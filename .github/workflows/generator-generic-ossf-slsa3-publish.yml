@@ -1,16 +1,10 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# SLSA Level 3 Provenance — Le Fabrique
+# Generates cryptographic provenance for Docker images on each release.
+# Verify with: https://github.com/slsa-framework/slsa-verifier
+# Spec: https://slsa.dev/spec/v0.1/requirements
 
-# This workflow lets you generate SLSA provenance file for your project.
-# The generation satisfies level 3 for the provenance requirements - see https://slsa.dev/spec/v0.1/requirements
-# The project is an initiative of the OpenSSF (openssf.org) and is developed at
-# https://github.com/slsa-framework/slsa-github-generator.
-# The provenance file can be verified using https://github.com/slsa-framework/slsa-verifier.
-# For more information about SLSA and how it improves the supply-chain, visit slsa.dev.
+name: SLSA Provenance — Le Fabrique
 
-name: SLSA generic generator
 on:
   workflow_dispatch:
   release:
@@ -18,6 +12,7 @@ on:
 
 jobs:
   build:
+    name: Build & hash Docker images
     runs-on: ubuntu-latest
     outputs:
       digests: ${{ steps.hash.outputs.digests }}
@@ -25,42 +20,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ========================================================
-      #
-      # Step 1: Build your artifacts.
-      #
-      # ========================================================
-      - name: Build artifacts
-        run: |
-            # These are some amazing artifacts.
-            echo "artifact1" > artifact1
-            echo "artifact2" > artifact2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # ========================================================
-      #
-      # Step 2: Add a step to generate the provenance subjects
-      #         as shown below. Update the sha256 sum arguments
-      #         to include all binaries that you generate
-      #         provenance for.
-      #
-      # ========================================================
-      - name: Generate subject for provenance
+      - name: Build Docker images
+        run: |
+          docker build -t le-fabrique-backend:${{ github.ref_name }}   ./backend
+          docker build -t le-fabrique-frontend:${{ github.ref_name }}  ./frontend
+          docker build -t le-fabrique-llm-proxy:${{ github.ref_name }} ./llm-proxy
+
+      - name: Export images as tarballs
+        run: |
+          docker save le-fabrique-backend:${{ github.ref_name }}   -o le-fabrique-backend.tar
+          docker save le-fabrique-frontend:${{ github.ref_name }}  -o le-fabrique-frontend.tar
+          docker save le-fabrique-llm-proxy:${{ github.ref_name }} -o le-fabrique-llm-proxy.tar
+
+      - name: Generate SHA256 subjects
         id: hash
         run: |
           set -euo pipefail
+          echo "digests=$(sha256sum le-fabrique-*.tar | base64 -w0)" >> "${GITHUB_OUTPUT}"
 
-          # List the artifacts the provenance will refer to.
-          files=$(ls artifact*)
-          # Generate the subjects (base64 encoded).
-          echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: le-fabrique-images-${{ github.ref_name }}
+          path: le-fabrique-*.tar
+          retention-days: 5
 
   provenance:
+    name: Generate SLSA provenance
     needs: [build]
     permissions:
-      actions: read   # To read the workflow path.
-      id-token: write # To sign the provenance.
-      contents: write # To add assets to a release.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.4.0
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.build.outputs.digests }}"
-      upload-assets: true # Optional: Upload to a new release
+      upload-assets: true
