@@ -50,14 +50,14 @@
 
 ```mermaid
 graph TD
-    A["🖥️ Frontend React\n(Vite + TailwindCSS)"] --> B["⚡ Backend FastAPI"]
-    B --> C["🐘 Postgres + pgvector\n(Relacional + Memoria Vectorial)"]
-    B --> D["🕸️ Neo4j\n(Grafo de Conocimiento Engram)"]
-    B --> E["📨 NATS JetStream\n(Broker de Eventos)"]
-    E --> F["🔌 VS Code Daemon\n(Operaciones de Archivos)"]
-    B --> G["🛡️ LLM Proxy\n(Presupuesto de Tokens + Auditoría)"]
-    G --> H["🤖 Gemini / DeepSeek\n(Modelos de IA)"]
-    B --> I["🔧 AI Janitor\n(Mantenimiento en Segundo Plano)"]
+    A[Frontend React] --> B[Backend FastAPI]
+    B --> C[Postgres + pgvector]
+    B --> D[Neo4j Engram Graph]
+    B --> E[NATS JetStream]
+    E --> F[VS Code Daemon]
+    B --> G[LLM Proxy]
+    G --> H[Gemini / DeepSeek]
+    B --> I[AI Janitor]
 ```
 
 [⬆ Volver al inicio](#le-fabrique)
