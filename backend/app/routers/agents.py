@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
@@ -39,7 +39,7 @@ sse_connections: Dict[str, asyncio.Queue] = {}
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest, request: Request):
     """
     Trigger a LangGraph agent workflow run.
 
@@ -50,8 +50,7 @@ async def generate(req: GenerateRequest):
     Returns the ``interaction_id`` so the caller can correlate Glassroom
     SSE events and audit log entries back to this request.
     """
-    from main import nats_client
-    service = AgentService(nats_client=nats_client)
+    service = AgentService(nats_client=request.app.state.nats_client)
     interaction_id = await service.generate_package(
         company_id=req.company_id,
         story=req.story,
@@ -84,20 +83,19 @@ async def audit(req: AuditRequest, session: Session = Depends(get_session)):
 
 
 @router.get("/memory/search")
-async def search_memory(query: str = Query(...), limit: int = 10):
+async def search_memory(request: Request, query: str = Query(...), limit: int = 10):
     """
     Search the vector memory store for content similar to *query*.
 
     Uses pgvector cosine similarity on pre-computed embeddings.
     Returns up to *limit* results sorted by descending similarity.
     """
-    from main import memory_client
-    results = memory_client.search_similar(query, limit)
+    results = request.app.state.memory_client.search_similar(query, limit)
     return {"results": results}
 
 
 @router.post("/memory/store")
-async def store_memory(content: str, metadata: dict = None):
+async def store_memory(request: Request, content: str, metadata: dict = None):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
 
@@ -105,8 +103,7 @@ async def store_memory(content: str, metadata: dict = None):
     *metadata* is an arbitrary JSON dict stored alongside the embedding for
     later retrieval context.
     """
-    from main import memory_client
-    memory_client.store(content, metadata)
+    request.app.state.memory_client.store(content, metadata)
     return {"status": "stored"}
 
 

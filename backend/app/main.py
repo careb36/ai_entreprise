@@ -4,10 +4,12 @@ Fabrique Enterprise API — FastAPI application entry point.
 Responsibilities:
 - Mounts all API routers (auth, enterprise, sprint, agents, support).
 - Manages NATS client lifecycle: connects on startup, drains on shutdown.
-- Initialises the MemoryClient (Neo4j) and LLMProxyClient singletons that
-  routers import via ``from main import memory_client, llm_client``.
+- Stores infrastructure singletons on ``app.state`` (not as module globals)
+  so routers access them safely via ``request.app.state`` — guaranteed to be
+  populated after the startup event fires, and never imported as ``None``.
 - Bridges NATS Glassroom events to per-sprint SSE queues so the frontend
   can receive real-time agent logs without polling.
+- Stores background task references so they can be cancelled cleanly on shutdown.
 - Installs a global exception handler that reports critical failures to the
   vendor support webhook and optionally creates a NATS maintenance ticket.
 """
@@ -17,6 +19,7 @@ import json
 import os
 import traceback
 from datetime import datetime
+from typing import Set
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,10 +64,14 @@ app.include_router(sprint_router)
 app.include_router(agents_router)
 app.include_router(support_router)
 
-# Module-level singletons used by routers via `from main import ...`
-nats_client: NATSClient = None
-memory_client: MemoryClient = None
-llm_client: LLMProxyClient = None
+# Initialise state slots so type checkers and docs know what lives here.
+# Actual values are set in the startup handler — never accessed before that.
+app.state.nats_client: NATSClient = None
+app.state.memory_client: MemoryClient = None
+app.state.llm_client: LLMProxyClient = None
+
+# Retained task references for graceful cancellation on shutdown.
+_background_tasks: Set[asyncio.Task] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +109,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         except Exception as report_e:
             logger.error(f"Failed to reach Vendor Support: {report_e}")
 
-    if nats_client:
+    nats = request.app.state.nats_client
+    if nats:
         try:
-            await nats_client.publish("system.maintenance.create_ticket", json.dumps({
+            await nats.publish("system.maintenance.create_ticket", json.dumps({
                 "subject": "[SYSTEM ERROR] Fabrique Engine Failure",
                 "description": "A report has been sent to the vendor (Carolina Pereira) for resolution.",
                 "priority": "critical",
@@ -136,36 +144,50 @@ async def startup():
     """
     Application startup handler.
 
-    Initialises all long-lived infrastructure clients and launches two
-    background asyncio tasks:
-    - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` and fans events out
-      to per-sprint SSE queues.
-    - ``process_outbox()`` — polls the ``outbox_events`` table and publishes
-      pending messages to NATS (transactional outbox pattern).
-    """
-    global nats_client, memory_client, llm_client
+    Stores all long-lived infrastructure clients on ``app.state`` so routers
+    access them via ``request.app.state`` — safe because request handlers only
+    run after startup completes.
 
+    Launches two background asyncio tasks and retains their references in
+    ``_background_tasks`` so shutdown can cancel them cleanly:
+    - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` and fans events
+      out to per-sprint SSE queues.
+    - ``process_outbox()`` — polls ``outbox_events`` and publishes to NATS
+      (transactional outbox pattern).
+    """
     logger.info("Initializing Enterprise Backend Components...")
     create_db_and_tables()
 
-    nats_client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
-    await nats_client.connect()
+    app.state.nats_client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+    await app.state.nats_client.connect()
 
-    memory_client = MemoryClient(
-        neo4j_driver=get_neo4j_driver(),
-    )
+    app.state.memory_client = MemoryClient(neo4j_driver=get_neo4j_driver())
+    app.state.llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
 
-    llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
-
-    asyncio.create_task(_listen_to_nats())
-    asyncio.create_task(process_outbox(nats_client))
+    # Store references so shutdown() can cancel these tasks gracefully.
+    for coro in (_listen_to_nats(), process_outbox(app.state.nats_client)):
+        task = asyncio.create_task(coro)
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    """
+    Graceful shutdown: cancel background tasks, then drain the NATS connection.
+
+    Cancelling stored task references ensures the outbox poller and NATS
+    listener exit cleanly instead of being killed mid-operation.
+    """
     logger.info("Initiating graceful shutdown...")
-    if nats_client:
-        await nats_client.close()
+
+    for task in list(_background_tasks):
+        task.cancel()
+    if _background_tasks:
+        await asyncio.gather(*_background_tasks, return_exceptions=True)
+
+    if app.state.nats_client:
+        await app.state.nats_client.close()
     logger.info("Shutdown complete.")
 
 
@@ -193,7 +215,7 @@ async def _listen_to_nats():
         await msg.ack()
 
     try:
-        await nats_client.subscribe("glassroom.>", callback)
+        await app.state.nats_client.subscribe("glassroom.>", callback)
     except Exception as e:
         logger.error(f"Failed to subscribe to Glassroom events: {e}")
 
