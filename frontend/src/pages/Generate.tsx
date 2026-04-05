@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useApp } from '../context/AppContext'
+import { useAppStore } from '../store/useAppStore'
 import { api } from '../services/api'
 import { Code2, Loader2, ArrowRight, CheckCircle2, Copy, Check } from 'lucide-react'
 
@@ -14,7 +14,8 @@ interface GenerateResult {
 export default function Generate() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { company } = useApp()
+  const companyId = useAppStore(state => state.companyId)
+  const companyName = useAppStore(state => state.companyName)
   const [story, setStory] = useState('')
   const [constraints, setConstraints] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,7 +30,7 @@ export default function Generate() {
     setError(null)
     try {
       const res = await api.post<GenerateResult>('/v1/generate', {
-        company_id: company?.id ?? 1,
+        company_id: companyId ?? 1,
         story: story.trim(),
         constraints: constraints.trim() || undefined
       })
@@ -102,7 +103,7 @@ export default function Generate() {
         {/* Company ID info */}
         <div className="flex items-center gap-2 text-xs text-gray-500 bg-surface-800 rounded-lg px-3 py-2">
           <span className="text-gray-400">{t('generate.companyId', 'Company')}:</span>
-          <span className="font-mono text-brand-300">{company?.name ?? `ID ${company?.id ?? 1}`}</span>
+          <span className="font-mono text-brand-300">{companyName ?? `ID ${companyId ?? 1}`}</span>
         </div>
 
         {/* Story */}

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useApp } from '../context/AppContext'
-import { api } from '../services/api'
+import { useAppStore } from '../store/useAppStore'
+import { useHealth } from '../hooks/useQueries'
 import {
   Plus, MonitorPlay, ShieldCheck, PieChart,
   Search, Code2, Building2, CheckCircle2, XCircle, Loader2
@@ -10,14 +9,11 @@ import {
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const { companyName, activeSprintId } = useApp()
-  const [systemOnline, setSystemOnline] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    api.get('/health')
-      .then(() => setSystemOnline(true))
-      .catch(() => setSystemOnline(false))
-  }, [])
+  const companyName = useAppStore(state => state.companyName)
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  
+  const { data: health, isLoading: checkingStatus } = useHealth()
+  const systemOnline = !!health
 
   const workspaceId = activeSprintId || 1
 
@@ -82,7 +78,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className="text-sm text-gray-400">{t('dashboard.systemStatus')}</span>
-            {systemOnline === null ? (
+            {checkingStatus ? (
               <div className="flex items-center gap-2 text-gray-400 text-sm">
                 <Loader2 size={16} className="animate-spin" /> {t('dashboard.checking')}
               </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useApp } from '../context/AppContext'
+import { useAppStore } from '../store/useAppStore'
 import { api } from '../services/api'
 
 interface Agent {
@@ -14,7 +14,7 @@ interface Agent {
 export default function CompanyNew() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { setCompany } = useApp()
+  const setCompany = useAppStore(state => state.setCompany)
   const [companyName, setCompanyName] = useState('')
   const [sprintLength, setSprintLength] = useState(14)
   const [autonomyLevel, setAutonomyLevel] = useState(2)

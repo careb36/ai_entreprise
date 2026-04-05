@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AppProvider, useApp } from './context/AppContext'
+import { useAppStore } from './store/useAppStore'
 import Dashboard from './pages/Dashboard'
 import CompanyNew from './pages/CompanyNew'
 import { SprintWorkspace } from './pages/SprintWorkspace'
@@ -43,7 +43,7 @@ function LanguageSwitcher() {
 
 function useNavLinks() {
   const { t } = useTranslation()
-  const { activeSprintId } = useApp()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
   return [
     { to: '/',           icon: LayoutDashboard, label: t('nav.dashboard') },
     { to: `/workspace/${activeSprintId || 1}`, icon: MonitorPlay, label: t('nav.workspace') },
@@ -70,8 +70,8 @@ function NavBar() {
     <header className="h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center px-4 lg:px-6 z-20 flex-shrink-0">
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
-        <img src="/fabrique-icon.svg" alt="Le Fabrique" width={30} height={30} className="rounded-md" />
-        <span className="text-lg font-black tracking-tight hidden xs:block">Le Fabrique</span>
+        <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
+        <span className="text-lg font-black tracking-tight hidden xs:block">La Fabrique</span>
       </Link>
 
       {/* Desktop nav */}
@@ -128,7 +128,7 @@ function NavBar() {
 // ── App shell ─────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const { activeSprintId } = useApp()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
 
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col relative">
@@ -158,9 +158,7 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
+      <AppContent />
     </BrowserRouter>
   )
 }

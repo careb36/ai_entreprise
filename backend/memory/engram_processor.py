@@ -143,7 +143,17 @@ class DeepSeekEngramProcessor:
         }
     
     def _determine_engram_type(self, role: str, metadata: Dict[str, Any]) -> EngramType:
-        """Determine the type of Engram based on role and context."""
+        """
+        Choose the most specific ``EngramType`` for the incoming event.
+
+        Priority order:
+        1. ``action_type`` metadata field (explicit classification from the caller).
+        2. Agent role (Architect/PO → architectural change).
+        3. Default to ``SPRINT_DECISION``.
+
+        The ``action_type`` field is set by ``burn_engram_node`` in ``graph.py``:
+        ``"test_result"`` when tests passed, ``"code_review"`` otherwise.
+        """
         if metadata.get("action_type") == "code_review":
             return EngramType.CODE_REVIEW
         elif metadata.get("action_type") == "test_result":
@@ -265,24 +275,35 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         self,
         agent_id: Optional[str] = None,
         engram_type: Optional[EngramType] = None,
-        limit: int = 10
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        """Query Engrams from the TKG."""
+        """
+        Return raw Episodic node dicts from Neo4j, ordered by recency.
+
+        Args:
+            agent_id:    Filter to a specific agent (optional).
+            engram_type: Filter to a specific engram type label (optional).
+            limit:       Maximum number of results.
+
+        Returns:
+            List of property dicts for each matching Episodic node.
+        """
         cypher = "MATCH (e:Episodic) "
-        
+
         conditions = []
-        params = {"limit": limit}
-        
+        params: Dict[str, Any] = {"limit": limit}
+
         if agent_id:
             conditions.append("e.agent_id = $agent_id")
+            params["agent_id"] = agent_id
         if engram_type:
             conditions.append(f"e:{engram_type.value}")
-        
+
         if conditions:
             cypher += "WHERE " + " AND ".join(conditions)
-        
+
         cypher += " RETURN e ORDER BY e.created_at DESC LIMIT $limit"
-        
+
         try:
             with self.driver.session() as session:
                 result = session.run(cypher, params)
@@ -290,6 +311,115 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         except Exception as e:
             logger.error(f"Failed to query Engrams: {e}")
             return []
+
+    def query_relevant_engrams(
+        self,
+        story: str,
+        limit: int = 5,
+        role_filter: Optional[str] = None,
+    ) -> str:
+        """
+        RAG over the Temporal Knowledge Graph.
+
+        Searches Episodic nodes whose summary contains keywords from the story,
+        ranks them by relevance (keyword-match count) and recency, and follows
+        MODIFIED_BY / RELATED_TO edges to surface connected semantic nodes.
+
+        Falls back to the most-recent engrams when no keywords match.
+
+        Args:
+            story:       The current user story / task description.
+            role_filter: Optional agent role to restrict results (e.g. "Architect").
+            limit:       Maximum number of engrams to return.
+
+        Returns:
+            A formatted context string ready for LLM injection, or "" when the
+            TKG has no engrams at all.
+        """
+        normalized = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in story.lower())
+        stop_words = {
+            "this", "that", "with", "from", "into", "para", "como", "sobre", "pero",
+            "the", "and", "for", "una", "unos", "unas", "de", "del", "por", "con", "sin",
+        }
+        keywords = [w for w in normalized.split() if len(w) > 3 and w not in stop_words][:10]
+
+        params: Dict[str, Any] = {"limit": limit}
+        role_condition = ""
+        if role_filter:
+            role_condition = "AND e.agent_role = $role_filter "
+            params["role_filter"] = role_filter
+
+        if keywords:
+            params["keywords"] = keywords
+            cypher = f"""
+            MATCH (e:Episodic)
+            WHERE any(kw IN $keywords WHERE toLower(e.summary) CONTAINS kw)
+            {role_condition}
+            WITH e,
+                 size([kw IN $keywords WHERE toLower(e.summary) CONTAINS kw]) AS match_score
+            OPTIONAL MATCH (e)-[:MODIFIED_BY|RELATED_TO]->(s)
+            RETURN
+                e.id         AS id,
+                e.agent_role AS role,
+                e.summary    AS summary,
+                e.created_at AS ts,
+                labels(e)    AS engram_types,
+                collect(s.id)[..3] AS related_nodes,
+                match_score
+            ORDER BY match_score DESC, e.created_at DESC
+            LIMIT $limit
+            """
+        else:
+            # No usable keywords – fall back to most-recent engrams.
+            cypher = f"""
+            MATCH (e:Episodic)
+            WHERE 1=1 {role_condition}
+            OPTIONAL MATCH (e)-[:MODIFIED_BY|RELATED_TO]->(s)
+            RETURN
+                e.id         AS id,
+                e.agent_role AS role,
+                e.summary    AS summary,
+                e.created_at AS ts,
+                labels(e)    AS engram_types,
+                collect(s.id)[..3] AS related_nodes,
+                0            AS match_score
+            ORDER BY e.created_at DESC
+            LIMIT $limit
+            """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(cypher, params)
+                records = [dict(r) for r in result]
+        except Exception as e:
+            logger.warning("RAG query failed, continuing without context: %s", e)
+            return ""
+
+        if not records:
+            return ""
+
+        lines = ["--- Past Architectural Decisions (RAG Context) ---"]
+        for r in records:
+            ts = r.get("ts", "unknown time")
+            role = r.get("role", "Agent")
+            summary = (r.get("summary") or "")[:400]
+            engram_types: list = r.get("engram_types") or []
+            related: list = r.get("related_nodes") or []
+            match_score = r.get("match_score", 0)
+
+            # Pick the most specific Episodic_* label for display.
+            etype = next((t for t in engram_types if t.startswith("Episodic_")), "")
+
+            header = f"[{ts}] [{role}]"
+            if etype:
+                header += f" [{etype}]"
+            if match_score:
+                header += f" (relevance: {match_score} keyword match(es))"
+            if related:
+                header += f"\n  ↳ affects: {', '.join(str(n) for n in related[:3])}"
+            lines.append(f"{header}\n  {summary}")
+        lines.append("--- End of RAG Context ---")
+        return "\n".join(lines)
     
     def close(self):
         """Close Neo4j driver."""
