@@ -1,14 +1,21 @@
-# 🏭 Fabrique (Factory System)
+<div align="center">
+  <img src="frontend/public/fabrique-icon.svg" width="90" alt="Le Fabrique" />
+
+# Le Fabrique
 
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
-[![Python](https://img.shields.ok/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/react-%2320232b.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
+**AI-powered autonomous software development platform**
+
 > **Languages:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
-👔 **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use Fabrique to automate your company's engineering.
+</div>
+
+👔 **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use Le Fabrique to automate your company's engineering.
 
 ---
 
@@ -20,22 +27,22 @@
 - [📖 API Documentation](#-api-documentation)
 - [📁 Project Structure](#-project-structure)
 - [⚖️ License](#️-license)
-- [🆘 Support](#-support)
+- [🆘 Support](#-support--maintenance)
 
 ---
 
 ## 🚀 Key Features
 
-- **🧠 Hybrid Agent Intelligence**: Orchestrates Gemini 1.5 Pro (Architect/PO) and DeepSeek (Dev/QA) for the perfect balance of reasoning and cost-effective coding.
+- **🧠 Hybrid Agent Intelligence**: Orchestrates Gemini (Architect/PO) and DeepSeek (Dev/QA) for the perfect balance of reasoning and cost-effective coding.
 - **🔄 Full Lifecycle Management**: Capable of creating new projects from scratch, evolving existing AI-generated code, and maintaining/improving legacy human-written systems.
-- **📋 Native OpenProject Integration**: Agents act as real team members, autonomously creating work packages, logging progress, and transitioning tickets in your OpenProject boards.
 - **📜 Transactional Outbox**: Guarantees NATS message delivery by syncing event publishing with Postgres transactions.
 - **🔄 LangGraph Checkpointing**: Asynchronous workflow suspension/resumption using `MemorySaver`.
 - **🛡️ Centralized LLM Proxy**: Strict token budgeting and security auditing for all AI interactions.
 - **🔌 VS Code Integration**: A native daemon and extension bridge the gap between AI orchestration and your local IDE.
 - **📊 Glassroom Monitoring**: Real-time SSE event streaming to monitor agent progress visually.
+- **🎫 Built-in Support Bot**: AI-powered help desk with ticket tracking, severity levels, and status follow-up (EN/ES).
 
-[⬆ Back to Top](#-fabrique-factory-system)
+[⬆ Back to Top](#le-fabrique)
 
 ---
 
@@ -43,30 +50,32 @@
 
 ```mermaid
 graph TD
-    A[Electron Frontend] --> B[FastAPI Backend]
-    B --> C[Postgres + pgvector]
-    B --> D[Neo4j Engram TKG]
-    B --> E[NATS Broker]
-    E --> F[VS Code Daemon]
-    B --> G[LLM Proxy]
-    G --> H[Gemini / DeepSeek]
-    B --> I[OpenProject]
+    A["🖥️ React Frontend\n(Vite + TailwindCSS)"] --> B["⚡ FastAPI Backend"]
+    B --> C["🐘 Postgres + pgvector\n(Relational + Vector Memory)"]
+    B --> D["🕸️ Neo4j\n(Engram Knowledge Graph)"]
+    B --> E["📨 NATS JetStream\n(Event Broker)"]
+    E --> F["🔌 VS Code Daemon\n(Local File Ops)"]
+    B --> G["🛡️ LLM Proxy\n(Token Budget + Audit)"]
+    G --> H["🤖 Gemini / DeepSeek\n(AI Models)"]
+    B --> I["🔧 AI Janitor\n(Background Maintenance)"]
 ```
 
-[⬆ Back to Top](#-fabrique-factory-system)
+[⬆ Back to Top](#le-fabrique)
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Backend**: FastAPI, LangGraph, SQLAlchemy.
-- **Frontend**: React, TypeScript, Electron, TailwindCSS.
-- **Memory**: Postgres (pgvector) + Neo4j (Temporal Knowledge Graph).
-- **Broker**: NATS (JetStream).
-- **Project Management**: OpenProject.
-- **Infrastructure**: Docker Compose, VS Code CLI.
+| Layer | Technology |
+|---|---|
+| **Backend** | FastAPI, LangGraph, SQLAlchemy |
+| **Frontend** | React, TypeScript, TailwindCSS, Vite |
+| **Memory** | Postgres (pgvector) + Neo4j (Temporal Knowledge Graph) |
+| **Broker** | NATS JetStream |
+| **AI Models** | Gemini (via Google AI Studio) + DeepSeek |
+| **Infrastructure** | Docker Compose, VS Code CLI |
 
-[⬆ Back to Top](#-fabrique-factory-system)
+[⬆ Back to Top](#le-fabrique)
 
 ---
 
@@ -78,29 +87,32 @@ graph TD
 - Python 3.11+ & Node.js 18+
 
 ### 2. Environment Setup
-Create a `.env` file from the example:
 ```bash
 cp .env.example .env
-# Edit .env with your API keys (GEMINI_API_KEY, DEEPSEEK_API_KEY, etc.)
+# Edit .env — add your GEMINI_API_KEY and DEEPSEEK_API_KEY
 ```
 
-### 3. Launch Services
+### 3. Launch All Services
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-### 4. Run the Local Daemon
+### 4. Run the Local VS Code Daemon
 ```bash
 pip install nats-py
 python vscode-daemon/daemon.py
 ```
 
-[⬆ Back to Top](#-fabrique-factory-system)
+### 5. Access the Dashboard
+Open **http://localhost:5173** in your browser.
+
+[⬆ Back to Top](#le-fabrique)
+
 ---
 
 ## 📖 API Documentation
 
-Fabrique uses a self-documenting API based on the OpenAPI standard. You can access interactive documentation at:
+Le Fabrique exposes a fully self-documented OpenAPI interface:
 
 - **Swagger UI (Interactive):** `http://localhost:8000/docs`
 - **ReDoc (Detailed):** `http://localhost:8000/redoc`
@@ -109,31 +121,44 @@ Fabrique uses a self-documenting API based on the OpenAPI standard. You can acce
 
 ## 🛠️ Support & Observability
 
-- **Structured Logging:** All system events are logged in JSON format for easy integration with ELK, Datadog, or Splunk.
-- **Support Bot:** A built-in AI Support Bot allows users to ask questions and report bugs directly into the Support Project.
-- **Log Export:** Administrators can download a full audit log bundle via the `/v1/support/logs` endpoint for rapid troubleshooting.
+- **Structured Logging:** All events logged in JSON format — compatible with ELK, Datadog, or Splunk.
+- **Support Bot:** Built-in AI help desk with ticket creation, severity levels, and status tracking.
+- **Log Export:** Administrators can download a full audit bundle via `GET /v1/support/logs`.
 
 ---
 
 ## 📁 Project Structure
----
 
-## 📁 Project Structure
+```
+le-fabrique/
+├── backend/          # FastAPI app + LangGraph agent logic
+│   ├── agents/       # Agent graph definitions
+│   ├── app/          # API routes, schemas, config
+│   ├── janitor/      # Background maintenance worker
+│   ├── llm/          # Model factory (Gemini + DeepSeek)
+│   └── memory/       # Engram processor (pgvector + Neo4j)
+├── frontend/         # React + TypeScript dashboard (Vite)
+│   ├── src/
+│   │   ├── components/   # KanbanBoard, GlassRoom, SupportBot…
+│   │   ├── pages/        # SprintWorkspace, Analytics, Generate…
+│   │   └── i18n/         # EN + ES translations
+│   └── electron/     # Electron shell (optional desktop mode)
+├── llm-proxy/        # Token budget & auditing gateway
+├── vscode-daemon/    # Local NATS subscriber for file operations
+├── vscode-extension/ # VS Code integration bridge
+├── db/               # Postgres initialization scripts
+├── deployment/       # Kubernetes manifests
+├── docker-compose.yml
+└── .env.example
+```
 
-*   `backend/`: FastAPI application & LangGraph agent logic.
-*   `frontend/`: Electron + React dashboard.
-*   `vscode-daemon/`: Local NATS subscriber for file operations.
-*   `vscode-extension/`: VS Code integration tools.
-*   `llm-proxy/`: Token budget & auditing gateway.
-*   `db/`: Database initialization scripts.
-
-[⬆ Back to Top](#-fabrique-factory-system)
+[⬆ Back to Top](#le-fabrique)
 
 ---
 
 ## ⚖️ License
 
-**Proprietary Software.** All rights reserved. 
+**Proprietary Software.** All rights reserved.  
 Copyright © 2026 Carolina Pereira.
 
 Unauthorized copying, distribution, or commercial use of this system, via any medium, is strictly prohibited without explicit written permission from the owner.
@@ -142,8 +167,8 @@ Unauthorized copying, distribution, or commercial use of this system, via any me
 
 ## 🆘 Support & Maintenance
 
-- **System Support:** The Fabrique Engine is maintained by **Carolina Pereira**. System errors are automatically reported to the vendor for resolution in the core GitHub repository.
-- **Project Support:** For issues related to the AI agents' code generation in your local projects, use the built-in AI Support Bot.
+- **System Support:** Le Fabrique is maintained by **Carolina Pereira**. Critical errors are automatically reported to the vendor for resolution.
+- **Project Support:** For issues with AI-generated code in your projects, use the built-in Support Bot.
 - **Contact:** For licensing and Enterprise SLA inquiries, please contact the owner directly.
 
-[⬆ Back to Top](#-fabrique-factory-system)
+[⬆ Back to Top](#le-fabrique)
