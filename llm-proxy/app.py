@@ -5,6 +5,13 @@ Routes LLM requests to Gemini API or DeepSeek API with strict token budget enfor
 Model selection is dynamic: at startup and every hour the proxy queries the Gemini API to
 discover which models are actually available for the configured API key, so it never breaks
 when Google deprecates or renames a model.
+
+Phase 4 — Observability:
+Instrumented with OpenTelemetry (OTLP/HTTP → Jaeger).  ``FlaskInstrumentor``
+creates a server span per request and extracts the W3C ``traceparent`` header
+forwarded by the backend agents, so every LLM call appears as a child span of
+the originating ``fabrique.workflow`` trace.  ``RequestsInstrumentor`` then
+injects the context into outbound Gemini / DeepSeek calls.
 """
 
 import os
@@ -14,7 +21,16 @@ import logging
 from flask import Flask, request, jsonify
 import requests
 
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
+
 app = Flask(__name__)
+
+# Bootstrap telemetry immediately after the Flask app is created so that
+# FlaskInstrumentor can patch the app before any requests are handled.
+from telemetry import configure_telemetry, get_tracer
+configure_telemetry(app)
+_tracer = get_tracer(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -192,22 +208,40 @@ def chat_completions():
       ``contents`` / ``system_instruction`` format.
 
     Token usage is tracked per agent role (``X-Agent-Role`` header).
+    OTel span attributes: ``agent_role``, ``llm.model``, ``llm.tokens_total``.
     """
+    data = request.get_json(force=True)
     model = data.get("model", "gemini-flash-latest")
     messages = data.get("messages", [])
     agent_role = request.headers.get("X-Agent-Role", "Developer")
+
+    # The FlaskInstrumentor has already created a server span for this request.
+    # Add semantic LLM attributes to the current (active) span.
+    current_span = trace.get_current_span()
+    current_span.set_attribute("agent_role", agent_role)
+    current_span.set_attribute("llm.model.requested", model)
 
     try:
         # ROUTE 1: DeepSeek
         if "deepseek" in model.lower():
             if not DEEPSEEK_API_KEY:
                 return jsonify({"error": "DEEPSEEK_API_KEY not configured", "ok": False}), 500
-            headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-            response = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers=headers, json=data, timeout=60)
-            response.raise_for_status()
-            result = response.json()
-            track_usage(agent_role, result.get("usage", {}).get("total_tokens", 0))
-            return jsonify(result)
+
+            with _tracer.start_as_current_span("deepseek.generate") as span:
+                span.set_attribute("agent_role", agent_role)
+                span.set_attribute("llm.model", model)
+                span.set_attribute("llm.provider", "deepseek")
+
+                headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
+                response = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers=headers, json=data, timeout=60)
+                response.raise_for_status()
+                result = response.json()
+                tokens = result.get("usage", {}).get("total_tokens", 0)
+                track_usage(agent_role, tokens)
+
+                span.set_attribute("llm.tokens_total", tokens)
+                current_span.set_attribute("llm.tokens_total", tokens)
+                return jsonify(result)
 
         # ROUTE 2: Gemini — dynamic model resolution
         else:
@@ -215,6 +249,7 @@ def chat_completions():
                 return jsonify({"error": "GEMINI_API_KEY not configured", "ok": False}), 500
 
             gemini_model = resolve_gemini_model(model)
+            current_span.set_attribute("llm.model.resolved", gemini_model)
             url = f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent"
             gemini_headers = {
                 "Content-Type": "application/json",
@@ -243,9 +278,15 @@ def chat_completions():
             if system_text:
                 payload["system_instruction"] = {"parts": [{"text": system_text}]}
 
-            response = _gemini_post(url, gemini_headers, payload)
-            response.raise_for_status()
-            result = response.json()
+            with _tracer.start_as_current_span("gemini.generate") as span:
+                span.set_attribute("agent_role", agent_role)
+                span.set_attribute("llm.model", gemini_model)
+                span.set_attribute("llm.provider", "gemini")
+
+                response = _gemini_post(url, gemini_headers, payload)
+                response.raise_for_status()
+                result = response.json()
+
             text_content = (
                 result.get("candidates", [{}])[0]
                 .get("content", {})
@@ -254,6 +295,9 @@ def chat_completions():
             )
             tokens = len(str(messages)) // 4 + len(text_content) // 4
             track_usage(agent_role, tokens)
+
+            span.set_attribute("llm.tokens_total", tokens)
+            current_span.set_attribute("llm.tokens_total", tokens)
             return jsonify({
                 "id": "gemini-proxy",
                 "object": "chat.completion",
@@ -263,6 +307,7 @@ def chat_completions():
             })
 
     except Exception as e:
+        current_span.set_status(StatusCode.ERROR, str(e))
         logger.error(f"Proxy failed: {str(e)}")
         return jsonify({"error": str(e), "ok": False}), 500
 
@@ -273,13 +318,21 @@ def embeddings():
 
     Uses Gemini ``text-embedding-004`` and returns an OpenAI-compatible
     response shape so callers don't need provider-specific logic.
+    OTel span attributes: ``agent_role``, ``llm.model``, ``input_chars``.
     """
+    data = request.get_json(force=True)
     text = data.get("input", "")
+    agent_role = request.headers.get("X-Agent-Role", "Developer")
+
+    current_span = trace.get_current_span()
+    current_span.set_attribute("agent_role", agent_role)
+    current_span.set_attribute("input_chars", len(text))
+
     if not GEMINI_API_KEY:
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 500
     try:
-        # Use the best available embedding model dynamically
         embed_model = "text-embedding-004"
+        current_span.set_attribute("llm.model", embed_model)
         url = f"{GEMINI_PROXY_URL}/models/{embed_model}:embedContent"
         payload = {"content": {"parts": [{"text": text}]}}
         response = requests.post(
@@ -297,6 +350,7 @@ def embeddings():
             "usage": {"total_tokens": len(text) // 4},
         })
     except Exception as e:
+        current_span.set_status(StatusCode.ERROR, str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route("/v1/models", methods=["GET"])
