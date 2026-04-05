@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Disable Electron download during build
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
+
 COPY package*.json ./
 RUN npm install
 

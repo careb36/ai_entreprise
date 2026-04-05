@@ -19,7 +19,7 @@ from enum import Enum
 from pydantic import BaseModel
 import neo4j
 
-from backend.llm.model_factory import get_llm_for_role, AgentRole
+from llm.model_factory import get_llm_for_role, AgentRole
 
 logger = logging.getLogger(__name__)
 

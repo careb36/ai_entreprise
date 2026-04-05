@@ -34,6 +34,7 @@ from llm_proxy_client import LLMProxyClient
 from routers import auth_router, enterprise_router, sprint_router, agents_router, support_router
 from routers.agents import sse_connections
 from services.outbox_service import process_outbox
+from services.agent_worker import process_agent_tasks
 
 settings = Settings()
 
@@ -144,31 +145,59 @@ async def startup():
     """
     Application startup handler.
 
-    Stores all long-lived infrastructure clients on ``app.state`` so routers
-    access them via ``request.app.state`` — safe because request handlers only
-    run after startup completes.
+    Always succeeds — NATS and Neo4j connection failures are caught and logged
+    as warnings, so DB-only endpoints (discovery, init_company, sprint board,
+    etc.) remain available even when those services are not yet running.
 
-    Launches two background asyncio tasks and retains their references in
-    ``_background_tasks`` so shutdown can cancel them cleanly:
-    - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` and fans events
-      out to per-sprint SSE queues.
-    - ``process_outbox()`` — polls ``outbox_events`` and publishes to NATS
-      (transactional outbox pattern).
+    Infrastructure clients are stored on ``app.state`` (not module globals) so
+    that request handlers only see them after startup completes.  Callers must
+    guard against ``None`` before using NATS/Neo4j features.
+
+    Background tasks are launched only when NATS is reachable:
+    - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` for SSE fanout.
+    - ``process_outbox()`` — transactional outbox → NATS publisher.
+    - ``process_agent_tasks()`` — NATS consumer → LangGraph runner.
     """
     logger.info("Initializing Enterprise Backend Components...")
     create_db_and_tables()
 
-    app.state.nats_client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
-    await app.state.nats_client.connect()
+    # NATS is required for agent workflow and SSE streaming, but the DB-only
+    # endpoints (discovery, init_company, sprints, etc.) must remain available
+    # even when the NATS broker is not yet running.
+    app.state.nats_client = None
+    try:
+        app.state.nats_client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+        await app.state.nats_client.connect()
 
-    app.state.memory_client = MemoryClient(neo4j_driver=get_neo4j_driver())
+        # Background tasks only make sense when NATS is connected.
+        for coro in (
+            _listen_to_nats(),
+            process_outbox(app.state.nats_client),
+            process_agent_tasks(app.state.nats_client),
+        ):
+            task = asyncio.create_task(coro)
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+        logger.info("NATS connected — background workers started.")
+    except Exception as exc:
+        logger.warning(
+            f"NATS unavailable at startup ({exc}). "
+            "Agent workflow and SSE streaming are disabled until NATS reconnects."
+        )
+
+    # Neo4j is used for memory search and lineage; degrade gracefully if absent.
+    app.state.memory_client = None
+    try:
+        app.state.memory_client = MemoryClient(neo4j_driver=get_neo4j_driver())
+        logger.info("Neo4j connected — memory features enabled.")
+    except Exception as exc:
+        logger.warning(
+            f"Neo4j unavailable at startup ({exc}). "
+            "Memory search and lineage endpoints will return errors until Neo4j is reachable."
+        )
+
     app.state.llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
-
-    # Store references so shutdown() can cancel these tasks gracefully.
-    for coro in (_listen_to_nats(), process_outbox(app.state.nats_client)):
-        task = asyncio.create_task(coro)
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
 
 
 @app.on_event("shutdown")

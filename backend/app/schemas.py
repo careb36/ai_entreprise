@@ -40,6 +40,7 @@ class SprintStartRequest(BaseModel):
 class GenerateRequest(BaseModel):
     """Payload for ``POST /v1/generate`` — triggers the LangGraph agent workflow."""
     company_id: int
+    business_unit_id: Optional[int] = None  # Impute costs to this unit (default if None)
     story: str                           # Natural-language user story
     constraints: Optional[str] = None   # Optional technical / business constraints
     interaction_id: Optional[str] = None  # Client-supplied UUID for idempotency
@@ -58,8 +59,8 @@ class AuditRequest(BaseModel):
 
 class DiscoveryRequest(BaseModel):
     """Payload for ``POST /v1/discover_team`` — analyses a project path."""
-    company_id: int
     project_path: str  # Absolute or relative path to the project root
+    company_id: Optional[int] = None  # Optional for pre-creation discovery
 
 
 class ApprovalRequest(BaseModel):

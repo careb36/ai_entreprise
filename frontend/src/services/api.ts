@@ -151,7 +151,7 @@ export const api = {
   initCompany: (data: { company_name: string; default_sprint_length_days?: number; autonomy_level?: number }) =>
     api.post<CompanyInfo>('/v1/init_company', data),
 
-  discoverTeam: (companyId: number, projectPath: string) =>
+  discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<any>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
 
   approveTask: (taskId: number, approverName: string, decision: 'approved' | 'rejected') =>
