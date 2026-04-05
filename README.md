@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="frontend/public/fabrique-icon.svg" width="90" alt="Le Fabrique" />
+  <img src="frontend/public/fabrique-icon.svg" width="90" alt="La Fabrique" />
 
-# Le Fabrique
+# La Fabrique
 
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
@@ -15,7 +15,7 @@
 
 </div>
 
-👔 **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use Le Fabrique to automate your company's engineering.
+👔 **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
 
 ---
 
@@ -42,7 +42,7 @@
 - **📊 Glassroom Monitoring**: Real-time SSE event streaming to monitor agent progress visually.
 - **🎫 Built-in Support Bot**: AI-powered help desk with ticket tracking, severity levels, and status follow-up (EN/ES).
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
@@ -60,7 +60,7 @@ graph TD
     B --> I[AI Janitor]
 ```
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
@@ -75,7 +75,7 @@ graph TD
 | **AI Models** | Gemini (via Google AI Studio) + DeepSeek |
 | **Infrastructure** | Docker Compose, VS Code CLI |
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
@@ -106,13 +106,13 @@ python vscode-daemon/daemon.py
 ### 5. Access the Dashboard
 Open **http://localhost:5173** in your browser.
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
 ## 📖 API Documentation
 
-Le Fabrique exposes a fully self-documented OpenAPI interface:
+La Fabrique exposes a fully self-documented OpenAPI interface:
 
 - **Swagger UI (Interactive):** `http://localhost:8000/docs`
 - **ReDoc (Detailed):** `http://localhost:8000/redoc`
@@ -130,7 +130,7 @@ Le Fabrique exposes a fully self-documented OpenAPI interface:
 ## 📁 Project Structure
 
 ```
-le-fabrique/
+la-fabrique/
 ├── backend/          # FastAPI app + LangGraph agent logic
 │   ├── agents/       # Agent graph definitions
 │   ├── app/          # API routes, schemas, config
@@ -152,7 +152,7 @@ le-fabrique/
 └── .env.example
 ```
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
@@ -167,8 +167,8 @@ Unauthorized copying, distribution, or commercial use of this system, via any me
 
 ## 🆘 Support & Maintenance
 
-- **System Support:** Le Fabrique is maintained by **Carolina Pereira**. Critical errors are automatically reported to the vendor for resolution.
+- **System Support:** La Fabrique is maintained by **Carolina Pereira**. Critical errors are automatically reported to the vendor for resolution.
 - **Project Support:** For issues with AI-generated code in your projects, use the built-in Support Bot.
 - **Contact:** For licensing and Enterprise SLA inquiries, please contact the owner directly.
 
-[⬆ Back to Top](#le-fabrique)
+[⬆ Back to Top](#la-fabrique)

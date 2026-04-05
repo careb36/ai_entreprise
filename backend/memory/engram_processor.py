@@ -269,20 +269,21 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
     ) -> List[Dict[str, Any]]:
         """Query Engrams from the TKG."""
         cypher = "MATCH (e:Episodic) "
-        
+
         conditions = []
-        params = {"limit": limit}
-        
+        params: Dict[str, Any] = {"limit": limit}
+
         if agent_id:
             conditions.append("e.agent_id = $agent_id")
+            params["agent_id"] = agent_id
         if engram_type:
             conditions.append(f"e:{engram_type.value}")
-        
+
         if conditions:
             cypher += "WHERE " + " AND ".join(conditions)
-        
+
         cypher += " RETURN e ORDER BY e.created_at DESC LIMIT $limit"
-        
+
         try:
             with self.driver.session() as session:
                 result = session.run(cypher, params)
@@ -290,6 +291,76 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         except Exception as e:
             logger.error(f"Failed to query Engrams: {e}")
             return []
+
+    def query_relevant_engrams(
+        self,
+        story: str,
+        limit: int = 5,
+        role_filter: Optional[str] = None,
+    ) -> str:
+        """
+        RAG over the Temporal Knowledge Graph.
+
+        Searches Episodic nodes whose summary contains keywords from the story
+        and returns a formatted context string ready to be injected into an
+        LLM prompt.
+
+        Args:
+            story: The current user story / task description.
+            role_filter: Optional agent role to restrict results (e.g. "Architect").
+            limit: Maximum number of engrams to return.
+
+        Returns:
+            A formatted string with past decisions, or an empty string when
+            no relevant engrams are found.
+        """
+        # Extract meaningful keywords (drop short words and normalize punctuation)
+        normalized = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in story.lower())
+        stop_words = {
+            "this", "that", "with", "from", "into", "para", "como", "sobre", "pero",
+            "the", "and", "for", "una", "unos", "unas", "de", "del", "por", "con", "sin",
+        }
+        keywords = [w for w in normalized.split() if len(w) > 3 and w not in stop_words][:10]
+        if not keywords:
+            return ""
+
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "keywords": keywords,
+        }
+        role_condition = ""
+        if role_filter:
+            role_condition = "AND e.agent_role = $role_filter "
+            params["role_filter"] = role_filter
+
+        cypher = f"""
+        MATCH (e:Episodic)
+        WHERE any(kw IN $keywords WHERE toLower(e.summary) CONTAINS kw)
+        {role_condition}
+        RETURN e.id AS id, e.agent_role AS role, e.summary AS summary, e.created_at AS ts
+        ORDER BY e.created_at DESC
+        LIMIT $limit
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(cypher, params)
+                records = [dict(r) for r in result]
+        except Exception as e:
+            logger.warning(f"RAG query failed, continuing without context: {e}")
+            return ""
+
+        if not records:
+            return ""
+
+        lines = ["--- Past Architectural Decisions (RAG Context) ---"]
+        for r in records:
+            ts = r.get("ts", "")
+            role = r.get("role", "Agent")
+            summary = (r.get("summary") or "")[:400]
+            lines.append(f"[{ts}] [{role}] {summary}")
+        lines.append("--- End of RAG Context ---")
+        return "\n".join(lines)
     
     def close(self):
         """Close Neo4j driver."""

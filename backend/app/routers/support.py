@@ -1,0 +1,201 @@
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import FileResponse
+from sqlmodel import Session, select, text
+
+from database import get_session
+from models import BugReport
+from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
+from logging_config import logger
+
+router = APIRouter(prefix="/v1/support", tags=["Support"])
+
+
+def _next_ticket_num(session: Session) -> str:
+    """Generate next FAB-XXXXX ticket number."""
+    result = session.exec(text("SELECT COALESCE(MAX(id), 0) + 1 FROM bug_reports")).scalar()
+    return f"FAB-{result:05d}"
+
+
+@router.post("/report_bug")
+async def report_bug(req: BugReportRequest, session: Session = Depends(get_session)):
+    """Create a structured bug report ticket with auto-generated ticket number."""
+    ticket_num = _next_ticket_num(session)
+    report = BugReport(
+        ticket_num=ticket_num,
+        title=req.title,
+        description=req.description,
+        steps=req.steps,
+        expected=req.expected,
+        actual=req.actual,
+        severity=req.severity,
+        category=req.category,
+        reporter_email=req.reporter_email,
+        browser_info=req.browser_info,
+    )
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+    logger.info(f"Bug report created: {ticket_num} by {req.reporter_email}")
+    return {
+        "ticket_num": report.ticket_num,
+        "id": report.id,
+        "status": report.status,
+        "created_at": report.created_at.isoformat(),
+        "message": f"Report {report.ticket_num} created. You can track its status at any time.",
+    }
+
+
+@router.get("/tickets")
+async def list_tickets(
+    reporter_email: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    limit: int = Query(50, le=200),
+    session: Session = Depends(get_session),
+):
+    """List bug report tickets with optional filters."""
+    query = select(BugReport)
+    if reporter_email:
+        query = query.where(BugReport.reporter_email == reporter_email)
+    if status:
+        query = query.where(BugReport.status == status)
+    if severity:
+        query = query.where(BugReport.severity == severity)
+    query = query.order_by(BugReport.created_at.desc()).limit(limit)
+
+    rows = session.exec(query).all()
+    tickets = [
+        {
+            "id": r.id,
+            "ticket_num": r.ticket_num,
+            "title": r.title,
+            "severity": r.severity,
+            "category": r.category,
+            "status": r.status,
+            "reporter_email": r.reporter_email,
+            "assigned_to": r.assigned_to,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        }
+        for r in rows
+    ]
+    return {"tickets": tickets, "count": len(tickets)}
+
+
+@router.get("/tickets/{ticket_num}")
+async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
+    """Get full detail of a single ticket by its ticket number (e.g. FAB-00001)."""
+    report = session.exec(
+        select(BugReport).where(BugReport.ticket_num == ticket_num.upper())
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_num} not found")
+    return {
+        "id": report.id,
+        "ticket_num": report.ticket_num,
+        "title": report.title,
+        "description": report.description,
+        "steps": report.steps,
+        "expected": report.expected,
+        "actual": report.actual,
+        "severity": report.severity,
+        "category": report.category,
+        "status": report.status,
+        "reporter_email": report.reporter_email,
+        "assigned_to": report.assigned_to,
+        "resolution": report.resolution,
+        "browser_info": report.browser_info,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "updated_at": report.updated_at.isoformat() if report.updated_at else None,
+        "resolved_at": report.resolved_at.isoformat() if report.resolved_at else None,
+    }
+
+
+@router.patch("/tickets/{ticket_num}")
+async def update_ticket_status(
+    ticket_num: str,
+    req: BugStatusUpdateRequest,
+    session: Session = Depends(get_session),
+):
+    """Update the status (and optionally resolution/assignee) of a ticket."""
+    valid_statuses = {"open", "in_progress", "waiting", "resolved", "closed"}
+    if req.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Use: {valid_statuses}")
+
+    report = session.exec(
+        select(BugReport).where(BugReport.ticket_num == ticket_num.upper())
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_num} not found")
+
+    report.status = req.status
+    if req.resolution:
+        report.resolution = req.resolution
+    if req.assigned_to:
+        report.assigned_to = req.assigned_to
+    report.updated_at = datetime.utcnow()
+    if req.status in ("resolved", "closed"):
+        report.resolved_at = datetime.utcnow()
+
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+    return {
+        "ticket_num": report.ticket_num,
+        "status": report.status,
+        "updated_at": report.updated_at.isoformat(),
+    }
+
+
+@router.post("/chat")
+async def support_chat(req: SupportChatRequest):
+    """Support Bot: Answers questions about Fabrique using the LLM proxy."""
+    import httpx
+
+    system_prompt = {
+        "role": "system",
+        "content": (
+            "You are the Fabrique Enterprise Support Bot. "
+            "You help users manage their autonomous AI engineering teams. "
+            "Explain concepts like 'Sprints', 'Autonomy Levels', 'Engrams', and 'Glassroom' simply. "
+            "If they report a bug, tell them to use the 'Bug Reporter' tab (the red bug icon). "
+            "Keep answers concise, professional, and friendly. "
+            "CRITICAL: You are fully bilingual. You MUST reply in the same language the user uses (English or Spanish)."
+        ),
+    }
+    formatted_messages = [system_prompt] + [msg.model_dump() for msg in req.messages]
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                f"{os.getenv('LLM_PROXY_URL', 'http://llm-proxy:5100')}/v1/chat/completions",
+                json={
+                    "model": "gemini-1.5-flash",
+                    "messages": formatted_messages,
+                    "max_tokens": 512,
+                    "temperature": 0.7,
+                },
+            )
+            r.raise_for_status()
+            reply = r.json()["choices"][0]["message"]["content"]
+            return {"reply": reply}
+    except Exception as e:
+        logger.warning(f"Support chat LLM error: {e}")
+        raise HTTPException(status_code=503, detail="LLM service unavailable")
+
+
+@router.get("/logs")
+async def download_support_logs():
+    """Enterprise Support: Downloads the latest structured audit logs."""
+    log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs")) / "audit.jsonl"
+    if log_path.exists():
+        return FileResponse(
+            path=log_path,
+            filename=f"fabrique_support_logs_{datetime.now().strftime('%Y%m%d')}.jsonl",
+        )
+    raise HTTPException(status_code=404, detail="Log file not found.")

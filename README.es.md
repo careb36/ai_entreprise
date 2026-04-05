@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="frontend/public/fabrique-icon.svg" width="90" alt="Le Fabrique" />
+  <img src="frontend/public/fabrique-icon.svg" width="90" alt="La Fabrique" />
 
-# Le Fabrique
+# La Fabrique
 
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
@@ -15,7 +15,7 @@
 
 </div>
 
-👔 **¿No eres desarrollador o usuario técnico?** Por favor, lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para comprender cómo utilizar Le Fabrique para automatizar la ingeniería de tu empresa.
+👔 **¿No eres desarrollador o usuario técnico?** Por favor, lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para comprender cómo utilizar La Fabrique para automatizar la ingeniería de tu empresa.
 
 ---
 
@@ -42,7 +42,7 @@
 - **📊 Monitoreo Glassroom**: Transmisión de eventos SSE en tiempo real para supervisar visualmente el progreso de los agentes.
 - **🎫 Bot de Soporte Integrado**: Mesa de ayuda con IA, creación de tickets, niveles de severidad y seguimiento de estado (ES/EN).
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
@@ -60,7 +60,7 @@ graph TD
     B --> I[AI Janitor]
 ```
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
@@ -75,7 +75,7 @@ graph TD
 | **Modelos IA** | Gemini (Google AI Studio) + DeepSeek |
 | **Infraestructura** | Docker Compose, VS Code CLI |
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
@@ -106,13 +106,13 @@ python vscode-daemon/daemon.py
 ### 5. Acceder al Dashboard
 Abre **http://localhost:5173** en tu navegador.
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
 ## 📖 Documentación de la API
 
-Le Fabrique expone una interfaz OpenAPI completamente autodocumentada:
+La Fabrique expone una interfaz OpenAPI completamente autodocumentada:
 
 - **Swagger UI (Interactivo):** `http://localhost:8000/docs`
 - **ReDoc (Detallado):** `http://localhost:8000/redoc`
@@ -130,7 +130,7 @@ Le Fabrique expone una interfaz OpenAPI completamente autodocumentada:
 ## 📁 Estructura del Proyecto
 
 ```
-le-fabrique/
+la-fabrique/
 ├── backend/          # App FastAPI + lógica de agentes LangGraph
 │   ├── agents/       # Definiciones del grafo de agentes
 │   ├── app/          # Rutas API, schemas, config
@@ -152,7 +152,7 @@ le-fabrique/
 └── .env.example
 ```
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
@@ -167,8 +167,8 @@ Queda estrictamente prohibida la copia, distribución o uso comercial no autoriz
 
 ## 🆘 Soporte & Mantenimiento
 
-- **Soporte del Sistema:** Le Fabrique es mantenido por **Carolina Pereira**. Los errores críticos se reportan automáticamente a la proveedora para su resolución.
+- **Soporte del Sistema:** La Fabrique es mantenido por **Carolina Pereira**. Los errores críticos se reportan automáticamente a la proveedora para su resolución.
 - **Soporte de Proyectos:** Para incidencias con el código generado por la IA, usa el Bot de Soporte integrado.
 - **Contacto:** Para consultas sobre licencias y acuerdos SLA Enterprise, contacta directamente con la propietaria.
 
-[⬆ Volver al inicio](#le-fabrique)
+[⬆ Volver al inicio](#la-fabrique)

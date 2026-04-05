@@ -70,8 +70,8 @@ function NavBar() {
     <header className="h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center px-4 lg:px-6 z-20 flex-shrink-0">
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
-        <img src="/fabrique-icon.svg" alt="Le Fabrique" width={30} height={30} className="rounded-md" />
-        <span className="text-lg font-black tracking-tight hidden xs:block">Le Fabrique</span>
+        <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
+        <span className="text-lg font-black tracking-tight hidden xs:block">La Fabrique</span>
       </Link>
 
       {/* Desktop nav */}

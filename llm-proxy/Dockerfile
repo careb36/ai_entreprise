@@ -2,10 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
-    flask==3.0.0 \
-    requests==2.31.0 \
-    gunicorn==21.2.0
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy poetry files
+COPY pyproject.toml poetry.lock* /app/
+
+# Install dependencies
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root
+
+# Install gunicorn for production
+RUN pip install --no-cache-dir gunicorn
 
 COPY app.py /app/
 
