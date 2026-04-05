@@ -379,6 +379,7 @@ def run_fabrique_workflow(story: str, role: str = "Developer"):
     Returns:
         Final ``AgentState`` dict after the workflow reaches ``END``.
     """
+    interaction_id = str(uuid4())
     initial_state = {
         "interaction_id": interaction_id,
         "agent_id": f"{role.lower()}_1",
