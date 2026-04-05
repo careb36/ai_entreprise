@@ -301,53 +301,78 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         """
         RAG over the Temporal Knowledge Graph.
 
-        Searches Episodic nodes whose summary contains keywords from the story
-        and returns a formatted context string ready to be injected into an
-        LLM prompt.
+        Searches Episodic nodes whose summary contains keywords from the story,
+        ranks them by relevance (keyword-match count) and recency, and follows
+        MODIFIED_BY / RELATED_TO edges to surface connected semantic nodes.
+
+        Falls back to the most-recent engrams when no keywords match.
 
         Args:
-            story: The current user story / task description.
+            story:       The current user story / task description.
             role_filter: Optional agent role to restrict results (e.g. "Architect").
-            limit: Maximum number of engrams to return.
+            limit:       Maximum number of engrams to return.
 
         Returns:
-            A formatted string with past decisions, or an empty string when
-            no relevant engrams are found.
+            A formatted context string ready for LLM injection, or "" when the
+            TKG has no engrams at all.
         """
-        # Extract meaningful keywords (drop short words and normalize punctuation)
         normalized = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in story.lower())
         stop_words = {
             "this", "that", "with", "from", "into", "para", "como", "sobre", "pero",
             "the", "and", "for", "una", "unos", "unas", "de", "del", "por", "con", "sin",
         }
         keywords = [w for w in normalized.split() if len(w) > 3 and w not in stop_words][:10]
-        if not keywords:
-            return ""
 
-        params: Dict[str, Any] = {
-            "limit": limit,
-            "keywords": keywords,
-        }
+        params: Dict[str, Any] = {"limit": limit}
         role_condition = ""
         if role_filter:
             role_condition = "AND e.agent_role = $role_filter "
             params["role_filter"] = role_filter
 
-        cypher = f"""
-        MATCH (e:Episodic)
-        WHERE any(kw IN $keywords WHERE toLower(e.summary) CONTAINS kw)
-        {role_condition}
-        RETURN e.id AS id, e.agent_role AS role, e.summary AS summary, e.created_at AS ts
-        ORDER BY e.created_at DESC
-        LIMIT $limit
-        """
+        if keywords:
+            params["keywords"] = keywords
+            cypher = f"""
+            MATCH (e:Episodic)
+            WHERE any(kw IN $keywords WHERE toLower(e.summary) CONTAINS kw)
+            {role_condition}
+            WITH e,
+                 size([kw IN $keywords WHERE toLower(e.summary) CONTAINS kw]) AS match_score
+            OPTIONAL MATCH (e)-[:MODIFIED_BY|RELATED_TO]->(s)
+            RETURN
+                e.id         AS id,
+                e.agent_role AS role,
+                e.summary    AS summary,
+                e.created_at AS ts,
+                labels(e)    AS engram_types,
+                collect(s.id)[..3] AS related_nodes,
+                match_score
+            ORDER BY match_score DESC, e.created_at DESC
+            LIMIT $limit
+            """
+        else:
+            # No usable keywords – fall back to most-recent engrams.
+            cypher = f"""
+            MATCH (e:Episodic)
+            WHERE 1=1 {role_condition}
+            OPTIONAL MATCH (e)-[:MODIFIED_BY|RELATED_TO]->(s)
+            RETURN
+                e.id         AS id,
+                e.agent_role AS role,
+                e.summary    AS summary,
+                e.created_at AS ts,
+                labels(e)    AS engram_types,
+                collect(s.id)[..3] AS related_nodes,
+                0            AS match_score
+            ORDER BY e.created_at DESC
+            LIMIT $limit
+            """
 
         try:
             with self.driver.session() as session:
                 result = session.run(cypher, params)
                 records = [dict(r) for r in result]
         except Exception as e:
-            logger.warning(f"RAG query failed, continuing without context: {e}")
+            logger.warning("RAG query failed, continuing without context: %s", e)
             return ""
 
         if not records:
@@ -355,10 +380,24 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
 
         lines = ["--- Past Architectural Decisions (RAG Context) ---"]
         for r in records:
-            ts = r.get("ts", "")
+            ts = r.get("ts", "unknown time")
             role = r.get("role", "Agent")
             summary = (r.get("summary") or "")[:400]
-            lines.append(f"[{ts}] [{role}] {summary}")
+            engram_types: list = r.get("engram_types") or []
+            related: list = r.get("related_nodes") or []
+            match_score = r.get("match_score", 0)
+
+            # Pick the most specific Episodic_* label for display.
+            etype = next((t for t in engram_types if t.startswith("Episodic_")), "")
+
+            header = f"[{ts}] [{role}]"
+            if etype:
+                header += f" [{etype}]"
+            if match_score:
+                header += f" (relevance: {match_score} keyword match(es))"
+            if related:
+                header += f"\n  ↳ affects: {', '.join(str(n) for n in related[:3])}"
+            lines.append(f"{header}\n  {summary}")
         lines.append("--- End of RAG Context ---")
         return "\n".join(lines)
     
