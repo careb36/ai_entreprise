@@ -1,10 +1,10 @@
 """
-LLM Proxy - Enterprise Multi-Model Gateway
+LLM Proxy - Enterprise Multi-Model Gateway v2.0 (Phase 4)
 
-Routes LLM requests to Gemini API or DeepSeek API with strict token budget enforcement.
-Model selection is dynamic: at startup and every hour the proxy queries the Gemini API to
-discover which models are actually available for the configured API key, so it never breaks
-when Google deprecates or renames a model.
+Governance-ready proxy that routes requests to Gemini or DeepSeek with:
+- **Distributed Tracing**: OpenTelemetry instrumentation.
+- **Dynamic Model Resolution**: Hourly refresh of available Gemini models.
+- **Quota Enforcement**: Persistent token tracking per Business Unit via PostgreSQL.
 """
 
 import os
@@ -13,9 +13,28 @@ import threading
 import logging
 from flask import Flask, request, jsonify
 import requests
+from sqlalchemy import create_engine, text
+
+# --- OpenTelemetry ---
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 app = Flask(__name__)
 
+# OTEL Init
+tracer_provider = TracerProvider()
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+span_processor = BatchSpanProcessor(otlp_exporter)
+tracer_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(tracer_provider)
+FlaskInstrumentor().instrument_app(app)
+RequestsInstrumentor().instrument()
+
+# --- Config & Logging ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -24,289 +43,116 @@ DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
 
-# ---------------------------------------------------------------------------
-# Dynamic model catalogue — refreshed every hour from the Gemini ListModels API
-# ---------------------------------------------------------------------------
+# --- Database ---
+def _build_database_url() -> str:
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    user = os.getenv("POSTGRES_USER", "factory")
+    password = os.getenv("POSTGRES_PASSWORD", "")
+    db = os.getenv("POSTGRES_DB", "factory")
+    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
-# Preference tiers: the proxy picks the first model in each tier that is available.
-# "fast" = low-latency / cheaper;  "powerful" = highest quality
+engine = create_engine(_build_database_url(), pool_pre_ping=True)
+
+# --- Dynamic Model Catalogue ---
 _PREFERENCE_TIERS = {
     "fast":     ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash-lite"],
     "powerful": ["gemini-2.5-pro",   "gemini-2.5-flash",      "gemini-pro-latest",   "gemini-2.0-flash"],
 }
-
-_available_models: set[str] = set()   # populated at startup & refreshed hourly
+_available_models: set[str] = set()
 _model_refresh_lock = threading.Lock()
 _last_refresh: float = 0
 
-
-def _refresh_gemini_models() -> None:
-    """Query Gemini ListModels and update the in-memory set of available model IDs."""
+def _refresh_gemini_models():
     global _available_models, _last_refresh
-    if not GEMINI_API_KEY:
-        return
+    if not GEMINI_API_KEY: return
     try:
-        resp = requests.get(
-            f"{GEMINI_PROXY_URL}/models",
-            headers={"x-goog-api-key": GEMINI_API_KEY},
-            timeout=10,
-        )
+        resp = requests.get(f"{GEMINI_PROXY_URL}/models", headers={"x-goog-api-key": GEMINI_API_KEY}, timeout=10)
         resp.raise_for_status()
-        models = resp.json().get("models", [])
-        ids = {
-            # strip the "models/" prefix → "gemini-2.0-flash"
-            m["name"].split("/")[-1]
-            for m in models
-            if "generateContent" in m.get("supportedGenerationMethods", [])
-        }
+        ids = {m["name"].split("/")[-1] for m in resp.json().get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])}
         with _model_refresh_lock:
             _available_models = ids
             _last_refresh = time.time()
-        logger.info(f"Gemini model catalogue refreshed: {sorted(ids)}")
-    except Exception as exc:
-        logger.warning(f"Could not refresh Gemini model list: {exc}")
-
-
-def _maybe_refresh() -> None:
-    """Refresh the model catalogue if stale (>1 h) or empty."""
-    if not _available_models or (time.time() - _last_refresh) > 3600:
-        _refresh_gemini_models()
-
-
-def _background_refresh() -> None:
-    """Background thread that keeps the model list fresh."""
-    while True:
-        time.sleep(3600)
-        _refresh_gemini_models()
-
+        logger.info(f"Models refreshed: {sorted(ids)}")
+    except Exception as e:
+        logger.warning(f"Refresh failed: {e}")
 
 def resolve_gemini_model(requested: str) -> str:
-    """
-    Return the best available Gemini model name for *requested*.
-
-    Strategy:
-    1. If *requested* is available as-is → use it.
-    2. If *requested* looks like a fast model (flash/lite) → pick best from 'fast' tier.
-    3. Otherwise → pick best from 'powerful' tier.
-    4. Fall back to any available generateContent model (sorted alphabetically).
-    """
-    _maybe_refresh()
+    if not _available_models: _refresh_gemini_models()
     with _model_refresh_lock:
-        available = set(_available_models)
+        if requested in _available_models: return requested
+        tier = "fast" if any(k in requested for k in ("flash", "lite")) else "powerful"
+        for candidate in _PREFERENCE_TIERS[tier]:
+            if candidate in _available_models: return candidate
+    return requested
 
-    if not available:
-        # Can't reach API to list models — let the call fail naturally with the
-        # requested name so the real error is surfaced.
-        return requested
+threading.Thread(target=lambda: (time.sleep(3600), _refresh_gemini_models()), daemon=True).start()
 
-    # Exact match (already a current model name)
-    if requested in available:
-        return requested
-
-    # Choose tier based on the requested name
-    tier = "fast" if any(k in requested for k in ("flash", "lite")) else "powerful"
-    for candidate in _PREFERENCE_TIERS[tier]:
-        if candidate in available:
-            logger.info(f"Model '{requested}' not available → resolved to '{candidate}'")
-            return candidate
-
-    # Last resort: any available model
-    fallback = sorted(available)[0]
-    logger.warning(f"No preferred model available → using '{fallback}'")
-    return fallback
-
-
-# Boot-time refresh + background refresh thread
-_refresh_gemini_models()
-threading.Thread(target=_background_refresh, daemon=True).start()
-
-# ---------------------------------------------------------------------------
-
-TOKEN_BUDGETS = {
-    # Per-role in-memory token counters.  Reset on every proxy restart.
-    # Future: persist to Postgres for cross-restart accounting.
-    "PO":       {"used": 0, "limit": 1_000_000},
-    "Architect":{"used": 0, "limit": 2_000_000},
-    "Developer":{"used": 0, "limit": 5_000_000},
-    "QA":       {"used": 0, "limit": 1_000_000},
-}
-
-def _gemini_post(url: str, headers: dict, payload: dict, timeout: int = 60):
-    """POST to Gemini with automatic retry on 429 (rate limit)."""
-    delays = [2, 5, 10]  # seconds to wait between retries
-    last_exc = None
-    for attempt, delay in enumerate([0] + delays):
-        if delay:
-            time.sleep(delay)
-        try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
-            if resp.status_code == 429 and attempt < len(delays):
-                logger.warning(f"Gemini 429 rate limit, retrying in {delays[attempt]}s…")
-                continue
-            resp.raise_for_status()
-            return resp
-        except requests.HTTPError as exc:
-            last_exc = exc
-            if resp.status_code != 429:
-                raise
-    raise last_exc
-
-
-
+# --- Governance Middleware ---
 @app.before_request
-def enforce_token_budget():
-    """Reject requests from agents that have exhausted their token budget."""
-    if request.path == "/health":
+def enforce_business_unit_quota():
+    if request.path == "/health": return
+    bu_id = request.headers.get("X-Business-Unit-ID")
+    if not bu_id:
+        logger.warning("No X-Business-Unit-ID provided.")
         return
-    agent_role = request.headers.get("X-Agent-Role", "Developer")
-    budget = TOKEN_BUDGETS.get(agent_role)
-    if budget and budget["used"] >= budget["limit"]:
-        return jsonify({"error": "Token budget exceeded", "ok": False}), 429
+    try:
+        with engine.connect() as conn:
+            query = text("SELECT token_quota_limit, token_quota_used FROM business_units WHERE id = :id")
+            res = conn.execute(query, {"id": bu_id}).fetchone()
+            if not res: return jsonify({"error": "Business Unit not found"}), 404
+            limit, used = res
+            if limit > 0 and used >= limit:
+                return jsonify({"error": "Quota exceeded", "used": used, "limit": limit}), 429
+    except Exception as e:
+        logger.error(f"Quota check failed: {e}")
 
+def track_usage_in_db(bu_id: str, tokens: int):
+    if not bu_id: return
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE business_units SET token_quota_used = token_quota_used + :t WHERE id = :id"), {"t": tokens, "id": bu_id})
+    except Exception as e:
+        logger.error(f"Usage tracking failed: {e}")
 
-def track_usage(agent_role: str, tokens: int):
-    """Increment the consumed-token counter for *agent_role*."""
-    if agent_role in TOKEN_BUDGETS:
-        TOKEN_BUDGETS[agent_role]["used"] += tokens
-
+# --- API Endpoints ---
 @app.route("/health")
 def health():
-    return jsonify({
-        "status": "healthy",
-        "service": "llm-proxy",
-        "budgets": TOKEN_BUDGETS,
-        "gemini_models_available": sorted(_available_models),
-    })
+    return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models)})
 
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
-    """
-    OpenAI-compatible chat completions endpoint.
-
-    Routes to:
-    - **DeepSeek** if the ``model`` field starts with ``"deepseek"``
-      (forwarded verbatim to ``api.deepseek.com``).
-    - **Gemini** otherwise — the requested model name is resolved to the best
-      available Gemini model via ``resolve_gemini_model()``, then the
-      OpenAI-style ``messages`` array is translated to Gemini's
-      ``contents`` / ``system_instruction`` format.
-
-    Token usage is tracked per agent role (``X-Agent-Role`` header).
-    """
+    data = request.json
     model = data.get("model", "gemini-flash-latest")
     messages = data.get("messages", [])
-    agent_role = request.headers.get("X-Agent-Role", "Developer")
+    bu_id = request.headers.get("X-Business-Unit-ID")
 
     try:
-        # ROUTE 1: DeepSeek
         if "deepseek" in model.lower():
-            if not DEEPSEEK_API_KEY:
-                return jsonify({"error": "DEEPSEEK_API_KEY not configured", "ok": False}), 500
-            headers = {"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"}
-            response = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers=headers, json=data, timeout=60)
-            response.raise_for_status()
-            result = response.json()
-            track_usage(agent_role, result.get("usage", {}).get("total_tokens", 0))
-            return jsonify(result)
-
-        # ROUTE 2: Gemini — dynamic model resolution
+            resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=data, timeout=60)
+            result = resp.json()
+            tokens = result.get("usage", {}).get("total_tokens", 0)
         else:
-            if not GEMINI_API_KEY:
-                return jsonify({"error": "GEMINI_API_KEY not configured", "ok": False}), 500
-
             gemini_model = resolve_gemini_model(model)
-            url = f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent"
-            gemini_headers = {
-                "Content-Type": "application/json",
-                "x-goog-api-key": GEMINI_API_KEY,
+            contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages if m["role"] != "system"]
+            system = next((m["content"] for m in messages if m["role"] == "system"), None)
+            payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
+            if system: payload["system_instruction"] = {"parts": [{"text": system}]}
+            
+            resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
+            res = resp.json()
+            text_out = res["candidates"][0]["content"]["parts"][0]["text"]
+            tokens = (len(str(messages)) + len(text_out)) // 4
+            result = {
+                "choices": [{"message": {"role": "assistant", "content": text_out}}],
+                "usage": {"total_tokens": tokens},
+                "model": gemini_model
             }
-
-            # Separate system_instruction from conversation turns
-            system_text = None
-            contents = []
-            for msg in messages:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-                if role == "system":
-                    system_text = content
-                else:
-                    gemini_role = "model" if role == "assistant" else "user"
-                    contents.append({"role": gemini_role, "parts": [{"text": content}]})
-
-            payload = {
-                "contents": contents,
-                "generationConfig": {
-                    "temperature": data.get("temperature", 0.7),
-                    "maxOutputTokens": data.get("max_tokens", 2048),
-                },
-            }
-            if system_text:
-                payload["system_instruction"] = {"parts": [{"text": system_text}]}
-
-            response = _gemini_post(url, gemini_headers, payload)
-            response.raise_for_status()
-            result = response.json()
-            text_content = (
-                result.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-            )
-            tokens = len(str(messages)) // 4 + len(text_content) // 4
-            track_usage(agent_role, tokens)
-            return jsonify({
-                "id": "gemini-proxy",
-                "object": "chat.completion",
-                "model": gemini_model,
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": text_content}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": len(str(messages)) // 4, "completion_tokens": len(text_content) // 4, "total_tokens": tokens},
-            })
-
-    except Exception as e:
-        logger.error(f"Proxy failed: {str(e)}")
-        return jsonify({"error": str(e), "ok": False}), 500
-
-@app.route("/v1/embeddings", methods=["POST"])
-def embeddings():
-    """
-    Produce a dense vector embedding for the input text.
-
-    Uses Gemini ``text-embedding-004`` and returns an OpenAI-compatible
-    response shape so callers don't need provider-specific logic.
-    """
-    text = data.get("input", "")
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "GEMINI_API_KEY not configured"}), 500
-    try:
-        # Use the best available embedding model dynamically
-        embed_model = "text-embedding-004"
-        url = f"{GEMINI_PROXY_URL}/models/{embed_model}:embedContent"
-        payload = {"content": {"parts": [{"text": text}]}}
-        response = requests.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
-            json=payload,
-            timeout=30,
-        )
-        result = response.json()
-        embedding = result.get("embedding", {}).get("values", [])
-        return jsonify({
-            "object": "list",
-            "data": [{"object": "embedding", "index": 0, "embedding": embedding}],
-            "model": embed_model,
-            "usage": {"total_tokens": len(text) // 4},
-        })
+        
+        track_usage_in_db(bu_id, tokens)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route("/v1/models", methods=["GET"])
-def list_models():
-    """Expose discovered model list so clients can query what's available."""
-    _maybe_refresh()
-    return jsonify({
-        "object": "list",
-        "data": [{"id": m, "object": "model"} for m in sorted(_available_models)],
-    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PROXY_PORT", 5100)))

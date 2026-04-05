@@ -12,12 +12,15 @@ without catching exceptions for common failure paths.
 
 import os
 import requests
+import logging
 from typing import Optional, Dict, Any
+from opentelemetry import propagate
 
+logger = logging.getLogger("fabrique-backend")
 
 class LLMProxyClient:
     """
-    Synchronous HTTP client for the Fabrique LLM proxy.
+    Synchronous HTTP client for the Fabrique LLM proxy with Governance support.
 
     Args:
         base_url: Base URL of the LLM proxy service (default: ``http://localhost:5100``).
@@ -26,81 +29,57 @@ class LLMProxyClient:
 
     def __init__(self, base_url: str = "http://localhost:5100"):
         self.base_url = base_url
-        # 30-second timeout balances LLM latency with request reliability.
-        self.timeout = 30
+        self.timeout = 60  # Increased for complex agentic prompts
 
-    def complete(self, prompt: str, model: str = "gemini-pro", **kwargs) -> Dict[str, Any]:
+    def _get_headers(self, role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, str]:
+        """Construct headers for trace propagation and governance."""
+        headers = {
+            "Content-Type": "application/json",
+            "X-Agent-Role": role,
+        }
+        if bu_id:
+            headers["X-Business-Unit-ID"] = str(bu_id)
+        
+        # Propagate OpenTelemetry context (TraceParent)
+        propagate.inject(headers)
+        return headers
+
+    def chat(self, messages: list, model: str = "gemini-pro", role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Send a single-turn completion request to the LLM proxy.
-
-        Args:
-            prompt: The prompt text to complete.
-            model:  Model name; the proxy resolves aliases to available models.
-            **kwargs: Additional fields forwarded verbatim in the JSON body
-                      (e.g. ``temperature``, ``max_tokens``).
-
-        Returns:
-            Parsed JSON response dict on success.
-            ``{"error": ..., "ok": False}`` on network or HTTP errors.
+        Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
         """
         try:
+            headers = self._get_headers(role, bu_id)
+            payload = {"messages": messages, "model": model}
+            
             response = requests.post(
-                f"{self.base_url}/v1/completions",
-                json={"prompt": prompt, "model": model, **kwargs},
+                f"{self.base_url}/v1/chat/completions",
+                json=payload,
+                headers=headers,
                 timeout=self.timeout,
             )
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
+            logger.error(f"LLM Proxy call failed: {e}")
             return {"error": str(e), "ok": False}
 
-    def embed(self, text: str) -> Optional[list]:
-        """
-        Retrieve a dense vector embedding for the given text.
-
-        Uses the ``text-embedding-004`` Gemini model (resolved dynamically by
-        the proxy to the best available embedding model).
-
-        Args:
-            text: Input text to embed.
-
-        Returns:
-            List of floats representing the embedding vector, or ``None`` on error.
-        """
+    def embed(self, text: str, role: str = "Developer", bu_id: Optional[int] = None) -> Optional[list]:
+        """Retrieve a dense vector embedding."""
         try:
+            headers = self._get_headers(role, bu_id)
             response = requests.post(
                 f"{self.base_url}/v1/embeddings",
-                json={"text": text},
+                json={"input": text},
+                headers=headers,
                 timeout=self.timeout,
             )
             response.raise_for_status()
-            return response.json().get("embedding")
-        except requests.RequestException as e:
-            print(f"Error getting embeddings: {e}")
+            # The proxy returns {"data": [{"embedding": [...]}]} (OpenAI style)
+            data = response.json().get("data", [])
+            if data:
+                return data[0].get("embedding")
             return None
-
-    def chat(self, messages: list, model: str = "gemini-pro") -> Dict[str, Any]:
-        """
-        Send a multi-turn chat request to the LLM proxy.
-
-        The proxy maps the ``messages`` array to the Gemini or DeepSeek format
-        depending on the model prefix.
-
-        Args:
-            messages: List of ``{"role": ..., "content": ...}`` dicts.
-            model:    Model name; resolved by the proxy.
-
-        Returns:
-            Parsed JSON response dict on success.
-            ``{"error": ..., "ok": False}`` on network or HTTP errors.
-        """
-        try:
-            response = requests.post(
-                f"{self.base_url}/v1/chat",
-                json={"messages": messages, "model": model},
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return response.json()
         except requests.RequestException as e:
-            return {"error": str(e), "ok": False}
+            logger.error(f"LLM Proxy embedding failed: {e}")
+            return None

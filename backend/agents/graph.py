@@ -24,12 +24,52 @@ import re
 from typing import Dict, Any, Optional, TypedDict
 from uuid import uuid4
 from datetime import datetime
+from functools import wraps
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
 from backend.llm.model_factory import create_completion
 from backend.memory.engram_processor import get_engram_processor
+
+# --- OpenTelemetry Initialization ---
+tracer_provider = TracerProvider()
+otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+span_processor = BatchSpanProcessor(otlp_exporter)
+tracer_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(tracer_provider)
+tracer = trace.get_tracer("fabrique-agents")
+
+# Instrument outgoing HTTP calls to propagate context to llm-proxy
+RequestsInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
+
+def instrument_node(node_name: str):
+    """Decorator to wrap LangGraph nodes in OpenTelemetry spans."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(state: AgentState, *args, **kwargs) -> AgentState:
+            with tracer.start_as_current_span(node_name) as span:
+                span.set_attribute("agent_role", state.get("agent_role", "unknown"))
+                span.set_attribute("interaction_id", state.get("interaction_id", "unknown"))
+                span.set_attribute("story", state.get("story", ""))
+                try:
+                    result = func(state, *args, **kwargs)
+                    return result
+                except Exception as e:
+                    span.set_status(Status(StatusCode.ERROR))
+                    span.record_exception(e)
+                    raise
+        return wrapper
+    return decorator
 
 logger = logging.getLogger("fabrique-agents")
 
@@ -267,6 +307,7 @@ def real_execution_node(state: AgentState) -> AgentState:
     state["last_error"] = None
     return state
 
+@instrument_node("burn_engram")
 def burn_engram_node(state: AgentState) -> AgentState:
     """Finalize by burning an immutable record into Neo4j."""
     processor = get_engram_processor()
@@ -403,3 +444,6 @@ def run_fabrique_workflow(story: str, role: str = "Developer"):
     graph = create_agent_graph()
     config = {"configurable": {"thread_id": interaction_id}}
     return graph.invoke(initial_state, config=config)
+g)
+
+
