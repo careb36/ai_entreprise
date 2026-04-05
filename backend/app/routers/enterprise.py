@@ -157,10 +157,13 @@ async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_se
     is provided, the result is persisted in the ``project_discovery`` table.
     """
     service = DiscoveryService(session)
-    discovery, detected_stack, suggested_team = service.discover_project_team(
-        company_id=req.company_id,
-        project_path=req.project_path,
-    )
+    try:
+        discovery, detected_stack, suggested_team = service.discover_project_team(
+            company_id=req.company_id,
+            project_path=req.project_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {
         "discovery_id": discovery.id if discovery else None,
         "detected_stack": detected_stack,

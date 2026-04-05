@@ -28,6 +28,7 @@ export default function CompanyNew() {
   const [agents, setAgents] = useState<Agent[]>([
     { role: 'PO', persona: '', seniority: 'Senior', specialty: '' }
   ])
+  const [discoveryResult, setDiscoveryResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,9 +40,9 @@ export default function CompanyNew() {
 
     setIsDiscovering(true)
     setError(null)
+    setDiscoveryResult(null)
     try {
-      // Pass null company_id for pre-creation discovery
-      const response = await api.discoverTeam(null as any, projectPath)
+      const response = await api.discoverTeam(null, projectPath)
       
       if (response) {
         if (response.suggested_team) {
@@ -50,6 +51,7 @@ export default function CompanyNew() {
         if (response.detected_stack?.name && !companyName) {
           setCompanyName(response.detected_stack.name)
         }
+        setDiscoveryResult(response.detected_stack)
       }
     } catch (e) {
       console.error(e)
@@ -120,6 +122,33 @@ export default function CompanyNew() {
             {isDiscovering ? t('companyNew.detecting') : t('companyNew.autoDetect')}
           </button>
         </div>
+
+        {/* Scan results */}
+        {discoveryResult && (
+          <div className="px-5 pb-4 border-t border-brand-700/20 pt-3 text-sm space-y-1">
+            <p className="text-brand-300 font-medium mb-2">✅ Stack detected</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-300">
+              <div className="bg-surface-800 rounded p-2">
+                <span className="text-gray-500 block">Language</span>
+                <span className="font-mono">{discoveryResult.language}</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2">
+                <span className="text-gray-500 block">Frameworks</span>
+                <span className="font-mono">{discoveryResult.frameworks?.join(', ') || '—'}</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2">
+                <span className="text-gray-500 block">Databases</span>
+                <span className="font-mono">{discoveryResult.databases?.join(', ') || '—'}</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2">
+                <span className="text-gray-500 block">Complexity</span>
+                <span className={`font-mono ${discoveryResult.complexity === 'High' ? 'text-status-error' : discoveryResult.complexity === 'Medium' ? 'text-yellow-400' : 'text-status-success'}`}>
+                  {discoveryResult.complexity} ({discoveryResult.file_count} files)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="card p-6 space-y-6">
