@@ -1,3 +1,16 @@
+"""
+Sprint router — Kanban board management and backlog item lifecycle.
+
+Endpoints:
+- ``POST /v1/start_sprint``          — create a sprint with initial backlog items.
+- ``GET  /v1/sprints/{id}/board``    — retrieve sprint metadata and Kanban columns.
+- ``PATCH /v1/backlog/{item_id}``    — update status, priority, assignee, or add a comment.
+
+New backlog items are dispatched to agents via the transactional outbox:
+an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
+delivered to NATS by the ``process_outbox`` background worker.
+"""
+
 import json
 from datetime import datetime
 from uuid import uuid4
@@ -12,13 +25,21 @@ from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
+# Allowed values for validation; rejected values return HTTP 422.
 VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
 @router.post("/start_sprint")
 async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_session)):
-    """Start a sprint and create backlog items."""
+    """
+    Create a sprint and its initial backlog items in a single transaction.
+
+    For each backlog item an ``OutboxEvent`` is inserted so the background
+    worker can publish a ``task.assign`` NATS message once the DB transaction
+    commits.  This guarantees at-least-once delivery without a distributed
+    transaction between Postgres and NATS.
+    """
     sprint = Sprint(
         company_id=req.company_id,
         sprint_name=req.sprint_name,
@@ -26,7 +47,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
         duration_days=req.duration_days,
     )
     session.add(sprint)
-    session.flush()
+    session.flush()  # Obtain sprint.id before processing backlog items
 
     item_ids = []
     for item in req.backlog_items:
@@ -39,6 +60,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
         session.flush()
         item_ids.append(backlog_item.id)
 
+        # Outbox entry — delivered to NATS by the process_outbox background worker.
         nats_payload = {
             "subject": "task.assign",
             "message": {
@@ -65,7 +87,12 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
 
 @router.get("/sprints/{sprint_id}/board")
 async def get_sprint_board(sprint_id: int, session: Session = Depends(get_session)):
-    """Return sprint metadata + all backlog items grouped by status (Kanban board)."""
+    """
+    Return sprint metadata and all backlog items grouped by Kanban column.
+
+    Items whose ``status`` value is not in ``VALID_STATUSES`` are placed in
+    the ``"todo"`` column to avoid breaking the frontend rendering.
+    """
     sprint = session.get(Sprint, sprint_id)
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
@@ -98,6 +125,7 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
         for i in items_db
     ]
 
+    # Pre-populate all columns so the frontend always receives a complete dict.
     columns = {s: [] for s in ["todo", "in_progress", "in_review", "done", "blocked"]}
     for item in items:
         col = item["status"] if item["status"] in columns else "todo"
@@ -108,7 +136,13 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
 
 @router.patch("/backlog/{item_id}")
 async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Session = Depends(get_session)):
-    """Update status, priority, assignee or add a comment to a backlog item."""
+    """
+    Partially update a backlog item.
+
+    Supports updating ``status``, ``priority``, ``assignee``, or appending a
+    new comment.  All fields are optional; only provided fields are changed.
+    Invalid ``status`` or ``priority`` values return HTTP 422.
+    """
     if req.status and req.status not in VALID_STATUSES:
         raise HTTPException(status_code=422, detail=f"Invalid status. Valid: {VALID_STATUSES}")
     if req.priority and req.priority not in VALID_PRIORITIES:
@@ -125,6 +159,7 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
     if req.assignee is not None:
         item.assignee = req.assignee
     if req.comment:
+        # Append the new comment to the existing JSON list.
         comments = list(item.comments or [])
         comments.append({
             "author": "user",

@@ -1,3 +1,14 @@
+"""
+Auth router — human user registration and company membership management.
+
+Endpoints:
+- ``POST /v1/auth/register``  — create a new platform user account.
+- ``POST /v1/company/invite`` — invite an existing user to collaborate on a company.
+
+Passwords are hashed with bcrypt via ``passlib`` before storage.
+JWT-based session authentication is planned for a future phase.
+"""
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
 
@@ -7,12 +18,22 @@ from schemas import UserCreateRequest, InviteMemberRequest
 from passlib.context import CryptContext
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
+
+# bcrypt context — "deprecated='auto'" automatically re-hashes old entries
+# when a stronger algorithm becomes the default in future passlib releases.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.post("/auth/register")
 async def register_user(req: UserCreateRequest, session: Session = Depends(get_session)):
-    """Register a new human user for the platform."""
+    """
+    Register a new human user for the platform.
+
+    Checks for a duplicate email before inserting.  The plain-text password
+    is hashed with bcrypt and the raw value is never stored.
+
+    Returns the new user's ``user_id`` and ``email``.
+    """
     existing = session.exec(select(User).where(User.email == req.email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered.")
@@ -29,7 +50,13 @@ async def register_user(req: UserCreateRequest, session: Session = Depends(get_s
 
 @router.post("/company/invite")
 async def invite_member(req: InviteMemberRequest, session: Session = Depends(get_session)):
-    """Invite a human user to collaborate on a company/project."""
+    """
+    Invite a registered user to collaborate on a company.
+
+    The user must already have an account (identified by email).  The
+    ``human_role`` determines which governance capabilities the user has:
+    ``"Owner"`` > ``"Manager"`` > ``"Viewer"``.
+    """
     user = session.exec(select(User).where(User.email == req.email)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

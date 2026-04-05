@@ -1,6 +1,22 @@
 """
-LangGraph Agent Workflow - Enterprise v2026.4
-Inspirations: MetaGPT (Design Artifacts), GPT Pilot (Micro-tasks), OpenHands (Real Execution)
+LangGraph Agent Workflow — Enterprise v2026.4
+
+Five-node directed graph that models the full AI engineering cycle:
+  design → validate_design → generate → execute → burn
+
+Inspirations:
+- **MetaGPT**: Architect produces Mermaid design artifacts before code generation.
+- **GPT Pilot**: Micro-tasks with explicit validation and retry budgets.
+- **OpenHands**: Real execution node that runs generated code and feeds back results.
+
+Phase 2 additions:
+- **Self-Correction loop**: ``generate_code_node`` includes structured execution
+  feedback (stdout + specific fix requirements) on every retry, not just the
+  error message.
+- **Guardrails**: ``validate_design_node`` uses ``_audit_mermaid_issues()`` which
+  returns a list of specific validation failures for richer error messages.
+- **RAG over Neo4j**: ``architect_design_node`` queries the Temporal Knowledge
+  Graph for relevant past decisions before designing.
 """
 
 import logging
@@ -83,24 +99,29 @@ def _fallback_design_artifact(story: str) -> str:
     )
 
 class AgentState(TypedDict):
-    interaction_id: str
-    agent_id: str
-    agent_role: str
-    task_type: str
-    story: str
-    constraints: Optional[str]
-    design_artifact: Optional[str] # MetaGPT style
-    generated_code: Optional[str]
-    execution_results: Optional[Dict[str, Any]] # OpenHands style
-    tests_passed: bool
-    engram_id: Optional[str]
-    retry_count: int
-    design_valid: bool
-    design_retry_count: int
-    execution_retry_count: int
-    last_error: Optional[str]
-    rag_context: Optional[str]
-    created_at: str
+    """
+    Immutable-style state dict threaded through every LangGraph node.
+
+    Fields:
+        interaction_id:       UUID that correlates all events for a single run.
+        agent_id:             Identifier of the primary executing agent.
+        agent_role:           Role string (e.g. ``"Developer"``).
+        task_type:            Domain hint (e.g. ``"feature"``, ``"bugfix"``).
+        story:                The original user story text.
+        constraints:          Optional technical/business constraints.
+        design_artifact:      Mermaid + requirements output from the Architect.
+        generated_code:       Source code produced by the Developer node.
+        execution_results:    Dict with ``stdout``, ``exit_code``, ``success``.
+        tests_passed:         ``True`` when the execution node reports no failures.
+        engram_id:            Neo4j node ID assigned after burning.
+        retry_count:          Legacy general retry counter.
+        design_valid:         Whether the latest Mermaid validation passed.
+        design_retry_count:   Number of Architect regeneration attempts so far.
+        execution_retry_count: Number of Developer fix attempts so far.
+        last_error:           Human-readable description of the most recent failure.
+        rag_context:          Context string injected into the Architect prompt.
+        created_at:           ISO-8601 timestamp when the workflow started.
+    """
 
 def architect_design_node(state: AgentState) -> AgentState:
     """Architect generates Mermaid diagrams and technical specs (MetaGPT style)."""
@@ -280,12 +301,14 @@ def burn_engram_node(state: AgentState) -> AgentState:
 
 
 def _route_after_design_validation(state: AgentState) -> str:
+    """Route back to 'design' for a retry, or forward to 'generate' when valid."""
     if state.get("design_valid"):
         return "generate"
     return "design"
 
 
 def _route_after_execution(state: AgentState) -> str:
+    """Route back to 'generate' for a fix, or to 'burn' when tests pass or retries are exhausted."""
     if state.get("tests_passed"):
         return "burn"
 
@@ -295,8 +318,21 @@ def _route_after_execution(state: AgentState) -> str:
     logger.warning("Max execution retries reached, burning engram with failure state.")
     return "burn"
 
+
 def create_agent_graph() -> StateGraph:
-    workflow = StateGraph(AgentState)
+    """
+    Compile the Fabrique LangGraph workflow into a runnable state machine.
+
+    Topology:
+        design → validate_design ⇄ design (retry loop, max ``MAX_DESIGN_RETRIES``)
+                                ↓ (valid)
+                              generate → execute ⇄ generate (retry loop, max ``MAX_EXECUTION_RETRIES``)
+                                                  ↓ (pass or exhausted)
+                                                 burn → END
+
+    The ``MemorySaver`` checkpointer persists intermediate state so the graph
+    can be resumed after interruptions (useful for async daemon callbacks).
+    """
     
     workflow.add_node("design", architect_design_node)
     workflow.add_node("validate_design", validate_design_node)
@@ -329,7 +365,20 @@ def create_agent_graph() -> StateGraph:
     return workflow.compile(checkpointer=memory)
 
 def run_fabrique_workflow(story: str, role: str = "Developer"):
-    interaction_id = str(uuid4())
+    """
+    Convenience entry point for running a single story through the full workflow.
+
+    Constructs the initial ``AgentState``, compiles the graph, and invokes it
+    synchronously.  For production async use, call ``create_agent_graph()``
+    directly and integrate with a NATS event loop.
+
+    Args:
+        story: Natural-language user story to implement.
+        role:  Primary agent role (determines which LLM model is used).
+
+    Returns:
+        Final ``AgentState`` dict after the workflow reaches ``END``.
+    """
     initial_state = {
         "interaction_id": interaction_id,
         "agent_id": f"{role.lower()}_1",

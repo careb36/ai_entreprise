@@ -1,29 +1,66 @@
+"""
+DiscoveryService — automated project stack detection and AI team composition.
+
+Analyses a project path (file system structure, configuration files, etc.) to
+determine the technology stack in use, then recommends the ideal composition of
+AI agents for that project.
+
+The current implementation returns a deterministic placeholder result.
+Future phases will replace this with real file-system introspection, parsing
+``package.json``, ``pom.xml``, ``requirements.txt``, Docker files, etc.
+"""
+
 import json
 from sqlmodel import Session
 from models import ProjectDiscovery
 
+
 class DiscoveryService:
+    """
+    Scans a project directory and persists the detected stack and team suggestion.
+
+    Args:
+        session: Active SQLModel session used for persisting the discovery result.
+    """
+
     def __init__(self, session: Session):
         self.session = session
 
     def discover_project_team(self, company_id: int, project_path: str):
-        """Scans a project path to detect stack and suggest the ideal AI team."""
-        
-        # Placeholder for real analysis logic (to be expanded in later phases)
+        """
+        Scan a project path and recommend an AI engineering team.
+
+        Steps:
+        1. Analyse the project to detect the technology stack (language, framework,
+           database, complexity).  Currently a stub — production implementation
+           should inspect files at *project_path*.
+        2. Map the detected stack to a recommended team of AI agents.
+        3. Persist a ``ProjectDiscovery`` row for historical reference and
+           return it alongside the raw stack/team dicts.
+
+        Args:
+            company_id:   Tenant owning this project.
+            project_path: Filesystem path to the project root to analyse.
+
+        Returns:
+            Tuple of ``(discovery_orm_row, detected_stack_dict, suggested_team_list)``.
+        """
+        # --- Stack detection (stub — replace with real file introspection) ---
         detected_stack = {
             "language": "TypeScript",
             "framework": "React",
             "database": "Postgres",
             "complexity": "Medium",
         }
-        
+
+        # Map detected stack complexity → optimal agent team composition.
         suggested_team = [
             {"role": "PO", "seniority": "Senior", "specialty": "Product Management"},
             {"role": "Architect", "seniority": "Staff", "specialty": "Cloud/DB"},
             {"role": "Developer", "seniority": "Mid", "specialty": "Frontend/React"},
             {"role": "QA", "seniority": "Senior", "specialty": "Automation"},
         ]
-        
+
         discovery = ProjectDiscovery(
             company_id=company_id,
             project_path=project_path,
@@ -31,9 +68,9 @@ class DiscoveryService:
             suggested_team=json.dumps(suggested_team),
             status="completed",
         )
-        
+
         self.session.add(discovery)
         self.session.commit()
         self.session.refresh(discovery)
-        
+
         return discovery, detected_stack, suggested_team

@@ -123,10 +123,12 @@ threading.Thread(target=_background_refresh, daemon=True).start()
 # ---------------------------------------------------------------------------
 
 TOKEN_BUDGETS = {
-    "PO": {"used": 0, "limit": 1_000_000},
-    "Architect": {"used": 0, "limit": 2_000_000},
-    "Developer": {"used": 0, "limit": 5_000_000},
-    "QA": {"used": 0, "limit": 1_000_000}
+    # Per-role in-memory token counters.  Reset on every proxy restart.
+    # Future: persist to Postgres for cross-restart accounting.
+    "PO":       {"used": 0, "limit": 1_000_000},
+    "Architect":{"used": 0, "limit": 2_000_000},
+    "Developer":{"used": 0, "limit": 5_000_000},
+    "QA":       {"used": 0, "limit": 1_000_000},
 }
 
 def _gemini_post(url: str, headers: dict, payload: dict, timeout: int = 60):
@@ -151,7 +153,9 @@ def _gemini_post(url: str, headers: dict, payload: dict, timeout: int = 60):
 
 
 
+@app.before_request
 def enforce_token_budget():
+    """Reject requests from agents that have exhausted their token budget."""
     if request.path == "/health":
         return
     agent_role = request.headers.get("X-Agent-Role", "Developer")
@@ -159,7 +163,9 @@ def enforce_token_budget():
     if budget and budget["used"] >= budget["limit"]:
         return jsonify({"error": "Token budget exceeded", "ok": False}), 429
 
+
 def track_usage(agent_role: str, tokens: int):
+    """Increment the consumed-token counter for *agent_role*."""
     if agent_role in TOKEN_BUDGETS:
         TOKEN_BUDGETS[agent_role]["used"] += tokens
 
@@ -174,7 +180,19 @@ def health():
 
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
-    data = request.get_json() or {}
+    """
+    OpenAI-compatible chat completions endpoint.
+
+    Routes to:
+    - **DeepSeek** if the ``model`` field starts with ``"deepseek"``
+      (forwarded verbatim to ``api.deepseek.com``).
+    - **Gemini** otherwise — the requested model name is resolved to the best
+      available Gemini model via ``resolve_gemini_model()``, then the
+      OpenAI-style ``messages`` array is translated to Gemini's
+      ``contents`` / ``system_instruction`` format.
+
+    Token usage is tracked per agent role (``X-Agent-Role`` header).
+    """
     model = data.get("model", "gemini-flash-latest")
     messages = data.get("messages", [])
     agent_role = request.headers.get("X-Agent-Role", "Developer")
@@ -250,7 +268,12 @@ def chat_completions():
 
 @app.route("/v1/embeddings", methods=["POST"])
 def embeddings():
-    data = request.get_json() or {}
+    """
+    Produce a dense vector embedding for the input text.
+
+    Uses Gemini ``text-embedding-004`` and returns an OpenAI-compatible
+    response shape so callers don't need provider-specific logic.
+    """
     text = data.get("input", "")
     if not GEMINI_API_KEY:
         return jsonify({"error": "GEMINI_API_KEY not configured"}), 500

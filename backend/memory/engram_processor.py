@@ -143,7 +143,17 @@ class DeepSeekEngramProcessor:
         }
     
     def _determine_engram_type(self, role: str, metadata: Dict[str, Any]) -> EngramType:
-        """Determine the type of Engram based on role and context."""
+        """
+        Choose the most specific ``EngramType`` for the incoming event.
+
+        Priority order:
+        1. ``action_type`` metadata field (explicit classification from the caller).
+        2. Agent role (Architect/PO → architectural change).
+        3. Default to ``SPRINT_DECISION``.
+
+        The ``action_type`` field is set by ``burn_engram_node`` in ``graph.py``:
+        ``"test_result"`` when tests passed, ``"code_review"`` otherwise.
+        """
         if metadata.get("action_type") == "code_review":
             return EngramType.CODE_REVIEW
         elif metadata.get("action_type") == "test_result":
@@ -265,9 +275,19 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         self,
         agent_id: Optional[str] = None,
         engram_type: Optional[EngramType] = None,
-        limit: int = 10
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
-        """Query Engrams from the TKG."""
+        """
+        Return raw Episodic node dicts from Neo4j, ordered by recency.
+
+        Args:
+            agent_id:    Filter to a specific agent (optional).
+            engram_type: Filter to a specific engram type label (optional).
+            limit:       Maximum number of results.
+
+        Returns:
+            List of property dicts for each matching Episodic node.
+        """
         cypher = "MATCH (e:Episodic) "
 
         conditions = []

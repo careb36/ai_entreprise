@@ -1,3 +1,29 @@
+"""
+Fabrique AI Janitor — daily database maintenance service.
+
+Runs as a standalone long-lived container (or bare process).  Executes three
+maintenance tasks every 24 hours:
+
+1. **Outbox cleanup** — deletes ``outbox_events`` rows with status
+   ``'completed'`` that are older than 7 days, keeping the table small and
+   the partial index efficient.
+
+2. **Task-queue cleanup** — deletes ``task_queue`` rows with terminal statuses
+   (``'completed'`` or ``'failed'``) older than 30 days.
+
+3. **Vector index rebuild** — runs ``REINDEX INDEX CONCURRENTLY`` on the
+   ``vector_memory_idx`` HNSW/IVFFlat index so that ANN search stays fast
+   after large insert batches.  ``CONCURRENTLY`` means read queries are not
+   blocked during the rebuild.
+
+Why a separate container?
+--------------------------
+Maintenance operations that hold locks (even temporarily) can interfere with
+online request-handling.  Isolating them in a dedicated container lets us
+schedule them during low-traffic windows and restart them independently of the
+main API.
+"""
+
 import os
 import time
 import logging
@@ -7,7 +33,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("fabrique-janitor")
 
 def get_db_connection():
-    """Establish connection for the Janitor script."""
+    """
+    Establish a direct psycopg2 connection for the Janitor process.
+
+    Uses psycopg2 directly (not SQLModel/SQLAlchemy) so we can set
+    ``autocommit = True``, which is required by ``REINDEX CONCURRENTLY``
+    (that DDL command cannot run inside a transaction block).
+    """
     return psycopg2.connect(
         host=os.getenv("POSTGRES_HOST", "localhost"),
         port=int(os.getenv("POSTGRES_PORT", "5432")),
@@ -17,7 +49,13 @@ def get_db_connection():
     )
 
 def run_janitor_tasks():
-    logger.info("Starting Daily AI Janitor Tasks...")
+    """
+    Execute all daily maintenance tasks in a single database session.
+
+    Connects with ``autocommit = True`` so each statement commits immediately
+    — a requirement for ``REINDEX CONCURRENTLY``.  All three tasks are
+    idempotent and safe to run repeatedly.
+    """
     conn = None
     cursor = None
     try:

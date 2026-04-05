@@ -1,3 +1,17 @@
+"""
+Fabrique Enterprise API — FastAPI application entry point.
+
+Responsibilities:
+- Mounts all API routers (auth, enterprise, sprint, agents, support).
+- Manages NATS client lifecycle: connects on startup, drains on shutdown.
+- Initialises the MemoryClient (Neo4j) and LLMProxyClient singletons that
+  routers import via ``from main import memory_client, llm_client``.
+- Bridges NATS Glassroom events to per-sprint SSE queues so the frontend
+  can receive real-time agent logs without polling.
+- Installs a global exception handler that reports critical failures to the
+  vendor support webhook and optionally creates a NATS maintenance ticket.
+"""
+
 import asyncio
 import json
 import os
@@ -59,6 +73,13 @@ llm_client: LLMProxyClient = None
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all exception handler that:
+    1. Logs the full traceback (truncated to 1 000 chars to avoid log flooding).
+    2. POSTs a structured error report to the vendor support webhook (if configured).
+    3. Publishes a ``system.maintenance.create_ticket`` NATS event so the on-call
+       agent can create an incident ticket automatically.
+    """
     error_type = type(exc).__name__
     error_msg = str(exc)
     trace = traceback.format_exc()[-1000:]
@@ -112,6 +133,16 @@ async def health_check():
 
 @app.on_event("startup")
 async def startup():
+    """
+    Application startup handler.
+
+    Initialises all long-lived infrastructure clients and launches two
+    background asyncio tasks:
+    - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` and fans events out
+      to per-sprint SSE queues.
+    - ``process_outbox()`` — polls the ``outbox_events`` table and publishes
+      pending messages to NATS (transactional outbox pattern).
+    """
     global nats_client, memory_client, llm_client
 
     logger.info("Initializing Enterprise Backend Components...")
@@ -143,6 +174,14 @@ async def shutdown():
 # ---------------------------------------------------------------------------
 
 async def _listen_to_nats():
+    """
+    Internal NATS subscriber that bridges Glassroom events to SSE queues.
+
+    Subscribes to the wildcard subject ``glassroom.>`` so that any event
+    published to ``glassroom.<sprint_id>`` is picked up here.  If a browser
+    client has an active SSE connection for that sprint, the raw JSON payload
+    is placed on its ``asyncio.Queue`` and flushed to the response stream.
+    """
     async def callback(msg):
         subject = msg.subject
         if subject.startswith("glassroom."):
