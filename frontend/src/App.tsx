@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AppProvider, useApp } from './context/AppContext'
+import { useAppStore } from './store/useAppStore'
 import Dashboard from './pages/Dashboard'
 import CompanyNew from './pages/CompanyNew'
 import { SprintWorkspace } from './pages/SprintWorkspace'
@@ -43,7 +43,7 @@ function LanguageSwitcher() {
 
 function useNavLinks() {
   const { t } = useTranslation()
-  const { activeSprintId } = useApp()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
   return [
     { to: '/',           icon: LayoutDashboard, label: t('nav.dashboard') },
     { to: `/workspace/${activeSprintId || 1}`, icon: MonitorPlay, label: t('nav.workspace') },
@@ -128,7 +128,7 @@ function NavBar() {
 // ── App shell ─────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const { activeSprintId } = useApp()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
 
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col relative">
@@ -158,9 +158,7 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
+      <AppContent />
     </BrowserRouter>
   )
 }

@@ -174,6 +174,7 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
     session.refresh(item)
     return {
         "id": item.id,
+        "sprint_id": item.sprint_id,
         "status": item.status,
         "priority": item.priority,
         "assignee": item.assignee,

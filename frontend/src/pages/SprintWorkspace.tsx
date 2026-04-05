@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { PanelLeftClose, PanelLeftOpen, LayoutGrid, MonitorPlay } from 'lucide-react'
+import { useAppStore } from '../store/useAppStore'
 import ControlPanel from '../components/ControlPanel'
 import KanbanBoard from '../components/KanbanBoard'
 import GlassRoom from '../components/GlassRoom'
@@ -9,13 +10,24 @@ import GlassRoom from '../components/GlassRoom'
 export const SprintWorkspace: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const { t } = useTranslation()
-  const [activeSprintId, setActiveSprintId] = useState<string>(id || '1')
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  const setActiveSprint = useAppStore(state => state.setActiveSprint)
+  
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [glassroomOpen, setGlassroomOpen] = useState(true)
 
+  // Sync URL param with store if needed
+  useEffect(() => {
+    if (id && parseInt(id) !== activeSprintId) {
+      setActiveSprint(parseInt(id))
+    }
+  }, [id, activeSprintId, setActiveSprint])
+
   function handleSprintStart(newSprintId: number) {
-    setActiveSprintId(newSprintId.toString())
+    setActiveSprint(newSprintId)
   }
+
+  const currentId = activeSprintId?.toString() || id || '1'
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-surface-950 text-white">
@@ -39,7 +51,7 @@ export const SprintWorkspace: React.FC = () => {
               {t('workspace.activeContext')}
             </p>
             <div className="flex items-center justify-between bg-surface-800 px-3 py-2 rounded-lg border border-surface-700">
-              <span className="text-brand-400 font-mono text-sm">Sprint #{activeSprintId}</span>
+              <span className="text-brand-400 font-mono text-sm">Sprint #{currentId}</span>
               <span className="status-dot-pulse" />
             </div>
           </div>
@@ -93,7 +105,7 @@ export const SprintWorkspace: React.FC = () => {
               <h3 className="font-semibold text-gray-200 text-sm">{t('workspace.sprintBoard')}</h3>
             </div>
             <div className="flex-1 overflow-auto">
-              <KanbanBoard sprintId={activeSprintId} />
+              <KanbanBoard sprintId={currentId} />
             </div>
           </div>
 
@@ -115,7 +127,7 @@ export const SprintWorkspace: React.FC = () => {
             </button>
             {glassroomOpen && (
               <div className="flex-1 overflow-hidden">
-                <GlassRoom sprintId={activeSprintId} />
+                <GlassRoom sprintId={currentId} />
               </div>
             )}
           </div>
