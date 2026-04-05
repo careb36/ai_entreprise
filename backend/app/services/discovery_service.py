@@ -27,7 +27,7 @@ class DiscoveryService:
     def __init__(self, session: Session):
         self.session = session
 
-    def discover_project_team(self, project_path: str, company_id: Optional[int] = None):
+    def discover_project_team(self, company_id: Optional[int], project_path: str):
         """
         Scan a project path and recommend an AI engineering team.
 
@@ -37,8 +37,9 @@ class DiscoveryService:
         3. Persist a ``ProjectDiscovery`` row ONLY if company_id is provided.
 
         Args:
+            company_id:   (Optional) Tenant owning this project.  Pass ``None``
+                          to run discovery without persisting the result.
             project_path: Filesystem path to the project root to analyse.
-            company_id:   (Optional) Tenant owning this project.
 
         Returns:
             Tuple of ``(discovery_orm_row_or_none, detected_stack_dict, suggested_team_list)``.

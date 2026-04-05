@@ -158,8 +158,8 @@ async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_se
     """
     service = DiscoveryService(session)
     discovery, detected_stack, suggested_team = service.discover_project_team(
+        company_id=req.company_id,
         project_path=req.project_path,
-        company_id=req.company_id
     )
     return {
         "discovery_id": discovery.id if discovery else None,
