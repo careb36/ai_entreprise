@@ -15,26 +15,25 @@ from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
 
-# --- OpenTelemetry ---
-from opentelemetry import trace
-from opentelemetry.trace import StatusCode
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from opentelemetry.instrumentation.requests import RequestsInstrumentor
+# --- OpenTelemetry (Temporarily Disabled for Python 3.14 compatibility) ---
+# from opentelemetry import trace
+# from opentelemetry.trace import StatusCode
+# from opentelemetry.sdk.trace import TracerProvider
+# from opentelemetry.sdk.trace.export import BatchSpanProcessor
+# from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+# from opentelemetry.instrumentation.flask import FlaskInstrumentor
+# from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
 app = Flask(__name__)
 
-# OTEL Init
-tracer_provider = TracerProvider()
-otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
-span_processor = BatchSpanProcessor(otlp_exporter)
-tracer_provider.add_span_processor(span_processor)
-trace.set_tracer_provider(tracer_provider)
-FlaskInstrumentor().instrument_app(app)
-RequestsInstrumentor().instrument()
-_tracer = trace.get_tracer(__name__)
+# tracer_provider = TracerProvider()
+# otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
+# span_processor = BatchSpanProcessor(otlp_exporter)
+# tracer_provider.add_span_processor(span_processor)
+# trace.set_tracer_provider(tracer_provider)
+# FlaskInstrumentor().instrument_app(app)
+# RequestsInstrumentor().instrument()
+# _tracer = trace.get_tracer(__name__)
 
 # --- Config & Logging ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -128,42 +127,31 @@ def chat_completions():
     bu_id = request.headers.get("X-Business-Unit-ID")
     agent_role = request.headers.get("X-Agent-Role", "Developer")
 
-    current_span = trace.get_current_span()
-    current_span.set_attribute("agent_role", agent_role)
-    current_span.set_attribute("llm.model.requested", model)
-
     try:
         if "deepseek" in model.lower():
-            with _tracer.start_as_current_span("deepseek.generate") as span:
-                resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=data, timeout=60)
-                result = resp.json()
-                tokens = result.get("usage", {}).get("total_tokens", 0)
-                span.set_attribute("llm.tokens_total", tokens)
+            resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=data, timeout=60)
+            result = resp.json()
+            tokens = result.get("usage", {}).get("total_tokens", 0)
         else:
             gemini_model = resolve_gemini_model(model)
-            current_span.set_attribute("llm.model.resolved", gemini_model)
             contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages if m["role"] != "system"]
             system = next((m["content"] for m in messages if m["role"] == "system"), None)
             payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
             if system: payload["system_instruction"] = {"parts": [{"text": system}]}
             
-            with _tracer.start_as_current_span("gemini.generate") as span:
-                resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
-                res = resp.json()
-                text_out = res["candidates"][0]["content"]["parts"][0]["text"]
-                tokens = (len(str(messages)) + len(text_out)) // 4
-                result = {
-                    "choices": [{"message": {"role": "assistant", "content": text_out}}],
-                    "usage": {"total_tokens": tokens},
-                    "model": gemini_model
-                }
-                span.set_attribute("llm.tokens_total", tokens)
+            resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
+            res = resp.json()
+            text_out = res["candidates"][0]["content"]["parts"][0]["text"]
+            tokens = (len(str(messages)) + len(text_out)) // 4
+            result = {
+                "choices": [{"message": {"role": "assistant", "content": text_out}}],
+                "usage": {"total_tokens": tokens},
+                "model": gemini_model
+            }
         
         track_usage_in_db(bu_id, tokens)
-        current_span.set_attribute("llm.tokens_total", tokens)
         return jsonify(result)
     except Exception as e:
-        current_span.set_status(StatusCode.ERROR, str(e))
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":

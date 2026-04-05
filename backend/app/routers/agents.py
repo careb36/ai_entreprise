@@ -39,23 +39,18 @@ sse_connections: Dict[str, asyncio.Queue] = {}
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest, request: Request):
+async def generate(req: GenerateRequest, request: Request, session: Session = Depends(get_session)):
     """
     Trigger a LangGraph agent workflow run.
-
-    Publishes a ``workspace.generate`` event to NATS.  The VS Code Daemon
-    and the LangGraph runtime subscribe to this subject and process the
-    request asynchronously.
-
-    Returns the ``interaction_id`` so the caller can correlate Glassroom
-    SSE events and audit log entries back to this request.
     """
     service = AgentService(nats_client=request.app.state.nats_client)
     interaction_id = await service.generate_package(
         company_id=req.company_id,
+        business_unit_id=req.business_unit_id,
         story=req.story,
         constraints=req.constraints,
-        interaction_id=req.interaction_id
+        interaction_id=req.interaction_id,
+        session=session
     )
     return {"interaction_id": interaction_id, "package_url": None}
 

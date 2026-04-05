@@ -129,18 +129,15 @@ def get_llm_for_role(role: str) -> ChatOpenAI:
         return ModelFactory.get_model(AgentRole.DEVELOPER)
 
 
-def create_completion(role: str, prompt: str, system_message: Optional[str] = None) -> str:
+def create_completion(role: str, prompt: str, system_message: Optional[str] = None, bu_id: Optional[int] = None) -> str:
     """
-    Execute a single-turn LLM completion for the given agent role.
-
-    Constructs a message list with an optional ``SystemMessage`` and a
-    ``HumanMessage``, then invokes the role-appropriate model and returns
-    the raw text content.
+    Execute a single-turn LLM completion for the given agent role with Governance.
 
     Args:
         role:           Agent role string (e.g. ``"Architect"``).
         prompt:         User-turn prompt text.
-        system_message: Optional system instruction prepended before the user turn.
+        system_message: Optional system instruction.
+        bu_id:          Optional Business Unit ID for token quota enforcement.
 
     Returns:
         The model's text response as a plain string.
@@ -150,4 +147,10 @@ def create_completion(role: str, prompt: str, system_message: Optional[str] = No
     if system_message:
         messages.append(SystemMessage(content=system_message))
     messages.append(HumanMessage(content=prompt))
-    return model.invoke(messages).content
+    
+    # Extra headers for the proxy (Governance & Observability)
+    config = {}
+    if bu_id:
+        config["headers"] = {"X-Business-Unit-ID": str(bu_id)}
+        
+    return model.invoke(messages, **config).content

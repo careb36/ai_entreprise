@@ -34,6 +34,7 @@ from llm_proxy_client import LLMProxyClient
 from routers import auth_router, enterprise_router, sprint_router, agents_router, support_router
 from routers.agents import sse_connections
 from services.outbox_service import process_outbox
+from services.agent_worker import process_agent_tasks
 
 settings = Settings()
 
@@ -165,7 +166,11 @@ async def startup():
     app.state.llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
 
     # Store references so shutdown() can cancel these tasks gracefully.
-    for coro in (_listen_to_nats(), process_outbox(app.state.nats_client)):
+    for coro in (
+        _listen_to_nats(), 
+        process_outbox(app.state.nats_client),
+        process_agent_tasks(app.state.nats_client)
+    ):
         task = asyncio.create_task(coro)
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)

@@ -15,6 +15,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
+from typing import Optional
 from sqlmodel import Session
 from models import AuditLog
 
@@ -37,35 +38,34 @@ class AgentService:
         company_id: int,
         story: str,
         constraints: str,
+        business_unit_id: Optional[int] = None,
         interaction_id: str = None,
+        session: Session = None,
     ) -> str:
         """
         Trigger an AI package generation workflow by publishing to NATS.
-
-        Publishes a ``workspace.generate`` event containing the user story and
-        company context.  The LangGraph runtime subscribes to this subject and
-        runs the full Architect → Developer → QA → Engram pipeline.
-
-        Args:
-            company_id:     Tenant identifier for context and quota tracking.
-            story:          Natural-language user story to implement.
-            constraints:    Optional technical / business constraints.
-            interaction_id: Client-supplied UUID for idempotency; auto-generated
-                            if not provided.
-
-        Returns:
-            The ``interaction_id`` (UUID string) for correlating events.
-
-        Raises:
-            RuntimeError: If ``nats_client`` was not provided at construction.
         """
         if not self.nats_client:
             raise RuntimeError("NATS client not initialized")
+
+        # Resolve Business Unit for Governance (Phase 4)
+        if not business_unit_id:
+            if not session:
+                raise ValueError("Session required to resolve default Business Unit")
+            
+            from models.company import BusinessUnit
+            from sqlmodel import select
+            
+            unit = session.exec(select(BusinessUnit).where(BusinessUnit.company_id == company_id)).first()
+            if not unit:
+                raise ValueError(f"No Business Unit found for company {company_id}. Governance requires a cost centre.")
+            business_unit_id = unit.id
 
         interaction_id = interaction_id or str(uuid4())
         await self.nats_client.publish("workspace.generate", {
             "interaction_id": interaction_id,
             "company_id": company_id,
+            "business_unit_id": business_unit_id,
             "story": story,
             "constraints": constraints,
         })
