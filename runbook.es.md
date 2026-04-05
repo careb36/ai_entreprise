@@ -6,7 +6,6 @@ Este documento describe los pasos para fortalecer el sistema Factory para su des
 
 ### Estado Actual (Desarrollo)
 - Tokens de API almacenados en variables de entorno
-- Tokens de OpenProject: `OPENPROJECT_TOKEN_PO`, `OPENPROJECT_TOKEN_DEV`
 - Contraseñas de base de datos en `.env`
 
 ### Pasos para Producción
@@ -19,9 +18,13 @@ import hvac
 client = hvac.Client(url='https://vault.example.com', token='...')
 
 # Leer secretos
-openproject_po_token = client.secrets.kv.v2.read_secret(
-    path='factory/openproject'
-)['data']['data']['po_token']
+gemini_api_key = client.secrets.kv.v2.read_secret(
+    path='le-fabrique/llm'
+)['data']['data']['gemini_api_key']
+
+deepseek_api_key = client.secrets.kv.v2.read_secret(
+    path='le-fabrique/llm'
+)['data']['data']['deepseek_api_key']
 ```
 
 #### AWS KMS (Alternativa)
@@ -103,7 +106,7 @@ done
 ```
 
 ## 5. Transacciones Distribuidas (Patrón Outbox)
-El sistema utiliza el patrón Transactional Outbox (Bandeja de Salida Transaccional) a través de la tabla `outbox_events` en Postgres para garantizar la entrega de mensajes a NATS, evitando problemas de sincronización entre OpenProject, Postgres y LangGraph.
+El sistema utiliza el patrón Transactional Outbox (Bandeja de Salida Transaccional) a través de la tabla `outbox_events` en Postgres para garantizar la entrega de mensajes a NATS, evitando problemas de sincronización entre Postgres y LangGraph.
 
 - **Worker en Segundo Plano**: La tarea `process_outbox` en `backend/app/main.py` sondea esta tabla y despacha eventos de forma segura.
 - **Monitoreo**: Asegúrate de monitorear la tabla `outbox_events` en busca de registros atascados en estado `failed` o perpetuamente en `pending`, lo que indica problemas de conectividad con NATS.
@@ -122,7 +125,6 @@ El sistema utiliza el patrón Transactional Outbox (Bandeja de Salida Transaccio
 | postgres | 4 núcleos | 8 GB | 100 GB |
 | neo4j | 4 núcleos | 8 GB | 50 GB |
 | nats | 1 núcleo | 512 MB | - |
-| openproject | 4 núcleos | 8 GB | 20 GB |
 
 ## 7. Estrategia de Respaldo (Backup)
 

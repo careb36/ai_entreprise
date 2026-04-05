@@ -6,7 +6,6 @@ This document describes steps to harden the Factory system for production deploy
 
 ### Current State (Development)
 - API tokens stored in environment variables
-- OpenProject tokens: `OPENPROJECT_TOKEN_PO`, `OPENPROJECT_TOKEN_DEV`
 - Database passwords in `.env`
 
 ### Production Steps
@@ -19,9 +18,13 @@ import hvac
 client = hvac.Client(url='https://vault.example.com', token='...')
 
 # Read secrets
-openproject_po_token = client.secrets.kv.v2.read_secret(
-    path='factory/openproject'
-)['data']['data']['po_token']
+gemini_api_key = client.secrets.kv.v2.read_secret(
+    path='le-fabrique/llm'
+)['data']['data']['gemini_api_key']
+
+deepseek_api_key = client.secrets.kv.v2.read_secret(
+    path='le-fabrique/llm'
+)['data']['data']['deepseek_api_key']
 ```
 
 #### AWS KMS (Alternative)
@@ -103,7 +106,7 @@ done
 ```
 
 ## 5. Distributed Transactions (Outbox Pattern)
-The system uses the Transactional Outbox pattern (`outbox_events` table in Postgres) to guarantee NATS message delivery, preventing sync issues between OpenProject, Postgres, and LangGraph.
+The system uses the Transactional Outbox pattern (`outbox_events` table in Postgres) to guarantee NATS message delivery, preventing sync issues between Postgres and LangGraph.
 
 - **Background Worker**: The `process_outbox` task in `backend/app/main.py` polls this table and safely dispatches events.
 - **Monitoring**: Ensure you monitor the `outbox_events` table for records stuck in `failed` or perpetually in `pending` status, which indicates NATS connectivity issues.
@@ -122,7 +125,6 @@ The system uses the Transactional Outbox pattern (`outbox_events` table in Postg
 | postgres | 4 cores | 8 GB | 100 GB |
 | neo4j | 4 cores | 8 GB | 50 GB |
 | nats | 1 core | 512 MB | - |
-| openproject | 4 cores | 8 GB | 20 GB |
 
 ## 7. Backup Strategy
 
