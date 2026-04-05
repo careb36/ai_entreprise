@@ -11,6 +11,7 @@ Future phases will replace this with real file-system introspection, parsing
 """
 
 import json
+from typing import Optional
 from sqlmodel import Session
 from models import ProjectDiscovery
 
@@ -26,27 +27,28 @@ class DiscoveryService:
     def __init__(self, session: Session):
         self.session = session
 
-    def discover_project_team(self, company_id: int, project_path: str):
+    def discover_project_team(self, project_path: str, company_id: Optional[int] = None):
         """
         Scan a project path and recommend an AI engineering team.
 
         Steps:
-        1. Analyse the project to detect the technology stack (language, framework,
-           database, complexity).  Currently a stub — production implementation
-           should inspect files at *project_path*.
+        1. Analyse the project to detect the technology stack.
         2. Map the detected stack to a recommended team of AI agents.
-        3. Persist a ``ProjectDiscovery`` row for historical reference and
-           return it alongside the raw stack/team dicts.
+        3. Persist a ``ProjectDiscovery`` row ONLY if company_id is provided.
 
         Args:
-            company_id:   Tenant owning this project.
             project_path: Filesystem path to the project root to analyse.
+            company_id:   (Optional) Tenant owning this project.
 
         Returns:
-            Tuple of ``(discovery_orm_row, detected_stack_dict, suggested_team_list)``.
+            Tuple of ``(discovery_orm_row_or_none, detected_stack_dict, suggested_team_list)``.
         """
         # --- Stack detection (stub — replace with real file introspection) ---
+        # Future enhancement: derive company name from folder name if no ID provided.
+        folder_name = project_path.split("/")[-1] or "New Project"
+        
         detected_stack = {
+            "name": folder_name,
             "language": "TypeScript",
             "framework": "React",
             "database": "Postgres",
@@ -61,16 +63,18 @@ class DiscoveryService:
             {"role": "QA", "seniority": "Senior", "specialty": "Automation"},
         ]
 
-        discovery = ProjectDiscovery(
-            company_id=company_id,
-            project_path=project_path,
-            detected_stack=json.dumps(detected_stack),
-            suggested_team=json.dumps(suggested_team),
-            status="completed",
-        )
+        discovery = None
+        if company_id:
+            discovery = ProjectDiscovery(
+                company_id=company_id,
+                project_path=project_path,
+                detected_stack=json.dumps(detected_stack),
+                suggested_team=json.dumps(suggested_team),
+                status="completed",
+            )
 
-        self.session.add(discovery)
-        self.session.commit()
-        self.session.refresh(discovery)
+            self.session.add(discovery)
+            self.session.commit()
+            self.session.refresh(discovery)
 
         return discovery, detected_stack, suggested_team

@@ -38,14 +38,22 @@ export default function CompanyNew() {
     }
 
     setIsDiscovering(true)
+    setError(null)
     try {
-      const response = await api.discoverTeam(0, projectPath)
-      if (response && response.suggested_team) {
-        setAgents(response.suggested_team)
+      // Pass null company_id for pre-creation discovery
+      const response = await api.discoverTeam(null as any, projectPath)
+      
+      if (response) {
+        if (response.suggested_team) {
+          setAgents(response.suggested_team)
+        }
+        if (response.detected_stack?.name && !companyName) {
+          setCompanyName(response.detected_stack.name)
+        }
       }
     } catch (e) {
       console.error(e)
-      alert('Failed to auto-discover team. Check backend connection.')
+      setError('Discovery failed. Please check the project path or backend connection.')
     } finally {
       setIsDiscovering(false)
     }

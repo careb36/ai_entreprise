@@ -25,7 +25,7 @@ from typing import Optional, Dict
 from enum import Enum
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 

@@ -153,16 +153,16 @@ async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_se
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
-    Delegates to ``DiscoveryService.discover_project_team()`` and persists
-    the result in the ``project_discovery`` table for historical reference.
+    Delegates to ``DiscoveryService.discover_project_team()``. If ``company_id``
+    is provided, the result is persisted in the ``project_discovery`` table.
     """
     service = DiscoveryService(session)
     discovery, detected_stack, suggested_team = service.discover_project_team(
-        company_id=req.company_id,
-        project_path=req.project_path
+        project_path=req.project_path,
+        company_id=req.company_id
     )
     return {
-        "discovery_id": discovery.id,
+        "discovery_id": discovery.id if discovery else None,
         "detected_stack": detected_stack,
         "suggested_team": suggested_team,
     }
