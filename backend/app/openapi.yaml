@@ -1,0 +1,251 @@
+openapi: 3.0.3
+info:
+  title: Factory API
+  version: 1.0.0
+  description: API for the Factory system with LangGraph orchestration
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+
+  /v1/init_company:
+    post:
+      summary: Initialize a company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - company_name
+              properties:
+                company_name:
+                  type: string
+                default_sprint_length_days:
+                  type: integer
+                  default: 14
+                agents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                      persona:
+                        type: string
+      responses:
+        '200':
+          description: Company initialized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  company_id:
+                    type: integer
+                  message:
+                    type: string
+
+  /v1/start_sprint:
+    post:
+      summary: Start a sprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - company_id
+                - sprint_name
+                - start_date
+                - duration_days
+                - backlog_items
+              properties:
+                company_id:
+                  type: integer
+                sprint_name:
+                  type: string
+                start_date:
+                  type: string
+                duration_days:
+                  type: integer
+                backlog_items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      title:
+                        type: string
+                      description:
+                        type: string
+      responses:
+        '200':
+          description: Sprint started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sprint_id:
+                    type: integer
+                  openproject_sprint_url:
+                    type: string
+
+  /v1/glassroom/stream:
+    get:
+      summary: SSE stream for glassroom events
+      parameters:
+        - name: sprint_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /v1/generate:
+    post:
+      summary: Generate package via LangGraph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - company_id
+                - story
+              properties:
+                company_id:
+                  type: integer
+                story:
+                  type: string
+                constraints:
+                  type: string
+                interaction_id:
+                  type: string
+      responses:
+        '200':
+          description: Generation initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  interaction_id:
+                    type: string
+                  package_url:
+                    type: string
+
+  /v1/audit:
+    post:
+      summary: Write audit entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                interaction_id:
+                  type: string
+                agent_id:
+                  type: string
+                action:
+                  type: string
+                details:
+                  type: object
+                result:
+                  type: object
+                decision_signature:
+                  type: string
+                cost_tokens:
+                  type: integer
+      responses:
+        '200':
+          description: Audit entry written
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /v1/memory/search:
+    get:
+      summary: Search vector memory
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+
+  /v1/memory/store:
+    post:
+      summary: Store in vector memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Content stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string

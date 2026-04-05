@@ -1,0 +1,115 @@
+# ==========================================
+# Le Fabrique — .gitignore
+# ==========================================
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+*.bak
+
+# --- Secrets & Environment (CRITICAL — never commit real credentials) ---
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+certs/
+secrets/
+password.txt
+
+# --- Logs ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Audit / JSONL runtime files ---
+*.jsonl
+!backend/app/audit_schema.jsonl.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# --- Python build artifacts (NOT the project's build/ asset folder) ---
+backend/build/
+llm-proxy/build/
+vscode-daemon/build/
+
+# --- Node.js ---
+node_modules/
+
+# --- Frontend build output ---
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.cache/
+*.tsbuildinfo
+
+# --- VS Code extension compiled output ---
+vscode-extension/out/
+vscode-extension/dist/
+
+# --- Electron distribution packages ---
+dist-electron/
+release/
+*.dmg
+*.exe
+*.AppImage
+
+# --- Databases (runtime data, NOT init scripts in db/) ---
+postgres-data/
+neo4j-data/
+neo4j-logs/
+nats-data/
+*.sqlite
+*.sqlite3
+*.db
+# SQL dump/backup files only (NOT db/init-db/init.sql)
+backup_*.sql
+dump_*.sql
+*_dump.sql
+*.tar
+*.gz
+
+# --- LangGraph checkpoints ---
+langgraph_checkpoints/
+*.checkpoint
+
+# --- IDEs ---
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- Project runtime artifacts ---
+.factory/
+factory-workspaces/
+support_logs/
+engrams_backup/
+
+# --- Stale / removed services ---
+openproject-data/
+openproject/
+
+# ==========================================
