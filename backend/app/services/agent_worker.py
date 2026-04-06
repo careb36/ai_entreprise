@@ -38,10 +38,12 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
     synchronous LangGraph execution.
     """
 
-    async def task_callback(msg):
-        data = {}
+    async def task_callback(msg, data=None):
+        if data is None:
+            data = {}
         try:
-            data = json.loads(msg.data.decode())
+            if not data:
+                data = json.loads(msg.data.decode())
             subject = msg.subject
 
             if subject == "workspace.generate":

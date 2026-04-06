@@ -8,12 +8,14 @@ import {
 
 const AGENT_CONFIG: Record<string, { icon: typeof Bot; color: string; bg: string; label: string }> = {
   PO:           { icon: Shield,    color: 'text-purple-400', bg: 'bg-purple-900/30', label: 'Product Owner' },
+  Architect:    { icon: Cpu,       color: 'text-indigo-400', bg: 'bg-indigo-900/30', label: 'Architect' },
   ScrumMaster:  { icon: Bot,       color: 'text-blue-400',   bg: 'bg-blue-900/30',   label: 'Scrum Master' },
   Dev:          { icon: User,      color: 'text-green-400',  bg: 'bg-green-900/30',  label: 'Developer' },
   Backend:      { icon: Cpu,       color: 'text-cyan-400',   bg: 'bg-cyan-900/30',   label: 'Backend Dev' },
   Frontend:     { icon: Zap,       color: 'text-yellow-400', bg: 'bg-yellow-900/30', label: 'Frontend Dev' },
   QA:           { icon: TestTube,  color: 'text-pink-400',   bg: 'bg-pink-900/30',   label: 'QA' },
   DevOps:       { icon: Wrench,    color: 'text-orange-400', bg: 'bg-orange-900/30', label: 'DevOps' },
+  Data:         { icon: Database,  color: 'text-teal-400',   bg: 'bg-teal-900/30',   label: 'Data Engineer' },
   DataEngineer: { icon: Database,  color: 'text-teal-400',   bg: 'bg-teal-900/30',   label: 'Data Engineer' },
   System:       { icon: AlertCircle, color: 'text-yellow-400', bg: 'bg-yellow-900/30', label: 'System' },
 }

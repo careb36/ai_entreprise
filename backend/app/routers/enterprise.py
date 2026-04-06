@@ -13,13 +13,14 @@ Endpoints:
 import asyncio
 import json
 from datetime import date
+from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel import Session, select, text
 
 from database import get_session, get_neo4j_driver
 from models import (
     Company, Agent, ProjectCredential, ProjectDiscovery,
-    BusinessUnit, Sprint, BacklogItem,
+    BusinessUnit, Sprint, BacklogItem, OutboxEvent,
 )
 from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from services.discovery_service import DiscoveryService
@@ -96,13 +97,32 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
 
     # Insert the PO-planned backlog items into the sprint.
     for task in plan.get("tasks", []):
-        session.add(BacklogItem(
+        bi = BacklogItem(
             sprint_id=sprint.id,
             title=task.get("title", "Untitled task"),
             description=task.get("description", ""),
             priority=task.get("priority", "medium"),
             assignee=task.get("assignee", "PO"),
             status="todo",
+        )
+        session.add(bi)
+        session.flush()  # Obtain bi.id before creating the outbox event
+
+        # Outbox entry — delivered to NATS by process_outbox, consumed by task_worker.
+        nats_payload = {
+            "subject": "task.assign",
+            "message": {
+                "backlog_item_id": bi.id,
+                "interaction_id": str(uuid4()),
+                "agent": task.get("assignee", "PO"),
+                "sprint_id": sprint.id,
+            },
+        }
+        session.add(OutboxEvent(
+            aggregate_type="backlog_item",
+            aggregate_id=str(bi.id),
+            event_type="nats_publish",
+            payload=nats_payload,
         ))
 
     session.commit()

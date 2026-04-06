@@ -35,6 +35,7 @@ from routers import auth_router, enterprise_router, sprint_router, agents_router
 from routers.agents import sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
+from services.task_worker import process_backlog_tasks
 
 settings = Settings()
 
@@ -174,6 +175,7 @@ async def startup():
             _listen_to_nats(),
             process_outbox(app.state.nats_client),
             process_agent_tasks(app.state.nats_client),
+            process_backlog_tasks(app.state.nats_client),
         ):
             task = asyncio.create_task(coro)
             _background_tasks.add(task)
@@ -233,7 +235,7 @@ async def _listen_to_nats():
     client has an active SSE connection for that sprint, the raw JSON payload
     is placed on its ``asyncio.Queue`` and flushed to the response stream.
     """
-    async def callback(msg):
+    async def callback(msg, data=None):
         subject = msg.subject
         if subject.startswith("glassroom."):
             sprint_id = subject.split(".")[1]
@@ -241,7 +243,6 @@ async def _listen_to_nats():
                 queue = sse_connections[sprint_id]
                 if isinstance(queue, asyncio.Queue):
                     await queue.put(msg.data.decode())
-        await msg.ack()
 
     try:
         await app.state.nats_client.subscribe("glassroom.>", callback)
