@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { PanelLeftClose, PanelLeftOpen, MonitorPlay } from 'lucide-react'
+import { MonitorPlay, ArrowLeft, Radio } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import ControlPanel from '../components/ControlPanel'
-import KanbanBoard from '../components/KanbanBoard'
 import GlassRoom from '../components/GlassRoom'
 
 export const SprintWorkspace: React.FC = () => {
@@ -13,9 +11,7 @@ export const SprintWorkspace: React.FC = () => {
   const { t } = useTranslation()
   const activeSprintId = useAppStore(state => state.activeSprintId)
   const setActiveSprint = useAppStore(state => state.setActiveSprint)
-  
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [glassroomOpen, setGlassroomOpen] = useState(true)
+
   const isSSEConnected = useAgentStore(s => s.isConnected)
   const messageCount = useAgentStore(s => s.messages.length)
 
@@ -26,117 +22,35 @@ export const SprintWorkspace: React.FC = () => {
     }
   }, [id, activeSprintId, setActiveSprint])
 
-  function handleSprintStart(newSprintId: number) {
-    setActiveSprint(newSprintId)
-  }
-
   const currentId = activeSprintId?.toString() || id || '1'
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-surface-950 text-white">
+    <div className="h-[calc(100vh-3.5rem)] overflow-hidden bg-surface-950 text-white p-3">
+      <div className="card h-full overflow-hidden flex flex-col">
+        <div className="h-11 border-b border-surface-700 bg-surface-900 px-4 flex items-center gap-3">
+          <MonitorPlay size={15} className="text-brand-400" />
+          <h2 className="text-sm font-semibold text-gray-200">{t('workspace.glassroomTitle')}</h2>
+          <span className="text-xs text-gray-500">Sprint #{currentId}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${isSSEConnected ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`} />
 
-      {/* ── Sidebar ─────────────────────────────────────────────────── */}
-      <aside
-        className={`
-          flex-shrink-0 border-r border-surface-700 bg-surface-900 overflow-y-auto
-          transition-all duration-200
-          ${sidebarOpen ? 'w-80' : 'w-0 overflow-hidden'}
-          /* On mobile the sidebar is an overlay when open */
-          md:relative absolute md:translate-x-0 z-10
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-        `}
-        aria-label="Control panel"
-      >
-        <div className="p-4 min-w-[20rem]">
-          {/* Active Sprint indicator */}
-          <div className="mb-4 pb-4 border-b border-surface-700">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-              {t('workspace.activeContext')}
-            </p>
-            <div className="flex items-center justify-between bg-surface-800 px-3 py-2 rounded-lg border border-surface-700">
-              <span className="text-brand-400 font-mono text-sm">Sprint #{currentId}</span>
-              <span className="status-dot-pulse" />
-            </div>
-          </div>
+          {messageCount > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-700/40 text-brand-300 font-medium">
+              {messageCount}
+            </span>
+          )}
 
-          <ControlPanel onSprintStart={handleSprintStart} />
-        </div>
-      </aside>
-
-      {/* Mobile overlay backdrop */}
-      {sidebarOpen && (
-        <div
-          className="md:hidden absolute inset-0 bg-black/50 z-[9]"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* ── Main area ───────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-surface-950">
-
-        {/* Toolbar */}
-        <div className="flex items-center gap-2 px-4 h-10 border-b border-surface-700 bg-surface-900 flex-shrink-0">
-          <button
-            onClick={() => setSidebarOpen(v => !v)}
-            className="btn-ghost btn-icon"
-            aria-label={sidebarOpen ? t('workspace.collapseSidebar') : t('workspace.expandSidebar')}
-            title={sidebarOpen ? t('workspace.collapseSidebar') : t('workspace.expandSidebar')}
-          >
-            {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          </button>
-
-          <span className="text-xs text-gray-500 hidden sm:flex items-center gap-1">
-            <span className="status-dot-active" />
-            {t('workspace.aiAgentsActive')}
+          <span className="ml-auto text-xs text-gray-500 hidden sm:flex items-center gap-1">
+            <Radio size={11} /> {t('workspace.aiAgentsActive')}
           </span>
 
-          <button
-            onClick={() => setGlassroomOpen(v => !v)}
-            className="btn-ghost btn-sm ml-auto flex items-center gap-1.5"
-            title="Toggle Glassroom"
-          >
-            <MonitorPlay size={14} />
-            <span className="hidden sm:inline text-xs">{t('workspace.glassroomTitle')}</span>
-          </button>
+          <Link to="/" className="btn-ghost btn-sm flex items-center gap-1.5">
+            <ArrowLeft size={13} />
+            <span>{t('workspace.sprintBoard')}</span>
+          </Link>
         </div>
 
-        {/* Kanban + Glassroom area */}
-        <div className="flex-1 min-h-0 flex flex-col p-3 gap-3 overflow-hidden">
-          {/* Board — grows to fill available space, scrolls internally */}
-          <div className={`min-h-0 card overflow-hidden flex flex-col ${glassroomOpen ? 'flex-[3]' : 'flex-1'}`}>
-            <div className="flex-1 overflow-auto">
-              <KanbanBoard sprintId={currentId} />
-            </div>
-          </div>
-
-          {/* Glassroom — collapsible bottom panel */}
-          <div
-            className={`
-              card overflow-hidden flex flex-col flex-shrink-0
-              transition-all duration-200
-              ${glassroomOpen ? 'flex-[2] min-h-[10rem]' : 'h-10'}
-            `}
-          >
-            <button
-              onClick={() => setGlassroomOpen(v => !v)}
-              className="flex items-center gap-2 px-4 py-2 border-b border-surface-700 w-full text-left hover:bg-surface-800 transition-colors shrink-0"
-            >
-              <MonitorPlay size={14} className="text-brand-400" />
-              <h3 className="font-semibold text-gray-200 text-sm">GlassRoom</h3>
-              {messageCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-700/40 text-brand-300 font-medium">
-                  {messageCount}
-                </span>
-              )}
-              <span className={`ml-auto mr-2 w-1.5 h-1.5 rounded-full ${isSSEConnected ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-gray-500 text-xs">{glassroomOpen ? '▼' : '▲'}</span>
-            </button>
-            {glassroomOpen && (
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <GlassRoom sprintId={currentId} />
-              </div>
-            )}
-          </div>
+        <div className="flex-1 min-h-0">
+          <GlassRoom sprintId={currentId} />
         </div>
       </div>
     </div>

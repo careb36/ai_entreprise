@@ -2,9 +2,9 @@
 schema: spec-driven
 
 context: |
-  Tech stack: FastAPI (Py 3.14), React/Electron (Node 22), Poetry, npm.
+  Tech stack: FastAPI (Py 3.11 Docker), React/Electron (Node 22), Poetry, npm.
   Architecture: Modular Monolith, Multi-tenant, Event-driven (NATS).
-  Testing: pytest (Backend), tsc (Frontend).
+  Testing: pytest (Backend), vitest (Frontend).
   Style: Black, Mypy, Conventional Commits.
 
 strict_tdd: true

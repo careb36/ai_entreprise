@@ -92,3 +92,4 @@ class TaskQueue(SQLModel, table=True):
     approval_status: Optional[str] = None     # "approved" | "rejected" | None (pending)
     approved_by: Optional[str] = None         # Name of the human who reviewed the task
     status: str = "pending"                   # "pending" | "in_progress" | "completed" | "failed"
+    review_comments: Optional[str] = None     # Feedback from the human reviewer

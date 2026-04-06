@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, SprintBoard, BacklogItem } from '../services/api'
+import { api } from '../services/api'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
@@ -9,9 +9,63 @@ export const QUERY_KEYS = {
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
   tickets: () => ['tickets'] as const,
   memory: (query: string) => ['memory', query] as const,
+  models: () => ['models'] as const,
+  pendingApprovals: () => ['governance', 'pending'] as const,
+}
+
+// ── Enterprise & Company ─────────────────────────────────────────────────────
+
+export function usePendingApprovals() {
+  return useQuery({
+    queryKey: QUERY_KEYS.pendingApprovals(),
+    queryFn: () => api.get<{ pending_approvals: any[] }>('/v1/pending_approvals'),
+    refetchInterval: 30_000, // Check every 30s
+  })
+}
+
+export function useApproveTask() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, decision, approverName, feedback }: { taskId: number, decision: 'approved' | 'rejected', approverName: string, feedback?: string }) => 
+      api.approveTask(taskId, approverName, decision, feedback),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApprovals() })
+    },
+  })
+}
+
+export function useModels() {
+  return useQuery({
+    queryKey: QUERY_KEYS.models(),
+    queryFn: () => api.get<{ models: any[], orchestrator?: string }>('/v1/models'),
+    staleTime: 1000 * 60 * 60, // 1 hour
+  })
+}
+
+export function useDiscoverTeam() {
+  return useMutation({
+    mutationFn: ({ companyId, projectPath }: { companyId: number | null, projectPath: string }) => 
+      api.discoverTeam(companyId, projectPath),
+  })
+}
+
+export function useInitCompany() {
+  return useMutation({
+    mutationFn: (data: any) => api.post<any>('/v1/init_company', data),
+  })
 }
 
 // ── Sprints & Backlog ─────────────────────────────────────────────────────────
+
+export function useStartSprint() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: any) => api.post<{ sprint_id: number }>('/v1/start_sprint', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sprint'] })
+    },
+  })
+}
 
 export function useSprintBoard(sprintId: number | null) {
   return useQuery({

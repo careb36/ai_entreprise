@@ -5,51 +5,37 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 
 ---
 
-## 🏛️ Fase 1: Cimientos de Acero (Backend Refactor)
+## 🏛️ Fase 1: Cimientos de Acero (Backend Refactor) — ✅ COMPLETADO
 **Objetivo:** Salir del `main.py` gigante y pasar a una arquitectura modular y tipada.
 
-1.  **Migración a SQLModel:** Reemplazar `psycopg2` pelado por **SQLModel** (SQLAlchemy + Pydantic). 
-    *   Crear modelos para: `Company`, `Agent`, `Sprint`, `BacklogItem`, `AuditLog`, `BusinessUnit`.
-2.  **Modularización por Routers:** Dividir `main.py` en la carpeta `backend/app/routers/`:
-    *   `auth.py`: Registro y login de humanos.
-    *   `enterprise.py`: Gestión de compañías, cuotas y Business Units.
-    *   `sprint.py`: Board, backlog y sprints.
-    *   `agents.py`: Orquestación de LangGraph y Glassroom (SSE).
-    *   `support.py`: Tickets de soporte (`bug_reports`) y logs.
-3.  **Capa de Servicios:** Mover la lógica de negocio pesada a `backend/app/services/`:
-    *   `outbox_service.py`: Procesamiento de eventos NATS confiable.
-    *   `agent_service.py`: Ejecución de grafos de LangGraph.
-    *   `discovery_service.py`: Detección automática de stacks tecnológicos.
+1.  **Migración a SQLModel:** ✅ Reemplazado `psycopg2` por **SQLModel**.
+    *   Modelos creados para: `Company`, `Agent`, `Sprint`, `BacklogItem`, `AuditLog`, `BusinessUnit`.
+2.  **Modularización por Routers:** ✅ `main.py` dividido en `backend/app/routers/`:
+    *   `auth.py`, `enterprise.py`, `sprint.py`, `agents.py`, `support.py`.
+3.  **Capa de Servicios:** ✅ Lógica de negocio movida a `backend/app/services/`:
+    *   `outbox_service.py`, `agent_service.py`, `discovery_service.py`, `task_worker.py`.
 
 ---
 
-## 🧠 Fase 2: Inteligencia Auto-Sanable (LangGraph Evolution)
+## 🧠 Fase 2: Inteligencia Auto-Sanable (LangGraph Evolution) — ✅ COMPLETADO
 **Objetivo:** Agentes con bucles de retroalimentación y memoria persistente.
 
-1.  **Bucle de Feedback (Self-Correction):** 
-    *   Modificar `backend/agents/graph.py`.
-    *   Si `real_execution_node` falla, volver a `generate_code_node` con el error de los tests.
-2.  **Validación de Salida (Guardrails):** 
-    *   Asegurar que el Arquitecto genere Mermaid válido antes de pasar al Desarrollador.
-3.  **RAG sobre Grafos (Neo4j):** 
-    *   Mejorar la consulta de "Engrams" para que el agente use decisiones pasadas en el contexto actual.
+1.  **Bucle de Feedback (Self-Correction):** ✅ `real_execution_node` ahora realiza validación sintáctica (compile) y reintenta con feedback específico.
+2.  **Validación de Salida (Guardrails):** ✅ `validate_design_node` asegura diagramas Mermaid no vacíos y bien formateados.
+3.  **RAG sobre Grafos (Neo4j):** ✅ `EngramProcessor` integra búsqueda semántica (pgvector) con búsqueda estructural (Neo4j) para un contexto RAG superior.
 
 ---
 
-## 🎨 Fase 3: Frontend de Alta Performance (React Upgrade)
+## 🎨 Fase 3: Frontend de Alta Performance (React Upgrade) — ✅ COMPLETADO
 **Objetivo:** UI reactiva, liviana y con mejor manejo de estado.
 
-1.  **Zustand Store:** 
-    *   Reemplazar `AppContext.tsx` con un store centralizado en `frontend/src/store/useAppStore.ts`.
-2.  **TanStack Query (React Query):** 
-    *   Implementar hooks para todas las llamadas a `/v1/`. 
-    *   Caching automático de sprints y backlog.
-3.  **Virtualización:** 
-    *   Usar `@tanstack/react-virtual` para el feed del Glassroom y listas largas de tareas.
+1.  **Zustand Store:** ✅ Migración completa a Zustand (`useAppStore.ts` y `agentStore.ts`).
+2.  **TanStack Query (React Query):** ✅ Implementados hooks personalizados en `useQueries.ts` para todas las operaciones de API.
+3.  **Refactor de Componentes:** ✅ `CompanyNew`, `ControlPanel`, `KanbanBoard`, `Generate`, `GovernancePanel` y `AnalyticsDashboard` refactorizados para usar hooks de Query/Mutation.
 
 ---
 
-## 🛡️ Fase 4: Governance y Observabilidad
+## 🛡️ Fase 4: Governance y Observabilidad — 🚧 PRÓXIMAMENTE
 **Objetivo:** Control de costos y trazabilidad total.
 
 1.  **Cuotas en Tiempo Real:** 

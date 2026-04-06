@@ -154,8 +154,8 @@ export const api = {
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<any>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
 
-  approveTask: (taskId: number, approverName: string, decision: 'approved' | 'rejected') =>
-    api.post<any>('/v1/approve_task', { task_id: taskId, approver_name: approverName, decision }),
+  approveTask: (taskId: number, approverName: string, decision: 'approved' | 'rejected', feedback?: string) =>
+    api.post<any>('/v1/approve_task', { task_id: taskId, approver_name: approverName, decision, feedback }),
 
   getQuotas: (companyId: number) =>
     api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),

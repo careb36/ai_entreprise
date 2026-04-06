@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
 import Dashboard from './pages/Dashboard'
+import Home from './pages/Home'
 import CompanyNew from './pages/CompanyNew'
 import { SprintWorkspace } from './pages/SprintWorkspace'
 import { GovernancePanel } from './components/GovernancePanel'
@@ -10,9 +11,10 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Generate from './pages/Generate'
+import Glassroom from './pages/Glassroom'
 import {
   LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
-  Globe, Database, Code2, Menu, X
+  Globe, Database, Code2, Menu, X, Building2
 } from 'lucide-react'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
@@ -46,7 +48,9 @@ function useNavLinks() {
   const activeSprintId = useAppStore(state => state.activeSprintId)
   const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/companies/new'
   return [
-    { to: '/',           icon: LayoutDashboard, label: t('nav.dashboard') },
+    { to: '/',           icon: LayoutDashboard, label: 'Home' },
+    { to: '/companies/new', icon: Building2, label: 'Nueva Compañia' },
+    { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
     { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
     { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
     { to: '/analytics',  icon: PieChart,       label: t('nav.analytics') },
@@ -136,7 +140,8 @@ function AppContent() {
       <NavBar />
       <main className="flex-1 overflow-auto">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/companies/new" element={<CompanyNew />} />
           <Route path="/workspace/:id" element={<SprintWorkspace />} />
           <Route
@@ -149,6 +154,7 @@ function AppContent() {
           />
           <Route path="/memory" element={<MemorySearch />} />
           <Route path="/generate" element={<Generate />} />
+          <Route path="/glassroom" element={<Glassroom />} />
         </Routes>
       </main>
       <SupportBot />

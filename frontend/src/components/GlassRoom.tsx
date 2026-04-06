@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAgentStore, AgentMessage } from '../store/agentStore'
 import {
   Bot, Copy, Check, ChevronDown, ChevronRight, Hash,
   CheckCircle2, AlertTriangle, Loader2, Eye, Sparkles,
+  Search, X, Filter, RotateCcw,
 } from 'lucide-react'
 
 /* ─── Agent identity config ──────────────────────────────────────────────── */
@@ -34,9 +35,21 @@ const FALLBACK_AGENT: AgentIdentity = {
   initials: 'AI', bg: 'bg-brand-600', ring: 'ring-brand-400/30', label: 'Agent', color: 'text-brand-300',
 }
 
+const ACTIVE_AGENT_TTL_MS = 90_000
+
 function getAgent(key: string): AgentIdentity {
   return AGENTS[key] ?? AGENTS[Object.keys(AGENTS).find(k => k.toLowerCase() === key?.toLowerCase()) ?? ''] ?? FALLBACK_AGENT
 }
+
+const EVENT_TYPES = [
+  { value: '', label: 'All types' },
+  { value: 'message', label: 'Message' },
+  { value: 'action', label: 'Action' },
+  { value: 'status', label: 'Status' },
+  { value: 'error', label: 'Error' },
+  { value: 'agent_start', label: 'Started' },
+  { value: 'agent_complete', label: 'Completed' },
+] as const
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -272,27 +285,83 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const { t } = useTranslation()
   const { messages, isConnected, connectionError, connect, disconnect } = useAgentStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const [, forceUpdate] = useState(0)
+
+  const [filterAgent, setFilterAgent] = useState('')
+  const [filterType, setFilterType] = useState('')
+  const [searchText, setSearchText] = useState('')
 
   useEffect(() => {
     if (propSprintId) connect(propSprintId)
     return () => { disconnect() }
   }, [propSprintId])
 
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50
+    setIsAtBottom(atBottom)
+  }, [])
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, isAtBottom])
+
+  const rebuildView = useCallback(() => {
+    forceUpdate(n => n + 1)
+  }, [])
+
+  // Filter messages based on search, agent, and type
+  const filteredMessages = useMemo(() => {
+    let result = messages
+
+    if (filterAgent) {
+      result = result.filter(m => {
+        const key = m.agent || m.role || ''
+        return key.toLowerCase() === filterAgent.toLowerCase() ||
+               getAgent(key).label.toLowerCase() === filterAgent.toLowerCase()
+      })
+    }
+
+    if (filterType) {
+      result = result.filter(m => m.type === filterType)
+    }
+
+    if (searchText) {
+      const term = searchText.toLowerCase()
+      result = result.filter(m => m.content.toLowerCase().includes(term))
+    }
+
+    return result
+  }, [messages, filterAgent, filterType, searchText])
 
   // Group messages by date → by consecutive agent.
-  const grouped = useMemo(() => groupMessages(messages), [messages])
+  const grouped = useMemo(() => groupMessages(filteredMessages), [filteredMessages])
 
   // Find agents currently "working" (last message is agent_start).
   const activeAgents = useMemo(() => {
-    const working = new Map<string, AgentIdentity>()
+    const working = new Map<string, { identity: AgentIdentity; startedAt: number }>()
+    const now = Date.now()
+
     for (const msg of messages) {
-      if (msg.type === 'agent_start') working.set(msg.agent, getAgent(msg.agent))
-      else if (msg.type === 'agent_complete' || msg.type === 'error') working.delete(msg.agent)
+      const agentKey = msg.agent || msg.role || 'System'
+      if (!agentKey || agentKey === 'System') continue
+
+      if (msg.type === 'agent_start') {
+        const startedAt = Date.parse(msg.timestamp || '') || now
+        working.set(agentKey, { identity: getAgent(agentKey), startedAt })
+      } else if (msg.type === 'agent_complete' || msg.type === 'error' || msg.type === 'status') {
+        working.delete(agentKey)
+      }
     }
-    return [...working.values()]
+
+    return [...working.entries()]
+      .filter(([, value]) => (now - value.startedAt) <= ACTIVE_AGENT_TTL_MS)
+      .map(([key, value]) => ({ key, identity: value.identity }))
   }, [messages])
 
   // Online agents (unique agents who posted).
@@ -315,17 +384,75 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       `}</style>
 
       {/* ── Channel header bar ──────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-700 bg-surface-900 shrink-0">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-700 bg-surface-900 shrink-0 flex-wrap">
         <Hash size={14} className="text-gray-500" />
         <span className="font-semibold text-sm text-gray-200">sprint-{propSprintId}</span>
         <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-500'}`} />
+        
+        <div className="flex items-center gap-2 ml-4">
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Search messages..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="pl-7 pr-6 py-1 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 placeholder-gray-500 focus:outline-none focus:border-brand-500 w-40"
+            />
+            {searchText && (
+              <button onClick={() => setSearchText('')} className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                <X size={12} className="text-gray-500 hover:text-gray-300" />
+              </button>
+            )}
+          </div>
+
+          <select
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+            className="py-1 px-2 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 focus:outline-none focus:border-brand-500"
+          >
+            <option value="">All agents</option>
+            {onlineAgents.map(a => (
+              <option key={a.label} value={a.label}>{a.label}</option>
+            ))}
+          </select>
+
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="py-1 px-2 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 focus:outline-none focus:border-brand-500"
+          >
+            {EVENT_TYPES.map(et => (
+              <option key={et.value} value={et.value}>{et.label}</option>
+            ))}
+          </select>
+
+          {(filterAgent || filterType || searchText) && (
+            <button
+              onClick={() => { setFilterAgent(''); setFilterType(''); setSearchText('') }}
+              className="p-1 hover:bg-surface-700 rounded"
+              title="Clear filters"
+            >
+              <RotateCcw size={12} className="text-gray-500" />
+            </button>
+          )}
+
+          <button
+            onClick={rebuildView}
+            className="p-1 hover:bg-surface-700 rounded"
+            title="Rebuild view"
+          >
+            <Filter size={12} className="text-gray-500" />
+          </button>
+        </div>
+
         {/* Online agent avatars (Slack-style presence row) */}
         {onlineAgents.length > 0 && (
           <div className="flex items-center gap-1 ml-auto">
             <span className="text-[10px] text-gray-500 mr-1">{onlineAgents.length} agents</span>
             <div className="flex -space-x-1.5">
-              {onlineAgents.slice(0, 6).map(a => (
-                <div key={a.initials} title={a.label}
+              {onlineAgents.slice(0, 6).map((a, i) => (
+                <div key={`${a.label}-${i}`} title={a.label}
                   className={`w-5 h-5 ${a.bg} rounded-md flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-surface-900`}>
                   {a.initials}
                 </div>
@@ -350,7 +477,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       )}
 
       {/* ── Message feed ───────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div 
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto py-2"
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 py-8">
             <div className="w-16 h-16 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-4">
@@ -377,7 +508,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
         )}
 
         {/* Typing indicators for active agents */}
-        {activeAgents.map(a => <TypingIndicator key={a.initials} identity={a} />)}
+        {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} />)}
 
         <div ref={messagesEndRef} />
       </div>
@@ -389,7 +520,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
         <span className="text-[11px] text-gray-600">•</span>
-        <span className="text-[11px] text-gray-500">{messages.length} messages</span>
+        <span className="text-[11px] text-gray-500">
+          {filterAgent || filterType || searchText 
+            ? `${filteredMessages.length} / ${messages.length} messages` 
+            : `${messages.length} messages`}
+        </span>
         {activeAgents.length > 0 && (
           <>
             <span className="text-[11px] text-gray-600">•</span>
