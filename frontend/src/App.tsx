@@ -44,9 +44,10 @@ function LanguageSwitcher() {
 function useNavLinks() {
   const { t } = useTranslation()
   const activeSprintId = useAppStore(state => state.activeSprintId)
+  const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/companies/new'
   return [
     { to: '/',           icon: LayoutDashboard, label: t('nav.dashboard') },
-    { to: `/workspace/${activeSprintId || 1}`, icon: MonitorPlay, label: t('nav.workspace') },
+    { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
     { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
     { to: '/analytics',  icon: PieChart,       label: t('nav.analytics') },
     { to: '/memory',     icon: Database,       label: t('nav.memory') },
@@ -144,7 +145,7 @@ function AppContent() {
           />
           <Route
             path="/analytics"
-            element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId || 1} /></div>}
+            element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
           />
           <Route path="/memory" element={<MemorySearch />} />
           <Route path="/generate" element={<Generate />} />

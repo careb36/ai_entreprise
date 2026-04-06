@@ -69,7 +69,7 @@ class OutboxEvent(SQLModel, table=True):
     aggregate_type: str    # Domain entity type (e.g. "backlog_item", "sprint")
     aggregate_id: str      # PK of the domain entity that triggered this event
     event_type: str        # Action that produced the event (e.g. "nats_publish")
-    payload: Optional[str] = None   # JSON string: {"subject": "...", "message": {...}}
+    payload: Optional[Any] = Field(default=None, sa_column=Column(JSON))  # {"subject": "...", "message": {...}}
     status: str = "pending"          # "pending" | "completed" | "failed"
     retry_count: int = 0             # Incremented on each failed delivery attempt
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)

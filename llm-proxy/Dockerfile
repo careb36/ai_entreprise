@@ -25,4 +25,4 @@ COPY app.py /app/
 
 EXPOSE 5100
 
-CMD ["gunicorn", "-b", "0.0.0.0:5100", "-w", "2", "app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:5100", "-w", "2", "--timeout", "120", "app:app"]

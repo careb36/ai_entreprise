@@ -74,7 +74,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             aggregate_type="backlog_item",
             aggregate_id=str(backlog_item.id),
             event_type="nats_publish",
-            payload=json.dumps(nats_payload),
+            payload=nats_payload,
         ))
 
     session.commit()
@@ -180,3 +180,50 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
         "assignee": item.assignee,
         "comments": item.comments,
     }
+
+
+@router.post("/sprints/{sprint_id}/dispatch")
+async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_session)):
+    """
+    Dispatch all ``todo`` backlog items in a sprint to their assigned agents.
+
+    Creates an ``OutboxEvent`` for each eligible item.  The background worker
+    publishes these to NATS as ``task.assign`` messages and the task worker
+    picks them up.  Items already dispatched (non-todo status) are skipped.
+    """
+    sprint = session.get(Sprint, sprint_id)
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+
+    items = session.exec(
+        select(BacklogItem).where(
+            BacklogItem.sprint_id == sprint_id,
+            BacklogItem.status == "todo",
+        )
+    ).all()
+
+    if not items:
+        return {"dispatched": 0, "message": "No todo items to dispatch"}
+
+    dispatched = 0
+    for item in items:
+        nats_payload = {
+            "subject": "task.assign",
+            "message": {
+                "backlog_item_id": item.id,
+                "interaction_id": str(uuid4()),
+                "agent": item.assignee or "PO",
+                "sprint_id": sprint.id,
+            },
+        }
+        session.add(OutboxEvent(
+            aggregate_type="backlog_item",
+            aggregate_id=str(item.id),
+            event_type="nats_publish",
+            payload=nats_payload,
+        ))
+        dispatched += 1
+
+    session.commit()
+    logger.info("Dispatched %d tasks for sprint %d", dispatched, sprint_id)
+    return {"dispatched": dispatched, "sprint_id": sprint_id}

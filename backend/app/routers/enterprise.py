@@ -10,14 +10,21 @@ Endpoints:
 - ``GET  /v1/enterprise/lineage``  — time-travel debugging: architectural decisions for a file.
 """
 
+import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Depends
+from datetime import date
+from uuid import uuid4
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel import Session, select, text
 
 from database import get_session, get_neo4j_driver
-from models import Company, Agent, ProjectCredential, ProjectDiscovery, BusinessUnit
+from models import (
+    Company, Agent, ProjectCredential, ProjectDiscovery,
+    BusinessUnit, Sprint, BacklogItem, OutboxEvent,
+)
 from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from services.discovery_service import DiscoveryService
+from services.sprint_planner import plan_foundation_sprint
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
@@ -48,10 +55,14 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
     for agent_data in req.agents:
         session.add(Agent(
             company_id=company.id,
+            name=agent_data.get("name", ""),
             role=agent_data.get("role"),
             persona=agent_data.get("persona"),
             seniority=agent_data.get("seniority", "Senior"),
             specialty=agent_data.get("specialty", ""),
+            model=agent_data.get("model", ""),
+            system_prompt=agent_data.get("system_prompt"),
+            token_budget=agent_data.get("token_budget", 500000),
         ))
 
     if req.permissions:
@@ -64,6 +75,55 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
                     access_level=access_level,
                     encrypted_value="vault_encrypted_placeholder",
                 ))
+
+    # ── PO plans the foundation sprint via LLM ──────────────────────────────
+    plan = plan_foundation_sprint(
+        company_name=req.company_name,
+        agents=req.agents,
+        detected_stack=req.detected_stack,
+        project_path=req.project_path,
+    )
+
+    sprint = Sprint(
+        company_id=company.id,
+        sprint_name="Sprint 0 — Foundations",
+        start_date=date.today().isoformat(),
+        duration_days=req.default_sprint_length_days or 14,
+        status="active",
+        goal=plan.get("goal", f"Foundation sprint for {req.company_name}"),
+    )
+    session.add(sprint)
+    session.flush()
+
+    # Insert the PO-planned backlog items into the sprint.
+    for task in plan.get("tasks", []):
+        bi = BacklogItem(
+            sprint_id=sprint.id,
+            title=task.get("title", "Untitled task"),
+            description=task.get("description", ""),
+            priority=task.get("priority", "medium"),
+            assignee=task.get("assignee", "PO"),
+            status="todo",
+        )
+        session.add(bi)
+        session.flush()  # Obtain bi.id before creating the outbox event
+
+        # Outbox entry — delivered to NATS by process_outbox, consumed by task_worker.
+        nats_payload = {
+            "subject": "task.assign",
+            "message": {
+                "backlog_item_id": bi.id,
+                "interaction_id": str(uuid4()),
+                "agent": task.get("assignee", "PO"),
+                "sprint_id": sprint.id,
+            },
+        }
+        session.add(OutboxEvent(
+            aggregate_type="backlog_item",
+            aggregate_id=str(bi.id),
+            event_type="nats_publish",
+            payload=nats_payload,
+        ))
 
     session.commit()
 
@@ -79,7 +139,17 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
     except Exception as e:
         logger.error(f"Neo4j seed failed (non-critical): {e}")
 
-    return {"company_id": company.id, "message": "Company initialized successfully"}
+    task_count = len(plan.get("tasks", []))
+    logger.info(
+        f"Company '{req.company_name}' initialized: "
+        f"sprint_id={sprint.id}, {task_count} foundation tasks"
+    )
+    return {
+        "company_id": company.id,
+        "sprint_id": sprint.id,
+        "task_count": task_count,
+        "message": f"Company initialized with {task_count} foundation tasks",
+    }
 
 
 @router.post("/approve_task", tags=["Enterprise"])
@@ -148,19 +218,69 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
     }
 
 
+@router.get("/models", tags=["Enterprise"])
+async def list_models(request: Request):
+    """
+    Return the live LLM model catalogue from the proxy.
+
+    Proxies the ``/v1/models`` response from the internal LLM proxy so that
+    the frontend can build a dynamic model selector without hardcoding model
+    names or tiers.  The proxy refreshes its catalogue from the Gemini API
+    every hour and classifies models by capability tier.
+
+    Response shape::
+
+        {
+          "models": [
+            {"id": "gemini-2.5-pro", "provider": "gemini", "tier": "strategic", "description": "..."},
+            ...
+          ],
+          "orchestrator": "gemini-2.5-flash",
+          "refreshed_at": 1712345678.0
+        }
+    """
+    llm_client = getattr(request.app.state, "llm_client", None)
+    if llm_client is None:
+        raise HTTPException(status_code=503, detail="LLM proxy not available")
+    try:
+        data = await asyncio.to_thread(llm_client.get_available_models)
+        if not data:
+            raise HTTPException(status_code=502, detail="LLM proxy returned empty catalogue")
+        return data
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to fetch model catalogue: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not reach LLM proxy")
+
+
 @router.post("/discover_team", tags=["Enterprise"])
-async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_session)):
+async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session)):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
-    Delegates to ``DiscoveryService.discover_project_team()``. If ``company_id``
-    is provided, the result is persisted in the ``project_discovery`` table.
+    Phase 1 (deterministic): filesystem walk + config-file parsing.
+    Phase 2 (AI): LLM proxy reasons about the stack and suggests a team with
+    per-role justifications. Falls back to rule-based team if LLM unavailable.
+
+    If ``company_id`` is provided, the result is persisted in the
+    ``project_discovery`` table.
     """
-    service = DiscoveryService(session)
-    discovery, detected_stack, suggested_team = service.discover_project_team(
-        company_id=req.company_id,
-        project_path=req.project_path,
-    )
+    llm_proxy_url = None
+    llm_client = getattr(request.app.state, "llm_client", None)
+    if llm_client:
+        llm_proxy_url = llm_client.base_url
+    service = DiscoveryService(session, llm_proxy_url=llm_proxy_url)
+    try:
+        # Run the synchronous filesystem scan + LLM call in a thread pool so
+        # the async event loop stays free while the work runs.
+        discovery, detected_stack, suggested_team = await asyncio.to_thread(
+            service.discover_project_team,
+            company_id=req.company_id,
+            project_path=req.project_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return {
         "discovery_id": discovery.id if discovery else None,
         "detected_stack": detected_stack,

@@ -3,9 +3,12 @@ import { create } from 'zustand'
 export interface AgentMessage {
   id: string
   timestamp: string
-  agent: 'PO' | 'ScrumMaster' | 'Dev' | 'System'
+  agent: string
   content: string
-  type: 'message' | 'action' | 'status' | 'error'
+  type: 'message' | 'action' | 'status' | 'error' | 'agent_start' | 'agent_complete'
+  role?: string
+  task?: string
+  preview?: string
 }
 
 interface AgentStore {
@@ -24,6 +27,12 @@ interface AgentStore {
 }
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// Reconnection state (kept outside Zustand to avoid re-renders)
+let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let _reconnectAttempts = 0
+const MAX_RECONNECT_DELAY = 30_000   // cap at 30s
+const BASE_RECONNECT_DELAY = 2_000   // start at 2s
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
   messages: [],
@@ -47,42 +56,20 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     const { disconnect } = get()
     disconnect()
     
-    set({ sprintId, connectionError: null })
+    // Clear any pending reconnect timer
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
+    _reconnectAttempts = 0
     
-    const eventSource = new EventSource(`${BACKEND_URL}/v1/glassroom/stream?sprint_id=${sprintId}`)
+    // Clear old messages — history will be replayed by the SSE endpoint.
+    set({ sprintId, connectionError: null, messages: [] })
     
-    eventSource.onopen = () => {
-      set({ isConnected: true, connectionError: null })
-    }
-    
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.ping) return
-        
-        const message: AgentMessage = {
-          id: data.id || crypto.randomUUID(),
-          timestamp: data.timestamp || new Date().toISOString(),
-          agent: data.agent || 'System',
-          content: data.content || JSON.stringify(data),
-          type: data.type || 'message'
-        }
-        
-        get().addMessage(message)
-      } catch (e) {
-        console.error('Failed to parse SSE message:', e)
-      }
-    }
-    
-    eventSource.onerror = (err) => {
-      set({ isConnected: false, connectionError: 'Connection lost' })
-      eventSource.close()
-    }
-    
-    ;(window as any).__eventSource = eventSource
+    _openSSE(sprintId)
   },
 
   disconnect: () => {
+    if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
+    _reconnectAttempts = 0
+
     const eventSource = (window as any).__eventSource
     if (eventSource) {
       eventSource.close()
@@ -91,3 +78,59 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ isConnected: false, sprintId: null })
   }
 }))
+
+/** Open an EventSource with auto-reconnect on failure. */
+function _openSSE(sprintId: string) {
+  const store = useAgentStore.getState
+
+  const eventSource = new EventSource(`${BACKEND_URL}/v1/glassroom/stream?sprint_id=${sprintId}`)
+  
+  eventSource.onopen = () => {
+    _reconnectAttempts = 0
+    store().setConnected(true)
+    store().setConnectionError(null)
+  }
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.ping || data.type === 'connected') return
+      
+      // Map backend event fields to AgentMessage.
+      // Backend sends: { type, agent, role, task, message, preview, timestamp }
+      const message: AgentMessage = {
+        id: data.id || crypto.randomUUID(),
+        timestamp: data.timestamp || new Date().toISOString(),
+        agent: data.role || data.agent || 'System',
+        content: data.message || data.content || JSON.stringify(data),
+        type: data.type || 'message',
+        role: data.role,
+        task: data.task,
+        preview: data.preview,
+      }
+      
+      store().addMessage(message)
+    } catch (e) {
+      console.error('Failed to parse SSE message:', e)
+    }
+  }
+  
+  eventSource.onerror = () => {
+    eventSource.close()
+    store().setConnected(false)
+
+    // Schedule reconnect with exponential backoff
+    const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** _reconnectAttempts, MAX_RECONNECT_DELAY)
+    _reconnectAttempts++
+    store().setConnectionError(`Reconnecting in ${Math.round(delay / 1000)}s…`)
+
+    _reconnectTimer = setTimeout(() => {
+      const currentSprint = store().sprintId
+      if (currentSprint) {
+        _openSSE(currentSprint)
+      }
+    }, delay)
+  }
+  
+  ;(window as any).__eventSource = eventSource
+}

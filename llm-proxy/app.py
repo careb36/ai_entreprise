@@ -56,37 +56,85 @@ def _build_database_url() -> str:
 engine = create_engine(_build_database_url(), pool_pre_ping=True)
 
 # --- Dynamic Model Catalogue ---
+
+# Preference order for fallback resolution (most preferred first).
+# Only used when the exact requested model is not in the live catalogue.
 _PREFERENCE_TIERS = {
-    "fast":     ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.0-flash-lite"],
-    "powerful": ["gemini-2.5-pro",   "gemini-2.5-flash",      "gemini-pro-latest",   "gemini-2.0-flash"],
+    "fast":     ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
+                 "gemini-2.0-flash-lite", "gemini-2.0-flash"],
+    "powerful": ["gemini-2.5-pro",   "gemini-3-pro-preview", "gemini-pro-latest",
+                 "gemini-2.5-flash"],
 }
+
+# Tier classification rules applied in order — first match wins.
+# Tuple: (substring_tests, tier_name, description)
+_TIER_RULES: list[tuple[list[str], str, str]] = [
+    (["preview"],            "preview",    "Experimental preview — may be unstable"),
+    (["flash-lite", "lite"], "fast",       "Lightweight, fastest responses"),
+    (["2.5-pro", "3-pro"],   "strategic",  "Deep reasoning, architecture, stakeholder decisions"),
+    (["pro"],                "strategic",  "Deep reasoning, architecture, stakeholder decisions"),
+    (["flash"],              "balanced",   "Fast reasoning, coordination, reviews"),
+    (["coder"],              "code",       "Specialised code generation & refactoring (~10x cheaper)"),
+    (["chat"],               "balanced",   "General-purpose reasoning and conversation"),
+]
+
 _available_models: set[str] = set()
 _model_refresh_lock = threading.Lock()
 _last_refresh: float = 0
 
+
+def _classify_model(model_id: str) -> tuple[str, str]:
+    """Return (tier, description) for a model ID based on naming conventions."""
+    lower = model_id.lower()
+    for substrings, tier, desc in _TIER_RULES:
+        if any(s in lower for s in substrings):
+            return tier, desc
+    return "balanced", "General-purpose model"
+
+
 def _refresh_gemini_models():
     global _available_models, _last_refresh
-    if not GEMINI_API_KEY: return
+    if not GEMINI_API_KEY:
+        return
     try:
-        resp = requests.get(f"{GEMINI_PROXY_URL}/models", headers={"x-goog-api-key": GEMINI_API_KEY}, timeout=10)
+        resp = requests.get(
+            f"{GEMINI_PROXY_URL}/models",
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            timeout=10,
+        )
         resp.raise_for_status()
-        ids = {m["name"].split("/")[-1] for m in resp.json().get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])}
+        ids = {
+            m["name"].split("/")[-1]
+            for m in resp.json().get("models", [])
+            if "generateContent" in m.get("supportedGenerationMethods", [])
+        }
         with _model_refresh_lock:
             _available_models = ids
             _last_refresh = time.time()
         logger.info(f"Models refreshed: {sorted(ids)}")
     except Exception as e:
-        logger.warning(f"Refresh failed: {e}")
+        logger.warning(f"Model refresh failed: {e}")
+
 
 def resolve_gemini_model(requested: str) -> str:
-    if not _available_models: _refresh_gemini_models()
+    """
+    Return the best available Gemini model for the requested name.
+    Falls back to the same capability tier if the exact model is unavailable.
+    """
+    if not _available_models:
+        _refresh_gemini_models()
     with _model_refresh_lock:
-        if requested in _available_models: return requested
+        if requested in _available_models:
+            return requested
         tier = "fast" if any(k in requested for k in ("flash", "lite")) else "powerful"
         for candidate in _PREFERENCE_TIERS[tier]:
-            if candidate in _available_models: return candidate
+            if candidate in _available_models:
+                return candidate
     return requested
 
+
+# Refresh models once at startup; background thread refreshes every hour.
+_refresh_gemini_models()
 threading.Thread(target=lambda: (time.sleep(3600), _refresh_gemini_models()), daemon=True).start()
 
 # --- Governance Middleware ---
@@ -115,9 +163,76 @@ def track_usage_in_db(bu_id: str, tokens: int):
         logger.error(f"Usage tracking failed: {e}")
 
 # --- API Endpoints ---
+
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models)})
+
+
+@app.route("/v1/models")
+def list_models():
+    """
+    Return a structured catalogue of all available models with tier classification.
+
+    Response schema:
+      {
+        "models": [
+          {
+            "id":          "gemini-2.5-pro",
+            "provider":    "gemini" | "deepseek",
+            "tier":        "strategic" | "balanced" | "code" | "fast" | "preview",
+            "description": "..."
+          },
+          ...
+        ],
+        "orchestrator": "gemini-2.5-flash",   // recommended model for meta-tasks
+        "refreshed_at": 1712345678.0
+      }
+    """
+    if not _available_models:
+        _refresh_gemini_models()
+
+    models = []
+    with _model_refresh_lock:
+        for model_id in sorted(_available_models):
+            tier, desc = _classify_model(model_id)
+            models.append({"id": model_id, "provider": "gemini", "tier": tier, "description": desc})
+
+    # DeepSeek models are available only when the API key is configured.
+    if DEEPSEEK_API_KEY:
+        models.extend([
+            {"id": "deepseek-coder", "provider": "deepseek", "tier": "code",
+             "description": "State-of-the-art code generation & refactoring (~10x cheaper than Gemini Pro)"},
+            {"id": "deepseek-chat",  "provider": "deepseek", "tier": "balanced",
+             "description": "Balanced reasoning and conversation"},
+        ])
+
+    # Pick the best non-preview balanced/fast model for orchestration tasks
+    # (team suggestion, routing decisions) — prefer stability over power.
+    orchestrator = _pick_orchestrator(models)
+
+    return jsonify({"models": models, "orchestrator": orchestrator, "refreshed_at": _last_refresh})
+
+
+def _pick_orchestrator(models: list[dict]) -> str:
+    """
+    Choose the best model for short orchestration/meta tasks (fast, stable, not preview).
+    Preference: balanced > fast > strategic, never preview.
+    """
+    preferred_ids = [
+        "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
+        "gemini-2.0-flash", "gemini-2.5-pro",
+    ]
+    available_ids = {m["id"] for m in models if m["tier"] != "preview"}
+    for candidate in preferred_ids:
+        if candidate in available_ids:
+            return candidate
+    # Fall back to any non-preview balanced model
+    for m in models:
+        if m["tier"] in ("balanced", "fast") and m["tier"] != "preview":
+            return m["id"]
+    return models[0]["id"] if models else "gemini-flash-latest"
+
 
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():

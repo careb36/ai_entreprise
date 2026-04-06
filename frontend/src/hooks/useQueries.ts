@@ -19,6 +19,7 @@ export function useSprintBoard(sprintId: number | null) {
     queryFn: () => api.getSprintBoard(sprintId!),
     enabled: !!sprintId,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    refetchInterval: 10_000,   // Auto-poll every 10s while agents work
   })
 }
 

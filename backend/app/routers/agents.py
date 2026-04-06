@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
-from database import get_session
+from database import get_session, engine
 from schemas import GenerateRequest, AuditRequest
 from services.agent_service import AgentService
 from logging_config import logger
@@ -107,25 +107,86 @@ async def glassroom_stream(sprint_id: str = Query(...)):
     """
     Server-Sent Events (SSE) stream for real-time Glassroom monitoring.
 
-    Registers an ``asyncio.Queue`` for *sprint_id* so that the NATS listener
-    in ``main.py`` can push events into it.  The generator yields each event
-    as an SSE ``data:`` line.  A keepalive ping is sent every 30 seconds to
-    prevent proxy timeouts.  The queue is cleaned up when the client disconnects.
+    On connect, replays past agent activity from backlog item comments so the
+    user sees the full conversation history.  Then switches to live streaming
+    via NATS.  A keepalive ping is sent every 15 seconds.
     """
     queue: asyncio.Queue = asyncio.Queue()
     sse_connections[sprint_id] = queue
 
+    def _load_history() -> list[dict]:
+        """Load past agent comments from the DB as GlassRoom messages."""
+        from sqlmodel import Session, select, text
+        from models import BacklogItem
+        events = []
+        try:
+            with Session(engine) as session:
+                items = session.exec(
+                    select(BacklogItem)
+                    .where(BacklogItem.sprint_id == int(sprint_id))
+                    .order_by(BacklogItem.id)
+                ).all()
+                for item in items:
+                    comments = item.comments or []
+                    if isinstance(comments, str):
+                        try:
+                            comments = json.loads(comments)
+                        except (json.JSONDecodeError, TypeError):
+                            comments = []
+                    for c in comments:
+                        events.append({
+                            "type": "agent_complete",
+                            "agent": c.get("author", item.assignee or "Agent"),
+                            "role": item.assignee or "Agent",
+                            "task": item.title,
+                            "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
+                            "preview": (c.get("text") or "")[:300],
+                            "timestamp": c.get("created_at", ""),
+                            "status": item.status,
+                        })
+                    # Show current status for items without comments too
+                    if not comments and item.status not in ("todo",):
+                        events.append({
+                            "type": "status",
+                            "agent": item.assignee or "System",
+                            "role": item.assignee or "System",
+                            "task": item.title,
+                            "message": f"📋 {item.title} → {item.status}",
+                            "timestamp": (item.updated_at or item.created_at or "").isoformat() if hasattr(item.updated_at or item.created_at, "isoformat") else "",
+                            "status": item.status,
+                        })
+        except Exception:
+            pass
+        return events
+
     async def event_generator():
         try:
+            yield f"data: {json.dumps({'type': 'connected', 'sprint_id': sprint_id})}\n\n"
+
+            # Replay past activity so the user sees the full history.
+            history = await asyncio.to_thread(_load_history)
+            for evt in history:
+                yield f"data: {json.dumps(evt)}\n\n"
+
+            # Live stream from NATS.
             while True:
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield f"data: {json.dumps(json.loads(data))}\n\n"
+                    data = await asyncio.wait_for(queue.get(), timeout=15)
+                    try:
+                        parsed = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        parsed = {"type": "message", "message": str(data)}
+                    yield f"data: {json.dumps(parsed)}\n\n"
                 except asyncio.TimeoutError:
-                    # Send a ping to keep the connection alive through proxies.
                     yield f"data: {json.dumps({'ping': True})}\n\n"
         finally:
-            # Remove the queue entry when the client disconnects.
             sse_connections.pop(sprint_id, None)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

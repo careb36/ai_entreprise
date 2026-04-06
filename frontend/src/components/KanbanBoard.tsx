@@ -143,12 +143,24 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     )
   }
 
+  if (isError && !board) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
+        <AlertCircle size={28} className="text-red-400" />
+        <p className="text-sm text-red-400">{t('kanban.error')}</p>
+        <button onClick={() => refetch()} className="btn-ghost btn-sm flex items-center gap-1.5 mt-1">
+          <RefreshCw size={12} />
+          <span>{t('kanban.refresh')}</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header with sprint name and refresh */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-surface-700 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <LayoutGrid size={15} className="text-brand-400" />
           <span className="font-medium text-gray-200 text-sm">
             {board ? board.sprint.sprint_name : t('kanban.title')}
           </span>
@@ -166,13 +178,6 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
         </button>
       </div>
 
-      {isError && (
-        <div className="mx-4 mt-3 alert-error flex items-center gap-2 text-sm">
-          <AlertCircle size={14} className="flex-shrink-0" />
-          {t('kanban.error')}
-        </div>
-      )}
-
       {/* Board */}
       {board ? (
         <DndContext
@@ -181,7 +186,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
             <div className="flex gap-3 min-w-max h-full md:h-auto md:min-w-0 md:flex-nowrap">
               {COLUMNS.map(({ id: colId, titleKey, className, icon: Icon }) => {
                 const items = board.columns[colId] || []

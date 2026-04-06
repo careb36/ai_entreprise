@@ -17,13 +17,13 @@ NATS subjects in use:
 
 import asyncio
 import json
-import logging
 from typing import Optional, Callable, Dict, Any
 
 import nats
 
+from logging_config import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger("fabrique-nats")
 
 
 class NATSClient:
@@ -117,15 +117,21 @@ class NATSClient:
         Internal coroutine that continuously reads messages from *sub* and
         forwards them to *callback*.
 
-        Messages are acknowledged after the callback returns.  Exceptions in
-        the callback are caught and logged so that a single bad message does
-        not terminate the listener loop.
+        Messages are acknowledged after the callback returns when using
+        JetStream.  For core NATS the ack is silently skipped.  Exceptions
+        in the callback are caught and logged so that a single bad message
+        does not terminate the listener loop.
         """
         async for msg in sub.messages:
             try:
                 data = json.loads(msg.data.decode())
                 await callback(msg, data)
-                await msg.ack()
+                # JetStream messages support ack(); core NATS messages do not.
+                if hasattr(msg, '_ackd') or hasattr(msg, 'metadata'):
+                    try:
+                        await msg.ack()
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
 

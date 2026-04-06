@@ -1,0 +1,331 @@
+"""
+Sprint planner service — AI-driven foundation sprint planning.
+
+When a new company is bootstrapped, the **PO agent** analyses the discovered
+project stack and produces a set of backlog items for "Sprint 0 — Foundations".
+These items focus on documentation completeness, missing configuration, and
+establishing the knowledge base that agents need to work effectively.
+
+The service delegates to the LLM proxy using the PO agent's assigned model,
+falling back to a deterministic task list when the LLM is unavailable.
+"""
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from llm_proxy_client import LLMProxyClient
+from logging_config import logger
+
+# ---------------------------------------------------------------------------
+# Prompt template — the PO agent plans the foundation sprint
+# ---------------------------------------------------------------------------
+
+_FOUNDATION_PROMPT = """\
+You are {agent_name}, a {seniority} Product Owner at an AI software factory.
+Your team consists of these AI agents:
+
+{team_roster}
+
+A new project has just been onboarded. Your job is to plan "Sprint 0 — \
+Foundations": a short sprint that ensures ALL documentation, configuration, \
+and knowledge-base artifacts are complete so the team can work effectively.
+
+## Detected Stack
+{stack_summary}
+
+## Existing Files in Project Root
+{file_listing}
+
+## Instructions
+
+Analyse what documentation and configuration already exists vs what is missing.
+Generate a backlog of **5 to 12 tasks** covering:
+
+1. **Documentation verification & completion** — README, CONTRIBUTING, \
+   ARCHITECTURE, API docs, deployment guides, changelog.
+2. **Agent knowledge base** — each agent needs context docs for their role: \
+   coding standards, testing strategy, CI/CD pipeline docs, security policies, \
+   infrastructure diagrams.
+3. **Project configuration** — verify .env.example, Docker configs, CI \
+   pipelines, linter configs are present and correct.
+4. **Foundational decisions** — document tech stack decisions, branching \
+   strategy, release process.
+
+For EACH task return a JSON object with these exact fields:
+- "title": concise task title (max 80 chars)
+- "description": 2-4 sentence description of what to do and the acceptance \
+  criteria
+- "priority": "critical" | "high" | "medium" | "low"
+- "assignee": the agent ROLE best suited (one of: {available_roles})
+
+Rules:
+- Do NOT create tasks for documentation that already exists AND is complete.
+- DO create tasks to UPDATE docs that exist but are clearly incomplete.
+- Assign tasks to the agent whose role fits best (e.g. Architect for \
+  architecture docs, DevOps for CI/CD docs, QA for testing strategy).
+- The PO should own the README and CONTRIBUTING tasks.
+- Return ONLY a valid JSON object with two keys:
+  * "goal": a one-sentence sprint goal (max 120 chars)
+  * "tasks": the JSON array of task objects
+- No markdown fences, no text outside the JSON object.
+"""
+
+
+def _build_stack_summary(stack: Dict[str, Any]) -> str:
+    """Format the detected stack dict into a readable summary for the prompt."""
+    parts = []
+    if stack.get("language"):
+        parts.append(f"Primary language: {stack['language']}")
+    if stack.get("all_languages"):
+        langs = ", ".join(f"{k} ({v} files)" for k, v in stack["all_languages"].items())
+        parts.append(f"Languages: {langs}")
+    if stack.get("frameworks"):
+        parts.append(f"Frameworks: {', '.join(stack['frameworks'])}")
+    if stack.get("databases"):
+        parts.append(f"Databases: {', '.join(stack['databases'])}")
+    if stack.get("infra"):
+        parts.append(f"Infrastructure: {', '.join(stack['infra'])}")
+    if stack.get("complexity"):
+        parts.append(f"Complexity: {stack['complexity']}")
+    if stack.get("file_count"):
+        parts.append(f"Files scanned: {stack['file_count']}")
+    return "\n".join(parts) if parts else "No stack data available."
+
+
+def _list_root_files(project_path: str, max_files: int = 60) -> str:
+    """List files in the project root (1 level deep) to help the PO assess docs."""
+    try:
+        root = Path(project_path)
+        if not root.is_dir():
+            return "(project path not accessible)"
+        entries = []
+        for entry in sorted(root.iterdir()):
+            if entry.name.startswith(".git") and entry.name != ".gitignore":
+                continue
+            marker = "📁" if entry.is_dir() else "📄"
+            entries.append(f"  {marker} {entry.name}")
+            if len(entries) >= max_files:
+                entries.append(f"  ... and more")
+                break
+        return "\n".join(entries) if entries else "(empty directory)"
+    except Exception as e:
+        logger.warning(f"Could not list project root: {e}")
+        return "(could not read directory)"
+
+
+def _build_team_roster(agents: List[Dict[str, Any]]) -> str:
+    """Format the agent list into a readable roster for the prompt."""
+    lines = []
+    for a in agents:
+        role = a.get("role", "Unknown")
+        name = a.get("name", "")
+        seniority = a.get("seniority", "Senior")
+        specialty = a.get("specialty", "")
+        model = a.get("model", "unknown")
+        label = f"{name} ({role})" if name else role
+        lines.append(f"- {label}: {seniority}, specialty={specialty}, model={model}")
+    return "\n".join(lines) if lines else "- (no agents defined)"
+
+
+def _find_po_agent(agents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Find the PO agent; fall back to Architect, then first agent."""
+    for role_pref in ("PO", "Architect"):
+        for a in agents:
+            if a.get("role") == role_pref:
+                return a
+    return agents[0] if agents else {"role": "PO", "model": "", "name": "PO", "seniority": "Senior"}
+
+
+# ---------------------------------------------------------------------------
+# Fallback tasks when the LLM is unavailable
+# ---------------------------------------------------------------------------
+
+_FALLBACK_TASKS = [
+    {
+        "title": "Verify and complete README.md",
+        "description": "Ensure the README includes: project description, setup instructions, "
+                       "architecture overview, contribution guidelines link, and license.",
+        "priority": "critical",
+        "assignee": "PO",
+    },
+    {
+        "title": "Create or update CONTRIBUTING.md",
+        "description": "Document the contribution workflow: branching strategy, commit conventions, "
+                       "code review process, and PR template.",
+        "priority": "high",
+        "assignee": "PO",
+    },
+    {
+        "title": "Document system architecture",
+        "description": "Create ARCHITECTURE.md with component diagram, data flow, service boundaries, "
+                       "and technology decisions with rationale.",
+        "priority": "critical",
+        "assignee": "Architect",
+    },
+    {
+        "title": "Define coding standards and conventions",
+        "description": "Document language-specific coding standards, naming conventions, file structure, "
+                       "and linter/formatter configuration.",
+        "priority": "high",
+        "assignee": "Dev",
+    },
+    {
+        "title": "Create testing strategy document",
+        "description": "Define testing pyramid: unit, integration, e2e test expectations, coverage "
+                       "targets, and test framework choices.",
+        "priority": "high",
+        "assignee": "QA",
+    },
+    {
+        "title": "Document CI/CD pipeline and deployment process",
+        "description": "Create deployment guide covering CI/CD pipeline stages, environment configuration, "
+                       "secrets management, and rollback procedures.",
+        "priority": "high",
+        "assignee": "DevOps",
+    },
+    {
+        "title": "Verify environment configuration files",
+        "description": "Ensure .env.example exists with all required variables documented, Docker configs "
+                       "are complete, and local dev setup is reproducible.",
+        "priority": "medium",
+        "assignee": "DevOps",
+    },
+    {
+        "title": "Create security baseline document",
+        "description": "Document authentication/authorization approach, secrets management policy, "
+                       "dependency scanning setup, and security review checklist.",
+        "priority": "medium",
+        "assignee": "Security",
+    },
+]
+
+
+def _filter_fallback_tasks(agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return only fallback tasks whose assignee role exists in the team."""
+    available_roles = {a.get("role") for a in agents}
+    return [t for t in _FALLBACK_TASKS if t["assignee"] in available_roles]
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def plan_foundation_sprint(
+    company_name: str,
+    agents: List[Dict[str, Any]],
+    detected_stack: Optional[Dict[str, Any]],
+    project_path: Optional[str],
+) -> Dict[str, Any]:
+    """
+    Have the PO agent plan "Sprint 0 — Foundations" via LLM.
+
+    Args:
+        company_name:   Display name of the company / project.
+        agents:         List of agent dicts (role, name, model, seniority, specialty).
+        detected_stack: Stack analysis from the discovery phase (may be None).
+        project_path:   Filesystem path to the project root (may be None).
+
+    Returns:
+        Dict with ``"goal"`` (str) and ``"tasks"`` (list of backlog dicts).
+        Each task has: title, description, priority, assignee.
+    """
+    po = _find_po_agent(agents)
+    po_model = po.get("model", "")
+    available_roles = sorted({a.get("role", "Dev") for a in agents})
+
+    # If no LLM model or no stack data, return fallback immediately.
+    if not po_model or not detected_stack:
+        logger.info("No PO model or stack data — using fallback foundation tasks")
+        return {
+            "goal": f"Establish documentation and configuration foundations for {company_name}",
+            "tasks": _filter_fallback_tasks(agents),
+        }
+
+    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
+    client = LLMProxyClient(base_url=llm_url)
+
+    stack_summary = _build_stack_summary(detected_stack)
+    file_listing = _list_root_files(project_path) if project_path else "(no project path)"
+    team_roster = _build_team_roster(agents)
+
+    prompt = _FOUNDATION_PROMPT.format(
+        agent_name=po.get("name") or "PO",
+        seniority=po.get("seniority", "Senior"),
+        team_roster=team_roster,
+        stack_summary=stack_summary,
+        file_listing=file_listing,
+        available_roles=", ".join(available_roles),
+    )
+
+    logger.info(f"PO planning foundation sprint with model={po_model}")
+
+    try:
+        result = client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=po_model,
+            role="PO",
+        )
+
+        if result.get("error"):
+            logger.warning(f"LLM error during sprint planning: {result['error']}")
+            return {
+                "goal": f"Establish documentation and configuration foundations for {company_name}",
+                "tasks": _filter_fallback_tasks(agents),
+            }
+
+        raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+        # Strip markdown fences if present.
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith("```"):
+            cleaned = cleaned.rsplit("```", 1)[0]
+        cleaned = cleaned.strip()
+
+        parsed = json.loads(cleaned)
+
+        goal = parsed.get("goal", f"Foundation sprint for {company_name}")
+        tasks = parsed.get("tasks", [])
+
+        # Validate and normalise each task.
+        valid_roles = set(available_roles)
+        validated = []
+        for t in tasks:
+            if not isinstance(t, dict) or not t.get("title"):
+                continue
+            assignee = t.get("assignee", "PO")
+            if assignee not in valid_roles:
+                assignee = "PO"
+            validated.append({
+                "title": str(t["title"])[:80],
+                "description": str(t.get("description", ""))[:500],
+                "priority": t.get("priority", "medium") if t.get("priority") in (
+                    "critical", "high", "medium", "low") else "medium",
+                "assignee": assignee,
+            })
+
+        if not validated:
+            logger.warning("LLM returned no valid tasks — using fallback")
+            return {
+                "goal": goal,
+                "tasks": _filter_fallback_tasks(agents),
+            }
+
+        logger.info(f"PO planned {len(validated)} foundation tasks")
+        return {"goal": goal, "tasks": validated}
+
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        logger.warning(f"Failed to parse PO sprint plan: {e}")
+        return {
+            "goal": f"Establish documentation and configuration foundations for {company_name}",
+            "tasks": _filter_fallback_tasks(agents),
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error in sprint planning: {e}")
+        return {
+            "goal": f"Establish documentation and configuration foundations for {company_name}",
+            "tasks": _filter_fallback_tasks(agents),
+        }
