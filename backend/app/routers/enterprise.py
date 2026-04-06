@@ -10,6 +10,7 @@ Endpoints:
 - ``GET  /v1/enterprise/lineage``  — time-travel debugging: architectural decisions for a file.
 """
 
+import asyncio
 import json
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
@@ -158,7 +159,10 @@ async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_se
     """
     service = DiscoveryService(session)
     try:
-        discovery, detected_stack, suggested_team = service.discover_project_team(
+        # Run the synchronous filesystem scan in a thread so the event loop
+        # stays free for other requests while the directory walk runs.
+        discovery, detected_stack, suggested_team = await asyncio.to_thread(
+            service.discover_project_team,
             company_id=req.company_id,
             project_path=req.project_path,
         )
