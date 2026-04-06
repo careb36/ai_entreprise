@@ -12,7 +12,7 @@ Endpoints:
 
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel import Session, select, text
 
 from database import get_session, get_neo4j_driver
@@ -150,17 +150,25 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
 
 
 @router.post("/discover_team", tags=["Enterprise"])
-async def discover_team(req: DiscoveryRequest, session: Session = Depends(get_session)):
+async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session)):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
-    Delegates to ``DiscoveryService.discover_project_team()``. If ``company_id``
-    is provided, the result is persisted in the ``project_discovery`` table.
+    Phase 1 (deterministic): filesystem walk + config-file parsing.
+    Phase 2 (AI): LLM proxy reasons about the stack and suggests a team with
+    per-role justifications. Falls back to rule-based team if LLM unavailable.
+
+    If ``company_id`` is provided, the result is persisted in the
+    ``project_discovery`` table.
     """
-    service = DiscoveryService(session)
+    llm_proxy_url = None
+    llm_client = getattr(request.app.state, "llm_client", None)
+    if llm_client:
+        llm_proxy_url = llm_client.base_url
+    service = DiscoveryService(session, llm_proxy_url=llm_proxy_url)
     try:
-        # Run the synchronous filesystem scan in a thread so the event loop
-        # stays free for other requests while the directory walk runs.
+        # Run the synchronous filesystem scan + LLM call in a thread pool so
+        # the async event loop stays free while the work runs.
         discovery, detected_stack, suggested_team = await asyncio.to_thread(
             service.discover_project_team,
             company_id=req.company_id,

@@ -11,6 +11,7 @@ interface Agent {
   seniority: string
   specialty: string
   token_budget?: number
+  reasoning?: string
 }
 
 interface Permissions {
@@ -32,6 +33,7 @@ interface DetectedStack {
   infra: string[]
   complexity: string
   file_count: number
+  team_source?: 'ai' | 'rules'
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -199,6 +201,11 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
         <span className="badge bg-surface-700 text-gray-400">{roleInfo.label}</span>
         {agent.specialty && <span className="badge bg-brand-900/30 text-brand-300">{agent.specialty}</span>}
       </div>
+      {agent.reasoning && (
+        <p className="text-xs text-gray-500 italic border-t border-surface-700/50 pt-2 mt-1">
+          💡 {agent.reasoning}
+        </p>
+      )}
     </div>
   )
 }
@@ -405,9 +412,17 @@ export default function CompanyNew() {
           </div>
           <div className="px-4 py-2 border-t border-brand-700/20 flex items-center justify-between text-xs">
             <span className="text-gray-500">{discoveryResult.file_count} files scanned</span>
-            <span className={`badge ${discoveryResult.complexity === 'High' ? 'bg-red-900/40 text-red-300' : discoveryResult.complexity === 'Medium' ? 'bg-yellow-900/40 text-yellow-300' : 'bg-green-900/40 text-green-300'}`}>
-              {discoveryResult.complexity} complexity
-            </span>
+            <div className="flex items-center gap-2">
+              {discoveryResult.team_source === 'ai' && (
+                <span className="badge bg-purple-900/40 text-purple-300">✨ AI team suggestion</span>
+              )}
+              {discoveryResult.team_source === 'rules' && (
+                <span className="badge bg-surface-700 text-gray-400">rule-based suggestion</span>
+              )}
+              <span className={`badge ${discoveryResult.complexity === 'High' ? 'bg-red-900/40 text-red-300' : discoveryResult.complexity === 'Medium' ? 'bg-yellow-900/40 text-yellow-300' : 'bg-green-900/40 text-green-300'}`}>
+                {discoveryResult.complexity} complexity
+              </span>
+            </div>
           </div>
         </div>
       )}

@@ -1,11 +1,15 @@
 """
 DiscoveryService — automated project stack detection and AI team composition.
 
-Performs real filesystem introspection: reads config files (package.json,
-pyproject.toml, pom.xml, build.gradle, Gemfile, go.mod, etc.), counts source
-file extensions, and inspects Dockerfiles / docker-compose.yml to build an
-accurate picture of the technology stack.  The detected stack is then used to
-compose an optimal AI engineering team with appropriate roles and specialties.
+Phase 1 (deterministic): Reads config files (package.json, pyproject.toml,
+pom.xml, build.gradle, Gemfile, go.mod, etc.), counts source file extensions,
+and inspects Dockerfiles / docker-compose.yml to build an accurate picture of
+the technology stack.
+
+Phase 2 (AI-powered): Sends the detected stack plus a compact snapshot of the
+project's README / CONTRIBUTING to the LLM proxy so Gemini can reason about
+the *actual* work involved and suggest a team with role-level justifications.
+Falls back to deterministic rules if the LLM is unavailable.
 """
 
 import json
@@ -315,28 +319,163 @@ def _build_team(
     return team
 
 
+# ── LLM-powered team suggestion ───────────────────────────────────────────────
+
+_TEAM_PROMPT = """\
+You are an expert engineering manager at an AI software factory.
+
+A new project has been scanned. Based on the stack context below, suggest the
+optimal AI agent team to build and maintain this project.
+
+## Detected Stack
+{stack_summary}
+
+## Project Context (README excerpt)
+{readme_excerpt}
+
+## Instructions
+Return ONLY a valid JSON array. Each element is an agent object with exactly
+these fields:
+- "role": one of PO, SM, Architect, Dev, QA, DevOps, Security, Data
+- "seniority": one of Junior, Mid, Senior, Staff
+- "specialty": a concise 2-5 word focus area derived from the actual stack
+- "reasoning": one sentence explaining why this role is needed for THIS project
+
+Constraints:
+- 3 to 8 agents maximum
+- Always include PO, Architect, and at least one Dev
+- Justify every role — do not add roles the project doesn't need
+- Use Staff seniority only for High complexity projects
+- Do NOT add markdown fences, keys, or any text outside the JSON array
+"""
+
+
+def _read_readme(root: Path, max_chars: int = 1500) -> str:
+    """Return the first *max_chars* characters of the project README, if any."""
+    for name in ("README.md", "README.rst", "README.txt", "README"):
+        candidate = root / name
+        if candidate.exists():
+            return _read_text(candidate)[:max_chars]
+    return "(no README found)"
+
+
+def _ai_suggest_team(
+    detected_stack: dict,
+    root: Path,
+    llm_proxy_url: str,
+) -> list[dict] | None:
+    """
+    Ask the LLM proxy to reason about the project and suggest a team.
+
+    Returns a list of agent dicts on success, or ``None`` if the LLM is
+    unavailable or returns malformed output (caller should fall back to rules).
+    """
+    try:
+        from llm_proxy_client import LLMProxyClient  # local import to avoid circular
+        import logging
+        log = logging.getLogger("fabrique-backend")
+
+        stack_summary = (
+            f"Primary language: {detected_stack['language']}\n"
+            f"All languages: {', '.join(f'{k} ({v} files)' for k, v in detected_stack.get('all_languages', {}).items())}\n"
+            f"Frameworks: {', '.join(detected_stack['frameworks']) or 'none detected'}\n"
+            f"Databases: {', '.join(detected_stack['databases']) or 'none detected'}\n"
+            f"Infra: {', '.join(detected_stack['infra']) or 'none detected'}\n"
+            f"Complexity: {detected_stack['complexity']} ({detected_stack['file_count']} files)"
+        )
+        readme = _read_readme(root)
+        prompt = _TEAM_PROMPT.format(stack_summary=stack_summary, readme_excerpt=readme)
+
+        client = LLMProxyClient(base_url=llm_proxy_url)
+        result = client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model="gemini-pro",
+            role="Architect",
+        )
+
+        if result.get("error"):
+            log.warning("LLM team suggestion failed: %s", result["error"])
+            return None
+
+        # Extract content from OpenAI-compatible response envelope
+        content = (
+            result.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
+
+        # Strip accidental markdown fences
+        content = re.sub(r"^```(?:json)?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content)
+
+        team = json.loads(content)
+        if not isinstance(team, list) or not team:
+            log.warning("LLM returned unexpected team shape: %s", type(team))
+            return None
+
+        # Normalise: ensure every agent has the required fields
+        valid_roles = {"PO", "SM", "Architect", "Dev", "QA", "DevOps", "Security", "Data"}
+        valid_seniorities = {"Junior", "Mid", "Senior", "Staff"}
+        normalised = []
+        for agent in team:
+            role = agent.get("role", "Dev")
+            if role not in valid_roles:
+                role = "Dev"
+            seniority = agent.get("seniority", "Senior")
+            if seniority not in valid_seniorities:
+                seniority = "Senior"
+            normalised.append({
+                "role": role,
+                "seniority": seniority,
+                "specialty": str(agent.get("specialty", ""))[:80],
+                "reasoning": str(agent.get("reasoning", ""))[:200],
+                "persona": str(agent.get("specialty", "")),
+            })
+        log.info("AI team suggestion: %d agents from LLM", len(normalised))
+        return normalised
+
+    except Exception as exc:
+        import logging
+        logging.getLogger("fabrique-backend").warning(
+            "AI team suggestion error (will use rule-based fallback): %s", exc
+        )
+        return None
+
+
 class DiscoveryService:
     """
     Scans a project directory and builds an accurate technology stack profile,
     then recommends an AI engineering team sized and specialised for that stack.
 
+    Phase 1 is deterministic (filesystem walk + config-file parsing).
+    Phase 2 uses the LLM proxy to reason about the project and produce a team
+    with per-role justifications.  If the LLM is unavailable the service falls
+    back to the rule-based ``_build_team()`` function automatically.
+
     Args:
-        session: Active SQLModel session used for persisting the discovery result.
+        session:       Active SQLModel session used for persisting the discovery result.
+        llm_proxy_url: Base URL of the internal LLM proxy (default: env var LLM_PROXY_URL).
     """
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, llm_proxy_url: str | None = None):
         self.session = session
+        self.llm_proxy_url = llm_proxy_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
 
     def discover_project_team(self, company_id: Optional[int], project_path: str):
         """
         Scan a project path and recommend an AI engineering team.
 
-        Performs real filesystem introspection:
+        Phase 1 — deterministic scan:
         - Walks up to 5 000 source files to determine the dominant language.
         - Reads package.json, pyproject.toml, pom.xml, Gemfile, go.mod, etc.
         - Inspects docker-compose.yml and .env for database services.
         - Detects CI, IaC, and containerisation tooling.
-        - Builds a team composition tailored to the detected stack.
+
+        Phase 2 — AI suggestion:
+        - Sends the detected stack + README excerpt to the LLM proxy.
+        - LLM returns a team with per-role reasoning.
+        - Falls back to rule-based team if LLM is unavailable.
 
         Args:
             company_id:   Pass ``None`` for pre-creation discovery (no DB write).
@@ -347,15 +486,13 @@ class DiscoveryService:
         """
         root = Path(project_path).expanduser().resolve()
 
-        # Validate the path exists and is a directory.
         if not root.is_dir():
             raise ValueError(f"Project path does not exist or is not a directory: {root}")
 
         folder_name = root.name or "New Project"
 
-        # Walk the project tree.
+        # ── Phase 1: deterministic filesystem scan ────────────────────────────
         files = _walk_files(root)
-
         primary_lang, lang_counts = _detect_language(files)
         frameworks = _detect_frameworks(root, primary_lang)
         databases = _detect_databases(root)
@@ -373,7 +510,14 @@ class DiscoveryService:
             "file_count": len(files),
         }
 
-        suggested_team = _build_team(primary_lang, frameworks, databases, infra, complexity)
+        # ── Phase 2: AI team suggestion (with rule-based fallback) ────────────
+        suggested_team = _ai_suggest_team(detected_stack, root, self.llm_proxy_url)
+        if suggested_team is None:
+            suggested_team = _build_team(primary_lang, frameworks, databases, infra, complexity)
+            # Tag as rule-based so the frontend can show a different indicator
+            detected_stack["team_source"] = "rules"
+        else:
+            detected_stack["team_source"] = "ai"
 
         discovery = None
         if company_id:
