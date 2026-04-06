@@ -68,6 +68,7 @@ services:
     container_name: factory-llm-proxy
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       PROXY_PORT: 5100
     ports:
       - "5100:5100"
