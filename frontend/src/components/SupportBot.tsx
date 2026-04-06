@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../services/api'
 import { MessageSquare, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
@@ -40,6 +40,36 @@ export const SupportBot: React.FC = () => {
   const { t } = useTranslation()
   const [isOpen, setIsOpen]     = useState(false)
   const [view, setView]         = useState<View>('chat')
+
+  // Draggable position (bottom-right default)
+  const [pos, setPos] = useState({ x: 24, y: 24 })
+  const dragging = useRef(false)
+  const dragMoved = useRef(false)
+  const dragOffset = useRef({ x: 0, y: 0 })
+  const fabRef = useRef<HTMLDivElement>(null)
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('[data-chat-panel]')) return
+    dragging.current = true
+    dragMoved.current = false
+    dragOffset.current = { x: e.clientX + pos.x, y: e.clientY + pos.y }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [pos])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging.current) return
+    dragMoved.current = true
+    const newX = dragOffset.current.x - e.clientX
+    const newY = dragOffset.current.y - e.clientY
+    const maxX = window.innerWidth - 56
+    const maxY = window.innerHeight - 56
+    setPos({
+      x: Math.max(0, Math.min(newX, maxX)),
+      y: Math.max(0, Math.min(newY, maxY)),
+    })
+  }, [])
+
+  const onPointerUp = useCallback(() => { dragging.current = false }, [])
 
   // Chat
   const [messages, setMessages] = useState<Message[]>([])
@@ -210,15 +240,23 @@ export const SupportBot: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
-      <button onClick={() => setIsOpen(p => !p)}
-        className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition-all hover:scale-110"
+    <div
+      ref={fabRef}
+      className="fixed z-50"
+      style={{ right: pos.x, bottom: pos.y }}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <button
+        onPointerDown={onPointerDown}
+        onClick={() => { if (!dragMoved.current) setIsOpen(p => !p) }}
+        className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition-all hover:scale-110 cursor-grab active:cursor-grabbing select-none touch-none"
         title={t('support.open')}>
         {isOpen ? <X size={24} /> : <MessageSquare size={24} />}
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-20 right-0 w-[min(320px,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[80vh]">
+        <div data-chat-panel className="absolute bottom-20 right-0 w-[min(320px,calc(100vw-2rem))] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden max-h-[80vh]">
 
           {/* Header */}
           <div className="px-4 py-3 bg-indigo-600 text-white flex items-center justify-between gap-2">

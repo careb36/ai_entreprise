@@ -107,7 +107,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const errorCount = messages.filter(m => m.type === 'error').length
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 rounded-lg border border-surface-700">
+    <div className="flex flex-col h-full bg-surface-900">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 shrink-0">
         <div className="flex items-center gap-2 min-w-0">

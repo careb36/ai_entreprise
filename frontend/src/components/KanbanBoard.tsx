@@ -186,7 +186,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
             <div className="flex gap-3 min-w-max h-full md:h-auto md:min-w-0 md:flex-nowrap">
               {COLUMNS.map(({ id: colId, titleKey, className, icon: Icon }) => {
                 const items = board.columns[colId] || []

@@ -97,20 +97,21 @@ export const SprintWorkspace: React.FC = () => {
           </button>
         </div>
 
-        {/* Kanban area */}
-        <div className={`${glassroomOpen ? 'flex-1' : 'flex-1'} min-h-0 overflow-hidden flex flex-col p-3 gap-3`}>
-          <div className="flex-1 min-h-0 card overflow-hidden flex flex-col">
+        {/* Kanban + Glassroom area */}
+        <div className="flex-1 min-h-0 flex flex-col p-3 gap-3 overflow-hidden">
+          {/* Board — grows to fill available space, scrolls internally */}
+          <div className={`min-h-0 card overflow-hidden flex flex-col ${glassroomOpen ? 'flex-[3]' : 'flex-1'}`}>
             <div className="flex-1 overflow-auto">
               <KanbanBoard sprintId={currentId} />
             </div>
           </div>
 
-          {/* Glassroom — collapsible */}
+          {/* Glassroom — collapsible bottom panel */}
           <div
             className={`
               card overflow-hidden flex flex-col flex-shrink-0
               transition-all duration-200
-              ${glassroomOpen ? 'h-64 md:h-72' : 'h-10'}
+              ${glassroomOpen ? 'flex-[2] min-h-[10rem]' : 'h-10'}
             `}
           >
             <button
@@ -122,7 +123,7 @@ export const SprintWorkspace: React.FC = () => {
               <span className="text-gray-500 text-xs">{glassroomOpen ? '▼' : '▲'}</span>
             </button>
             {glassroomOpen && (
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto">
                 <GlassRoom sprintId={currentId} />
               </div>
             )}
