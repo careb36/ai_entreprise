@@ -60,7 +60,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
     _reconnectAttempts = 0
     
-    set({ sprintId, connectionError: null })
+    // Clear old messages — history will be replayed by the SSE endpoint.
+    set({ sprintId, connectionError: null, messages: [] })
     
     _openSSE(sprintId)
   },

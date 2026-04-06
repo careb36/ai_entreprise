@@ -305,6 +305,184 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     logger.info("Task Worker subscribed to task.assign")
     await nats_client.subscribe("task.assign", _on_task_assign)
 
+    # Periodic review loop — processes items stuck in in_review or blocked.
+    await asyncio.sleep(10)  # Let initial tasks start first
+    while True:
+        try:
+            await _review_cycle(nats_client)
+        except Exception as e:
+            logger.error("Review cycle error: %s", e)
+        await asyncio.sleep(30)  # Run every 30s
+
+
+async def _review_cycle(nats_client: NATSClient) -> None:
+    """
+    Periodic cycle that advances the sprint board:
+    - ``in_review`` items get reviewed by QA and moved to ``done``.
+    - ``blocked`` items get retried once (moved back to ``todo`` for re-dispatch).
+    """
+    with Session(engine) as session:
+        # --- Review: in_review → done ---
+        in_review = session.exec(
+            select(BacklogItem).where(BacklogItem.status == "in_review")
+        ).all()
+
+        for item in in_review:
+            sprint = session.get(Sprint, item.sprint_id)
+            if not sprint:
+                continue
+
+            # Find QA agent for this company (fallback to any reviewer)
+            reviewer = session.exec(
+                select(Agent).where(
+                    Agent.company_id == sprint.company_id,
+                    Agent.role == "QA",
+                )
+            ).first()
+
+            reviewer_dict = {
+                "role": reviewer.role if reviewer else "QA",
+                "name": reviewer.name if reviewer else "QA",
+                "model": reviewer.model if reviewer else "deepseek-coder",
+                "seniority": reviewer.seniority if reviewer else "Senior",
+                "system_prompt": reviewer.system_prompt if reviewer else None,
+            }
+
+            # Get the deliverable from comments
+            comments = item.comments or []
+            if isinstance(comments, str):
+                try:
+                    comments = json.loads(comments)
+                except Exception:
+                    comments = []
+            deliverable = comments[-1].get("text", "") if comments else ""
+
+            if not deliverable:
+                # Nothing to review — skip
+                continue
+
+            # Build review prompt
+            review_prompt = (
+                f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
+                f"Description: {item.description or 'N/A'}\n\n"
+                f"--- DELIVERABLE ---\n{deliverable[:3000]}\n--- END ---\n\n"
+                "Provide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
+                "If not, start with 'NEEDS WORK:' and explain what's missing."
+            )
+
+            try:
+                await _publish_glassroom(nats_client, sprint.id, {
+                    "type": "agent_start",
+                    "agent": reviewer_dict["name"],
+                    "role": reviewer_dict["role"],
+                    "task": f"Reviewing: {item.title}",
+                    "message": f"🔍 {reviewer_dict['name']} is reviewing: {item.title}",
+                })
+
+                review_result = await asyncio.to_thread(
+                    _call_llm_for_review, reviewer_dict, review_prompt
+                )
+
+                # Append review comment
+                comments.append({
+                    "author": reviewer_dict["name"],
+                    "text": review_result[:2000],
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                item.comments = comments
+                item.status = "done"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+                session.commit()
+
+                await _publish_glassroom(nats_client, sprint.id, {
+                    "type": "agent_complete",
+                    "agent": reviewer_dict["name"],
+                    "role": reviewer_dict["role"],
+                    "task": f"Reviewed: {item.title}",
+                    "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
+                    "preview": review_result[:200],
+                })
+
+                logger.info("Reviewed item=%s → done by %s", item.id, reviewer_dict["name"])
+
+            except Exception as e:
+                logger.warning("Review failed for item=%s: %s", item.id, e)
+
+        # --- Retry: blocked → todo (one retry only) ---
+        blocked = session.exec(
+            select(BacklogItem).where(BacklogItem.status == "blocked")
+        ).all()
+
+        for item in blocked:
+            comments = item.comments or []
+            if isinstance(comments, str):
+                try:
+                    comments = json.loads(comments)
+                except Exception:
+                    comments = []
+            # Only retry once — check if there's already a retry comment
+            retry_count = sum(1 for c in comments if c.get("author") == "System" and "retry" in c.get("text", "").lower())
+            if retry_count >= 1:
+                continue
+
+            comments.append({
+                "author": "System",
+                "text": "Automatic retry — re-queuing blocked task.",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            item.comments = comments
+            item.status = "todo"
+            item.updated_at = datetime.now(timezone.utc)
+            session.add(item)
+
+            sprint = session.get(Sprint, item.sprint_id)
+            if sprint:
+                await _publish_glassroom(nats_client, sprint.id, {
+                    "type": "status",
+                    "agent": "System",
+                    "role": "System",
+                    "task": item.title,
+                    "message": f"🔄 Retrying blocked task: {item.title}",
+                })
+
+            logger.info("Retrying blocked item=%s", item.id)
+
+        session.commit()
+
+    # Re-dispatch any items that just went back to todo
+    await _dispatch_todo_items(nats_client)
+
+
+def _call_llm_for_review(agent: Dict[str, Any], prompt: str) -> str:
+    """Synchronous LLM call for code review (runs in thread)."""
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    messages = [{"role": "user", "content": prompt}]
+    if agent.get("system_prompt"):
+        messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
+    return client.chat(
+        model=agent.get("model", "deepseek-coder"),
+        messages=messages,
+        temperature=0.3,
+        max_tokens=500,
+    )
+
+
+async def _dispatch_todo_items(nats_client: NATSClient) -> None:
+    """Find todo items and publish task.assign events for them."""
+    with Session(engine) as session:
+        todo_items = session.exec(
+            select(BacklogItem).where(BacklogItem.status == "todo")
+        ).all()
+        for item in todo_items:
+            from uuid import uuid4
+            await nats_client.publish("task.assign", {
+                "agent": item.assignee or "Dev",
+                "sprint_id": item.sprint_id,
+                "interaction_id": str(uuid4()),
+                "backlog_item_id": item.id,
+            })
+
 
 async def _publish_glassroom(
     nats_client: NATSClient,

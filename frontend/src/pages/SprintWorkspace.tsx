@@ -119,12 +119,12 @@ export const SprintWorkspace: React.FC = () => {
           >
             <button
               onClick={() => setGlassroomOpen(v => !v)}
-              className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700 w-full text-left hover:bg-surface-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 border-b border-surface-700 w-full text-left hover:bg-surface-800 transition-colors shrink-0"
             >
               <MonitorPlay size={14} className="text-brand-400" />
-              <h3 className="font-semibold text-gray-200 text-sm">{t('workspace.glassroomTitle')}</h3>
+              <h3 className="font-semibold text-gray-200 text-sm">GlassRoom</h3>
               {messageCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-700/40 text-brand-300">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-700/40 text-brand-300 font-medium">
                   {messageCount}
                 </span>
               )}
@@ -132,7 +132,7 @@ export const SprintWorkspace: React.FC = () => {
               <span className="text-gray-500 text-xs">{glassroomOpen ? '▼' : '▲'}</span>
             </button>
             {glassroomOpen && (
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <GlassRoom sprintId={currentId} />
               </div>
             )}
