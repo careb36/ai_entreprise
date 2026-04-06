@@ -92,7 +92,7 @@ function MessageBubble({ message }: { message: AgentMessage }) {
 
 export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string }) {
   const { t } = useTranslation()
-  const { messages, isConnected, connectionError, connect, disconnect, sprintId: storeSprintId } = useAgentStore()
+  const { messages, connectionError, connect, disconnect, sprintId: storeSprintId } = useAgentStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -104,36 +104,10 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const errorCount = messages.filter(m => m.type === 'error').length
-
   return (
     <div className="flex flex-col h-full bg-surface-900">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Bot className="text-brand-400 shrink-0" size={18} />
-          <h2 className="font-semibold text-white text-sm truncate">{t('glassroom.title')}</h2>
-          <span className="text-xs text-gray-400 hidden sm:inline truncate">— {t('glassroom.subtitle')}</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {errorCount > 0 && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-900/50 text-red-400 border border-red-800">
-              {errorCount} err
-            </span>
-          )}
-          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium flex items-center gap-1 ${
-            isConnected
-              ? 'bg-status-online/15 text-status-online border border-status-online/30'
-              : 'bg-red-900/30 text-red-400 border border-red-800/40'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-status-online animate-pulse' : 'bg-red-500'}`} />
-            {isConnected ? t('glassroom.connected') : t('glassroom.disconnected')}
-          </span>
-        </div>
-      </div>
-
       {connectionError && (
-        <div className="mx-3 mt-3 p-2.5 bg-red-900/30 border border-red-800/50 rounded-lg shrink-0">
+        <div className="mx-3 mt-2 p-2 bg-red-900/30 border border-red-800/50 rounded-lg shrink-0">
           <p className="text-red-400 text-xs">{connectionError}</p>
         </div>
       )}

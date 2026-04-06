@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../services/api'
-import { MessageSquare, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
+import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -252,7 +252,7 @@ export const SupportBot: React.FC = () => {
         onClick={() => { if (!dragMoved.current) setIsOpen(p => !p) }}
         className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-indigo-700 transition-all hover:scale-110 cursor-grab active:cursor-grabbing select-none touch-none"
         title={t('support.open')}>
-        {isOpen ? <X size={24} /> : <MessageSquare size={24} />}
+        {isOpen ? <X size={24} /> : <Bot size={26} />}
       </button>
 
       {isOpen && (

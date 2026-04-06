@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { PanelLeftClose, PanelLeftOpen, MonitorPlay } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
+import { useAgentStore } from '../store/agentStore'
 import ControlPanel from '../components/ControlPanel'
 import KanbanBoard from '../components/KanbanBoard'
 import GlassRoom from '../components/GlassRoom'
@@ -15,6 +16,8 @@ export const SprintWorkspace: React.FC = () => {
   
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [glassroomOpen, setGlassroomOpen] = useState(true)
+  const isSSEConnected = useAgentStore(s => s.isConnected)
+  const messageCount = useAgentStore(s => s.messages.length)
 
   // Sync URL param with store if needed
   useEffect(() => {
@@ -119,7 +122,13 @@ export const SprintWorkspace: React.FC = () => {
               className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700 w-full text-left hover:bg-surface-800 transition-colors"
             >
               <MonitorPlay size={14} className="text-brand-400" />
-              <h3 className="font-semibold text-gray-200 text-sm flex-1">{t('workspace.glassroomTitle')}</h3>
+              <h3 className="font-semibold text-gray-200 text-sm">{t('workspace.glassroomTitle')}</h3>
+              {messageCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand-700/40 text-brand-300">
+                  {messageCount}
+                </span>
+              )}
+              <span className={`ml-auto mr-2 w-1.5 h-1.5 rounded-full ${isSSEConnected ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`} />
               <span className="text-gray-500 text-xs">{glassroomOpen ? '▼' : '▲'}</span>
             </button>
             {glassroomOpen && (
