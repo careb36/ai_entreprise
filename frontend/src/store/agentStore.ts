@@ -93,7 +93,7 @@ function _openSSE(sprintId: string) {
   eventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
-      if (data.ping) return
+      if (data.ping || data.type === 'connected') return
       
       // Map backend event fields to AgentMessage.
       // Backend sends: { type, agent, role, task, message, preview, timestamp }

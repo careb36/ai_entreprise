@@ -109,23 +109,37 @@ async def glassroom_stream(sprint_id: str = Query(...)):
 
     Registers an ``asyncio.Queue`` for *sprint_id* so that the NATS listener
     in ``main.py`` can push events into it.  The generator yields each event
-    as an SSE ``data:`` line.  A keepalive ping is sent every 30 seconds to
-    prevent proxy timeouts.  The queue is cleaned up when the client disconnects.
+    as an SSE ``data:`` line.  A keepalive ping is sent every 15 seconds to
+    prevent proxy/browser timeouts.  The queue is cleaned up when the client
+    disconnects.
     """
     queue: asyncio.Queue = asyncio.Queue()
     sse_connections[sprint_id] = queue
 
     async def event_generator():
         try:
+            # Send an immediate "connected" event so the browser knows SSE is live.
+            yield f"data: {json.dumps({'type': 'connected', 'sprint_id': sprint_id})}\n\n"
+
             while True:
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield f"data: {json.dumps(json.loads(data))}\n\n"
+                    data = await asyncio.wait_for(queue.get(), timeout=15)
+                    # data is a JSON string from NATS; re-serialise to guarantee validity.
+                    try:
+                        parsed = json.loads(data)
+                    except (json.JSONDecodeError, TypeError):
+                        parsed = {"type": "message", "message": str(data)}
+                    yield f"data: {json.dumps(parsed)}\n\n"
                 except asyncio.TimeoutError:
-                    # Send a ping to keep the connection alive through proxies.
                     yield f"data: {json.dumps({'ping': True})}\n\n"
         finally:
-            # Remove the queue entry when the client disconnects.
             sse_connections.pop(sprint_id, None)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
