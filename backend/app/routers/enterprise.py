@@ -149,6 +149,42 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
     }
 
 
+@router.get("/models", tags=["Enterprise"])
+async def list_models(request: Request):
+    """
+    Return the live LLM model catalogue from the proxy.
+
+    Proxies the ``/v1/models`` response from the internal LLM proxy so that
+    the frontend can build a dynamic model selector without hardcoding model
+    names or tiers.  The proxy refreshes its catalogue from the Gemini API
+    every hour and classifies models by capability tier.
+
+    Response shape::
+
+        {
+          "models": [
+            {"id": "gemini-2.5-pro", "provider": "gemini", "tier": "strategic", "description": "..."},
+            ...
+          ],
+          "orchestrator": "gemini-2.5-flash",
+          "refreshed_at": 1712345678.0
+        }
+    """
+    llm_client = getattr(request.app.state, "llm_client", None)
+    if llm_client is None:
+        raise HTTPException(status_code=503, detail="LLM proxy not available")
+    try:
+        data = await asyncio.to_thread(llm_client.get_available_models)
+        if not data:
+            raise HTTPException(status_code=502, detail="LLM proxy returned empty catalogue")
+        return data
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to fetch model catalogue: %s", exc)
+        raise HTTPException(status_code=502, detail="Could not reach LLM proxy")
+
+
 @router.post("/discover_team", tags=["Enterprise"])
 async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session)):
     """

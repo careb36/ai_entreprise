@@ -333,21 +333,75 @@ optimal AI agent team to build and maintain this project.
 ## Project Context (README excerpt)
 {readme_excerpt}
 
+## Available Models (current live catalogue — choose ONLY from this list)
+{model_catalog}
+
+## Assignment Guidelines
+- strategic tier  → PO, Architect  (complex decisions, stakeholder impact)
+- balanced tier   → SM, Security   (coordination, reviews, risk analysis)
+- code tier       → Dev, QA, DevOps, Data  (primary output is code/tests/scripts)
+- fast/preview    → avoid unless no better option exists
+
 ## Instructions
-Return ONLY a valid JSON array. Each element is an agent object with exactly
-these fields:
-- "role": one of PO, SM, Architect, Dev, QA, DevOps, Security, Data
-- "seniority": one of Junior, Mid, Senior, Staff
-- "specialty": a concise 2-5 word focus area derived from the actual stack
-- "reasoning": one sentence explaining why this role is needed for THIS project
+Return ONLY a valid JSON array — no markdown, no explanation outside the array.
+Each element is an agent object with EXACTLY these fields:
+
+- "role"         : one of PO, SM, Architect, Dev, QA, DevOps, Security, Data
+- "seniority"    : one of Junior, Mid, Senior, Staff
+- "specialty"    : concise 2-6 word focus area derived from the ACTUAL detected stack
+- "model"        : one model id from the catalogue above (must match exactly)
+- "system_prompt": A detailed paragraph (4-8 sentences) written in first person that defines:
+                   * This agent's personality and communication style
+                   * Their core responsibilities in THIS specific project
+                   * The technologies they specialise in (from the detected stack)
+                   * How they interact with other agents and escalate decisions
+- "reasoning"    : one sentence explaining why this role + model choice is right for THIS project
 
 Constraints:
-- 3 to 8 agents maximum
+- 3 to 8 agents maximum — do NOT pad with unnecessary roles
 - Always include PO, Architect, and at least one Dev
-- Justify every role — do not add roles the project doesn't need
 - Use Staff seniority only for High complexity projects
-- Do NOT add markdown fences, keys, or any text outside the JSON array
+- Prefer the cheapest model that can handle the role's cognitive demands
+- Do NOT add markdown fences or any text outside the JSON array
 """
+
+
+def _build_dynamic_catalog(models: list[dict]) -> tuple[str, set[str]]:
+    """
+    Build a human-readable model catalog string and a set of valid model IDs
+    from the live list returned by the proxy.
+
+    Returns (catalog_text, valid_model_ids).
+    """
+    tier_order = ["strategic", "balanced", "code", "fast", "preview"]
+    tier_labels = {
+        "strategic": "STRATEGIC — deep reasoning (expensive, use sparingly)",
+        "balanced":  "BALANCED  — fast reasoning, coordination, reviews",
+        "code":      "CODE      — specialised code generation (cheapest, use for Dev/QA/DevOps/Data)",
+        "fast":      "FAST      — lightweight, quick responses",
+        "preview":   "PREVIEW   — experimental, may be unstable (avoid unless necessary)",
+    }
+
+    grouped: dict[str, list[dict]] = {t: [] for t in tier_order}
+    for m in models:
+        tier = m.get("tier", "balanced")
+        if tier not in grouped:
+            tier = "balanced"
+        grouped[tier].append(m)
+
+    lines = ["Available models (fetched live — only choose IDs listed here):\n"]
+    valid_ids: set[str] = set()
+    for tier in tier_order:
+        entries = grouped[tier]
+        if not entries:
+            continue
+        lines.append(f"{tier_labels[tier]}:")
+        for m in sorted(entries, key=lambda x: x["id"]):
+            lines.append(f"  - {m['id']:<40} {m['description']}")
+            valid_ids.add(m["id"])
+        lines.append("")
+
+    return "\n".join(lines), valid_ids
 
 
 def _read_readme(root: Path, max_chars: int = 1500) -> str:
@@ -367,14 +421,40 @@ def _ai_suggest_team(
     """
     Ask the LLM proxy to reason about the project and suggest a team.
 
-    Returns a list of agent dicts on success, or ``None`` if the LLM is
-    unavailable or returns malformed output (caller should fall back to rules).
+    Workflow:
+    1. Fetch the live model catalogue from the proxy (so the AI always sees
+       current, non-deprecated models and their capability tiers).
+    2. Build a dynamic catalog string and valid model ID set from that list.
+    3. Ask the orchestrator model (also chosen dynamically) to produce a JSON
+       team where every agent has an appropriate model, system_prompt, and
+       reasoning.
+    4. Validate and normalise the response; fall back to rules on any error.
+
+    Returns a list of agent dicts on success, or ``None`` on failure.
     """
     try:
-        from llm_proxy_client import LLMProxyClient  # local import to avoid circular
+        from llm_proxy_client import LLMProxyClient
         import logging
         log = logging.getLogger("fabrique-backend")
 
+        client = LLMProxyClient(base_url=llm_proxy_url)
+
+        # ── Step 1: fetch live model catalogue ───────────────────────────────
+        catalogue_data = client.get_available_models()
+        models = catalogue_data.get("models", [])
+        # Orchestrator: fastest stable non-preview model for meta-tasks
+        orchestrator_model = catalogue_data.get("orchestrator", "gemini-2.5-flash")
+
+        if not models:
+            log.warning("Empty model catalogue from proxy — falling back to rules")
+            return None
+
+        log.info("Model catalogue: %d models, orchestrator=%s", len(models), orchestrator_model)
+
+        # ── Step 2: build dynamic catalog string ─────────────────────────────
+        catalog_text, valid_model_ids = _build_dynamic_catalog(models)
+
+        # ── Step 3: build and send prompt ────────────────────────────────────
         stack_summary = (
             f"Primary language: {detected_stack['language']}\n"
             f"All languages: {', '.join(f'{k} ({v} files)' for k, v in detected_stack.get('all_languages', {}).items())}\n"
@@ -384,12 +464,15 @@ def _ai_suggest_team(
             f"Complexity: {detected_stack['complexity']} ({detected_stack['file_count']} files)"
         )
         readme = _read_readme(root)
-        prompt = _TEAM_PROMPT.format(stack_summary=stack_summary, readme_excerpt=readme)
+        prompt = _TEAM_PROMPT.format(
+            stack_summary=stack_summary,
+            readme_excerpt=readme,
+            model_catalog=catalog_text,
+        )
 
-        client = LLMProxyClient(base_url=llm_proxy_url)
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
-            model="gemini-pro",
+            model=orchestrator_model,
             role="Architect",
         )
 
@@ -397,7 +480,6 @@ def _ai_suggest_team(
             log.warning("LLM team suggestion failed: %s", result["error"])
             return None
 
-        # Extract content from OpenAI-compatible response envelope
         content = (
             result.get("choices", [{}])[0]
             .get("message", {})
@@ -414,9 +496,20 @@ def _ai_suggest_team(
             log.warning("LLM returned unexpected team shape: %s", type(team))
             return None
 
-        # Normalise: ensure every agent has the required fields
-        valid_roles = {"PO", "SM", "Architect", "Dev", "QA", "DevOps", "Security", "Data"}
+        # ── Step 4: validate and normalise ───────────────────────────────────
+        valid_roles       = {"PO", "SM", "Architect", "Dev", "QA", "DevOps", "Security", "Data"}
         valid_seniorities = {"Junior", "Mid", "Senior", "Staff"}
+
+        # Build a quick tier lookup for fallback model selection
+        model_tier: dict[str, str] = {m["id"]: m.get("tier", "balanced") for m in models}
+        best_strategic = next(
+            (m["id"] for m in models if m.get("tier") == "strategic"), orchestrator_model
+        )
+        best_code = next(
+            (m["id"] for m in models if m.get("tier") == "code"), orchestrator_model
+        )
+        code_roles = {"Dev", "QA", "DevOps", "Data"}
+
         normalised = []
         for agent in team:
             role = agent.get("role", "Dev")
@@ -425,14 +518,26 @@ def _ai_suggest_team(
             seniority = agent.get("seniority", "Senior")
             if seniority not in valid_seniorities:
                 seniority = "Senior"
+            model = agent.get("model", "")
+            if model not in valid_model_ids:
+                # LLM hallucinated a model — assign sensible default
+                model = best_code if role in code_roles else best_strategic
+            specialty = str(agent.get("specialty", ""))[:80]
             normalised.append({
                 "role": role,
                 "seniority": seniority,
-                "specialty": str(agent.get("specialty", ""))[:80],
-                "reasoning": str(agent.get("reasoning", ""))[:200],
-                "persona": str(agent.get("specialty", "")),
+                "specialty": specialty,
+                "model": model,
+                "system_prompt": str(agent.get("system_prompt", ""))[:1500],
+                "reasoning": str(agent.get("reasoning", ""))[:300],
+                "persona": specialty,
             })
-        log.info("AI team suggestion: %d agents from LLM", len(normalised))
+
+        log.info(
+            "AI team: %d agents | %s",
+            len(normalised),
+            ", ".join(f"{a['role']}→{a['model']}" for a in normalised),
+        )
         return normalised
 
     except Exception as exc:

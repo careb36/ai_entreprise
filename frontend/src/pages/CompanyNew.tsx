@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
 import { api } from '../services/api'
@@ -12,6 +12,25 @@ interface Agent {
   specialty: string
   token_budget?: number
   reasoning?: string
+  model?: string
+  system_prompt?: string
+}
+
+interface ModelInfo {
+  id: string
+  provider: 'gemini' | 'deepseek'
+  tier: 'strategic' | 'balanced' | 'code' | 'fast' | 'preview'
+  description: string
+}
+
+// Static display metadata keyed by tier — used when model ID is not in the
+// live catalogue (e.g. while loading or for legacy agents).
+const TIER_META: Record<string, { color: string; icon: string; label: string }> = {
+  strategic: { color: 'text-blue-300 bg-blue-900/30',   icon: '🔵', label: 'Strategic' },
+  balanced:  { color: 'text-cyan-300 bg-cyan-900/30',   icon: '⚡', label: 'Balanced'  },
+  code:      { color: 'text-green-300 bg-green-900/30', icon: '🟢', label: 'Code'      },
+  fast:      { color: 'text-yellow-300 bg-yellow-900/30', icon: '🟡', label: 'Fast'    },
+  preview:   { color: 'text-purple-300 bg-purple-900/30', icon: '🔮', label: 'Preview' },
 }
 
 interface Permissions {
@@ -131,18 +150,23 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
   )
 }
 
-function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
+function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModels }: {
   agent: Agent
   index: number
   onUpdate: (i: number, field: keyof Agent, val: string | number) => void
   onRemove: (i: number) => void
   canRemove: boolean
+  availableModels: ModelInfo[]
 }) {
-  const roleInfo = ROLES.find(r => r.value === agent.role) ?? ROLES[3]
-  const senInfo  = SENIORITIES.find(s => s.value === agent.seniority) ?? SENIORITIES[2]
+  const roleInfo  = ROLES.find(r => r.value === agent.role) ?? ROLES[3]
+  const senInfo   = SENIORITIES.find(s => s.value === agent.seniority) ?? SENIORITIES[2]
+  const modelInfo = availableModels.find(m => m.id === (agent.model ?? ''))
+  const tierMeta  = TIER_META[modelInfo?.tier ?? 'balanced']
+  const [showPrompt, setShowPrompt] = useState(false)
 
   return (
     <div className="bg-surface-800 border border-surface-700 rounded-xl p-4 space-y-3">
+      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-2xl">{roleInfo.icon}</span>
@@ -151,13 +175,21 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
             <p className="text-xs text-gray-500">{roleInfo.desc}</p>
           </div>
         </div>
-        {canRemove && (
-          <button onClick={() => onRemove(index)}
-            className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none p-1"
-            title="Remove agent">×</button>
-        )}
+        <div className="flex items-center gap-1">
+          {modelInfo && (
+            <span className={`badge text-[10px] font-mono ${tierMeta.color}`}>
+              {tierMeta.icon} {agent.model}
+            </span>
+          )}
+          {canRemove && (
+            <button onClick={() => onRemove(index)}
+              className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none p-1 ml-1"
+              title="Remove agent">×</button>
+          )}
+        </div>
       </div>
 
+      {/* Role + Seniority */}
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="input-label">Role</label>
@@ -175,6 +207,35 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
         </div>
       </div>
 
+      {/* Model selector */}
+      <div>
+        <label className="input-label">LLM Model</label>
+        <select value={agent.model ?? ''}
+          onChange={e => onUpdate(index, 'model', e.target.value)} className="select w-full text-xs">
+          {availableModels.length === 0 && (
+            <option value="">Loading models…</option>
+          )}
+          {(['strategic', 'balanced', 'code', 'fast'] as const).map(tier => {
+            const group = availableModels.filter(m => m.tier === tier)
+            if (!group.length) return null
+            const tm = TIER_META[tier]
+            return (
+              <optgroup key={tier} label={`${tm.icon} ${tm.label} — ${tier}`}>
+                {group.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.id} ({m.provider})
+                  </option>
+                ))}
+              </optgroup>
+            )
+          })}
+        </select>
+        {modelInfo && (
+          <p className="text-[10px] text-gray-600 mt-1">{modelInfo.description}</p>
+        )}
+      </div>
+
+      {/* Specialty */}
       <div>
         <label className="input-label">Specialty / Focus area</label>
         <input type="text" value={agent.specialty || agent.persona}
@@ -183,6 +244,26 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
           className="input w-full" />
       </div>
 
+      {/* System prompt — collapsible */}
+      {agent.system_prompt && (
+        <div>
+          <button type="button"
+            onClick={() => setShowPrompt(v => !v)}
+            className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors">
+            {showPrompt ? '▾' : '▸'} System prompt
+          </button>
+          {showPrompt && (
+            <textarea
+              value={agent.system_prompt}
+              onChange={e => onUpdate(index, 'system_prompt', e.target.value)}
+              rows={4}
+              className="textarea w-full text-xs mt-1 text-gray-300 font-mono"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Token budget */}
       <div>
         <label className="input-label">Monthly token budget</label>
         <div className="flex items-center gap-2">
@@ -196,6 +277,7 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
         </div>
       </div>
 
+      {/* Badges + reasoning */}
       <div className="flex gap-2 flex-wrap pt-1">
         <span className={`badge bg-surface-700 ${senInfo.color}`}>{senInfo.label}</span>
         <span className="badge bg-surface-700 text-gray-400">{roleInfo.label}</span>
@@ -274,6 +356,14 @@ export default function CompanyNew() {
     { role: 'QA', persona: '', seniority: 'Senior', specialty: 'Automated Testing', token_budget: 300000 },
   ])
 
+  // Available LLM models — fetched dynamically from the proxy via backend
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
+  useEffect(() => {
+    api.get('/v1/models')
+      .then(data => setAvailableModels(data.models ?? []))
+      .catch(() => {/* non-critical — selector falls back to empty state */})
+  }, [])
+
   // Global
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -297,8 +387,10 @@ export default function CompanyNew() {
         if (response.suggested_team?.length) {
           setAgents(response.suggested_team.map((a: any) => ({
             ...a,
-            persona: a.persona ?? '',
+            persona: a.persona ?? a.specialty ?? '',
             token_budget: a.token_budget ?? 500000,
+            model: a.model ?? 'deepseek-coder',
+            system_prompt: a.system_prompt ?? '',
           })))
         }
       }
@@ -611,7 +703,8 @@ export default function CompanyNew() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {agents.map((agent, i) => (
           <AgentCard key={i} agent={agent} index={i}
-            onUpdate={updateAgent} onRemove={removeAgent} canRemove={agents.length > 1} />
+            onUpdate={updateAgent} onRemove={removeAgent} canRemove={agents.length > 1}
+            availableModels={availableModels} />
         ))}
       </div>
 
@@ -706,6 +799,15 @@ export default function CompanyNew() {
                     <span>{roleInfo?.icon ?? '🤖'}</span>
                     <span className="text-gray-300 font-medium">{roleInfo?.label ?? a.role}</span>
                     <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{a.seniority}</span>
+                    {a.model && (() => {
+                      const mi = availableModels.find(m => m.id === a.model)
+                      const tm = TIER_META[mi?.tier ?? 'balanced']
+                      return (
+                        <span className={`badge text-[10px] font-mono ${tm.color}`}>
+                          {tm.icon} {a.model}
+                        </span>
+                      )
+                    })()}
                     {a.specialty && <span className="text-xs text-gray-600 truncate">· {a.specialty}</span>}
                   </div>
                 )

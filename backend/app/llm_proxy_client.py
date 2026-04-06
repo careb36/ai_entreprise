@@ -64,6 +64,24 @@ class LLMProxyClient:
             logger.error(f"LLM Proxy call failed: {e}")
             return {"error": str(e), "ok": False}
 
+    def get_available_models(self) -> dict:
+        """
+        Fetch the live model catalogue from the proxy.
+
+        Returns a dict with keys:
+          - ``models``: list of dicts with id, provider, tier, description
+          - ``orchestrator``: recommended model for meta-tasks (team suggestion, routing)
+
+        Returns an empty dict on error so callers can fall back gracefully.
+        """
+        try:
+            response = requests.get(f"{self.base_url}/v1/models", timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.warning(f"Failed to fetch model catalogue: {e}")
+            return {}
+
     def embed(self, text: str, role: str = "Developer", bu_id: Optional[int] = None) -> Optional[list]:
         """Retrieve a dense vector embedding."""
         try:
