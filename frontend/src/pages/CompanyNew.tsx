@@ -457,6 +457,8 @@ export default function CompanyNew() {
         agents,
         permissions: credPerms,
         governance: { require_approval_deploy, require_approval_db_write },
+        project_path: projectPath.trim() || undefined,
+        detected_stack: discoveryResult || undefined,
       })
       const companyId = response?.company_id ?? response?.id ?? 1
       const sprintId = response?.sprint_id ?? companyId

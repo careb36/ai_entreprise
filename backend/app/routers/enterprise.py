@@ -12,13 +12,18 @@ Endpoints:
 
 import asyncio
 import json
+from datetime import date
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel import Session, select, text
 
 from database import get_session, get_neo4j_driver
-from models import Company, Agent, ProjectCredential, ProjectDiscovery, BusinessUnit, Sprint
+from models import (
+    Company, Agent, ProjectCredential, ProjectDiscovery,
+    BusinessUnit, Sprint, BacklogItem,
+)
 from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from services.discovery_service import DiscoveryService
+from services.sprint_planner import plan_foundation_sprint
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
@@ -70,18 +75,35 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
                     encrypted_value="vault_encrypted_placeholder",
                 ))
 
-    # Auto-create the first sprint so the workspace board is immediately usable.
-    from datetime import date
+    # ── PO plans the foundation sprint via LLM ──────────────────────────────
+    plan = plan_foundation_sprint(
+        company_name=req.company_name,
+        agents=req.agents,
+        detected_stack=req.detected_stack,
+        project_path=req.project_path,
+    )
+
     sprint = Sprint(
         company_id=company.id,
-        sprint_name="Sprint 1",
+        sprint_name="Sprint 0 — Foundations",
         start_date=date.today().isoformat(),
         duration_days=req.default_sprint_length_days or 14,
         status="active",
-        goal=f"Initial sprint for {req.company_name}",
+        goal=plan.get("goal", f"Foundation sprint for {req.company_name}"),
     )
     session.add(sprint)
     session.flush()
+
+    # Insert the PO-planned backlog items into the sprint.
+    for task in plan.get("tasks", []):
+        session.add(BacklogItem(
+            sprint_id=sprint.id,
+            title=task.get("title", "Untitled task"),
+            description=task.get("description", ""),
+            priority=task.get("priority", "medium"),
+            assignee=task.get("assignee", "PO"),
+            status="todo",
+        ))
 
     session.commit()
 
@@ -97,10 +119,16 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
     except Exception as e:
         logger.error(f"Neo4j seed failed (non-critical): {e}")
 
+    task_count = len(plan.get("tasks", []))
+    logger.info(
+        f"Company '{req.company_name}' initialized: "
+        f"sprint_id={sprint.id}, {task_count} foundation tasks"
+    )
     return {
         "company_id": company.id,
         "sprint_id": sprint.id,
-        "message": "Company initialized successfully",
+        "task_count": task_count,
+        "message": f"Company initialized with {task_count} foundation tasks",
     }
 
 

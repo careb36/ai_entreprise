@@ -29,6 +29,8 @@ class CompanyInitRequest(BaseModel):
     agents: List[Dict[str, Any]] = []               # List of agent role/persona/budget definitions
     permissions: Optional[Dict[str, str]] = None    # credential_type → access_level
     governance: Optional[Dict[str, bool]] = None    # Governance gate flags (e.g. require_approval_deploy)
+    project_path: Optional[str] = None              # Filesystem path scanned during discovery
+    detected_stack: Optional[Dict[str, Any]] = None # Stack analysis from discovery phase
 
 
 class SprintStartRequest(BaseModel):
