@@ -6,6 +6,7 @@ import { api } from '../services/api'
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface Agent {
+  name: string
   role: string
   persona: string
   seniority: string
@@ -165,14 +166,23 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
   const [showPrompt, setShowPrompt] = useState(false)
 
   return (
-    <div className="bg-surface-800 border border-surface-700 rounded-xl p-4 space-y-3">
+    <div className="bg-surface-800 border border-surface-700 rounded-xl p-5 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-2xl">{roleInfo.icon}</span>
           <div>
-            <p className="text-sm font-medium text-white">{roleInfo.label}</p>
-            <p className="text-xs text-gray-500">{roleInfo.desc}</p>
+            {agent.name ? (
+              <>
+                <p className="text-sm font-medium text-white">{agent.name}</p>
+                <p className="text-xs text-gray-500">{roleInfo.label} · {roleInfo.desc}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-white">{roleInfo.label}</p>
+                <p className="text-xs text-gray-500">{roleInfo.desc}</p>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -187,6 +197,15 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
               title="Remove agent">×</button>
           )}
         </div>
+      </div>
+
+      {/* Name / Alias */}
+      <div>
+        <label className="input-label">Name / Alias</label>
+        <input type="text" value={agent.name}
+          onChange={e => onUpdate(index, 'name', e.target.value)}
+          placeholder="e.g. Atlas, Nova, Sentinel..."
+          className="input w-full" />
       </div>
 
       {/* Role + Seniority */}
@@ -212,10 +231,11 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
         <label className="input-label">LLM Model</label>
         <select value={agent.model ?? ''}
           onChange={e => onUpdate(index, 'model', e.target.value)} className="select w-full text-xs">
+          <option value="">— Select a model —</option>
           {availableModels.length === 0 && (
-            <option value="">Loading models…</option>
+            <option value="" disabled>Loading models…</option>
           )}
-          {(['strategic', 'balanced', 'code', 'fast'] as const).map(tier => {
+          {Object.keys(TIER_META).map(tier => {
             const group = availableModels.filter(m => m.tier === tier)
             if (!group.length) return null
             const tm = TIER_META[tier]
@@ -229,6 +249,9 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
               </optgroup>
             )
           })}
+          {agent.model && !availableModels.find(m => m.id === agent.model) && (
+            <option value={agent.model}>{agent.model} (unresolved)</option>
+          )}
         </select>
         {modelInfo && (
           <p className="text-[10px] text-gray-600 mt-1">{modelInfo.description}</p>
@@ -350,16 +373,16 @@ export default function CompanyNew() {
 
   // Step 4 — Team
   const [agents, setAgents] = useState<Agent[]>([
-    { role: 'PO', persona: '', seniority: 'Senior', specialty: 'Product Management & Backlog', token_budget: 500000 },
-    { role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 1000000 },
-    { role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000 },
-    { role: 'QA', persona: '', seniority: 'Senior', specialty: 'Automated Testing', token_budget: 300000 },
+    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: 'Product Management & Backlog', token_budget: 500000 },
+    { name: '', role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 1000000 },
+    { name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000 },
+    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: 'Automated Testing', token_budget: 300000 },
   ])
 
   // Available LLM models — fetched dynamically from the proxy via backend
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   useEffect(() => {
-    api.get('/v1/models')
+    api.get<{ models: ModelInfo[]; orchestrator?: string }>('/v1/models')
       .then(data => setAvailableModels(data.models ?? []))
       .catch(() => {/* non-critical — selector falls back to empty state */})
   }, [])
@@ -387,6 +410,7 @@ export default function CompanyNew() {
         if (response.suggested_team?.length) {
           setAgents(response.suggested_team.map((a: any) => ({
             ...a,
+            name: a.name ?? '',
             persona: a.persona ?? a.specialty ?? '',
             token_budget: a.token_budget ?? 500000,
             model: a.model ?? 'deepseek-coder',
@@ -404,7 +428,7 @@ export default function CompanyNew() {
   // ── Agent helpers ─────────────────────────────────────────────────────────
 
   const addAgent = () => setAgents(prev => [...prev, {
-    role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000,
+    name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000,
   }])
 
   const removeAgent = (i: number) => setAgents(prev => prev.filter((_, idx) => idx !== i))
@@ -700,7 +724,7 @@ export default function CompanyNew() {
         <div className="alert-error text-sm">At least 1 agent is required.</div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {agents.map((agent, i) => (
           <AgentCard key={i} agent={agent} index={i}
             onUpdate={updateAgent} onRemove={removeAgent} canRemove={agents.length > 1}
@@ -797,7 +821,9 @@ export default function CompanyNew() {
                 return (
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <span>{roleInfo?.icon ?? '🤖'}</span>
-                    <span className="text-gray-300 font-medium">{roleInfo?.label ?? a.role}</span>
+                    <span className="text-gray-300 font-medium">
+                      {a.name ? `${a.name} — ${roleInfo?.label ?? a.role}` : (roleInfo?.label ?? a.role)}
+                    </span>
                     <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{a.seniority}</span>
                     {a.model && (() => {
                       const mi = availableModels.find(m => m.id === a.model)
@@ -840,7 +866,7 @@ export default function CompanyNew() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="page-container max-w-3xl">
+    <div className="page-container max-w-6xl">
       <div className="mb-6">
         <h1 className="page-title">🏭 New Factory</h1>
         <p className="text-gray-400 text-sm mt-1">Set up your AI-powered software factory in 6 steps.</p>
