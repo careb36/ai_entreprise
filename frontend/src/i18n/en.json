@@ -8,7 +8,7 @@
     "generate": "Generate"
   },
   "dashboard": {
-    "title": "Le Fabrique",
+    "title": "La Fabrique",
     "subtitle": "AI-powered autonomous development platform",
     "systemStatus": "System Status",
     "online": "Online",
@@ -265,7 +265,7 @@
     "error": "Generation failed"
   },
   "support": {
-    "title": "Le Fabrique Assistant",
+    "title": "La Fabrique Assistant",
     "reportBug": "Report a Problem",
     "myTickets": "My Tickets",
     "email": "Email",
@@ -291,7 +291,7 @@
     "resolved": "Resolved",
     "open": "Open Support",
     "online": "Online · AI Assistant",
-    "greeting": "Hello! I'm your Le Fabrique assistant. How can I help you today?",
+    "greeting": "Hello! I'm your La Fabrique assistant. How can I help you today?",
     "inputPlaceholder": "Ask a question… (Enter to send)",
     "thinking": "Thinking…",
     "chatUnavailable": "AI service is starting up. Try again in a moment, or use 🐞 to report a problem.",

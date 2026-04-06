@@ -312,7 +312,19 @@ def transition_ticket(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 @tool
 def search_memory(query: str) -> List[Dict[str, Any]]:
-    """Search vector memory (pgvector + Neo4j) for relevant content."""
+    """
+    Search both pgvector and Neo4j memory stores for content relevant to *query*.
+
+    Delegates to the ``/v1/memory/search`` backend endpoint, which runs a
+    pgvector ANN search and returns the top results with similarity scores.
+
+    Args:
+        query: Natural-language search string.
+
+    Returns:
+        List of result dicts (``content``, ``metadata``, ``similarity``),
+        or an empty list on error.
+    """
     try:
         response = requests.get(
             f"{BACKEND_URL}/v1/memory/search",
@@ -328,7 +340,18 @@ def search_memory(query: str) -> List[Dict[str, Any]]:
 
 @tool
 def store_memory(content: str, metadata: Optional[Dict] = None) -> Dict[str, Any]:
-    """Store content in vector memory."""
+    """
+    Persist arbitrary content to the dual-store memory (pgvector + Neo4j).
+
+    The backend endpoint embeds the content and writes it to both stores.
+
+    Args:
+        content:  Text to store (will be embedded for similarity search).
+        metadata: Optional key-value metadata attached to the memory entry.
+
+    Returns:
+        ``{"ok": True}`` on success, or ``{"ok": False, "error": ...}`` on failure.
+    """
     try:
         response = requests.post(
             f"{BACKEND_URL}/v1/memory/store",
@@ -343,7 +366,20 @@ def store_memory(content: str, metadata: Optional[Dict] = None) -> Dict[str, Any
 
 @tool
 def publish_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Publish event to NATS."""
+    """
+    Publish a NATS event from within a LangGraph tool context.
+
+    Creates a short-lived ``NATSClient``, publishes the event, and closes the
+    connection.  For high-throughput use cases, prefer sharing a persistent
+    client via the backend's singleton instead.
+
+    Args:
+        event_type: NATS subject string (e.g. ``"task.progress"``).
+        payload:    JSON-serialisable dict to publish.
+
+    Returns:
+        ``{"ok": True}`` on success, or ``{"ok": False, "error": ...}`` on failure.
+    """
     try:
         import asyncio
         from backend.app.nats_client import NATSClient
@@ -363,7 +399,19 @@ def publish_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
 
 @tool
 def llm_complete(prompt: str, model: str = "gemini-pro") -> Dict[str, Any]:
-    """Complete prompt via LLM proxy."""
+    """
+    Execute a single-turn LLM completion via the internal proxy.
+
+    Wraps ``LLMProxyClient.complete()`` so LangGraph tools don't need to
+    import SDK-specific classes.
+
+    Args:
+        prompt: Prompt text.
+        model:  Model name (resolved by the proxy to the best available model).
+
+    Returns:
+        Proxy response dict, or ``{"ok": False, "error": ...}`` on failure.
+    """
     try:
         from backend.app.llm_proxy_client import LLMProxyClient
         client = LLMProxyClient()

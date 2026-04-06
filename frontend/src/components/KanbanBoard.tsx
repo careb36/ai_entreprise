@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../services/api'
+import { BacklogItem, SprintBoard } from '../services/api'
+import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useSensor, useSensors, closestCenter
@@ -15,26 +16,6 @@ import {
   Loader2, GripVertical
 } from 'lucide-react'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface BacklogItem {
-  id: number
-  title: string
-  description?: string
-  status: string
-  priority: 'low' | 'medium' | 'high' | 'critical'
-  assignee?: string
-  comments: { author: string; text: string; created_at: string }[]
-  created_at: string
-  updated_at: string
-}
-
-interface BoardData {
-  sprint: { id: number; sprint_name: string; status: string; goal?: string }
-  columns: Record<string, BacklogItem[]>
-  total: number
-}
-
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const COLUMNS = [
@@ -45,7 +26,7 @@ const COLUMNS = [
   { id: 'blocked',     titleKey: 'kanban.blocked',     className: 'text-status-error',   icon: AlertTriangle },
 ]
 
-const VALID_STATUSES = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
+const VALID_STATUSES: BacklogItem['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
 
 // ── SortableCard ───────────────────────────────────────────────────────────────
 
@@ -53,8 +34,8 @@ function ItemCard({
   item, onStatusChange, updating, isDragging = false
 }: {
   item: BacklogItem
-  onStatusChange: (id: number, status: string) => void
-  updating: number | null
+  onStatusChange: (id: number, status: BacklogItem['status']) => void
+  updating: boolean
   isDragging?: boolean
 }) {
   const { t } = useTranslation()
@@ -96,8 +77,8 @@ function ItemCard({
 
       <select
         value={item.status}
-        disabled={updating === item.id}
-        onChange={e => onStatusChange(item.id, e.target.value)}
+        disabled={updating}
+        onChange={e => onStatusChange(item.id, e.target.value as BacklogItem['status'])}
         className="select w-full mt-2 text-xs py-1 disabled:opacity-50"
         aria-label="Change status"
       >
@@ -113,71 +94,43 @@ function ItemCard({
 
 export default function KanbanBoard({ sprintId }: { sprintId: string }) {
   const { t } = useTranslation()
-  const [board, setBoard] = useState<BoardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [updating, setUpdating] = useState<number | null>(null)
+  const idNum = parseInt(sprintId, 10) || 1
+  
+  const { data: board, isLoading, isError, refetch } = useSprintBoard(idNum)
+  const updateMutation = useUpdateBacklogItem()
+
   const [activeItem, setActiveItem] = useState<BacklogItem | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const fetchBoard = useCallback(async () => {
-    if (!sprintId || sprintId === '0') return
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await api.get<BoardData>(`/v1/sprints/${sprintId}/board`)
-      setBoard(data)
-    } catch {
-      setError(t('kanban.error'))
-    } finally {
-      setLoading(false)
-    }
-  }, [sprintId, t])
-
-  useEffect(() => { fetchBoard() }, [fetchBoard])
-
-  async function handleStatusChange(itemId: number, newStatus: string) {
-    if (!VALID_STATUSES.includes(newStatus)) return
-    setUpdating(itemId)
-    try {
-      await api.patch(`/v1/backlog/${itemId}`, { status: newStatus })
-      setBoard(prev => {
-        if (!prev) return prev
-        const cols = structuredClone(prev.columns)
-        let found: BacklogItem | undefined
-        for (const col of Object.values(cols)) {
-          const i = col.findIndex(x => x.id === itemId)
-          if (i !== -1) { found = { ...col[i], status: newStatus }; col.splice(i, 1) }
-        }
-        if (found) cols[newStatus] = [...(cols[newStatus] || []), found]
-        return { ...prev, columns: cols }
-      })
-    } catch {
-      fetchBoard()
-    } finally {
-      setUpdating(null)
-    }
+  const handleStatusChange = (itemId: number, newStatus: BacklogItem['status']) => {
+    updateMutation.mutate({ itemId, data: { status: newStatus } })
   }
 
-  function handleDragStart(event: DragStartEvent) {
+  const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as number
     const item = Object.values(board?.columns ?? {}).flat().find(x => x.id === id)
     setActiveItem(item ?? null)
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  const handleDragEnd = (event: DragEndEvent) => {
     setActiveItem(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
-    // Find which column the drop target belongs to
-    const targetCol = COLUMNS.find(c => (board?.columns[c.id] ?? []).some(x => x.id === over.id))
-    if (targetCol) handleStatusChange(active.id as number, targetCol.id)
+    
+    // Find column id from drop target
+    const targetCol = COLUMNS.find(c => 
+      c.id === over.id || (board?.columns[c.id] ?? []).some(x => x.id === over.id)
+    )
+    
+    if (targetCol) {
+      handleStatusChange(active.id as number, targetCol.id as BacklogItem['status'])
+    }
   }
 
   // ── Skeleton ──────────────────────────────────────────────────────────────────
 
-  if (loading && !board) {
+  if (isLoading && !board) {
     return (
       <div className="flex gap-4 p-4 overflow-x-auto min-w-0">
         {COLUMNS.map(c => (
@@ -190,12 +143,24 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     )
   }
 
+  if (isError && !board) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
+        <AlertCircle size={28} className="text-red-400" />
+        <p className="text-sm text-red-400">{t('kanban.error')}</p>
+        <button onClick={() => refetch()} className="btn-ghost btn-sm flex items-center gap-1.5 mt-1">
+          <RefreshCw size={12} />
+          <span>{t('kanban.refresh')}</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header with sprint name and refresh */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-surface-700 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <LayoutGrid size={15} className="text-brand-400" />
           <span className="font-medium text-gray-200 text-sm">
             {board ? board.sprint.sprint_name : t('kanban.title')}
           </span>
@@ -204,21 +169,14 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
           )}
         </div>
         <button
-          onClick={fetchBoard}
-          disabled={loading}
+          onClick={() => refetch()}
+          disabled={isLoading}
           className="btn-ghost btn-sm flex items-center gap-1"
         >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">{t('kanban.refresh')}</span>
         </button>
       </div>
-
-      {error && (
-        <div className="mx-4 mt-3 alert-error flex items-center gap-2 text-sm">
-          <AlertCircle size={14} className="flex-shrink-0" />
-          {error}
-        </div>
-      )}
 
       {/* Board */}
       {board ? (
@@ -228,8 +186,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          {/* Horizontal scroll on desktop, vertical stack on mobile */}
-          <div className="flex-1 overflow-x-auto overflow-y-hidden p-4">
+          <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
             <div className="flex gap-3 min-w-max h-full md:h-auto md:min-w-0 md:flex-nowrap">
               {COLUMNS.map(({ id: colId, titleKey, className, icon: Icon }) => {
                 const items = board.columns[colId] || []
@@ -255,7 +212,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
                               key={item.id}
                               item={item}
                               onStatusChange={handleStatusChange}
-                              updating={updating}
+                              updating={updateMutation.isPending && updateMutation.variables?.itemId === item.id}
                               isDragging={activeItem?.id === item.id}
                             />
                           ))
@@ -268,7 +225,6 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
             </div>
           </div>
 
-          {/* Drag overlay */}
           <DragOverlay>
             {activeItem && (
               <div className="card p-3 shadow-glow rotate-1 w-56">

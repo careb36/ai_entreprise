@@ -8,7 +8,7 @@
     "generate": "Generar"
   },
   "dashboard": {
-    "title": "Le Fabrique",
+    "title": "La Fabrique",
     "subtitle": "Plataforma de desarrollo autónomo con IA",
     "systemStatus": "Estado del Sistema",
     "online": "En línea",
@@ -265,7 +265,7 @@
     "error": "Error en la generación"
   },
   "support": {
-    "title": "Asistente Le Fabrique",
+    "title": "Asistente La Fabrique",
     "reportBug": "Reportar un Problema",
     "myTickets": "Mis Tickets",
     "email": "Correo",
@@ -291,7 +291,7 @@
     "resolved": "Resuelto",
     "open": "Abrir Soporte",
     "online": "En línea · Asistente IA",
-    "greeting": "¡Hola! Soy el Asistente de Le Fabrique. ¿En qué puedo ayudarte hoy?",
+    "greeting": "¡Hola! Soy el Asistente de La Fabrique. ¿En qué puedo ayudarte hoy?",
     "inputPlaceholder": "Escribe una pregunta… (Enter para enviar)",
     "thinking": "Pensando…",
     "chatUnavailable": "El servicio de IA está iniciando. Intenta de nuevo en un momento, o usa 🐞 para reportar un problema.",

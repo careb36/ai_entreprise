@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useApp } from '../context/AppContext'
+import { useAppStore } from '../store/useAppStore'
 import { api } from '../services/api'
 
 interface BacklogItem {
@@ -13,7 +13,7 @@ export default function SprintBoard() {
   const { t } = useTranslation()
   const { id } = useParams()
   const navigate = useNavigate()
-  const { setActiveSprint } = useApp()
+  const setActiveSprint = useAppStore(state => state.setActiveSprint)
   const [sprintName, setSprintName] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [durationDays, setDurationDays] = useState(14)

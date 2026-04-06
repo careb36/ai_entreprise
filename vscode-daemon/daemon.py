@@ -28,10 +28,22 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
 
 def compute_prompt_hash(prompt: str) -> str:
+    """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
     return hashlib.sha256(prompt.encode()).hexdigest()
 
-def create_commit_message(interaction_id: str, agent_id: str, prompt_hash: str, 
-                          decision_signature: Optional[str] = None) -> str:
+
+def create_commit_message(
+    interaction_id: str,
+    agent_id: str,
+    prompt_hash: str,
+    decision_signature: Optional[str] = None,
+) -> str:
+    """
+    Build a structured git commit message that embeds governance metadata.
+
+    The ``interaction_id`` and ``prompt_hash`` fields allow full traceability
+    from a git commit back to the originating API call and decision record.
+    """
     sig = decision_signature or "placeholder_signature"
     return f"""feat: AI generated code
 
@@ -41,10 +53,22 @@ prompt_hash: {prompt_hash}
 decision_signature: {sig}"""
 
 def confirm_workspace_path() -> str:
+    """Ensure the default workspace root directory exists and return its path."""
     Path(WORKSPACE_ROOT_DEFAULT).mkdir(parents=True, exist_ok=True)
     return WORKSPACE_ROOT_DEFAULT
 
+
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
+    """
+    Write a list of files to the workspace directory, creating parent dirs as needed.
+
+    Args:
+        workspace_path: Absolute path to the workspace root.
+        files:          List of dicts with ``path`` (relative) and ``content`` keys.
+
+    Returns:
+        List of ``{"path": <absolute>, "status": "written"}`` dicts.
+    """
     results = []
     for file_info in files:
         file_path = os.path.join(workspace_path, file_info.get("path", ""))
@@ -57,7 +81,21 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     return results
 
 def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
-    """Real-time command execution (Idea from OpenHands)."""
+    """
+    Execute a shell command synchronously and capture all output.
+
+    Inspired by OpenHands' real-execution model: runs the command with a
+    120-second timeout, captures both stdout and stderr, and returns the
+    exit code so the caller can decide whether execution succeeded.
+
+    Args:
+        command: Shell command string (passed to ``shell=True``).
+        cwd:     Working directory for the command.
+
+    Returns:
+        Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
+        ``exit_code`` — or ``{"success": False, "error": ...}`` on exception.
+    """
     logger.info(f"Executing: {command} in {cwd}")
     try:
         result = subprocess.run(
@@ -78,7 +116,21 @@ def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 async def handle_msg(nc, msg):
-    """Unified message handler."""
+    """
+    Unified NATS message handler for ``workspace.generate`` and ``workspace.execute``.
+
+    ``workspace.generate`` flow:
+    1. Write all files provided in the payload to the workspace directory.
+    2. Initialise a git repository (idempotent) and commit the generated files
+       with a structured message that embeds governance metadata.
+    3. Optionally reply to the request-reply subject with a summary.
+
+    ``workspace.execute`` flow:
+    1. Run the requested shell command inside the workspace directory.
+    2. Publish the command output to the Glassroom NATS subject so the frontend
+       SSE stream receives it in real-time.
+    3. Optionally reply with the full result dict.
+    """
     subject = msg.subject
     data = json.loads(msg.data.decode())
     reply_to = msg.reply

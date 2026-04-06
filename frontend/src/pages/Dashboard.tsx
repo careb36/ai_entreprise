@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useApp } from '../context/AppContext'
-import { api } from '../services/api'
+import { useAppStore } from '../store/useAppStore'
+import { useHealth } from '../hooks/useQueries'
 import {
   Plus, MonitorPlay, ShieldCheck, PieChart,
   Search, Code2, Building2, CheckCircle2, XCircle, Loader2
@@ -10,16 +9,13 @@ import {
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const { companyName, activeSprintId } = useApp()
-  const [systemOnline, setSystemOnline] = useState<boolean | null>(null)
+  const companyName = useAppStore(state => state.companyName)
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  
+  const { data: health, isLoading: checkingStatus } = useHealth()
+  const systemOnline = !!health
 
-  useEffect(() => {
-    api.get('/health')
-      .then(() => setSystemOnline(true))
-      .catch(() => setSystemOnline(false))
-  }, [])
-
-  const workspaceId = activeSprintId || 1
+  const workspaceId = activeSprintId || null
 
   const cards = [
     {
@@ -30,11 +26,11 @@ export default function Dashboard() {
       color: 'border-indigo-100 hover:border-indigo-300',
     },
     {
-      to: `/workspace/${workspaceId}`,
+      to: workspaceId ? `/workspace/${workspaceId}` : '/companies/new',
       icon: <MonitorPlay size={28} className="text-emerald-500" />,
       title: t('dashboard.activeWorkspace'),
-      desc: t('dashboard.activeWorkspaceDesc'),
-      color: 'border-emerald-100 hover:border-emerald-300',
+      desc: workspaceId ? t('dashboard.activeWorkspaceDesc') : t('dashboard.noWorkspace', 'Create a factory first'),
+      color: workspaceId ? 'border-emerald-100 hover:border-emerald-300' : 'border-gray-200 hover:border-gray-300',
     },
     {
       to: '/governance',
@@ -82,7 +78,7 @@ export default function Dashboard() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <span className="text-sm text-gray-400">{t('dashboard.systemStatus')}</span>
-            {systemOnline === null ? (
+            {checkingStatus ? (
               <div className="flex items-center gap-2 text-gray-400 text-sm">
                 <Loader2 size={16} className="animate-spin" /> {t('dashboard.checking')}
               </div>
