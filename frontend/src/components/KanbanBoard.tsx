@@ -143,12 +143,24 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     )
   }
 
+  if (isError && !board) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
+        <AlertCircle size={28} className="text-red-400" />
+        <p className="text-sm text-red-400">{t('kanban.error')}</p>
+        <button onClick={() => refetch()} className="btn-ghost btn-sm flex items-center gap-1.5 mt-1">
+          <RefreshCw size={12} />
+          <span>{t('kanban.refresh')}</span>
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header with sprint name and refresh */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-surface-700 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <LayoutGrid size={15} className="text-brand-400" />
           <span className="font-medium text-gray-200 text-sm">
             {board ? board.sprint.sprint_name : t('kanban.title')}
           </span>
@@ -165,13 +177,6 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
           <span className="hidden sm:inline">{t('kanban.refresh')}</span>
         </button>
       </div>
-
-      {isError && (
-        <div className="mx-4 mt-3 alert-error flex items-center gap-2 text-sm">
-          <AlertCircle size={14} className="flex-shrink-0" />
-          {t('kanban.error')}
-        </div>
-      )}
 
       {/* Board */}
       {board ? (

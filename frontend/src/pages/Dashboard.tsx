@@ -15,7 +15,7 @@ export default function Dashboard() {
   const { data: health, isLoading: checkingStatus } = useHealth()
   const systemOnline = !!health
 
-  const workspaceId = activeSprintId || 1
+  const workspaceId = activeSprintId || null
 
   const cards = [
     {
@@ -26,11 +26,11 @@ export default function Dashboard() {
       color: 'border-indigo-100 hover:border-indigo-300',
     },
     {
-      to: `/workspace/${workspaceId}`,
+      to: workspaceId ? `/workspace/${workspaceId}` : '/companies/new',
       icon: <MonitorPlay size={28} className="text-emerald-500" />,
       title: t('dashboard.activeWorkspace'),
-      desc: t('dashboard.activeWorkspaceDesc'),
-      color: 'border-emerald-100 hover:border-emerald-300',
+      desc: workspaceId ? t('dashboard.activeWorkspaceDesc') : t('dashboard.noWorkspace', 'Create a factory first'),
+      color: workspaceId ? 'border-emerald-100 hover:border-emerald-300' : 'border-gray-200 hover:border-gray-300',
     },
     {
       to: '/governance',

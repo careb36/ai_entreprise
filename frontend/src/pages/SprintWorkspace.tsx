@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { PanelLeftClose, PanelLeftOpen, LayoutGrid, MonitorPlay } from 'lucide-react'
+import { PanelLeftClose, PanelLeftOpen, MonitorPlay } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import ControlPanel from '../components/ControlPanel'
 import KanbanBoard from '../components/KanbanBoard'
@@ -100,10 +100,6 @@ export const SprintWorkspace: React.FC = () => {
         {/* Kanban area */}
         <div className={`${glassroomOpen ? 'flex-1' : 'flex-1'} min-h-0 overflow-hidden flex flex-col p-3 gap-3`}>
           <div className="flex-1 min-h-0 card overflow-hidden flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-surface-700">
-              <LayoutGrid size={15} className="text-brand-400" />
-              <h3 className="font-semibold text-gray-200 text-sm">{t('workspace.sprintBoard')}</h3>
-            </div>
             <div className="flex-1 overflow-auto">
               <KanbanBoard sprintId={currentId} />
             </div>
