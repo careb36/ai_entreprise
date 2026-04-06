@@ -107,31 +107,24 @@ const STEPS = ['Project', 'Company', 'Autonomy', 'Permissions', 'Team', 'Review'
 
 function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
   return (
-    <div className="mb-8">
-      {/* Step circles + connectors */}
-      <div className="flex items-center justify-between">
-        {steps.map((label, i) => (
-          <div key={i} className="flex items-center flex-1 last:flex-none">
-            <div className="flex flex-col items-center gap-1 flex-shrink-0">
-              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold transition-all
-                ${i < current ? 'bg-brand-600 text-white' : i === current ? 'bg-brand-500 text-white ring-2 ring-brand-400/40' : 'bg-surface-700 text-gray-500'}`}>
-                {i < current ? '✓' : i + 1}
-              </div>
-              <span className={`text-[10px] sm:text-xs whitespace-nowrap hidden sm:block
-                ${i === current ? 'text-brand-300 font-medium' : i < current ? 'text-gray-400' : 'text-gray-600'}`}>
-                {label}
-              </span>
+    <div className="flex items-center justify-between mb-8">
+      {steps.map((label, i) => (
+        <div key={i} className="flex items-center flex-1 last:flex-none">
+          <div className="flex flex-col items-center gap-1 flex-shrink-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
+              ${i < current ? 'bg-brand-600 text-white' : i === current ? 'bg-brand-500 text-white ring-2 ring-brand-400/40' : 'bg-surface-700 text-gray-500'}`}>
+              {i < current ? '✓' : i + 1}
             </div>
-            {i < steps.length - 1 && (
-              <div className={`h-px flex-1 mx-1 sm:mx-2 mb-3 sm:mb-4 transition-all ${i < current ? 'bg-brand-600' : 'bg-surface-700'}`} />
-            )}
+            <span className={`text-xs whitespace-nowrap
+              ${i === current ? 'text-brand-300 font-medium' : i < current ? 'text-gray-400' : 'text-gray-600'}`}>
+              {label}
+            </span>
           </div>
-        ))}
-      </div>
-      {/* Current step label for mobile */}
-      <p className="sm:hidden text-center text-xs text-brand-300 font-medium mt-1">
-        {steps[current]}
-      </p>
+          {i < steps.length - 1 && (
+            <div className={`h-px flex-1 mx-2 mb-5 transition-all ${i < current ? 'bg-brand-600' : 'bg-surface-700'}`} />
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -166,13 +159,13 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove }: {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="input-label">Role</label>
-          <select value={agent.role} onChange={e => onUpdate(index, 'role', e.target.value)} className="select w-full text-xs sm:text-sm">
+          <select value={agent.role} onChange={e => onUpdate(index, 'role', e.target.value)} className="select w-full">
             {ROLES.map(r => <option key={r.value} value={r.value}>{r.icon} {r.label}</option>)}
           </select>
         </div>
         <div>
           <label className="input-label">Seniority</label>
-          <select value={agent.seniority} onChange={e => onUpdate(index, 'seniority', e.target.value)} className="select w-full text-xs sm:text-sm">
+          <select value={agent.seniority} onChange={e => onUpdate(index, 'seniority', e.target.value)} className="select w-full">
             {SENIORITIES.map(s => (
               <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>
             ))}
@@ -226,11 +219,11 @@ function PermRow({ icon, label, desc, permKey, value, options, onChange }: {
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={`text-xs font-medium ${current?.color ?? 'text-gray-400'} hidden md:block w-20 text-right`}>
+        <span className={`text-xs font-medium ${current?.color ?? 'text-gray-400'} w-20 text-right`}>
           {current?.label}
         </span>
         <select value={value} onChange={e => onChange(permKey, e.target.value)}
-          className="select w-full sm:w-32 text-xs">
+          className="select w-36 text-xs">
           {options.map(o => (
             <option key={o} value={o}>{PERM_LEVELS[o as keyof typeof PERM_LEVELS]?.label ?? o}</option>
           ))}
@@ -396,7 +389,7 @@ export default function CompanyNew() {
             <span className="text-green-400 text-lg">✓</span>
             <span className="text-sm font-semibold text-brand-200">Stack detected — <span className="font-mono">{discoveryResult.name}</span></span>
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             {[
               { label: 'Primary language', value: discoveryResult.language, icon: '🔷' },
               { label: 'Frameworks', value: discoveryResult.frameworks?.join(', ') || '—', icon: '🧩' },
@@ -663,7 +656,7 @@ export default function CompanyNew() {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Permissions</p>
               <button type="button" onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">Edit</button>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-5 gap-2">
               {[
                 { label: 'Git', key: 'git_access', icon: '🔀' },
                 { label: 'Cloud', key: 'cloud_access', icon: '☁️' },
@@ -730,7 +723,7 @@ export default function CompanyNew() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="page-container max-w-2xl">
+    <div className="page-container max-w-3xl">
       <div className="mb-6">
         <h1 className="page-title">🏭 New Factory</h1>
         <p className="text-gray-400 text-sm mt-1">Set up your AI-powered software factory in 6 steps.</p>
@@ -738,7 +731,7 @@ export default function CompanyNew() {
 
       <StepIndicator current={step} steps={STEPS} />
 
-      <div className="card p-4 sm:p-6">
+      <div className="card p-6">
         {STEP_RENDERERS[step]()}
       </div>
 
