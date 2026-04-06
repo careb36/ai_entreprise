@@ -49,10 +49,14 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
     for agent_data in req.agents:
         session.add(Agent(
             company_id=company.id,
+            name=agent_data.get("name", ""),
             role=agent_data.get("role"),
             persona=agent_data.get("persona"),
             seniority=agent_data.get("seniority", "Senior"),
             specialty=agent_data.get("specialty", ""),
+            model=agent_data.get("model", ""),
+            system_prompt=agent_data.get("system_prompt"),
+            token_budget=agent_data.get("token_budget", 500000),
         ))
 
     if req.permissions:

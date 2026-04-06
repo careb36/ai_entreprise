@@ -32,18 +32,23 @@ class Agent(SQLModel, table=True):
     """
     AI agent instance assigned to a company.
 
-    An agent has a fixed role (Architect, Developer, QA…) and a persona
-    prompt that tailors its LLM responses to the company's engineering culture.
+    Each agent has a role, an LLM model assignment, a persona system-prompt,
+    and a monthly token budget.  The ``name`` field is a human-friendly alias
+    (e.g. "Atlas", "Nova") displayed in the dashboard.
     """
 
     __tablename__ = "agents"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
-    role: Optional[str] = None       # e.g. "Architect", "Developer", "QA"
-    persona: Optional[str] = None    # Free-text system-prompt personality description
-    seniority: str = "Senior"        # e.g. "Junior", "Mid", "Senior", "Staff"
-    specialty: str = ""              # Domain speciality (e.g. "Cloud/DB", "Frontend/React")
+    name: str = ""                        # Display alias (e.g. "Atlas")
+    role: Optional[str] = None            # e.g. "Architect", "Developer", "QA"
+    persona: Optional[str] = None         # Free-text system-prompt personality description
+    seniority: str = "Senior"             # e.g. "Junior", "Mid", "Senior", "Staff"
+    specialty: str = ""                   # Domain speciality (e.g. "Cloud/DB", "Frontend/React")
+    model: str = ""                       # LLM model ID (e.g. "deepseek-coder", "gemini-2.5-pro")
+    system_prompt: Optional[str] = None   # Full system prompt for the agent's LLM calls
+    token_budget: int = 500000            # Monthly token budget (soft limit)
 
 
 class BusinessUnit(SQLModel, table=True):
