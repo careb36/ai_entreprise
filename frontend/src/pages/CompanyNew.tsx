@@ -459,8 +459,9 @@ export default function CompanyNew() {
         governance: { require_approval_deploy, require_approval_db_write },
       })
       const companyId = response?.company_id ?? response?.id ?? 1
+      const sprintId = response?.sprint_id ?? companyId
       setCompany(companyId, companyName.trim())
-      navigate(`/workspace/${companyId}`)
+      navigate(`/workspace/${sprintId}`)
     } catch (err: any) {
       setError(err?.message ?? 'Failed to initialize factory. Please try again.')
       setLoading(false)

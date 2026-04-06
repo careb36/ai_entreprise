@@ -16,7 +16,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlmodel import Session, select, text
 
 from database import get_session, get_neo4j_driver
-from models import Company, Agent, ProjectCredential, ProjectDiscovery, BusinessUnit
+from models import Company, Agent, ProjectCredential, ProjectDiscovery, BusinessUnit, Sprint
 from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from services.discovery_service import DiscoveryService
 from logging_config import logger
@@ -70,6 +70,19 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
                     encrypted_value="vault_encrypted_placeholder",
                 ))
 
+    # Auto-create the first sprint so the workspace board is immediately usable.
+    from datetime import date
+    sprint = Sprint(
+        company_id=company.id,
+        sprint_name="Sprint 1",
+        start_date=date.today().isoformat(),
+        duration_days=req.default_sprint_length_days or 14,
+        status="active",
+        goal=f"Initial sprint for {req.company_name}",
+    )
+    session.add(sprint)
+    session.flush()
+
     session.commit()
 
     # Seed a root Company node in Neo4j for the Temporal Knowledge Graph.
@@ -84,7 +97,11 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
     except Exception as e:
         logger.error(f"Neo4j seed failed (non-critical): {e}")
 
-    return {"company_id": company.id, "message": "Company initialized successfully"}
+    return {
+        "company_id": company.id,
+        "sprint_id": sprint.id,
+        "message": "Company initialized successfully",
+    }
 
 
 @router.post("/approve_task", tags=["Enterprise"])
