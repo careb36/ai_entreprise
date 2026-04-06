@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../services/api'
+import { useAnalyticsSummary } from '../hooks/useQueries'
 import { TrendingUp, Zap, CheckSquare, XSquare, Info, RefreshCw } from 'lucide-react'
 
 interface AnalyticsData {
@@ -34,26 +34,9 @@ function HealthBadge({ score }: { score: number }) {
 
 export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId }) => {
   const { t } = useTranslation()
-  const [data, setData] = useState<AnalyticsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const { data, isLoading, isError, refetch } = useAnalyticsSummary(sprintId)
 
-  async function fetchAnalytics() {
-    setLoading(true)
-    setError(false)
-    try {
-      const res = await api.getAnalyticsSummary(sprintId)
-      setData(res)
-    } catch {
-      setError(true)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchAnalytics() }, [sprintId])
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -64,7 +47,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
     )
   }
 
-  if (error || !data) {
+  if (isError || !data) {
     return (
       <div className="alert-error flex items-center gap-2">
         <XSquare size={16} /> {t('analytics.error')}
@@ -72,10 +55,12 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
     )
   }
 
+  const analytics = data as AnalyticsData
+
   // Correct task counts — use actual status fields
-  const done    = data.tasks_status['done']    || data.tasks_status['closed'] || 0
-  const failed  = data.tasks_status['failed']  || data.tasks_status['blocked'] || 0
-  const inProg  = data.tasks_status['in_progress'] || 0
+  const done    = analytics.tasks_status['done']    || analytics.tasks_status['closed'] || 0
+  const failed  = analytics.tasks_status['failed']  || analytics.tasks_status['blocked'] || 0
+  const inProg  = analytics.tasks_status['in_progress'] || 0
 
   return (
     <div className="space-y-6">
@@ -89,8 +74,8 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <HealthBadge score={data.health_score} />
-          <button onClick={fetchAnalytics} className="btn-ghost btn-icon" title={t('common.refresh','Refresh')}>
+          <HealthBadge score={analytics.health_score} />
+          <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh','Refresh')}>
             <RefreshCw size={14} />
           </button>
         </div>
@@ -103,7 +88,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
             <Zap size={14} className="text-brand-400" />
             <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('analytics.tokensConsumed')}</p>
           </div>
-          <p className="text-3xl font-black text-white">{data.tokens_consumed.toLocaleString()}</p>
+          <p className="text-3xl font-black text-white">{analytics.tokens_consumed.toLocaleString()}</p>
         </div>
 
         <div className="card p-4">
@@ -125,15 +110,15 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
       </div>
 
       {/* Tokens by agent */}
-      {data.tokens_by_agent && Object.keys(data.tokens_by_agent).length > 0 && (
+      {analytics.tokens_by_agent && Object.keys(analytics.tokens_by_agent).length > 0 && (
         <div className="card p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
             <Info size={12} />
             {t('analytics.tokensByAgent', 'Tokens by agent')}
           </p>
           <div className="space-y-2">
-            {Object.entries(data.tokens_by_agent).map(([agent, tokens]) => {
-              const pct = Math.round((tokens / data.tokens_consumed) * 100)
+            {Object.entries(analytics.tokens_by_agent).map(([agent, tokens]) => {
+              const pct = Math.round((tokens / analytics.tokens_consumed) * 100)
               return (
                 <div key={agent}>
                   <div className="flex justify-between text-xs mb-1">
@@ -153,9 +138,8 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
       {/* Executive summary */}
       <div className="card p-4 border-l-4 border-l-brand-500">
         <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">{t('analytics.executiveSummary')}</p>
-        <p className="text-gray-300 leading-relaxed italic">"{data.ai_executive_summary}"</p>
+        <p className="text-gray-300 leading-relaxed italic">"{analytics.ai_executive_summary}"</p>
       </div>
     </div>
   )
 }
-

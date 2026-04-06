@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
-import { api } from '../services/api'
+import { 
+  useModels, 
+  useDiscoverTeam, 
+  useInitCompany 
+} from '../hooks/useQueries'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -356,7 +360,6 @@ export default function CompanyNew() {
 
   // Step 0 — Project
   const [projectPath, setProjectPath] = useState('')
-  const [isDiscovering, setIsDiscovering] = useState(false)
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
 
   // Step 1 — Company
@@ -380,49 +383,44 @@ export default function CompanyNew() {
   ])
 
   // Available LLM models — fetched dynamically from the proxy via backend
-  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
-  useEffect(() => {
-    api.get<{ models: ModelInfo[]; orchestrator?: string }>('/v1/models')
-      .then(data => setAvailableModels(data.models ?? []))
-      .catch(() => {/* non-critical — selector falls back to empty state */})
-  }, [])
+  const { data: modelsData } = useModels()
+  const availableModels = (modelsData?.models || []) as ModelInfo[]
+
+  const discoverTeamMutation = useDiscoverTeam()
+  const initCompanyMutation = useInitCompany()
 
   // Global
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const loading = initCompanyMutation.isPending
+  const mutationError = (discoverTeamMutation.error as any)?.message || (initCompanyMutation.error as any)?.message || null
 
   // ── Discover ──────────────────────────────────────────────────────────────
 
   const handleDiscover = async () => {
     if (!projectPath.trim()) return
-    setIsDiscovering(true)
-    setError(null)
     setDiscoveryResult(null)
-    try {
-      const response = await api.discoverTeam(null, projectPath.trim())
-      if (response) {
-        if (response.detected_stack) {
-          setDiscoveryResult(response.detected_stack)
-          if (response.detected_stack.name && !companyName) {
-            setCompanyName(response.detected_stack.name)
+    
+    discoverTeamMutation.mutate({ companyId: null, projectPath: projectPath.trim() }, {
+      onSuccess: (response) => {
+        if (response) {
+          if (response.detected_stack) {
+            setDiscoveryResult(response.detected_stack)
+            if (response.detected_stack.name && !companyName) {
+              setCompanyName(response.detected_stack.name)
+            }
+          }
+          if (response.suggested_team?.length) {
+            setAgents(response.suggested_team.map((a: any) => ({
+              ...a,
+              name: a.name ?? '',
+              persona: a.persona ?? a.specialty ?? '',
+              token_budget: a.token_budget ?? 500000,
+              model: a.model ?? 'deepseek-coder',
+              system_prompt: a.system_prompt ?? '',
+            })))
           }
         }
-        if (response.suggested_team?.length) {
-          setAgents(response.suggested_team.map((a: any) => ({
-            ...a,
-            name: a.name ?? '',
-            persona: a.persona ?? a.specialty ?? '',
-            token_budget: a.token_budget ?? 500000,
-            model: a.model ?? 'deepseek-coder',
-            system_prompt: a.system_prompt ?? '',
-          })))
-        }
       }
-    } catch (e: any) {
-      setError(e?.message ?? 'Discovery failed. Please check the project path or backend connection.')
-    } finally {
-      setIsDiscovering(false)
-    }
+    })
   }
 
   // ── Agent helpers ─────────────────────────────────────────────────────────
@@ -444,35 +442,34 @@ export default function CompanyNew() {
   // ── Submit ────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const { require_approval_deploy, require_approval_db_write, ...credPerms } = permissions
-      const response = await api.post<any>('/v1/init_company', {
-        company_name: companyName.trim(),
-        description: companyDesc,
-        default_sprint_length_days: sprintLength,
-        autonomy_level: autonomyLevel,
-        timezone,
-        agents,
-        permissions: credPerms,
-        governance: { require_approval_deploy, require_approval_db_write },
-        project_path: projectPath.trim() || undefined,
-        detected_stack: discoveryResult || undefined,
-      })
-      const companyId = response?.company_id ?? response?.id ?? 1
-      const sprintId = response?.sprint_id ?? companyId
-      setCompany(companyId, companyName.trim())
-      navigate(`/workspace/${sprintId}`)
-    } catch (err: any) {
-      setError(err?.message ?? 'Failed to initialize factory. Please try again.')
-      setLoading(false)
+    const { require_approval_deploy, require_approval_db_write, ...credPerms } = permissions
+    const payload = {
+      company_name: companyName.trim(),
+      description: companyDesc,
+      default_sprint_length_days: sprintLength,
+      autonomy_level: autonomyLevel,
+      timezone,
+      agents,
+      permissions: credPerms,
+      governance: { require_approval_deploy, require_approval_db_write },
+      project_path: projectPath.trim() || undefined,
+      detected_stack: discoveryResult || undefined,
     }
+
+    initCompanyMutation.mutate(payload, {
+      onSuccess: (response) => {
+        const companyId = response?.company_id ?? response?.id ?? 1
+        const sprintId = response?.sprint_id ?? companyId
+        setCompany(companyId, companyName.trim())
+        navigate(`/workspace/${sprintId}`)
+      }
+    })
   }
 
   // ── Validation ────────────────────────────────────────────────────────────
 
   const canProceed = () => {
+    if (step === 0) return !discoverTeamMutation.isPending
     if (step === 1) return companyName.trim().length >= 2
     if (step === 4) return agents.length >= 1
     return true
@@ -496,9 +493,9 @@ export default function CompanyNew() {
           placeholder="/home/user/my-project  or  ~/projects/acme-backend"
           className="input flex-1 font-mono text-sm" />
         <button type="button" onClick={handleDiscover}
-          disabled={isDiscovering || !projectPath.trim()}
+          disabled={discoverTeamMutation.isPending || !projectPath.trim()}
           className="btn btn-primary flex-shrink-0 min-w-28">
-          {isDiscovering ? (
+          {discoverTeamMutation.isPending ? (
             <span className="flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Scanning…
@@ -507,7 +504,7 @@ export default function CompanyNew() {
         </button>
       </div>
 
-      {error && <div className="alert-error text-sm">{error}</div>}
+      {mutationError && <div className="alert-error text-sm">{mutationError}</div>}
 
       {discoveryResult && (
         <div className="rounded-xl border border-brand-700/40 bg-brand-950/20 overflow-hidden">
@@ -848,7 +845,7 @@ export default function CompanyNew() {
           </div>
         </div>
 
-        {error && <div className="alert-error text-sm">{error}</div>}
+        {mutationError && <div className="alert-error text-sm">{mutationError}</div>}
 
         <button type="button" onClick={handleSubmit}
           disabled={loading}
@@ -883,7 +880,7 @@ export default function CompanyNew() {
 
       {/* Navigation */}
       <div className="flex items-center justify-between mt-4">
-        <button type="button" onClick={() => { setStep(s => s - 1); setError(null) }}
+        <button type="button" onClick={() => setStep(s => s - 1)}
           disabled={step === 0}
           className="btn btn-secondary disabled:opacity-30">
           ← Back
@@ -892,7 +889,7 @@ export default function CompanyNew() {
         <span className="text-xs text-gray-600">{step + 1} / {STEPS.length}</span>
 
         {step < STEPS.length - 1 ? (
-          <button type="button" onClick={() => { setStep(s => s + 1); setError(null) }}
+          <button type="button" onClick={() => setStep(s => s + 1)}
             disabled={!canProceed()}
             className="btn btn-primary disabled:opacity-50">
             Next →

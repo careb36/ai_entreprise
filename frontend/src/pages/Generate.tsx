@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../store/useAppStore'
-import { api } from '../services/api'
+import { useGenerate } from '../hooks/useQueries'
 import { Code2, Loader2, ArrowRight, CheckCircle2, Copy, Check } from 'lucide-react'
 
 interface GenerateResult {
@@ -18,31 +18,29 @@ export default function Generate() {
   const companyName = useAppStore(state => state.companyName)
   const [story, setStory] = useState('')
   const [constraints, setConstraints] = useState('')
-  const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<GenerateResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const generateMutation = useGenerate()
+
+  const loading = generateMutation.isPending
+  const error = (generateMutation.error as any)?.message || null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!story.trim()) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await api.post<GenerateResult>('/v1/generate', {
-        company_id: companyId ?? 1,
-        story: story.trim(),
-        constraints: constraints.trim() || undefined
-      })
-      setResult(res)
-      // Clear form on success
-      setStory('')
-      setConstraints('')
-    } catch (err: any) {
-      setError(err.message || t('generate.error', 'Generation failed'))
-    } finally {
-      setLoading(false)
-    }
+    
+    generateMutation.mutate({
+      company_id: companyId ?? 1,
+      story: story.trim(),
+      constraints: constraints.trim() || undefined
+    }, {
+      onSuccess: (res) => {
+        setResult(res as GenerateResult)
+        setStory('')
+        setConstraints('')
+      }
+    })
   }
 
   async function copyId(text: string) {

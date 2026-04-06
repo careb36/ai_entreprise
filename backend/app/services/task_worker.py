@@ -20,18 +20,30 @@ import asyncio
 import functools
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from sqlmodel import Session, select, text
 
 from database import engine
-from models import BacklogItem, Sprint, Agent
+from models import BacklogItem, Sprint, Agent, ProjectDiscovery
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from nats_client import NATSClient
 
 logger = setup_logger("fabrique-task-worker")
+
+MAX_QA_REVIEW_FAILURES = 3
+MAX_QA_REWORK_CYCLES = 2
+MIN_DELIVERABLE_WORDS = 80
+MIN_DOC_DELIVERABLE_WORDS = 180
+AUTOPILOT_QA_REWORK_ENABLED = os.getenv("AUTOPILOT_QA_REWORK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+AUTOPILOT_MAX_REWORK_CYCLES = int(os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(MAX_QA_REWORK_CYCLES)))
+ALLOWED_ARTIFACT_EXTENSIONS = {
+    ".md", ".txt", ".json", ".yaml", ".yml", ".toml",
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".css", ".html",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +106,118 @@ def _execute_task(
         .get("content", "")
     )
     return content.strip()
+
+
+def _validate_minimum_deliverable(item: Dict[str, Any], deliverable: str) -> tuple[bool, str]:
+    """Apply lightweight quality checks before sending output to QA review."""
+    text = (deliverable or "").strip()
+    if not text:
+        return False, "Empty output from agent"
+
+    word_count = len(re.findall(r"\\b\\w+\\b", text))
+    title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
+    doc_like = any(
+        kw in title_desc
+        for kw in (
+            "document",
+            "documentation",
+            "readme",
+            "architecture",
+            "api",
+            "strategy",
+            "process",
+            "pipeline",
+            "standards",
+        )
+    )
+
+    min_words = MIN_DOC_DELIVERABLE_WORDS if doc_like else MIN_DELIVERABLE_WORDS
+    if word_count < min_words:
+        return False, f"Too short ({word_count} words, minimum {min_words})"
+
+    heading_count = len(re.findall(r"(?m)^#{1,6}\\s+", text))
+    if doc_like and heading_count < 2:
+        return False, "Documentation-like deliverable missing structured sections"
+
+    code_fence_count = text.count("```")
+    if code_fence_count % 2 != 0:
+        return False, "Unbalanced code fences (likely truncated output)"
+
+    tail = text[-180:].strip()
+    if tail.endswith((":", ",", ";", " and", " or", " the", " to", " with")):
+        return False, "Output appears to end abruptly"
+
+    return True, "ok"
+
+
+def _resolve_workspace_root(company_id: int) -> Optional[str]:
+    """Best-effort lookup of a writable workspace root for artifact generation."""
+    explicit = os.getenv("AGENT_WORKSPACE_ROOT")
+    if explicit:
+        return explicit
+
+    with Session(engine) as session:
+        discovery = session.exec(
+            select(ProjectDiscovery)
+            .where(ProjectDiscovery.company_id == company_id)
+            .order_by(text("created_at DESC"))
+        ).first()
+        if discovery and discovery.project_path:
+            return discovery.project_path
+
+    return None
+
+
+def _sanitize_relative_path(path: str) -> Optional[str]:
+    """Normalize a relative path and reject unsafe values."""
+    p = (path or "").strip().replace("\\", "/")
+    if not p or p.startswith("/") or ".." in p.split("/"):
+        return None
+    return p
+
+
+def _normalize_artifact_content(path: str, deliverable: str) -> str:
+    """Trim wrapper text so persisted files contain only final artifact content."""
+    text_content = (deliverable or "").strip().replace("\r\n", "\n")
+
+    fenced = re.search(r"```(?:[a-zA-Z0-9_+-]+)?\s*(.*?)```", text_content, flags=re.DOTALL)
+    if fenced and len(fenced.group(1).strip()) > 40:
+        text_content = fenced.group(1).strip()
+
+    if path.lower().endswith(".md"):
+        text_content = re.sub(r"(?m)^\*\*\*\s*$", "", text_content).strip()
+        heading = re.search(r"(?m)^#\s+", text_content)
+        if heading and heading.start() > 0:
+            text_content = text_content[heading.start():].strip()
+
+    return text_content
+
+
+def _extract_artifact_targets(item: Dict[str, Any], deliverable: str) -> list[Dict[str, str]]:
+    """Infer concrete file targets from task metadata and generated content."""
+    title_desc = f"{item.get('title', '')} {item.get('description', '')}"
+    candidates = re.findall(r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)", title_desc)
+
+    artifacts: list[Dict[str, str]] = []
+    for c in candidates:
+        rel = _sanitize_relative_path(c)
+        if not rel:
+            continue
+        _, ext = os.path.splitext(rel)
+        if ext.lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
+            continue
+        artifacts.append({"path": rel, "content": _normalize_artifact_content(rel, deliverable)})
+
+    # Remove duplicates while preserving order.
+    dedup: list[Dict[str, str]] = []
+    seen: set[str] = set()
+    for a in artifacts:
+        if a["path"] in seen:
+            continue
+        seen.add(a["path"])
+        dedup.append(a)
+
+    return dedup
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +352,15 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             agent = ctx["agent"]
             sprint = ctx["sprint"]
 
+            # Guard against duplicate task.assign events for the same item.
+            if item.get("status") != "todo":
+                logger.info(
+                    "Skipping duplicate assignment for item=%s with status=%s",
+                    item["id"],
+                    item.get("status"),
+                )
+                return
+
             # 2. Mark as in_progress and notify glassroom.
             await asyncio.to_thread(
                 _update_item_status, item["id"], "in_progress"
@@ -245,6 +378,72 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             deliverable = await asyncio.to_thread(
                 _execute_task, item, agent, sprint["name"],
             )
+
+            is_valid, validation_reason = _validate_minimum_deliverable(item, deliverable)
+            if not is_valid:
+                await asyncio.to_thread(
+                    _update_item_status,
+                    item["id"],
+                    "blocked",
+                    comment_text=f"Pre-review quality gate failed: {validation_reason}",
+                    comment_author="System",
+                )
+
+                await _publish_glassroom(nats_client, sprint["id"], {
+                    "type": "error",
+                    "agent": agent.get("name") or agent["role"],
+                    "role": agent["role"],
+                    "task": item["title"],
+                    "message": f"❌ Pre-review gate blocked deliverable for: {item['title']} ({validation_reason}).",
+                    "preview": deliverable[:200] if deliverable else "",
+                })
+
+                logger.warning(
+                    "Pre-review gate blocked item=%s by %s: %s",
+                    backlog_item_id,
+                    agent.get("name") or agent["role"],
+                    validation_reason,
+                )
+                return
+
+            artifact_targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
+            if artifact_targets:
+                workspace_root = await asyncio.to_thread(_resolve_workspace_root, sprint["company_id"])
+                if not workspace_root:
+                    await asyncio.to_thread(
+                        _update_item_status,
+                        item["id"],
+                        "in_progress",
+                        comment_text="Artifact materialization skipped: workspace path not configured",
+                        comment_author="System",
+                    )
+                    logger.warning("Artifact materialization skipped for item=%s: missing workspace root", item["id"])
+                else:
+                    try:
+                        await nats_client.publish(
+                            "workspace.generate",
+                            {
+                                "workspace_root": workspace_root,
+                                "files": artifact_targets,
+                                "interaction_id": f"task-{item['id']}",
+                            },
+                        )
+                        await asyncio.to_thread(
+                            _update_item_status,
+                            item["id"],
+                            "in_progress",
+                            comment_text=f"Artifact materialization requested for: {', '.join(a['path'] for a in artifact_targets)}",
+                            comment_author="System",
+                        )
+                    except Exception as e:
+                        await asyncio.to_thread(
+                            _update_item_status,
+                            item["id"],
+                            "in_progress",
+                            comment_text=f"Artifact materialization request failed: {str(e)[:240]}",
+                            comment_author="System",
+                        )
+                        logger.warning("Artifact materialization request failed for item=%s: %s", item["id"], e)
 
             # 4. Save result and mark as in_review.
             await asyncio.to_thread(
@@ -321,6 +520,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
     - ``in_review`` items get reviewed by QA and moved to ``done``.
     - ``blocked`` items get retried once (moved back to ``todo`` for re-dispatch).
     """
+    # Items blocked by QA in this same cycle must not be auto-retried below.
+    quality_gate_blocked_ids: set[int] = set()
+
     with Session(engine) as session:
         # --- Review: in_review → done ---
         in_review = session.exec(
@@ -357,8 +559,49 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     comments = []
             deliverable = comments[-1].get("text", "") if comments else ""
 
+            # Prevent infinite review loops when QA repeatedly fails.
+            qa_review_failures = sum(
+                1
+                for c in comments
+                if c.get("author") == "System" and "qa review failed" in c.get("text", "").lower()
+            )
+            if qa_review_failures >= MAX_QA_REVIEW_FAILURES:
+                item.status = "blocked"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+                session.commit()
+
+                await _publish_glassroom(nats_client, sprint.id, {
+                    "type": "error",
+                    "agent": reviewer_dict["name"],
+                    "role": reviewer_dict["role"],
+                    "task": f"Reviewing: {item.title}",
+                    "message": f"❌ {reviewer_dict['name']} review failed {MAX_QA_REVIEW_FAILURES} times for: {item.title}. Marked as blocked.",
+                })
+
+                logger.warning("Review retries exhausted for item=%s; marked blocked", item.id)
+                continue
+
             if not deliverable:
-                # Nothing to review — skip
+                comments.append({
+                    "author": "System",
+                    "text": "QA review aborted: no deliverable found in task comments.",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                item.comments = comments
+                item.status = "blocked"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+                session.commit()
+
+                await _publish_glassroom(nats_client, sprint.id, {
+                    "type": "error",
+                    "agent": reviewer_dict["name"],
+                    "role": reviewer_dict["role"],
+                    "task": f"Reviewing: {item.title}",
+                    "message": f"❌ {reviewer_dict['name']} cannot review {item.title}: missing deliverable. Marked as blocked.",
+                })
+
                 continue
 
             # Build review prompt
@@ -383,31 +626,109 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     _call_llm_for_review, reviewer_dict, review_prompt
                 )
 
+                normalized_review = (review_result or "").strip()
+                needs_work = normalized_review.upper().startswith("NEEDS WORK:")
+
                 # Append review comment
                 comments.append({
                     "author": reviewer_dict["name"],
-                    "text": review_result[:2000],
+                    "text": normalized_review[:2000],
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+
+                previous_reworks = sum(
+                    1
+                    for c in comments[:-1]
+                    if c.get("author") == reviewer_dict["name"]
+                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                )
+
+                autopilot_rework_allowed = (
+                    needs_work
+                    and AUTOPILOT_QA_REWORK_ENABLED
+                    and previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+                )
+
+                item.comments = comments
+                if needs_work:
+                    item.status = "todo" if autopilot_rework_allowed else "blocked"
+                else:
+                    item.status = "done"
+                item.updated_at = datetime.now(timezone.utc)
+
+                if needs_work:
+                    if autopilot_rework_allowed:
+                        comments.append({
+                            "author": "System",
+                            "text": f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                    else:
+                        comments.append({
+                            "author": "System",
+                            "text": "QA quality gate failed — task blocked pending manual triage.",
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        quality_gate_blocked_ids.add(item.id)
+
+                    item.comments = comments
+
+                session.add(item)
+                session.commit()
+
+                if needs_work:
+                    if autopilot_rework_allowed:
+                        await _publish_glassroom(nats_client, sprint.id, {
+                            "type": "status",
+                            "agent": "System",
+                            "role": "System",
+                            "task": f"Reviewed: {item.title}",
+                            "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
+                            "preview": normalized_review[:200],
+                        })
+                        logger.info("Reviewed item=%s → todo (autopilot rework) by %s [reworks=%s/%s]", item.id, reviewer_dict["name"], previous_reworks + 1, AUTOPILOT_MAX_REWORK_CYCLES)
+                    else:
+                        await _publish_glassroom(nats_client, sprint.id, {
+                            "type": "error",
+                            "agent": reviewer_dict["name"],
+                            "role": reviewer_dict["role"],
+                            "task": f"Reviewed: {item.title}",
+                            "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
+                            "preview": normalized_review[:200],
+                        })
+                        logger.info("Reviewed item=%s → blocked (needs work gate) by %s [reworks=%s/%s]", item.id, reviewer_dict["name"], previous_reworks + 1, AUTOPILOT_MAX_REWORK_CYCLES)
+                else:
+                    await _publish_glassroom(nats_client, sprint.id, {
+                        "type": "agent_complete",
+                        "agent": reviewer_dict["name"],
+                        "role": reviewer_dict["role"],
+                        "task": f"Reviewed: {item.title}",
+                        "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
+                        "preview": normalized_review[:200],
+                    })
+
+                    logger.info("Reviewed item=%s → done by %s", item.id, reviewer_dict["name"])
+
+            except Exception as e:
+                logger.warning("Review failed for item=%s: %s", item.id, e)
+
+                comments.append({
+                    "author": "System",
+                    "text": f"QA review failed — will retry automatically. Reason: {str(e)[:300]}",
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
                 item.comments = comments
-                item.status = "done"
                 item.updated_at = datetime.now(timezone.utc)
                 session.add(item)
                 session.commit()
 
                 await _publish_glassroom(nats_client, sprint.id, {
-                    "type": "agent_complete",
+                    "type": "error",
                     "agent": reviewer_dict["name"],
                     "role": reviewer_dict["role"],
-                    "task": f"Reviewed: {item.title}",
-                    "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
-                    "preview": review_result[:200],
+                    "task": f"Reviewing: {item.title}",
+                    "message": f"❌ {reviewer_dict['name']} review failed for: {item.title}. Will retry.",
                 })
-
-                logger.info("Reviewed item=%s → done by %s", item.id, reviewer_dict["name"])
-
-            except Exception as e:
-                logger.warning("Review failed for item=%s: %s", item.id, e)
 
         # --- Retry: blocked → todo (one retry only) ---
         blocked = session.exec(
@@ -415,12 +736,39 @@ async def _review_cycle(nats_client: NATSClient) -> None:
         ).all()
 
         for item in blocked:
+            if item.id in quality_gate_blocked_ids:
+                continue
+
             comments = item.comments or []
             if isinstance(comments, str):
                 try:
                     comments = json.loads(comments)
                 except Exception:
                     comments = []
+
+            # QA quality-gate blocks require manual triage; do not auto-retry.
+            qa_quality_gate_block = any(
+                (c.get("author") == "System" and "manual triage" in str(c.get("text", "")).lower())
+                or (c.get("author") == "System" and "qa quality gate failed" in str(c.get("text", "")).lower())
+                or (c.get("author") == "QA" and str(c.get("text", "")).upper().startswith("NEEDS WORK:"))
+                or str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                for c in comments
+            )
+            if qa_quality_gate_block:
+                continue
+
+            # Only retry blocked items that failed for transient/system reasons.
+            retryable_system_block = any(
+                c.get("author") == "System"
+                and (
+                    "qa review failed" in str(c.get("text", "")).lower()
+                    or "agent error:" in str(c.get("text", "")).lower()
+                )
+                for c in comments
+            )
+            if not retryable_system_block:
+                continue
+
             # Only retry once — check if there's already a retry comment
             retry_count = sum(1 for c in comments if c.get("author") == "System" and "retry" in c.get("text", "").lower())
             if retry_count >= 1:
@@ -460,12 +808,21 @@ def _call_llm_for_review(agent: Dict[str, Any], prompt: str) -> str:
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
-    return client.chat(
+    result = client.chat(
         model=agent.get("model", "deepseek-coder"),
         messages=messages,
-        temperature=0.3,
-        max_tokens=500,
+        role=agent.get("role", "QA"),
     )
+
+    if result.get("error"):
+        raise RuntimeError(f"LLM error: {result['error']}")
+
+    content = (
+        result.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+    )
+    return content.strip()
 
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:

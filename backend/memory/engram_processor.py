@@ -20,6 +20,7 @@ from pydantic import BaseModel
 import neo4j
 
 from llm.model_factory import get_llm_for_role, AgentRole
+from app.memory_client import MemoryClient
 
 logger = logging.getLogger(__name__)
 
@@ -92,22 +93,13 @@ class DeepSeekEngramProcessor:
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Burn an Engram into the Temporal Knowledge Graph.
+        Burn an Engram into the Temporal Knowledge Graph and Vector Store.
         
         This method:
         1. Uses DeepSeek to process the decision
         2. Creates an Episodic node in Neo4j
-        3. Links it to relevant Semantic nodes
-        
-        Args:
-            agent_id: ID of the agent making the decision
-            role: Role of the agent (Developer, QA, etc.)
-            decision_summary: Summary of the decision/action
-            related_semantic_refs: References to related Semantic nodes
-            metadata: Additional metadata
-            
-        Returns:
-            Dict with engram_id and status
+        3. Stores the summary in pgvector for semantic RAG
+        4. Links it to relevant Semantic nodes in Neo4j
         """
         if related_semantic_refs is None:
             related_semantic_refs = []
@@ -120,7 +112,7 @@ class DeepSeekEngramProcessor:
         # Use DeepSeek to process and summarize the decision
         processed_summary = self._process_with_deepseek(decision_summary, engram_type)
         
-        # Create the Engram in Neo4j
+        # 1. Create the Engram in Neo4j
         engram_id = self._create_engram_node(
             engram_type=engram_type,
             agent_id=agent_id,
@@ -129,7 +121,20 @@ class DeepSeekEngramProcessor:
             metadata=metadata
         )
         
-        # Create temporal edges to related Semantic nodes
+        # 2. Store in pgvector for semantic RAG
+        try:
+            vector_metadata = {
+                **metadata,
+                "engram_id": engram_id,
+                "engram_type": engram_type.value,
+                "agent_role": role,
+                "is_engram": True
+            }
+            self._store_in_vector_db(processed_summary, vector_metadata)
+        except Exception as e:
+            logger.warning(f"Failed to store engram vector: {e}")
+
+        # 3. Create temporal edges to related Semantic nodes
         if related_semantic_refs:
             self._create_temporal_edges(engram_id, related_semantic_refs)
         
@@ -141,6 +146,22 @@ class DeepSeekEngramProcessor:
             "status": "burned",
             "summary": processed_summary[:200]
         }
+
+    def _store_in_vector_db(self, content: str, metadata: Dict[str, Any]):
+        """Helper to store in pgvector only."""
+        from llm_proxy_client import LLMProxyClient
+        from sqlmodel import Session, text
+        from database import engine
+        
+        client = LLMProxyClient()
+        embedding = client.embed(content)
+        if embedding:
+            with Session(engine) as session:
+                session.execute(
+                    text("INSERT INTO vector_memory (content, embedding, metadata) VALUES (:c, :e, :m)"),
+                    {"c": content, "e": json.dumps(embedding), "m": json.dumps(metadata)}
+                )
+                session.commit()
     
     def _determine_engram_type(self, role: str, metadata: Dict[str, Any]) -> EngramType:
         """
@@ -319,22 +340,53 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         role_filter: Optional[str] = None,
     ) -> str:
         """
-        RAG over the Temporal Knowledge Graph.
+        Improved RAG: Combined Semantic (pgvector) + Structural (Neo4j) search.
+        
+        Decisions are ranked by semantic similarity to the story and 
+        complemented by the architectural context from the graph.
+        """
+        # 1. Semantic Search via pgvector
+        semantic_results = []
+        try:
+            mem_client = MemoryClient(neo4j_driver=self.driver)
+            semantic_results = mem_client.search_similar(story, limit=limit)
+        except Exception as e:
+            logger.warning(f"Semantic engram search failed: {e}")
 
-        Searches Episodic nodes whose summary contains keywords from the story,
-        ranks them by relevance (keyword-match count) and recency, and follows
-        MODIFIED_BY / RELATED_TO edges to surface connected semantic nodes.
+        # 2. Structural/Keyword Search via Neo4j
+        graph_context = self._query_graph_rag(story, limit=limit, role_filter=role_filter)
+        
+        # 3. Combine and Format
+        if not semantic_results and not graph_context:
+            return ""
 
-        Falls back to the most-recent engrams when no keywords match.
+        lines = ["--- Past Architectural Decisions (RAG Context) ---"]
+        
+        if semantic_results:
+            lines.append("## Semantic Matches (from pgvector):")
+            for res in semantic_results:
+                sim = res.get("similarity", 0)
+                content = res.get("content", "")[:400]
+                lines.append(f"- [Score: {sim:.2f}] {content}")
+        
+        if graph_context:
+            # Strip original headers from internal graph RAG output
+            clean_graph = graph_context.replace("--- Past Architectural Decisions (RAG Context) ---", "").replace("--- End of RAG Context ---", "").strip()
+            if clean_graph:
+                lines.append("\n## Graph Relationships (from Neo4j):")
+                lines.append(clean_graph)
 
-        Args:
-            story:       The current user story / task description.
-            role_filter: Optional agent role to restrict results (e.g. "Architect").
-            limit:       Maximum number of engrams to return.
+        lines.append("--- End of RAG Context ---")
+        return "\n".join(lines)
 
-        Returns:
-            A formatted context string ready for LLM injection, or "" when the
-            TKG has no engrams at all.
+    def _query_graph_rag(
+        self,
+        story: str,
+        limit: int = 5,
+        role_filter: Optional[str] = None,
+    ) -> str:
+        """
+        Keyword-based search over the Temporal Knowledge Graph.
         """
         normalized = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in story.lower())
         stop_words = {
@@ -392,7 +444,7 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
                 result = session.run(cypher, params)
                 records = [dict(r) for r in result]
         except Exception as e:
-            logger.warning("RAG query failed, continuing without context: %s", e)
+            logger.warning("Graph RAG query failed: %s", e)
             return ""
 
         if not records:

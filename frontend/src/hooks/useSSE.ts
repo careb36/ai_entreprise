@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-interface UseSSEOptions {
-  onMessage?: (data: any) => void
-  onError?: (error: Event) => void
-}
-
 export function useSSE(url: string, onMessage?: (data: any) => void, onError?: (error: any) => void) {
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)

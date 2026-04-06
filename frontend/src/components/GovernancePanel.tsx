@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../services/api'
+import { 
+  usePendingApprovals, 
+  useApproveTask 
+} from '../hooks/useQueries'
 import { ShieldCheck, CheckCircle2, XCircle, Loader2, RefreshCw, AlertTriangle, Info } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,12 +39,13 @@ function ConfirmModal({
 }: {
   task: PendingTask
   decision: 'approved' | 'rejected'
-  onConfirm: () => void
+  onConfirm: (feedback?: string) => void
   onCancel: () => void
   loading: boolean
 }) {
   const { t } = useTranslation()
   const isApprove = decision === 'approved'
+  const [feedback, setFeedback] = useState('')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -55,9 +59,23 @@ function ConfirmModal({
           </h3>
         </div>
 
-        <div className="bg-surface-800 rounded-lg p-3 mb-5 border border-surface-700">
+        <div className="bg-surface-800 rounded-lg p-3 mb-4 border border-surface-700">
           <p className="text-sm text-gray-300 leading-relaxed">{task.description}</p>
           <p className="text-xs text-gray-500 mt-2 font-mono">{task.interaction_id}</p>
+        </div>
+
+        <div className="mb-5">
+          <label className="input-label flex items-center gap-1.5">
+            <Info size={12} />
+            {t('governance.feedback', 'Review feedback')} <span className="text-gray-600 font-normal">({t('common.optional', 'optional')})</span>
+          </label>
+          <textarea
+            value={feedback}
+            onChange={e => setFeedback(e.target.value)}
+            rows={3}
+            placeholder={isApprove ? 'Looks good! Go ahead.' : 'Reason for rejection...'}
+            className="textarea w-full text-sm"
+          />
         </div>
 
         <div className="flex gap-3 justify-end">
@@ -65,7 +83,7 @@ function ConfirmModal({
             {t('common.cancel', 'Cancel')}
           </button>
           <button
-            onClick={onConfirm}
+            onClick={() => onConfirm(feedback)}
             disabled={loading}
             className={`btn ${isApprove ? 'btn-success' : 'btn-danger'}`}
           >
@@ -82,56 +100,36 @@ function ConfirmModal({
 
 export const GovernancePanel: React.FC = () => {
   const { t } = useTranslation()
-  const [tasks, setTasks] = useState<PendingTask[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [actioningId, setActioningId] = useState<number | null>(null)
+  const { data, isLoading, isError, refetch } = usePendingApprovals()
+  const approveMutation = useApproveTask()
+
   const [confirm, setConfirm] = useState<{ task: PendingTask; decision: 'approved' | 'rejected' } | null>(null)
   const [page, setPage] = useState(0)
   const PER_PAGE = 10
 
-  const fetchTasks = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await api.get<{ pending_approvals: PendingTask[] }>('/v1/pending_approvals')
-      setTasks(res.pending_approvals ?? [])
-    } catch {
-      // Fallback to empty — backend may not have any pending
-      setTasks([])
-      setError(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const tasks = (data?.pending_approvals || []) as PendingTask[]
+  const actioningId = approveMutation.isPending ? approveMutation.variables?.taskId : null
 
-  useEffect(() => { fetchTasks() }, [fetchTasks])
-
-  async function executeDecision(taskId: number, decision: 'approved' | 'rejected') {
-    setActioningId(taskId)
-    setConfirm(null)
-    try {
-      await api.approveTask(taskId, 'Manager', decision)
-      setTasks(prev => prev.filter(t => t.id !== taskId))
-    } catch (e: any) {
-      setError(e.message ?? t('governance.actionError', 'Action failed'))
-    } finally {
-      setActioningId(null)
-    }
+  async function executeDecision(taskId: number, decision: 'approved' | 'rejected', feedback?: string) {
+    approveMutation.mutate({ taskId, decision, approverName: 'Manager', feedback }, {
+      onSettled: () => setConfirm(null)
+    })
   }
 
   const paginated = tasks.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
   const totalPages = Math.ceil(tasks.length / PER_PAGE)
 
+  const error = (approveMutation.error as any)?.message || (isError ? t('governance.fetchError') : null)
+
   // ── Empty state ─────────────────────────────────────────────────────────────
 
-  if (!loading && tasks.length === 0) {
+  if (!isLoading && tasks.length === 0) {
     return (
       <div className="empty-state py-16">
         <CheckCircle2 size={40} className="text-status-success mx-auto mb-3" />
         <p className="font-semibold text-gray-300">{t('governance.noPending')}</p>
         <p className="text-sm text-gray-500 mt-1">{t('governance.noPendingHint', 'All AI actions are within autonomy limits')}</p>
-        <button onClick={fetchTasks} className="btn btn-ghost btn-sm mt-4 flex items-center gap-1.5 mx-auto">
+        <button onClick={() => refetch()} className="btn btn-ghost btn-sm mt-4 flex items-center gap-1.5 mx-auto">
           <RefreshCw size={13} /> {t('common.refresh', 'Refresh')}
         </button>
       </div>
@@ -151,15 +149,15 @@ export const GovernancePanel: React.FC = () => {
             {tasks.length} {t('governance.pending')}
           </span>
         )}
-        <button onClick={fetchTasks} disabled={loading} className="btn-ghost btn-sm flex items-center gap-1.5 ml-auto">
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+        <button onClick={() => refetch()} disabled={isLoading} className="btn-ghost btn-sm flex items-center gap-1.5 ml-auto">
+          <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
           <span className="hidden sm:inline">{t('common.refresh', 'Refresh')}</span>
         </button>
       </div>
 
       {error && <div className="alert-error mb-4 flex items-center gap-2"><AlertTriangle size={14} />{error}</div>}
 
-      {loading ? (
+      {isLoading ? (
         <div className="space-y-3">
           {[1,2,3].map(i => <div key={i} className="skeleton h-24 rounded-lg" />)}
         </div>
@@ -237,4 +235,3 @@ export const GovernancePanel: React.FC = () => {
     </div>
   )
 }
-

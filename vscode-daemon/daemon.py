@@ -119,11 +119,9 @@ async def handle_msg(nc, msg):
     """
     Unified NATS message handler for ``workspace.generate`` and ``workspace.execute``.
 
-    ``workspace.generate`` flow:
-    1. Write all files provided in the payload to the workspace directory.
-    2. Initialise a git repository (idempotent) and commit the generated files
-       with a structured message that embeds governance metadata.
-    3. Optionally reply to the request-reply subject with a summary.
+     ``workspace.generate`` flow:
+     1. Write all files provided in the payload to the workspace directory.
+     2. Optionally reply to the request-reply subject with a summary.
 
     ``workspace.execute`` flow:
     1. Run the requested shell command inside the workspace directory.
@@ -141,13 +139,7 @@ async def handle_msg(nc, msg):
         # Write files
         files = data.get("files", [])
         write_results = write_files(workspace_path, files)
-        
-        # Git commit
-        subprocess.run(["git", "init"], cwd=workspace_path, capture_output=True)
-        subprocess.run(["git", "add", "."], cwd=workspace_path, capture_output=True)
-        commit_msg = create_commit_message(data.get("interaction_id", "ui"), "ai-dev", "hash")
-        subprocess.run(["git", "commit", "-m", commit_msg], cwd=workspace_path, capture_output=True)
-        
+
         response = {"ok": True, "files": len(write_results), "path": workspace_path}
         if reply_to:
             await nc.publish(reply_to, json.dumps(response).encode())
@@ -168,15 +160,22 @@ async def handle_msg(nc, msg):
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
 
-    await msg.ack()
+    if hasattr(msg, "ack"):
+        try:
+            await msg.ack()
+        except Exception:
+            pass
 
 async def main():
     logger.info(f"Connecting to NATS at {NATS_URL}...")
     nc = await nats.connect(NATS_URL)
     
     # Subscriptions
-    sub_gen = await nc.subscribe("workspace.generate", cb=lambda m: handle_msg(nc, m))
-    sub_exec = await nc.subscribe("workspace.execute", cb=lambda m: handle_msg(nc, m))
+    async def _callback(msg):
+        await handle_msg(nc, msg)
+
+    sub_gen = await nc.subscribe("workspace.generate", cb=_callback)
+    sub_exec = await nc.subscribe("workspace.execute", cb=_callback)
     
     logger.info("Daemon is ready for generation and execution tasks.")
     while True:

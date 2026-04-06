@@ -11,20 +11,13 @@ Endpoints:
 """
 
 import asyncio
-import json
-from datetime import date
-from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Depends, Request
-from sqlmodel import Session, select, text
+from sqlmodel import Session
 
 from database import get_session, get_neo4j_driver
-from models import (
-    Company, Agent, ProjectCredential, ProjectDiscovery,
-    BusinessUnit, Sprint, BacklogItem, OutboxEvent,
-)
-from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from services.discovery_service import DiscoveryService
-from services.sprint_planner import plan_foundation_sprint
+from services.company_service import CompanyService
+from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
@@ -34,188 +27,53 @@ router = APIRouter(prefix="/v1", tags=["Enterprise"])
 async def init_company(req: CompanyInitRequest, session: Session = Depends(get_session)):
     """
     Bootstrap a new company tenant with its AI agents and project credentials.
-
-    Steps:
-    1. Insert the ``Company`` row and flush to obtain its PK.
-    2. Insert one ``Agent`` row per entry in ``req.agents``.
-    3. Insert ``ProjectCredential`` rows for each non-"none" permission entry.
-    4. Seed a ``(:Company)`` root node in Neo4j for the Temporal Knowledge Graph.
-
-    The Neo4j step is non-critical — a failure is logged but does not roll
-    back the Postgres transaction.
+    Delegates to CompanyService for transactional logic and team planning.
     """
-    company = Company(
-        company_name=req.company_name,
-        default_sprint_length_days=req.default_sprint_length_days,
-        autonomy_level=req.autonomy_level,
-    )
-    session.add(company)
-    session.flush()  # Obtain company.id before committing
-
-    for agent_data in req.agents:
-        session.add(Agent(
-            company_id=company.id,
-            name=agent_data.get("name", ""),
-            role=agent_data.get("role"),
-            persona=agent_data.get("persona"),
-            seniority=agent_data.get("seniority", "Senior"),
-            specialty=agent_data.get("specialty", ""),
-            model=agent_data.get("model", ""),
-            system_prompt=agent_data.get("system_prompt"),
-            token_budget=agent_data.get("token_budget", 500000),
-        ))
-
-    if req.permissions:
-        for cred_type, access_level in req.permissions.items():
-            # Skip credentials explicitly denied at tenant level.
-            if access_level != "none":
-                session.add(ProjectCredential(
-                    company_id=company.id,
-                    credential_type=cred_type,
-                    access_level=access_level,
-                    encrypted_value="vault_encrypted_placeholder",
-                ))
-
-    # ── PO plans the foundation sprint via LLM ──────────────────────────────
-    plan = plan_foundation_sprint(
-        company_name=req.company_name,
-        agents=req.agents,
-        detected_stack=req.detected_stack,
-        project_path=req.project_path,
-    )
-
-    sprint = Sprint(
-        company_id=company.id,
-        sprint_name="Sprint 0 — Foundations",
-        start_date=date.today().isoformat(),
-        duration_days=req.default_sprint_length_days or 14,
-        status="active",
-        goal=plan.get("goal", f"Foundation sprint for {req.company_name}"),
-    )
-    session.add(sprint)
-    session.flush()
-
-    # Insert the PO-planned backlog items into the sprint.
-    for task in plan.get("tasks", []):
-        bi = BacklogItem(
-            sprint_id=sprint.id,
-            title=task.get("title", "Untitled task"),
-            description=task.get("description", ""),
-            priority=task.get("priority", "medium"),
-            assignee=task.get("assignee", "PO"),
-            status="todo",
-        )
-        session.add(bi)
-        session.flush()  # Obtain bi.id before creating the outbox event
-
-        # Outbox entry — delivered to NATS by process_outbox, consumed by task_worker.
-        nats_payload = {
-            "subject": "task.assign",
-            "message": {
-                "backlog_item_id": bi.id,
-                "interaction_id": str(uuid4()),
-                "agent": task.get("assignee", "PO"),
-                "sprint_id": sprint.id,
-            },
-        }
-        session.add(OutboxEvent(
-            aggregate_type="backlog_item",
-            aggregate_id=str(bi.id),
-            event_type="nats_publish",
-            payload=nats_payload,
-        ))
-
-    session.commit()
-
-    # Seed a root Company node in Neo4j for the Temporal Knowledge Graph.
+    service = CompanyService(session)
     try:
-        driver = get_neo4j_driver()
-        with driver.session() as neo_session:
-            neo_session.run(
-                "CREATE (c:Company {id: $id, name: $name, created: timestamp()})",
-                id=company.id,
-                name=req.company_name,
-            )
-    except Exception as e:
-        logger.error(f"Neo4j seed failed (non-critical): {e}")
-
-    task_count = len(plan.get("tasks", []))
-    logger.info(
-        f"Company '{req.company_name}' initialized: "
-        f"sprint_id={sprint.id}, {task_count} foundation tasks"
-    )
-    return {
-        "company_id": company.id,
-        "sprint_id": sprint.id,
-        "task_count": task_count,
-        "message": f"Company initialized with {task_count} foundation tasks",
-    }
+        result = service.init_company(
+            company_name=req.company_name,
+            agents=req.agents,
+            default_sprint_length_days=req.default_sprint_length_days,
+            autonomy_level=req.autonomy_level,
+            permissions=req.permissions,
+            project_path=req.project_path,
+            detected_stack=req.detected_stack,
+        )
+        return result
+    except Exception as exc:
+        logger.error(f"Company initialization failed: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error during initialization")
 
 
 @router.post("/approve_task", tags=["Enterprise"])
 async def approve_task(req: ApprovalRequest, session: Session = Depends(get_session)):
     """
     Human-in-the-Loop governance: approve or reject an AI-generated task.
-
-    Updates ``task_queue.approval_status`` and resets the task status to
-    ``"pending"`` so the workflow resumes processing.  Returns 404 if the
-    task does not exist.
     """
-    new_status = "approved" if req.decision == "approved" else "rejected"
-    result = session.exec(
-        text("UPDATE task_queue SET approval_status = :s, approved_by = :a, status = 'pending' WHERE id = :id RETURNING id")
-        .bindparams(s=new_status, a=req.approver_name, id=req.task_id)
-    ).fetchone()
-    if not result:
-        raise HTTPException(status_code=404, detail="Task not found")
-    session.commit()
-    return {"status": "success", "task_id": req.task_id, "new_status": new_status}
+    service = CompanyService(session)
+    try:
+        return service.approve_task(req.task_id, req.approver_name, req.decision, req.feedback)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.get("/enterprise/quotas", tags=["Enterprise"])
 async def get_quotas(company_id: int, session: Session = Depends(get_session)):
     """
     Return token usage and limits for all business units of a company.
-
-    Useful for the governance dashboard to visualise cost burn per department.
     """
-    units = session.exec(
-        select(BusinessUnit).where(BusinessUnit.company_id == company_id)
-    ).all()
-    return [{"unit": u.unit_name, "limit": u.token_quota_limit, "used": u.token_quota_used} for u in units]
+    service = CompanyService(session)
+    return service.get_quotas(company_id)
 
 
 @router.get("/analytics/summary", tags=["Enterprise"])
 async def get_project_health(sprint_id: int, session: Session = Depends(get_session)):
     """
     AI Scrum Master: generate a sprint health report from audit and backlog data.
-
-    Aggregates total tokens consumed and counts backlog items per status column.
-    The AI executive summary is a deterministic template (future enhancement:
-    replace with an LLM call for adaptive commentary).
     """
-    total_tokens = session.exec(
-        text("SELECT COALESCE(SUM(cost_tokens), 0) FROM audit_log WHERE interaction_id IN (SELECT interaction_id FROM task_queue)")
-    ).scalar() or 0
-
-    rows = session.exec(
-        text("SELECT status, COUNT(*) FROM backlog_items WHERE sprint_id = :sid GROUP BY status")
-        .bindparams(sid=sprint_id)
-    ).all()
-    status_counts = {r[0]: r[1] for r in rows}
-
-    ai_summary = (
-        f"The sprint is healthy. {status_counts.get('closed', 0)} tasks completed. "
-        f"Total investment: {total_tokens} tokens. "
-        "Velocity is stable, no major blockers detected."
-    )
-    return {
-        "sprint_id": sprint_id,
-        "health_score": 92,
-        "tokens_consumed": total_tokens,
-        "tasks_status": status_counts,
-        "ai_executive_summary": ai_summary,
-    }
+    service = CompanyService(session)
+    return service.get_project_health(sprint_id)
 
 
 @router.get("/models", tags=["Enterprise"])

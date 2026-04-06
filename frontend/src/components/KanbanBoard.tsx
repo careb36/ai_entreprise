@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BacklogItem, SprintBoard } from '../services/api'
+import { BacklogItem } from '../services/api'
 import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  LayoutGrid, Circle, ArrowRight, GitPullRequest,
+  Circle, ArrowRight, GitPullRequest,
   CheckCircle2, AlertTriangle, AlertCircle, RefreshCw,
   Loader2, GripVertical
 } from 'lucide-react'
@@ -27,6 +27,39 @@ const COLUMNS = [
 ]
 
 const VALID_STATUSES: BacklogItem['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
+
+const QA_REWORK_LIMIT = 2
+const QA_FAILURE_LIMIT = 3
+
+function getQaMetrics(item: BacklogItem): { reworks: number; failures: number } {
+  const comments = Array.isArray(item.comments) ? item.comments : []
+  let reworks = 0
+  let failures = 0
+
+  for (const comment of comments) {
+    const author = String(comment.author || '').toLowerCase()
+    const text = String(comment.text || '').toLowerCase()
+
+    const isQaSignal = author === 'qa' || author === 'system'
+    if (!isQaSignal) continue
+
+    if (text.startsWith('needs work:') || text.includes('requested rework')) {
+      reworks += 1
+    }
+
+    if (text.includes('qa review failed') || text.includes('cannot review')) {
+      failures += 1
+    }
+  }
+
+  return { reworks, failures }
+}
+
+function metricBadgeClass(value: number, limit: number): string {
+  if (value >= limit) return 'bg-red-900/40 text-red-300 border-red-700/40'
+  if (value >= Math.max(1, limit - 1)) return 'bg-yellow-900/40 text-yellow-300 border-yellow-700/40'
+  return 'bg-surface-800 text-gray-300 border-surface-700'
+}
 
 // ── SortableCard ───────────────────────────────────────────────────────────────
 
@@ -46,6 +79,8 @@ function ItemCard({
     transition,
     opacity: isDragging ? 0.4 : 1,
   }
+
+  const qaMetrics = getQaMetrics(item)
 
   return (
     <div
@@ -69,6 +104,22 @@ function ItemCard({
         <span className={`badge badge-priority-${item.priority}`}>{item.priority}</span>
         {item.assignee && (
           <span className="badge bg-brand-900/50 text-brand-300 border-brand-700/40">{item.assignee}</span>
+        )}
+        {qaMetrics.reworks > 0 && (
+          <span
+            className={`badge border ${metricBadgeClass(qaMetrics.reworks, QA_REWORK_LIMIT)}`}
+            title={`QA reworks: ${qaMetrics.reworks}/${QA_REWORK_LIMIT}`}
+          >
+            QA rework {qaMetrics.reworks}/{QA_REWORK_LIMIT}
+          </span>
+        )}
+        {qaMetrics.failures > 0 && (
+          <span
+            className={`badge border ${metricBadgeClass(qaMetrics.failures, QA_FAILURE_LIMIT)}`}
+            title={`QA failures: ${qaMetrics.failures}/${QA_FAILURE_LIMIT}`}
+          >
+            QA fail {qaMetrics.failures}/{QA_FAILURE_LIMIT}
+          </span>
         )}
         {item.comments?.length > 0 && (
           <span className="text-xs text-gray-500">💬 {item.comments.length}</span>

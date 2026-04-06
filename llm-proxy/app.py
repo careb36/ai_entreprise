@@ -15,25 +15,27 @@ from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
 
-# --- OpenTelemetry (Temporarily Disabled for Python 3.14 compatibility) ---
-# from opentelemetry import trace
-# from opentelemetry.trace import StatusCode
-# from opentelemetry.sdk.trace import TracerProvider
-# from opentelemetry.sdk.trace.export import BatchSpanProcessor
-# from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-# from opentelemetry.instrumentation.flask import FlaskInstrumentor
-# from opentelemetry.instrumentation.requests import RequestsInstrumentor
+# --- OpenTelemetry ---
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
 app = Flask(__name__)
 
-# tracer_provider = TracerProvider()
-# otlp_exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
-# span_processor = BatchSpanProcessor(otlp_exporter)
-# tracer_provider.add_span_processor(span_processor)
-# trace.set_tracer_provider(tracer_provider)
-# FlaskInstrumentor().instrument_app(app)
-# RequestsInstrumentor().instrument()
-# _tracer = trace.get_tracer(__name__)
+resource = Resource.create({SERVICE_NAME: "llm-proxy"})
+tracer_provider = TracerProvider(resource=resource)
+otlp_exporter = OTLPSpanExporter(endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318") + "/v1/traces")
+span_processor = BatchSpanProcessor(otlp_exporter)
+tracer_provider.add_span_processor(span_processor)
+trace.set_tracer_provider(tracer_provider)
+FlaskInstrumentor().instrument_app(app)
+RequestsInstrumentor().instrument()
+_tracer = trace.get_tracer(__name__)
 
 # --- Config & Logging ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

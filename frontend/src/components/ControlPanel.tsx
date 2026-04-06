@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../services/api'
+import { 
+  useHealth, 
+  useStartSprint 
+} from '../hooks/useQueries'
 import {
-  PanelLeft, Play, Rocket, Settings, Zap,
+  Play, Rocket, Settings, Zap,
   Brain, Loader2, CheckCircle2, AlertCircle
 } from 'lucide-react'
 
@@ -13,11 +16,6 @@ interface SprintConfig {
   durationDays: number
 }
 
-interface SystemStatus {
-  backend: 'ok' | 'error' | 'loading'
-  nats: 'ok' | 'unknown'
-}
-
 interface ControlPanelProps {
   onSprintStart?: (sprintId: number) => void
 }
@@ -26,50 +24,47 @@ const AGENT_ROLE_KEYS = ['PO', 'SM', 'Dev', 'QA', 'DevOps'] as const
 
 export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
   const { t } = useTranslation()
-  const [isLoading, setIsLoading] = useState(false)
   const [config, setConfig] = useState<SprintConfig>({
     sprintName: `Sprint ${new Date().getMonth() + 1}`,
     sprintGoal: '',
     model: 'gemini-pro',
     durationDays: 14
   })
-  const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [status, setStatus] = useState<SystemStatus>({ backend: 'loading', nats: 'unknown' })
 
-  // Poll backend health on mount
-  useEffect(() => {
-    api.health()
-      .then(d => setStatus({ backend: d.status === 'healthy' ? 'ok' : 'error', nats: d.nats ?? 'unknown' }))
-      .catch(() => setStatus({ backend: 'error', nats: 'unknown' }))
-  }, [])
+  const { data: healthData, status: backendStatus } = useHealth()
+  const startSprintMutation = useStartSprint()
 
-  async function handleStartSprint() {
-    if (!config.sprintGoal.trim()) {
-      setError(t('controlPanel.error'))
-      return
-    }
-    setIsLoading(true)
-    setError(null)
-    setSuccess(null)
-    try {
-      const response = await api.post<{ sprint_id: number }>('/v1/start_sprint', {
-        company_id: 1,
-        sprint_name: config.sprintName,
-        start_date: new Date().toISOString().split('T')[0],
-        duration_days: config.durationDays,
-        backlog_items: [{ title: config.sprintGoal, description: config.sprintGoal }]
-      })
-      setSuccess(`${t('controlPanel.success')} #${response.sprint_id}`)
-      onSprintStart?.(response.sprint_id)
-    } catch (e: any) {
-      setError(e.message || t('controlPanel.error'))
-    } finally {
-      setIsLoading(false)
-    }
+  const isLoading = startSprintMutation.isPending
+  const error = (startSprintMutation.error as any)?.message || null
+
+  const systemStatus = {
+    backend: backendStatus === 'pending' ? 'loading' : backendStatus === 'error' ? 'error' : 'ok',
+    nats: healthData?.status === 'healthy' ? 'ok' : 'unknown'
   }
 
-  const statusIcon = (s: 'ok' | 'error' | 'loading' | 'unknown') => {
+  async function handleStartSprint() {
+    if (!config.sprintGoal.trim()) return
+    
+    setSuccess(null)
+    
+    const payload = {
+      company_id: 1, // Default for demo
+      sprint_name: config.sprintName,
+      start_date: new Date().toISOString().split('T')[0],
+      duration_days: config.durationDays,
+      backlog_items: [{ title: config.sprintGoal, description: config.sprintGoal }]
+    }
+
+    startSprintMutation.mutate(payload, {
+      onSuccess: (response) => {
+        setSuccess(`${t('controlPanel.success')} #${response.sprint_id}`)
+        onSprintStart?.(response.sprint_id)
+      }
+    })
+  }
+
+  const statusIcon = (s: string) => {
     if (s === 'ok')      return <CheckCircle2 size={12} className="text-status-success" />
     if (s === 'error')   return <AlertCircle  size={12} className="text-status-error" />
     return <span className="w-2 h-2 rounded-full bg-gray-600 inline-block" />
@@ -177,13 +172,13 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
         </div>
         <div className="space-y-1.5 text-xs">
           {[
-            { label: 'Backend', state: status.backend },
-            { label: 'NATS',    state: status.nats    },
+            { label: 'Backend', state: systemStatus.backend },
+            { label: 'NATS',    state: systemStatus.nats    },
           ].map(({ label, state }) => (
             <div key={label} className="flex justify-between items-center">
               <span className="text-gray-500">{label}</span>
               <span className="flex items-center gap-1">
-                {statusIcon(state as any)}
+                {statusIcon(state)}
                 <span className={state === 'ok' ? 'text-status-success' : state === 'error' ? 'text-status-error' : 'text-gray-500'}>
                   {statusLabel(state)}
                 </span>
@@ -203,4 +198,3 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
     </div>
   )
 }
-

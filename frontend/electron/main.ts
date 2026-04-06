@@ -71,11 +71,11 @@ function createMenu() {
         },
         {
           label: 'Start Sprint',
-          click: () => mainWindow?.webContents.send('navigate', '/sprints/new')
+          click: () => mainWindow?.webContents.send('navigate', '/companies/new')
         },
         {
           label: 'Glassroom',
-          click: () => mainWindow?.webContents.send('navigate', '/glassroom')
+          click: () => mainWindow?.webContents.send('navigate', '/glassroom?sprint_id=1')
         }
       ]
     },

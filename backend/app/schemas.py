@@ -69,10 +69,12 @@ class DiscoveryRequest(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
-    """Payload for ``POST /v1/approve_task`` — human-in-the-loop governance step."""
+    """Payload for ``POST /v1/approve_task`` — human governance action."""
     task_id: int
     approver_name: str
     decision: str  # "approved" | "rejected"
+    feedback: Optional[str] = None
+
 
 
 class UserCreateRequest(BaseModel):
