@@ -15,148 +15,294 @@
 
 </div>
 
-👔 **¿No eres desarrollador o usuario técnico?** Por favor, lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para comprender cómo utilizar La Fabrique para automatizar la ingeniería de tu empresa.
+👔 **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
 
 ---
 
-## 📑 Índice
-- [🚀 Características Clave](#-características-clave)
-- [🏗️ Arquitectura](#️-arquitectura)
-- [🛠️ Stack Tecnológico](#️-stack-tecnológico)
-- [📥 Primeros Pasos](#-primeros-pasos)
-- [📖 Documentación de la API](#-documentación-de-la-api)
-- [📁 Estructura del Proyecto](#-estructura-del-proyecto)
-- [⚖️ Licencia](#️-licencia)
-- [🆘 Soporte](#-soporte--mantenimiento)
+## Índice
+
+- [Descripción General](#descripción-general)
+- [Arquitectura](#arquitectura)
+- [Stack Tecnológico](#stack-tecnológico)
+- [Configuración Local](#configuración-local)
+- [Orquestación de Agentes](#orquestación-de-agentes)
+- [GlassRoom](#glassroom)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Referencia de la API](#referencia-de-la-api)
+- [Licencia](#licencia)
 
 ---
 
-## 🚀 Características Clave
+## Descripción General
 
-- **🧠 Inteligencia de Agentes Híbrida**: Orquesta Gemini (Arquitecto/PO) y DeepSeek (Dev/QA) para lograr el equilibrio perfecto entre razonamiento y programación rentable.
-- **🔄 Gestión del Ciclo de Vida Completo**: Capaz de crear nuevos proyectos desde cero, evolucionar código existente generado por IA y mantener/mejorar sistemas legados escritos por humanos.
-- **📜 Bandeja de Salida Transaccional (Outbox)**: Garantiza la entrega de mensajes NATS sincronizando la publicación de eventos con las transacciones de Postgres.
-- **🔄 Checkpointing de LangGraph**: Suspensión y reanudación asíncrona de flujos de trabajo mediante `MemorySaver`.
-- **🛡️ Proxy LLM Centralizado**: Presupuesto estricto de tokens y auditoría de seguridad para todas las interacciones de IA.
-- **🔌 Integración con VS Code**: Un daemon nativo y una extensión cierran la brecha entre la orquestación de IA y tu IDE local.
-- **📊 Monitoreo Glassroom**: Transmisión de eventos SSE en tiempo real para supervisar visualmente el progreso de los agentes.
-- **🎫 Bot de Soporte Integrado**: Mesa de ayuda con IA, creación de tickets, niveles de severidad y seguimiento de estado (ES/EN).
+La Fabrique es una plataforma multiagente que orquesta equipos de IA a través de un ciclo de vida de sprint estructurado. El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija.
 
-[⬆ Volver al inicio](#la-fabrique)
+**Niveles de alcance por sprint:**
+
+| Tamaño | Máx. ítems en backlog | Uso típico |
+|--------|----------------------|------------|
+| S      | 4                    | Correcciones, features pequeñas |
+| M      | 8                    | Iteraciones de features (por defecto) |
+| L      | 12                   | Features grandes, trabajo fundacional |
+
+Cuando un workflow de agentes agota su capacidad antes de completar todos los ítems, el sprint pasa a estado `needs_split` — señal de que el alcance debe dividirse en sprints más pequeños antes de reintentar.
+
+**Ciclo de vida del sprint:** `active` → `completed` | `needs_split` | `cancelled`
 
 ---
 
-## 🏗️ Arquitectura
+## Arquitectura
 
 ```mermaid
 graph TD
-    A[Frontend React] --> B[Backend FastAPI]
-    B --> C[Postgres + pgvector]
-    B --> D[Neo4j Engram Graph]
-    B --> E[NATS JetStream]
-    E --> F[VS Code Daemon]
-    B --> G[LLM Proxy]
-    G --> H[Gemini / DeepSeek]
-    B --> I[AI Janitor]
+    A[Frontend React<br/>Dashboard · GlassRoom · KanbanBoard] -->|REST + SSE| B[Backend FastAPI]
+
+    B -->|SQLModel| C[(PostgreSQL + pgvector<br/>sprints · auditoría · embeddings)]
+    B -->|Bolt| D[(Neo4j 5<br/>Grafo de Engramas)]
+    B -->|publish/subscribe| E[NATS JetStream]
+
+    E -->|workspace.generate| F[Workflow LangGraph<br/>kickoff → PO → SM → Dev → burn]
+    E -->|glassroom.sprint_id| A
+    E -->|workspace.execute| G[VS Code Daemon<br/>escritura de archivos · shell]
+
+    F -->|chat_async| H[LLM Proxy :5100<br/>presupuesto de tokens · auditoría]
+    H -->|API Gemini| I[Google AI Studio]
+    H -->|API DeepSeek| J[DeepSeek]
+
+    B --> K[Janitor<br/>mantenimiento diario · reindexación]
+```
+
+### Flujo de datos de un sprint
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant FE as Frontend
+    participant BE as FastAPI
+    participant NJ as NATS
+    participant LG as LangGraph
+    participant DB as PostgreSQL
+    participant N4J as Neo4j
+
+    U->>FE: Crear sprint (alcance S/M/L + backlog)
+    FE->>BE: POST /v1/start_sprint
+    BE->>DB: INSERT sprint (status=active)
+    BE->>NJ: publish workspace.generate
+    NJ->>LG: kickoff → PO → ScrumMaster → Developer → PO wrap
+    LG-->>NJ: eventos glassroom.<sprint_id> (puente SSE)
+    NJ-->>FE: mensajes de agentes en tiempo real
+    LG->>N4J: burn_node — persistir engrama
+    LG->>BE: needs_split=true (si se supera la capacidad)
+    BE->>DB: UPDATE sprint SET status='needs_split'
 ```
 
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
 
-## 🛠️ Stack Tecnológico
+## Stack Tecnológico
 
 | Capa | Tecnología |
 |---|---|
-| **Backend** | FastAPI, LangGraph, SQLAlchemy |
-| **Frontend** | React, TypeScript, TailwindCSS, Vite |
-| **Memoria** | Postgres (pgvector) + Neo4j (Grafo de Conocimiento Temporal) |
-| **Broker** | NATS JetStream |
-| **Modelos IA** | Gemini (Google AI Studio) + DeepSeek |
-| **Infraestructura** | Docker Compose, VS Code CLI |
+| **Backend** | Python 3.12, FastAPI, LangGraph, SQLModel |
+| **Frontend** | React 18, TypeScript, TailwindCSS, Vite, Zustand |
+| **Memoria Vectorial** | PostgreSQL 15 + pgvector |
+| **Grafo de Conocimiento** | Neo4j 5.15 Enterprise + APOC |
+| **Broker de Mensajes** | NATS JetStream |
+| **Modelos de IA** | Gemini (Google AI Studio) + DeepSeek |
+| **Infraestructura** | Docker Compose (8 servicios), VS Code CLI |
 
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
 
-## 📥 Primeros Pasos
+## Configuración Local
 
-### 1. Requisitos Previos
-- Docker y Docker Compose
-- CLI de VS Code (comando `code`)
-- Python 3.11+ y Node.js 18+
+La forma canónica de levantar el entorno local es `reset_infra.sh`:
 
-### 2. Configuración del Entorno
 ```bash
+# 1. Copiar y configurar el entorno
 cp .env.example .env
-# Edita .env — agrega tu GEMINI_API_KEY y DEEPSEEK_API_KEY
+# Editar .env — completar GEMINI_API_KEY, DEEPSEEK_API_KEY,
+# POSTGRES_PASSWORD, NEO4J_PASSWORD
+
+# 2. Inicio limpio completo
+./reset_infra.sh
 ```
 
-### 3. Iniciar Todos los Servicios
+El script ejecuta 6 pasos: `down -v` → prune de Docker → `build --no-cache` → `up -d` → espera de health-checks → `ps`. Al finalizar:
+
+- **Frontend:** `http://localhost:5173`
+- **API Backend + Swagger:** `http://localhost:8000/docs`
+- **LLM Proxy:** `http://localhost:5100`
+
+**Prerrequisitos:** Docker Desktop, Docker Compose v2
+
+**Reinicios incrementales** (tras cambios en el código):
+
 ```bash
-docker compose up -d
+docker compose up -d --build backend
+docker compose up -d --build frontend
 ```
 
-### 4. Ejecutar el Daemon Local de VS Code
+**Daemon local de VS Code** (opcional — para escritura real de archivos en tu IDE):
+
 ```bash
 pip install nats-py
 python vscode-daemon/daemon.py
 ```
 
-### 5. Acceder al Dashboard
-Abre **http://localhost:5173** en tu navegador.
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Orquestación de Agentes
+
+Cada kickoff de sprint dispara un **workflow LangGraph** a través del subject NATS `workspace.generate`. El grafo tiene una topología fija con `recursion_limit=12`:
+
+```mermaid
+flowchart LR
+    K([kickoff]) --> PO([PO])
+    PO -->|éxito| SM([Scrum Master])
+    PO -->|error| B
+    SM -->|éxito| DEV([Developer])
+    SM -->|error| B
+    DEV -->|éxito| POW([PO wrap])
+    DEV -->|error| B
+    POW --> B([burn])
+    B --> END(( END ))
+
+    style K  fill:#6366f1,color:#fff,stroke:none
+    style PO fill:#0ea5e9,color:#fff,stroke:none
+    style SM fill:#0ea5e9,color:#fff,stroke:none
+    style DEV fill:#0ea5e9,color:#fff,stroke:none
+    style POW fill:#0ea5e9,color:#fff,stroke:none
+    style B   fill:#64748b,color:#fff,stroke:none
+    style END fill:#10b981,color:#fff,stroke:none
+```
+
+**Responsabilidades de cada nodo:**
+
+| Nodo | Agente | Responsabilidad |
+|------|--------|----------------|
+| `kickoff` | Sistema | Valida el brief del sprint, extrae ítems del backlog, emite evento de estado inicial |
+| `po` | Product Owner | Crea work package en OpenProject, prioriza el backlog, identifica el ítem de mayor riesgo |
+| `scrum_master` | Scrum Master | Secuencia el trabajo, detecta bloqueos, asigna el primer movimiento al Developer |
+| `developer` | Developer | Toma el primer ítem accionable, detalla el plan de implementación, señala dependencias |
+| `po_wrap` | Product Owner | Cierra el kickoff con resumen de 3 puntos: prioridad · dueño · próxima acción |
+| `burn` | Sistema | Persiste engrama en Neo4j; publica evento `needs_split` o de finalización en NATS |
+
+**Manejo de errores:** Cualquier fallo en un nodo establece `last_error` y cortocircuita hacia `burn`, que marca el sprint como `needs_split`. El `GraphRecursionError` se captura explícitamente a nivel de workflow y también devuelve `needs_split: True`.
+
+**Enrutamiento de modelos:** `ModelFactory.ROLE_MODEL_MAP` resuelve cada rol hacia un LLM específico vía el proxy — se cambia el modelo por rol en configuración sin tocar el código.
 
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
 
-## 📖 Documentación de la API
+## GlassRoom
 
-La Fabrique expone una interfaz OpenAPI completamente autodocumentada:
+El GlassRoom es la vista de observabilidad en tiempo real de un sprint en ejecución. Usa Server-Sent Events (SSE) para transmitir los mensajes NATS de `glassroom.<sprint_id>` directamente al navegador.
 
-- **Swagger UI (Interactivo):** `http://localhost:8000/docs`
-- **ReDoc (Detallado):** `http://localhost:8000/redoc`
+**Diseño de 3 columnas:**
+
+| Columna | Contenido |
+|---------|-----------|
+| Barra lateral izquierda | Metadata del sprint (badge de alcance, indicador de estado) + lista de agentes conectados |
+| Feed de mensajes | Mensajes agrupados por turno de agente (estilo Slack); `NeedsSplitBanner` ante eventos de scope excedido |
+| Panel derecho | Tarjetas de estado FSM por agente — `active` (verde) · `waiting` (brand) · `error` (rojo) · `idle` (gris) |
+
+**Tipos de eventos:** `status`, `agent_start`, `message`, `agent_complete`, `error`, `needs_split`
+
+El endpoint SSE (`GET /v1/glassroom/stream?sprint_id=<id>`) reproduce los últimos 50 eventos al conectarse, garantizando contexto completo para clientes que se unan tarde. Se envían pings de keepalive cada 15 segundos para mantener la conexión activa.
+
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
-## 🛠️ Soporte y Observabilidad
+## Estructura del Proyecto
 
-- **Logs Estructurados:** Todos los eventos se registran en formato JSON — compatible con ELK, Datadog o Splunk.
-- **Bot de Soporte:** Mesa de ayuda con IA integrada, creación de tickets, niveles de severidad y seguimiento de estado.
+```
+la-fabrique/
+├── backend/
+│   ├── agents/
+│   │   ├── graph.py                  # Workflow multiagente LangGraph
+│   │   └── tools/
+│   │       └── openproject_tools.py  # Creación de work packages
+│   ├── app/
+│   │   ├── main.py                   # Punto de entrada FastAPI · 4 workers · puente SSE
+│   │   ├── models/                   # ORM SQLModel (Sprint, Company, BacklogItem…)
+│   │   ├── schemas.py                # Schemas Pydantic de request/response
+│   │   ├── database.py               # Engine · sesión · _ensure_runtime_schema()
+│   │   ├── routers/                  # sprint · agents · enterprise · support
+│   │   ├── services/
+│   │   │   ├── agent_worker.py       # Consumidor NATS → ejecución LangGraph
+│   │   │   ├── task_worker.py        # Worker de asignación de tareas
+│   │   │   └── outbox_service.py     # Outbox transaccional → drenaje NATS
+│   │   └── nats_client.py            # Wrapper async de publish/subscribe NATS
+│   ├── llm/
+│   │   └── model_factory.py          # Mapeo rol → modelo
+│   ├── memory/
+│   │   └── engram_processor.py       # Persistencia de engramas (pgvector + Neo4j)
+│   ├── llm_proxy_client.py           # Cliente HTTP para el servicio LLM Proxy
+│   └── telemetry.py                  # Configuración de trazas OpenTelemetry
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── GlassRoom.tsx         # Vista en tiempo real del sprint (3 columnas)
+│       │   ├── KanbanBoard.tsx       # Tablero de backlog del sprint (dnd-kit)
+│       │   ├── ControlPanel.tsx      # UI de configuración de sprint
+│       │   └── ErrorBoundary.tsx     # Error boundary global de React
+│       ├── pages/
+│       │   ├── Dashboard.tsx         # Strip KPI · tarjetas de sprint · lanzamiento rápido
+│       │   └── CompanyNew.tsx        # Wizard de onboarding de empresa
+│       ├── store/
+│       │   └── agentStore.ts         # Store Zustand FSM (idle/active/waiting/error)
+│       └── i18n/                     # Archivos de traducción EN + ES
+├── llm-proxy/                        # Gateway de presupuesto de tokens y auditoría (Flask :5100)
+├── vscode-daemon/                    # Suscriptor NATS local para operaciones en el IDE
+├── scripts/
+│   └── verify_infra.py               # Script de verificación de salud de la infraestructura
+├── db/
+│   └── init-db/init.sql              # DDL de bootstrap de Postgres
+├── docker-compose.yml                # Definición del stack local (8 servicios)
+├── reset_infra.sh                    # Script canónico de reset completo
+└── .env.example                      # Plantilla de variables de entorno requeridas
+```
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Referencia de la API
+
+Documentación interactiva disponible en `http://localhost:8000/docs` con el entorno levantado.
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET`  | `/health` | Health check del servicio |
+| `POST` | `/v1/init_company` | Crear empresa con tamaño de alcance por defecto (S/M/L) |
+| `POST` | `/v1/start_sprint` | Iniciar sprint; valida restricción de alcance y cantidad de ítems |
+| `POST` | `/v1/generate` | Disparar workflow LangGraph vía NATS |
+| `GET`  | `/v1/glassroom/stream` | Stream SSE de eventos de agentes en tiempo real |
+| `POST` | `/v1/audit` | Registrar entrada de auditoría estructurada |
+| `GET`  | `/v1/memory/search` | Búsqueda semántica en memoria de engramas (pgvector) |
+| `POST` | `/v1/memory/store` | Almacenar contenido en memoria vectorial |
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Soporte y Observabilidad
+
+- **Logs Estructurados:** Todos los eventos se registran en JSON — compatible con ELK, Datadog o Splunk.
+- **OpenTelemetry:** Trazas distribuidas exportadas desde el agent worker y los nodos del grafo.
+- **Bot de Soporte:** Mesa de ayuda con IA integrada, creación de tickets, niveles de severidad y seguimiento de estado (EN/ES).
 - **Exportación de Logs:** Los administradores pueden descargar un paquete completo de auditoría vía `GET /v1/support/logs`.
 
 ---
 
-## 📁 Estructura del Proyecto
-
-```
-la-fabrique/
-├── backend/          # App FastAPI + lógica de agentes LangGraph
-│   ├── agents/       # Definiciones del grafo de agentes
-│   ├── app/          # Rutas API, schemas, config
-│   ├── janitor/      # Worker de mantenimiento en segundo plano
-│   ├── llm/          # Model factory (Gemini + DeepSeek)
-│   └── memory/       # Procesador de Engramas (pgvector + Neo4j)
-├── frontend/         # Dashboard React + TypeScript (Vite)
-│   ├── src/
-│   │   ├── components/   # KanbanBoard, GlassRoom, SupportBot…
-│   │   ├── pages/        # SprintWorkspace, Analytics, Generate…
-│   │   └── i18n/         # Traducciones EN + ES
-│   └── electron/     # Shell Electron (modo escritorio opcional)
-├── llm-proxy/        # Pasarela de presupuesto de tokens y auditoría
-├── vscode-daemon/    # Suscriptor NATS local para operaciones de archivos
-├── vscode-extension/ # Bridge de integración con VS Code
-├── db/               # Scripts de inicialización de Postgres
-├── deployment/       # Manifiestos de Kubernetes
-├── docker-compose.yml
-└── .env.example
-```
-
-[⬆ Volver al inicio](#la-fabrique)
-
----
-
-## ⚖️ Licencia
+## Licencia
 
 **Software Propietario.** Todos los derechos reservados.  
 Copyright © 2026 Carolina Pereira.
@@ -165,10 +311,10 @@ Queda estrictamente prohibida la copia, distribución o uso comercial no autoriz
 
 ---
 
-## 🆘 Soporte & Mantenimiento
+## Soporte y Mantenimiento
 
 - **Soporte del Sistema:** La Fabrique es mantenido por **Carolina Pereira**. Los errores críticos se reportan automáticamente a la proveedora para su resolución.
-- **Soporte de Proyectos:** Para incidencias con el código generado por la IA, usa el Bot de Soporte integrado.
+- **Soporte de Proyectos:** Para incidencias con el código generado por la IA en tus proyectos, usa el Bot de Soporte integrado.
 - **Contacto:** Para consultas sobre licencias y acuerdos SLA Enterprise, contacta directamente con la propietaria.
 
 [⬆ Volver al inicio](#la-fabrique)
