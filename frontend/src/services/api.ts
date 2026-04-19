@@ -29,11 +29,94 @@ function friendlyMessage(status: number): string {
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface CompanyInfo {
-  id: number
+  company_id?: number
+  id?: number
   name: string
   autonomy_level: number
   token_quota: number
   token_used: number
+}
+
+export interface StartSprintRequest {
+  company_id: number
+  sprint_name: string
+  start_date: string
+  scope_size: 'S' | 'M' | 'L'
+  backlog_items: { title: string; description?: string }[]
+}
+
+export interface StartSprintResponse {
+  sprint_id: number
+  scope_size: string
+  item_limit: number
+  sprint_url?: string
+}
+
+export interface GenerateResponse {
+  interaction_id: string
+  package_url?: string
+}
+
+export interface ApproveTaskResponse {
+  status: string
+  task_id: number
+  decision: 'approved' | 'rejected'
+}
+
+export interface DetectedStack {
+  name: string
+  language: string
+  all_languages?: Record<string, number>
+  frameworks: string[]
+  databases: string[]
+  infra: string[]
+  complexity: string
+  file_count: number
+  team_source?: 'ai' | 'rules'
+}
+
+export interface DiscoverTeamAgent {
+  name?: string
+  role: string
+  seniority: string
+  specialty: string
+  persona?: string
+  reasoning?: string
+  model?: string
+  system_prompt?: string
+  token_budget?: number
+}
+
+export interface DiscoverTeamResponse {
+  suggested_team: DiscoverTeamAgent[]
+  detected_stack?: DetectedStack
+  project_name?: string
+}
+
+export interface PendingApproval {
+  id: number
+  task_type: string
+  description: string
+  risk_level: 'high' | 'medium' | 'low'
+  requested_by: string
+  interaction_id?: string
+  created_at: string
+}
+
+export interface AgentTokenUsage {
+  role: string
+  tokens: number
+  percentage: number
+}
+
+export interface AnalyticsData {
+  health_score: number
+  tokens_consumed: number
+  tasks_completed: number
+  tasks_failed: number
+  tasks_in_progress: number
+  executive_summary?: string
+  agent_breakdown: AgentTokenUsage[]
 }
 
 export interface BacklogItem {
@@ -149,40 +232,56 @@ export const api = {
   // Core & Enterprise
   health: () => api.get<{ status: string; timestamp: string }>('/health'),
   
-  initCompany: (data: { company_name: string; default_sprint_length_days?: number; autonomy_level?: number }) =>
-    api.post<CompanyInfo>('/v1/init_company', data),
+  initCompany: (data: {
+    company_name: string
+    default_scope_size?: 'S' | 'M' | 'L'
+    default_sprint_length_days?: number
+    autonomy_level?: number
+    agents?: DiscoverTeamAgent[]
+  }) => api.post<CompanyInfo>('/v1/init_company', data),
 
   discoverTeam: (companyId: number | null, projectPath: string) =>
-    api.post<any>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
+    api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
 
   approveTask: (taskId: number, approverName: string, decision: 'approved' | 'rejected', feedback?: string) =>
-    api.post<any>('/v1/approve_task', { task_id: taskId, approver_name: approverName, decision, feedback }),
+    api.post<ApproveTaskResponse>('/v1/approve_task', { task_id: taskId, approver_name: approverName, decision, feedback }),
 
   getQuotas: (companyId: number) =>
-    api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),
+    api.get<{ role: string; quota: number; used: number }[]>('/v1/enterprise/quotas', { company_id: companyId }),
 
   getAnalyticsSummary: (sprintId: number) =>
-    api.get<any>('/v1/analytics/summary', { sprint_id: sprintId }),
+    api.get<AnalyticsData>('/v1/analytics/summary', { sprint_id: sprintId }),
+
+  getPendingApprovals: () =>
+    api.get<PendingApproval[]>('/v1/pending_approvals'),
 
   // Sprints & Backlog
   getSprintBoard: (sprintId: number) =>
     api.get<SprintBoard>(`/v1/sprints/${sprintId}/board`),
 
-  updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
-    api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
+  updateBacklogItem: (itemId: number, data: {
+    status?: BacklogItem['status']
+    priority?: BacklogItem['priority']
+    assignee?: string
+    comment?: string
+  }) => api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; backlog_items: any[] }) =>
-    api.post<any>('/v1/start_sprint', data),
+  startSprint: (data: StartSprintRequest) =>
+    api.post<StartSprintResponse>('/v1/start_sprint', data),
 
   // Agents & Memory
   generate: (data: { company_id: number; story: string; constraints?: string; interaction_id?: string }) =>
-    api.post<any>('/v1/generate', data),
+    api.post<GenerateResponse>('/v1/generate', data),
 
   searchMemory: (query: string, companyId?: number) =>
-    api.get<any[]>('/v1/memory/search', { q: query, ...(companyId && { company_id: companyId }) }),
+    api.get<{ content: string; score: number; metadata: Record<string, unknown> }[]>(
+      '/v1/memory/search',
+      { q: query, ...(companyId && { company_id: companyId }) }
+    ),
 
   // Support
-  getTickets: () => api.get<any[]>('/v1/tickets'),
-  reportBug: (data: any) => api.post<any>('/v1/report_bug', data),
+  getTickets: () => api.get<{ id: number; title: string; status: string; severity: string; created_at: string }[]>('/v1/tickets'),
+  reportBug: (data: { title: string; description: string; severity: string; reporter_email: string }) =>
+    api.post<{ ticket_number: number; status: string }>('/v1/report_bug', data),
 }
 

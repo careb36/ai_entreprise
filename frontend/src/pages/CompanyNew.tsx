@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
+import type {
+  DetectedStack,
+  DiscoverTeamAgent,
+  DiscoverTeamResponse,
+} from '../services/api'
 import { 
   useModels, 
   useDiscoverTeam, 
@@ -46,23 +51,6 @@ interface Permissions {
   secrets_access: string
   require_approval_deploy: boolean
   require_approval_db_write: boolean
-}
-
-interface DetectedStack {
-  name: string
-  language: string
-  all_languages?: Record<string, number>
-  frameworks: string[]
-  databases: string[]
-  infra: string[]
-  complexity: string
-  file_count: number
-  team_source?: 'ai' | 'rules'
-}
-
-interface DiscoverTeamResponse {
-  detected_stack?: DetectedStack
-  suggested_team?: Agent[]
 }
 
 interface InitCompanyResponse {
@@ -421,7 +409,7 @@ export default function CompanyNew() {
             }
           }
           if (response.suggested_team?.length) {
-            setAgents(response.suggested_team.map((a: any) => ({
+            setAgents(response.suggested_team.map((a: DiscoverTeamAgent) => ({
               ...a,
               name: a.name ?? '',
               persona: a.persona ?? a.specialty ?? '',
