@@ -26,6 +26,20 @@ logger = logging.getLogger("fabrique-daemon")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
+PROTECTED_ROOT_DOCS = {
+    "README.md",
+    "README.es.md",
+    "CONTRIBUTING.md",
+    "ARCHITECTURE.md",
+    "TESTING_STRATEGY.md",
+    "REFACTORING_PLAN.md",
+    "DEPLOYMENT.md",
+    "runbook.md",
+    "runbook.es.md",
+    "USER_GUIDE.md",
+    "USER_GUIDE.es.md",
+    "CHANGELOG.md",
+}
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -58,6 +72,30 @@ def confirm_workspace_path() -> str:
     return WORKSPACE_ROOT_DEFAULT
 
 
+def _resolve_target_path(workspace_path: str, relative_path: str) -> Optional[Path]:
+    """Resolve a payload path safely under the workspace root."""
+    root = Path(workspace_path).resolve()
+    candidate = (root / (relative_path or "")).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
+    """Protect curated root docs from blind overwrite by agent output."""
+    if not target_path.exists() or target_path.is_dir():
+        return False
+
+    try:
+        relative = target_path.relative_to(workspace_root)
+    except ValueError:
+        return False
+
+    return len(relative.parts) == 1 and relative.name in PROTECTED_ROOT_DOCS
+
+
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     """
     Write a list of files to the workspace directory, creating parent dirs as needed.
@@ -70,14 +108,27 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         List of ``{"path": <absolute>, "status": "written"}`` dicts.
     """
     results = []
+    workspace_root = Path(workspace_path).resolve()
     for file_info in files:
-        file_path = os.path.join(workspace_path, file_info.get("path", ""))
+        target_path = _resolve_target_path(workspace_path, file_info.get("path", ""))
         content = file_info.get("content", "")
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "w") as f:
+        overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
+
+        if not target_path:
+            results.append({"path": file_info.get("path", ""), "status": "rejected"})
+            logger.warning("Rejected unsafe file path: %s", file_info.get("path", ""))
+            continue
+
+        if _is_protected_existing_doc(workspace_root, target_path) and not overwrite_existing:
+            results.append({"path": str(target_path), "status": "skipped_protected"})
+            logger.warning("Skipped protected document overwrite: %s", target_path)
+            continue
+
+        os.makedirs(target_path.parent, exist_ok=True)
+        with open(target_path, "w") as f:
             f.write(content)
-        results.append({"path": file_path, "status": "written"})
-        logger.info(f"File written: {file_path}")
+        results.append({"path": str(target_path), "status": "written"})
+        logger.info(f"File written: {target_path}")
     return results
 
 def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:

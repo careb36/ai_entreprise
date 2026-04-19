@@ -86,6 +86,7 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 return
 
             story = data.get("story")
+            files = data.get("files")
             interaction_id = data.get("interaction_id", "unknown")
             bu_id = data.get("business_unit_id")
             sprint_id = data.get("sprint_id")  # included when triggered from task_worker
@@ -94,6 +95,14 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 "workspace.generate received: interaction_id=%s bu_id=%s sprint_id=%s story=%.80s",
                 interaction_id, bu_id, sprint_id, story,
             )
+
+            if files and not story:
+                logger.debug(
+                    "Ignoring workspace.generate file materialization payload: interaction_id=%s files=%s",
+                    interaction_id,
+                    len(files),
+                )
+                return
 
             if not story:
                 logger.warning("workspace.generate message missing 'story' field — skipping: %s", data)

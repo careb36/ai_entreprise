@@ -220,6 +220,111 @@ def _extract_artifact_targets(item: Dict[str, Any], deliverable: str) -> list[Di
     return dedup
 
 
+def _build_review_payload(deliverable: str, artifact_targets: list[Dict[str, str]]) -> str:
+    """Prefer normalized artifact content for QA review when files were materialized."""
+    if not artifact_targets:
+        return (deliverable or "").strip()
+
+    sections: list[str] = []
+    for artifact in artifact_targets:
+        path = artifact.get("path", "artifact")
+        content = (artifact.get("content") or "").strip()
+        sections.append(f"# Artifact: {path}\n\n{content}")
+
+    return "\n\n".join(section for section in sections if section.strip())
+
+
+def _extract_latest_reviewable_comment(comments: Any) -> str:
+    """Return the latest non-system, non-QA deliverable comment for review."""
+    if isinstance(comments, str):
+        try:
+            comments = json.loads(comments)
+        except Exception:
+            comments = []
+
+    if not isinstance(comments, list):
+        return ""
+
+    for comment in reversed(comments):
+        author = str(comment.get("author", "")).strip().lower()
+        text = str(comment.get("text", "")).strip()
+        if not text:
+            continue
+        if text.lower().startswith("freeze after") or "sleep-induced churn" in text.lower():
+            continue
+        if author in {"system", "qa"}:
+            continue
+        if text.upper().startswith("APPROVED:") or text.upper().startswith("NEEDS WORK:"):
+            continue
+        return text
+
+    return ""
+
+
+def _has_manual_freeze_marker(comments: Any) -> bool:
+    """Detect operator comments that intentionally freeze a task out of automation."""
+    if isinstance(comments, str):
+        try:
+            comments = json.loads(comments)
+        except Exception:
+            comments = []
+
+    if not isinstance(comments, list):
+        return False
+
+    return any(
+        "sleep-induced churn" in str(comment.get("text", "")).lower()
+        or str(comment.get("text", "")).strip().lower().startswith("freeze after")
+        for comment in comments
+    )
+
+
+def _load_item_runtime_state(item_id: int) -> Optional[Dict[str, Any]]:
+    """Load the latest mutable state so stale in-flight work can be discarded."""
+    with Session(engine) as session:
+        item = session.get(BacklogItem, item_id)
+        if not item:
+            return None
+
+        comments = item.comments or []
+        if isinstance(comments, str):
+            try:
+                comments = json.loads(comments)
+            except Exception:
+                comments = []
+
+        return {
+            "status": item.status,
+            "comments": comments,
+            "manually_frozen": _has_manual_freeze_marker(comments),
+        }
+
+
+def _sync_manual_freeze_state(item_id: int) -> bool:
+    """Ensure manually frozen items stay blocked and out of automation."""
+    with Session(engine) as session:
+        item = session.get(BacklogItem, item_id)
+        if not item:
+            return False
+
+        comments = item.comments or []
+        if isinstance(comments, str):
+            try:
+                comments = json.loads(comments)
+            except Exception:
+                comments = []
+
+        if not _has_manual_freeze_marker(comments):
+            return False
+
+        changed = item.status != "blocked"
+        item.status = "blocked"
+        item.updated_at = datetime.now(timezone.utc)
+        session.add(item)
+        session.commit()
+        return changed
+
+
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
@@ -274,6 +379,7 @@ def _load_task_context(backlog_item_id: int) -> Optional[Dict[str, Any]]:
                 "priority": item.priority,
                 "assignee": item.assignee,
                 "status": item.status,
+                "comments": item.comments or [],
             },
             "sprint": {
                 "id": sprint.id,
@@ -352,6 +458,11 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             agent = ctx["agent"]
             sprint = ctx["sprint"]
 
+            if _has_manual_freeze_marker(item.get("comments") or []):
+                await asyncio.to_thread(_sync_manual_freeze_state, item["id"])
+                logger.info("Skipping manually frozen assignment for item=%s", item["id"])
+                return
+
             # Guard against duplicate task.assign events for the same item.
             if item.get("status") != "todo":
                 logger.info(
@@ -378,6 +489,22 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             deliverable = await asyncio.to_thread(
                 _execute_task, item, agent, sprint["name"],
             )
+
+            latest_state = await asyncio.to_thread(_load_item_runtime_state, item["id"])
+            if not latest_state:
+                logger.info("Skipping stale completion for missing item=%s", item["id"])
+                return
+            if latest_state.get("manually_frozen"):
+                await asyncio.to_thread(_sync_manual_freeze_state, item["id"])
+                logger.info("Discarding stale completion for manually frozen item=%s", item["id"])
+                return
+            if latest_state.get("status") != "in_progress":
+                logger.info(
+                    "Discarding stale completion for item=%s with status=%s",
+                    item["id"],
+                    latest_state.get("status"),
+                )
+                return
 
             is_valid, validation_reason = _validate_minimum_deliverable(item, deliverable)
             if not is_valid:
@@ -407,6 +534,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 return
 
             artifact_targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
+            review_payload = await asyncio.to_thread(_build_review_payload, deliverable, artifact_targets)
             if artifact_targets:
                 workspace_root = await asyncio.to_thread(_resolve_workspace_root, sprint["company_id"])
                 if not workspace_root:
@@ -451,7 +579,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 _update_item_status,
                 item["id"],
                 "in_review",
-                comment_text=deliverable,
+                comment_text=review_payload,
                 comment_author=agent.get("name") or agent["role"],
             )
 
@@ -558,7 +686,16 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     comments = json.loads(comments)
                 except Exception:
                     comments = []
-            deliverable = comments[-1].get("text", "") if comments else ""
+
+            if _has_manual_freeze_marker(comments):
+                item.status = "blocked"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+                session.commit()
+                logger.info("Skipping QA review for manually frozen item=%s", item.id)
+                continue
+
+            deliverable = _extract_latest_reviewable_comment(comments)
 
             # Prevent infinite review loops when QA repeatedly fails.
             qa_review_failures = sum(
@@ -747,6 +884,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 except Exception:
                     comments = []
 
+            if _has_manual_freeze_marker(comments):
+                continue
+
             # QA quality-gate blocks require manual triage; do not auto-retry.
             qa_quality_gate_block = any(
                 (c.get("author") == "System" and "manual triage" in str(c.get("text", "")).lower())
@@ -833,6 +973,20 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             select(BacklogItem).where(BacklogItem.status == "todo")
         ).all()
         for item in todo_items:
+            comments = item.comments or []
+            if isinstance(comments, str):
+                try:
+                    comments = json.loads(comments)
+                except Exception:
+                    comments = []
+
+            if _has_manual_freeze_marker(comments):
+                item.status = "blocked"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+                logger.info("Keeping manually frozen todo item=%s blocked during dispatch", item.id)
+                continue
+
             from uuid import uuid4
             await nats_client.publish("task.assign", {
                 "agent": item.assignee or "Dev",
@@ -840,6 +994,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 "interaction_id": str(uuid4()),
                 "backlog_item_id": item.id,
             })
+        session.commit()
 
 
 async def _publish_glassroom(
