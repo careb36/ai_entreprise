@@ -35,8 +35,8 @@ export default function Generate() {
       story: story.trim(),
       constraints: constraints.trim() || undefined
     }, {
-      onSuccess: (res) => {
-        setResult(res as GenerateResult)
+      onSuccess: (res: GenerateResult) => {
+        setResult(res)
         setStory('')
         setConstraints('')
       }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Calendar, SlotInfo, Views, momentLocalizer } from 'react-big-calendar'
+import type { View } from 'react-big-calendar'
 import { CalendarDays, Expand, Minimize, X } from 'lucide-react'
 import moment from 'moment'
 
@@ -35,7 +36,7 @@ export default function SprintCalendar({
   durationDays,
 }: SprintCalendarProps) {
   const { t, i18n } = useTranslation()
-  const [view, setView] = useState<(typeof Views)[keyof typeof Views]>(Views.MONTH)
+  const [view, setView] = useState<View>(Views.MONTH)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<SprintEvent | null>(null)
@@ -175,9 +176,9 @@ export default function SprintCalendar({
             step={30}
             timeslots={2}
             showMultiDayTimes
-            onView={(next) => setView(next)}
-            onNavigate={(nextDate) => setCurrentDate(nextDate)}
-            onSelectEvent={(event) => setSelectedEvent(event as SprintEvent)}
+            onView={(next: View) => setView(next)}
+            onNavigate={(nextDate: Date) => setCurrentDate(nextDate)}
+            onSelectEvent={(event: SprintEvent) => setSelectedEvent(event)}
             onSelectSlot={handleSelectSlot}
             selectable
             eventPropGetter={eventStyleGetter}

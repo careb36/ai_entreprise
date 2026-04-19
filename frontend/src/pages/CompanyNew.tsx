@@ -60,6 +60,17 @@ interface DetectedStack {
   team_source?: 'ai' | 'rules'
 }
 
+interface DiscoverTeamResponse {
+  detected_stack?: DetectedStack
+  suggested_team?: Agent[]
+}
+
+interface InitCompanyResponse {
+  company_id?: number
+  id?: number
+  sprint_id?: number
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const ROLES = [
@@ -400,7 +411,7 @@ export default function CompanyNew() {
     setDiscoveryResult(null)
     
     discoverTeamMutation.mutate({ companyId: null, projectPath: projectPath.trim() }, {
-      onSuccess: (response) => {
+      onSuccess: (response: DiscoverTeamResponse) => {
         if (response) {
           if (response.detected_stack) {
             setDiscoveryResult(response.detected_stack)
@@ -457,7 +468,7 @@ export default function CompanyNew() {
     }
 
     initCompanyMutation.mutate(payload, {
-      onSuccess: (response) => {
+      onSuccess: (response: InitCompanyResponse) => {
         const companyId = response?.company_id ?? response?.id ?? 1
         const sprintId = response?.sprint_id ?? companyId
         setCompany(companyId, companyName.trim())

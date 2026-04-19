@@ -57,7 +57,7 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
     }
 
     startSprintMutation.mutate(payload, {
-      onSuccess: (response) => {
+      onSuccess: (response: { sprint_id: number }) => {
         setSuccess(`${t('controlPanel.success')} #${response.sprint_id}`)
         onSprintStart?.(response.sprint_id)
       }
