@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api, type BacklogItem } from '../services/api'
+import {
+  api,
+  type BacklogItem,
+  type InitCompanyRequest,
+} from '../services/api'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
@@ -51,7 +55,7 @@ export function useDiscoverTeam() {
 
 export function useInitCompany() {
   return useMutation({
-    mutationFn: (data: any) => api.post<any>('/v1/init_company', data),
+    mutationFn: (data: InitCompanyRequest) => api.initCompany(data),
   })
 }
 

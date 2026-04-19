@@ -5,6 +5,7 @@ import type {
   DetectedStack,
   DiscoverTeamAgent,
   DiscoverTeamResponse,
+  InitCompanyResponse,
 } from '../services/api'
 import { 
   useModels, 
@@ -51,12 +52,6 @@ interface Permissions {
   secrets_access: string
   require_approval_deploy: boolean
   require_approval_db_write: boolean
-}
-
-interface InitCompanyResponse {
-  company_id?: number
-  id?: number
-  sprint_id?: number
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -401,23 +396,19 @@ export default function CompanyNew() {
     
     discoverTeamMutation.mutate({ companyId: null, projectPath: projectPath.trim() }, {
       onSuccess: (response: DiscoverTeamResponse) => {
-        if (response) {
-          if (response.detected_stack) {
-            setDiscoveryResult(response.detected_stack)
-            if (response.detected_stack.name && !companyName) {
-              setCompanyName(response.detected_stack.name)
-            }
-          }
-          if (response.suggested_team?.length) {
-            setAgents(response.suggested_team.map((a: DiscoverTeamAgent) => ({
-              ...a,
-              name: a.name ?? '',
-              persona: a.persona ?? a.specialty ?? '',
-              token_budget: a.token_budget ?? 500000,
-              model: a.model ?? 'deepseek-coder',
-              system_prompt: a.system_prompt ?? '',
-            })))
-          }
+        setDiscoveryResult(response.detected_stack)
+        if (response.detected_stack.name && !companyName) {
+          setCompanyName(response.detected_stack.name)
+        }
+        if (response.suggested_team.length) {
+          setAgents(response.suggested_team.map((a: DiscoverTeamAgent) => ({
+            ...a,
+            name: a.name ?? '',
+            persona: a.persona ?? a.specialty ?? '',
+            token_budget: a.token_budget ?? 500000,
+            model: a.model ?? 'deepseek-coder',
+            system_prompt: a.system_prompt ?? '',
+          })))
         }
       }
     })
@@ -458,7 +449,7 @@ export default function CompanyNew() {
 
     initCompanyMutation.mutate(payload, {
       onSuccess: (response: InitCompanyResponse) => {
-        const companyId = response?.company_id ?? response?.id ?? 1
+        const companyId = response.company_id
         const sprintId = response?.sprint_id ?? companyId
         setCompany(companyId, companyName.trim())
         navigate(`/workspace/${sprintId}`)

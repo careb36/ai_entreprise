@@ -29,12 +29,32 @@ function friendlyMessage(status: number): string {
 // ── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface CompanyInfo {
-  company_id?: number
-  id?: number
+  id: number
   name: string
   autonomy_level: number
   token_quota: number
   token_used: number
+}
+
+export interface InitCompanyRequest {
+  company_name: string
+  description?: string
+  default_scope_size?: 'S' | 'M' | 'L'
+  default_sprint_length_days?: number
+  autonomy_level?: number
+  timezone?: string
+  agents?: DiscoverTeamAgent[]
+  permissions?: Record<string, string>
+  governance?: Record<string, boolean>
+  project_path?: string
+  detected_stack?: DetectedStack
+}
+
+export interface InitCompanyResponse {
+  company_id: number
+  sprint_id: number
+  task_count: number
+  message: string
 }
 
 export interface DetectedStack {
@@ -62,9 +82,9 @@ export interface DiscoverTeamAgent {
 }
 
 export interface DiscoverTeamResponse {
+  discovery_id: number | null
   suggested_team: DiscoverTeamAgent[]
-  detected_stack?: DetectedStack
-  project_name?: string
+  detected_stack: DetectedStack
 }
 
 export interface BacklogItem {
@@ -180,8 +200,8 @@ export const api = {
   // Core & Enterprise
   health: () => api.get<{ status: string; timestamp: string }>('/health'),
   
-  initCompany: (data: { company_name: string; default_sprint_length_days?: number; autonomy_level?: number }) =>
-    api.post<CompanyInfo>('/v1/init_company', data),
+  initCompany: (data: InitCompanyRequest) =>
+    api.post<InitCompanyResponse>('/v1/init_company', data),
 
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
