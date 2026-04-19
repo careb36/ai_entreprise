@@ -102,7 +102,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - factory-logs:/app/.factory
-      - ${SCAN_ROOT:-/home}:/home:ro
+      - ${HOME}:${HOME}:ro
     networks:
       - factory-network
     depends_on:

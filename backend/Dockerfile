@@ -28,6 +28,7 @@ COPY app/     /app/app/
 COPY llm/     /app/llm/
 COPY agents/  /app/agents/
 COPY memory/  /app/memory/
+COPY telemetry.py /app/telemetry.py
 
 EXPOSE 8000
 
