@@ -3,15 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useAnalyticsSummary } from '../hooks/useQueries'
 import { TrendingUp, Zap, CheckSquare, XSquare, Info, RefreshCw } from 'lucide-react'
 
-interface AnalyticsData {
-  sprint_id: number
-  health_score: number
-  tokens_consumed: number
-  tasks_status: Record<string, number>
-  ai_executive_summary: string
-  tokens_by_agent?: Record<string, number>
-}
-
 function HealthBadge({ score }: { score: number }) {
   const { t } = useTranslation()
   const color = score >= 80 ? 'text-status-success' : score >= 50 ? 'text-yellow-400' : 'text-status-error'
@@ -55,12 +46,11 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
     )
   }
 
-  const analytics = data as AnalyticsData
+  const analytics = data
 
-  // Correct task counts — use actual status fields
-  const done    = analytics.tasks_status['done']    || analytics.tasks_status['closed'] || 0
-  const failed  = analytics.tasks_status['failed']  || analytics.tasks_status['blocked'] || 0
-  const inProg  = analytics.tasks_status['in_progress'] || 0
+  const done    = analytics.tasks_completed ?? 0
+  const failed  = analytics.tasks_failed    ?? 0
+  const inProg  = analytics.tasks_in_progress ?? 0
 
   return (
     <div className="space-y-6">
@@ -97,7 +87,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
             <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">{t('analytics.tasksCompleted')}</p>
           </div>
           <p className="text-3xl font-black text-white">{done}</p>
-          {inProg > 0 && <p className="text-xs text-gray-500 mt-1">{inProg} {t('analytics.inProgress','in progress')}</p>}
+          {inProg > 0 && <p className="text-xs text-gray-500 mt-1">{inProg} {t('analytics.inProgress')}</p>}
         </div>
 
         <div className="card p-4">
@@ -110,36 +100,35 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
       </div>
 
       {/* Tokens by agent */}
-      {analytics.tokens_by_agent && Object.keys(analytics.tokens_by_agent).length > 0 && (
+      {analytics.agent_breakdown && analytics.agent_breakdown.length > 0 && (
         <div className="card p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
             <Info size={12} />
-            {t('analytics.tokensByAgent', 'Tokens by agent')}
+            {t('analytics.tokensByAgent')}
           </p>
           <div className="space-y-2">
-            {Object.entries(analytics.tokens_by_agent).map(([agent, tokens]) => {
-              const pct = Math.round((tokens / analytics.tokens_consumed) * 100)
-              return (
-                <div key={agent}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-400">{agent}</span>
-                    <span className="text-gray-500">{tokens.toLocaleString()} ({pct}%)</span>
-                  </div>
-                  <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
+            {analytics.agent_breakdown.map(({ role, tokens, percentage }) => (
+              <div key={role}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-400">{role}</span>
+                  <span className="text-gray-500">{tokens.toLocaleString()} ({percentage}%)</span>
                 </div>
-              )
-            })}
+                <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand-500 rounded-full" style={{ width: `${percentage}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Executive summary */}
-      <div className="card p-4 border-l-4 border-l-brand-500">
-        <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">{t('analytics.executiveSummary')}</p>
-        <p className="text-gray-300 leading-relaxed italic">"{analytics.ai_executive_summary}"</p>
-      </div>
+      {analytics.executive_summary && (
+        <div className="card p-4 border-l-4 border-l-brand-500">
+          <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2">{t('analytics.executiveSummary')}</p>
+          <p className="text-gray-300 leading-relaxed italic">"{analytics.executive_summary}"</p>
+        </div>
+      )}
     </div>
   )
 }

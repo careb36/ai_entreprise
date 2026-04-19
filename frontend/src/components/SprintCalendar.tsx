@@ -60,33 +60,33 @@ export default function SprintCalendar({
 
     return [
       {
-        title: `${sprintName || 'Sprint'} window`,
+        title: `${sprintName || 'Sprint'} ${t('sprintCalendar.focusBlock')}`,
         start,
         end,
         allDay: true,
         kind: 'window',
-        description: 'Main sprint delivery window',
+        description: t('sprintCalendar.focusBlock'),
       },
       {
-        title: 'Sprint planning',
+        title: t('sprintCalendar.planning'),
         start,
         end: prep,
         kind: 'checkpoint',
-        description: 'Planning and backlog alignment',
+        description: t('sprintCalendar.planning'),
       },
       {
-        title: 'Mid-sprint checkpoint',
+        title: t('sprintCalendar.midpoint'),
         start: midpoint,
         end: midpoint,
         kind: 'checkpoint',
-        description: 'Scope, blockers and quality checkpoint',
+        description: t('sprintCalendar.midpoint'),
       },
       {
-        title: 'Sprint deadline',
+        title: t('sprintCalendar.deadline'),
         start: end,
         end,
         kind: 'deadline',
-        description: 'Final deadline and closure target',
+        description: t('sprintCalendar.deadline'),
       },
     ]
   }, [start, end, sprintName, totalDays])
@@ -141,14 +141,14 @@ export default function SprintCalendar({
       <div className="px-4 py-3 border-b border-[#dde3ea] bg-white">
         <div className="flex items-center gap-2">
           <CalendarDays size={14} className="text-[#1a73e8]" />
-          <h3 className="text-sm font-semibold text-[#1f1f1f]">Sprint Calendar</h3>
+          <h3 className="text-sm font-semibold text-[#1f1f1f]">{t('sprintCalendar.title')}</h3>
           <button
             type="button"
             className="ml-auto google-calendar-toggle"
             onClick={() => setIsFullscreen(prev => !prev)}
           >
             {isFullscreen ? <Minimize size={14} /> : <Expand size={14} />}
-            {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            {isFullscreen ? t('sprintCalendar.exitFullscreen') : t('sprintCalendar.fullscreen')}
           </button>
         </div>
         <p className="text-xs text-[#5f6368] mt-1">Sprint #{sprintId} · {sprintName || 'Current Sprint'}</p>

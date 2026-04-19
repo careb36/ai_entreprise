@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight,
@@ -112,16 +113,16 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
 // ── Needs Split Alert ──────────────────────────────────────────────────────────
 
 function NeedsSplitAlert({ sprintId, sprintName }: { sprintId: number; sprintName: string }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-950/20 animate-fade-in">
       <div className="p-2 rounded-lg bg-amber-500/10 shrink-0">
         <SplitSquareVertical size={16} className="text-amber-400" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-amber-300">Sprint needs splitting</p>
+        <p className="text-sm font-semibold text-amber-300">{t('dashboard.needsSplit')}</p>
         <p className="text-xs text-amber-200/60 mt-0.5">
-          <strong className="text-amber-200/80">{sprintName}</strong> exceeded agent capacity during execution.
-          Split it into two smaller sprints to maintain AI focus.
+          <strong className="text-amber-200/80">{sprintName}</strong> {t('dashboard.needsSplitDesc')}
         </p>
       </div>
       <Link
@@ -181,6 +182,7 @@ function SprintCard({
 }: {
   sprint: any; columns: Record<string, any[]>; total: number; sprintId: number
 }) {
+  const { t }   = useTranslation()
   const done    = columns.done?.length ?? 0
   const blocked = columns.blocked?.length ?? 0
   const inProg  = columns.in_progress?.length ?? 0
@@ -223,7 +225,7 @@ function SprintCard({
           className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-brand-600/15 border border-brand-600/25 text-brand-400 text-xs font-medium hover:bg-brand-600/25 transition-colors"
         >
           <Radio size={12} />
-          Open Agents Room
+          {t('dashboard.openAgentsRoom')}
         </Link>
       </div>
     </div>
@@ -326,6 +328,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const { activeSprintId, setActiveSprint, companyName } = useAppStore()
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
@@ -371,7 +374,7 @@ export default function Dashboard() {
                 : 'bg-red-500/5 border-red-500/20 text-red-400'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              {backendOnline ? 'System online' : 'System offline'}
+              {backendOnline ? t('dashboard.systemOnline') : t('dashboard.systemOffline')}
             </div>
             <Link
               to="/companies/new"

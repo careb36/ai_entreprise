@@ -67,7 +67,7 @@ function ConfirmModal({
         <div className="mb-5">
           <label className="input-label flex items-center gap-1.5">
             <Info size={12} />
-            {t('governance.feedback', 'Review feedback')} <span className="text-gray-600 font-normal">({t('common.optional', 'optional')})</span>
+            {t('governance.feedbackLabel')} <span className="text-gray-600 font-normal">({t('common.optional', t('common.na'))})</span>
           </label>
           <textarea
             value={feedback}
@@ -128,7 +128,7 @@ export const GovernancePanel: React.FC = () => {
       <div className="empty-state py-16">
         <CheckCircle2 size={40} className="text-status-success mx-auto mb-3" />
         <p className="font-semibold text-gray-300">{t('governance.noPending')}</p>
-        <p className="text-sm text-gray-500 mt-1">{t('governance.noPendingHint', 'All AI actions are within autonomy limits')}</p>
+        <p className="text-sm text-gray-500 mt-1">{t('governance.allActionsOk')}</p>
         <button onClick={() => refetch()} className="btn btn-ghost btn-sm mt-4 flex items-center gap-1.5 mx-auto">
           <RefreshCw size={13} /> {t('common.refresh', 'Refresh')}
         </button>

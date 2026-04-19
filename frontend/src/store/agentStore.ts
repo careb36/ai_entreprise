@@ -44,10 +44,17 @@ interface AgentStore {
   disconnect: () => void
 }
 
+import {
+  SSE_RECONNECT_DELAY_MS,
+  SSE_MAX_RECONNECT_DELAY_MS,
+  SSE_MAX_RECONNECT_ATTEMPTS,
+  MAX_MESSAGES,
+} from '../lib/constants'
+
 const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const RECONNECT_DELAY_MS = 3_000
-const MAX_RECONNECT_ATTEMPTS = 10
-const MAX_RECONNECT_DELAY_MS = 30_000
+const RECONNECT_DELAY_MS     = SSE_RECONNECT_DELAY_MS
+const MAX_RECONNECT_ATTEMPTS = SSE_MAX_RECONNECT_ATTEMPTS
+const MAX_RECONNECT_DELAY_MS = SSE_MAX_RECONNECT_DELAY_MS
 
 let activeEventSource: EventSource | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -213,7 +220,10 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     sprintId: null,
 
     addMessage: (message) =>
-      set((state) => ({ messages: [...state.messages, message] })),
+      set((state) => {
+        const next = [...state.messages, message]
+        return { messages: next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next }
+      }),
 
     /**
      * Drive per-agent FSM state from a normalized AgentEvent.

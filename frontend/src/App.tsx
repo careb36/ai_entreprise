@@ -12,11 +12,15 @@ import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Generate from './pages/Generate'
 import Glassroom from './pages/Glassroom'
+import NotFound from './pages/NotFound'
+import TaskDetails from './pages/TaskDetails'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastContainer } from './components/Toast'
 import {
   LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
   Globe, Database, Code2, Menu, X, Building2
 } from 'lucide-react'
+import { STORAGE_KEY_LANG } from './lib/constants'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -27,7 +31,7 @@ function LanguageSwitcher() {
   function toggle() {
     const lang = i18n.language === 'en' ? 'es' : 'en'
     i18n.changeLanguage(lang)
-    localStorage.setItem('fabrique-lang', lang)
+    localStorage.setItem(STORAGE_KEY_LANG, lang)
   }
 
   return (
@@ -49,7 +53,7 @@ function useNavLinks() {
   const activeSprintId = useAppStore(state => state.activeSprintId)
    const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/glassroom'
   return [
-     { to: '/',           icon: LayoutDashboard, label: 'Home' },
+     { to: '/',           icon: LayoutDashboard, label: t('nav.home') },
      { to: '/companies/new', icon: Building2, label: t('nav.newCompany') },
      { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
      { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
@@ -157,10 +161,14 @@ function AppContent() {
             <Route path="/memory" element={<MemorySearch />} />
             <Route path="/generate" element={<Generate />} />
             <Route path="/glassroom" element={<Glassroom />} />
+            <Route path="/workspace/:sprintId/task/:taskId" element={<TaskDetails />} />
+            <Route path="/task/:taskId" element={<TaskDetails />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </ErrorBoundary>
       </main>
       <SupportBot />
+      <ToastContainer />
     </div>
   )
 }

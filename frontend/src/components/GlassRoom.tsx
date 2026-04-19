@@ -443,7 +443,7 @@ function RightPanel({ agentStates, messageCount, isConnected }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string }) {
-  useTranslation()
+  const { t } = useTranslation()
 
   const { messages, agentStates, isConnected, connectionError, connect, disconnect } = useAgentStore()
   const activeSprintId = useAppStore(s => s.activeSprintId)
@@ -622,7 +622,15 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       {connectionError && (
         <div className="mx-3 mt-2 p-2 bg-red-950/30 border border-red-800/40 rounded-lg shrink-0 flex items-center gap-2">
           <ZapOff size={12} className="text-red-400 shrink-0" />
-          <p className="text-red-400 text-[11px]">{connectionError}</p>
+          <p className="text-red-400 text-[11px] flex-1">{connectionError}</p>
+          {propSprintId && (
+            <button
+              onClick={() => connect(propSprintId)}
+              className="text-[11px] text-red-300 hover:text-white font-medium shrink-0 underline underline-offset-2"
+            >
+              {t('glassroom.retryConnection')}
+            </button>
+          )}
         </div>
       )}
 
@@ -645,15 +653,29 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
             className="flex-1 overflow-y-auto py-2"
           >
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                <div className="w-14 h-14 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-3">
-                  <Bot size={24} className="text-brand-400 opacity-40" />
+              !isConnected && !connectionError ? (
+                /* Connecting skeleton */
+                <div className="flex flex-col gap-4 p-4 animate-pulse">
+                  {[80, 60, 95, 45, 70].map((w, i) => (
+                    <div key={i} className="flex gap-3 items-start">
+                      <div className="w-7 h-7 rounded-lg bg-surface-700 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-2.5 bg-surface-700 rounded-full" style={{ width: `${w}%` }} />
+                        <div className="h-2 bg-surface-800 rounded-full" style={{ width: `${w * 0.6}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-center text-xs text-gray-600 pt-2">{t('glassroom.connecting')}</p>
                 </div>
-                <p className="text-sm font-semibold text-gray-400">Waiting for agents</p>
-                <p className="text-xs text-gray-600 mt-1 max-w-[220px]">
-                  Sprint events will appear here in real time once agents start working.
-                </p>
-              </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                  <div className="w-14 h-14 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-3">
+                    <Bot size={24} className="text-brand-400 opacity-40" />
+                  </div>
+                  <p className="text-sm font-semibold text-gray-400">{t('glassroom.waiting')}</p>
+                  <p className="text-xs text-gray-600 mt-1 max-w-[220px]">{t('glassroom.emptyState')}</p>
+                </div>
+              )
             ) : (
               grouped.map((day, di) => (
                 <div key={di}>

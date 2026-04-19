@@ -1,5 +1,6 @@
 {
   "nav": {
+    "home": "Inicio",
     "newCompany": "Nueva compañía",
     "dashboard": "Panel Principal",
     "workspace": "Sala de Agentes",
@@ -29,7 +30,12 @@
     "generateDesc": "Generación de código asistida por IA",
     "noCompany": "Ninguna fábrica inicializada aún",
     "noCompanyDesc": "Crea tu primera fábrica para comenzar",
-    "companies": "Tus Fábricas"
+    "companies": "Tus Fábricas",
+    "needsSplit": "El sprint necesita dividirse",
+    "needsSplitDesc": "Este sprint superó la capacidad de los agentes. Divídelo en alcances más pequeños.",
+    "openAgentsRoom": "Abrir Sala de Agentes",
+    "systemOnline": "Sistema en línea",
+    "systemOffline": "Sistema fuera de línea"
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -131,8 +137,12 @@
       "PO": "Product Owner",
       "SM": "Scrum Master",
       "Dev": "Desarrollador",
+      "Developer": "Desarrollador",
       "QA": "Ingeniero QA",
-      "Architect": "Arquitecto"
+      "Architect": "Arquitecto",
+      "DevOps": "Ingeniero DevOps",
+      "Security": "Ingeniero de Seguridad",
+      "Data": "Ingeniero de Datos"
     },
     "systemStatus": "Estado del Sistema",
     "connected": "Conectado",
@@ -156,6 +166,7 @@
     "error": "Error al cargar el tablero",
     "noActiveSprint": "Todavia no hay un sprint activo.",
     "empty": "Sin tareas",
+    "item": "Ítem",
     "items": "items",
     "assignee": "Responsable",
     "priority": "Prioridad",
@@ -186,13 +197,23 @@
     "minutesAgo": "hace {{n}}m",
     "hoursAgo": "hace {{n}}h",
     "eventsHint": "Los eventos aparecerán aquí en tiempo real",
-    "messages": "mensajes"
+    "messages": "mensajes",
+    "connecting": "Conectando al stream del sprint...",
+    "connectionError": "Conexión perdida",
+    "retryConnection": "Reintentar conexión",
+    "needsSplit": "Capacidad del sprint superada — necesita dividirse",
+    "filterAll": "Todos",
+    "filterByAgent": "Por agente",
+    "noCompanySetup": "Ninguna fábrica inicializada"
   },
   "governance": {
     "title": "Gobernanza",
     "subtitle": "Aprobaciones humanas requeridas",
     "pending": "Aprobaciones Pendientes",
     "noPending": "Sin aprobaciones pendientes",
+    "allActionsOk": "Todas las acciones de IA están dentro de los límites de autonomía",
+    "fetchError": "Error al cargar las aprobaciones pendientes",
+    "feedbackLabel": "Comentarios de revisión",
     "approve": "Aprobar",
     "reject": "Rechazar",
     "approving": "Aprobando...",
@@ -237,7 +258,8 @@
     "load": "Cargar Reporte",
     "loading": "Cargando...",
     "noData": "Sin datos disponibles",
-    "error": "Error al cargar analíticas"
+    "error": "Error al cargar analíticas",
+    "inProgress": "En Progreso"
   },
   "memorySearch": {
     "title": "Búsqueda de Memoria",
@@ -319,6 +341,33 @@
       "resolved": "Resuelto",
       "closed": "Cerrado"
     }
+  },
+  "sprintCalendar": {
+    "title": "Calendario del Sprint",
+    "focusBlock": "Bloque de enfoque",
+    "planning": "Planificación del sprint",
+    "midpoint": "Revisión a mitad de sprint",
+    "deadline": "Cierre del sprint",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "progress": "Progreso"
+  },
+  "errorBoundary": {
+    "title": "Ocurrió un error inesperado",
+    "description": "Puedes intentar de nuevo o recargar la página.",
+    "retry": "Intentar de nuevo"
+  },
+  "notFound": {
+    "title": "Página no encontrada",
+    "description": "La página que buscas no existe o fue movida.",
+    "backHome": "Volver al Panel Principal"
+  },
+  "toast": {
+    "sprintStarted": "Sprint iniciado correctamente",
+    "companyCreated": "Fábrica inicializada",
+    "sessionExpired": "Sesión expirada — recarga la página",
+    "networkError": "Error de red — verifica tu conexión",
+    "unknownError": "Ocurrió un error inesperado"
   },
   "common": {
     "loading": "Cargando...",

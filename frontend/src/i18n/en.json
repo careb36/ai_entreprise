@@ -1,5 +1,6 @@
 {
   "nav": {
+    "home": "Home",
     "newCompany": "New company",
     "dashboard": "Dashboard",
     "workspace": "Agents Room",
@@ -29,7 +30,12 @@
     "generateDesc": "AI-assisted code generation",
     "noCompany": "No factory initialized yet",
     "noCompanyDesc": "Create your first factory to get started",
-    "companies": "Your Factories"
+    "companies": "Your Factories",
+    "needsSplit": "Sprint needs splitting",
+    "needsSplitDesc": "This sprint exceeded agent capacity. Split it into smaller scopes.",
+    "openAgentsRoom": "Open Agents Room",
+    "systemOnline": "System online",
+    "systemOffline": "System offline"
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -131,8 +137,12 @@
       "PO": "Product Owner",
       "SM": "Scrum Master",
       "Dev": "Developer",
+      "Developer": "Developer",
       "QA": "QA Engineer",
-      "Architect": "Architect"
+      "Architect": "Architect",
+      "DevOps": "DevOps Engineer",
+      "Security": "Security Engineer",
+      "Data": "Data Engineer"
     },
     "systemStatus": "System Status",
     "connected": "Connected",
@@ -156,6 +166,7 @@
     "error": "Failed to load board",
     "noActiveSprint": "There is no active sprint yet.",
     "empty": "No tasks",
+    "item": "Item",
     "items": "items",
     "assignee": "Assignee",
     "priority": "Priority",
@@ -186,13 +197,23 @@
     "minutesAgo": "{{n}}m ago",
     "hoursAgo": "{{n}}h ago",
     "eventsHint": "Events will appear here in real-time",
-    "messages": "messages"
+    "messages": "messages",
+    "connecting": "Connecting to sprint stream...",
+    "connectionError": "Connection lost",
+    "retryConnection": "Retry connection",
+    "needsSplit": "Sprint capacity exceeded — needs splitting",
+    "filterAll": "All",
+    "filterByAgent": "By agent",
+    "noCompanySetup": "No factory initialized yet"
   },
   "governance": {
     "title": "Governance",
     "subtitle": "Human-in-the-loop approvals",
     "pending": "Pending Approvals",
     "noPending": "No pending approvals",
+    "allActionsOk": "All AI actions are within autonomy limits",
+    "fetchError": "Failed to load pending approvals",
+    "feedbackLabel": "Review feedback",
     "approve": "Approve",
     "reject": "Reject",
     "approving": "Approving...",
@@ -237,7 +258,8 @@
     "load": "Load Report",
     "loading": "Loading...",
     "noData": "No data available",
-    "error": "Failed to load analytics"
+    "error": "Failed to load analytics",
+    "inProgress": "In Progress"
   },
   "memorySearch": {
     "title": "Memory Search",
@@ -319,6 +341,33 @@
       "resolved": "Resolved",
       "closed": "Closed"
     }
+  },
+  "sprintCalendar": {
+    "title": "Sprint Calendar",
+    "focusBlock": "Focus block",
+    "planning": "Sprint planning",
+    "midpoint": "Mid-sprint checkpoint",
+    "deadline": "Sprint deadline",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "progress": "Progress"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "description": "An unexpected error occurred. You can try again or refresh the page.",
+    "retry": "Try Again"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "description": "The page you're looking for doesn't exist or has been moved.",
+    "backHome": "Back to Dashboard"
+  },
+  "toast": {
+    "sprintStarted": "Sprint started successfully",
+    "companyCreated": "Factory initialized",
+    "sessionExpired": "Session expired — please refresh",
+    "networkError": "Network error — check your connection",
+    "unknownError": "An unexpected error occurred"
   },
   "common": {
     "loading": "Loading...",
