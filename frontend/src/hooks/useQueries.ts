@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../services/api'
+import { api, type BacklogItem } from '../services/api'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ export function useUpdateBacklogItem() {
   return useMutation({
     mutationFn: ({ itemId, data }: { itemId: number, data: Parameters<typeof api.updateBacklogItem>[1] }) => 
       api.updateBacklogItem(itemId, data),
-    onSuccess: (updatedItem) => {
+    onSuccess: (updatedItem: BacklogItem) => {
       if (updatedItem.sprint_id) {
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(updatedItem.sprint_id) })
       }

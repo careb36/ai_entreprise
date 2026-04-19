@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   nats:
     image: nats:latest
@@ -67,11 +65,18 @@ services:
       dockerfile: Dockerfile
     container_name: factory-llm-proxy
     environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-factory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-factory}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       PROXY_PORT: 5100
     ports:
       - "5100:5100"
+    volumes:
+      - ./llm-proxy/app.py:/app/app.py
     networks:
       - factory-network
     healthcheck:
@@ -97,20 +102,44 @@ services:
       NATS_URL: nats://nats:4222
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
+      AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+      - ./backend/agents:/app/agents
+      - ./backend/llm:/app/llm
+      - ./backend/memory:/app/memory
+      - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
-      - ${SCAN_ROOT:-/home}:/home:ro
+      - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:ro
     networks:
       - factory-network
     depends_on:
+      llm-proxy:
+        condition: service_healthy
       nats:
         condition: service_healthy
       postgres:
         condition: service_healthy
       neo4j:
+        condition: service_healthy
+
+  vscode-daemon:
+    image: python:3.11-slim
+    container_name: factory-vscode-daemon
+    environment:
+      NATS_URL: nats://nats:4222
+      WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
+    working_dir: /app
+    command: sh -lc "pip install --no-cache-dir nats-py==2.3.1 && python /app/daemon.py"
+    volumes:
+      - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}
+      - ./vscode-daemon/daemon.py:/app/daemon.py:ro
+    networks:
+      - factory-network
+    depends_on:
+      nats:
         condition: service_healthy
 
   janitor:
@@ -137,6 +166,8 @@ services:
     container_name: factory-frontend
     ports:
       - "5173:5173"
+    environment:
+      VITE_DEFAULT_PROJECT_PATH: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public

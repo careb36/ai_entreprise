@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { 
-  useHealth, 
-  useStartSprint 
+import {
+  useHealth,
+  useInitCompany,
+  useStartSprint
 } from '../hooks/useQueries'
+import { useAgentStore } from '../store/agentStore'
+import { useAppStore } from '../store/useAppStore'
 import {
   Play, Rocket, Settings, Zap,
   Brain, Loader2, CheckCircle2, AlertCircle
@@ -13,7 +16,7 @@ interface SprintConfig {
   sprintName: string
   sprintGoal: string
   model: string
-  durationDays: number
+  scopeSize: 'S' | 'M' | 'L'
 }
 
 interface ControlPanelProps {
@@ -21,6 +24,13 @@ interface ControlPanelProps {
 }
 
 const AGENT_ROLE_KEYS = ['PO', 'SM', 'Dev', 'QA', 'DevOps'] as const
+const AGENT_ROLE_ALIASES: Record<(typeof AGENT_ROLE_KEYS)[number], string[]> = {
+  PO: ['PO'],
+  SM: ['ScrumMaster', 'SM'],
+  Dev: ['Developer', 'Dev'],
+  QA: ['QA'],
+  DevOps: ['DevOps'],
+}
 
 export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
   const { t } = useTranslation()
@@ -28,36 +38,74 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
     sprintName: `Sprint ${new Date().getMonth() + 1}`,
     sprintGoal: '',
     model: 'gemini-pro',
-    durationDays: 14
+    scopeSize: 'M'
   })
   const [success, setSuccess] = useState<string | null>(null)
 
   const { data: healthData, status: backendStatus } = useHealth()
+  const initCompanyMutation = useInitCompany()
   const startSprintMutation = useStartSprint()
+  const agentStates = useAgentStore(state => state.agentStates)
+  const isAgentStreamConnected = useAgentStore(state => state.isConnected)
+  const companyId = useAppStore(state => state.companyId)
+  const companyName = useAppStore(state => state.companyName)
+  const activeSprintId = useAppStore(state => state.activeSprintId)
 
-  const isLoading = startSprintMutation.isPending
-  const error = (startSprintMutation.error as any)?.message || null
+  const isLoading = initCompanyMutation.isPending || startSprintMutation.isPending
+  const mutationError = startSprintMutation.error ?? initCompanyMutation.error
+  const error = mutationError instanceof Error
+    ? mutationError.message
+    : mutationError
+      ? String(mutationError)
+      : null
 
   const systemStatus = {
     backend: backendStatus === 'pending' ? 'loading' : backendStatus === 'error' ? 'error' : 'ok',
     nats: healthData?.status === 'healthy' ? 'ok' : 'unknown'
   }
 
+  const isAgentRoleActive = (role: (typeof AGENT_ROLE_KEYS)[number]) => {
+    return AGENT_ROLE_ALIASES[role].some(alias => agentStates[alias]?.fsmState === 'active')
+  }
+
+  const isAgentRoleSeen = (role: (typeof AGENT_ROLE_KEYS)[number]) => {
+    return AGENT_ROLE_ALIASES[role].some(alias => Boolean(agentStates[alias]))
+  }
+
   async function handleStartSprint() {
     if (!config.sprintGoal.trim()) return
     
     setSuccess(null)
+
+    let resolvedCompanyId = companyId
+    if (!resolvedCompanyId) {
+      const bootstrapCompanyName = companyName?.trim() || 'Fabrique Demo'
+      try {
+        const companyResponse = await initCompanyMutation.mutateAsync({
+          company_name: bootstrapCompanyName,
+          default_scope_size: config.scopeSize,
+        })
+        resolvedCompanyId = companyResponse?.company_id ?? companyResponse?.id ?? null
+        if (resolvedCompanyId) {
+          useAppStore.getState().setCompany(resolvedCompanyId, bootstrapCompanyName)
+        }
+      } catch {
+        return
+      }
+    }
+
+    if (!resolvedCompanyId) return
     
     const payload = {
-      company_id: 1, // Default for demo
+      company_id: resolvedCompanyId,
       sprint_name: config.sprintName,
       start_date: new Date().toISOString().split('T')[0],
-      duration_days: config.durationDays,
+      scope_size: config.scopeSize,
       backlog_items: [{ title: config.sprintGoal, description: config.sprintGoal }]
     }
 
     startSprintMutation.mutate(payload, {
-      onSuccess: (response) => {
+      onSuccess: (response: { sprint_id: number }) => {
         setSuccess(`${t('controlPanel.success')} #${response.sprint_id}`)
         onSprintStart?.(response.sprint_id)
       }
@@ -108,17 +156,19 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
             />
           </div>
 
-          {/* Duration + Model */}
+          {/* Scope + Model */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="input-label">{t('controlPanel.duration')}</label>
-              <input
-                type="number"
-                value={config.durationDays}
-                onChange={e => setConfig({ ...config, durationDays: parseInt(e.target.value) || 14 })}
-                min={1} max={90}
-                className="input w-full"
-              />
+              <label className="input-label">{t('controlPanel.scope')}</label>
+              <select
+                value={config.scopeSize}
+                onChange={e => setConfig({ ...config, scopeSize: e.target.value as 'S' | 'M' | 'L' })}
+                className="select w-full"
+              >
+                <option value="S">{t('controlPanel.scopeS')}</option>
+                <option value="M">{t('controlPanel.scopeM')}</option>
+                <option value="L">{t('controlPanel.scopeL')}</option>
+              </select>
             </div>
             <div>
               <label className="input-label">{t('controlPanel.model')}</label>
@@ -155,13 +205,23 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
           <h3 className="text-sm font-semibold text-gray-300">{t('controlPanel.activeAgents')}</h3>
         </div>
         <div className="space-y-1.5">
-          {AGENT_ROLE_KEYS.map(role => (
-            <div key={role} className="flex items-center justify-between px-3 py-2 bg-surface-800 rounded-lg">
-              <span className="text-gray-300 text-sm">{t(`controlPanel.agents.${role}`, role)}</span>
-              <span className="status-dot-active" />
-            </div>
-          ))}
+          {AGENT_ROLE_KEYS.map(role => {
+            const isActive = isAgentRoleActive(role)
+            const hasBeenSeen = isAgentRoleSeen(role)
+            const title = isActive ? 'Working' : hasBeenSeen && isAgentStreamConnected ? 'Connected' : 'Idle'
+            return (
+              <div key={role} className="flex items-center justify-between px-3 py-2 bg-surface-800 rounded-lg">
+                <span className="text-gray-300 text-sm">{t(`controlPanel.agents.${role}`, role)}</span>
+                {isActive
+                  ? <span className="status-dot-active" title={title} />
+                  : <span className={hasBeenSeen && isAgentStreamConnected ? 'status-dot-warning' : 'status-dot-offline'} title={title} />}
+              </div>
+            )
+          })}
         </div>
+        {!activeSprintId && (
+          <p className="text-xs text-gray-500 mt-3">{t('kanban.noActiveSprint')}</p>
+        )}
       </section>
 
       {/* System status */}

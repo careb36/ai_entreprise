@@ -141,16 +141,33 @@ def create_completion(role: str, prompt: str, system_message: Optional[str] = No
 
     Returns:
         The model's text response as a plain string.
+
+    Raises:
+        RuntimeError: If the LLM proxy is unreachable or returns an error,
+                      so callers can map it to a structured error state.
     """
-    model = get_llm_for_role(role)
+    try:
+        model = get_llm_for_role(role)
+    except Exception as e:
+        raise RuntimeError(f"Failed to initialise LLM for role '{role}': {e}") from e
+
     messages = []
     if system_message:
         messages.append(SystemMessage(content=system_message))
     messages.append(HumanMessage(content=prompt))
-    
-    # Extra headers for the proxy (Governance & Observability)
-    config = {}
+
+    config: Dict[str, Any] = {}
     if bu_id:
         config["headers"] = {"X-Business-Unit-ID": str(bu_id)}
-        
-    return model.invoke(messages, **config).content
+
+    try:
+        return model.invoke(messages, **config).content
+    except Exception as e:
+        # Log with full traceback so the request ID shows up in the logs.
+        logger.error(
+            "LLM completion failed for role=%s bu_id=%s: %s",
+            role, bu_id, e, exc_info=True,
+        )
+        raise RuntimeError(
+            f"LLM proxy error for role '{role}': {type(e).__name__}: {e}"
+        ) from e

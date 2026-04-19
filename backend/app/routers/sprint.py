@@ -29,6 +29,10 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
+# Scope guardrail — max backlog items per scope size.
+SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
+SCOPE_HARD_MAX = 12
+
 
 @router.post("/start_sprint")
 async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_session)):
@@ -40,11 +44,27 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
     commits.  This guarantees at-least-once delivery without a distributed
     transaction between Postgres and NATS.
     """
+    scope_size = req.scope_size.upper()
+    if scope_size not in SCOPE_LIMITS:
+        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+
+    item_limit = SCOPE_LIMITS[scope_size]
+    if len(req.backlog_items) > SCOPE_HARD_MAX:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many backlog items ({len(req.backlog_items)}). Hard limit is {SCOPE_HARD_MAX}. Split into multiple sprints.",
+        )
+    if len(req.backlog_items) > item_limit:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Scope '{scope_size}' allows up to {item_limit} items, got {len(req.backlog_items)}. Use scope 'L' or split this sprint.",
+        )
+
     sprint = Sprint(
         company_id=req.company_id,
         sprint_name=req.sprint_name,
         start_date=req.start_date,
-        duration_days=req.duration_days,
+        scope_size=scope_size,
     )
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
@@ -77,6 +97,35 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             payload=nats_payload,
         ))
 
+    kickoff_story = "\n".join(
+        [
+            f"Sprint kickoff: {req.sprint_name}",
+            f"Sprint ID: {sprint.id}",
+            "Backlog:",
+            *[
+                f"- {item.get('title', '').strip()}: {item.get('description', '').strip()}"
+                for item in req.backlog_items
+            ],
+            "Goal: PO, Scrum Master and Developer must coordinate, surface blockers, and agree the first execution plan.",
+        ]
+    )
+    session.add(OutboxEvent(
+        aggregate_type="sprint",
+        aggregate_id=str(sprint.id),
+        event_type="nats_publish",
+        payload={
+            "subject": "workspace.generate",
+            "message": {
+                "interaction_id": str(uuid4()),
+                "company_id": req.company_id,
+                "business_unit_id": None,
+                "sprint_id": sprint.id,
+                "story": kickoff_story,
+                "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",
+            },
+        },
+    ))
+
     session.commit()
     return {
         "sprint_id": sprint.id,
@@ -101,7 +150,8 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
         "id": sprint.id,
         "sprint_name": sprint.sprint_name,
         "start_date": sprint.start_date,
-        "duration_days": sprint.duration_days,
+        "scope_size": sprint.scope_size,
+        "item_limit": SCOPE_LIMITS.get(sprint.scope_size, 8),
         "status": sprint.status,
         "goal": sprint.goal,
     }

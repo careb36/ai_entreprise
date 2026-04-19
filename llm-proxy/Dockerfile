@@ -18,8 +18,8 @@ COPY pyproject.toml poetry.lock* /app/
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root
 
-# Install gunicorn for production
-RUN pip install --no-cache-dir gunicorn
+# Install runtime helpers required by gunicorn and OpenTelemetry instrumentation.
+RUN pip install --no-cache-dir gunicorn 'setuptools<81'
 
 COPY app.py /app/
 

@@ -1,218 +1,492 @@
-"""
-LangGraph Agent Workflow — Enterprise v2026.4 (Phase 4)
-
-Five-node directed graph that models the full AI engineering cycle:
-  design → validate_design → generate → execute → burn
-
-Phase 4 additions:
-- **OpenTelemetry**: Fully instrumented nodes with span tracking and propagation.
-- **Context Propagation**: interaction_id and business_unit_id flow through state.
-"""
+"""Multi-agent LangGraph orchestration for sprint kickoff conversations."""
 
 import logging
-import re
-from typing import Dict, Any, Optional, TypedDict
+from datetime import datetime, timezone
+from typing import Any, Awaitable, Callable, Optional
+from typing_extensions import Annotated, TypedDict
 from uuid import uuid4
-from datetime import datetime
 
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.errors import GraphRecursionError
 
-from llm.model_factory import create_completion
+from agents.tools.openproject_tools import create_work_package
+from llm_proxy_client import LLMProxyClient
+from llm.model_factory import AgentRole, ModelFactory
 from memory.engram_processor import get_engram_processor
 from telemetry import configure_telemetry, get_tracer
 
 configure_telemetry("agent-worker")
 tracer = get_tracer(__name__)
-
 logger = logging.getLogger("fabrique-agents")
 
-MAX_DESIGN_RETRIES = 2
-MAX_EXECUTION_RETRIES = 2
+PublishEvent = Callable[[dict[str, Any]], Awaitable[None]]
+
 
 class AgentState(TypedDict):
     interaction_id: str
+    company_id: Optional[int]
     business_unit_id: Optional[int]
-    agent_id: str
-    agent_role: str
-    task_type: Optional[str]
+    sprint_id: Optional[int]
     story: str
-    constraints: Optional[str]
-    design_artifact: Optional[str]
-    generated_code: Optional[str]
-    execution_results: Optional[Dict[str, Any]]
-    tests_passed: bool
+    backlog_items: list[str]
+    messages: Annotated[list[AnyMessage], add_messages]
+    next_agent: str
+    openproject_ticket_id: Optional[str]
     engram_id: Optional[Any]
-    design_valid: bool
-    design_retry_count: int
-    execution_retry_count: int
     last_error: Optional[str]
-    rag_context: Optional[str]
+    needs_split: Optional[bool]
     created_at: str
+    publish_event: Optional[PublishEvent]
 
-def architect_design_node(state: AgentState) -> AgentState:
-    """Architect generates Mermaid diagrams and technical specs."""
-    with tracer.start_as_current_span("architect_design") as span:
-        span.set_attribute("interaction_id", state["interaction_id"])
-        span.set_attribute("business_unit_id", state.get("business_unit_id") or 0)
-        
-        logger.info(f"Designing solution for: {state['story']} (BU: {state.get('business_unit_id')})")
-        processor = get_engram_processor()
-        rag_context = processor.query_relevant_engrams(state["story"], limit=5, role_filter="Architect")
-        state["rag_context"] = rag_context
 
-        corrective_instruction = f"\nPrevious error: {state['last_error']}" if state.get("last_error") else ""
-        prompt = (
-            f"Act as a Staff Architect. Story: {state['story']}\n"
-            f"Context: {rag_context or 'None'}\n{corrective_instruction}"
-            "\nOutput: ```mermaid ... ``` + Technical requirements."
-        )
-        state["design_artifact"] = create_completion(
-            role="Architect", 
-            prompt=prompt, 
-            bu_id=state.get("business_unit_id")
-        )
-        return state
+def _resolve_model_name(role: str) -> str:
+    try:
+        return ModelFactory.ROLE_MODEL_MAP[AgentRole(role)].model_name
+    except Exception:
+        return ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name
 
-def validate_design_node(state: AgentState) -> AgentState:
-    """Guardrails: ensure structurally valid Mermaid diagram."""
-    with tracer.start_as_current_span("validate_design") as span:
-        artifact = state.get("design_artifact") or ""
-        # Look for mermaid block with content
-        mermaid_match = re.search(r"```mermaid\s*\n(.*?)\n```", artifact, flags=re.IGNORECASE | re.DOTALL)
-        
-        if mermaid_match and len(mermaid_match.group(1).strip()) > 10:
-            state["design_valid"] = True
-            state["last_error"] = None
-            span.set_attribute("design.valid", True)
-        else:
-            state["design_valid"] = False
-            state["design_retry_count"] += 1
-            state["last_error"] = "Invalid or empty ```mermaid``` block. Please provide a valid diagram."
-            logger.warning(f"Design validation failed: {state['last_error']}")
-            span.set_attribute("design.valid", False)
-            span.set_attribute("design.error", state["last_error"])
-            
-        return state
 
-def generate_code_node(state: AgentState) -> AgentState:
-    """Developer generates code based on design."""
-    with tracer.start_as_current_span("generate_code") as span:
-        retry = state.get("execution_retry_count", 0)
-        span.set_attribute("retry_count", retry)
-        
-        feedback = ""
-        if state.get("last_error") and retry > 0:
-            feedback = f"\n\nCRITICAL: Previous attempt failed with error:\n{state['last_error']}\nFIX THIS in the next iteration."
-        
-        logger.info(f"Generating code (retry={retry})...")
-        prompt = (
-            f"Story: {state['story']}\n"
-            f"Design: {state['design_artifact']}\n"
-            f"{feedback}\n"
-            "Instructions: Write production-quality code. "
-            "DO NOT use 'TODO', 'pass', or 'NotImplementedError' placeholders. "
-            "Implement the logic completely."
-        )
-        state["generated_code"] = create_completion(
-            role="Developer", 
-            prompt=prompt, 
-            bu_id=state.get("business_unit_id")
-        )
-        return state
+def _message_text(message: AnyMessage) -> str:
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    return str(content)
 
-def real_execution_node(state: AgentState) -> AgentState:
-    """Simulates code execution and testing with basic syntax validation."""
-    with tracer.start_as_current_span("real_execution") as span:
-        code = state.get("generated_code") or ""
-        
-        # 1. Check for stubs
-        stubs = [s for s in ["TODO", "pass", "NotImplementedError"] if s in code]
-        if stubs:
-            state["tests_passed"] = False
-            state["execution_retry_count"] += 1
-            state["last_error"] = f"Incomplete implementation. Found placeholders: {', '.join(stubs)}"
-            logger.warning(f"Execution failed: {state['last_error']}")
-            span.set_attribute("tests.passed", False)
-            span.set_attribute("tests.error", "stubs_detected")
-            return state
 
-        # 2. Basic syntax check for Python (if applicable)
-        if "def " in code or "import " in code:
-            try:
-                # Try to compile the code to catch syntax errors
-                # We wrap it in a dummy block if it's just snippets
-                compile(code, "<string>", "exec")
-            except SyntaxError as e:
-                state["tests_passed"] = False
-                state["execution_retry_count"] += 1
-                state["last_error"] = f"Syntax Error: {e.msg} (line {e.lineno})"
-                logger.warning(f"Execution failed: {state['last_error']}")
-                span.set_attribute("tests.passed", False)
-                span.set_attribute("tests.error", "syntax_error")
-                return state
-            except Exception as e:
-                # Other errors during compilation (unlikely but possible)
-                state["tests_passed"] = False
-                state["execution_retry_count"] += 1
-                state["last_error"] = f"Compilation Error: {str(e)}"
-                logger.warning(f"Execution failed: {state['last_error']}")
-                span.set_attribute("tests.passed", False)
-                return state
+def _message_name(message: AnyMessage) -> str:
+    explicit_name = getattr(message, "name", None)
+    if explicit_name:
+        return str(explicit_name)
+    message_type = getattr(message, "type", "message")
+    if message_type == "human":
+        return "User"
+    if message_type == "system":
+        return "System"
+    return "Agent"
 
-        # 3. If we reached here, simulate success
-        state["tests_passed"] = True
-        state["last_error"] = None
-        logger.info("Code execution/validation passed.")
-        span.set_attribute("tests.passed", True)
-            
-        return state
 
-def burn_engram_node(state: AgentState) -> AgentState:
-    """Finalize by burning record into Neo4j."""
-    with tracer.start_as_current_span("burn_engram") as span:
-        processor = get_engram_processor()
-        summary = f"Story: {state['story']}. Status: {'passed' if state['tests_passed'] else 'failed'}."
-        result = processor.burn_engram(
-            agent_id=state["agent_id"],
-            role=state["agent_role"],
-            decision_summary=summary,
-            metadata={"interaction_id": state["interaction_id"]}
-        )
-        state["engram_id"] = result["engram_id"]
-        span.set_attribute("engram.id", state["engram_id"])
-        return state
+def _transcript(messages: list[AnyMessage]) -> str:
+    lines: list[str] = []
+    for message in messages:
+        lines.append(f"{_message_name(message)}: {_message_text(message)}")
+    return "\n".join(lines[-12:])
 
-def create_agent_graph() -> StateGraph:
-    workflow = StateGraph(AgentState)
-    workflow.add_node("design", architect_design_node)
-    workflow.add_node("validate_design", validate_design_node)
-    workflow.add_node("generate", generate_code_node)
-    workflow.add_node("execute", real_execution_node)
-    workflow.add_node("burn", burn_engram_node)
-    
-    workflow.set_entry_point("design")
-    workflow.add_edge("design", "validate_design")
-    workflow.add_conditional_edges("validate_design", lambda s: "generate" if s["design_valid"] or s["design_retry_count"] > MAX_DESIGN_RETRIES else "design")
-    workflow.add_edge("generate", "execute")
-    workflow.add_conditional_edges("execute", lambda s: "burn" if s["tests_passed"] or s["execution_retry_count"] > MAX_EXECUTION_RETRIES else "generate")
-    workflow.add_edge("burn", END)
-    
-    return workflow.compile(checkpointer=MemorySaver())
 
-def run_fabrique_workflow(story: str, role: str = "Developer", bu_id: Optional[int] = None):
-    interaction_id = str(uuid4())
-    initial_state = {
-        "interaction_id": interaction_id,
-        "business_unit_id": bu_id,
-        "agent_id": f"{role.lower()}_1",
-        "agent_role": role,
-        "story": story,
-        "tests_passed": False,
-        "design_retry_count": 0,
-        "execution_retry_count": 0,
-        "created_at": datetime.now().isoformat(),
-        "last_error": None
+def _extract_backlog(story: str) -> list[str]:
+    items: list[str] = []
+    for raw_line in story.splitlines():
+        line = raw_line.strip()
+        if line.startswith(("- ", "* ")):
+            items.append(line[2:].strip())
+    return items
+
+
+async def _publish(state: AgentState, event: dict[str, Any]) -> None:
+    publish_event = state.get("publish_event")
+    sprint_id = state.get("sprint_id")
+    if not publish_event or sprint_id is None:
+        return
+    payload = dict(event)
+    payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+    await publish_event(payload)
+
+
+async def _invoke_agent(
+    state: AgentState,
+    role: str,
+    task: str,
+    prompt: str,
+) -> str:
+    await _publish(
+        state,
+        {
+            "type": "agent_start",
+            "agent": role,
+            "role": role,
+            "task": task,
+            "message": f"{role} is thinking about: {task}",
+        },
+    )
+
+    client = LLMProxyClient()
+    result = await client.chat_async(
+        messages=[
+            {
+                "role": "system",
+                "content": f"You are {role} in a sprint orchestration. Keep answers concrete, operational, and aware of prior messages.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        model=_resolve_model_name(role),
+        role=role,
+        bu_id=state.get("business_unit_id"),
+    )
+
+    if result.get("error"):
+        raise RuntimeError(str(result["error"]))
+
+    content = (
+        result.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+        .strip()
+    )
+
+    await _publish(
+        state,
+        {
+            "type": "message",
+            "agent": role,
+            "role": role,
+            "task": task,
+            "message": content,
+        },
+    )
+    await _publish(
+        state,
+        {
+            "type": "agent_complete",
+            "agent": role,
+            "role": role,
+            "task": task,
+            "message": f"{role} finished: {task}",
+        },
+    )
+    return content
+
+
+async def kickoff_node(state: AgentState) -> dict[str, Any]:
+    await _publish(
+        state,
+        {
+            "type": "status",
+            "agent": "System",
+            "role": "System",
+            "task": "Sprint kickoff",
+            "message": "Sprint orchestration started. PO, Scrum Master, and Developer are joining the conversation.",
+        },
+    )
+    return {
+        "messages": [SystemMessage(content="Sprint kickoff started.")],
+        "backlog_items": state.get("backlog_items") or _extract_backlog(state["story"]),
+        "next_agent": "PO",
+        "last_error": None,
     }
-    graph = create_agent_graph()
-    return graph.invoke(initial_state, config={"configurable": {"thread_id": interaction_id}})
+
+
+async def po_node(state: AgentState) -> dict[str, Any]:
+    with tracer.start_as_current_span("graph.po"):
+        try:
+            backlog_items = state.get("backlog_items") or _extract_backlog(state["story"])
+            first_ticket = backlog_items[0] if backlog_items else state["story"].splitlines()[0]
+            tool_result = await create_work_package(
+                {
+                    "project_id": 1,
+                    "subject": first_ticket[:120],
+                    "description": state["story"],
+                    "interaction_id": state["interaction_id"],
+                    "sprint_id": state.get("sprint_id"),
+                },
+                publish_event=lambda event: _publish(state, event),
+            )
+            prompt = (
+                f"Sprint brief:\n{state['story']}\n\n"
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                f"Backlog anchor ticket: {tool_result.get('work_package_id')}\n"
+                "As PO, prioritize the sprint, call out the riskiest item, and give one clear instruction to the Scrum Master."
+            )
+            content = await _invoke_agent(state, "PO", "Prioritize sprint backlog", prompt)
+            return {
+                "messages": [AIMessage(content=content, name="PO")],
+                "next_agent": "ScrumMaster",
+                "openproject_ticket_id": str(tool_result.get("work_package_id")),
+                "backlog_items": backlog_items,
+                "last_error": None,
+            }
+        except Exception as exc:
+            await _publish(
+                state,
+                {
+                    "type": "error",
+                    "agent": "PO",
+                    "role": "PO",
+                    "task": "Prioritize sprint backlog",
+                    "message": f"PO failed: {exc}",
+                },
+            )
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
+async def scrum_master_node(state: AgentState) -> dict[str, Any]:
+    with tracer.start_as_current_span("graph.scrum_master"):
+        try:
+            prompt = (
+                f"Sprint brief:\n{state['story']}\n\n"
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                f"OpenProject ticket: {state.get('openproject_ticket_id') or 'pending'}\n"
+                "As Scrum Master, coordinate sequencing, identify one blocker, and assign the first execution move to the Developer."
+            )
+            content = await _invoke_agent(state, "ScrumMaster", "Coordinate sprint execution", prompt)
+            return {
+                "messages": [AIMessage(content=content, name="ScrumMaster")],
+                "next_agent": "Developer",
+                "last_error": None,
+            }
+        except Exception as exc:
+            await _publish(
+                state,
+                {
+                    "type": "error",
+                    "agent": "ScrumMaster",
+                    "role": "ScrumMaster",
+                    "task": "Coordinate sprint execution",
+                    "message": f"Scrum Master failed: {exc}",
+                },
+            )
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
+async def developer_node(state: AgentState) -> dict[str, Any]:
+    with tracer.start_as_current_span("graph.developer"):
+        try:
+            prompt = (
+                f"Sprint brief:\n{state['story']}\n\n"
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                "As Developer, pick up the first actionable item, state exactly what you will implement first, and mention any dependency or unblock request."
+            )
+            content = await _invoke_agent(state, "Developer", "Pick up first sprint task", prompt)
+            return {
+                "messages": [AIMessage(content=content, name="Developer")],
+                "next_agent": "PO_WRAP",
+                "last_error": None,
+            }
+        except Exception as exc:
+            await _publish(
+                state,
+                {
+                    "type": "error",
+                    "agent": "Developer",
+                    "role": "Developer",
+                    "task": "Pick up first sprint task",
+                    "message": f"Developer failed: {exc}",
+                },
+            )
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
+async def po_wrap_node(state: AgentState) -> dict[str, Any]:
+    with tracer.start_as_current_span("graph.po_wrap"):
+        try:
+            prompt = (
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                "As PO, close the kickoff by summarizing priority, owner, and next immediate action in 3 compact bullets."
+            )
+            content = await _invoke_agent(state, "PO", "Close sprint kickoff", prompt)
+            return {
+                "messages": [AIMessage(content=content, name="PO")],
+                "next_agent": "burn",
+                "last_error": None,
+            }
+        except Exception as exc:
+            await _publish(
+                state,
+                {
+                    "type": "error",
+                    "agent": "PO",
+                    "role": "PO",
+                    "task": "Close sprint kickoff",
+                    "message": f"PO wrap-up failed: {exc}",
+                },
+            )
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
+async def burn_node(state: AgentState) -> dict[str, Any]:
+    summary = _transcript(state["messages"])
+    last_error = state.get("last_error")
+    sprint_id = state.get("sprint_id")
+
+    try:
+        processor = get_engram_processor()
+        result = processor.burn_engram(
+            agent_id=f"orchestrator_{state['interaction_id']}",
+            role="PO",
+            decision_summary=summary[:4000],
+            metadata={
+                "interaction_id": state["interaction_id"],
+                "sprint_id": sprint_id,
+                "needs_split": bool(last_error),
+            },
+        )
+        engram_id = result.get("engram_id")
+    except Exception as exc:
+        logger.warning("Could not burn engram for interaction_id=%s: %s", state["interaction_id"], exc)
+        engram_id = None
+
+    if last_error:
+        await _publish(
+            state,
+            {
+                "type": "needs_split",
+                "agent": "System",
+                "role": "System",
+                "task": "Sprint kickoff",
+                "sprint_id": sprint_id,
+                "message": "Sprint scope exceeded agent capacity. Split into smaller sprints.",
+                "error": last_error,
+            },
+        )
+        logger.warning(
+            "Sprint sprint_id=%s marked needs_split interaction_id=%s error=%s",
+            sprint_id,
+            state["interaction_id"],
+            last_error,
+        )
+    else:
+        await _publish(
+            state,
+            {
+                "type": "status",
+                "agent": "System",
+                "role": "System",
+                "task": "Sprint kickoff",
+                "message": "Sprint kickoff conversation finished.",
+            },
+        )
+
+    return {"engram_id": engram_id, "needs_split": bool(last_error)}
+
+
+def _route_from(state: AgentState, fallback: str, success: str) -> str:
+    if state.get("last_error"):
+        return fallback
+    return success
+
+
+def create_agent_graph():
+    workflow = StateGraph(AgentState)
+    workflow.add_node("kickoff", kickoff_node)
+    workflow.add_node("po", po_node)
+    workflow.add_node("scrum_master", scrum_master_node)
+    workflow.add_node("developer", developer_node)
+    workflow.add_node("po_wrap", po_wrap_node)
+    workflow.add_node("burn", burn_node)
+
+    workflow.set_entry_point("kickoff")
+    workflow.add_edge("kickoff", "po")
+    workflow.add_conditional_edges("po", lambda state: _route_from(state, "burn", "scrum_master"))
+    workflow.add_conditional_edges("scrum_master", lambda state: _route_from(state, "burn", "developer"))
+    workflow.add_conditional_edges("developer", lambda state: _route_from(state, "burn", "po_wrap"))
+    workflow.add_edge("po_wrap", "burn")
+    workflow.add_edge("burn", END)
+    # 6 fixed nodes × 2 safety margin = 12. Raise explicitly if cycles are added later.
+    return workflow.compile(recursion_limit=12)
+
+
+async def run_fabrique_workflow(
+    story: str,
+    role: str = "Developer",
+    bu_id: Optional[int] = None,
+    sprint_id: Optional[int] = None,
+    company_id: Optional[int] = None,
+    nats_client: Any = None,
+    interaction_id: Optional[str] = None,
+) -> dict[str, Any]:
+    interaction_id = interaction_id or str(uuid4())
+
+    async def publish_event(event: dict[str, Any]) -> None:
+        if not nats_client or sprint_id is None:
+            return
+        await nats_client.publish(f"glassroom.{sprint_id}", event)
+
+    initial_state: AgentState = {
+        "interaction_id": interaction_id,
+        "company_id": company_id,
+        "business_unit_id": bu_id,
+        "sprint_id": sprint_id,
+        "story": story,
+        "backlog_items": _extract_backlog(story),
+        "messages": [HumanMessage(content=story, name="User")],
+        "next_agent": role,
+        "openproject_ticket_id": None,
+        "engram_id": None,
+        "last_error": None,
+        "needs_split": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "publish_event": publish_event,
+    }
+
+    logger.info(
+        "Starting multi-agent workflow interaction_id=%s sprint_id=%s role=%s story=%.80s",
+        interaction_id,
+        sprint_id,
+        role,
+        story,
+    )
+
+    try:
+        graph = create_agent_graph()
+        result = await graph.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": interaction_id}},
+        )
+        logger.info(
+            "Workflow completed interaction_id=%s sprint_id=%s engram_id=%s needs_split=%s",
+            interaction_id,
+            sprint_id,
+            result.get("engram_id"),
+            result.get("needs_split"),
+        )
+        return result
+    except GraphRecursionError as exc:
+        logger.error(
+            "Workflow RECURSION LIMIT hit interaction_id=%s sprint_id=%s — sprint needs_split",
+            interaction_id,
+            sprint_id,
+        )
+        if nats_client and sprint_id is not None:
+            await nats_client.publish(
+                f"glassroom.{sprint_id}",
+                {
+                    "type": "needs_split",
+                    "agent": "System",
+                    "role": "System",
+                    "task": "Sprint kickoff",
+                    "sprint_id": sprint_id,
+                    "message": "Sprint scope exceeded agent recursion limit. Split into smaller sprints.",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return {
+            **initial_state,
+            "error": f"GraphRecursionError: {exc}",
+            "engram_id": None,
+            "needs_split": True,
+        }
+    except Exception as exc:
+        logger.error(
+            "Workflow FATAL ERROR interaction_id=%s: %s",
+            interaction_id,
+            exc,
+            exc_info=True,
+        )
+        if nats_client and sprint_id is not None:
+            await nats_client.publish(
+                f"glassroom.{sprint_id}",
+                {
+                    "type": "error",
+                    "agent": "System",
+                    "role": "System",
+                    "task": "Sprint kickoff",
+                    "message": f"LangGraph workflow failed: {type(exc).__name__}: {exc}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return {
+            **initial_state,
+            "error": f"{type(exc).__name__}: {exc}",
+            "engram_id": None,
+            "needs_split": False,
+        }

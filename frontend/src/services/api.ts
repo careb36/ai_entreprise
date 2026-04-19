@@ -56,7 +56,8 @@ export interface SprintBoard {
     status: string
     goal?: string
     start_date: string
-    duration_days: number
+    scope_size: string
+    item_limit: number
   }
   columns: Record<string, BacklogItem[]>
   total: number
@@ -170,7 +171,7 @@ export const api = {
   updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
     api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; duration_days: number; backlog_items: any[] }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; backlog_items: any[] }) =>
     api.post<any>('/v1/start_sprint', data),
 
   // Agents & Memory

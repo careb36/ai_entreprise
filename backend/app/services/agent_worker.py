@@ -2,31 +2,61 @@
 Agent Worker — NATS consumer for LangGraph workflow execution.
 
 Listens for ``workspace.generate`` events and invokes the corresponding
-LangGraph agent graph.  This worker decouples the HTTP request from the
-long-running AI generation process.
-
-Concurrency model
------------------
-``run_fabrique_workflow()`` is a synchronous, CPU/IO-bound function (LangGraph
-graph traversal + LLM HTTP calls).  Calling it directly inside a coroutine
-would block the event loop and stall every other NATS callback, SSE fan-out,
-and HTTP request handled by the same process.
-
-``asyncio.to_thread()`` offloads the call to the default ``ThreadPoolExecutor``
-so the event loop remains free to process other coroutines while the workflow
-runs in a worker thread.  Each concurrent ``workspace.generate`` message gets
-its own thread, up to the executor's thread limit (default: ``min(32, cpu+4)``).
+LangGraph agent graph asynchronously so agent turns can publish GlassRoom
+events in real time while the workflow is still running.
 """
 
 import asyncio
-import functools
 import json
 import logging
+from datetime import datetime, timezone
+
+from sqlmodel import Session
 
 from agents.graph import run_fabrique_workflow
+from database import engine
+from models import Sprint
 from nats_client import NATSClient
 
 logger = logging.getLogger("fabrique-worker")
+
+
+def _mark_sprint_needs_split(sprint_id: int) -> None:
+    """Update sprint status to needs_split in DB — called after workflow exhausts scope."""
+    try:
+        with Session(engine) as session:
+            sprint = session.get(Sprint, sprint_id)
+            if sprint and sprint.status == "active":
+                sprint.status = "needs_split"
+                session.add(sprint)
+                session.commit()
+    except Exception as exc:
+        logger.warning("Could not mark sprint %s as needs_split: %s", sprint_id, exc)
+
+
+async def _publish_glassroom_error(
+    nats_client: NATSClient,
+    sprint_id: int | str | None,
+    interaction_id: str,
+    error_msg: str,
+) -> None:
+    """Emit a red error event to the Glassroom SSE stream for the given sprint."""
+    if not sprint_id:
+        return
+    try:
+        await nats_client.publish(
+            f"glassroom.{sprint_id}",
+            {
+                "type": "error",
+                "agent": "System",
+                "role": "System",
+                "task": f"LangGraph workflow ({interaction_id})",
+                "message": f"❌ LangGraph workflow failed: {error_msg}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception as pub_err:
+        logger.warning("Failed to publish Glassroom error event: %s", pub_err)
 
 
 async def process_agent_tasks(nats_client: NATSClient) -> None:
@@ -35,46 +65,80 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
 
     Each incoming message is processed in a dedicated thread via
     ``asyncio.to_thread()`` so the event loop is never blocked by the
-    synchronous LangGraph execution.
+    synchronous LangGraph execution.  On any failure, a structured error event
+    is published to the Glassroom SSE stream so the user sees a clear red message
+    rather than silent inactivity.
     """
 
     async def task_callback(msg, data=None):
         if data is None:
             data = {}
+        interaction_id = "unknown"
+        sprint_id = None
         try:
             if not data:
-                data = json.loads(msg.data.decode())
+                raw = msg.data.decode()
+                logger.debug("workspace.generate raw payload: %.200s", raw)
+                data = json.loads(raw)
+
             subject = msg.subject
+            if subject != "workspace.generate":
+                return
 
-            if subject == "workspace.generate":
-                story = data.get("story")
-                interaction_id = data.get("interaction_id")
-                bu_id = data.get("business_unit_id")
+            story = data.get("story")
+            interaction_id = data.get("interaction_id", "unknown")
+            bu_id = data.get("business_unit_id")
+            sprint_id = data.get("sprint_id")  # included when triggered from task_worker
 
-                logger.info(f"Received generation task: {interaction_id} (BU: {bu_id})")
+            logger.info(
+                "workspace.generate received: interaction_id=%s bu_id=%s sprint_id=%s story=%.80s",
+                interaction_id, bu_id, sprint_id, story,
+            )
 
-                # Offload the synchronous LangGraph workflow to a thread so the
-                # event loop stays free for other NATS callbacks and HTTP requests.
-                result = await asyncio.to_thread(
-                    functools.partial(run_fabrique_workflow, story=story, bu_id=bu_id)
+            if not story:
+                logger.warning("workspace.generate message missing 'story' field — skipping: %s", data)
+                return
+
+            result = await run_fabrique_workflow(
+                story=story,
+                bu_id=bu_id,
+                sprint_id=sprint_id,
+                company_id=data.get("company_id"),
+                nats_client=nats_client,
+                interaction_id=interaction_id,
+            )
+
+            if result.get("needs_split") and sprint_id:
+                _mark_sprint_needs_split(sprint_id)
+                logger.warning(
+                    "Sprint sprint_id=%s marked needs_split after workflow interaction_id=%s",
+                    sprint_id, interaction_id,
                 )
 
+            if result.get("error"):
+                logger.error(
+                    "LangGraph workflow returned error for interaction_id=%s: %s",
+                    interaction_id, result["error"],
+                )
+                await _publish_glassroom_error(
+                    nats_client, sprint_id, interaction_id, result["error"]
+                )
+            else:
                 logger.info(
-                    "Workflow completed for %s. tests_passed=%s engram_id=%s",
-                    interaction_id,
-                    result.get("tests_passed"),
-                    result.get("engram_id"),
+                    "LangGraph workflow completed: interaction_id=%s engram_id=%s needs_split=%s",
+                    interaction_id, result.get("engram_id"), result.get("needs_split"),
                 )
 
         except Exception as e:
             logger.error(
-                "Error processing agent task (interaction_id=%s): %s",
-                data.get("interaction_id", "unknown"),
-                e,
-                exc_info=True,
+                "Fatal error in workspace.generate handler (interaction_id=%s): %s",
+                interaction_id, e, exc_info=True,
             )
-        finally:
-            await msg.ack()
+            await _publish_glassroom_error(
+                nats_client, sprint_id, interaction_id,
+                f"{type(e).__name__}: {e}",
+            )
 
-    logger.info("Agent Worker subscribed to workspace.generate")
+    logger.info("Agent Worker subscribing to workspace.generate")
     await nats_client.subscribe("workspace.generate", task_callback)
+    logger.info("Agent Worker subscribed to workspace.generate — ready.")

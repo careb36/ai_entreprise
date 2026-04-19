@@ -39,9 +39,11 @@ paths:
               properties:
                 company_name:
                   type: string
-                default_sprint_length_days:
-                  type: integer
-                  default: 14
+                default_scope_size:
+                  type: string
+                  enum: [S, M, L]
+                  default: M
+                  description: "S = up to 4 items, M = up to 8, L = up to 12"
                 agents:
                   type: array
                   items:
@@ -77,7 +79,6 @@ paths:
                 - company_id
                 - sprint_name
                 - start_date
-                - duration_days
                 - backlog_items
               properties:
                 company_id:
@@ -86,8 +87,11 @@ paths:
                   type: string
                 start_date:
                   type: string
-                duration_days:
-                  type: integer
+                scope_size:
+                  type: string
+                  enum: [S, M, L]
+                  default: M
+                  description: "S = up to 4 items, M = up to 8, L = up to 12"
                 backlog_items:
                   type: array
                   items:
@@ -107,7 +111,11 @@ paths:
                 properties:
                   sprint_id:
                     type: integer
-                  openproject_sprint_url:
+                  scope_size:
+                    type: string
+                  item_limit:
+                    type: integer
+                  sprint_url:
                     type: string
 
   /v1/glassroom/stream:

@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Calendar, SlotInfo, Views, momentLocalizer } from 'react-big-calendar'
+import type { View } from 'react-big-calendar'
 import { CalendarDays, Expand, Minimize, X } from 'lucide-react'
 import moment from 'moment'
+
+const SCOPE_DAYS: Record<string, number> = { S: 7, M: 14, L: 21 }
 
 interface SprintCalendarProps {
   sprintId: string
   sprintName?: string
   startDate?: string
-  durationDays?: number
+  scopeSize?: string
 }
 
 interface SprintEvent {
@@ -32,15 +35,15 @@ export default function SprintCalendar({
   sprintId,
   sprintName,
   startDate,
-  durationDays,
+  scopeSize,
 }: SprintCalendarProps) {
   const { t, i18n } = useTranslation()
-  const [view, setView] = useState<(typeof Views)[keyof typeof Views]>(Views.MONTH)
+  const [view, setView] = useState<View>(Views.MONTH)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<SprintEvent | null>(null)
-  const start = toDate(startDate)
-  const totalDays = Math.max(1, durationDays || 14)
+  const start = useMemo(() => toDate(startDate), [startDate])
+  const totalDays = SCOPE_DAYS[scopeSize ?? 'M'] ?? 14
 
   const end = useMemo(() => {
     const next = new Date(start)
@@ -175,9 +178,9 @@ export default function SprintCalendar({
             step={30}
             timeslots={2}
             showMultiDayTimes
-            onView={(next) => setView(next)}
-            onNavigate={(nextDate) => setCurrentDate(nextDate)}
-            onSelectEvent={(event) => setSelectedEvent(event as SprintEvent)}
+            onView={(next: View) => setView(next)}
+            onNavigate={(nextDate: Date) => setCurrentDate(nextDate)}
+            onSelectEvent={(event: SprintEvent) => setSelectedEvent(event)}
             onSelectSlot={handleSelectSlot}
             selectable
             eventPropGetter={eventStyleGetter}

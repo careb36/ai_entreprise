@@ -40,7 +40,8 @@ class CompanyService:
         self,
         company_name: str,
         agents: List[Dict[str, Any]],
-        default_sprint_length_days: int = 14,
+        default_scope_size: str = "M",
+        default_sprint_length_days: Optional[int] = None,  # deprecated
         autonomy_level: int = 2,
         permissions: Optional[Dict[str, str]] = None,
         project_path: Optional[str] = None,
@@ -55,7 +56,7 @@ class CompanyService:
         # 1. Create the Company
         company = Company(
             company_name=company_name,
-            default_sprint_length_days=default_sprint_length_days,
+            default_scope_size=default_scope_size,
             autonomy_level=autonomy_level,
         )
         self.session.add(company)
@@ -98,7 +99,7 @@ class CompanyService:
             company_id=company.id,
             sprint_name="Sprint 0 — Foundations",
             start_date=date.today().isoformat(),
-            duration_days=default_sprint_length_days or 14,
+            scope_size=default_scope_size,
             status="active",
             goal=plan.get("goal", f"Foundation sprint for {company_name}"),
         )
