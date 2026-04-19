@@ -4,7 +4,7 @@ import { BacklogItem } from '../services/api'
 import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
-  PointerSensor, useSensor, useSensors, closestCenter
+  PointerSensor, useDroppable, useSensor, useSensors, closestCenter
 } from '@dnd-kit/core'
 import {
   SortableContext, useSortable, verticalListSortingStrategy
@@ -30,6 +30,10 @@ const VALID_STATUSES: BacklogItem['status'][] = ['todo', 'in_progress', 'in_revi
 
 const QA_REWORK_LIMIT = 2
 const QA_FAILURE_LIMIT = 3
+
+function findColumnIdByItemId(columns: Record<string, BacklogItem[]>, itemId: number) {
+  return COLUMNS.find((column) => (columns[column.id] ?? []).some((item) => item.id === itemId))?.id
+}
 
 function getQaMetrics(item: BacklogItem): { reworks: number; failures: number } {
   const comments = Array.isArray(item.comments) ? item.comments : []
@@ -93,7 +97,7 @@ function ItemCard({
         <button
           {...attributes} {...listeners}
           className="mt-0.5 text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          aria-label="Drag to reorder"
+          aria-label={t('kanban.dragToReorder')}
         >
           <GripVertical size={14} />
         </button>
@@ -131,12 +135,75 @@ function ItemCard({
         disabled={updating}
         onChange={e => onStatusChange(item.id, e.target.value as BacklogItem['status'])}
         className="select w-full mt-2 text-xs py-1 disabled:opacity-50"
-        aria-label="Change status"
+        aria-label={t('kanban.changeStatus')}
       >
         {VALID_STATUSES.map(s => (
           <option key={s} value={s}>{t(`kanban.status.${s}`, s)}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function ColumnDropZone({
+  columnId,
+  items,
+  titleKey,
+  className,
+  Icon,
+  t,
+  onStatusChange,
+  updating,
+  activeItemId,
+}: {
+  columnId: string
+  items: BacklogItem[]
+  titleKey: string
+  className: string
+  Icon: typeof Circle
+  t: ReturnType<typeof useTranslation>['t']
+  onStatusChange: (id: number, status: BacklogItem['status']) => void
+  updating: ReturnType<typeof useUpdateBacklogItem>
+  activeItemId: number | null
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: columnId })
+
+  return (
+    <div className="w-56 lg:w-64 flex-shrink-0 flex flex-col">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Icon className={className} size={13} />
+        <h3 className={`font-semibold text-xs uppercase tracking-wide ${className}`}>
+          {t(titleKey)}
+        </h3>
+        <span className="ml-auto badge text-xs">{items.length}</span>
+      </div>
+
+      <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+        <div
+          ref={setNodeRef}
+          className={`flex-1 space-y-2 min-h-[80px] rounded-lg border border-dashed p-2 transition-colors ${
+            isOver
+              ? 'border-brand-500 bg-brand-950/40'
+              : 'border-surface-700 bg-surface-950/40'
+          }`}
+        >
+          {items.length === 0 ? (
+            <div className="flex items-center justify-center h-16 text-gray-600 text-xs">
+              {t('kanban.empty')}
+            </div>
+          ) : (
+            items.map(item => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                onStatusChange={onStatusChange}
+                updating={updating.isPending && updating.variables?.itemId === item.id}
+                isDragging={activeItemId === item.id}
+              />
+            ))
+          )}
+        </div>
+      </SortableContext>
     </div>
   )
 }
@@ -160,7 +227,8 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as number
-    const item = Object.values(board?.columns ?? {}).flat().find(x => x.id === id)
+    const allItems = (Object.values(board?.columns ?? {}) as BacklogItem[][]).flat()
+    const item = allItems.find((entry) => entry.id === id)
     setActiveItem(item ?? null)
   }
 
@@ -168,14 +236,14 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     setActiveItem(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
-    
-    // Find column id from drop target
-    const targetCol = COLUMNS.find(c => 
-      c.id === over.id || (board?.columns[c.id] ?? []).some(x => x.id === over.id)
-    )
-    
-    if (targetCol) {
-      handleStatusChange(active.id as number, targetCol.id as BacklogItem['status'])
+
+    const columns = board?.columns ?? {}
+    const overId = String(over.id)
+    const targetColumnId = COLUMNS.find((column) => column.id === overId)?.id
+      ?? findColumnIdByItemId(columns, Number(over.id))
+
+    if (targetColumnId) {
+      handleStatusChange(active.id as number, targetColumnId as BacklogItem['status'])
     }
   }
 
@@ -242,35 +310,18 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
               {COLUMNS.map(({ id: colId, titleKey, className, icon: Icon }) => {
                 const items = board.columns[colId] || []
                 return (
-                  <div key={colId} className="w-56 lg:w-64 flex-shrink-0 flex flex-col">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Icon className={className} size={13} />
-                      <h3 className={`font-semibold text-xs uppercase tracking-wide ${className}`}>
-                        {t(titleKey)}
-                      </h3>
-                      <span className="ml-auto badge text-xs">{items.length}</span>
-                    </div>
-
-                    <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-                      <div className="flex-1 space-y-2 min-h-[80px] rounded-lg border border-dashed border-surface-700 p-2 bg-surface-950/40">
-                        {items.length === 0 ? (
-                          <div className="flex items-center justify-center h-16 text-gray-600 text-xs">
-                            {t('kanban.empty')}
-                          </div>
-                        ) : (
-                          items.map(item => (
-                            <ItemCard
-                              key={item.id}
-                              item={item}
-                              onStatusChange={handleStatusChange}
-                              updating={updateMutation.isPending && updateMutation.variables?.itemId === item.id}
-                              isDragging={activeItem?.id === item.id}
-                            />
-                          ))
-                        )}
-                      </div>
-                    </SortableContext>
-                  </div>
+                  <ColumnDropZone
+                    key={colId}
+                    columnId={colId}
+                    items={items}
+                    titleKey={titleKey}
+                    className={className}
+                    Icon={Icon}
+                    t={t}
+                    onStatusChange={handleStatusChange}
+                    updating={updateMutation}
+                    activeItemId={activeItem?.id ?? null}
+                  />
                 )
               })}
             </div>
@@ -293,6 +344,4 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     </div>
   )
 }
-
-
 

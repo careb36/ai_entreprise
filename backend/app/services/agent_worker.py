@@ -73,8 +73,6 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 e,
                 exc_info=True,
             )
-        finally:
-            await msg.ack()
 
     logger.info("Agent Worker subscribed to workspace.generate")
     await nats_client.subscribe("workspace.generate", task_callback)

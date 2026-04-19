@@ -143,6 +143,8 @@
     "review": "En Revisión",
     "done": "Terminado",
     "blocked": "Bloqueado",
+    "dragToReorder": "Arrastrar para reordenar",
+    "changeStatus": "Cambiar estado",
     "refresh": "Actualizar",
     "loading": "Cargando tablero...",
     "error": "Error al cargar el tablero",

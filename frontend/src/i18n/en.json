@@ -143,6 +143,8 @@
     "review": "In Review",
     "done": "Done",
     "blocked": "Blocked",
+    "dragToReorder": "Drag to reorder",
+    "changeStatus": "Change status",
     "refresh": "Refresh",
     "loading": "Loading board...",
     "error": "Failed to load board",

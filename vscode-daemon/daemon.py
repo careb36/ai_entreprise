@@ -160,12 +160,6 @@ async def handle_msg(nc, msg):
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
 
-    if hasattr(msg, "ack"):
-        try:
-            await msg.ack()
-        except Exception:
-            pass
-
 async def main():
     logger.info(f"Connecting to NATS at {NATS_URL}...")
     nc = await nats.connect(NATS_URL)

@@ -99,14 +99,6 @@ class NATSClient:
         if not self.nc:
             raise RuntimeError("NATS not connected")
 
-        async def wrapped_callback(msg):
-            # Decode and validate JSON before forwarding to the caller's handler.
-            try:
-                data = json.loads(msg.data.decode())
-                await callback(msg)
-            except Exception as e:
-                logger.error(f"Error in callback: {e}")
-
         sub = await self.nc.subscribe(subject, queue=queue)
         task = asyncio.create_task(self._listen(sub, callback))
         self.subscriptions[subject] = task
@@ -117,21 +109,13 @@ class NATSClient:
         Internal coroutine that continuously reads messages from *sub* and
         forwards them to *callback*.
 
-        Messages are acknowledged after the callback returns when using
-        JetStream.  For core NATS the ack is silently skipped.  Exceptions
-        in the callback are caught and logged so that a single bad message
-        does not terminate the listener loop.
+        Exceptions in the callback are caught and logged so that a single bad
+        message does not terminate the listener loop.
         """
         async for msg in sub.messages:
             try:
                 data = json.loads(msg.data.decode())
                 await callback(msg, data)
-                # JetStream messages support ack(); core NATS messages do not.
-                if hasattr(msg, '_ackd') or hasattr(msg, 'metadata'):
-                    try:
-                        await msg.ack()
-                    except Exception:
-                        pass
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
 
