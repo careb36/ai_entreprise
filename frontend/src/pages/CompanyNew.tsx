@@ -139,6 +139,7 @@ const DEFAULT_PERMISSIONS: Permissions = {
 }
 
 const STEPS = ['Project', 'Company', 'Autonomy', 'Permissions', 'Team', 'Review']
+const DEFAULT_PROJECT_PATH = import.meta.env.VITE_DEFAULT_PROJECT_PATH || ''
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -370,13 +371,13 @@ export default function CompanyNew() {
   const [step, setStep] = useState(0)
 
   // Step 0 — Project
-  const [projectPath, setProjectPath] = useState('')
+  const [projectPath, setProjectPath] = useState(DEFAULT_PROJECT_PATH)
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
 
   // Step 1 — Company
   const [companyName, setCompanyName] = useState('')
   const [companyDesc, setCompanyDesc] = useState('')
-  const [sprintLength, setSprintLength] = useState(14)
+  const [scopeSize, setScopeSize] = useState<'S' | 'M' | 'L'>('M')
   const [timezone, setTimezone] = useState('UTC')
 
   // Step 2 — Autonomy
@@ -457,7 +458,7 @@ export default function CompanyNew() {
     const payload = {
       company_name: companyName.trim(),
       description: companyDesc,
-      default_sprint_length_days: sprintLength,
+      default_scope_size: scopeSize,
       autonomy_level: autonomyLevel,
       timezone,
       agents,
@@ -589,15 +590,18 @@ export default function CompanyNew() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="input-label">Sprint length (days)</label>
-          <div className="flex items-center gap-3">
-            <input type="range" min={1} max={30} step={1} value={sprintLength}
-              onChange={e => setSprintLength(parseInt(e.target.value))}
-              className="flex-1 accent-brand-500" />
-            <span className="text-brand-300 font-mono text-sm w-16 text-right">{sprintLength} days</span>
-          </div>
+          <label className="input-label">Default sprint scope</label>
+          <select
+            value={scopeSize}
+            onChange={e => setScopeSize(e.target.value as 'S' | 'M' | 'L')}
+            className="select w-full"
+          >
+            <option value="S">Small — up to 4 tasks, single concern</option>
+            <option value="M">Medium — up to 8 tasks, one full feature</option>
+            <option value="L">Large — up to 12 tasks, requires review</option>
+          </select>
           <p className="text-xs text-gray-500 mt-1">
-            {sprintLength <= 7 ? 'Short cycle — ideal for fast iteration' : sprintLength <= 14 ? 'Standard 2-week sprint' : 'Extended sprint — suits complex features'}
+            {scopeSize === 'S' ? 'Tight scope — ideal for focused AI passes' : scopeSize === 'M' ? 'Recommended default — balances scope and AI focus' : 'Wide scope — the system may suggest splitting before execution'}
           </p>
         </div>
         <div>
@@ -775,7 +779,7 @@ export default function CompanyNew() {
               <button type="button" onClick={() => setStep(1)} className="text-xs text-brand-400 hover:underline flex-shrink-0">Edit</button>
             </div>
             <div className="mt-2 flex gap-3 text-xs text-gray-500">
-              <span>🔄 {sprintLength}-day sprints</span>
+              <span>🔄 Scope {scopeSize} sprints</span>
               <span>🌍 {timezone}</span>
             </div>
           </div>

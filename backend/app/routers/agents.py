@@ -17,9 +17,10 @@ this router's SSE generator reads and forwards to the connected browser.
 import asyncio
 import json
 import os
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,9 +34,95 @@ from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
-# Shared SSE connection map — keys are sprint IDs, values are asyncio Queues.
+# Shared SSE connection map — keys are sprint IDs, values are active subscriber queues.
 # Also consumed by the NATS listener in main.py to forward Glassroom events.
-sse_connections: Dict[str, asyncio.Queue] = {}
+sse_connections: Dict[str, List[asyncio.Queue[str]]] = {}
+recent_sse_events: Dict[str, List[dict]] = defaultdict(list)
+MAX_RECENT_SSE_EVENTS = 50
+
+HistoryLoader = Callable[[], Awaitable[list[dict]]]
+
+
+def register_sse_connection(sprint_id: str, queue: asyncio.Queue[str]) -> None:
+    subscribers = sse_connections.setdefault(sprint_id, [])
+    subscribers.append(queue)
+
+
+def unregister_sse_connection(sprint_id: str, queue: asyncio.Queue[str]) -> None:
+    subscribers = sse_connections.get(sprint_id)
+    if not subscribers:
+        return
+    sse_connections[sprint_id] = [subscriber for subscriber in subscribers if subscriber is not queue]
+    if not sse_connections[sprint_id]:
+        sse_connections.pop(sprint_id, None)
+
+
+async def publish_sse_event(sprint_id: str, payload: str) -> None:
+    try:
+        parsed = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+
+    if isinstance(parsed, dict):
+        recent_sse_events[sprint_id].append(parsed)
+        if len(recent_sse_events[sprint_id]) > MAX_RECENT_SSE_EVENTS:
+            recent_sse_events[sprint_id] = recent_sse_events[sprint_id][-MAX_RECENT_SSE_EVENTS:]
+
+    for subscriber in list(sse_connections.get(sprint_id, [])):
+        await subscriber.put(payload)
+
+
+def _merge_sse_history(db_history: list[dict], recent_history: list[dict]) -> list[dict]:
+    merged: list[dict] = []
+    seen: set[tuple[str, str, str, str, str, str]] = set()
+
+    for event in [*db_history, *recent_history]:
+        if not isinstance(event, dict):
+            continue
+        key = (
+            str(event.get("type", "")),
+            str(event.get("agent", "")),
+            str(event.get("role", "")),
+            str(event.get("task", "")),
+            str(event.get("message", "")),
+            str(event.get("timestamp", "")),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(event)
+
+    return merged
+
+
+async def generate_glassroom_sse(
+    queue: asyncio.Queue[str],
+    sprint_id: str,
+    nats_available: bool,
+    history_loader: HistoryLoader,
+) -> AsyncIterator[str]:
+    try:
+        yield f"data: {json.dumps({'type': 'connected', 'sprint_id': sprint_id})}\n\n"
+
+        if not nats_available:
+            yield f"data: {json.dumps({'type': 'error', 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+
+        history = _merge_sse_history(await history_loader(), recent_sse_events.get(sprint_id, []))
+        for evt in history:
+            yield f"data: {json.dumps(evt)}\n\n"
+
+        while True:
+            try:
+                data = await asyncio.wait_for(queue.get(), timeout=15)
+                try:
+                    parsed = json.loads(data)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {"type": "message", "message": str(data)}
+                yield f"data: {json.dumps(parsed)}\n\n"
+            except asyncio.TimeoutError:
+                yield f"data: {json.dumps({'ping': True})}\n\n"
+    finally:
+        unregister_sse_connection(sprint_id, queue)
 
 
 @router.post("/generate")
@@ -85,12 +172,15 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
     Uses pgvector cosine similarity on pre-computed embeddings.
     Returns up to *limit* results sorted by descending similarity.
     """
-    results = request.app.state.memory_client.search_similar(query, limit)
+    client = request.app.state.memory_client
+    if not client:
+        raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
+    results = client.search_similar(query, limit)
     return {"results": results}
 
 
 @router.post("/memory/store")
-async def store_memory(request: Request, content: str, metadata: dict = None):
+async def store_memory(request: Request, content: str, metadata: Optional[dict] = None):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
 
@@ -98,21 +188,27 @@ async def store_memory(request: Request, content: str, metadata: dict = None):
     *metadata* is an arbitrary JSON dict stored alongside the embedding for
     later retrieval context.
     """
-    request.app.state.memory_client.store(content, metadata)
+    client = request.app.state.memory_client
+    if not client:
+        raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
+    client.store(content, metadata)
     return {"status": "stored"}
 
 
 @router.get("/glassroom/stream")
-async def glassroom_stream(sprint_id: str = Query(...)):
+async def glassroom_stream(sprint_id: str = Query(...), request: Request = None):
     """
     Server-Sent Events (SSE) stream for real-time Glassroom monitoring.
 
     On connect, replays past agent activity from backlog item comments so the
     user sees the full conversation history.  Then switches to live streaming
     via NATS.  A keepalive ping is sent every 15 seconds.
+
+    If NATS is unavailable, a red system error event is emitted immediately so
+    the user sees a clear explanation instead of silent inactivity.
     """
-    queue: asyncio.Queue = asyncio.Queue()
-    sse_connections[sprint_id] = queue
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    register_sse_connection(sprint_id, queue)
 
     def _load_history() -> list[dict]:
         """Load past agent comments from the DB as GlassRoom messages."""
@@ -159,31 +255,16 @@ async def glassroom_stream(sprint_id: str = Query(...)):
             pass
         return events
 
-    async def event_generator():
-        try:
-            yield f"data: {json.dumps({'type': 'connected', 'sprint_id': sprint_id})}\n\n"
-
-            # Replay past activity so the user sees the full history.
-            history = await asyncio.to_thread(_load_history)
-            for evt in history:
-                yield f"data: {json.dumps(evt)}\n\n"
-
-            # Live stream from NATS.
-            while True:
-                try:
-                    data = await asyncio.wait_for(queue.get(), timeout=15)
-                    try:
-                        parsed = json.loads(data)
-                    except (json.JSONDecodeError, TypeError):
-                        parsed = {"type": "message", "message": str(data)}
-                    yield f"data: {json.dumps(parsed)}\n\n"
-                except asyncio.TimeoutError:
-                    yield f"data: {json.dumps({'ping': True})}\n\n"
-        finally:
-            sse_connections.pop(sprint_id, None)
+    # Detect whether NATS (and therefore agents) is available.
+    nats_available = bool(request and getattr(request.app.state, "nats_client", None))
 
     return StreamingResponse(
-        event_generator(),
+        generate_glassroom_sse(
+            queue=queue,
+            sprint_id=sprint_id,
+            nats_available=nats_available,
+            history_loader=lambda: asyncio.to_thread(_load_history),
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

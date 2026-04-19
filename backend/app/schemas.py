@@ -23,7 +23,8 @@ class CompanyInitRequest(BaseModel):
     """Payload for ``POST /v1/init_company`` — bootstraps a new tenant."""
     company_name: str
     description: Optional[str] = None              # Human-readable factory description
-    default_sprint_length_days: int = 14
+    default_scope_size: str = "M"                  # "S" | "M" | "L" — default scope for new sprints
+    default_sprint_length_days: Optional[int] = None  # deprecated
     autonomy_level: int = 2                         # 1 = human-led, 3 = fully autonomous
     timezone: str = "UTC"                           # IANA timezone (e.g. "America/Sao_Paulo")
     agents: List[Dict[str, Any]] = []               # List of agent role/persona/budget definitions
@@ -37,8 +38,9 @@ class SprintStartRequest(BaseModel):
     """Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."""
     company_id: int
     sprint_name: str
-    start_date: str   # ISO-8601 date string (e.g. "2026-04-01")
-    duration_days: int
+    start_date: str        # ISO-8601 date string (e.g. "2026-04-01")
+    scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
+    duration_days: Optional[int] = None  # deprecated
     backlog_items: List[Dict[str, str]]  # Each item has at least "title" and "description"
 
 

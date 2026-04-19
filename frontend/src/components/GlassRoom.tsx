@@ -1,26 +1,37 @@
+/**
+ * GlassRoom — enterprise agents room.
+ *
+ * Three-column layout: agent sidebar → message feed → detail panel.
+ * Slack-style message grouping with rich type differentiation.
+ * Handles needs_split events as first-class citizens.
+ */
+
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAgentStore, AgentMessage } from '../store/agentStore'
+import { useSprintBoard } from '../hooks/useQueries'
+import { useAppStore } from '../store/useAppStore'
 import {
-  Bot, Copy, Check, ChevronDown, ChevronRight, Hash,
-  CheckCircle2, AlertTriangle, Loader2, Eye, Sparkles,
-  Search, X, Filter, RotateCcw,
+  AlertTriangle, Bot, Check, ChevronDown, ChevronRight,
+  Copy, Eye, Hash, Layers, Loader2, RotateCcw, Search,
+  SplitSquareVertical, X, ZapOff,
 } from 'lucide-react'
 
-/* ─── Agent identity config ──────────────────────────────────────────────── */
+// ── Agent identity ────────────────────────────────────────────────────────────
 
 interface AgentIdentity {
   initials: string
-  bg: string          // Tailwind bg class for avatar circle
-  ring: string        // Tailwind ring class for avatar focus ring
-  label: string       // Display name
-  color: string       // Text accent color
+  bg: string
+  ring: string
+  label: string
+  color: string
 }
 
 const AGENTS: Record<string, AgentIdentity> = {
   PO:           { initials: 'PO', bg: 'bg-purple-600',  ring: 'ring-purple-400/30', label: 'Product Owner',  color: 'text-purple-300'  },
   Architect:    { initials: 'AR', bg: 'bg-indigo-600',  ring: 'ring-indigo-400/30', label: 'Architect',      color: 'text-indigo-300'  },
   ScrumMaster:  { initials: 'SM', bg: 'bg-blue-600',    ring: 'ring-blue-400/30',   label: 'Scrum Master',   color: 'text-blue-300'    },
+  Developer:    { initials: 'DV', bg: 'bg-green-600',   ring: 'ring-green-400/30',  label: 'Developer',      color: 'text-green-300'   },
   Dev:          { initials: 'DV', bg: 'bg-green-600',   ring: 'ring-green-400/30',  label: 'Developer',      color: 'text-green-300'   },
   Backend:      { initials: 'BE', bg: 'bg-cyan-600',    ring: 'ring-cyan-400/30',   label: 'Backend Dev',    color: 'text-cyan-300'    },
   Frontend:     { initials: 'FE', bg: 'bg-yellow-600',  ring: 'ring-yellow-400/30', label: 'Frontend Dev',   color: 'text-yellow-300'  },
@@ -38,20 +49,14 @@ const FALLBACK_AGENT: AgentIdentity = {
 const ACTIVE_AGENT_TTL_MS = 90_000
 
 function getAgent(key: string): AgentIdentity {
-  return AGENTS[key] ?? AGENTS[Object.keys(AGENTS).find(k => k.toLowerCase() === key?.toLowerCase()) ?? ''] ?? FALLBACK_AGENT
+  return (
+    AGENTS[key] ??
+    AGENTS[Object.keys(AGENTS).find(k => k.toLowerCase() === key?.toLowerCase()) ?? ''] ??
+    FALLBACK_AGENT
+  )
 }
 
-const EVENT_TYPES = [
-  { value: '', label: 'All types' },
-  { value: 'message', label: 'Message' },
-  { value: 'action', label: 'Action' },
-  { value: 'status', label: 'Status' },
-  { value: 'error', label: 'Error' },
-  { value: 'agent_start', label: 'Started' },
-  { value: 'agent_complete', label: 'Completed' },
-] as const
-
-/* ─── Helpers ────────────────────────────────────────────────────────────── */
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatTime(iso: string): string {
   try {
@@ -62,15 +67,15 @@ function formatTime(iso: string): string {
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso)
-    const today = new Date()
-    const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
-    if (d.toDateString() === today.toDateString()) return 'Today'
+    const today     = new Date()
+    const yesterday = new Date()
+    yesterday.setDate(today.getDate() - 1)
+    if (d.toDateString() === today.toDateString())     return 'Today'
     if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
     return new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(d)
   } catch { return '' }
 }
 
-/** Group consecutive messages from the same agent within the same minute. */
 interface MessageGroup {
   agent: string
   identity: AgentIdentity
@@ -90,7 +95,6 @@ function groupMessages(messages: AgentMessage[]): { date: string; groups: Messag
   for (const [, dayMsgs] of dayMap) {
     const groups: MessageGroup[] = []
     let current: MessageGroup | null = null
-
     for (const msg of dayMsgs) {
       const agentKey = msg.agent || msg.role || 'System'
       if (current && current.agent === agentKey) {
@@ -105,25 +109,51 @@ function groupMessages(messages: AgentMessage[]): { date: string; groups: Messag
         groups.push(current)
       }
     }
-
     result.push({ date: formatDate(dayMsgs[0]?.timestamp || ''), groups })
   }
   return result
 }
 
-/* ─── Sub-components ─────────────────────────────────────────────────────── */
+const EVENT_TYPES = [
+  { value: '', label: 'All types' },
+  { value: 'message',        label: 'Message'   },
+  { value: 'agent_start',    label: 'Working'   },
+  { value: 'agent_complete', label: 'Delivered' },
+  { value: 'status',         label: 'Status'    },
+  { value: 'error',          label: 'Error'     },
+] as const
 
-/** Slack-style avatar circle with initials. */
-function AgentAvatar({ identity, size = 'md' }: { identity: AgentIdentity; size?: 'sm' | 'md' }) {
-  const dim = size === 'sm' ? 'w-5 h-5 text-[9px]' : 'w-8 h-8 text-xs'
+// ── Atoms ─────────────────────────────────────────────────────────────────────
+
+function AgentAvatar({ identity, size = 'md' }: { identity: AgentIdentity; size?: 'sm' | 'md' | 'lg' }) {
+  const dims = { sm: 'w-5 h-5 text-[9px]', md: 'w-8 h-8 text-xs', lg: 'w-10 h-10 text-sm' }[size]
   return (
-    <div className={`${dim} ${identity.bg} ${identity.ring} ring-2 rounded-lg flex items-center justify-center font-bold text-white shrink-0 select-none`}>
+    <div className={`${dims} ${identity.bg} ${identity.ring} ring-2 rounded-lg flex items-center justify-center font-bold text-white shrink-0 select-none`}>
       {identity.initials}
     </div>
   )
 }
 
-/** Copy-to-clipboard button that appears on hover. */
+function TypeBadge({ type }: { type: string }) {
+  const cfg: Record<string, { label: string; cls: string; spin?: boolean }> = {
+    agent_start:    { label: 'working',   cls: 'bg-brand-500/15 text-brand-300 border-brand-500/25',     spin: true  },
+    agent_complete: { label: 'delivered', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'             },
+    error:          { label: 'error',     cls: 'bg-red-500/15 text-red-300 border-red-500/25'                         },
+    status:         { label: 'update',    cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'                },
+    needs_split:    { label: 'split',     cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25'                   },
+  }
+  const c = cfg[type]
+  if (!c) return null
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${c.cls}`}>
+      {c.spin && <Loader2 size={9} className="animate-spin" />}
+      {type === 'error' && <AlertTriangle size={9} />}
+      {type === 'needs_split' && <SplitSquareVertical size={9} />}
+      {c.label}
+    </span>
+  )
+}
+
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
@@ -132,50 +162,32 @@ function CopyBtn({ text }: { text: string }) {
     setTimeout(() => setCopied(false), 1500)
   }
   return (
-    <button onClick={copy}
+    <button
+      onClick={copy}
       className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 rounded hover:bg-white/10"
-      title="Copy">
-      {copied ? <Check size={13} className="text-green-400" /> : <Copy size={13} className="text-gray-500" />}
+      title="Copy"
+    >
+      {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-gray-500" />}
     </button>
   )
 }
 
-/** Type badge shown next to agent name. */
-function TypeBadge({ type }: { type: string }) {
-  const map: Record<string, { label: string; cls: string; icon?: typeof CheckCircle2 }> = {
-    agent_start:    { label: 'working',   cls: 'bg-blue-500/20 text-blue-300 border-blue-500/30',   icon: Loader2 },
-    agent_complete: { label: 'delivered',  cls: 'bg-green-500/20 text-green-300 border-green-500/30', icon: CheckCircle2 },
-    error:          { label: 'error',      cls: 'bg-red-500/20 text-red-300 border-red-500/30',       icon: AlertTriangle },
-    status:         { label: 'update',     cls: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', icon: Sparkles },
-  }
-  const cfg = map[type]
-  if (!cfg) return null
-  const Icon = cfg.icon
-  return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${cfg.cls}`}>
-      {Icon && <Icon size={10} className={type === 'agent_start' ? 'animate-spin' : ''} />}
-      {cfg.label}
-    </span>
-  )
-}
-
-/** Expandable preview card for deliverables. */
 function PreviewCard({ preview, task }: { preview: string; task?: string }) {
   const [open, setOpen] = useState(false)
   if (!preview) return null
   return (
-    <div className="mt-1.5 rounded-md border border-surface-600/60 bg-surface-800/60 overflow-hidden">
+    <div className="mt-1.5 rounded-lg border border-surface-600/60 bg-surface-800/60 overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         className="flex items-center gap-1.5 w-full text-left px-3 py-1.5 hover:bg-surface-700/40 transition-colors"
       >
-        {open ? <ChevronDown size={12} className="text-gray-500" /> : <ChevronRight size={12} className="text-gray-500" />}
-        <Eye size={12} className="text-brand-400" />
-        <span className="text-[11px] text-gray-400 font-medium truncate">{task || 'View deliverable'}</span>
+        {open ? <ChevronDown size={11} className="text-gray-500" /> : <ChevronRight size={11} className="text-gray-500" />}
+        <Eye size={11} className="text-brand-400" />
+        <span className="text-[11px] text-gray-400 font-medium truncate flex-1">{task || 'View deliverable'}</span>
       </button>
       {open && (
         <div className="px-3 pb-2.5 pt-1 border-t border-surface-700/50">
-          <pre className="text-[11px] text-gray-300 whitespace-pre-wrap break-words font-mono leading-relaxed max-h-60 overflow-y-auto">
+          <pre className="text-[11px] text-gray-300 whitespace-pre-wrap break-words font-mono leading-relaxed max-h-48 overflow-y-auto">
             {preview}
           </pre>
         </div>
@@ -184,20 +196,18 @@ function PreviewCard({ preview, task }: { preview: string; task?: string }) {
   )
 }
 
-/** Slack-style date separator. */
 function DateSeparator({ date }: { date: string }) {
   return (
-    <div className="flex items-center gap-3 py-2">
-      <div className="flex-1 h-px bg-surface-700" />
-      <span className="text-[11px] font-semibold text-gray-400 bg-surface-900 px-3 py-0.5 rounded-full border border-surface-700">
+    <div className="flex items-center gap-3 py-2 px-4">
+      <div className="flex-1 h-px bg-surface-700/60" />
+      <span className="text-[10px] font-semibold text-gray-500 bg-surface-950 px-2.5 py-0.5 rounded-full border border-surface-700">
         {date}
       </span>
-      <div className="flex-1 h-px bg-surface-700" />
+      <div className="flex-1 h-px bg-surface-700/60" />
     </div>
   )
 }
 
-/** Typing indicator — three bouncing dots. */
 function TypingIndicator({ identity }: { identity: AgentIdentity }) {
   return (
     <div className="flex items-center gap-2.5 px-4 py-2 animate-fade-in">
@@ -207,22 +217,36 @@ function TypingIndicator({ identity }: { identity: AgentIdentity }) {
         {[0, 1, 2].map(i => (
           <span
             key={i}
-            className="w-1.5 h-1.5 rounded-full bg-gray-400"
+            className="w-1.5 h-1.5 rounded-full bg-gray-500"
             style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.15}s infinite` }}
           />
         ))}
       </span>
-      <span className="text-[11px] text-gray-500 italic">is working…</span>
+      <span className="text-[11px] text-gray-600 italic">thinking…</span>
     </div>
   )
 }
 
-/** Single message row inside a group (no avatar). */
+/** NeedsSplit inline banner — shown in the feed when that event arrives. */
+function NeedsSplitBanner({ message }: { message: AgentMessage }) {
+  return (
+    <div className="mx-4 my-2 flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-950/20 animate-fade-in">
+      <SplitSquareVertical size={15} className="text-amber-400 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-amber-300">Sprint scope exceeded</p>
+        <p className="text-[11px] text-amber-200/60 mt-0.5 break-words">{message.content}</p>
+        <p className="text-[10px] text-amber-200/40 mt-0.5">{formatTime(message.timestamp)}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Message row / group ───────────────────────────────────────────────────────
+
 function MessageRow({ msg }: { msg: AgentMessage }) {
   const isError = msg.type === 'error'
   return (
-    <div className="group/msg flex items-start gap-2 relative hover:bg-surface-800/40 rounded px-1 -mx-1 py-0.5 transition-colors">
-      {/* Hover timestamp (Slack shows it in the gutter) */}
+    <div className="group/msg flex items-start gap-2 relative hover:bg-surface-800/30 rounded px-1 -mx-1 py-0.5 transition-colors">
       <span className="opacity-0 group-hover/msg:opacity-100 text-[10px] text-gray-600 min-w-[3rem] text-right pt-0.5 transition-opacity select-none shrink-0">
         {formatTime(msg.timestamp)}
       </span>
@@ -239,59 +263,201 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   )
 }
 
-/** A group of messages from the same agent — shows avatar + name once. */
 function SlackMessageGroup({ group }: { group: MessageGroup }) {
   const { identity, messages } = group
   const firstMsg = messages[0]
-  const isError = firstMsg?.type === 'error'
+  const isError  = firstMsg?.type === 'error'
 
   return (
-    <div className={`flex gap-3 px-4 py-1.5 animate-fade-in ${
-      isError ? 'bg-red-950/20' : ''
+    <div className={`flex gap-3 px-4 py-1.5 animate-fade-in transition-colors ${
+      isError ? 'bg-red-950/20 border-l-2 border-l-red-800/50' : 'hover:bg-surface-800/20'
     }`}>
-      {/* Avatar column */}
       <div className="pt-0.5 shrink-0">
         <AgentAvatar identity={identity} />
       </div>
-
-      {/* Content column */}
       <div className="flex-1 min-w-0">
-        {/* Header: name + badge + timestamp */}
-        <div className="flex items-center gap-2 mb-0.5">
-          <span className={`font-bold text-[13px] ${identity.color} hover:underline cursor-default`}>
-            {identity.label}
-          </span>
+        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+          <span className={`font-bold text-[13px] ${identity.color}`}>{identity.label}</span>
           <TypeBadge type={firstMsg.type} />
           {firstMsg.task && (
-            <span className="text-[11px] text-gray-500 truncate max-w-[200px]" title={firstMsg.task}>
+            <span className="text-[11px] text-gray-500 truncate max-w-[180px]" title={firstMsg.task}>
               {firstMsg.task}
             </span>
           )}
-          <span className="text-[11px] text-gray-500 ml-auto shrink-0">
+          <span className="text-[11px] text-gray-600 ml-auto shrink-0">
             {formatTime(firstMsg.timestamp)}
           </span>
         </div>
-
-        {/* Messages */}
         {messages.map(msg => <MessageRow key={msg.id} msg={msg} />)}
       </div>
     </div>
   )
 }
 
-/* ─── Main component ─────────────────────────────────────────────────────── */
+// ── Left sidebar: sprint selector + agent roster ──────────────────────────────
+
+function LeftSidebar({
+  sprintId, scope, status, activeAgents, onlineAgents,
+}: {
+  sprintId: string
+  scope?: string
+  status?: string
+  activeAgents: { key: string; identity: AgentIdentity }[]
+  onlineAgents: AgentIdentity[]
+}) {
+  const SCOPE_COLOR: Record<string, string> = {
+    S: 'text-emerald-400',
+    M: 'text-brand-400',
+    L: 'text-amber-400',
+  }
+
+  const STATUS_DOT: Record<string, string> = {
+    active:      'bg-emerald-400 animate-pulse',
+    needs_split: 'bg-amber-400 animate-pulse',
+    completed:   'bg-gray-400',
+  }
+
+  return (
+    <div className="w-52 flex-shrink-0 border-r border-surface-700/60 bg-surface-950 flex flex-col">
+      {/* Sprint info */}
+      <div className="p-3 border-b border-surface-700/60">
+        <div className="flex items-center gap-2 mb-1">
+          <Hash size={12} className="text-gray-500" />
+          <span className="text-xs font-semibold text-gray-300 truncate">sprint-{sprintId}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {scope && (
+            <span className={`flex items-center gap-1 text-[10px] font-semibold ${SCOPE_COLOR[scope] ?? 'text-gray-400'}`}>
+              <Layers size={9} /> {scope}
+            </span>
+          )}
+          {status && (
+            <span className="flex items-center gap-1 text-[10px] text-gray-500">
+              <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status] ?? 'bg-gray-600'}`} />
+              {status}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Active agents */}
+      <div className="flex-1 overflow-y-auto py-2">
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-3 mb-1">
+          Agents
+        </p>
+        {onlineAgents.length === 0 ? (
+          <p className="text-[11px] text-gray-600 px-3 py-2 italic">Waiting for agents…</p>
+        ) : (
+          onlineAgents.map((identity, i) => {
+            const isActive = activeAgents.some(a => a.identity.initials === identity.initials)
+            return (
+              <div
+                key={`${identity.label}-${i}`}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-800/40 transition-colors rounded"
+              >
+                <AgentAvatar identity={identity} size="sm" />
+                <span className={`text-[11px] font-medium ${identity.color} flex-1 truncate`}>
+                  {identity.label}
+                </span>
+                {isActive
+                  ? <Loader2 size={10} className="text-emerald-400 animate-spin shrink-0" />
+                  : <span className="w-1.5 h-1.5 rounded-full bg-surface-700 shrink-0" />
+                }
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Right panel: agent detail ─────────────────────────────────────────────────
+
+function RightPanel({ agentStates, messageCount, isConnected }: {
+  agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string }>
+  messageCount: number
+  isConnected: boolean
+}) {
+  const entries = Object.entries(agentStates)
+
+  return (
+    <div className="w-52 flex-shrink-0 border-l border-surface-700/60 bg-surface-950 flex flex-col">
+      <div className="p-3 border-b border-surface-700/60">
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">Live State</p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto py-2 space-y-px">
+        {entries.length === 0 ? (
+          <p className="text-[11px] text-gray-600 px-3 py-2 italic">No agent activity yet.</p>
+        ) : (
+          entries.map(([role, state]) => {
+            const identity = getAgent(role)
+            return (
+              <div key={role} className="px-3 py-2 hover:bg-surface-800/40 transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <AgentAvatar identity={identity} size="sm" />
+                  <span className={`text-[11px] font-semibold ${identity.color} truncate flex-1`}>
+                    {identity.label}
+                  </span>
+                </div>
+                <div className="ml-7">
+                  <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                    state.fsmState === 'active'  ? 'bg-emerald-500/10 text-emerald-400' :
+                    state.fsmState === 'waiting' ? 'bg-brand-500/10 text-brand-400'    :
+                    state.fsmState === 'error'   ? 'bg-red-500/10 text-red-400'        :
+                                                   'bg-surface-800 text-gray-600'
+                  }`}>
+                    {state.fsmState}
+                  </span>
+                  {state.currentActivity && (
+                    <p className="text-[10px] text-gray-600 mt-0.5 break-words leading-tight line-clamp-2">
+                      {state.currentActivity}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Stats footer */}
+      <div className="p-3 border-t border-surface-700/60 space-y-1.5">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-gray-600">Stream</span>
+          <span className={`flex items-center gap-1 font-medium ${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+            {isConnected ? 'Live' : 'Off'}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-gray-600">Events</span>
+          <span className="text-gray-400 font-medium tabular-nums">{messageCount}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string }) {
-  const { t } = useTranslation()
-  const { messages, isConnected, connectionError, connect, disconnect } = useAgentStore()
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [isAtBottom, setIsAtBottom] = useState(true)
-  const [, forceUpdate] = useState(0)
+  useTranslation()
 
-  const [filterAgent, setFilterAgent] = useState('')
-  const [filterType, setFilterType] = useState('')
-  const [searchText, setSearchText] = useState('')
+  const { messages, agentStates, isConnected, connectionError, connect, disconnect } = useAgentStore()
+  const activeSprintId = useAppStore(s => s.activeSprintId)
+
+  const numericId   = propSprintId ? parseInt(propSprintId, 10) : (activeSprintId ?? null)
+  const { data: board } = useSprintBoard(isNaN(numericId as number) ? null : numericId)
+  const sprint = board?.sprint
+
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const containerRef   = useRef<HTMLDivElement>(null)
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const [filterAgent, setFilterAgent]   = useState('')
+  const [filterType,  setFilterType]    = useState('')
+  const [searchText,  setSearchText]    = useState('')
 
   useEffect(() => {
     if (propSprintId) connect(propSprintId)
@@ -301,24 +467,15 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50
-    setIsAtBottom(atBottom)
+    setIsAtBottom(el.scrollHeight - el.scrollTop <= el.clientHeight + 50)
   }, [])
 
   useEffect(() => {
-    if (isAtBottom) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    if (isAtBottom) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAtBottom])
 
-  const rebuildView = useCallback(() => {
-    forceUpdate(n => n + 1)
-  }, [])
-
-  // Filter messages based on search, agent, and type
   const filteredMessages = useMemo(() => {
     let result = messages
-
     if (filterAgent) {
       result = result.filter(m => {
         const key = m.agent || m.role || ''
@@ -326,45 +483,33 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
                getAgent(key).label.toLowerCase() === filterAgent.toLowerCase()
       })
     }
-
-    if (filterType) {
-      result = result.filter(m => m.type === filterType)
-    }
-
+    if (filterType) result = result.filter(m => m.type === filterType)
     if (searchText) {
       const term = searchText.toLowerCase()
       result = result.filter(m => m.content.toLowerCase().includes(term))
     }
-
     return result
   }, [messages, filterAgent, filterType, searchText])
 
-  // Group messages by date → by consecutive agent.
   const grouped = useMemo(() => groupMessages(filteredMessages), [filteredMessages])
 
-  // Find agents currently "working" (last message is agent_start).
   const activeAgents = useMemo(() => {
     const working = new Map<string, { identity: AgentIdentity; startedAt: number }>()
     const now = Date.now()
-
     for (const msg of messages) {
-      const agentKey = msg.agent || msg.role || 'System'
-      if (!agentKey || agentKey === 'System') continue
-
+      const key = msg.agent || msg.role || 'System'
+      if (!key || key === 'System') continue
       if (msg.type === 'agent_start') {
-        const startedAt = Date.parse(msg.timestamp || '') || now
-        working.set(agentKey, { identity: getAgent(agentKey), startedAt })
+        working.set(key, { identity: getAgent(key), startedAt: Date.parse(msg.timestamp || '') || now })
       } else if (msg.type === 'agent_complete' || msg.type === 'error' || msg.type === 'status') {
-        working.delete(agentKey)
+        working.delete(key)
       }
     }
-
     return [...working.entries()]
-      .filter(([, value]) => (now - value.startedAt) <= ACTIVE_AGENT_TTL_MS)
-      .map(([key, value]) => ({ key, identity: value.identity }))
+      .filter(([, v]) => now - v.startedAt <= ACTIVE_AGENT_TTL_MS)
+      .map(([key, v]) => ({ key, identity: v.identity }))
   }, [messages])
 
-  // Online agents (unique agents who posted).
   const onlineAgents = useMemo(() => {
     const seen = new Map<string, AgentIdentity>()
     for (const msg of messages) {
@@ -373,9 +518,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
     return [...seen.values()]
   }, [messages])
 
+  const isFiltered = filterAgent || filterType || searchText
+
   return (
     <div className="flex flex-col h-full bg-surface-900">
-      {/* ── Typing CSS (injected once) ──────────────────────────── */}
+      {/* Typing animation */}
       <style>{`
         @keyframes typingBounce {
           0%, 60%, 100% { transform: translateY(0) }
@@ -383,33 +530,43 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
         }
       `}</style>
 
-      {/* ── Channel header bar ──────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-surface-700 bg-surface-900 shrink-0 flex-wrap">
-        <Hash size={14} className="text-gray-500" />
-        <span className="font-semibold text-sm text-gray-200">sprint-{propSprintId}</span>
-        <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-500'}`} />
-        
-        <div className="flex items-center gap-2 ml-4">
+      {/* ── Top bar ───────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 h-11 border-b border-surface-700/60 bg-surface-900 shrink-0 flex-wrap">
+        <Hash size={13} className="text-gray-600" />
+        <span className="text-sm font-semibold text-gray-200">sprint-{propSprintId}</span>
+        {sprint?.scope_size && (
+          <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${
+            sprint.scope_size === 'S' ? 'text-emerald-400' :
+            sprint.scope_size === 'L' ? 'text-amber-400' : 'text-brand-400'
+          }`}>
+            <Layers size={9} />
+            {sprint.scope_size}
+          </span>
+        )}
+        <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+
+        {/* Filters */}
+        <div className="flex items-center gap-1.5 ml-3">
           <div className="relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+            <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600" />
             <input
               type="text"
-              placeholder="Search messages..."
+              placeholder="Search…"
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="pl-7 pr-6 py-1 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 placeholder-gray-500 focus:outline-none focus:border-brand-500 w-40"
+              onChange={e => setSearchText(e.target.value)}
+              className="pl-6 pr-5 py-1 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500 w-32 transition-colors"
             />
             {searchText && (
               <button onClick={() => setSearchText('')} className="absolute right-1.5 top-1/2 -translate-y-1/2">
-                <X size={12} className="text-gray-500 hover:text-gray-300" />
+                <X size={11} className="text-gray-500 hover:text-gray-300" />
               </button>
             )}
           </div>
 
           <select
             value={filterAgent}
-            onChange={(e) => setFilterAgent(e.target.value)}
-            className="py-1 px-2 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 focus:outline-none focus:border-brand-500"
+            onChange={e => setFilterAgent(e.target.value)}
+            className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"
           >
             <option value="">All agents</option>
             {onlineAgents.map(a => (
@@ -419,47 +576,41 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
 
           <select
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="py-1 px-2 text-xs bg-surface-800 border border-surface-600 rounded-md text-gray-200 focus:outline-none focus:border-brand-500"
+            onChange={e => setFilterType(e.target.value)}
+            className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"
           >
             {EVENT_TYPES.map(et => (
               <option key={et.value} value={et.value}>{et.label}</option>
             ))}
           </select>
 
-          {(filterAgent || filterType || searchText) && (
+          {isFiltered && (
             <button
               onClick={() => { setFilterAgent(''); setFilterType(''); setSearchText('') }}
-              className="p-1 hover:bg-surface-700 rounded"
+              className="p-1 hover:bg-surface-700 rounded text-gray-500 hover:text-gray-300 transition-colors"
               title="Clear filters"
             >
-              <RotateCcw size={12} className="text-gray-500" />
+              <RotateCcw size={11} />
             </button>
           )}
-
-          <button
-            onClick={rebuildView}
-            className="p-1 hover:bg-surface-700 rounded"
-            title="Rebuild view"
-          >
-            <Filter size={12} className="text-gray-500" />
-          </button>
         </div>
 
-        {/* Online agent avatars (Slack-style presence row) */}
+        {/* Presence avatars */}
         {onlineAgents.length > 0 && (
-          <div className="flex items-center gap-1 ml-auto">
-            <span className="text-[10px] text-gray-500 mr-1">{onlineAgents.length} agents</span>
+          <div className="flex items-center gap-1.5 ml-auto">
             <div className="flex -space-x-1.5">
-              {onlineAgents.slice(0, 6).map((a, i) => (
-                <div key={`${a.label}-${i}`} title={a.label}
-                  className={`w-5 h-5 ${a.bg} rounded-md flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-surface-900`}>
+              {onlineAgents.slice(0, 5).map((a, i) => (
+                <div
+                  key={`${a.label}-${i}`}
+                  title={a.label}
+                  className={`w-5 h-5 ${a.bg} rounded-md flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-surface-900`}
+                >
                   {a.initials}
                 </div>
               ))}
-              {onlineAgents.length > 6 && (
-                <div className="w-5 h-5 bg-gray-700 rounded-md flex items-center justify-center text-[8px] font-bold text-gray-300 ring-1 ring-surface-900">
-                  +{onlineAgents.length - 6}
+              {onlineAgents.length > 5 && (
+                <div className="w-5 h-5 bg-surface-700 rounded-md flex items-center justify-center text-[8px] font-bold text-gray-400 ring-1 ring-surface-900">
+                  +{onlineAgents.length - 5}
                 </div>
               )}
             </div>
@@ -467,73 +618,109 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
         )}
       </div>
 
-      {/* ── Connection error banner ────────────────────────────── */}
+      {/* ── Connection error ─────────────────────��─────────────────── */}
       {connectionError && (
-        <div className="mx-4 mt-2 p-2 bg-red-900/30 border border-red-800/50 rounded-lg shrink-0">
-          <p className="text-red-400 text-xs flex items-center gap-1.5">
-            <AlertTriangle size={12} /> {connectionError}
-          </p>
+        <div className="mx-3 mt-2 p-2 bg-red-950/30 border border-red-800/40 rounded-lg shrink-0 flex items-center gap-2">
+          <ZapOff size={12} className="text-red-400 shrink-0" />
+          <p className="text-red-400 text-[11px]">{connectionError}</p>
         </div>
       )}
 
-      {/* ── Message feed ───────────────────────────────────────── */}
-      <div 
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto py-2"
-      >
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 py-8">
-            <div className="w-16 h-16 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-4">
-              <Bot size={28} className="text-brand-400 opacity-50" />
-            </div>
-            <p className="text-sm font-medium text-gray-400">
-              {t('glassroom.waiting', 'Waiting for agent activity…')}
-            </p>
-            <p className="text-xs mt-1 text-gray-600 max-w-[260px] text-center">
-              All your people and AI agents working together. Messages will appear here in real-time.
-            </p>
-          </div>
-        ) : (
-          <>
-            {grouped.map((day, di) => (
-              <div key={di}>
-                <DateSeparator date={day.date} />
-                {day.groups.map((g, gi) => (
-                  <SlackMessageGroup key={`${di}-${gi}`} group={g} />
-                ))}
+      {/* ── Body: sidebar + feed + panel ──────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left sidebar */}
+        <LeftSidebar
+          sprintId={propSprintId}
+          scope={sprint?.scope_size}
+          status={sprint?.status}
+          activeAgents={activeAgents}
+          onlineAgents={onlineAgents}
+        />
+
+        {/* Message feed */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div
+            ref={containerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto py-2"
+          >
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                <div className="w-14 h-14 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-3">
+                  <Bot size={24} className="text-brand-400 opacity-40" />
+                </div>
+                <p className="text-sm font-semibold text-gray-400">Waiting for agents</p>
+                <p className="text-xs text-gray-600 mt-1 max-w-[220px]">
+                  Sprint events will appear here in real time once agents start working.
+                </p>
               </div>
-            ))}
-          </>
-        )}
+            ) : (
+              grouped.map((day, di) => (
+                <div key={di}>
+                  <DateSeparator date={day.date} />
+                  {day.groups.map((g, gi) => {
+                    if (g.messages[0]?.type === ('needs_split' as any)) {
+                      return <NeedsSplitBanner key={`${di}-${gi}`} message={g.messages[0]} />
+                    }
+                    return <SlackMessageGroup key={`${di}-${gi}`} group={g} />
+                  })}
+                </div>
+              ))
+            )}
 
-        {/* Typing indicators for active agents */}
-        {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} />)}
+            {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} />)}
+            <div ref={messagesEndRef} />
+          </div>
 
-        <div ref={messagesEndRef} />
-      </div>
+          {/* Scroll-to-bottom prompt */}
+          {!isAtBottom && messages.length > 0 && (
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2">
+              <button
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-brand-600/90 text-white text-[11px] font-medium shadow-lg hover:bg-brand-500 transition-colors"
+              >
+                <ChevronDown size={11} /> New messages
+              </button>
+            </div>
+          )}
 
-      {/* ── Footer ─────────────────────────────────────────────── */}
-      <div className="px-4 py-1.5 border-t border-surface-700 shrink-0 flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-          <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-500'}`} />
-          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
-        </div>
-        <span className="text-[11px] text-gray-600">•</span>
-        <span className="text-[11px] text-gray-500">
-          {filterAgent || filterType || searchText 
-            ? `${filteredMessages.length} / ${messages.length} messages` 
-            : `${messages.length} messages`}
-        </span>
-        {activeAgents.length > 0 && (
-          <>
-            <span className="text-[11px] text-gray-600">•</span>
-            <span className="text-[11px] text-green-400 flex items-center gap-1">
-              <Loader2 size={10} className="animate-spin" />
-              {activeAgents.length} working
+          {/* Status bar */}
+          <div className="px-4 py-1.5 border-t border-surface-700/60 shrink-0 flex items-center gap-3 bg-surface-900">
+            <span className={`flex items-center gap-1.5 text-[10px] font-medium ${isConnected ? 'text-emerald-400' : 'text-gray-600'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-surface-600'}`} />
+              {isConnected ? 'Connected' : 'Disconnected'}
             </span>
-          </>
-        )}
+            <span className="text-[10px] text-gray-700">·</span>
+            <span className="text-[10px] text-gray-600 tabular-nums">
+              {isFiltered ? `${filteredMessages.length} / ${messages.length}` : messages.length} events
+            </span>
+            {activeAgents.length > 0 && (
+              <>
+                <span className="text-[10px] text-gray-700">·</span>
+                <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                  <Loader2 size={9} className="animate-spin" />
+                  {activeAgents.length} working
+                </span>
+              </>
+            )}
+            {sprint?.status === 'needs_split' && (
+              <>
+                <span className="text-[10px] text-gray-700">·</span>
+                <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
+                  <SplitSquareVertical size={9} />
+                  Needs split
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right panel */}
+        <RightPanel
+          agentStates={agentStates}
+          messageCount={messages.length}
+          isConnected={isConnected}
+        />
       </div>
     </div>
   )

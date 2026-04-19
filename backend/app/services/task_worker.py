@@ -114,7 +114,7 @@ def _validate_minimum_deliverable(item: Dict[str, Any], deliverable: str) -> tup
     if not text:
         return False, "Empty output from agent"
 
-    word_count = len(re.findall(r"\\b\\w+\\b", text))
+    word_count = len(re.findall(r"\b\w+\b", text))
     title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
     doc_like = any(
         kw in title_desc
@@ -135,7 +135,7 @@ def _validate_minimum_deliverable(item: Dict[str, Any], deliverable: str) -> tup
     if word_count < min_words:
         return False, f"Too short ({word_count} words, minimum {min_words})"
 
-    heading_count = len(re.findall(r"(?m)^#{1,6}\\s+", text))
+    heading_count = len(re.findall(r"(?m)^#{1,6}\s+", text))
     if doc_like and heading_count < 2:
         return False, "Documentation-like deliverable missing structured sections"
 
@@ -426,6 +426,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                                 "workspace_root": workspace_root,
                                 "files": artifact_targets,
                                 "interaction_id": f"task-{item['id']}",
+                                "sprint_id": sprint["id"],
                             },
                         )
                         await asyncio.to_thread(

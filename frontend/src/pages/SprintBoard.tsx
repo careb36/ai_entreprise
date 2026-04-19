@@ -16,7 +16,7 @@ export default function SprintBoard() {
   const setActiveSprint = useAppStore(state => state.setActiveSprint)
   const [sprintName, setSprintName] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
-  const [durationDays, setDurationDays] = useState(14)
+  const [scopeSize, setScopeSize] = useState<'S' | 'M' | 'L'>('M')
   const [backlogItems, setBacklogItems] = useState<BacklogItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,7 +44,7 @@ export default function SprintBoard() {
         company_id: 1,
         sprint_name: sprintName,
         start_date: startDate,
-        duration_days: durationDays,
+        scope_size: scopeSize,
         backlog_items: backlogItems
       })
       const sprintId = response?.sprint_id
@@ -80,14 +80,16 @@ export default function SprintBoard() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Duration (days)</label>
-            <input
-              type="number"
-              value={durationDays}
-              onChange={e => setDurationDays(parseInt(e.target.value))}
-              min={1}
+            <label className="block text-sm font-medium text-gray-700">Scope</label>
+            <select
+              value={scopeSize}
+              onChange={e => setScopeSize(e.target.value as 'S' | 'M' | 'L')}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
-            />
+            >
+              <option value="S">Small — up to 4 tasks</option>
+              <option value="M">Medium — up to 8 tasks</option>
+              <option value="L">Large — up to 12 tasks</option>
+            </select>
           </div>
         </div>
 

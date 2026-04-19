@@ -109,15 +109,32 @@ class NATSClient:
         Internal coroutine that continuously reads messages from *sub* and
         forwards them to *callback*.
 
-        Exceptions in the callback are caught and logged so that a single bad
-        message does not terminate the listener loop.
+        Per-message exceptions are caught and logged so that a single bad
+        message does not terminate the listener loop.  An outer try/except
+        catches unexpected failures from the async generator itself (e.g. a
+        NATS server disconnect) so the task exits with a clear log entry
+        rather than a silent, unobservable cancellation.
         """
-        async for msg in sub.messages:
-            try:
-                data = json.loads(msg.data.decode())
-                await callback(msg, data)
-            except Exception as e:
-                logger.error(f"Error processing message: {e}")
+        try:
+            async for msg in sub.messages:
+                try:
+                    data = json.loads(msg.data.decode())
+                    await callback(msg, data)
+                except asyncio.CancelledError:
+                    raise  # Let cancellation propagate normally on shutdown.
+                except Exception as e:
+                    logger.error(
+                        "Error processing NATS message on subject=%s: %s",
+                        getattr(msg, "subject", "?"), e, exc_info=True,
+                    )
+        except asyncio.CancelledError:
+            logger.info("NATS _listen task cancelled (normal shutdown).")
+            raise
+        except Exception as outer_err:
+            logger.error(
+                "NATS _listen loop exited unexpectedly (subscription lost?): %s",
+                outer_err, exc_info=True,
+            )
 
     async def request(self, subject: str, payload: Dict[str, Any], timeout: float = 5.0) -> Dict[str, Any]:
         """

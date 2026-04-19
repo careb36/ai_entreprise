@@ -14,6 +14,8 @@ import os
 import requests
 import logging
 import time
+import asyncio
+import httpx
 from typing import Optional, Dict, Any
 from opentelemetry import propagate
 
@@ -28,8 +30,8 @@ class LLMProxyClient:
                   Override via the ``LLM_PROXY_URL`` environment variable in production.
     """
 
-    def __init__(self, base_url: str = "http://localhost:5100"):
-        self.base_url = base_url
+    def __init__(self, base_url: Optional[str] = None):
+        self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
         self.timeout = 60  # Increased for complex agentic prompts
         self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
         self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
@@ -110,6 +112,70 @@ class LLMProxyClient:
                     continue
 
                 logger.error(f"LLM Proxy call failed after retries: {e}")
+                return {"error": str(e), "ok": False}
+
+    async def chat_async(self, messages: list, model: str = "gemini-pro", role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Async variant of ``chat()`` used by LangGraph async nodes.
+        """
+        headers = self._get_headers(role, bu_id)
+        payload = {"messages": messages, "model": model}
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(
+                        f"{self.base_url}/v1/chat/completions",
+                        json=payload,
+                        headers=headers,
+                    )
+
+                if response.is_success:
+                    return response.json()
+
+                if response.status_code >= 500 and attempt < self.max_retries:
+                    delay = self.retry_backoff_sec * (attempt + 1)
+                    logger.warning(
+                        "LLM proxy transient async error %s for model=%s role=%s (attempt %s/%s), retrying in %.1fs",
+                        response.status_code,
+                        model,
+                        role,
+                        attempt + 1,
+                        self.max_retries + 1,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                body = response.text[:500]
+                logger.error(
+                    "LLM proxy async request failed: status=%s model=%s role=%s body=%s",
+                    response.status_code,
+                    model,
+                    role,
+                    body,
+                )
+                return {
+                    "error": f"HTTP {response.status_code}: {body}",
+                    "ok": False,
+                }
+
+            except httpx.RequestError as e:
+                if attempt < self.max_retries:
+                    delay = self.retry_backoff_sec * (attempt + 1)
+                    logger.warning(
+                        "LLM proxy async exception for model=%s role=%s (attempt %s/%s): %s; retrying in %.1fs",
+                        model,
+                        role,
+                        attempt + 1,
+                        self.max_retries + 1,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+                logger.error("LLM Proxy async call failed after retries: %s", e)
                 return {"error": str(e), "ok": False}
 
     def get_available_models(self) -> dict:

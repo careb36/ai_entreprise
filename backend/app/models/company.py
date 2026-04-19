@@ -24,7 +24,8 @@ class Company(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     company_name: str
-    default_sprint_length_days: int = 14  # Used when creating new sprints
+    default_scope_size: str = "M"          # "S" | "M" | "L" — default scope for new sprints
+    default_sprint_length_days: Optional[int] = None  # deprecated
     autonomy_level: int = 2               # 1 = human-led  2 = assisted  3 = autonomous
 
 

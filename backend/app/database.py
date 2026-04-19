@@ -43,9 +43,31 @@ engine = create_engine(
 )
 
 
+def _ensure_runtime_schema() -> None:
+    """Apply lightweight additive fixes for local databases created by older schemas."""
+    statements = (
+        # agents — original additive fixes
+        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT ''",
+        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS model VARCHAR(255) DEFAULT ''",
+        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS system_prompt TEXT",
+        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS token_budget INTEGER DEFAULT 500000",
+        # sprints — scope replaces duration_days
+        "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS scope_size VARCHAR DEFAULT 'M'",
+        "ALTER TABLE IF EXISTS sprints ALTER COLUMN duration_days DROP NOT NULL",
+        # companies — default scope replaces default_sprint_length_days
+        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS default_scope_size VARCHAR DEFAULT 'M'",
+        "ALTER TABLE IF EXISTS companies ALTER COLUMN default_sprint_length_days DROP NOT NULL",
+    )
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.exec_driver_sql(statement)
+
+
 def create_db_and_tables() -> None:
     """Create all tables defined via SQLModel (idempotent — safe to call on startup)."""
     SQLModel.metadata.create_all(engine)
+    _ensure_runtime_schema()
 
 
 def get_session() -> Generator[Session, None, None]:

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BacklogItem } from '../services/api'
 import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
-  PointerSensor, useDroppable, useSensor, useSensors, closestCenter
+  PointerSensor, useDroppable, useSensor, useSensors,
+  closestCenter, pointerWithin, rectIntersection,
+  type CollisionDetection,
 } from '@dnd-kit/core'
 import {
   SortableContext, useSortable, verticalListSortingStrategy
@@ -210,9 +212,9 @@ function ColumnDropZone({
 
 // ── KanbanBoard ────────────────────────────────────────────────────────────────
 
-export default function KanbanBoard({ sprintId }: { sprintId: string }) {
+export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const { t } = useTranslation()
-  const idNum = parseInt(sprintId, 10) || 1
+  const idNum = sprintId ? parseInt(sprintId, 10) : null
   
   const { data: board, isLoading, isError, refetch } = useSprintBoard(idNum)
   const updateMutation = useUpdateBacklogItem()
@@ -220,6 +222,16 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
   const [activeItem, setActiveItem] = useState<BacklogItem | null>(null)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  // pointerWithin gives priority to whatever the pointer is directly over (including
+  // empty columns). Falls back to rectIntersection then closestCenter for overlapping cases.
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const pointer = pointerWithin(args)
+    if (pointer.length > 0) return pointer
+    const rect = rectIntersection(args)
+    if (rect.length > 0) return rect
+    return closestCenter(args)
+  }, [])
 
   const handleStatusChange = (itemId: number, newStatus: BacklogItem['status']) => {
     updateMutation.mutate({ itemId, data: { status: newStatus } })
@@ -245,6 +257,15 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
     if (targetColumnId) {
       handleStatusChange(active.id as number, targetColumnId as BacklogItem['status'])
     }
+  }
+
+  if (!idNum) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-gray-500 py-12">
+        <AlertCircle size={28} className="text-gray-500" />
+        <p className="text-sm text-gray-300">{t('kanban.noActiveSprint')}</p>
+      </div>
+    )
   }
 
   // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -301,7 +322,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string }) {
       {board ? (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >

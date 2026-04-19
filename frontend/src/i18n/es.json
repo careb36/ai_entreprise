@@ -1,5 +1,6 @@
 {
   "nav": {
+    "newCompany": "Nueva compañía",
     "dashboard": "Panel Principal",
     "workspace": "Sala de Agentes",
     "governance": "Gobernanza",
@@ -39,7 +40,7 @@
     "projectPathPlaceholder": "/home/usuario/mi-proyecto",
     "autoDetect": "Detectar equipo automáticamente",
     "detecting": "Detectando...",
-    "sprintLength": "Duración del Sprint (días)",
+    "sprintLength": "Alcance Predeterminado del Sprint",
     "autonomyLevel": "Nivel de Autonomía del Sistema",
     "autonomyLevels": {
       "1": "Copiloto — Manual (cada acción requiere aprobación)",
@@ -114,7 +115,12 @@
     "sprintNamePlaceholder": "Sprint 1 - MVP",
     "sprintGoal": "Objetivo del Sprint",
     "sprintGoalPlaceholder": "¿Qué debe lograr este sprint?",
-    "duration": "Duración (días)",
+    "scope": "Alcance",
+    "scopeS": "Pequeño — hasta 4 tareas",
+    "scopeM": "Mediano — hasta 8 tareas",
+    "scopeL": "Grande — hasta 12 tareas",
+    "scopeTooBig": "Este sprint excede el alcance recomendado. Los sprints grandes degradan el foco de la IA y pueden necesitar división.",
+    "scopeSplitHint": "Sugerencia: dividir en 2 sprints — Sprint A (items 1–4) · Sprint B (items 5–8)",
     "model": "Modelo IA",
     "backlogItems": "Elementos del Backlog",
     "addItem": "+ Agregar Elemento",
@@ -148,6 +154,7 @@
     "refresh": "Actualizar",
     "loading": "Cargando tablero...",
     "error": "Error al cargar el tablero",
+    "noActiveSprint": "Todavia no hay un sprint activo.",
     "empty": "Sin tareas",
     "items": "items",
     "assignee": "Responsable",

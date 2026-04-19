@@ -12,6 +12,7 @@ import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Generate from './pages/Generate'
 import Glassroom from './pages/Glassroom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
   Globe, Database, Code2, Menu, X, Building2
@@ -46,13 +47,13 @@ function LanguageSwitcher() {
 function useNavLinks() {
   const { t } = useTranslation()
   const activeSprintId = useAppStore(state => state.activeSprintId)
-  const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/companies/new'
+   const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/glassroom'
   return [
-    { to: '/',           icon: LayoutDashboard, label: 'Home' },
-    { to: '/companies/new', icon: Building2, label: 'Nueva Compañia' },
-    { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
-    { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
-    { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
+     { to: '/',           icon: LayoutDashboard, label: 'Home' },
+     { to: '/companies/new', icon: Building2, label: t('nav.newCompany') },
+     { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
+     { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
+     { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
     { to: '/analytics',  icon: PieChart,       label: t('nav.analytics') },
     { to: '/memory',     icon: Database,       label: t('nav.memory') },
     { to: '/generate',   icon: Code2,          label: t('nav.generate') },
@@ -139,23 +140,25 @@ function AppContent() {
     <div className="min-h-screen bg-surface-950 flex flex-col relative">
       <NavBar />
       <main className="flex-1 overflow-auto">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/companies/new" element={<CompanyNew />} />
-          <Route path="/workspace/:id" element={<SprintWorkspace />} />
-          <Route
-            path="/governance"
-            element={<div className="page-container"><GovernancePanel /></div>}
-          />
-          <Route
-            path="/analytics"
-            element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
-          />
-          <Route path="/memory" element={<MemorySearch />} />
-          <Route path="/generate" element={<Generate />} />
-          <Route path="/glassroom" element={<Glassroom />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/companies/new" element={<CompanyNew />} />
+            <Route path="/workspace/:id" element={<SprintWorkspace />} />
+            <Route
+              path="/governance"
+              element={<div className="page-container"><GovernancePanel /></div>}
+            />
+            <Route
+              path="/analytics"
+              element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
+            />
+            <Route path="/memory" element={<MemorySearch />} />
+            <Route path="/generate" element={<Generate />} />
+            <Route path="/glassroom" element={<Glassroom />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
       <SupportBot />
     </div>

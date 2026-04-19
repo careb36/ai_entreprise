@@ -48,6 +48,26 @@ _provider_configured: bool = False
 _DEFAULT_OTLP_ENDPOINT = "http://localhost:4318"
 
 
+def _is_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_otlp_endpoint() -> str | None:
+    if _is_truthy(os.getenv("OTEL_SDK_DISABLED")):
+        return None
+
+    explicit_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv(
+        "OTEL_EXPORTER_OTLP_ENDPOINT"
+    )
+    if explicit_endpoint:
+        return explicit_endpoint.rstrip("/")
+
+    if _is_truthy(os.getenv("OTEL_EXPORTER_OTLP_ENABLED")):
+        return _DEFAULT_OTLP_ENDPOINT
+
+    return None
+
+
 def configure_telemetry(service_name: str) -> None:
     """
     Initialise the global ``TracerProvider`` with a batching OTLP/HTTP exporter.
@@ -68,23 +88,27 @@ def configure_telemetry(service_name: str) -> None:
 
     # Honour the standard OTel env-var override.
     service_name = os.getenv("OTEL_SERVICE_NAME", service_name)
-    endpoint_base = os.getenv(
-        "OTEL_EXPORTER_OTLP_ENDPOINT", _DEFAULT_OTLP_ENDPOINT
-    ).rstrip("/")
-
     resource = Resource.create({SERVICE_NAME: service_name})
-    exporter = OTLPSpanExporter(endpoint=f"{endpoint_base}/v1/traces")
-
     provider = TracerProvider(resource=resource)
-    provider.add_span_processor(BatchSpanProcessor(exporter))
+
+    endpoint_base = _resolve_otlp_endpoint()
+    if endpoint_base:
+        exporter = OTLPSpanExporter(endpoint=f"{endpoint_base}/v1/traces")
+        provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
     _provider_configured = True
-    logger.info(
-        "OpenTelemetry configured: service=%s endpoint=%s/v1/traces",
-        service_name,
-        endpoint_base,
-    )
+    if endpoint_base:
+        logger.info(
+            "OpenTelemetry configured: service=%s endpoint=%s/v1/traces",
+            service_name,
+            endpoint_base,
+        )
+    else:
+        logger.info(
+            "OpenTelemetry exporter disabled: service=%s (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)",
+            service_name,
+        )
 
 
 def get_tracer(name: str) -> trace.Tracer:

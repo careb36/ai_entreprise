@@ -32,7 +32,7 @@ from nats_client import NATSClient
 from memory_client import MemoryClient
 from llm_proxy_client import LLMProxyClient
 from routers import auth_router, enterprise_router, sprint_router, agents_router, support_router
-from routers.agents import sse_connections
+from routers.agents import publish_sse_event, sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
 from services.task_worker import process_backlog_tasks
@@ -74,6 +74,19 @@ app.state.llm_client: LLMProxyClient = None
 
 # Retained task references for graceful cancellation on shutdown.
 _background_tasks: Set[asyncio.Task] = set()
+
+
+def _on_task_done(task: asyncio.Task) -> None:
+    """Log unexpected exits from background worker tasks."""
+    _background_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(
+            "Background worker task '%s' exited with an exception: %s",
+            task.get_name(), exc, exc_info=exc,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -171,21 +184,27 @@ async def startup():
         await app.state.nats_client.connect()
 
         # Background tasks only make sense when NATS is connected.
-        for coro in (
-            _listen_to_nats(),
-            process_outbox(app.state.nats_client),
-            process_agent_tasks(app.state.nats_client),
-            process_backlog_tasks(app.state.nats_client),
-        ):
-            task = asyncio.create_task(coro)
+        worker_coros = {
+            "nats_glassroom_listener": _listen_to_nats(),
+            "outbox_processor": process_outbox(app.state.nats_client),
+            "agent_worker": process_agent_tasks(app.state.nats_client),
+            "task_worker": process_backlog_tasks(app.state.nats_client),
+        }
+        for name, coro in worker_coros.items():
+            task = asyncio.create_task(coro, name=name)
             _background_tasks.add(task)
-            task.add_done_callback(_background_tasks.discard)
+            task.add_done_callback(_on_task_done)
 
-        logger.info("NATS connected — background workers started.")
+        logger.info(
+            "NATS connected — background workers started: %s",
+            list(worker_coros.keys()),
+        )
     except Exception as exc:
         logger.warning(
-            f"NATS unavailable at startup ({exc}). "
-            "Agent workflow and SSE streaming are disabled until NATS reconnects."
+            "NATS unavailable at startup (%s). "
+            "Agent workflow and SSE streaming are DISABLED. "
+            "Start NATS (docker compose up nats) and restart the backend to enable agents.",
+            exc,
         )
 
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
@@ -240,9 +259,7 @@ async def _listen_to_nats():
         if subject.startswith("glassroom."):
             sprint_id = subject.split(".")[1]
             if sprint_id in sse_connections:
-                queue = sse_connections[sprint_id]
-                if isinstance(queue, asyncio.Queue):
-                    await queue.put(msg.data.decode())
+                await publish_sse_event(sprint_id, msg.data.decode())
 
     try:
         await app.state.nats_client.subscribe("glassroom.>", callback)

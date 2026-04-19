@@ -34,10 +34,14 @@ CREATE TABLE IF NOT EXISTS agents (
     id SERIAL PRIMARY KEY,
     company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
     business_unit_id INTEGER REFERENCES business_units(id),
+    name VARCHAR(255) DEFAULT '',
     role VARCHAR(50) NOT NULL,
     persona TEXT,
     seniority VARCHAR(20) DEFAULT 'Senior',
     specialty VARCHAR(100),
+    model VARCHAR(255) DEFAULT '',
+    system_prompt TEXT,
+    token_budget INTEGER DEFAULT 500000,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

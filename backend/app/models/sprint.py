@@ -15,7 +15,7 @@ from sqlalchemy import JSON
 
 
 class Sprint(SQLModel, table=True):
-    """A time-boxed work iteration owned by a company."""
+    """A scope-bounded work iteration owned by a company."""
 
     __tablename__ = "sprints"
 
@@ -23,8 +23,9 @@ class Sprint(SQLModel, table=True):
     company_id: int = Field(foreign_key="companies.id")
     sprint_name: str
     start_date: Optional[str] = None  # ISO-8601 date string
-    duration_days: int = 14
-    status: str = "active"            # "active" | "completed" | "cancelled"
+    scope_size: str = "M"             # "S" (≤4 items) | "M" (≤8) | "L" (≤12)
+    duration_days: Optional[int] = None  # deprecated — kept for backwards compat
+    status: str = "active"            # "active" | "completed" | "cancelled" | "needs_split"
     goal: Optional[str] = None        # Sprint goal statement for the team
 
 

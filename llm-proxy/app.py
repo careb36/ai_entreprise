@@ -11,6 +11,7 @@ import os
 import time
 import threading
 import logging
+import math
 from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
@@ -27,11 +28,28 @@ from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
 app = Flask(__name__)
 
+
+def _is_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_otlp_endpoint() -> str | None:
+    if _is_truthy(os.getenv("OTEL_SDK_DISABLED")):
+        return None
+    explicit_endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if explicit_endpoint:
+        return explicit_endpoint.rstrip("/")
+    if _is_truthy(os.getenv("OTEL_EXPORTER_OTLP_ENABLED")):
+        return "http://localhost:4318"
+    return None
+
 resource = Resource.create({SERVICE_NAME: "llm-proxy"})
 tracer_provider = TracerProvider(resource=resource)
-otlp_exporter = OTLPSpanExporter(endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318") + "/v1/traces")
-span_processor = BatchSpanProcessor(otlp_exporter)
-tracer_provider.add_span_processor(span_processor)
+endpoint_base = _resolve_otlp_endpoint()
+if endpoint_base:
+    otlp_exporter = OTLPSpanExporter(endpoint=endpoint_base + "/v1/traces")
+    span_processor = BatchSpanProcessor(otlp_exporter)
+    tracer_provider.add_span_processor(span_processor)
 trace.set_tracer_provider(tracer_provider)
 FlaskInstrumentor().instrument_app(app)
 RequestsInstrumentor().instrument()
@@ -45,6 +63,20 @@ DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
+if endpoint_base:
+    logger.info("OpenTelemetry exporter enabled for llm-proxy: %s/v1/traces", endpoint_base)
+else:
+    logger.info("OpenTelemetry exporter disabled for llm-proxy")
+
+
+def _fallback_embedding(text: str, dims: int = 1536) -> list[float]:
+    """Deterministic local embedding fallback used only when provider embedding fails."""
+    vector = [0.0] * dims
+    for index, byte in enumerate(text.encode("utf-8")):
+        slot = (index * 131 + byte) % dims
+        vector[slot] += (byte % 17) + 1
+    norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+    return [value / norm for value in vector]
 
 # --- Database ---
 def _build_database_url() -> str:
@@ -270,6 +302,64 @@ def chat_completions():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/v1/embeddings", methods=["POST"])
+def embeddings():
+    data = request.json or {}
+    input_text = data.get("input", "")
+    if isinstance(input_text, list):
+        input_text = "\n".join(str(item) for item in input_text)
+    input_text = str(input_text)
+
+    bu_id = request.headers.get("X-Business-Unit-ID")
+
+    if not input_text.strip():
+        return jsonify({"error": "input is required"}), 400
+
+    try:
+        if GEMINI_API_KEY:
+            payload = {
+                "model": "models/text-embedding-004",
+                "content": {
+                    "parts": [{"text": input_text}],
+                },
+                "taskType": data.get("taskType", "RETRIEVAL_DOCUMENT"),
+            }
+            resp = requests.post(
+                f"{GEMINI_PROXY_URL}/models/text-embedding-004:embedContent",
+                headers={"x-goog-api-key": GEMINI_API_KEY},
+                json=payload,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            values = body.get("embedding", {}).get("values") or []
+            if values:
+                track_usage_in_db(bu_id, max(1, len(input_text) // 4))
+                return jsonify(
+                    {
+                        "data": [{"embedding": values, "index": 0}],
+                        "model": "text-embedding-004",
+                    }
+                )
+
+        fallback = _fallback_embedding(input_text)
+        return jsonify(
+            {
+                "data": [{"embedding": fallback, "index": 0}],
+                "model": "local-fallback-embedding",
+            }
+        )
+    except Exception as e:
+        logger.warning("Embedding provider failed, using local fallback: %s", e)
+        fallback = _fallback_embedding(input_text)
+        return jsonify(
+            {
+                "data": [{"embedding": fallback, "index": 0}],
+                "model": "local-fallback-embedding",
+            }
+        )
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PROXY_PORT", 5100)))

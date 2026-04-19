@@ -206,7 +206,7 @@ Decision: {decision_summary}
 Output as JSON with keys: patterns, entities, impact. Keep it concise."""
 
         try:
-            from langchain.schema import HumanMessage
+            from langchain_core.messages import HumanMessage
             response = model.invoke([HumanMessage(content=prompt)])
             # Extract summary from response
             return f"{decision_summary}\n\n[AI Analysis]: {response.content[:500]}"
