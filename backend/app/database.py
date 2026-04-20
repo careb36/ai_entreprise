@@ -57,6 +57,19 @@ def _ensure_runtime_schema() -> None:
         # companies — default scope replaces default_sprint_length_days
         "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS default_scope_size VARCHAR DEFAULT 'M'",
         "ALTER TABLE IF EXISTS companies ALTER COLUMN default_sprint_length_days DROP NOT NULL",
+        # assistant runtime state — persistent cooldown / quota metadata
+        """
+        CREATE TABLE IF NOT EXISTS assistant_runtime_state (
+            id SERIAL PRIMARY KEY,
+            company_id INTEGER NOT NULL REFERENCES companies(id),
+            assistant_key VARCHAR(255) NOT NULL,
+            cooldown_until TIMESTAMP NULL,
+            last_error TEXT NULL,
+            updated_at TIMESTAMP NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_company_id ON assistant_runtime_state (company_id)",
+        "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_assistant_key ON assistant_runtime_state (assistant_key)",
     )
 
     with engine.begin() as connection:

@@ -89,6 +89,9 @@ async def _publish(state: AgentState, event: dict[str, Any]) -> None:
     if not publish_event or sprint_id is None:
         return
     payload = dict(event)
+    payload.setdefault("event_id", str(uuid4()))
+    payload.setdefault("source", "langgraph")
+    payload.setdefault("semantic_version", 1)
     payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
     await publish_event(payload)
 
@@ -103,8 +106,11 @@ async def _invoke_agent(
         state,
         {
             "type": "agent_start",
+            "semantic_type": "kickoff.agent_started",
             "agent": role,
             "role": role,
+            "task_status": "kickoff",
+            "phase": "kickoff",
             "task": task,
             "message": f"{role} is thinking about: {task}",
         },
@@ -138,8 +144,11 @@ async def _invoke_agent(
         state,
         {
             "type": "message",
+            "semantic_type": "kickoff.agent_message",
             "agent": role,
             "role": role,
+            "task_status": "kickoff",
+            "phase": "kickoff",
             "task": task,
             "message": content,
         },
@@ -148,8 +157,11 @@ async def _invoke_agent(
         state,
         {
             "type": "agent_complete",
+            "semantic_type": "kickoff.agent_completed",
             "agent": role,
             "role": role,
+            "task_status": "kickoff",
+            "phase": "kickoff",
             "task": task,
             "message": f"{role} finished: {task}",
         },
@@ -162,14 +174,41 @@ async def kickoff_node(state: AgentState) -> dict[str, Any]:
         state,
         {
             "type": "status",
+            "semantic_type": "kickoff.started",
             "agent": "System",
             "role": "System",
+            "task_status": "kickoff",
+            "phase": "kickoff",
             "task": "Sprint kickoff",
-            "message": "Sprint orchestration started. PO, Scrum Master, and Developer are joining the conversation.",
+            "message": "Sprint orchestration started. PO, Architect, Scrum Master, and Developer are joining the conversation.",
         },
     )
+    messages: list[AnyMessage] = [SystemMessage(content="Sprint kickoff started.")]
+
+    # Retrieve relevant memory from past sprints and inject into planning context.
+    try:
+        processor = get_engram_processor()
+        memory_context = processor.query_relevant_engrams(state["story"], limit=4)
+        if memory_context:
+            messages.append(SystemMessage(content=f"Relevant memory from past sprints:\n{memory_context}"))
+            await _publish(
+                state,
+                {
+                    "type": "status",
+                    "semantic_type": "kickoff.memory_retrieved",
+                    "agent": "System",
+                    "role": "System",
+                    "task_status": "kickoff",
+                    "phase": "memory_retrieved",
+                    "task": "Sprint kickoff",
+                    "message": "Memory retrieved from past sprints — context injected into agent planning.",
+                },
+            )
+    except Exception as exc:
+        logger.warning("Memory retrieval at kickoff failed (non-fatal): %s", exc)
+
     return {
-        "messages": [SystemMessage(content="Sprint kickoff started.")],
+        "messages": messages,
         "backlog_items": state.get("backlog_items") or _extract_backlog(state["story"]),
         "next_agent": "PO",
         "last_error": None,
@@ -210,10 +249,50 @@ async def po_node(state: AgentState) -> dict[str, Any]:
                 state,
                 {
                     "type": "error",
+                    "semantic_type": "kickoff.agent_failed",
                     "agent": "PO",
                     "role": "PO",
+                    "task_status": "kickoff",
+                    "phase": "kickoff",
                     "task": "Prioritize sprint backlog",
                     "message": f"PO failed: {exc}",
+                },
+            )
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
+async def architect_node(state: AgentState) -> dict[str, Any]:
+    with tracer.start_as_current_span("graph.architect"):
+        try:
+            backlog_items = state.get("backlog_items") or []
+            items_text = "\n".join(f"- {i}" for i in backlog_items) if backlog_items else "(see sprint brief)"
+            prompt = (
+                f"Sprint brief:\n{state['story']}\n\n"
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                f"Backlog items:\n{items_text}\n\n"
+                "As Architect, define the technical approach for this sprint: "
+                "key design decisions, data model or interface changes, integration points, "
+                "and architectural constraints or risks the team must respect. "
+                "Be concrete — one clear paragraph per concern. No verbose preamble."
+            )
+            content = await _invoke_agent(state, "Architect", "Define technical approach", prompt)
+            return {
+                "messages": [AIMessage(content=content, name="Architect")],
+                "next_agent": "ScrumMaster",
+                "last_error": None,
+            }
+        except Exception as exc:
+            await _publish(
+                state,
+                {
+                    "type": "error",
+                    "semantic_type": "kickoff.agent_failed",
+                    "agent": "Architect",
+                    "role": "Architect",
+                    "task_status": "kickoff",
+                    "phase": "kickoff",
+                    "task": "Define technical approach",
+                    "message": f"Architect failed: {exc}",
                 },
             )
             return {"last_error": str(exc), "next_agent": "burn"}
@@ -330,10 +409,13 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
             state,
             {
                 "type": "needs_split",
+                "semantic_type": "kickoff.needs_split",
                 "agent": "System",
                 "role": "System",
                 "task": "Sprint kickoff",
                 "sprint_id": sprint_id,
+                "task_status": "needs_split",
+                "phase": "kickoff",
                 "message": "Sprint scope exceeded agent capacity. Split into smaller sprints.",
                 "error": last_error,
             },
@@ -349,10 +431,13 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
             state,
             {
                 "type": "status",
+                "semantic_type": "kickoff.completed",
                 "agent": "System",
                 "role": "System",
                 "task": "Sprint kickoff",
-                "message": "Sprint kickoff conversation finished.",
+                "task_status": "kickoff_complete",
+                "phase": "kickoff",
+                "message": "Sprint kickoff conversation finished. Background sprint execution continues on the board and task workers.",
             },
         )
 
@@ -369,6 +454,7 @@ def create_agent_graph():
     workflow = StateGraph(AgentState)
     workflow.add_node("kickoff", kickoff_node)
     workflow.add_node("po", po_node)
+    workflow.add_node("architect", architect_node)
     workflow.add_node("scrum_master", scrum_master_node)
     workflow.add_node("developer", developer_node)
     workflow.add_node("po_wrap", po_wrap_node)
@@ -376,13 +462,13 @@ def create_agent_graph():
 
     workflow.set_entry_point("kickoff")
     workflow.add_edge("kickoff", "po")
-    workflow.add_conditional_edges("po", lambda state: _route_from(state, "burn", "scrum_master"))
+    workflow.add_conditional_edges("po", lambda state: _route_from(state, "burn", "architect"))
+    workflow.add_conditional_edges("architect", lambda state: _route_from(state, "burn", "scrum_master"))
     workflow.add_conditional_edges("scrum_master", lambda state: _route_from(state, "burn", "developer"))
     workflow.add_conditional_edges("developer", lambda state: _route_from(state, "burn", "po_wrap"))
     workflow.add_edge("po_wrap", "burn")
     workflow.add_edge("burn", END)
-    # 6 fixed nodes × 2 safety margin = 12. Raise explicitly if cycles are added later.
-    return workflow.compile(recursion_limit=12)
+    return workflow.compile()
 
 
 async def run_fabrique_workflow(
@@ -430,7 +516,12 @@ async def run_fabrique_workflow(
         graph = create_agent_graph()
         result = await graph.ainvoke(
             initial_state,
-            config={"configurable": {"thread_id": interaction_id}},
+            config={
+                "configurable": {"thread_id": interaction_id},
+                # 6 fixed nodes × 2 safety margin = 12. Keep limit at execution time
+                # for compatibility with older LangGraph versions.
+                "recursion_limit": 16,
+            },
         )
         logger.info(
             "Workflow completed interaction_id=%s sprint_id=%s engram_id=%s needs_split=%s",

@@ -8,13 +8,15 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAgentStore, AgentMessage } from '../store/agentStore'
-import { useSprintBoard } from '../hooks/useQueries'
+import i18n from '../i18n'
+import { useAgentStore, AgentMessage, type SprintRetro } from '../store/agentStore'
+import { useSprintBoard, useQuotas } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
+import type { BacklogItem } from '../services/api'
 import {
   AlertTriangle, Bot, Check, ChevronDown, ChevronRight,
-  Copy, Eye, Hash, Layers, Loader2, RotateCcw, Search,
-  SplitSquareVertical, X, ZapOff,
+  Copy, Eye, GitBranch, Hash, HeartPulse, Layers, Loader2, RotateCcw, Search,
+  ShieldAlert, SplitSquareVertical, X, ZapOff,
 } from 'lucide-react'
 
 // ── Agent identity ────────────────────────────────────────────────────────────
@@ -47,6 +49,7 @@ const FALLBACK_AGENT: AgentIdentity = {
 }
 
 const ACTIVE_AGENT_TTL_MS = 90_000
+const FRESH_ACTIVITY_MS = 12_000
 
 function getAgent(key: string): AgentIdentity {
   return (
@@ -70,10 +73,118 @@ function formatDate(iso: string): string {
     const today     = new Date()
     const yesterday = new Date()
     yesterday.setDate(today.getDate() - 1)
-    if (d.toDateString() === today.toDateString())     return 'Today'
-    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday'
-    return new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' }).format(d)
+    if (d.toDateString() === today.toDateString())     return i18n.t('glassroom.today', 'Today')
+    if (d.toDateString() === yesterday.toDateString()) return i18n.t('glassroom.yesterday', 'Yesterday')
+    return new Intl.DateTimeFormat(i18n.language || 'en', { weekday: 'long', month: 'long', day: 'numeric' }).format(d)
   } catch { return '' }
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`
+}
+
+function formatAgeShort(ms: number): string {
+  if (ms < 1000) return '0s'
+  return formatElapsed(ms)
+}
+
+function parseCooldownUntil(detail?: string): string | undefined {
+  if (!detail) return undefined
+  const match = detail.match(/cooldown_until=([^\s]+)/)
+  return match?.[1]
+}
+
+function hasDeliverableComment(comment: { author: string; text: string; created_at: string }): boolean {
+  const text = (comment.text || '').trim()
+  if (!text || comment.author === 'System') return false
+  if (text.toUpperCase().startsWith('APPROVED:') || text.toUpperCase().startsWith('NEEDS WORK:')) return false
+  return true
+}
+
+function extractBlockedReason(comments: BacklogItem['comments'] | undefined): string | undefined {
+  const entries = comments || []
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const text = (entries[index]?.text || '').trim()
+    if (!text) continue
+    const lowered = text.toLowerCase()
+    if (
+      lowered.includes('manual triage') ||
+      lowered.includes('quality gate failed') ||
+      lowered.includes('agent error:') ||
+      lowered.includes('missing deliverable') ||
+      lowered.includes('freeze after')
+    ) {
+      return text
+    }
+  }
+  return undefined
+}
+
+function phaseLabel(t: (key: string, fallback?: string) => string, phase?: string): string {
+  const labels: Record<string, string> = {
+    queued: 'Queued',
+    claimed: 'Claimed',
+    context: 'Context',
+    memory_retrieved: 'Memory retrieved',
+    execution: 'Execution',
+    deliverable: 'Deliverable',
+    artifact_generation: 'Artifacts',
+    qa_handoff: 'QA handoff',
+    qa_review: 'QA review',
+    qa_approved: 'Approved',
+    rework: 'Rework',
+    retry: 'Retry',
+    restart_recovery: 'Restart recovery',
+    blocked_recovery: 'Blocked recovery',
+    quality_gate: 'Quality gate',
+    qa_gate: 'QA gate',
+    implementation_complete: 'Implementation complete',
+    kickoff_complete: 'Kickoff complete',
+    unknown: 'Unknown',
+  }
+  const key = phase || 'unknown'
+  return t(`glassroom.phaseLabels.${key}`, labels[key] ?? phase ?? 'Unknown')
+}
+
+function renderInlineMarkdown(text: string): Array<string | JSX.Element> {
+  const parts: Array<string | JSX.Element> = []
+  const pattern = /\*\*(.+?)\*\*/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    parts.push(
+      <strong key={`bold-${match.index}`} className="font-semibold text-gray-100">
+        {match[1]}
+      </strong>,
+    )
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : [text]
+}
+
+function MessageContent({ text, isError }: { text: string; isError: boolean }) {
+  return (
+    <div className={`text-[13px] break-words leading-relaxed ${isError ? 'text-red-300' : 'text-gray-200'}`}>
+      {text.split('\n').map((line, index) => (
+        <p key={`${index}-${line.slice(0, 12)}`} className={index === 0 ? '' : 'mt-1'}>
+          {line.length > 0 ? renderInlineMarkdown(line) : <span>&nbsp;</span>}
+        </p>
+      ))}
+    </div>
+  )
 }
 
 interface MessageGroup {
@@ -81,6 +192,59 @@ interface MessageGroup {
   identity: AgentIdentity
   timestamp: string
   messages: AgentMessage[]
+}
+
+interface AssistantSummaryEntry {
+  label: string
+  used: number
+  quotaSkips: number
+  failures: number
+  unavailableSkips: number
+  requested: number
+  cooldownUntil?: string
+  lastDecision?: string
+}
+
+interface HealthPanelEntry {
+  label: string
+  value: string
+  tone: 'neutral' | 'good' | 'warn' | 'danger'
+}
+
+interface QuotaTelemetry {
+  quota: number
+  used: number
+  remaining: number
+  ratio: number
+}
+
+interface SprintTaskEntry {
+  id: number
+  title: string
+  status: BacklogItem['status']
+  priority: BacklogItem['priority']
+  assignee?: string
+  comments?: BacklogItem['comments']
+}
+
+interface TaskAutonomyEntry {
+  id: number
+  title: string
+  status: BacklogItem['status']
+  priority: BacklogItem['priority']
+  assignee?: string
+  currentPhase: string
+  reworkCount: number
+  reviewCount: number
+  deliverableCount: number
+  blockedReason?: string
+  assistantLabels: string[]
+  stepStates: Array<{
+    key: string
+    label: string
+    state: 'pending' | 'active' | 'done' | 'blocked'
+    detail?: string
+  }>
 }
 
 function groupMessages(messages: AgentMessage[]): { date: string; groups: MessageGroup[] }[] {
@@ -114,14 +278,16 @@ function groupMessages(messages: AgentMessage[]): { date: string; groups: Messag
   return result
 }
 
-const EVENT_TYPES = [
-  { value: '', label: 'All types' },
-  { value: 'message',        label: 'Message'   },
-  { value: 'agent_start',    label: 'Working'   },
-  { value: 'agent_complete', label: 'Delivered' },
-  { value: 'status',         label: 'Status'    },
-  { value: 'error',          label: 'Error'     },
-] as const
+function getEventTypes(t: (key: string, fallback?: string) => string) {
+  return [
+    { value: '', label: t('glassroom.eventTypes.all', 'All types') },
+    { value: 'message', label: t('glassroom.eventTypes.message', 'Message') },
+    { value: 'agent_start', label: t('glassroom.eventTypes.working', 'Working') },
+    { value: 'agent_complete', label: t('glassroom.eventTypes.delivered', 'Delivered') },
+    { value: 'status', label: t('glassroom.eventTypes.status', 'Status') },
+    { value: 'error', label: t('glassroom.eventTypes.error', 'Error') },
+  ] as const
+}
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 
@@ -135,12 +301,13 @@ function AgentAvatar({ identity, size = 'md' }: { identity: AgentIdentity; size?
 }
 
 function TypeBadge({ type }: { type: string }) {
+  const { t } = useTranslation()
   const cfg: Record<string, { label: string; cls: string; spin?: boolean }> = {
-    agent_start:    { label: 'working',   cls: 'bg-brand-500/15 text-brand-300 border-brand-500/25',     spin: true  },
-    agent_complete: { label: 'delivered', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'             },
-    error:          { label: 'error',     cls: 'bg-red-500/15 text-red-300 border-red-500/25'                         },
-    status:         { label: 'update',    cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'                },
-    needs_split:    { label: 'split',     cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25'                   },
+    agent_start:    { label: t('glassroom.badgeLabels.working', 'working'),   cls: 'bg-brand-500/15 text-brand-300 border-brand-500/25',     spin: true  },
+    agent_complete: { label: t('glassroom.badgeLabels.delivered', 'delivered'), cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'             },
+    error:          { label: t('glassroom.badgeLabels.error', 'error'),     cls: 'bg-red-500/15 text-red-300 border-red-500/25'                         },
+    status:         { label: t('glassroom.badgeLabels.update', 'update'),    cls: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25'                },
+    needs_split:    { label: t('glassroom.badgeLabels.split', 'split'),     cls: 'bg-amber-500/15 text-amber-300 border-amber-500/25'                   },
   }
   const c = cfg[type]
   if (!c) return null
@@ -196,6 +363,279 @@ function PreviewCard({ preview, task }: { preview: string; task?: string }) {
   )
 }
 
+function AssistantBadge({ msg }: { msg: AgentMessage }) {
+  const { t } = useTranslation()
+  if (!msg.assistantLabel) return null
+
+  const palette = msg.assistantLabel.includes('Claude')
+    ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+    : 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+
+  const decisionTone: Record<string, string> = {
+    used: 'text-emerald-300',
+    requested: 'text-sky-300',
+    skipped_quota_cooldown: 'text-amber-300',
+    quota_cooldown: 'text-amber-300',
+    unavailable: 'text-gray-400',
+    failed: 'text-red-300',
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-semibold ${palette}`}>
+        {msg.assistantLabel}
+      </span>
+      {msg.assistantPurpose && (
+        <span className="text-gray-400">{msg.assistantPurpose}</span>
+      )}
+      {msg.assistantDecision && (
+        <span className={decisionTone[msg.assistantDecision] ?? 'text-gray-400'}>
+          {t(`glassroom.assistantDecisions.${msg.assistantDecision}`, msg.assistantDecision.replaceAll('_', ' '))}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function AssistantSummaryPanel({ entries }: { entries: AssistantSummaryEntry[] }) {
+  const { t } = useTranslation()
+  if (entries.length === 0) return null
+
+  return (
+    <div className="border-b border-surface-700/60 p-3 space-y-2">
+      <div>
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+          {t('glassroom.assistantSummaryTitle')}
+        </p>
+        <p className="text-[11px] text-gray-500 mt-1">
+          {t('glassroom.assistantSummarySubtitle')}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {entries.map(entry => {
+          const pillTone = entry.label.includes('Claude')
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+            : 'border-sky-500/30 bg-sky-500/10 text-sky-200'
+
+          return (
+            <div key={entry.label} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${pillTone}`}>
+                  {entry.label}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
+                <div className="rounded-md bg-emerald-500/10 px-2 py-1.5 text-emerald-300">
+                  <p className="text-[9px] uppercase tracking-wider text-emerald-400/80">{t('glassroom.assistantUsed')}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.used}</p>
+                </div>
+                <div className="rounded-md bg-amber-500/10 px-2 py-1.5 text-amber-300">
+                  <p className="text-[9px] uppercase tracking-wider text-amber-400/80">{t('glassroom.assistantQuotaSkips')}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.quotaSkips}</p>
+                </div>
+                <div className="rounded-md bg-red-500/10 px-2 py-1.5 text-red-300">
+                  <p className="text-[9px] uppercase tracking-wider text-red-400/80">{t('glassroom.assistantFailures')}</p>
+                  <p className="mt-1 text-sm font-semibold tabular-nums">{entry.failures}</p>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
+                <span>requested {entry.requested}</span>
+                <span>unavailable {entry.unavailableSkips}</span>
+                {entry.cooldownUntil && <span>cooldown {formatTime(entry.cooldownUntil)}</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SprintTaskPanel({ tasks }: { tasks: SprintTaskEntry[] }) {
+  const { t } = useTranslation()
+  if (tasks.length === 0) return null
+
+  const statusTone: Record<SprintTaskEntry['status'], string> = {
+    todo: 'bg-surface-800 text-gray-300',
+    in_progress: 'bg-blue-500/10 text-blue-300',
+    in_review: 'bg-amber-500/10 text-amber-300',
+    done: 'bg-emerald-500/10 text-emerald-300',
+    blocked: 'bg-red-500/10 text-red-300',
+  }
+
+  const priorityTone: Record<SprintTaskEntry['priority'], string> = {
+    low: 'text-gray-500',
+    medium: 'text-sky-300',
+    high: 'text-amber-300',
+    critical: 'text-red-300',
+  }
+
+  return (
+    <div className="border-b border-surface-700/60 p-3 space-y-2">
+      <div>
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+          {t('glassroom.taskSummaryTitle')}
+        </p>
+        <p className="text-[11px] text-gray-500 mt-1">
+          {t('glassroom.taskSummarySubtitle')}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {tasks.map(task => (
+          <div key={task.id} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-gray-200 leading-tight break-words">{task.title}</p>
+                <div className="mt-1 flex items-center gap-2 flex-wrap text-[10px]">
+                  <span className={`rounded-full px-1.5 py-0.5 font-medium ${statusTone[task.status]}`}>
+                    {t(`glassroom.taskStatus.${task.status}`)}
+                  </span>
+                  <span className={priorityTone[task.priority]}>
+                    {t('glassroom.taskPriority')}: {t(`glassroom.taskPriorityValue.${task.priority}`)}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[10px] text-gray-500">
+              {t('glassroom.taskOwner')}: {task.assignee || t('glassroom.unassigned')}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HealthPanel({ entries }: { entries: HealthPanelEntry[] }) {
+  const { t } = useTranslation()
+  if (entries.length === 0) return null
+
+  const toneClass: Record<HealthPanelEntry['tone'], string> = {
+    neutral: 'bg-surface-800 text-gray-300',
+    good: 'bg-emerald-500/10 text-emerald-300',
+    warn: 'bg-amber-500/10 text-amber-300',
+    danger: 'bg-red-500/10 text-red-300',
+  }
+
+  return (
+    <div className="border-b border-surface-700/60 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <HeartPulse size={12} className="text-emerald-400" />
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+          {t('glassroom.healthTitle', 'Operational Health')}
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+        {entries.map(entry => (
+          <div key={entry.label} className="rounded-lg border border-surface-700 bg-surface-900/70 px-3 py-2.5 min-w-0">
+            <p className="text-[9px] uppercase tracking-wider text-gray-500">{entry.label}</p>
+            <p className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-medium ${toneClass[entry.tone]}`}>
+              {entry.value}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QuotaTelemetryPanel({ quota }: { quota?: QuotaTelemetry }) {
+  const { t } = useTranslation()
+  if (!quota || quota.quota <= 0) return null
+
+  const percent = Math.round(quota.ratio * 100)
+  const barTone = percent >= 90 ? 'bg-red-400' : percent >= 70 ? 'bg-amber-400' : 'bg-emerald-400'
+
+  return (
+    <div className="border-b border-surface-700/60 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <ShieldAlert size={12} className="text-sky-300" />
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+          {t('glassroom.quotaTitle', 'Quota Telemetry')}
+        </p>
+      </div>
+      <div className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+        <div className="flex items-center justify-between text-[10px] text-gray-400">
+          <span>{t('glassroom.quotaUsed', 'Used')}</span>
+          <span className="tabular-nums">{quota.used} / {quota.quota}</span>
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-surface-800 overflow-hidden">
+          <div className={`h-full ${barTone}`} style={{ width: `${Math.max(4, percent)}%` }} />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[10px] text-gray-500">
+          <span>{percent}%</span>
+          <span>{t('glassroom.quotaRemaining', 'Remaining')}: {quota.remaining}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TaskAutonomyTree({ tasks }: { tasks: TaskAutonomyEntry[] }) {
+  const { t } = useTranslation()
+  if (tasks.length === 0) return null
+
+  const stateTone: Record<TaskAutonomyEntry['stepStates'][number]['state'], string> = {
+    pending: 'bg-surface-800 text-gray-500',
+    active: 'bg-sky-500/10 text-sky-300',
+    done: 'bg-emerald-500/10 text-emerald-300',
+    blocked: 'bg-red-500/10 text-red-300',
+  }
+
+  return (
+    <div className="border-b border-surface-700/60 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <GitBranch size={12} className="text-violet-300" />
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+          {t('glassroom.autonomyTreeTitle', 'Autonomy Tree')}
+        </p>
+      </div>
+      <div className="space-y-2">
+        {tasks.map(task => (
+          <div key={task.id} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium text-gray-200 break-words">{task.title}</p>
+                <p className="mt-1 text-[10px] text-gray-500">
+                  {phaseLabel(t, task.currentPhase)} · {t('glassroom.reworksCount', '{{n}} reworks').replace('{{n}}', String(task.reworkCount))} · {t('glassroom.qaReviewsCount', '{{n}} QA reviews').replace('{{n}}', String(task.reviewCount))}
+                </p>
+              </div>
+              <span className="text-[10px] text-gray-500">#{task.id}</span>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {task.stepStates.map(step => (
+                <div key={step.key} className="flex items-start gap-2">
+                  <span className={`mt-0.5 h-2 w-2 rounded-full ${
+                    step.state === 'done' ? 'bg-emerald-400' :
+                    step.state === 'active' ? 'bg-sky-400' :
+                    step.state === 'blocked' ? 'bg-red-400' : 'bg-surface-700'
+                  }`} />
+                  <div className="min-w-0 flex-1">
+                    <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-medium ${stateTone[step.state]}`}>
+                      {step.label}
+                    </span>
+                    {step.detail && <p className="mt-1 text-[10px] text-gray-500 break-words">{step.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {(task.blockedReason || task.assistantLabels.length > 0) && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
+                {task.assistantLabels.map(label => (
+                  <span key={label} className="rounded-full border border-surface-700 px-1.5 py-0.5">{label}</span>
+                ))}
+                {task.blockedReason && <span className="text-red-300">{task.blockedReason}</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DateSeparator({ date }: { date: string }) {
   return (
     <div className="flex items-center gap-3 py-2 px-4">
@@ -208,21 +648,33 @@ function DateSeparator({ date }: { date: string }) {
   )
 }
 
-function TypingIndicator({ identity }: { identity: AgentIdentity }) {
+function TypingIndicator({ identity, elapsedMs }: { identity: AgentIdentity; elapsedMs: number }) {
+  const { t } = useTranslation()
+  const isFresh = elapsedMs <= FRESH_ACTIVITY_MS
+  const statusLabel = isFresh
+    ? t('glassroom.agentActivelyThinking')
+    : t('glassroom.agentStillWorking')
+
   return (
     <div className="flex items-center gap-2.5 px-4 py-2 animate-fade-in">
       <AgentAvatar identity={identity} size="sm" />
       <span className={`text-xs font-medium ${identity.color}`}>{identity.label}</span>
-      <span className="flex gap-0.5 items-center">
-        {[0, 1, 2].map(i => (
-          <span
-            key={i}
-            className="w-1.5 h-1.5 rounded-full bg-gray-500"
-            style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.15}s infinite` }}
-          />
-        ))}
+      {isFresh ? (
+        <span className="flex gap-0.5 items-center">
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full bg-gray-500"
+              style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.15}s infinite` }}
+            />
+          ))}
+        </span>
+      ) : (
+        <Loader2 size={12} className="text-gray-500 animate-spin" />
+      )}
+      <span className="text-[11px] text-gray-600 italic">
+        {statusLabel} · {formatElapsed(elapsedMs)}
       </span>
-      <span className="text-[11px] text-gray-600 italic">thinking…</span>
     </div>
   )
 }
@@ -251,11 +703,13 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
         {formatTime(msg.timestamp)}
       </span>
       <div className="flex-1 min-w-0">
-        <p className={`text-[13px] whitespace-pre-wrap break-words leading-relaxed ${
-          isError ? 'text-red-300' : 'text-gray-200'
-        }`}>
-          {msg.content}
-        </p>
+        <MessageContent text={msg.content} isError={isError} />
+        <AssistantBadge msg={msg} />
+        {msg.assistantDetail && (
+          <p className="mt-1 text-[11px] text-gray-500 whitespace-pre-wrap break-words">
+            {msg.assistantDetail}
+          </p>
+        )}
         {msg.preview && <PreviewCard preview={msg.preview} task={msg.task} />}
       </div>
       <CopyBtn text={msg.content} />
@@ -302,9 +756,10 @@ function LeftSidebar({
   sprintId: string
   scope?: string
   status?: string
-  activeAgents: { key: string; identity: AgentIdentity }[]
+  activeAgents: { key: string; identity: AgentIdentity; elapsedMs: number }[]
   onlineAgents: AgentIdentity[]
 }) {
+  const { t } = useTranslation()
   const SCOPE_COLOR: Record<string, string> = {
     S: 'text-emerald-400',
     M: 'text-brand-400',
@@ -318,7 +773,7 @@ function LeftSidebar({
   }
 
   return (
-    <div className="w-52 flex-shrink-0 border-r border-surface-700/60 bg-surface-950 flex flex-col">
+    <div className="w-full border-r lg:border-r border-b lg:border-b-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0">
       {/* Sprint info */}
       <div className="p-3 border-b border-surface-700/60">
         <div className="flex items-center gap-2 mb-1">
@@ -341,12 +796,12 @@ function LeftSidebar({
       </div>
 
       {/* Active agents */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="py-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto">
         <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-3 mb-1">
-          Agents
+          {t('glassroom.agentsTitle', 'Agents')}
         </p>
         {onlineAgents.length === 0 ? (
-          <p className="text-[11px] text-gray-600 px-3 py-2 italic">Waiting for agents…</p>
+          <p className="text-[11px] text-gray-600 px-3 py-2 italic">{t('glassroom.waitingAgents', 'Waiting for agents…')}</p>
         ) : (
           onlineAgents.map((identity, i) => {
             const isActive = activeAgents.some(a => a.identity.initials === identity.initials)
@@ -372,24 +827,79 @@ function LeftSidebar({
   )
 }
 
+// ── Sprint Retrospective Panel ────────────────────────────────────────────────
+
+function SprintRetroPanel({ retro }: { retro: SprintRetro | null }) {
+  const { t } = useTranslation()
+  if (!retro) return null
+
+  const rate = retro.completionRate
+  const rateTone = rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'
+  const barColor = rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-500' : 'bg-red-500'
+
+  return (
+    <div className="border-b border-surface-700/60 px-3 py-2.5">
+      <div className="flex items-center gap-2 mb-2">
+        <HeartPulse size={11} className="text-fuchsia-400" />
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+          {t('glassroom.retroTitle', 'Last Sprint Retro')}
+        </p>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">{t('glassroom.retroCompletion', 'Completion')}</span>
+          <span className={`text-[11px] font-semibold ${rateTone}`}>{rate}%</span>
+        </div>
+        <div className="w-full bg-surface-800 rounded-full h-1">
+          <div className={`${barColor} h-1 rounded-full transition-all`} style={{ width: `${rate}%` }} />
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
+          <span className="text-[10px] text-gray-500">{t('glassroom.retroDone', 'Done')}</span>
+          <span className="text-[10px] text-gray-300 text-right">{retro.doneTasks}/{retro.totalTasks}</span>
+          <span className="text-[10px] text-gray-500">{t('glassroom.retroBlocked', 'Blocked')}</span>
+          <span className={`text-[10px] text-right ${retro.blockedTasks > 0 ? 'text-amber-400' : 'text-gray-300'}`}>{retro.blockedTasks}</span>
+          <span className="text-[10px] text-gray-500">{t('glassroom.retroRework', 'Rework cycles')}</span>
+          <span className={`text-[10px] text-right ${retro.reworkCycles > 3 ? 'text-amber-400' : 'text-gray-300'}`}>{retro.reworkCycles}</span>
+          <span className="text-[10px] text-gray-500">{t('glassroom.retroQA', 'QA failures')}</span>
+          <span className={`text-[10px] text-right ${retro.qaFailures > 2 ? 'text-red-400' : 'text-gray-300'}`}>{retro.qaFailures}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Right panel: agent detail ─────────────────────────────────────────────────
 
-function RightPanel({ agentStates, messageCount, isConnected }: {
-  agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string }>
+function RightPanel({ agentStates, messageCount, isConnected, assistantSummary, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
+  agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string; lastTaskTitle?: string; lastTaskId?: number; lastSemanticType?: string }>
   messageCount: number
   isConnected: boolean
+  assistantSummary: AssistantSummaryEntry[]
+  sprintTasks: SprintTaskEntry[]
+  healthEntries: HealthPanelEntry[]
+  autonomyTree: TaskAutonomyEntry[]
+  quotaTelemetry?: QuotaTelemetry
+  lastRetro?: SprintRetro | null
 }) {
+  const { t } = useTranslation()
   const entries = Object.entries(agentStates)
 
   return (
-    <div className="w-52 flex-shrink-0 border-l border-surface-700/60 bg-surface-950 flex flex-col">
+    <div className="w-full border-l lg:border-l border-t lg:border-t-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0 max-h-none lg:max-h-none overflow-visible lg:overflow-y-auto lg:overflow-x-hidden">
       <div className="p-3 border-b border-surface-700/60">
-        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">Live State</p>
+        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">{t('glassroom.liveStateTitle')}</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-2 space-y-px">
+      <HealthPanel entries={healthEntries} />
+      <SprintRetroPanel retro={lastRetro ?? null} />
+      <QuotaTelemetryPanel quota={quotaTelemetry} />
+      <SprintTaskPanel tasks={sprintTasks} />
+      <TaskAutonomyTree tasks={autonomyTree} />
+      <AssistantSummaryPanel entries={assistantSummary} />
+
+      <div className="py-2 space-y-px lg:flex-1 lg:min-h-0">
         {entries.length === 0 ? (
-          <p className="text-[11px] text-gray-600 px-3 py-2 italic">No agent activity yet.</p>
+          <p className="text-[11px] text-gray-600 px-3 py-2 italic">{t('glassroom.noAgentActivity')}</p>
         ) : (
           entries.map(([role, state]) => {
             const identity = getAgent(role)
@@ -415,6 +925,11 @@ function RightPanel({ agentStates, messageCount, isConnected }: {
                       {state.currentActivity}
                     </p>
                   )}
+                  {state.lastTaskTitle && (
+                    <p className="text-[10px] text-gray-500 mt-1 break-words leading-tight">
+                      {state.lastTaskTitle}
+                    </p>
+                  )}
                 </div>
               </div>
             )
@@ -425,14 +940,14 @@ function RightPanel({ agentStates, messageCount, isConnected }: {
       {/* Stats footer */}
       <div className="p-3 border-t border-surface-700/60 space-y-1.5">
         <div className="flex items-center justify-between text-[10px]">
-          <span className="text-gray-600">Stream</span>
+          <span className="text-gray-600">{t('glassroom.healthLabels.stream')}</span>
           <span className={`flex items-center gap-1 font-medium ${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-            {isConnected ? 'Live' : 'Off'}
+            {isConnected ? t('glassroom.streamStatus.live', 'Live') : t('glassroom.streamStatus.off', 'Off')}
           </span>
         </div>
         <div className="flex items-center justify-between text-[10px]">
-          <span className="text-gray-600">Events</span>
+          <span className="text-gray-600">{t('glassroom.eventsLabel', 'Events')}</span>
           <span className="text-gray-400 font-medium tabular-nums">{messageCount}</span>
         </div>
       </div>
@@ -444,12 +959,15 @@ function RightPanel({ agentStates, messageCount, isConnected }: {
 
 export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string }) {
   const { t } = useTranslation()
+  const eventTypes = useMemo(() => getEventTypes(t), [t])
 
-  const { messages, agentStates, isConnected, connectionError, connect, disconnect } = useAgentStore()
+  const { messages, agentStates, isConnected, connectionError, connect, disconnect, memoryHits, lastRetro } = useAgentStore()
   const activeSprintId = useAppStore(s => s.activeSprintId)
+  const companyId = useAppStore(s => s.companyId)
 
   const numericId   = propSprintId ? parseInt(propSprintId, 10) : (activeSprintId ?? null)
   const { data: board } = useSprintBoard(isNaN(numericId as number) ? null : numericId)
+  const { data: quotas } = useQuotas(companyId)
   const sprint = board?.sprint
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -458,6 +976,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   const [filterAgent, setFilterAgent]   = useState('')
   const [filterType,  setFilterType]    = useState('')
   const [searchText,  setSearchText]    = useState('')
+  const [clockTick, setClockTick] = useState(() => Date.now())
 
   useEffect(() => {
     if (propSprintId) connect(propSprintId)
@@ -473,6 +992,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   useEffect(() => {
     if (isAtBottom) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isAtBottom])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick(Date.now()), 5000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const filteredMessages = useMemo(() => {
     let result = messages
@@ -495,7 +1019,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
 
   const activeAgents = useMemo(() => {
     const working = new Map<string, { identity: AgentIdentity; startedAt: number }>()
-    const now = Date.now()
+    const now = clockTick
     for (const msg of messages) {
       const key = msg.agent || msg.role || 'System'
       if (!key || key === 'System') continue
@@ -507,8 +1031,8 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
     }
     return [...working.entries()]
       .filter(([, v]) => now - v.startedAt <= ACTIVE_AGENT_TTL_MS)
-      .map(([key, v]) => ({ key, identity: v.identity }))
-  }, [messages])
+      .map(([key, v]) => ({ key, identity: v.identity, elapsedMs: now - v.startedAt }))
+  }, [messages, clockTick])
 
   const onlineAgents = useMemo(() => {
     const seen = new Map<string, AgentIdentity>()
@@ -518,10 +1042,170 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
     return [...seen.values()]
   }, [messages])
 
+  const assistantSummary = useMemo<AssistantSummaryEntry[]>(() => {
+    const summary = new Map<string, AssistantSummaryEntry>()
+    for (const msg of messages) {
+      if (!msg.assistantLabel || !msg.assistantDecision) continue
+      const current = summary.get(msg.assistantLabel) ?? {
+        label: msg.assistantLabel,
+        used: 0,
+        quotaSkips: 0,
+        failures: 0,
+        unavailableSkips: 0,
+        requested: 0,
+        cooldownUntil: undefined,
+        lastDecision: undefined,
+      }
+
+      if (msg.assistantDecision === 'used') {
+        current.used += 1
+      } else if (msg.assistantDecision === 'quota_cooldown' || msg.assistantDecision === 'skipped_quota_cooldown') {
+        current.quotaSkips += 1
+      } else if (msg.assistantDecision === 'failed' || msg.assistantDecision === 'unavailable') {
+        current.failures += 1
+      } else if (msg.assistantDecision === 'requested') {
+        current.requested += 1
+      } else if (msg.assistantDecision === 'unavailable_cooldown' || msg.assistantDecision === 'skipped_unavailable_cooldown') {
+        current.unavailableSkips += 1
+      }
+
+      current.lastDecision = msg.assistantDecision
+      current.cooldownUntil = parseCooldownUntil(msg.assistantDetail) || current.cooldownUntil
+
+      summary.set(msg.assistantLabel, current)
+    }
+
+    return [...summary.values()].sort((left, right) => left.label.localeCompare(right.label))
+  }, [messages])
+
+  const sprintTasks = useMemo<SprintTaskEntry[]>(() => {
+    if (!board?.columns) return []
+
+    const order: Array<BacklogItem['status']> = ['in_progress', 'in_review', 'blocked', 'todo', 'done']
+    const entries = Object.values(board.columns)
+      .flat()
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        assignee: task.assignee,
+        comments: task.comments,
+      }))
+
+    return entries.sort((left, right) => {
+      const statusDelta = order.indexOf(left.status) - order.indexOf(right.status)
+      if (statusDelta !== 0) return statusDelta
+      return left.id - right.id
+    })
+  }, [board])
+
   const isFiltered = filterAgent || filterType || searchText
 
+  const quotaTelemetry = useMemo<QuotaTelemetry | undefined>(() => {
+    const rows = Array.isArray(quotas) ? quotas : []
+    const quota = rows.reduce((total, row) => total + Number(row?.limit ?? row?.quota ?? 0), 0)
+    const used = rows.reduce((total, row) => total + Number(row?.used ?? row?.token_used ?? 0), 0)
+    if (!Number.isFinite(quota) || quota <= 0 || !Number.isFinite(used)) return undefined
+    return {
+      quota,
+      used,
+      remaining: Math.max(0, quota - used),
+      ratio: Math.max(0, Math.min(1, used / quota)),
+    }
+  }, [quotas])
+
+  const healthEntries = useMemo<HealthPanelEntry[]>(() => {
+    const now = clockTick
+    const liveRoles = Object.values(agentStates)
+    const activeCount = liveRoles.filter(entry => entry.fsmState === 'active').length
+    const errorCount = liveRoles.filter(entry => entry.fsmState === 'error').length
+    const staleMs = liveRoles.length > 0
+      ? Math.min(...liveRoles.map(entry => Math.max(0, now - Date.parse(entry.lastSeen || ''))))
+      : 0
+    const blockedCount = sprintTasks.filter(task => task.status === 'blocked').length
+    const reworkOpen = messages.filter(msg => msg.semanticType === 'task.rework_scheduled').length
+
+    const retroRate = lastRetro?.completionRate ?? null
+    const retroTone: HealthPanelEntry['tone'] = retroRate === null ? 'neutral' : retroRate >= 80 ? 'good' : retroRate >= 50 ? 'warn' : 'danger'
+
+    return [
+      { label: t('glassroom.healthLabels.stream'), value: isConnected ? t('glassroom.streamStatus.live', 'Live') : t('glassroom.streamStatus.offline', 'Offline'), tone: isConnected ? 'good' : 'danger' },
+      { label: t('glassroom.healthLabels.activeAgents'), value: String(activeCount), tone: activeCount > 0 ? 'good' : 'warn' },
+      { label: t('glassroom.healthLabels.agentErrors'), value: String(errorCount), tone: errorCount > 0 ? 'danger' : 'good' },
+      { label: t('glassroom.healthLabels.blockedTasks'), value: String(blockedCount), tone: blockedCount > 0 ? 'warn' : 'good' },
+      { label: t('glassroom.healthLabels.openReworks'), value: String(reworkOpen), tone: reworkOpen > 0 ? 'warn' : 'neutral' },
+      { label: t('glassroom.healthLabels.freshestHeartbeat'), value: liveRoles.length > 0 ? t('glassroom.agoWithValue', '{{value}} ago').replace('{{value}}', formatAgeShort(staleMs)) : t('glassroom.notAvailable', 'n/a'), tone: staleMs <= 30000 ? 'good' : 'warn' },
+      { label: t('glassroom.healthLabels.memoryHits', 'Memory hits'), value: String(memoryHits), tone: memoryHits > 0 ? 'good' : 'neutral' },
+      ...(retroRate !== null ? [{ label: t('glassroom.healthLabels.lastSprintCompletion', 'Last sprint'), value: `${retroRate}%`, tone: retroTone }] : []),
+    ]
+  }, [agentStates, clockTick, isConnected, messages, sprintTasks, memoryHits, lastRetro, t])
+
+  const autonomyTree = useMemo<TaskAutonomyEntry[]>(() => {
+    return sprintTasks.map(task => {
+      const relatedMessages = messages.filter(msg => msg.taskId === task.id || msg.task === task.title)
+      const reworkCount = relatedMessages.reduce((count, msg) => Math.max(count, msg.reworkCount ?? 0), 0)
+      const reviewCount = (task.comments || []).filter(comment => comment.author === 'QA').length
+      const deliverableCount = (task.comments || []).filter(hasDeliverableComment).length
+      const currentPhase = [...relatedMessages].reverse().find(msg => msg.taskPhase)?.taskPhase || 'unknown'
+      const blockedReason = task.status === 'blocked' ? extractBlockedReason(task.comments) : undefined
+      const assistantLabels = [...new Set(relatedMessages.map(msg => msg.assistantLabel).filter(Boolean) as string[])]
+
+      const stepStates: TaskAutonomyEntry['stepStates'] = [
+        {
+          key: 'queued',
+          label: t('glassroom.treeSteps.queued'),
+          state: relatedMessages.some(msg => msg.semanticType === 'task.queued') ? 'done' : task.status === 'todo' ? 'active' : 'pending',
+        },
+        {
+          key: 'execution',
+          label: t('glassroom.treeSteps.execution'),
+          state: task.status === 'in_progress' ? 'active' : deliverableCount > 0 || ['in_review', 'done', 'blocked'].includes(task.status) ? 'done' : 'pending',
+          detail: currentPhase !== 'unknown' ? phaseLabel(t, currentPhase) : undefined,
+        },
+        {
+          key: 'review',
+          label: t('glassroom.treeSteps.review'),
+          state: task.status === 'in_review' ? 'active' : reviewCount > 0 || task.status === 'done' ? 'done' : task.status === 'blocked' && deliverableCount > 0 ? 'blocked' : 'pending',
+          detail: reviewCount > 0 ? t('glassroom.reviewsCount', '{{n}} reviews').replace('{{n}}', String(reviewCount)) : undefined,
+        },
+        {
+          key: 'rework',
+          label: t('glassroom.treeSteps.rework'),
+          state: reworkCount > 0 ? (task.status === 'blocked' ? 'blocked' : task.status === 'todo' ? 'active' : 'done') : 'pending',
+          detail: reworkCount > 0 ? t('glassroom.cyclesCount', '{{n}} cycle(s)').replace('{{n}}', String(reworkCount)) : undefined,
+        },
+        {
+          key: 'done',
+          label: t('glassroom.treeSteps.done'),
+          state: task.status === 'done' ? 'done' : task.status === 'blocked' ? 'blocked' : 'pending',
+          detail: blockedReason,
+        },
+      ]
+
+      return {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        assignee: task.assignee,
+        currentPhase,
+        reworkCount,
+        reviewCount,
+        deliverableCount,
+        blockedReason,
+        assistantLabels,
+        stepStates,
+      }
+    }).sort((left, right) => {
+      if (left.status === right.status) return left.id - right.id
+      const order = ['in_progress', 'in_review', 'blocked', 'todo', 'done']
+      return order.indexOf(left.status) - order.indexOf(right.status)
+    })
+  }, [messages, sprintTasks, t])
+
   return (
-    <div className="flex flex-col h-full bg-surface-900">
+    <div className="flex flex-col min-h-full xl:h-full bg-surface-900">
       {/* Typing animation */}
       <style>{`
         @keyframes typingBounce {
@@ -531,7 +1215,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       `}</style>
 
       {/* ── Top bar ───────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 h-11 border-b border-surface-700/60 bg-surface-900 shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 px-4 py-2 min-h-11 border-b border-surface-700/60 bg-surface-900 shrink-0 flex-wrap overflow-x-auto">
         <Hash size={13} className="text-gray-600" />
         <span className="text-sm font-semibold text-gray-200">sprint-{propSprintId}</span>
         {sprint?.scope_size && (
@@ -568,7 +1252,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
             onChange={e => setFilterAgent(e.target.value)}
             className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"
           >
-            <option value="">All agents</option>
+            <option value="">{t('glassroom.allAgents', 'All agents')}</option>
             {onlineAgents.map(a => (
               <option key={a.label} value={a.label}>{a.label}</option>
             ))}
@@ -579,7 +1263,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
             onChange={e => setFilterType(e.target.value)}
             className="py-1 px-2 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 focus:outline-none focus:border-brand-500"
           >
-            {EVENT_TYPES.map(et => (
+            {eventTypes.map(et => (
               <option key={et.value} value={et.value}>{et.label}</option>
             ))}
           </select>
@@ -635,7 +1319,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       )}
 
       {/* ── Body: sidebar + feed + panel ──────────────────────────── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 flex-col overflow-visible lg:grid lg:grid-cols-[15rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[17rem_minmax(0,1.2fr)_24rem] lg:overflow-hidden">
         {/* Left sidebar */}
         <LeftSidebar
           sprintId={propSprintId}
@@ -646,11 +1330,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
         />
 
         {/* Message feed */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="relative flex-1 flex flex-col min-w-0 overflow-visible lg:overflow-hidden">
           <div
             ref={containerRef}
             onScroll={handleScroll}
-            className="flex-1 overflow-y-auto py-2"
+            className="min-h-[20rem] py-2 overflow-visible lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
           >
             {messages.length === 0 ? (
               !isConnected && !connectionError ? (
@@ -690,7 +1374,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
               ))
             )}
 
-            {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} />)}
+            {activeAgents.map(a => <TypingIndicator key={a.key} identity={a.identity} elapsedMs={a.elapsedMs} />)}
             <div ref={messagesEndRef} />
           </div>
 
@@ -710,11 +1394,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           <div className="px-4 py-1.5 border-t border-surface-700/60 shrink-0 flex items-center gap-3 bg-surface-900">
             <span className={`flex items-center gap-1.5 text-[10px] font-medium ${isConnected ? 'text-emerald-400' : 'text-gray-600'}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-surface-600'}`} />
-              {isConnected ? 'Connected' : 'Disconnected'}
+              {isConnected ? t('glassroom.connected') : t('glassroom.disconnected')}
             </span>
             <span className="text-[10px] text-gray-700">·</span>
             <span className="text-[10px] text-gray-600 tabular-nums">
-              {isFiltered ? `${filteredMessages.length} / ${messages.length}` : messages.length} events
+              {isFiltered ? `${filteredMessages.length} / ${messages.length}` : messages.length} {t('glassroom.eventsLabel', 'Events').toLowerCase()}
             </span>
             {activeAgents.length > 0 && (
               <>
@@ -742,6 +1426,12 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           agentStates={agentStates}
           messageCount={messages.length}
           isConnected={isConnected}
+          assistantSummary={assistantSummary}
+          sprintTasks={sprintTasks}
+          healthEntries={healthEntries}
+          autonomyTree={autonomyTree}
+          quotaTelemetry={quotaTelemetry}
+          lastRetro={lastRetro}
         />
       </div>
     </div>

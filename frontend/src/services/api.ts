@@ -114,6 +114,20 @@ export interface SprintBoard {
   total: number
 }
 
+export interface PlannedSprintTask {
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  assignee: string
+}
+
+export interface SprintPlanResponse {
+  sprint_name: string
+  goal: string
+  scope_size: 'S' | 'M' | 'L'
+  tasks: PlannedSprintTask[]
+}
+
 // ── Core fetch ───────────────────────────────────────────────────────────────
 
 interface FetchOptions extends RequestInit {
@@ -226,8 +240,14 @@ export const api = {
     comment?: string
   }) => api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; backlog_items: any[] }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[] }) =>
     api.post<any>('/v1/start_sprint', data),
+
+  planSprint: (data: { company_id: number; prompt: string; scope_size: 'S' | 'M' | 'L' }) =>
+    api.post<SprintPlanResponse>('/v1/plan_sprint', data),
+
+  planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>
+    api.post<SprintPlanResponse>('/v1/plan_self_improvement_sprint', data),
 
   // Agents & Memory
   generate: (data: { company_id: number; story: string; constraints?: string; interaction_id?: string }) =>

@@ -12,6 +12,7 @@ from .company import Company, Agent, BusinessUnit, User, CompanyMember, ProjectC
 from .sprint import Sprint, BacklogItem, OutboxEvent, TaskQueue
 from .audit import AuditLog
 from .support import BugReport
+from .runtime import AssistantRuntimeState
 
 __all__ = [
     "Company", "Agent", "BusinessUnit", "User", "CompanyMember",
@@ -19,4 +20,5 @@ __all__ = [
     "Sprint", "BacklogItem", "OutboxEvent", "TaskQueue",
     "AuditLog",
     "BugReport",
+    "AssistantRuntimeState",
 ]

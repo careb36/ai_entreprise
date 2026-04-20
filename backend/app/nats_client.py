@@ -17,6 +17,7 @@ NATS subjects in use:
 
 import asyncio
 import json
+import os
 from typing import Optional, Callable, Dict, Any
 
 import nats
@@ -41,8 +42,8 @@ class NATSClient:
         subscriptions: Map of subject pattern → asyncio Task for active listeners.
     """
 
-    def __init__(self, nats_url: str = "nats://localhost:4222"):
-        self.nats_url = nats_url
+    def __init__(self, nats_url: Optional[str] = None):
+        self.nats_url = nats_url or os.getenv("NATS_URL", "nats://localhost:4222")
         self.nc: Optional[nats.NATS] = None
         # Tracks running listener tasks so they can be cancelled on shutdown.
         self.subscriptions: Dict[str, asyncio.Task] = {}
@@ -79,6 +80,32 @@ class NATSClient:
         data = json.dumps(payload).encode()
         await self.nc.publish(subject, data)
         logger.info(f"Published to {subject}: {payload}")
+
+    async def request(self, subject: str, payload: Dict[str, Any], timeout: float = 120.0) -> Dict[str, Any]:
+        """
+        Send a request and wait for a JSON reply from a NATS subject.
+
+        Args:
+            subject: NATS subject string (e.g. ``"workspace.execute"``).
+            payload: JSON-serialisable request body.
+            timeout: Maximum seconds to wait for a reply.
+
+        Returns:
+            Decoded JSON response payload.
+
+        Raises:
+            RuntimeError: If called before ``connect()``.
+        """
+        if not self.nc:
+            raise RuntimeError("NATS not connected")
+
+        data = json.dumps(payload).encode()
+        response = await self.nc.request(subject, data, timeout=timeout)
+        decoded = response.data.decode()
+        try:
+            return json.loads(decoded)
+        except json.JSONDecodeError:
+            return {"ok": False, "raw": decoded}
 
     async def subscribe(self, subject: str, callback: Callable, queue: Optional[str] = None):
         """

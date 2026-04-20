@@ -12,6 +12,7 @@ import asyncio
 import subprocess
 import hashlib
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 from uuid import uuid4
@@ -131,6 +132,57 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         logger.info(f"File written: {target_path}")
     return results
 
+
+def _build_command_env() -> Dict[str, str]:
+    """Provide a stable host-like environment for assistant CLI execution."""
+    env = os.environ.copy()
+    home = env.get("HOME") or str(Path.home())
+    env["HOME"] = home
+
+    nvm_root = Path(home) / ".nvm" / "versions" / "node"
+    nvm_bins = sorted(nvm_root.glob("*/bin"), reverse=True) if nvm_root.exists() else []
+
+    path_entries = [
+        *(str(path) for path in nvm_bins),
+        os.path.join(home, ".local", "bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        env.get("PATH", ""),
+    ]
+    env["PATH"] = os.pathsep.join(entry for entry in path_entries if entry)
+    return env
+
+
+def _build_shell_command(command: str) -> list[str]:
+    """Run commands through the user's shell when available instead of bare /bin/sh."""
+    configured_shell = os.getenv("FABRIQUE_EXEC_SHELL")
+    shell_path = configured_shell or ("/bin/zsh" if Path("/bin/zsh").exists() else "/bin/sh")
+    if shell_path.endswith("zsh"):
+        return [shell_path, "-dfc", command]
+    if shell_path.endswith("bash"):
+        return [shell_path, "--noprofile", "--norc", "-c", command]
+    return [shell_path, "-c", command]
+
+
+def _is_assistant_command(command: str) -> bool:
+    normalized = (command or "").lower()
+    return "copilot" in normalized or "claude" in normalized
+
+
+def _summarize_command_result(command: str, result: Dict[str, Any]) -> str:
+    command_preview = " ".join((command or "").strip().split())[:180]
+    exit_code = result.get("exit_code", -1)
+    output = (result.get("stdout") or result.get("stderr") or result.get("error") or "").strip()
+    output_preview = output[:240]
+
+    if result.get("success"):
+        return f"Workspace command finished successfully (exit {exit_code}): {command_preview}"
+
+    if output_preview:
+        return f"Workspace command failed (exit {exit_code}): {output_preview}"
+
+    return f"Workspace command failed (exit {exit_code}): {command_preview}"
+
 def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     """
     Execute a shell command synchronously and capture all output.
@@ -150,9 +202,9 @@ def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     logger.info(f"Executing: {command} in {cwd}")
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            _build_shell_command(command),
             cwd=cwd,
+            env=_build_command_env(),
             capture_output=True,
             text=True,
             timeout=120
@@ -199,14 +251,14 @@ async def handle_msg(nc, msg):
         cmd = data.get("command")
         result = execute_shell_command(cmd, workspace_path)
         
-        # Log results to Glassroom via NATS
         sprint_id = data.get("sprint_id", "1")
-        await nc.publish(f"glassroom.{sprint_id}", json.dumps({
-            "agent": "System",
-            "timestamp": "2026-04-04T00:00:00Z",
-            "content": f"Command executed: {cmd}\nExit Code: {result['exit_code']}\nOutput: {result['stdout'] or result['stderr']}",
-            "type": "status"
-        }).encode())
+        if not _is_assistant_command(cmd):
+            await nc.publish(f"glassroom.{sprint_id}", json.dumps({
+                "agent": "System",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "content": _summarize_command_result(cmd, result),
+                "type": "status"
+            }).encode())
         
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())

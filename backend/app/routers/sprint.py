@@ -19,9 +19,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
 
 from database import get_session
-from models import Sprint, BacklogItem, OutboxEvent
-from schemas import SprintStartRequest, BacklogItemUpdate
+from models import Sprint, BacklogItem, OutboxEvent, Company, Agent, ProjectDiscovery
+from schemas import SprintStartRequest, BacklogItemUpdate, SprintPlanRequest, SelfImprovementSprintRequest
 from logging_config import logger
+from services.sprint_planner import plan_execution_sprint, plan_self_improvement_sprint as build_self_improvement_plan, build_self_improvement_objective
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
@@ -32,6 +33,101 @@ VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 # Scope guardrail — max backlog items per scope size.
 SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
 SCOPE_HARD_MAX = 12
+
+
+def _load_planning_context(session: Session, company_id: int):
+    company = session.get(Company, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    agents = session.exec(
+        select(Agent).where(Agent.company_id == company_id)
+    ).all()
+    agent_dicts = [
+        {
+            "role": agent.role,
+            "name": agent.name,
+            "model": agent.model,
+            "seniority": agent.seniority,
+            "specialty": agent.specialty,
+        }
+        for agent in agents
+    ]
+
+    discovery = session.exec(
+        select(ProjectDiscovery)
+        .where(ProjectDiscovery.company_id == company_id)
+        .order_by(text("created_at DESC"))
+    ).first()
+
+    return company, agent_dicts, discovery
+
+
+def _serialize_plan_response(plan: dict, scope_size: str, fallback_name: str, fallback_goal: str):
+    return {
+        "sprint_name": plan.get("sprint_name", fallback_name),
+        "goal": plan.get("goal", fallback_goal),
+        "scope_size": scope_size,
+        "tasks": plan.get("tasks", []),
+    }
+
+
+@router.post("/plan_sprint")
+async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_session)):
+    """Turn a strategic prompt into a scoped sprint backlog before sprint creation."""
+    scope_size = req.scope_size.upper()
+    if scope_size not in SCOPE_LIMITS:
+        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+    if not req.prompt.strip():
+        raise HTTPException(status_code=422, detail="Prompt is required")
+
+    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+
+    plan = plan_execution_sprint(
+        company_name=company.company_name,
+        objective=req.prompt,
+        scope_size=scope_size,
+        agents=agent_dicts,
+        detected_stack=discovery.detected_stack if discovery else None,
+        project_path=discovery.project_path if discovery else None,
+    )
+
+    return _serialize_plan_response(
+        plan,
+        scope_size,
+        f"Sprint - {company.company_name}",
+        req.prompt.strip(),
+    )
+
+
+@router.post("/plan_self_improvement_sprint")
+async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, session: Session = Depends(get_session)):
+    """Create a bounded autonomous-improvement plan from the repository's own context."""
+    scope_size = req.scope_size.upper()
+    if scope_size not in SCOPE_LIMITS:
+        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+
+    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+    objective = build_self_improvement_objective(
+        company_name=company.company_name,
+        detected_stack=discovery.detected_stack if discovery else None,
+    )
+
+    plan = build_self_improvement_plan(
+        company_name=company.company_name,
+        objective=objective,
+        scope_size=scope_size,
+        agents=agent_dicts,
+        detected_stack=discovery.detected_stack if discovery else None,
+        project_path=discovery.project_path if discovery else None,
+    )
+
+    return _serialize_plan_response(
+        plan,
+        scope_size,
+        f"Sprint - Improve {company.company_name}",
+        objective,
+    )
 
 
 @router.post("/start_sprint")
@@ -65,6 +161,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
         sprint_name=req.sprint_name,
         start_date=req.start_date,
         scope_size=scope_size,
+        goal=req.goal,
     )
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
@@ -75,6 +172,8 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             sprint_id=sprint.id,
             title=item.get("title", ""),
             description=item.get("description", ""),
+            priority=item.get("priority", "medium"),
+            assignee=item.get("assignee", "PO"),
         )
         session.add(backlog_item)
         session.flush()
@@ -86,7 +185,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             "message": {
                 "backlog_item_id": backlog_item.id,
                 "interaction_id": str(uuid4()),
-                "agent": "PO",
+                "agent": item.get("assignee", "PO"),
                 "sprint_id": sprint.id,
             },
         }

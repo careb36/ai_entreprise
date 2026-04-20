@@ -21,16 +21,20 @@ import functools
 import json
 import os
 import re
-from datetime import datetime, timezone
+import shlex
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 from sqlmodel import Session, select, text
 
+from config import settings
 from database import engine
-from models import BacklogItem, Sprint, Agent, ProjectDiscovery
+from models import BacklogItem, Sprint, Agent, ProjectDiscovery, Company, OutboxEvent, AssistantRuntimeState
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from nats_client import NATSClient
+from services.sprint_planner import build_self_improvement_objective, plan_self_improvement_sprint
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -40,10 +44,192 @@ MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv("AUTOPILOT_QA_REWORK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 AUTOPILOT_MAX_REWORK_CYCLES = int(os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(MAX_QA_REWORK_CYCLES)))
+DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90"))
+AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
+CONSOLE_ASSISTANTS_ENABLED = settings.CONSOLE_ASSISTANTS_ENABLED
+CONSOLE_ASSISTANT_TIMEOUT = float(os.getenv("CONSOLE_ASSISTANT_TIMEOUT", "90"))
+COPILOT_CLI_COMMAND_TEMPLATE = settings.COPILOT_CLI_COMMAND_TEMPLATE
+CLAUDE_CLI_COMMAND_TEMPLATE = settings.CLAUDE_CLI_COMMAND_TEMPLATE or ""
+CLAUDE_CLI_ALLOWED_TOOLS = settings.CLAUDE_CLI_ALLOWED_TOOLS
+CLAUDE_CLI_APPEND_SYSTEM_PROMPT = settings.CLAUDE_CLI_APPEND_SYSTEM_PROMPT
+CONSOLE_ASSISTANT_STRATEGY = settings.CONSOLE_ASSISTANT_STRATEGY
+CLAUDE_CLI_HIGH_VALUE_ROLES = {
+    role.strip()
+    for role in settings.CLAUDE_CLI_HIGH_VALUE_ROLES.split(",")
+    if role.strip()
+}
+CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES = max(1, int(settings.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES))
+ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES = int(os.getenv("ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES", "30"))
+CONSOLE_ASSISTANT_EXCERPT_CHARS = int(os.getenv("CONSOLE_ASSISTANT_EXCERPT_CHARS", "240"))
+CONSOLE_ASSISTANT_ALLOWED_ROLES = {
+    role.strip()
+    for role in settings.CONSOLE_ASSISTANT_ALLOWED_ROLES.split(",")
+    if role.strip()
+}
+CLAUDE_QUOTA_PATTERNS = (
+    "usage limit",
+    "rate limit",
+    "quota",
+    "too many requests",
+)
+ASSISTANT_UNAVAILABLE_PATTERNS = (
+    "not found",
+    "cannot find github copilot cli",
+    "no such file or directory",
+    "command not found",
+)
+CLAUDE_RESET_TIME_PATTERNS = (
+    re.compile(r"(?:available|retry|resets?)\s+(?:at|after)\s+(?P<time>\d{1,2}:\d{2}\s?(?:am|pm)?)", re.IGNORECASE),
+    re.compile(r"(?P<time>\d{1,2}:\d{2}\s?(?:am|pm))", re.IGNORECASE),
+)
+LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
+
+
+def _normalize_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalize datetimes loaded from the DB to timezone-aware UTC values."""
+    if not value:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _queued_recently(item_id: int, now: datetime) -> bool:
+    """Avoid publishing duplicate queue events for the same todo item every review tick."""
+    last_dispatched_at = LAST_AUTONOMOUS_QUEUE_AT.get(item_id)
+    if not last_dispatched_at:
+        return False
+    return (now - last_dispatched_at).total_seconds() < DISPATCH_REQUEUE_COOLDOWN_SECONDS
+
+
+def _mark_queued(item_id: int, now: datetime) -> None:
+    LAST_AUTONOMOUS_QUEUE_AT[item_id] = now
+
+
+def _clear_queue_marker(item_id: int) -> None:
+    LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
+
+
 ALLOWED_ARTIFACT_EXTENSIONS = {
     ".md", ".txt", ".json", ".yaml", ".yml", ".toml",
     ".py", ".js", ".ts", ".tsx", ".jsx", ".css", ".html",
 }
+
+
+# ---------------------------------------------------------------------------
+# Memory augmentation helpers — fail silently, never block task execution
+# ---------------------------------------------------------------------------
+
+def _fetch_memory_context(item: Dict[str, Any], agent: Dict[str, Any]) -> str:
+    """Query engram RAG for past decisions relevant to this task and agent role."""
+    task_text = f"{item.get('title', '')} {item.get('description', '')}".strip()
+    role = agent.get("role") or None
+    try:
+        from memory.engram_processor import get_engram_processor
+        processor = get_engram_processor()
+        return processor.query_relevant_engrams(task_text, limit=3, role_filter=role)
+    except Exception as exc:
+        logger.debug("Memory context fetch failed for item=%s: %s", item.get("id"), exc)
+        return ""
+
+
+def _load_sprint_completed_tasks(sprint_id: int, exclude_item_id: int, limit: int = 5) -> str:
+    """Return a brief summary of done tasks in the same sprint for cross-task context."""
+    try:
+        with Session(engine) as session:
+            done_items = session.exec(
+                select(BacklogItem).where(
+                    BacklogItem.sprint_id == sprint_id,
+                    BacklogItem.id != exclude_item_id,
+                    BacklogItem.status == "done",
+                )
+            ).all()
+            if not done_items:
+                return ""
+            lines = ["Completed tasks in this sprint (build on this work, avoid duplication):"]
+            for it in done_items[:limit]:
+                comments = it.comments or []
+                if isinstance(comments, str):
+                    try:
+                        comments = json.loads(comments)
+                    except Exception:
+                        comments = []
+                deliverable_excerpt = _extract_latest_reviewable_comment(
+                    comments, assignee_role=it.assignee
+                )
+                excerpt = deliverable_excerpt[:280].replace("\n", " ") if deliverable_excerpt else "(no deliverable)"
+                lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
+            return "\n".join(lines)
+    except Exception as exc:
+        logger.debug("Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc)
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Sprint retrospective — written to memory after sprint completion
+# ---------------------------------------------------------------------------
+
+def _build_sprint_retrospective(sprint_id: int) -> Dict[str, Any]:
+    """Compute sprint health metrics for retrospective engram and next-sprint planning."""
+    try:
+        with Session(engine) as session:
+            items = session.exec(
+                select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
+            ).all()
+            if not items:
+                return {}
+
+            total = len(items)
+            done = sum(1 for i in items if i.status == "done")
+            blocked = sum(1 for i in items if i.status == "blocked")
+            rework_count = 0
+            qa_fail_count = 0
+            blocked_reasons: list[str] = []
+
+            for item in items:
+                comments = item.comments or []
+                if isinstance(comments, str):
+                    try:
+                        comments = json.loads(comments)
+                    except Exception:
+                        comments = []
+                for comment in comments:
+                    text = str(comment.get("text", ""))
+                    if "NEEDS WORK:" in text.upper():
+                        rework_count += 1
+                    if "qa quality gate failed" in text.lower() or "qa review failed" in text.lower():
+                        qa_fail_count += 1
+                if item.status == "blocked":
+                    reason = _extract_latest_reviewable_comment(comments, assignee_role=item.assignee)
+                    if reason:
+                        blocked_reasons.append(f"{item.title[:60]}: {reason[:120]}")
+
+            return {
+                "sprint_id": sprint_id,
+                "total_tasks": total,
+                "done_tasks": done,
+                "blocked_tasks": blocked,
+                "completion_rate": round(done / total * 100) if total else 0,
+                "rework_cycles": rework_count,
+                "qa_failures": qa_fail_count,
+                "blocked_reasons": blocked_reasons[:5],
+            }
+    except Exception as exc:
+        logger.warning("Sprint retrospective build failed for sprint=%s: %s", sprint_id, exc)
+        return {}
+
+
+def _format_retrospective_summary(metrics: Dict[str, Any]) -> str:
+    lines = [
+        f"Sprint {metrics.get('sprint_id')} retrospective:",
+        f"- Completed {metrics.get('done_tasks', 0)}/{metrics.get('total_tasks', 0)} tasks ({metrics.get('completion_rate', 0)}%)",
+        f"- Blocked: {metrics.get('blocked_tasks', 0)} tasks",
+        f"- QA rework cycles: {metrics.get('rework_cycles', 0)}",
+        f"- QA failures: {metrics.get('qa_failures', 0)}",
+    ]
+    for reason in (metrics.get("blocked_reasons") or []):
+        lines.append(f"  • {reason}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +240,9 @@ def _execute_task(
     item: Dict[str, Any],
     agent: Dict[str, Any],
     sprint_name: str,
+    external_advice: Optional[str] = None,
+    memory_context: Optional[str] = None,
+    completed_tasks_context: Optional[str] = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -79,6 +268,29 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
     )
+
+    if memory_context:
+        user_prompt += (
+            "\n\n## Memory: Relevant Past Decisions\n"
+            "These are decisions and deliverables from previous sprints in this factory. "
+            "Use them to maintain consistency and avoid repeating past mistakes.\n\n"
+            f"{memory_context[:3000]}"
+        )
+
+    if completed_tasks_context:
+        user_prompt += (
+            "\n\n## Sprint Context: Already Completed Tasks\n"
+            f"{completed_tasks_context[:2000]}"
+        )
+
+    if external_advice:
+        user_prompt += (
+            "\n\n## External Console Assistant Notes\n"
+            "The following advice was gathered from configured terminal assistants such as GitHub Copilot CLI or Claude CLI. "
+            "Treat it as optional supporting context, not as a replacement for reasoning about the current repository. "
+            "Prefer preserving working behavior over blindly following suggestions.\n\n"
+            f"{external_advice[:4000]}"
+        )
 
     model = agent.get("model", "deepseek-coder")
     role = agent.get("role", "Dev")
@@ -148,6 +360,18 @@ def _validate_minimum_deliverable(item: Dict[str, Any], deliverable: str) -> tup
         return False, "Output appears to end abruptly"
 
     return True, "ok"
+
+
+def _sanitize_deliverable_text(deliverable: str) -> str:
+    """Repair small formatting truncations that should not block autonomous progress."""
+    text = (deliverable or "").strip()
+    if not text:
+        return ""
+
+    if text.count("```") % 2 != 0:
+        text = f"{text}\n```"
+
+    return text
 
 
 def _resolve_workspace_root(company_id: int) -> Optional[str]:
@@ -234,7 +458,7 @@ def _build_review_payload(deliverable: str, artifact_targets: list[Dict[str, str
     return "\n\n".join(section for section in sections if section.strip())
 
 
-def _extract_latest_reviewable_comment(comments: Any) -> str:
+def _extract_latest_reviewable_comment(comments: Any, assignee_role: Optional[str] = None) -> str:
     """Return the latest non-system, non-QA deliverable comment for review."""
     if isinstance(comments, str):
         try:
@@ -245,6 +469,8 @@ def _extract_latest_reviewable_comment(comments: Any) -> str:
     if not isinstance(comments, list):
         return ""
 
+    assignee_normalized = (assignee_role or "").strip().lower()
+
     for comment in reversed(comments):
         author = str(comment.get("author", "")).strip().lower()
         text = str(comment.get("text", "")).strip()
@@ -252,13 +478,50 @@ def _extract_latest_reviewable_comment(comments: Any) -> str:
             continue
         if text.lower().startswith("freeze after") or "sleep-induced churn" in text.lower():
             continue
-        if author in {"system", "qa"}:
+        if author == "system":
+            continue
+        if author == "qa" and assignee_normalized != "qa":
             continue
         if text.upper().startswith("APPROVED:") or text.upper().startswith("NEEDS WORK:"):
             continue
         return text
 
     return ""
+
+
+def _is_explicit_block_reason(text: str) -> bool:
+    """Return True when a comment clearly indicates the task must remain blocked."""
+    normalized = (text or "").strip().lower()
+    return any(token in normalized for token in (
+        "manual triage",
+        "pre-review quality gate failed",
+        "qa quality gate failed",
+        "qa review failed",
+        "agent error:",
+        "missing deliverable",
+        "freeze after",
+        "sleep-induced churn",
+    ))
+
+
+def _can_resume_blocked_item_from_deliverable(comments: Any, assignee_role: Optional[str] = None) -> bool:
+    """Detect blocked items that already have a deliverable and no explicit block reason."""
+    if isinstance(comments, str):
+        try:
+            comments = json.loads(comments)
+        except Exception:
+            comments = []
+
+    if not isinstance(comments, list) or not comments:
+        return False
+
+    if _has_manual_freeze_marker(comments):
+        return False
+
+    if any(_is_explicit_block_reason(str(comment.get("text", ""))) for comment in comments):
+        return False
+
+    return bool(_extract_latest_reviewable_comment(comments, assignee_role=assignee_role))
 
 
 def _has_manual_freeze_marker(comments: Any) -> bool:
@@ -323,6 +586,784 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
         session.add(item)
         session.commit()
         return changed
+
+
+def _recover_inflight_items_for_restart() -> list[Dict[str, Any]]:
+    """Return unfinished in-progress work to todo so the worker can resume after restart."""
+    recovered: list[Dict[str, Any]] = []
+    recovery_time = datetime.now(timezone.utc)
+
+    with Session(engine) as session:
+        inflight_items = session.exec(
+            select(BacklogItem).where(BacklogItem.status == "in_progress")
+        ).all()
+
+        for item in inflight_items:
+            comments = item.comments or []
+            if isinstance(comments, str):
+                try:
+                    comments = json.loads(comments)
+                except Exception:
+                    comments = []
+
+            if _has_manual_freeze_marker(comments):
+                item.status = "blocked"
+                item.updated_at = recovery_time
+                session.add(item)
+                continue
+
+            comments.append({
+                "author": "System",
+                "text": "Worker recovery after backend restart — unfinished in-progress task returned to todo for redispatch.",
+                "created_at": recovery_time.isoformat(),
+            })
+            item.comments = comments
+            item.status = "todo"
+            item.updated_at = recovery_time
+            session.add(item)
+            recovered.append({
+                "id": item.id,
+                "sprint_id": item.sprint_id,
+                "title": item.title,
+                "assignee": item.assignee or "Dev",
+            })
+
+        session.commit()
+
+    return recovered
+
+
+def _coerce_json_dict(value: Any) -> Dict[str, Any]:
+    """Decode a JSON object stored either as dict or JSON string."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _build_sprint_kickoff_story(sprint_name: str, sprint_id: int, backlog_items: list[Dict[str, Any]]) -> str:
+    """Create the initial coordination story for a newly opened sprint."""
+    return "\n".join(
+        [
+            f"Sprint kickoff: {sprint_name}",
+            f"Sprint ID: {sprint_id}",
+            "Backlog:",
+            *[
+                f"- {item.get('title', '').strip()}: {item.get('description', '').strip()}"
+                for item in backlog_items
+            ],
+            "Goal: PO, Scrum Master and Developer must coordinate, surface blockers, and agree the first execution plan.",
+        ]
+    )
+
+
+def _complete_sprint_and_plan_follow_up(
+    completed_sprint_id: int,
+    retro_metrics: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Mark a sprint completed when all items are done and optionally open an autonomous follow-up sprint."""
+    with Session(engine) as session:
+        sprint = session.get(Sprint, completed_sprint_id)
+        if not sprint or sprint.status != "active":
+            return {"completed": False, "auto_opened": False, "reason": "not_active"}
+
+        items = session.exec(
+            select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
+        ).all()
+        if not items or any(item.status != "done" for item in items):
+            return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
+
+        sprint.status = "completed"
+        session.add(sprint)
+
+        result = {
+            "completed": True,
+            "auto_opened": False,
+            "reason": "completed_no_follow_up",
+            "sprint_id": sprint.id,
+            "sprint_name": sprint.sprint_name,
+            "company_id": sprint.company_id,
+        }
+
+        company = session.get(Company, sprint.company_id)
+        if not company:
+            result["reason"] = "company_missing"
+            session.commit()
+            return result
+
+        if company.autonomy_level < 3:
+            result["reason"] = "autonomy_below_threshold"
+            session.commit()
+            return result
+
+        if not AUTO_SELF_IMPROVEMENT_ENABLED:
+            result["reason"] = "auto_self_improvement_disabled"
+            session.commit()
+            return result
+
+        active_sprint = session.exec(
+            select(Sprint).where(
+                Sprint.company_id == company.id,
+                Sprint.id != sprint.id,
+                Sprint.status.in_(("active", "needs_split")),
+            )
+        ).first()
+        if active_sprint:
+            result["reason"] = "active_sprint_already_exists"
+            result["blocking_sprint_id"] = active_sprint.id
+            session.commit()
+            return result
+
+        discovery = session.exec(
+            select(ProjectDiscovery)
+            .where(ProjectDiscovery.company_id == company.id)
+            .order_by(text("created_at DESC"))
+        ).first()
+        detected_stack = _coerce_json_dict(discovery.detected_stack if discovery else None)
+        project_path = discovery.project_path if discovery else None
+
+        agents = session.exec(
+            select(Agent).where(Agent.company_id == company.id)
+        ).all()
+        agent_dicts = [
+            {
+                "role": agent.role,
+                "name": agent.name,
+                "model": agent.model,
+                "seniority": agent.seniority,
+                "specialty": agent.specialty,
+            }
+            for agent in agents
+        ]
+
+        scope_size = (company.default_scope_size or "M").upper()
+        if scope_size not in {"S", "M", "L"}:
+            scope_size = "M"
+
+        objective = build_self_improvement_objective(
+            company_name=company.company_name,
+            detected_stack=detected_stack,
+            sprint_metrics=retro_metrics,
+        )
+        plan = plan_self_improvement_sprint(
+            company_name=company.company_name,
+            objective=objective,
+            scope_size=scope_size,
+            agents=agent_dicts,
+            detected_stack=detected_stack,
+            project_path=project_path,
+        )
+        tasks = plan.get("tasks") or []
+        if not tasks:
+            result["reason"] = "planner_returned_no_tasks"
+            session.commit()
+            return result
+
+        next_sprint = Sprint(
+            company_id=company.id,
+            sprint_name=plan.get("sprint_name", f"Sprint - Improve {company.company_name}"),
+            start_date=datetime.now(timezone.utc).date().isoformat(),
+            scope_size=scope_size,
+            status="active",
+            goal=plan.get("goal") or objective,
+        )
+        session.add(next_sprint)
+        session.flush()
+
+        backlog_payloads: list[Dict[str, Any]] = []
+        for task in tasks:
+            backlog_item = BacklogItem(
+                sprint_id=next_sprint.id,
+                title=task.get("title", ""),
+                description=task.get("description", ""),
+                priority=task.get("priority", "medium"),
+                assignee=task.get("assignee", "PO"),
+            )
+            session.add(backlog_item)
+            session.flush()
+            backlog_payloads.append(task)
+
+            session.add(OutboxEvent(
+                aggregate_type="backlog_item",
+                aggregate_id=str(backlog_item.id),
+                event_type="nats_publish",
+                payload={
+                    "subject": "task.assign",
+                    "message": {
+                        "backlog_item_id": backlog_item.id,
+                        "interaction_id": str(uuid4()),
+                        "agent": task.get("assignee", "PO"),
+                        "sprint_id": next_sprint.id,
+                    },
+                },
+            ))
+
+        session.add(OutboxEvent(
+            aggregate_type="sprint",
+            aggregate_id=str(next_sprint.id),
+            event_type="nats_publish",
+            payload={
+                "subject": "workspace.generate",
+                "message": {
+                    "interaction_id": str(uuid4()),
+                    "company_id": company.id,
+                    "business_unit_id": None,
+                    "sprint_id": next_sprint.id,
+                    "story": _build_sprint_kickoff_story(next_sprint.sprint_name, next_sprint.id, backlog_payloads),
+                    "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",
+                },
+            },
+        ))
+
+        session.commit()
+        result.update({
+            "auto_opened": True,
+            "reason": "auto_follow_up_opened",
+            "next_sprint_id": next_sprint.id,
+            "next_sprint_name": next_sprint.sprint_name,
+            "next_goal": next_sprint.goal,
+        })
+        return result
+
+
+def _build_console_assistant_prompt(item: Dict[str, Any], agent: Dict[str, Any], sprint_name: str) -> str:
+    """Build a concise prompt for external console assistants."""
+    return (
+        f"Repository task for {agent.get('role', 'Developer')} in sprint '{sprint_name}'.\n"
+        f"Task: {item.get('title', '')}\n"
+        f"Description: {item.get('description', '')}\n"
+        f"Priority: {item.get('priority', 'medium')}\n\n"
+        "Provide concise actionable advice for implementing this task in the current repository. "
+        "Prefer incremental changes, mention relevant existing code or GitHub/MCP-backed ideas when useful, and avoid suggesting destructive rewrites."
+    )
+
+
+def _assistant_purpose(item: Dict[str, Any], agent: Dict[str, Any], label: str) -> str:
+    """Describe why an external assistant is being consulted for the current task."""
+    role = (agent.get("role") or "Developer").strip()
+    priority = (item.get("priority") or "medium").strip().lower()
+    task_text = f"{item.get('title', '')}\n{item.get('description', '')}".lower()
+
+    if label == "Claude CLI":
+        if role in {"Architect", "PO", "ScrumMaster"}:
+            return "planning and architecture advice"
+        if role == "QA" or any(token in task_text for token in ("validate", "review", "security", "risk")):
+            return "review and risk analysis advice"
+        return "high-value implementation guidance"
+
+    if priority in {"high", "critical"}:
+        return "high-priority implementation guidance"
+    return "incremental implementation guidance"
+
+
+def _claude_is_high_value(item: Dict[str, Any], agent: Dict[str, Any]) -> bool:
+    """Use Claude selectively for strategic, review-heavy, or high-priority work."""
+    role = (agent.get("role") or "Developer").strip()
+    priority = (item.get("priority") or "medium").strip().lower()
+    task_text = f"{item.get('title', '')}\n{item.get('description', '')}".lower()
+    strategic_keywords = (
+        "architecture", "plan", "planning", "review", "security", "risk",
+        "refactor", "scrumban", "autonomy", "self-improvement", "design",
+    )
+    return (
+        role in CLAUDE_CLI_HIGH_VALUE_ROLES
+        or priority in {"high", "critical"}
+        or any(keyword in task_text for keyword in strategic_keywords)
+    )
+
+
+def _get_assistant_runtime_state(company_id: int, assistant_key: str) -> Optional[AssistantRuntimeState]:
+    """Load the persisted runtime state for a company/assistant pair."""
+    with Session(engine) as session:
+        return session.exec(
+            select(AssistantRuntimeState).where(
+                AssistantRuntimeState.company_id == company_id,
+                AssistantRuntimeState.assistant_key == assistant_key,
+            )
+        ).first()
+
+
+def _set_assistant_runtime_state(
+    company_id: int,
+    assistant_key: str,
+    *,
+    cooldown_until: Optional[datetime],
+    last_error: Optional[str] = None,
+) -> Optional[datetime]:
+    """Persist runtime state updates so assistant cooldown survives backend restarts."""
+    normalized_cooldown = _normalize_utc(cooldown_until)
+    with Session(engine) as session:
+        state = session.exec(
+            select(AssistantRuntimeState).where(
+                AssistantRuntimeState.company_id == company_id,
+                AssistantRuntimeState.assistant_key == assistant_key,
+            )
+        ).first()
+        if not state:
+            state = AssistantRuntimeState(company_id=company_id, assistant_key=assistant_key)
+        state.cooldown_until = normalized_cooldown
+        state.last_error = (last_error or "")[:1000] or None
+        state.updated_at = datetime.now(timezone.utc)
+        session.add(state)
+        session.commit()
+    return normalized_cooldown
+
+
+def _get_claude_cooldown_until(company_id: int) -> Optional[datetime]:
+    """Return the persisted Claude cooldown deadline when quota was recently hit."""
+    now = datetime.now(timezone.utc)
+    state = _get_assistant_runtime_state(company_id, "claude")
+    cooldown_until = _normalize_utc(state.cooldown_until) if state else None
+    if cooldown_until and cooldown_until <= now:
+        _set_assistant_runtime_state(company_id, "claude", cooldown_until=None, last_error=None)
+        return None
+    return cooldown_until
+
+
+def _get_assistant_cooldown_until(company_id: int, assistant_key: str) -> Optional[datetime]:
+    """Return the persisted cooldown deadline for any assistant key."""
+    now = datetime.now(timezone.utc)
+    state = _get_assistant_runtime_state(company_id, assistant_key)
+    cooldown_until = _normalize_utc(state.cooldown_until) if state else None
+    if cooldown_until and cooldown_until <= now:
+        _set_assistant_runtime_state(company_id, assistant_key, cooldown_until=None, last_error=None)
+        return None
+    return cooldown_until
+
+
+def _parse_claude_reset_time(text: str) -> Optional[datetime]:
+    """Best-effort parse for reset times embedded in Claude CLI quota messages."""
+    now = datetime.now().astimezone()
+    for pattern in CLAUDE_RESET_TIME_PATTERNS:
+        match = pattern.search(text or "")
+        if not match:
+            continue
+        raw_time = (match.group("time") or "").strip().upper().replace(" ", "")
+        formats = ["%I:%M%p", "%H:%M"]
+        for fmt in formats:
+            try:
+                parsed = datetime.strptime(raw_time, fmt)
+            except ValueError:
+                continue
+            candidate = now.replace(hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0)
+            if candidate <= now:
+                candidate += timedelta(days=1)
+            return candidate.astimezone(timezone.utc)
+    return None
+
+
+def _maybe_activate_claude_cooldown(company_id: int, output: str) -> Optional[datetime]:
+    """Detect Claude quota exhaustion and persist a cooldown window for the company."""
+    lowered = (output or "").lower()
+    if not any(token in lowered for token in CLAUDE_QUOTA_PATTERNS):
+        return None
+    cooldown_until = _parse_claude_reset_time(output) or (
+        datetime.now(timezone.utc) + timedelta(minutes=CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES)
+    )
+    return _set_assistant_runtime_state(
+        company_id,
+        "claude",
+        cooldown_until=cooldown_until,
+        last_error=output,
+    )
+
+
+def _assistant_key_for_label(label: str) -> str:
+    if label == "Claude CLI":
+        return "claude"
+    if label == "GitHub Copilot CLI":
+        return "copilot"
+    return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "assistant"
+
+
+def _maybe_activate_assistant_unavailable_cooldown(
+    company_id: int,
+    label: str,
+    output: str,
+) -> Optional[datetime]:
+    """Persist a short cooldown when an assistant binary is missing or unusable."""
+    lowered = (output or "").lower()
+    if not any(token in lowered for token in ASSISTANT_UNAVAILABLE_PATTERNS):
+        return None
+    return _set_assistant_runtime_state(
+        company_id,
+        _assistant_key_for_label(label),
+        cooldown_until=datetime.now(timezone.utc) + timedelta(minutes=max(1, ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES)),
+        last_error=output,
+    )
+
+
+async def _publish_console_assistant_event(
+    nats_client: NATSClient,
+    sprint_id: int,
+    item: Dict[str, Any],
+    label: str,
+    purpose: str,
+    message: str,
+    *,
+    decision: str,
+    detail: Optional[str] = None,
+) -> None:
+    """Publish a GlassRoom status event explaining assistant usage decisions."""
+    await _publish_glassroom(nats_client, sprint_id, {
+        "type": "status",
+        "semantic_type": "assistant.telemetry",
+        "source": "task_worker",
+        "agent": "System",
+        "role": "System",
+        "task_id": item.get("id"),
+        "task": item.get("title", "Task"),
+        "message": message,
+        "assistant_label": label,
+        "assistant_purpose": purpose,
+        "assistant_decision": decision,
+        "assistant_detail": detail or "",
+    })
+
+
+def _select_console_assistants(item: Dict[str, Any], agent: Dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Choose assistants efficiently so Copilot is the default and Claude stays budget-aware."""
+    assistants: list[tuple[str, str, str]] = []
+    if CONSOLE_ASSISTANT_STRATEGY == "copilot_first" and COPILOT_CLI_COMMAND_TEMPLATE:
+        assistants.append(("GitHub Copilot CLI", COPILOT_CLI_COMMAND_TEMPLATE, _assistant_purpose(item, agent, "GitHub Copilot CLI")))
+
+    if CLAUDE_CLI_COMMAND_TEMPLATE and _claude_is_high_value(item, agent):
+        assistants.append(("Claude CLI", CLAUDE_CLI_COMMAND_TEMPLATE, _assistant_purpose(item, agent, "Claude CLI")))
+
+    if not assistants and COPILOT_CLI_COMMAND_TEMPLATE:
+        assistants.append(("GitHub Copilot CLI", COPILOT_CLI_COMMAND_TEMPLATE, _assistant_purpose(item, agent, "GitHub Copilot CLI")))
+
+    return assistants
+
+
+def _render_console_command(template: str, prompt: str, workspace_root: str) -> Optional[str]:
+    """Render a shell command template with a safely quoted prompt."""
+    normalized = (template or "").strip()
+    if not normalized:
+        return None
+    quoted_values = {
+        "prompt": shlex.quote(prompt),
+        "workspace_root": shlex.quote(workspace_root),
+        "allowed_tools": shlex.quote(CLAUDE_CLI_ALLOWED_TOOLS),
+        "system_prompt": shlex.quote(CLAUDE_CLI_APPEND_SYSTEM_PROMPT),
+    }
+    if any(token in normalized for token in ("{prompt}", "{workspace_root}", "{allowed_tools}", "{system_prompt}")):
+        return normalized.format(**quoted_values)
+    return f"{normalized} {quoted_values['prompt']}"
+
+
+def _replace_command_binary(command: str, original: str, replacement: str) -> str:
+    """Swap the first command token while preserving the rest of the shell command."""
+    if command == original:
+        return replacement
+    prefix = f"{original} "
+    if command.startswith(prefix):
+        return f"{replacement}{command[len(original):]}"
+    return command
+
+
+def _wrap_console_command_with_fallback(label: str, command: str) -> str:
+    """Add host-specific binary fallback paths for known assistants."""
+    if label == "GitHub Copilot CLI":
+        fallback = '"$HOME/Library/Application Support/Code/User/globalStorage/github.copilot-chat/copilotCli/copilot"'
+        fallback_command = _replace_command_binary(command, "copilot", fallback)
+        return (
+            f"if [ -x {fallback} ]; then {fallback_command}; "
+            f"elif command -v copilot >/dev/null 2>&1; then {command}; "
+            f"else {command}; fi"
+        )
+
+    if label == "Claude CLI":
+        fallback = '"$HOME/.local/bin/claude"'
+        fallback_command = _replace_command_binary(command, "claude", fallback)
+        return (
+            f"if command -v claude >/dev/null 2>&1; then {command}; "
+            f"elif [ -x {fallback} ]; then {fallback_command}; "
+            f"else {command}; fi"
+        )
+
+    return command
+
+
+async def _collect_console_assistant_advice(
+    nats_client: NATSClient,
+    item: Dict[str, Any],
+    agent: Dict[str, Any],
+    sprint: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Query configured terminal assistants via the VS Code daemon and return their advice."""
+    if not CONSOLE_ASSISTANTS_ENABLED:
+        return {"combined": "", "sources": []}
+
+    role = agent.get("role", "Developer")
+    if role not in CONSOLE_ASSISTANT_ALLOWED_ROLES:
+        return {"combined": "", "sources": []}
+
+    workspace_root = await asyncio.to_thread(_resolve_workspace_root, sprint["company_id"])
+    if not workspace_root:
+        return {"combined": "", "sources": []}
+
+    prompt = _build_console_assistant_prompt(item, agent, sprint["name"])
+    assistants = _select_console_assistants(item, agent)
+    notes: list[str] = []
+    sources: list[Dict[str, str]] = []
+
+    for label, template, purpose in assistants:
+        assistant_key = _assistant_key_for_label(label)
+        cooldown_until = await asyncio.to_thread(_get_assistant_cooldown_until, sprint["company_id"], assistant_key)
+        if cooldown_until:
+            cooldown_local = cooldown_until.astimezone().strftime("%H:%M")
+            if label == "Claude CLI":
+                await _publish_console_assistant_event(
+                    nats_client,
+                    sprint["id"],
+                    item,
+                    label,
+                    purpose,
+                    f"Claude CLI skipped for now due to quota cooldown until {cooldown_local}. Copilot remains the default assistant.",
+                    decision="skipped_quota_cooldown",
+                    detail=f"cooldown_until={cooldown_until.isoformat()}",
+                )
+            else:
+                await _publish_console_assistant_event(
+                    nats_client,
+                    sprint["id"],
+                    item,
+                    label,
+                    purpose,
+                    f"{label} skipped temporarily after repeated local availability failures. Cooldown until {cooldown_local}.",
+                    decision="skipped_unavailable_cooldown",
+                    detail=f"cooldown_until={cooldown_until.isoformat()}",
+                )
+            continue
+
+        await _publish_console_assistant_event(
+            nats_client,
+            sprint["id"],
+            item,
+            label,
+            purpose,
+            f"Consulting {label} for {purpose} on: {item.get('title', 'task')}",
+            decision="requested",
+        )
+
+        command = _render_console_command(template, prompt, workspace_root)
+        if not command:
+            continue
+        command = _wrap_console_command_with_fallback(label, command)
+
+        try:
+            result = await nats_client.request(
+                "workspace.execute",
+                {
+                    "workspace_root": workspace_root,
+                    "command": command,
+                    "sprint_id": sprint["id"],
+                },
+                timeout=CONSOLE_ASSISTANT_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.warning("Console assistant request failed for %s on item=%s: %s", label, item.get("id"), exc)
+            await _publish_console_assistant_event(
+                nats_client,
+                sprint["id"],
+                item,
+                label,
+                purpose,
+                f"{label} request failed while gathering {purpose}.",
+                decision="failed",
+                detail=str(exc),
+            )
+            continue
+
+        output = str(result.get("stdout") or result.get("stderr") or "").strip()
+        if not result.get("success"):
+            logger.info("Console assistant %s unavailable for item=%s exit=%s", label, item.get("id"), result.get("exit_code"))
+            if label == "Claude CLI":
+                cooldown_until = await asyncio.to_thread(_maybe_activate_claude_cooldown, sprint["company_id"], output)
+                if cooldown_until:
+                    cooldown_local = cooldown_until.astimezone().strftime("%H:%M")
+                    await _publish_console_assistant_event(
+                        nats_client,
+                        sprint["id"],
+                        item,
+                        label,
+                        purpose,
+                        f"Claude CLI hit quota limits and entered cooldown until {cooldown_local}. Future tasks will prefer Copilot until then.",
+                        decision="quota_cooldown",
+                        detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+                    )
+                    continue
+            unavailable_cooldown = await asyncio.to_thread(
+                _maybe_activate_assistant_unavailable_cooldown,
+                sprint["company_id"],
+                label,
+                output,
+            )
+            if unavailable_cooldown:
+                cooldown_local = unavailable_cooldown.astimezone().strftime("%H:%M")
+                await _publish_console_assistant_event(
+                    nats_client,
+                    sprint["id"],
+                    item,
+                    label,
+                    purpose,
+                    f"{label} is unavailable in the local runtime and entered cooldown until {cooldown_local}.",
+                    decision="unavailable_cooldown",
+                    detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+                )
+                continue
+            await _publish_console_assistant_event(
+                nats_client,
+                sprint["id"],
+                item,
+                label,
+                purpose,
+                f"{label} was unavailable for {purpose}.",
+                decision="unavailable",
+                detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+            )
+            continue
+
+        if output:
+            notes.append(f"[{label}]\n{output[:2500]}")
+            sources.append({
+                "label": label,
+                "purpose": purpose,
+                "excerpt": output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+            })
+            await _publish_console_assistant_event(
+                nats_client,
+                sprint["id"],
+                item,
+                label,
+                purpose,
+                f"{label} contributed {purpose} for: {item.get('title', 'task')}",
+                decision="used",
+                detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+            )
+
+    return {
+        "combined": "\n\n".join(notes),
+        "sources": sources,
+    }
+
+
+def _build_console_assistant_usage_comment(sources: list[Dict[str, str]]) -> str:
+    """Summarize which external assistants were used and their immediate value."""
+    if not sources:
+        return ""
+
+    lines = ["External assistant context used for this task:"]
+    for source in sources:
+        label = source.get("label", "Assistant")
+        purpose = source.get("purpose", "advice")
+        excerpt = (source.get("excerpt") or "").strip().replace("\n", " ")
+        lines.append(f"- {label} ({purpose}): {excerpt}")
+    return "\n".join(lines)[:1800]
+
+
+def _describe_follow_up_reason(result: Dict[str, Any]) -> str:
+    """Render a human-readable reason for autonomous follow-up decisions."""
+    reason = result.get("reason")
+    if reason == "auto_follow_up_opened":
+        return f"Autonomous follow-up opened: {result.get('next_sprint_name', 'Self-improvement sprint')}"
+    if reason == "autonomy_below_threshold":
+        return "Autonomous follow-up skipped: company autonomy level is below 3."
+    if reason == "auto_self_improvement_disabled":
+        return "Autonomous follow-up skipped: auto self-improvement is disabled."
+    if reason == "active_sprint_already_exists":
+        return f"Autonomous follow-up skipped: sprint {result.get('blocking_sprint_id')} is still active or needs split."
+    if reason == "planner_returned_no_tasks":
+        return "Autonomous follow-up skipped: planner did not produce a usable backlog."
+    if reason == "company_missing":
+        return "Autonomous follow-up skipped: company context was missing."
+    if reason == "completed_no_follow_up":
+        return "Sprint completed with no autonomous follow-up trigger."
+    return "Autonomous follow-up evaluation completed."
+
+
+async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> None:
+    """Close a sprint once all cards are done and optionally open the next autonomous self-improvement sprint."""
+    # Build retrospective metrics before closing so the planner can use them.
+    retro_metrics = await asyncio.to_thread(_build_sprint_retrospective, sprint_id)
+
+    result = await asyncio.to_thread(_complete_sprint_and_plan_follow_up, sprint_id, retro_metrics)
+    if not result.get("completed"):
+        return
+
+    # Burn retrospective engram to memory so future sprints can learn from it.
+    if retro_metrics:
+        try:
+            from memory.engram_processor import get_engram_processor
+            processor = get_engram_processor()
+            processor.burn_engram(
+                agent_id=f"retrospective_{sprint_id}",
+                role="ScrumMaster",
+                decision_summary=_format_retrospective_summary(retro_metrics),
+                metadata={
+                    "action_type": "sprint_retrospective",
+                    **retro_metrics,
+                },
+            )
+        except Exception as exc:
+            logger.warning("Retrospective engram write failed for sprint=%s: %s", sprint_id, exc)
+
+        await _publish_glassroom(nats_client, sprint_id, {
+            "type": "status",
+            "semantic_type": "sprint.retrospective",
+            "source": "task_worker",
+            "agent": "System",
+            "role": "System",
+            "task": "Sprint retrospective",
+            "message": (
+                f"📊 Sprint retrospective: {retro_metrics.get('done_tasks', 0)}/{retro_metrics.get('total_tasks', 0)} tasks done "
+                f"({retro_metrics.get('completion_rate', 0)}%), "
+                f"{retro_metrics.get('rework_cycles', 0)} rework cycles, "
+                f"{retro_metrics.get('blocked_tasks', 0)} blocked. "
+                "Lessons stored in memory for future sprints."
+            ),
+            "retro": retro_metrics,
+        })
+
+    await _publish_glassroom(nats_client, sprint_id, {
+        "type": "status",
+        "agent": "System",
+        "role": "System",
+        "task": result.get("sprint_name", "Sprint"),
+        "message": f"🏁 Sprint completed: {result.get('sprint_name', 'Sprint')}",
+    })
+
+    await _publish_glassroom(nats_client, sprint_id, {
+        "type": "status",
+        "agent": "System",
+        "role": "System",
+        "task": result.get("sprint_name", "Sprint"),
+        "message": _describe_follow_up_reason(result),
+    })
+
+    logger.info(
+        "Sprint follow-up evaluation sprint_id=%s auto_opened=%s reason=%s next_sprint_id=%s",
+        sprint_id,
+        result.get("auto_opened"),
+        result.get("reason"),
+        result.get("next_sprint_id"),
+    )
+
+    if result.get("auto_opened") and result.get("next_sprint_id"):
+        await _publish_glassroom(nats_client, result["next_sprint_id"], {
+            "type": "status",
+            "agent": "System",
+            "role": "System",
+            "task": result.get("next_sprint_name", "Self-improvement sprint"),
+            "message": f"♻️ Autonomous self-improvement sprint opened: {result.get('next_sprint_name', 'Self-improvement sprint')}",
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +1498,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             item = ctx["item"]
             agent = ctx["agent"]
             sprint = ctx["sprint"]
+            _clear_queue_marker(item["id"])
 
             if _has_manual_freeze_marker(item.get("comments") or []):
                 await asyncio.to_thread(_sync_manual_freeze_state, item["id"])
@@ -479,16 +1521,98 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
             await _publish_glassroom(nats_client, sprint["id"], {
                 "type": "agent_start",
+                "semantic_type": "task.claimed",
+                "source": "task_worker",
                 "agent": agent.get("name") or agent["role"],
                 "role": agent["role"],
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "claimed",
                 "task": item["title"],
                 "message": f"🚀 {agent.get('name') or agent['role']} started working on: {item['title']}",
             })
 
+            await _publish_glassroom(nats_client, sprint["id"], {
+                "type": "status",
+                "semantic_type": "task.progress",
+                "source": "task_worker",
+                "agent": agent.get("name") or agent["role"],
+                "role": agent["role"],
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "context",
+                "task": item["title"],
+                "message": f"🧭 {agent.get('name') or agent['role']} claimed the card and is gathering context for: {item['title']}",
+            })
+
+            # Fetch memory context and cross-task context concurrently (non-blocking).
+            memory_ctx, completed_ctx, assistant_context = await asyncio.gather(
+                asyncio.to_thread(_fetch_memory_context, item, agent),
+                asyncio.to_thread(_load_sprint_completed_tasks, sprint["id"], item["id"]),
+                _collect_console_assistant_advice(nats_client, item, agent, sprint),
+            )
+            external_advice = assistant_context.get("combined", "")
+            assistant_usage_comment = _build_console_assistant_usage_comment(assistant_context.get("sources", []))
+
+            if memory_ctx:
+                await _publish_glassroom(nats_client, sprint["id"], {
+                    "type": "status",
+                    "semantic_type": "task.memory_retrieved",
+                    "source": "task_worker",
+                    "agent": agent.get("name") or agent["role"],
+                    "role": agent["role"],
+                    "task_id": item["id"],
+                    "task_status": "in_progress",
+                    "phase": "memory_retrieved",
+                    "task": item["title"],
+                    "message": f"🧠 Memory context retrieved for: {item['title']}",
+                })
+
+            if assistant_usage_comment:
+                await asyncio.to_thread(
+                    _update_item_status,
+                    item["id"],
+                    "in_progress",
+                    comment_text=assistant_usage_comment,
+                    comment_author="System",
+                )
+
+            await _publish_glassroom(nats_client, sprint["id"], {
+                "type": "status",
+                "semantic_type": "task.progress",
+                "source": "task_worker",
+                "agent": agent.get("name") or agent["role"],
+                "role": agent["role"],
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "execution",
+                "task": item["title"],
+                "message": (
+                    f"🛠️ {agent.get('name') or agent['role']} is executing autonomously on: {item['title']}"
+                    if external_advice
+                    else f"🛠️ {agent.get('name') or agent['role']} is executing autonomously without external assistant help on: {item['title']}"
+                ),
+            })
+
             # 3. Call the LLM (in a thread).
             deliverable = await asyncio.to_thread(
-                _execute_task, item, agent, sprint["name"],
+                _execute_task, item, agent, sprint["name"], external_advice, memory_ctx, completed_ctx,
             )
+            deliverable = await asyncio.to_thread(_sanitize_deliverable_text, deliverable)
+
+            await _publish_glassroom(nats_client, sprint["id"], {
+                "type": "status",
+                "semantic_type": "task.deliverable_ready",
+                "source": "task_worker",
+                "agent": agent.get("name") or agent["role"],
+                "role": agent["role"],
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "deliverable",
+                "task": item["title"],
+                "message": f"📦 {agent.get('name') or agent['role']} produced a deliverable for: {item['title']}. Running quality checks before QA handoff.",
+                "preview": deliverable[:200] if deliverable else "",
+            })
 
             latest_state = await asyncio.to_thread(_load_item_runtime_state, item["id"])
             if not latest_state:
@@ -518,8 +1642,13 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
                 await _publish_glassroom(nats_client, sprint["id"], {
                     "type": "error",
+                    "semantic_type": "task.blocked",
+                    "source": "task_worker",
                     "agent": agent.get("name") or agent["role"],
                     "role": agent["role"],
+                    "task_id": item["id"],
+                    "task_status": "blocked",
+                    "phase": "quality_gate",
                     "task": item["title"],
                     "message": f"❌ Pre-review gate blocked deliverable for: {item['title']} ({validation_reason}).",
                     "preview": deliverable[:200] if deliverable else "",
@@ -564,6 +1693,18 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                             comment_text=f"Artifact materialization requested for: {', '.join(a['path'] for a in artifact_targets)}",
                             comment_author="System",
                         )
+                        await _publish_glassroom(nats_client, sprint["id"], {
+                            "type": "status",
+                            "semantic_type": "task.artifact_generation",
+                            "source": "task_worker",
+                            "agent": "System",
+                            "role": "System",
+                            "task_id": item["id"],
+                            "task_status": "in_progress",
+                            "phase": "artifact_generation",
+                            "task": item["title"],
+                            "message": f"🧱 Workspace artifact generation requested for: {item['title']}",
+                        })
                     except Exception as e:
                         await asyncio.to_thread(
                             _update_item_status,
@@ -584,9 +1725,28 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             )
 
             await _publish_glassroom(nats_client, sprint["id"], {
+                "type": "status",
+                "semantic_type": "task.review_handoff",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item["id"],
+                "task_status": "in_review",
+                "phase": "qa_handoff",
+                "task": item["title"],
+                "message": f"🧪 {item['title']} moved to QA review.",
+                "preview": deliverable[:200] if deliverable else "",
+            })
+
+            await _publish_glassroom(nats_client, sprint["id"], {
                 "type": "agent_complete",
+                "semantic_type": "task.agent_complete",
+                "source": "task_worker",
                 "agent": agent.get("name") or agent["role"],
                 "role": agent["role"],
+                "task_id": item["id"],
+                "task_status": "in_review",
+                "phase": "implementation_complete",
                 "task": item["title"],
                 "message": f"✅ {agent.get('name') or agent['role']} completed: {item['title']}",
                 "preview": deliverable[:200] if deliverable else "",
@@ -624,6 +1784,10 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             if data.get("sprint_id"):
                 await _publish_glassroom(nats_client, data["sprint_id"], {
                     "type": "error",
+                    "semantic_type": "task.error",
+                    "source": "task_worker",
+                    "task_id": data.get("backlog_item_id"),
+                    "task_status": "blocked",
                     "message": f"❌ Task failed: {str(e)[:200]}",
                 })
 
@@ -632,6 +1796,23 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
     logger.info("Task Worker subscribed to task.assign")
     await nats_client.subscribe("task.assign", _on_task_assign)
+
+    recovered_items = await asyncio.to_thread(_recover_inflight_items_for_restart)
+    for recovered in recovered_items:
+        await _publish_glassroom(nats_client, recovered["sprint_id"], {
+            "type": "status",
+            "semantic_type": "task.recovered",
+            "source": "task_worker",
+            "agent": "System",
+            "role": "System",
+            "task_id": recovered.get("id"),
+            "task_status": "todo",
+            "phase": "restart_recovery",
+            "task": recovered["title"],
+            "message": f"♻️ Recovered after backend restart: {recovered['title']} returned to todo for autonomous redispatch.",
+        })
+
+    await _review_cycle(nats_client)
 
     # Periodic review loop — processes items stuck in in_review or blocked.
     await asyncio.sleep(10)  # Let initial tasks start first
@@ -695,7 +1876,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 logger.info("Skipping QA review for manually frozen item=%s", item.id)
                 continue
 
-            deliverable = _extract_latest_reviewable_comment(comments)
+            deliverable = _extract_latest_reviewable_comment(comments, assignee_role=item.assignee)
 
             # Prevent infinite review loops when QA repeatedly fails.
             qa_review_failures = sum(
@@ -711,8 +1892,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 await _publish_glassroom(nats_client, sprint.id, {
                     "type": "error",
+                    "semantic_type": "task.blocked",
+                    "source": "task_worker",
                     "agent": reviewer_dict["name"],
                     "role": reviewer_dict["role"],
+                    "task_id": item.id,
+                    "task_status": "blocked",
+                    "phase": "qa_review",
                     "task": f"Reviewing: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} review failed {MAX_QA_REVIEW_FAILURES} times for: {item.title}. Marked as blocked.",
                 })
@@ -734,8 +1920,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 await _publish_glassroom(nats_client, sprint.id, {
                     "type": "error",
+                    "semantic_type": "task.blocked",
+                    "source": "task_worker",
                     "agent": reviewer_dict["name"],
                     "role": reviewer_dict["role"],
+                    "task_id": item.id,
+                    "task_status": "blocked",
+                    "phase": "qa_review",
                     "task": f"Reviewing: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} cannot review {item.title}: missing deliverable. Marked as blocked.",
                 })
@@ -754,8 +1945,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             try:
                 await _publish_glassroom(nats_client, sprint.id, {
                     "type": "agent_start",
+                    "semantic_type": "task.review_started",
+                    "source": "task_worker",
                     "agent": reviewer_dict["name"],
                     "role": reviewer_dict["role"],
+                    "task_id": item.id,
+                    "task_status": "in_review",
+                    "phase": "qa_review",
                     "task": f"Reviewing: {item.title}",
                     "message": f"🔍 {reviewer_dict['name']} is reviewing: {item.title}",
                 })
@@ -818,8 +2014,15 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     if autopilot_rework_allowed:
                         await _publish_glassroom(nats_client, sprint.id, {
                             "type": "status",
+                            "semantic_type": "task.rework_scheduled",
+                            "source": "task_worker",
                             "agent": "System",
                             "role": "System",
+                            "task_id": item.id,
+                            "task_status": "todo",
+                            "phase": "rework",
+                            "rework_count": previous_reworks + 1,
+                            "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
                             "task": f"Reviewed: {item.title}",
                             "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
                             "preview": normalized_review[:200],
@@ -828,8 +2031,15 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     else:
                         await _publish_glassroom(nats_client, sprint.id, {
                             "type": "error",
+                            "semantic_type": "task.blocked",
+                            "source": "task_worker",
                             "agent": reviewer_dict["name"],
                             "role": reviewer_dict["role"],
+                            "task_id": item.id,
+                            "task_status": "blocked",
+                            "phase": "qa_gate",
+                            "rework_count": previous_reworks + 1,
+                            "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
                             "task": f"Reviewed: {item.title}",
                             "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
                             "preview": normalized_review[:200],
@@ -838,14 +2048,20 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 else:
                     await _publish_glassroom(nats_client, sprint.id, {
                         "type": "agent_complete",
+                        "semantic_type": "task.approved",
+                        "source": "task_worker",
                         "agent": reviewer_dict["name"],
                         "role": reviewer_dict["role"],
+                        "task_id": item.id,
+                        "task_status": "done",
+                        "phase": "qa_approved",
                         "task": f"Reviewed: {item.title}",
                         "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
                         "preview": normalized_review[:200],
                     })
 
                     logger.info("Reviewed item=%s → done by %s", item.id, reviewer_dict["name"])
+                    await _finalize_sprint_if_ready(nats_client, sprint.id)
 
             except Exception as e:
                 logger.warning("Review failed for item=%s: %s", item.id, e)
@@ -862,8 +2078,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 await _publish_glassroom(nats_client, sprint.id, {
                     "type": "error",
+                    "semantic_type": "task.review_error",
+                    "source": "task_worker",
                     "agent": reviewer_dict["name"],
                     "role": reviewer_dict["role"],
+                    "task_id": item.id,
+                    "task_status": item.status,
+                    "phase": "qa_review",
                     "task": f"Reviewing: {item.title}",
                     "message": f"❌ {reviewer_dict['name']} review failed for: {item.title}. Will retry.",
                 })
@@ -887,6 +2108,35 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             if _has_manual_freeze_marker(comments):
                 continue
 
+            if _can_resume_blocked_item_from_deliverable(comments, assignee_role=item.assignee):
+                comments.append({
+                    "author": "System",
+                    "text": "Autonomous recovery detected a blocked task with an existing deliverable and no explicit block reason. Returning it to QA review.",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                item.comments = comments
+                item.status = "in_review"
+                item.updated_at = datetime.now(timezone.utc)
+                session.add(item)
+
+                sprint = session.get(Sprint, item.sprint_id)
+                if sprint:
+                    await _publish_glassroom(nats_client, sprint.id, {
+                        "type": "status",
+                        "semantic_type": "task.recovered",
+                        "source": "task_worker",
+                        "agent": "System",
+                        "role": "System",
+                        "task_id": item.id,
+                        "task_status": "in_review",
+                        "phase": "blocked_recovery",
+                        "task": item.title,
+                        "message": f"♻️ Recovered blocked task with existing deliverable: {item.title} moved back to QA review.",
+                    })
+
+                logger.info("Recovered blocked item=%s back to in_review because a deliverable already exists", item.id)
+                continue
+
             # QA quality-gate blocks require manual triage; do not auto-retry.
             qa_quality_gate_block = any(
                 (c.get("author") == "System" and "manual triage" in str(c.get("text", "")).lower())
@@ -904,6 +2154,8 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 and (
                     "qa review failed" in str(c.get("text", "")).lower()
                     or "agent error:" in str(c.get("text", "")).lower()
+                    or "no deliverable found" in str(c.get("text", "")).lower()
+                    or "unfinished in-progress task returned to todo for redispatch" in str(c.get("text", "")).lower()
                 )
                 for c in comments
             )
@@ -929,8 +2181,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             if sprint:
                 await _publish_glassroom(nats_client, sprint.id, {
                     "type": "status",
+                    "semantic_type": "task.retry_queued",
+                    "source": "task_worker",
                     "agent": "System",
                     "role": "System",
+                    "task_id": item.id,
+                    "task_status": "todo",
+                    "phase": "retry",
                     "task": item.title,
                     "message": f"🔄 Retrying blocked task: {item.title}",
                 })
@@ -973,6 +2230,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             select(BacklogItem).where(BacklogItem.status == "todo")
         ).all()
         for item in todo_items:
+            dispatch_time = datetime.now(timezone.utc)
             comments = item.comments or []
             if isinstance(comments, str):
                 try:
@@ -987,12 +2245,54 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 logger.info("Keeping manually frozen todo item=%s blocked during dispatch", item.id)
                 continue
 
+            existing_deliverable = _extract_latest_reviewable_comment(
+                comments,
+                assignee_role=item.assignee,
+            )
+            if existing_deliverable:
+                item.status = "in_review"
+                item.updated_at = dispatch_time
+                session.add(item)
+                _clear_queue_marker(item.id)
+                await _publish_glassroom(nats_client, item.sprint_id, {
+                    "type": "status",
+                    "semantic_type": "task.recovered",
+                    "source": "task_worker",
+                    "agent": "System",
+                    "role": "System",
+                    "task_id": item.id,
+                    "task_status": "in_review",
+                    "phase": "todo_recovery",
+                    "task": item.title,
+                    "message": f"♻️ Recovered todo task with existing deliverable: {item.title} moved to QA review.",
+                    "preview": existing_deliverable[:200],
+                })
+                logger.info("Recovered todo item=%s to in_review because a deliverable already exists", item.id)
+                continue
+
+            if _queued_recently(item.id, dispatch_time):
+                logger.debug("Skipping duplicate autonomous queue publish for item=%s", item.id)
+                continue
+
             from uuid import uuid4
             await nats_client.publish("task.assign", {
                 "agent": item.assignee or "Dev",
                 "sprint_id": item.sprint_id,
                 "interaction_id": str(uuid4()),
                 "backlog_item_id": item.id,
+            })
+            _mark_queued(item.id, dispatch_time)
+            await _publish_glassroom(nats_client, item.sprint_id, {
+                "type": "status",
+                "semantic_type": "task.queued",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item.id,
+                "task_status": "todo",
+                "phase": "queued",
+                "task": item.title,
+                "message": f"📬 Task queued for autonomous execution: {item.title} → {item.assignee or 'Dev'}",
             })
         session.commit()
 
@@ -1004,6 +2304,9 @@ async def _publish_glassroom(
 ):
     """Publish a real-time event to the Glassroom SSE stream for a sprint."""
     try:
+        event.setdefault("event_id", str(uuid4()))
+        event.setdefault("source", "backend")
+        event.setdefault("semantic_version", 1)
         event["timestamp"] = datetime.now(timezone.utc).isoformat()
         await nats_client.publish(f"glassroom.{sprint_id}", event)
     except Exception as e:

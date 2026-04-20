@@ -52,6 +52,20 @@ class Settings(BaseSettings):
     LLM_PROXY_URL: str = "http://localhost:5100"
 
     # ---------------------------------------------------------------------------
+    # Autonomous improvement & console assistants
+    # ---------------------------------------------------------------------------
+    AUTO_SELF_IMPROVEMENT_ENABLED: bool = True
+    CONSOLE_ASSISTANTS_ENABLED: bool = True
+    COPILOT_CLI_COMMAND_TEMPLATE: str = 'copilot -p {prompt} --output-format json'
+    CLAUDE_CLI_COMMAND_TEMPLATE: Optional[str] = 'claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}'
+    CLAUDE_CLI_ALLOWED_TOOLS: str = 'Read,Grep,Glob,LS,Bash(git *)'
+    CLAUDE_CLI_APPEND_SYSTEM_PROMPT: str = 'You are being used as a bounded external coding advisor. Stay read-mostly, prefer incremental changes, preserve healthy behavior, and return concise actionable guidance for the current repository task.'
+    CONSOLE_ASSISTANT_STRATEGY: str = 'copilot_first'
+    CLAUDE_CLI_HIGH_VALUE_ROLES: str = 'Architect,PO,QA,ScrumMaster'
+    CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES: int = 10
+    CONSOLE_ASSISTANT_ALLOWED_ROLES: str = "Developer,Architect,QA,PO,ScrumMaster"
+
+    # ---------------------------------------------------------------------------
     # Audit — filesystem path for append-only JSONL audit logs
     # ---------------------------------------------------------------------------
     AUDIT_LOG_PATH: str = "/app/.factory/logs"

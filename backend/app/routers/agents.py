@@ -75,10 +75,49 @@ async def publish_sse_event(sprint_id: str, payload: str) -> None:
 def _merge_sse_history(db_history: list[dict], recent_history: list[dict]) -> list[dict]:
     merged: list[dict] = []
     seen: set[tuple[str, str, str, str, str, str]] = set()
+    combined = [*db_history, *recent_history]
 
-    for event in [*db_history, *recent_history]:
+    latest_queue_index: dict[str, int] = {}
+    has_follow_up_for_task: set[str] = set()
+
+    for index, event in enumerate(combined):
         if not isinstance(event, dict):
             continue
+        task_key = str(event.get("task_id") or event.get("task") or "")
+        semantic_type = str(event.get("semantic_type") or "")
+        if not task_key:
+            continue
+        if semantic_type == "task.queued":
+            latest_queue_index[task_key] = index
+            continue
+        if semantic_type in {
+            "task.claimed",
+            "task.progress",
+            "task.review_started",
+            "task.review_handoff",
+            "task.agent_complete",
+            "task.approved",
+            "task.blocked",
+            "task.recovered",
+            "task.history_comment",
+            "task.status_snapshot",
+            "task.retry_queued",
+            "task.rework_scheduled",
+        }:
+            has_follow_up_for_task.add(task_key)
+
+    for index, event in enumerate(combined):
+        if not isinstance(event, dict):
+            continue
+        task_key = str(event.get("task_id") or event.get("task") or "")
+        semantic_type = str(event.get("semantic_type") or "")
+
+        if semantic_type == "task.queued" and task_key:
+            if latest_queue_index.get(task_key) != index:
+                continue
+            if task_key in has_follow_up_for_task:
+                continue
+
         key = (
             str(event.get("type", "")),
             str(event.get("agent", "")),
@@ -102,10 +141,10 @@ async def generate_glassroom_sse(
     history_loader: HistoryLoader,
 ) -> AsyncIterator[str]:
     try:
-        yield f"data: {json.dumps({'type': 'connected', 'sprint_id': sprint_id})}\n\n"
+        yield f"data: {json.dumps({'type': 'connected', 'semantic_type': 'stream.connected', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'sprint_id': sprint_id})}\n\n"
 
         if not nats_available:
-            yield f"data: {json.dumps({'type': 'error', 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'semantic_type': 'stream.unavailable', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
 
         history = _merge_sse_history(await history_loader(), recent_sse_events.get(sprint_id, []))
         for evt in history:
@@ -230,13 +269,37 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
                         except (json.JSONDecodeError, TypeError):
                             comments = []
                     for c in comments:
+                        text = c.get("text") or ""
+                        if text.startswith("External assistant context used for this task:"):
+                            events.append({
+                                "type": "status",
+                                "semantic_type": "assistant.history_context",
+                                "source": "history",
+                                "semantic_version": 1,
+                                "event_id": str(uuid4()),
+                                "agent": "System",
+                                "role": "System",
+                                "task_id": item.id,
+                                "task": item.title,
+                                "message": "External assistant context was used for this task.",
+                                "preview": text[:300],
+                                "timestamp": c.get("created_at", ""),
+                                "status": item.status,
+                            })
+                            continue
                         events.append({
                             "type": "agent_complete",
+                            "semantic_type": "task.history_comment",
+                            "source": "history",
+                            "semantic_version": 1,
+                            "event_id": str(uuid4()),
                             "agent": c.get("author", item.assignee or "Agent"),
                             "role": item.assignee or "Agent",
+                            "task_id": item.id,
+                            "task_status": item.status,
                             "task": item.title,
                             "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
-                            "preview": (c.get("text") or "")[:300],
+                            "preview": text[:300],
                             "timestamp": c.get("created_at", ""),
                             "status": item.status,
                         })
@@ -244,8 +307,14 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
                     if not comments and item.status not in ("todo",):
                         events.append({
                             "type": "status",
+                            "semantic_type": "task.status_snapshot",
+                            "source": "history",
+                            "semantic_version": 1,
+                            "event_id": str(uuid4()),
                             "agent": item.assignee or "System",
                             "role": item.assignee or "System",
+                            "task_id": item.id,
+                            "task_status": item.status,
                             "task": item.title,
                             "message": f"📋 {item.title} → {item.status}",
                             "timestamp": (item.updated_at or item.created_at or "").isoformat() if hasattr(item.updated_at or item.created_at, "isoformat") else "",

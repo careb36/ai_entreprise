@@ -71,6 +71,18 @@ export function useStartSprint() {
   })
 }
 
+export function usePlanSprint() {
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.planSprint>[0]) => api.planSprint(data),
+  })
+}
+
+export function usePlanSelfImprovementSprint() {
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.planSelfImprovementSprint>[0]) => api.planSelfImprovementSprint(data),
+  })
+}
+
 export function useSprintBoard(sprintId: number | null) {
   return useQuery({
     queryKey: QUERY_KEYS.sprintBoard(sprintId || 0),

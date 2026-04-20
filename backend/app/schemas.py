@@ -40,8 +40,22 @@ class SprintStartRequest(BaseModel):
     sprint_name: str
     start_date: str        # ISO-8601 date string (e.g. "2026-04-01")
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
+    goal: Optional[str] = None
     duration_days: Optional[int] = None  # deprecated
     backlog_items: List[Dict[str, str]]  # Each item has at least "title" and "description"
+
+
+class SprintPlanRequest(BaseModel):
+    """Payload for ``POST /v1/plan_sprint`` — turns a strategic prompt into a sprint backlog."""
+    company_id: int
+    prompt: str
+    scope_size: str = "M"
+
+
+class SelfImprovementSprintRequest(BaseModel):
+    """Payload for ``POST /v1/plan_self_improvement_sprint`` — plans an autonomous improvement sprint."""
+    company_id: int
+    scope_size: str = "M"
 
 
 class GenerateRequest(BaseModel):

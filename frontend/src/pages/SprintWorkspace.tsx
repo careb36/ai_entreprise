@@ -25,9 +25,9 @@ export const SprintWorkspace: React.FC = () => {
   const currentId = activeSprintId?.toString() || id || '1'
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] overflow-hidden bg-surface-950 text-white p-3">
-      <div className="card h-full overflow-hidden flex flex-col">
-        <div className="h-11 border-b border-surface-700 bg-surface-900 px-4 flex items-center gap-3">
+    <div className="min-h-[calc(100vh-3.5rem)] xl:h-[calc(100vh-3.5rem)] overflow-x-auto overflow-y-auto xl:overflow-y-hidden bg-surface-950 text-white p-3">
+      <div className="card min-h-full xl:h-full min-w-[20rem] overflow-visible xl:overflow-hidden flex flex-col">
+        <div className="min-h-11 border-b border-surface-700 bg-surface-900 px-4 py-2 flex items-center gap-3 flex-wrap">
           <MonitorPlay size={15} className="text-brand-400" />
           <h2 className="text-sm font-semibold text-gray-200">{t('workspace.glassroomTitle')}</h2>
           <span className="text-xs text-gray-500">Sprint #{currentId}</span>

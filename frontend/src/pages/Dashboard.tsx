@@ -5,7 +5,7 @@
  * Scope: read-only overview + sprint launch. Heavy state lives in stores/queries.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -13,9 +13,10 @@ import {
   CircleDot, Cpu, Layers, Loader2, Play, Plus, Radio,
   ShieldAlert, Sparkles, SplitSquareVertical, Target, Zap,
 } from 'lucide-react'
+import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany } from '../hooks/useQueries'
+import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -237,39 +238,115 @@ function SprintCard({
 function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
   const [goal, setGoal] = useState('')
   const [scope, setScope] = useState<'S' | 'M' | 'L'>('M')
+  const [plannedSprint, setPlannedSprint] = useState<SprintPlanResponse | null>(null)
+  const [planSource, setPlanSource] = useState<'manual' | 'autonomous' | null>(null)
   const { companyId, companyName, setCompany } = useAppStore()
   const initMutation    = useInitCompany()
+  const planMutation    = usePlanSprint()
+  const autoPlanMutation = usePlanSelfImprovementSprint()
   const sprintMutation  = useStartSprint()
   const navigate        = useNavigate()
 
-  const busy  = initMutation.isPending || sprintMutation.isPending
-  const error = sprintMutation.error ?? initMutation.error
+  const busy  = initMutation.isPending || planMutation.isPending || autoPlanMutation.isPending || sprintMutation.isPending
+  const error = sprintMutation.error ?? autoPlanMutation.error ?? planMutation.error ?? initMutation.error
+
+  async function ensureCompany() {
+    let cid = companyId
+
+    if (!cid) {
+      const resolvedCompanyName = companyName?.trim() || 'Fabrique Demo'
+      const company = await initMutation.mutateAsync({
+        company_name: resolvedCompanyName,
+        default_scope_size: scope,
+      })
+      cid = company.company_id
+      setCompany(cid, resolvedCompanyName)
+    }
+
+    return cid
+  }
+
+  function resetPreview() {
+    setPlannedSprint(null)
+    setPlanSource(null)
+  }
+
+  async function generatePlan() {
+    if (busy || !goal.trim()) return
+
+    initMutation.reset()
+    planMutation.reset()
+    sprintMutation.reset()
+
+    try {
+      const cid = await ensureCompany()
+      if (!cid) return
+
+      const plan = await planMutation.mutateAsync({
+        company_id: cid,
+        prompt: goal.trim(),
+        scope_size: scope,
+      })
+
+      setPlannedSprint(plan)
+      setPlanSource('manual')
+    } catch {
+      return
+    }
+  }
+
+  async function generateAutonomousPlan() {
+    if (busy) return
+
+    initMutation.reset()
+    planMutation.reset()
+    autoPlanMutation.reset()
+    sprintMutation.reset()
+
+    try {
+      const cid = await ensureCompany()
+      if (!cid) return
+
+      const plan = await autoPlanMutation.mutateAsync({
+        company_id: cid,
+        scope_size: scope,
+      })
+
+      setPlannedSprint(plan)
+      setPlanSource('autonomous')
+    } catch {
+      return
+    }
+  }
 
   async function launch() {
-    if (!goal.trim()) return
-    let cid = companyId
-    if (!cid) {
-      const res = await initMutation.mutateAsync({
-        company_name: companyName?.trim() || 'Fabrique Demo',
-        default_scope_size: scope,
-      }).catch(() => null)
-      cid = res?.company_id ?? res?.id ?? null
-      if (cid) setCompany(cid, companyName || 'Fabrique Demo')
+    if (busy || !plannedSprint) return
+
+    initMutation.reset()
+    planMutation.reset()
+    autoPlanMutation.reset()
+    sprintMutation.reset()
+
+    try {
+      const cid = await ensureCompany()
+      if (!cid) return
+
+      const sprint = await sprintMutation.mutateAsync({
+        company_id: cid,
+        sprint_name: plannedSprint.sprint_name,
+        start_date: new Date().toISOString().split('T')[0],
+        scope_size: scope,
+        goal: plannedSprint.goal,
+        backlog_items: plannedSprint.tasks,
+      })
+
+      onSuccess(sprint.sprint_id)
+      setGoal('')
+      resetPreview()
+      navigate(`/workspace/${sprint.sprint_id}`)
+    } catch {
+      return
     }
-    if (!cid) return
-    sprintMutation.mutate({
-      company_id: cid,
-      sprint_name: `Sprint ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`,
-      start_date: new Date().toISOString().split('T')[0],
-      scope_size: scope,
-      backlog_items: [{ title: goal, description: goal }],
-    }, {
-      onSuccess: (r: { sprint_id: number }) => {
-        onSuccess(r.sprint_id)
-        setGoal('')
-        navigate(`/workspace/${r.sprint_id}`)
-      },
-    })
   }
 
   return (
@@ -282,17 +359,37 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
       <textarea
         rows={2}
         value={goal}
-        onChange={e => setGoal(e.target.value)}
+        onChange={e => {
+          setGoal(e.target.value)
+          resetPreview()
+        }}
         placeholder="Describe the sprint goal…"
         className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-brand-500 resize-none mb-3 transition-colors"
       />
+
+      <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-surface-700 bg-surface-800/60 px-3 py-2">
+        <div>
+          <p className="text-xs font-medium text-gray-200">Autonomous self-improvement</p>
+          <p className="text-[11px] text-gray-500">Let the factory inspect the repo, preserve what already works, and propose the next Scrumban improvement sprint.</p>
+        </div>
+        <button
+          onClick={generateAutonomousPlan}
+          disabled={busy}
+          className="shrink-0 px-3 py-1.5 rounded-lg border border-brand-500/30 text-brand-300 text-xs font-medium hover:bg-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {autoPlanMutation.isPending ? 'Scanning…' : 'Auto-Improve'}
+        </button>
+      </div>
 
       <div className="flex items-center gap-2">
         <div className="flex rounded-lg border border-surface-700 overflow-hidden text-xs">
           {(['S', 'M', 'L'] as const).map(s => (
             <button
               key={s}
-              onClick={() => setScope(s)}
+              onClick={() => {
+                setScope(s)
+                resetPreview()
+              }}
               className={`px-3 py-1.5 font-medium transition-colors ${
                 scope === s
                   ? 'bg-brand-600/20 text-brand-300 border-r border-brand-600/30 last:border-r-0'
@@ -306,15 +403,70 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
         <span className="text-[11px] text-gray-600 flex-1">
           {SCOPE_META[scope].label} · up to {SCOPE_META[scope].limit} tasks
         </span>
+        {plannedSprint && (
+          <button
+            onClick={planSource === 'autonomous' ? generateAutonomousPlan : generatePlan}
+            disabled={busy || (planSource !== 'autonomous' && !goal.trim())}
+            className="px-3 py-1.5 rounded-lg border border-surface-700 text-gray-300 text-xs font-medium hover:border-brand-500/40 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Regenerate
+          </button>
+        )}
         <button
-          onClick={launch}
-          disabled={busy || !goal.trim()}
+          onClick={plannedSprint ? launch : generatePlan}
+          disabled={busy || (!plannedSprint && !goal.trim())}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-          {busy ? 'Launching…' : 'Launch'}
+          {busy ? (planMutation.isPending ? 'Planning…' : 'Launching…') : plannedSprint ? 'Launch Sprint' : 'Generate Plan'}
         </button>
       </div>
+
+      {plannedSprint && (
+        <div className="mt-3 rounded-lg border border-brand-500/20 bg-brand-950/10 p-3 space-y-3 animate-fade-in">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-brand-300/80">
+                {planSource === 'autonomous' ? 'Autonomous Plan Preview' : 'Plan Preview'}
+              </p>
+              <h4 className="text-sm font-semibold text-white mt-1">{plannedSprint.sprint_name}</h4>
+            </div>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${SCOPE_META[plannedSprint.scope_size].bg} ${SCOPE_META[plannedSprint.scope_size].color}`}>
+              <Layers size={10} />
+              {SCOPE_META[plannedSprint.scope_size].label}
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-400">{plannedSprint.goal}</p>
+
+          {planSource === 'autonomous' && (
+            <p className="text-[11px] text-brand-200/80">
+              This plan was generated from repository context with a preserve-and-iterate rule: improve the next bottleneck, keep healthy assets, and move in bounded Scrumban slices.
+            </p>
+          )}
+
+          <div className="space-y-2">
+            {plannedSprint.tasks.map((task, index) => (
+              <div key={`${task.title}-${index}`} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-100">{index + 1}. {task.title}</p>
+                    <p className="text-[11px] text-gray-500 mt-1">{task.description}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] uppercase tracking-wide text-brand-300">{task.assignee}</p>
+                    <p className="text-[10px] text-gray-500 mt-1">{task.priority}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[11px] text-gray-500">
+            Review the plan, regenerate if needed, then launch the sprint.
+          </p>
+        </div>
+      )}
 
       {error && (
         <p className="mt-2 text-[11px] text-red-400 flex items-center gap-1">
@@ -333,8 +485,18 @@ export default function Dashboard() {
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
   const { data: health } = useHealth()
+  const connectToSprintStream = useAgentStore(s => s.connect)
+  const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
   const agentStates = useAgentStore(s => s.agentStates)
   const isSSEConnected = useAgentStore(s => s.isConnected)
+
+  useEffect(() => {
+    if (!activeSprintId) return
+    connectToSprintStream(String(activeSprintId))
+    return () => {
+      disconnectFromSprintStream()
+    }
+  }, [activeSprintId, connectToSprintStream, disconnectFromSprintStream])
 
   const sprint  = board?.sprint
   const columns = board?.columns ?? {}

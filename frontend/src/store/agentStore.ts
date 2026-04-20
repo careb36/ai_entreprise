@@ -2,17 +2,33 @@ import { create } from 'zustand'
 import {
   type AgentEvent,
   type AgentFsmState,
+  type AssistantTelemetry,
+  type TaskTelemetry,
+  type AgentRetrospectiveEvent,
   normalizeSSEEvent,
   assignRolePalette,
 } from '../lib/agentEvents'
 
 export interface AgentMessage {
   id: string
+  eventId?: string
   timestamp: string
+  rawType?: string
+  semanticType?: string
+  source?: string
   agent: string
   role?: string
   task?: string
+  taskId?: number
+  taskStatus?: string
+  taskPhase?: string
+  reworkCount?: number
+  reworkLimit?: number
   preview?: string
+  assistantLabel?: string
+  assistantPurpose?: string
+  assistantDecision?: string
+  assistantDetail?: string
   content: string
   type: 'message' | 'action' | 'status' | 'error' | 'agent_start' | 'agent_complete'
 }
@@ -24,6 +40,38 @@ export interface AgentLiveState {
   currentActivity: string  // last formatted status from nodeStart
   color: string            // Tailwind color token (from assignRolePalette)
   lastSeen: string         // ISO timestamp
+  lastTaskTitle?: string
+  lastTaskId?: number
+  lastSemanticType?: string
+}
+
+function assistantMetaFromTelemetry(assistant?: AssistantTelemetry) {
+  return {
+    assistantLabel: assistant?.label,
+    assistantPurpose: assistant?.purpose,
+    assistantDecision: assistant?.decision,
+    assistantDetail: assistant?.detail,
+  }
+}
+
+function taskMetaFromTelemetry(task?: TaskTelemetry) {
+  return {
+    taskId: task?.id,
+    taskStatus: task?.status,
+    taskPhase: task?.phase,
+    reworkCount: task?.reworkCount,
+    reworkLimit: task?.reworkLimit,
+  }
+}
+
+export interface SprintRetro {
+  completionRate: number
+  doneTasks: number
+  totalTasks: number
+  reworkCycles: number
+  blockedTasks: number
+  qaFailures: number
+  receivedAt: string
 }
 
 interface AgentStore {
@@ -33,6 +81,8 @@ interface AgentStore {
   isConnected: boolean
   connectionError: string | null
   sprintId: string | null
+  memoryHits: number          // times memory context was retrieved this session
+  lastRetro: SprintRetro | null
 
   addMessage: (message: AgentMessage) => void
   applyAgentEvent: (event: AgentEvent) => void
@@ -101,54 +151,70 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
         const normalized = normalizeSSEEvent(raw)
         if (normalized) {
+          const assistantMeta = assistantMetaFromTelemetry(normalized.assistant)
+          const taskMeta = taskMetaFromTelemetry(normalized.task)
+          const messageBase = {
+            id: String(raw.id || normalized.eventId || crypto.randomUUID()),
+            eventId: normalized.eventId,
+            timestamp: normalized.timestamp,
+            rawType: normalized.rawType,
+            semanticType: normalized.semanticType,
+            source: normalized.source,
+            ...taskMeta,
+            ...assistantMeta,
+          }
+
+          // Track memory hit counter.
+          const semType = normalized.semanticType || ''
+          if (semType === 'task.memory_retrieved' || semType === 'kickoff.memory_retrieved') {
+            set((s) => ({ memoryHits: s.memoryHits + 1 }))
+          }
+
           get().applyAgentEvent(normalized)
 
           if (normalized.kind === 'nodeStart') {
             get().addMessage({
-              id: String(raw.id || crypto.randomUUID()),
-              timestamp: normalized.timestamp,
+              ...messageBase,
               agent: normalized.agentRole || 'System',
               role: normalized.agentRole || 'System',
-              task: normalized.nodeName,
+              task: normalized.task?.title || normalized.nodeName,
               content: normalized.status,
               type: 'agent_start',
             })
           } else if (normalized.kind === 'nodeEnd') {
             get().addMessage({
-              id: String(raw.id || crypto.randomUUID()),
-              timestamp: normalized.timestamp,
+              ...messageBase,
               agent: normalized.agentRole || 'System',
               role: normalized.agentRole || 'System',
-              task: normalized.nodeName,
+              task: normalized.task?.title || normalized.nodeName,
               content: `${normalized.agentRole || 'System'} finished ${normalized.nodeName}`,
               type: 'agent_complete',
             })
           } else if (normalized.kind === 'agentMessage') {
             get().addMessage({
-              id: String(raw.id || crypto.randomUUID()),
-              timestamp: normalized.timestamp,
+              ...messageBase,
               agent: normalized.agentRole || 'System',
               role: normalized.agentRole || 'System',
-              task: typeof raw.task === 'string' ? raw.task : undefined,
+              task: normalized.task?.title || (typeof raw.task === 'string' ? raw.task : undefined),
               preview: typeof raw.preview === 'string' ? raw.preview : undefined,
               content: normalized.content,
               type: 'message',
             })
           } else if (normalized.kind === 'nodeError') {
             get().addMessage({
-              id: String(raw.id || crypto.randomUUID()),
-              timestamp: normalized.timestamp,
+              ...messageBase,
               agent: normalized.agentRole || 'System',
               role: normalized.agentRole || 'System',
-              task: normalized.nodeName,
+              task: normalized.task?.title || normalized.nodeName,
               content: `Error in ${normalized.nodeName}: ${normalized.error}`,
               type: 'error',
             })
           } else if (normalized.kind === 'system') {
             get().addMessage({
-              id: crypto.randomUUID(),
-              timestamp: normalized.timestamp,
+              ...messageBase,
+              id: normalized.eventId || crypto.randomUUID(),
               agent: 'System',
+              task: normalized.task?.title,
               content: normalized.content,
               type: 'status',
             })
@@ -158,11 +224,24 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
         get().addMessage({
           id: String(raw.id || crypto.randomUUID()),
+          eventId: typeof raw.event_id === 'string' ? raw.event_id : undefined,
           timestamp: String(raw.timestamp || new Date().toISOString()),
+          rawType: typeof raw.type === 'string' ? raw.type : undefined,
+          semanticType: typeof raw.semantic_type === 'string' ? raw.semantic_type : undefined,
+          source: typeof raw.source === 'string' ? raw.source : undefined,
           agent: String(raw.agent || 'System'),
           role: typeof raw.role === 'string' ? raw.role : undefined,
           task: typeof raw.task === 'string' ? raw.task : undefined,
+          taskId: typeof raw.task_id === 'number' ? raw.task_id : undefined,
+          taskStatus: typeof raw.task_status === 'string' ? raw.task_status : undefined,
+          taskPhase: typeof raw.phase === 'string' ? raw.phase : undefined,
+          reworkCount: typeof raw.rework_count === 'number' ? raw.rework_count : undefined,
+          reworkLimit: typeof raw.rework_limit === 'number' ? raw.rework_limit : undefined,
           preview: typeof raw.preview === 'string' ? raw.preview : undefined,
+          assistantLabel: typeof raw.assistant_label === 'string' ? raw.assistant_label : undefined,
+          assistantPurpose: typeof raw.assistant_purpose === 'string' ? raw.assistant_purpose : undefined,
+          assistantDecision: typeof raw.assistant_decision === 'string' ? raw.assistant_decision : undefined,
+          assistantDetail: typeof raw.assistant_detail === 'string' ? raw.assistant_detail : undefined,
           content: String(raw.content || JSON.stringify(raw)),
           type:
             raw.type === 'agent_start' ||
@@ -218,6 +297,8 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     isConnected: false,
     connectionError: null,
     sprintId: null,
+    memoryHits: 0,
+    lastRetro: null,
 
     addMessage: (message) =>
       set((state) => {
@@ -244,6 +325,9 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             currentActivity: '',
             color,
             lastSeen: new Date().toISOString(),
+            lastTaskTitle: undefined,
+            lastTaskId: undefined,
+            lastSemanticType: undefined,
           }
           agentStates[role] = Object.assign(
             defaults,
@@ -258,27 +342,52 @@ export const useAgentStore = create<AgentStore>((set, get) => {
             upsertRole(event.agentRole, {
               fsmState: 'active',
               currentActivity: event.status,
+              lastTaskTitle: event.task?.title ?? event.nodeName,
+              lastTaskId: event.task?.id,
+              lastSemanticType: event.semanticType,
             })
             break
           case 'nodeEnd':
             upsertRole(event.agentRole, {
               fsmState: 'waiting',
               currentActivity: '',
+              lastTaskTitle: event.task?.title ?? event.nodeName,
+              lastTaskId: event.task?.id,
+              lastSemanticType: event.semanticType,
             })
             break
           case 'nodeError':
             upsertRole(event.agentRole, {
               fsmState: 'error',
               currentActivity: event.error,
+              lastTaskTitle: event.task?.title ?? event.nodeName,
+              lastTaskId: event.task?.id,
+              lastSemanticType: event.semanticType,
             })
             break
           case 'agentMessage':
             upsertRole(event.agentRole, {
               fsmState: 'active',
               currentActivity: event.content.slice(0, 60),
+              lastTaskTitle: event.task?.title,
+              lastTaskId: event.task?.id,
+              lastSemanticType: event.semanticType,
             })
             break
           // 'system' events don't map to a specific role
+          case 'retrospective': {
+            const retro = event as AgentRetrospectiveEvent
+            const retroEntry: SprintRetro = {
+              completionRate: retro.completionRate,
+              doneTasks: retro.doneTasks,
+              totalTasks: retro.totalTasks,
+              reworkCycles: retro.reworkCycles,
+              blockedTasks: retro.blockedTasks,
+              qaFailures: retro.qaFailures,
+              receivedAt: retro.timestamp,
+            }
+            return { agentStates, rolePalettes: palettes, lastRetro: retroEntry }
+          }
         }
 
         return { agentStates, rolePalettes: palettes }
@@ -288,7 +397,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     setConnected: (connected) => set({ isConnected: connected }),
     setConnectionError: (error) => set({ connectionError: error }),
     setSprintId: (sprintId) => set({ sprintId }),
-    clearMessages: () => set({ messages: [], agentStates: {}, rolePalettes: {} }),
+    clearMessages: () => set({ messages: [], agentStates: {}, rolePalettes: {}, memoryHits: 0, lastRetro: null }),
 
     connect: (sprintId) => {
       const token = ++connectionToken
