@@ -3,7 +3,10 @@ import {
   api,
   type BacklogItem,
   type InitCompanyRequest,
+  type LoginResponse,
+  type RegisterRequest,
 } from '../services/api'
+import { useAuthStore } from '../store/authStore'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
@@ -166,4 +169,36 @@ export function useReportBug() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tickets() })
     },
   })
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export function useLogin() {
+  const setAuth = useAuthStore((s) => s.setAuth)
+  return useMutation<LoginResponse, Error, { email: string; password: string }>({
+    mutationFn: ({ email, password }) => api.login(email, password),
+    onSuccess: (data) => {
+      setAuth(data.access_token, {
+        user_id: data.user_id,
+        email: data.email,
+        role: data.role,
+      })
+    },
+  })
+}
+
+export function useRegister() {
+  return useMutation({
+    mutationFn: (data: RegisterRequest) => api.register(data),
+  })
+}
+
+export function useLogout() {
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const queryClient = useQueryClient()
+  // Returns a callback (not a mutation) because logout is synchronous and local-only
+  return function logout() {
+    queryClient.clear()
+    clearAuth()
+  }
 }

@@ -1,26 +1,43 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
-import Dashboard from './pages/Dashboard'
-import Home from './pages/Home'
-import CompanyNew from './pages/CompanyNew'
-import { SprintWorkspace } from './pages/SprintWorkspace'
-import { GovernancePanel } from './components/GovernancePanel'
-import { AnalyticsDashboard } from './components/AnalyticsDashboard'
-import { SupportBot } from './components/SupportBot'
-import MemorySearch from './pages/MemorySearch'
-import Generate from './pages/Generate'
-import Glassroom from './pages/Glassroom'
-import NotFound from './pages/NotFound'
-import TaskDetails from './pages/TaskDetails'
+import { useAuthStore } from './store/authStore'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
   LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
-  Globe, Database, Code2, Menu, X, Building2
+  Globe, Database, Code2, Menu, X, Building2, LogOut,
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
+
+// ── Lazy page imports ─────────────────────────────────────────────────────────
+
+const Dashboard      = lazy(() => import('./pages/Dashboard'))
+const Home           = lazy(() => import('./pages/Home'))
+const CompanyNew     = lazy(() => import('./pages/CompanyNew'))
+const SprintWorkspaceModule = lazy(() => import('./pages/SprintWorkspace').then(m => ({ default: m.SprintWorkspace })))
+const MemorySearch   = lazy(() => import('./pages/MemorySearch'))
+const Generate       = lazy(() => import('./pages/Generate'))
+const Glassroom      = lazy(() => import('./pages/Glassroom'))
+const NotFound       = lazy(() => import('./pages/NotFound'))
+const TaskDetails    = lazy(() => import('./pages/TaskDetails'))
+const LoginPage      = lazy(() => import('./pages/LoginPage'))
+const RegisterPage   = lazy(() => import('./pages/RegisterPage'))
+const GovernancePanelPage = lazy(() => import('./components/GovernancePanel').then(m => ({ default: m.GovernancePanel })))
+const AnalyticsDashboardPage = lazy(() => import('./components/AnalyticsDashboard').then(m => ({ default: m.AnalyticsDashboard })))
+import { SupportBot } from './components/SupportBot'
+
+// ── Page loader fallback ──────────────────────────────────────────────────────
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+      <span className="w-5 h-5 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
+    </div>
+  )
+}
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -43,6 +60,64 @@ function LanguageSwitcher() {
       <Globe size={14} />
       {next}
     </button>
+  )
+}
+
+// ── User menu ─────────────────────────────────────────────────────────────────
+
+function UserMenu() {
+  const { t } = useTranslation()
+  const user = useAuthStore((s) => s.user)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
+  const [open, setOpen] = useState(false)
+
+  if (!user) return null
+
+  const roleLabel = user.role
+    ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
+    : 'User'
+  const initials = user.email.slice(0, 2).toUpperCase()
+
+  function handleLogout() {
+    setOpen(false)
+    // Clear query cache before clearing auth so in-flight refetches don't 401-loop
+    clearAuth()
+    window.location.replace('/login')
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t('auth.loggedInAs') + ' ' + user.email}
+        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-800 transition-colors"
+      >
+        <span className="w-7 h-7 rounded-full bg-brand-600/30 border border-brand-600/50 flex items-center justify-center text-[11px] font-bold text-brand-300">
+          {initials}
+        </span>
+        <span className="hidden sm:block text-xs text-gray-400 max-w-[120px] truncate">{user.email}</span>
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[180px] card p-1.5 shadow-card-md animate-fade-in">
+            <div className="px-3 py-2 border-b border-surface-700 mb-1">
+              <p className="text-xs font-medium text-white truncate">{user.email}</p>
+              <p className="text-[11px] text-gray-500">{roleLabel}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-300 hover:bg-surface-700 hover:text-white transition-colors"
+            >
+              <LogOut size={14} />
+              {t('auth.logOut')}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -97,6 +172,7 @@ function NavBar() {
       {/* Right side */}
       <div className="ml-auto flex items-center gap-2">
         <LanguageSwitcher />
+        <UserMenu />
 
         {/* Status pill — desktop only */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
@@ -145,26 +221,33 @@ function AppContent() {
       <NavBar />
       <main className="flex-1 overflow-auto">
         <ErrorBoundary>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/companies/new" element={<CompanyNew />} />
-            <Route path="/workspace/:id" element={<SprintWorkspace />} />
-            <Route
-              path="/governance"
-              element={<div className="page-container"><GovernancePanel /></div>}
-            />
-            <Route
-              path="/analytics"
-              element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
-            />
-            <Route path="/memory" element={<MemorySearch />} />
-            <Route path="/generate" element={<Generate />} />
-            <Route path="/glassroom" element={<Glassroom />} />
-            <Route path="/workspace/:sprintId/task/:taskId" element={<TaskDetails />} />
-            <Route path="/task/:taskId" element={<TaskDetails />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+
+              {/* Protected routes */}
+              <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/companies/new" element={<ProtectedRoute><CompanyNew /></ProtectedRoute>} />
+              <Route path="/workspace/:id" element={<ProtectedRoute><SprintWorkspaceModule /></ProtectedRoute>} />
+              <Route
+                path="/governance"
+                element={<ProtectedRoute><div className="page-container"><GovernancePanelPage /></div></ProtectedRoute>}
+              />
+              <Route
+                path="/analytics"
+                element={<ProtectedRoute><div className="page-container"><AnalyticsDashboardPage sprintId={activeSprintId ?? 0} /></div></ProtectedRoute>}
+              />
+              <Route path="/memory" element={<ProtectedRoute><MemorySearch /></ProtectedRoute>} />
+              <Route path="/generate" element={<ProtectedRoute><Generate /></ProtectedRoute>} />
+              <Route path="/glassroom" element={<ProtectedRoute><Glassroom /></ProtectedRoute>} />
+              <Route path="/workspace/:sprintId/task/:taskId" element={<ProtectedRoute><TaskDetails /></ProtectedRoute>} />
+              <Route path="/task/:taskId" element={<ProtectedRoute><TaskDetails /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
       <SupportBot />

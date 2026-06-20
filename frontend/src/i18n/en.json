@@ -485,6 +485,37 @@
     "networkError": "Network error — check your connection",
     "unknownError": "An unexpected error occurred"
   },
+  "home": {
+    "subtitle": "Launch your workflow quickly. Start by creating a company, then run your sprint autopilot.",
+    "newCompanyDesc": "Create or configure the company profile and agent team.",
+    "dashboardDesc": "Kanban + control panel + operational sprint dashboard.",
+    "liveExecution": "Live execution for",
+    "agentsRoomDesc": "Open live multi-agent execution and monitoring.",
+    "generateDesc": "Describe a feature and let the team generate implementation tasks.",
+    "calendarHint": "Need planning first? Open the sprint board and calendar view.",
+    "openDashboard": "Open Dashboard"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "fullName": "Full name",
+    "login": "Sign in",
+    "loggingIn": "Signing in…",
+    "register": "Create account",
+    "registering": "Creating account…",
+    "loginSubtitle": "Sign in to your workspace",
+    "registerSubtitle": "Create your account",
+    "loginError": "Invalid email or password",
+    "registerError": "Registration failed. Please try again.",
+    "registerSuccess": "Account created! Redirecting to login…",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "passwordHint": "Minimum 8 characters",
+    "logOut": "Sign out",
+    "loggedInAs": "Signed in as"
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
@@ -506,6 +537,7 @@
     "yes": "Yes",
     "no": "No",
     "na": "N/A",
+    "optional": "optional",
     "copyId": "Copy ID",
     "learnMore": "Learn more"
   }

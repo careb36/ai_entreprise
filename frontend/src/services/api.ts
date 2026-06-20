@@ -1,6 +1,29 @@
+import { useAuthStore } from '../store/authStore'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
+
+// ── Auth header helper ────────────────────────────────────────────────────────
+
+function authHeader(): Record<string, string> {
+  const token = useAuthStore.getState().token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+// Called on 401 — clears auth and redirects to /login
+function handleUnauthorized() {
+  // Use replace so Back doesn't loop back to the protected page.
+  // Guard against redirect loops on /login and /register (401 expected there).
+  if (
+    typeof window !== 'undefined' &&
+    !window.location.pathname.startsWith('/login') &&
+    !window.location.pathname.startsWith('/register')
+  ) {
+    useAuthStore.getState().clearAuth()
+    window.location.replace('/login')
+  }
+}
 
 // ── Error types ───────────────────────────────────────────────────────────────
 
@@ -155,6 +178,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeader(),
         ...fetchOptions.headers,
       },
     })
@@ -162,6 +186,10 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
     clearTimeout(timer)
 
     if (!response.ok) {
+      if (response.status === 401) {
+        handleUnauthorized()
+        throw new ApiError(401, friendlyMessage(401))
+      }
       if (response.status >= 500 && _attempt < MAX_RETRIES) {
         await delay(600 * (_attempt + 1))
         return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
@@ -189,6 +217,28 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// ── Auth types ────────────────────────────────────────────────────────────────
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  user_id: number
+  email: string
+  role: string
+}
+
+export interface RegisterRequest {
+  email: string
+  password: string
+  full_name?: string
+}
+
+export interface RegisterResponse {
+  user_id: number
+  email: string
+  message: string
 }
 
 // ── Public API client ─────────────────────────────────────────────────────────
@@ -259,5 +309,17 @@ export const api = {
   // Support
   getTickets: () => api.get<any[]>('/v1/tickets'),
   reportBug: (data: any) => api.post<any>('/v1/report_bug', data),
-}
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  login: (email: string, password: string) =>
+    // OAuth2 PasswordRequestForm requires form-encoded body, not JSON
+    fetchApi<LoginResponse>('/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: email, password }).toString(),
+    }),
+
+  register: (data: RegisterRequest) =>
+    api.post<RegisterResponse>('/v1/auth/register', data),
+}

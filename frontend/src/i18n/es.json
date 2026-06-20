@@ -485,6 +485,37 @@
     "networkError": "Error de red — verifica tu conexión",
     "unknownError": "Ocurrió un error inesperado"
   },
+  "home": {
+    "subtitle": "Lanza tu flujo de trabajo rápidamente. Comienza creando una compañía y luego ejecuta tu sprint en piloto automático.",
+    "newCompanyDesc": "Crea o configura el perfil de la compañía y el equipo de agentes.",
+    "dashboardDesc": "Kanban + panel de control + panel operacional del sprint.",
+    "liveExecution": "Ejecución en vivo para",
+    "agentsRoomDesc": "Abre la ejecución multiagente en tiempo real y monitoreo.",
+    "generateDesc": "Describe una funcionalidad y deja que el equipo genere las tareas de implementación.",
+    "calendarHint": "¿Necesitas planificar primero? Abre el tablero del sprint y la vista de calendario.",
+    "openDashboard": "Abrir Panel"
+  },
+  "auth": {
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "fullName": "Nombre completo",
+    "login": "Iniciar sesión",
+    "loggingIn": "Iniciando sesión…",
+    "register": "Crear cuenta",
+    "registering": "Creando cuenta…",
+    "loginSubtitle": "Accede a tu espacio de trabajo",
+    "registerSubtitle": "Crea tu cuenta",
+    "loginError": "Email o contraseña incorrectos",
+    "registerError": "El registro falló. Por favor intenta de nuevo.",
+    "registerSuccess": "¡Cuenta creada! Redirigiendo al inicio de sesión…",
+    "noAccount": "¿No tienes cuenta?",
+    "haveAccount": "¿Ya tienes cuenta?",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "passwordHint": "Mínimo 8 caracteres",
+    "logOut": "Cerrar sesión",
+    "loggedInAs": "Sesión iniciada como"
+  },
   "common": {
     "loading": "Cargando...",
     "error": "Ocurrió un error",
@@ -506,6 +537,7 @@
     "yes": "Sí",
     "no": "No",
     "na": "N/D",
+    "optional": "opcional",
     "copyId": "Copiar ID",
     "learnMore": "Más información"
   }
