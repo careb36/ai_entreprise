@@ -4,6 +4,13 @@ VS Code Daemon - Enterprise Edition (v2026.4)
 Subscribes to:
 - workspace.generate: Write files and open VS Code
 - workspace.execute: Execute shell commands and return results (OpenHands style)
+
+OpenTelemetry tracing is enabled when ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set
+(e.g. ``http://jaeger:4318``).  Each NATS message handler is wrapped in its
+own span so traces link the daemon's file-write and shell-execute operations to
+the upstream agent calls that triggered them, giving end-to-end visibility in
+Jaeger.  When the OTel endpoint is not configured the daemon operates normally
+without any tracing overhead.
 """
 
 import os
@@ -41,6 +48,57 @@ PROTECTED_ROOT_DOCS = {
     "USER_GUIDE.es.md",
     "CHANGELOG.md",
 }
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry initialisation (optional — no-ops when endpoint is absent)
+# ---------------------------------------------------------------------------
+
+def _setup_telemetry():
+    """
+    Initialise an OTLP/HTTP TracerProvider when ``OTEL_EXPORTER_OTLP_ENDPOINT``
+    is configured.  Returns a no-op tracer if the env var is absent or if the
+    ``opentelemetry`` packages are not installed, so the daemon never fails to
+    start because of a missing OTel dependency.
+    """
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        logger.info("OTEL_EXPORTER_OTLP_ENDPOINT not set — tracing disabled")
+        from opentelemetry import trace as _trace
+        return _trace.get_tracer(__name__)
+
+    try:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+        resource = Resource.create({SERVICE_NAME: "fabrique-vscode-daemon"})
+        provider = TracerProvider(resource=resource)
+        exporter = OTLPSpanExporter(endpoint=f"{endpoint.rstrip('/')}/v1/traces")
+        provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        logger.info("OTel tracing enabled — exporting to %s", endpoint)
+        return trace.get_tracer(__name__)
+    except ImportError:
+        logger.warning(
+            "opentelemetry packages not installed — tracing disabled. "
+            "Install opentelemetry-sdk and opentelemetry-exporter-otlp-proto-http."
+        )
+        from opentelemetry import trace as _trace
+        return _trace.get_tracer(__name__)
+    except Exception as exc:
+        logger.error("Failed to initialise OTel tracer: %s", exc)
+        from opentelemetry import trace as _trace
+        return _trace.get_tracer(__name__)
+
+
+tracer = _setup_telemetry()
+
+
+# ---------------------------------------------------------------------------
+# Workspace helpers
+# ---------------------------------------------------------------------------
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -231,37 +289,61 @@ async def handle_msg(nc, msg):
     2. Publish the command output to the Glassroom NATS subject so the frontend
        SSE stream receives it in real-time.
     3. Optionally reply with the full result dict.
+
+    Each invocation is wrapped in an OpenTelemetry span so the operation is
+    visible in Jaeger as a child of the upstream agent trace when a
+    ``traceparent`` header is present in the NATS message headers.
     """
     subject = msg.subject
     data = json.loads(msg.data.decode())
     reply_to = msg.reply
-    
-    workspace_path = data.get("workspace_root", confirm_workspace_path())
-    
-    if subject == "workspace.generate":
-        # Write files
-        files = data.get("files", [])
-        write_results = write_files(workspace_path, files)
 
-        response = {"ok": True, "files": len(write_results), "path": workspace_path}
-        if reply_to:
-            await nc.publish(reply_to, json.dumps(response).encode())
-            
-    elif subject == "workspace.execute":
-        cmd = data.get("command")
-        result = execute_shell_command(cmd, workspace_path)
-        
-        sprint_id = data.get("sprint_id", "1")
-        if not _is_assistant_command(cmd):
-            await nc.publish(f"glassroom.{sprint_id}", json.dumps({
-                "agent": "System",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "content": _summarize_command_result(cmd, result),
-                "type": "status"
-            }).encode())
-        
-        if reply_to:
-            await nc.publish(reply_to, json.dumps(result).encode())
+    workspace_path = data.get("workspace_root", confirm_workspace_path())
+
+    # Extract optional W3C traceparent from NATS headers for trace propagation.
+    traceparent = None
+    if msg.headers:
+        traceparent = msg.headers.get("traceparent")
+
+    span_attrs = {
+        "messaging.system": "nats",
+        "messaging.destination": subject,
+        "workspace.path": workspace_path,
+    }
+
+    with tracer.start_as_current_span(
+        f"daemon.{subject}",
+        attributes=span_attrs,
+    ) as span:
+        if subject == "workspace.generate":
+            files = data.get("files", [])
+            span.set_attribute("workspace.file_count", len(files))
+            write_results = write_files(workspace_path, files)
+            span.set_attribute("workspace.files_written",
+                               sum(1 for r in write_results if r.get("status") == "written"))
+
+            response = {"ok": True, "files": len(write_results), "path": workspace_path}
+            if reply_to:
+                await nc.publish(reply_to, json.dumps(response).encode())
+
+        elif subject == "workspace.execute":
+            cmd = data.get("command")
+            span.set_attribute("workspace.command", (cmd or "")[:200])
+            result = execute_shell_command(cmd, workspace_path)
+            span.set_attribute("workspace.exit_code", result.get("exit_code", -1))
+            span.set_attribute("workspace.success", bool(result.get("success")))
+
+            sprint_id = data.get("sprint_id", "1")
+            if not _is_assistant_command(cmd):
+                await nc.publish(f"glassroom.{sprint_id}", json.dumps({
+                    "agent": "System",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "content": _summarize_command_result(cmd, result),
+                    "type": "status"
+                }).encode())
+
+            if reply_to:
+                await nc.publish(reply_to, json.dumps(result).encode())
 
 async def main():
     logger.info(f"Connecting to NATS at {NATS_URL}...")

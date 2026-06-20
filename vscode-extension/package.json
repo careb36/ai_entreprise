@@ -16,7 +16,8 @@
     "onCommand:factory.runTask",
     "onCommand:factory.showMemory",
     "onCommand:factory.startSprint",
-    "onCommand:factory.streamGlassroom"
+    "onCommand:factory.streamGlassroom",
+    "onCommand:factory.glassroomPanel"
   ],
   "main": "./extension",
   "contributes": {
@@ -39,7 +40,11 @@
       },
       {
         "command": "factory.streamGlassroom",
-        "title": "Factory: Stream Glassroom Events"
+        "title": "Factory: Stream Glassroom Events (terminal)"
+      },
+      {
+        "command": "factory.glassroomPanel",
+        "title": "Factory: Open GlassRoom Panel"
       }
     ],
     "statusBar": {

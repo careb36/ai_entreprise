@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+* **Test suite (`backend/tests/`):** 75 pytest tests covering all new Phase 4 modules.
+  - `test_crypto.py` (9 tests) — Fernet round-trip, unique tokens, wrong key, tampered ciphertext, plaintext fallback, invalid key.
+  - `test_auth_dependencies.py` (14 tests) — `create_access_token` claims, `get_current_user` with expired/tampered/wrong-secret/missing-claim tokens, `require_roles` Owner/Manager/Viewer access matrix.
+  - `test_company_service.py` (12 tests) — `init_company` persistence (company, sprint, backlog, outbox, credentials, scope), `approve_task` approval/rejection/HitL feedback/OutboxEvent, `get_quotas`.
+  - `test_sprint_planner.py` (21 tests) — deterministic helpers (`_build_stack_summary`, `_build_team_roster`, `_find_po_agent`, `_ensure_execution_team`, `_filter_fallback_tasks`, `_build_execution_fallback`, `_build_self_improvement_fallback`, `build_self_improvement_objective`) and `plan_foundation_sprint` fallback paths.
+  - `test_auth_router.py` (10 tests) — `POST /v1/auth/register`, `POST /v1/auth/login` (valid, wrong password, unknown user, JWT claim check), `GET /health` public access, JWT-protection of `/v1/enterprise/quotas` and `/v1/company/invite`.
+  - `conftest.py` — shared in-memory SQLite engine fixture with per-test rollback isolation.
+  - `python-multipart ^0.0.9` added to `pyproject.toml` (required by FastAPI's OAuth2 `PasswordRequestForm`).
+* **VS Code Extension — native GlassRoom WebView panel (`vscode-extension/extension.ts`):**
+  - New command `factory.glassroomPanel` opens a singleton `vscode.WebviewPanel` (column Two) that connects directly to `GET /v1/glassroom/stream` via the browser-native `EventSource` API inside the WebView.
+  - Renders agent events as colour-coded cards (role → colour palette), auto-scrolls to the latest message, and provides Pause/Clear controls.
+  - Auto-reconnects when the SSE connection drops; accepts a `reconnect` message from the extension host to switch sprints without panel teardown.
+  - The legacy `factory.streamGlassroom` terminal+curl command is preserved as a fallback and renamed "Stream Glassroom Events (terminal)" in the command palette.
+  - `package.json`: new `factory.glassroomPanel` command + activation event registered.
+* **OTel instrumentation for `vscode-daemon/daemon.py`:**
+  - New `_setup_telemetry()` function initialises a `TracerProvider` with `BatchSpanProcessor` and `OTLPSpanExporter` when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Service name: `fabrique-vscode-daemon`.
+  - Each NATS handler (`workspace.generate`, `workspace.execute`) is wrapped in a span with messaging/workspace attributes (`file_count`, `files_written`, `command`, `exit_code`, `success`).
+  - Degrades gracefully (logs a warning, uses no-op tracer) when the `opentelemetry` packages are absent — daemon startup is never blocked.
+  - Completes full end-to-end trace coverage: backend agent → NATS → daemon → Jaeger.
+
 * **Fernet credential encryption (`backend/app/crypto.py`):** `ProjectCredential.encrypted_value` is now encrypted at rest using AES-128-CBC + HMAC-SHA256 (Fernet). `encrypt_value()` / `decrypt_value()` utilities handle transparent plaintext fallback when `FERNET_SECRET_KEY` is absent (with a logged warning). `cryptography ^48.0.1` added to `pyproject.toml`.
 * **HitL feedback propagation:** `POST /v1/approve_task` now operates on `BacklogItem.id` directly. On rejection, the item is reset to `todo` and a `task.assign` OutboxEvent is published containing the reviewer's `hitl_feedback` text. The task worker injects that feedback as a `## Human Review Feedback` section in the agent prompt, and emits a `task.hitl_rework` GlassRoom event.
 * **X-Business-Unit-ID propagation in task worker:** `task_worker._execute_task()` now accepts `bu_id` and forwards it to `LLMProxyClient.chat()` as the `X-Business-Unit-ID` header so per-unit token budgets are correctly enforced for agent-generated calls.
