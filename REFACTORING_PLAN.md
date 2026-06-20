@@ -35,15 +35,54 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 
 ---
 
-## 🛡️ Fase 4: Governance y Observabilidad — 🚧 PRÓXIMAMENTE
+## 🛡️ Fase 4: Governance y Observabilidad — 🔄 EN PROGRESO
 **Objetivo:** Control de costos y trazabilidad total.
 
-1.  **Cuotas en Tiempo Real:** 
-    *   Validar `token_quota` en cada llamada al LLM Proxy. Frenar la ejecución si se supera el límite de la Business Unit.
-2.  **OpenTelemetry Tracing:** 
-    *   Instrumentar los nodos de LangGraph para ver la latencia y fallos en Jaeger/SigNoz.
-3.  **Human-in-the-Loop:** 
-    *   Mejorar el endpoint `/approve_task` para permitir feedback textual del PO humano que el Agente deba procesar.
+1.  **Cuotas en Tiempo Real:** ✅ COMPLETADO
+    *   `enforce_business_unit_quota()` en `llm-proxy/app.py` frena llamadas al LLM cuando `token_quota_used >= token_quota_limit` (HTTP 429).
+    *   `track_usage_in_db()` actualiza el contador tras cada respuesta exitosa.
+    *   El modelo `BusinessUnit` en `backend/app/models/company.py` expone `token_quota_limit` y `token_quota_used`.
+    *   **Pendiente:** el `task_worker` debe propagar el `X-Business-Unit-ID` header en todas las llamadas al proxy.
+
+2.  **OpenTelemetry Tracing:** ✅ COMPLETADO (instrumentación) / ⬜ PENDIENTE (despliegue)
+    *   `backend/telemetry.py` configura `TracerProvider` con exportador OTLP/HTTP.
+    *   `llm-proxy/app.py` instrumentado con `FlaskInstrumentor` y `RequestsInstrumentor`.
+    *   `backend/agents/graph.py` usa `get_tracer(__name__)` en los nodos de LangGraph.
+    *   ✅ **NUEVO:** Jaeger `all-in-one` añadido a `docker-compose.yml` (puerto 16686 UI, 4318 OTLP).
+    *   ✅ **NUEVO:** `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318` inyectado en `backend` y `llm-proxy`.
+    *   **Pendiente:** instrumentar `vscode-daemon` con OTel para trazas end-to-end completas.
+
+3.  **Human-in-the-Loop mejorado:** 🔄 PARCIALMENTE COMPLETADO
+    *   `TaskQueue` model y `POST /v1/approve_task` existen y funcionan.
+    *   El campo `feedback` llega al endpoint pero no se reenvía al agente para que lo procese.
+    *   **Pendiente (próxima tarea):** publicar el feedback textual como mensaje adicional en el contexto del agente al re-encolarse la tarea tras rechazo.
+
+---
+
+## 🗂️ Deuda Técnica Identificada
+**Estos elementos no bloquean el sistema pero deben abordarse en sprints dedicados.**
+
+1.  **Modelos LLM desactualizados en `model_factory.py`:**
+    *   El mapa `ROLE_MODEL_MAP` usa `gemini-1.5-pro` / `gemini-1.5-flash`.
+    *   El proxy ya soporta `gemini-2.5-pro` y `gemini-2.5-flash` con resolución dinámica.
+    *   Actualizar las entradas del mapa para que los agentes usen modelos más capaces y económicos.
+
+2.  **Autenticación JWT no implementada:**
+    *   `auth.py` hace hash de contraseñas con bcrypt pero los endpoints no requieren token.
+    *   Toda la API es públicamente accesible mientras no haya JWT/session middleware.
+    *   Añadir `python-jose` + middleware de autenticación en los routers sensibles.
+
+3.  **Sin suite de tests:**
+    *   Sólo existe `backend/tests/test_glassroom_sse.py`.
+    *   Añadir tests unitarios para `CompanyService`, `SprintPlanner` y los routers críticos con `pytest` + `httpx`.
+
+4.  **Credenciales sin cifrado real:**
+    *   `ProjectCredential.encrypted_value` guarda un texto plano o referencia sin Vault/KMS.
+    *   Integrar `python-cryptography` (Fernet) como mínimo, o añadir soporte para HashiCorp Vault.
+
+5.  **VS Code Extension mínima:**
+    *   `vscode-extension/extension.ts` existe pero no está integrada con el daemon NATS.
+    *   Conectar la extensión para mostrar eventos del GlassRoom directamente en VS Code.
 
 ---
 

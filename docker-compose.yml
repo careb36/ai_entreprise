@@ -59,6 +59,22 @@ services:
       retries: 10
       start_period: 30s
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: factory-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4318:4318"     # OTLP/HTTP collector
+    networks:
+      - factory-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   llm-proxy:
     build:
       context: ./llm-proxy
@@ -73,12 +89,16 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       PROXY_PORT: 5100
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "5100:5100"
     volumes:
       - ./llm-proxy/app.py:/app/app.py
     networks:
       - factory-network
+    depends_on:
+      jaeger:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5100/health')"]
       interval: 10s
@@ -103,6 +123,7 @@ services:
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8000:8000"
     volumes:
@@ -123,6 +144,8 @@ services:
       postgres:
         condition: service_healthy
       neo4j:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
 
   vscode-daemon:

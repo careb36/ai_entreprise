@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+* **OpenTelemetry / Jaeger integration:** `docker-compose.yml` now includes a `jaeger:1.58 all-in-one` service (UI on port 16686, OTLP/HTTP collector on port 4318). Both `backend` and `llm-proxy` automatically export traces via `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`, making the full LangGraph → LLM Proxy → Gemini/DeepSeek trace visible in the Jaeger UI without any local configuration.
+
+### Fixed
+* **`backend/llm/model_factory.py`:** Added missing `Any` import from `typing`. The `create_completion` function referenced `Dict[str, Any]` but `Any` was not in the import list, causing a `NameError` at runtime when `bu_id` was provided.
+
+### Changed
+* **`REFACTORING_PLAN.md`:** Updated with accurate Phase 4 status, detailed technical debt inventory, and concrete next-step action items for each pending item.
+
 ---
 
 ## [0.1.0] - 2023-10-27

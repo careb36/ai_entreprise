@@ -21,7 +21,7 @@ so API keys and token budgets are enforced centrally.
 
 import os
 import logging
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 from enum import Enum
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
