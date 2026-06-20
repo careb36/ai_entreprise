@@ -141,7 +141,13 @@ async def update_me(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if req.full_name is not None:
-        user.full_name = req.full_name.strip()
+        trimmed = req.full_name.strip()
+        if len(trimmed) > 80:
+            raise HTTPException(
+                status_code=422,
+                detail="full_name must be 80 characters or fewer.",
+            )
+        user.full_name = trimmed
     session.add(user)
     session.commit()
     session.refresh(user)

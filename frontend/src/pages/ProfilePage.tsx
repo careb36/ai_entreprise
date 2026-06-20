@@ -8,6 +8,10 @@ import { useAuthStore } from '../store/authStore'
 import { useMe, useUpdateMe } from '../hooks/useQueries'
 import { getInitials } from '../lib/avatar'
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MAX_FULL_NAME_LENGTH = 80
+
 // ── Role badge colours ────────────────────────────────────────────────────────
 
 const ROLE_STYLE: Record<string, string> = {
@@ -41,6 +45,7 @@ export default function ProfilePage() {
   const [saved, setSaved]       = useState(false)
   const [fieldError, setFieldError] = useState<string | null>(null)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef  = useRef(true)
 
   // Seed the input from the live /me response (preferred) or the store
   useEffect(() => {
@@ -51,9 +56,11 @@ export default function ProfilePage() {
     }
   }, [me, user])
 
-  // Clear the "saved" timer on unmount to avoid state updates on an unmounted component
+  // Track mount state and clear pending timer on unmount
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
+      isMountedRef.current = false
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
     }
   }, [])
@@ -68,7 +75,7 @@ export default function ProfilePage() {
     setSaved(false)
 
     const trimmed = fullName.trim()
-    if (trimmed.length > 80) {
+    if (trimmed.length > MAX_FULL_NAME_LENGTH) {
       setFieldError(t('profile.fullNameTooLong'))
       return
     }
@@ -77,9 +84,11 @@ export default function ProfilePage() {
       { full_name: trimmed },
       {
         onSuccess: () => {
-          setSaved(true)
           if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-          savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
+          savedTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) setSaved(false)
+          }, 3000)
+          setSaved(true)
         },
         onError: () => {
           setFieldError(t('profile.saveError'))
@@ -155,7 +164,7 @@ export default function ProfilePage() {
             onChange={(e) => { setFullName(e.target.value); setFieldError(null) }}
             className="input w-full"
             placeholder={t('profile.fullNamePlaceholder')}
-            maxLength={80}
+            maxLength={MAX_FULL_NAME_LENGTH}
           />
         </div>
 

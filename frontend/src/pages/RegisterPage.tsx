@@ -8,15 +8,24 @@ import { api } from '../services/api'
 
 type StrengthLevel = 0 | 1 | 2 | 3 | 4
 
+// Module-level regex constants — compiled once, not on every keystroke
+const RE_UPPER   = /[A-Z]/
+const RE_LOWER   = /[a-z]/
+const RE_DIGIT   = /[0-9]/
+const RE_SPECIAL = /[^A-Za-z0-9]/
+
+// Number of bars must match the max StrengthLevel (4)
+const NUM_BARS = 4
+
 function calcStrength(pw: string): StrengthLevel {
   if (!pw) return 0
   let score = 0
   if (pw.length >= 8)  score++
   if (pw.length >= 12) score++
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++
-  if (/[0-9]/.test(pw)) score++
-  if (/[^A-Za-z0-9]/.test(pw)) score++
-  return Math.min(score, 4) as StrengthLevel
+  if (RE_UPPER.test(pw) && RE_LOWER.test(pw)) score++
+  if (RE_DIGIT.test(pw)) score++
+  if (RE_SPECIAL.test(pw)) score++
+  return Math.min(score, NUM_BARS) as StrengthLevel
 }
 
 const STRENGTH_COLOURS: Record<StrengthLevel, string> = {
@@ -51,7 +60,7 @@ function PasswordStrengthBar({ password }: { password: string }) {
   return (
     <div className="space-y-1 mt-1.5">
       <div className="flex gap-1">
-        {([1, 2, 3, 4] as const).map((i) => (
+        {Array.from({ length: NUM_BARS }, (_, i) => i + 1).map((i) => (
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
