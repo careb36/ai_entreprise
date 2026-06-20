@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change-me-in-production"   # Override with a strong random secret
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480         # 8 hours
+
+    # ---------------------------------------------------------------------------
+    # Credential Encryption — Fernet symmetric key for ProjectCredential values.
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # ---------------------------------------------------------------------------
+    FERNET_SECRET_KEY: Optional[str] = None   # URL-safe base64-encoded 32-byte key
     # ---------------------------------------------------------------------------
     # Audit — filesystem path for append-only JSONL audit logs
     # ---------------------------------------------------------------------------

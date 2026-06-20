@@ -42,20 +42,21 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
     *   `enforce_business_unit_quota()` en `llm-proxy/app.py` frena llamadas al LLM cuando `token_quota_used >= token_quota_limit` (HTTP 429).
     *   `track_usage_in_db()` actualiza el contador tras cada respuesta exitosa.
     *   El modelo `BusinessUnit` en `backend/app/models/company.py` expone `token_quota_limit` y `token_quota_used`.
-    *   **Pendiente:** el `task_worker` debe propagar el `X-Business-Unit-ID` header en todas las llamadas al proxy.
+    *   ✅ **NUEVO:** `task_worker._execute_task()` propaga el header `X-Business-Unit-ID` al proxy vía `bu_id` extraído del NATS payload `task.assign`.
 
-2.  **OpenTelemetry Tracing:** ✅ COMPLETADO (instrumentación) / ⬜ PENDIENTE (despliegue)
+2.  **OpenTelemetry Tracing:** ✅ COMPLETADO (instrumentación) / ✅ DESPLEGADO (Jaeger)
     *   `backend/telemetry.py` configura `TracerProvider` con exportador OTLP/HTTP.
     *   `llm-proxy/app.py` instrumentado con `FlaskInstrumentor` y `RequestsInstrumentor`.
     *   `backend/agents/graph.py` usa `get_tracer(__name__)` en los nodos de LangGraph.
-    *   ✅ **NUEVO:** Jaeger `all-in-one` añadido a `docker-compose.yml` (puerto 16686 UI, 4318 OTLP).
-    *   ✅ **NUEVO:** `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318` inyectado en `backend` y `llm-proxy`.
+    *   ✅ Jaeger `all-in-one` añadido a `docker-compose.yml` (puerto 16686 UI, 4318 OTLP).
+    *   ✅ `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318` inyectado en `backend` y `llm-proxy`.
     *   **Pendiente:** instrumentar `vscode-daemon` con OTel para trazas end-to-end completas.
 
-3.  **Human-in-the-Loop mejorado:** 🔄 PARCIALMENTE COMPLETADO
+3.  **Human-in-the-Loop mejorado:** ✅ COMPLETADO
     *   `TaskQueue` model y `POST /v1/approve_task` existen y funcionan.
-    *   El campo `feedback` llega al endpoint pero no se reenvía al agente para que lo procese.
-    *   **Pendiente (próxima tarea):** publicar el feedback textual como mensaje adicional en el contexto del agente al re-encolarse la tarea tras rechazo.
+    *   ✅ **NUEVO:** Al rechazar una tarea, `approve_task` reinicia el `BacklogItem` a `todo` y publica un evento `task.assign` con `hitl_feedback` en el payload NATS.
+    *   ✅ **NUEVO:** `task_worker._execute_task()` inyecta el feedback humano en el prompt del agente con una sección `## Human Review Feedback` prominente antes del contexto de memoria.
+    *   ✅ **NUEVO:** El GlassRoom recibe un evento `task.hitl_rework` cuando una tarea es re-procesada tras rechazo humano.
 
 ---
 
@@ -63,9 +64,8 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 **Estos elementos no bloquean el sistema pero deben abordarse en sprints dedicados.**
 
 1.  **Modelos LLM desactualizados en `model_factory.py`:**
-    *   El mapa `ROLE_MODEL_MAP` usa `gemini-1.5-pro` / `gemini-1.5-flash`.
-    *   El proxy ya soporta `gemini-2.5-pro` y `gemini-2.5-flash` con resolución dinámica.
-    *   Actualizar las entradas del mapa para que los agentes usen modelos más capaces y económicos.
+    *   ✅ **RESUELTO:** `ROLE_MODEL_MAP` actualizado de `gemini-1.5-pro` / `gemini-1.5-flash` → `gemini-2.5-pro` / `gemini-2.5-flash`.
+    *   El proxy ya soportaba resolución dinámica — sólo era necesario actualizar el mapa.
 
 2.  **~~Autenticación JWT no implementada~~:** ✅ COMPLETADO
     *   `POST /v1/auth/login` genera tokens HS256. `get_current_user` + `require_roles()` protegen todos los endpoints sensibles.
@@ -75,9 +75,11 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
     *   Sólo existe `backend/tests/test_glassroom_sse.py`.
     *   Añadir tests unitarios para `CompanyService`, `SprintPlanner` y los routers críticos con `pytest` + `httpx`.
 
-4.  **Credenciales sin cifrado real:**
-    *   `ProjectCredential.encrypted_value` guarda un texto plano o referencia sin Vault/KMS.
-    *   Integrar `python-cryptography` (Fernet) como mínimo, o añadir soporte para HashiCorp Vault.
+4.  **~~Credenciales sin cifrado real~~:** ✅ COMPLETADO
+    *   `backend/app/crypto.py` implementa cifrado Fernet simétrico (AES-128-CBC con HMAC-SHA256).
+    *   `ProjectCredential.encrypted_value` ahora almacena el token Fernet; fallback a `plaintext:<value>` si `FERNET_SECRET_KEY` no está configurado.
+    *   `FERNET_SECRET_KEY` añadido a `Settings`; generación con `Fernet.generate_key()`.
+    *   `cryptography ^48.0.1` añadido a `pyproject.toml`.
 
 5.  **VS Code Extension mínima:**
     *   `vscode-extension/extension.ts` existe pero no está integrada con el daemon NATS.

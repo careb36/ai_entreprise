@@ -243,6 +243,8 @@ def _execute_task(
     external_advice: Optional[str] = None,
     memory_context: Optional[str] = None,
     completed_tasks_context: Optional[str] = None,
+    bu_id: Optional[int] = None,
+    hitl_feedback: Optional[str] = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -268,6 +270,14 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
     )
+
+    if hitl_feedback:
+        user_prompt += (
+            "\n\n## Human Review Feedback (Previous Attempt Rejected)\n"
+            "A human reviewer rejected the previous deliverable for this task. "
+            "You **must** address all points raised before producing the new deliverable.\n\n"
+            f"{hitl_feedback}"
+        )
 
     if memory_context:
         user_prompt += (
@@ -307,6 +317,7 @@ def _execute_task(
         ],
         model=model,
         role=role,
+        bu_id=bu_id,
     )
 
     if result.get("error"):
@@ -1483,6 +1494,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             data = data_from_nats or json.loads(msg.data.decode())
             backlog_item_id = data.get("backlog_item_id")
             sprint_id = data.get("sprint_id")
+            bu_id: Optional[int] = data.get("bu_id") or data.get("business_unit_id")
+            hitl_feedback: Optional[str] = data.get("hitl_feedback")
 
             if not backlog_item_id:
                 logger.warning("task.assign message missing backlog_item_id: %s", data)
@@ -1518,6 +1531,21 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             await asyncio.to_thread(
                 _update_item_status, item["id"], "in_progress"
             )
+
+            if hitl_feedback:
+                await _publish_glassroom(nats_client, sprint["id"], {
+                    "type": "status",
+                    "semantic_type": "task.hitl_rework",
+                    "source": "task_worker",
+                    "agent": agent.get("name") or agent["role"],
+                    "role": agent["role"],
+                    "task_id": item["id"],
+                    "task_status": "in_progress",
+                    "phase": "hitl_rework",
+                    "task": item["title"],
+                    "message": f"🔄 Re-working task after human rejection: {item['title']}",
+                    "hitl_feedback": hitl_feedback,
+                })
 
             await _publish_glassroom(nats_client, sprint["id"], {
                 "type": "agent_start",
@@ -1597,6 +1625,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             # 3. Call the LLM (in a thread).
             deliverable = await asyncio.to_thread(
                 _execute_task, item, agent, sprint["name"], external_advice, memory_ctx, completed_ctx,
+                bu_id, hitl_feedback,
             )
             deliverable = await asyncio.to_thread(_sanitize_deliverable_text, deliverable)
 

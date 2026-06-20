@@ -183,6 +183,13 @@ async def startup():
             "before exposing this service to any network."
         )
 
+    if not settings.FERNET_SECRET_KEY:
+        logger.warning(
+            "⚠️  FERNET_SECRET_KEY is not configured. ProjectCredential values will be "
+            "stored as plain text. Generate a key with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
+
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
     # even when the NATS broker is not yet running.

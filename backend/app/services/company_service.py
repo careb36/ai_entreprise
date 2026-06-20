@@ -22,6 +22,7 @@ from models import (
     OutboxEvent, TaskQueue, AuditLog, BusinessUnit
 )
 from services.sprint_planner import plan_foundation_sprint
+from crypto import encrypt_value, decrypt_value
 from logging_config import logger
 
 
@@ -84,7 +85,7 @@ class CompanyService:
                         company_id=company.id,
                         credential_type=cred_type,
                         access_level=access_level,
-                        encrypted_value="vault_encrypted_placeholder",
+                        encrypted_value=encrypt_value("vault_encrypted_placeholder"),
                     ))
 
         # 4. Plan and Create Foundation Sprint
@@ -165,19 +166,75 @@ class CompanyService:
     def approve_task(self, task_id: int, approver_name: str, decision: str, feedback: Optional[str] = None) -> Dict[str, Any]:
         """
         Human-in-the-Loop governance: approve or reject an AI-generated task.
+
+        ``task_id`` maps to a ``BacklogItem.id``.  On approval the item status
+        is set to ``in_review``.  On rejection the item is reset to ``todo``
+        and a ``task.assign`` OutboxEvent is created that carries the human
+        feedback so the agent can incorporate it on the next execution pass.
+
+        A ``TaskQueue`` record is also updated if one exists with a matching
+        ``interaction_id`` for legacy compatibility.
         """
-        task = self.session.get(TaskQueue, task_id)
-        if not task:
-            raise ValueError(f"Task {task_id} not found")
+        from datetime import datetime, timezone
 
-        task.approval_status = "approved" if decision == "approved" else "rejected"
-        task.approved_by = approver_name
-        task.review_comments = feedback
-        task.status = "pending"  # Workflow resumes processing
+        item = self.session.get(BacklogItem, task_id)
+        if not item:
+            raise ValueError(f"BacklogItem {task_id} not found")
 
-        self.session.add(task)
+        sprint = self.session.get(Sprint, item.sprint_id)
+        if not sprint:
+            raise ValueError(f"Sprint for BacklogItem {task_id} not found")
+
+        if decision == "approved":
+            item.status = "in_review"
+            item.updated_at = datetime.now(timezone.utc)
+            if feedback:
+                comments = list(item.comments or [])
+                comments.append({
+                    "author": approver_name,
+                    "text": f"✅ Approved: {feedback}",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+                item.comments = comments
+        else:
+            # Rejected — reset to todo and re-queue with reviewer feedback.
+            item.status = "todo"
+            item.updated_at = datetime.now(timezone.utc)
+            reject_note = feedback or "No feedback provided."
+            comments = list(item.comments or [])
+            comments.append({
+                "author": approver_name,
+                "text": f"❌ Rejected: {reject_note}",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            item.comments = comments
+
+            # Publish a task.assign event with the feedback so the agent
+            # receives it as part of the prompt on the next execution pass.
+            self.session.add(OutboxEvent(
+                aggregate_type="backlog_item",
+                aggregate_id=str(item.id),
+                event_type="nats_publish",
+                payload={
+                    "subject": "task.assign",
+                    "message": {
+                        "backlog_item_id": item.id,
+                        "interaction_id": str(uuid4()),
+                        "agent": item.assignee or "PO",
+                        "sprint_id": sprint.id,
+                        "hitl_feedback": reject_note,
+                    },
+                },
+            ))
+
+        self.session.add(item)
         self.session.commit()
-        return {"status": "success", "task_id": task_id, "new_status": task.approval_status}
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "new_status": decision,
+            "item_status": item.status,
+        }
 
     def get_quotas(self, company_id: int) -> List[Dict[str, Any]]:
         """Return token usage and limits for all business units of a company."""
