@@ -4,6 +4,7 @@ import {
   type BacklogItem,
   type InitCompanyRequest,
   type LoginResponse,
+  type MeResponse,
   type RegisterRequest,
 } from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -11,6 +12,7 @@ import { useAuthStore } from '../store/authStore'
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
 export const QUERY_KEYS = {
+  me: () => ['me'] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
@@ -201,4 +203,28 @@ export function useLogout() {
     queryClient.clear()
     clearAuth()
   }
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
+export function useMe() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  return useQuery<MeResponse>({
+    queryKey: QUERY_KEYS.me(),
+    queryFn: api.getMe,
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+}
+
+export function useUpdateMe() {
+  const queryClient = useQueryClient()
+  const updateUser = useAuthStore((s) => s.updateUser)
+  return useMutation<MeResponse, Error, { full_name: string }>({
+    mutationFn: api.updateMe,
+    onSuccess: (data) => {
+      updateUser({ full_name: data.full_name })
+      queryClient.setQueryData(QUERY_KEYS.me(), data)
+    },
+  })
 }

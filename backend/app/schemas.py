@@ -96,8 +96,13 @@ class ApprovalRequest(BaseModel):
 class UserCreateRequest(BaseModel):
     """Payload for ``POST /v1/auth/register`` — creates a human platform user."""
     email: str
-    full_name: str
+    full_name: Optional[str] = ""
     password: str  # Plain-text; hashed with bcrypt before storage
+
+
+class UserUpdateRequest(BaseModel):
+    """Payload for ``PATCH /v1/auth/me`` — partial profile update."""
+    full_name: Optional[str] = None
 
 
 class InviteMemberRequest(BaseModel):

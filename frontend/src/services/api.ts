@@ -229,6 +229,13 @@ export interface LoginResponse {
   role: string
 }
 
+export interface MeResponse {
+  user_id: number
+  email: string
+  full_name: string
+  role: string
+}
+
 export interface RegisterRequest {
   email: string
   password: string
@@ -322,4 +329,10 @@ export const api = {
 
   register: (data: RegisterRequest) =>
     api.post<RegisterResponse>('/v1/auth/register', data),
+
+  getMe: () =>
+    api.get<MeResponse>('/v1/auth/me'),
+
+  updateMe: (data: { full_name: string }) =>
+    api.patch<MeResponse>('/v1/auth/me', data),
 }

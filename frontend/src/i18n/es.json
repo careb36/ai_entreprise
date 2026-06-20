@@ -514,7 +514,37 @@
     "hidePassword": "Ocultar contraseña",
     "passwordHint": "Mínimo 8 caracteres",
     "logOut": "Cerrar sesión",
-    "loggedInAs": "Sesión iniciada como"
+    "loggedInAs": "Sesión iniciada como",
+    "myProfile": "Mi perfil",
+    "passwordStrength": {
+      "label": "Seguridad de contraseña",
+      "weak": "Débil",
+      "fair": "Regular",
+      "good": "Buena",
+      "strong": "Fuerte"
+    }
+  },
+  "profile": {
+    "title": "Mi Perfil",
+    "subtitle": "Administra la configuración de tu cuenta",
+    "avatarSection": "Avatar",
+    "initials": "Iniciales",
+    "personalInfo": "Información personal",
+    "fullNameLabel": "Nombre de usuario",
+    "fullNamePlaceholder": "Jane Doe",
+    "emailLabel": "Correo electrónico",
+    "emailHint": "El correo no se puede cambiar",
+    "roleLabel": "Rol en la plataforma",
+    "save": "Guardar cambios",
+    "saving": "Guardando…",
+    "saveSuccess": "Perfil actualizado",
+    "saveError": "Error al actualizar el perfil",
+    "dangerZone": "Sesión",
+    "signOut": "Cerrar sesión en todos los dispositivos",
+    "signOutDesc": "Esto limpiará tu sesión local. Tendrás que iniciar sesión de nuevo.",
+    "accountInfo": "Info de cuenta",
+    "userId": "ID de usuario",
+    "memberSince": "Miembro desde"
   },
   "common": {
     "loading": "Cargando...",

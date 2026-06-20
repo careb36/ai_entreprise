@@ -4,6 +4,63 @@ import { useTranslation } from 'react-i18next'
 import { Loader2, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { api } from '../services/api'
 
+// ── Password strength ────────────────────────────────────────────────────────
+
+type StrengthLevel = 0 | 1 | 2 | 3 | 4
+
+function calcStrength(pw: string): StrengthLevel {
+  if (!pw) return 0
+  let score = 0
+  if (pw.length >= 8)  score++
+  if (pw.length >= 12) score++
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  return Math.min(score, 4) as StrengthLevel
+}
+
+const STRENGTH_COLOURS: Record<StrengthLevel, string> = {
+  0: 'bg-surface-700',
+  1: 'bg-red-500',
+  2: 'bg-orange-500',
+  3: 'bg-yellow-400',
+  4: 'bg-green-500',
+}
+
+const STRENGTH_KEYS: Record<StrengthLevel, string> = {
+  0: '',
+  1: 'auth.passwordStrength.weak',
+  2: 'auth.passwordStrength.fair',
+  3: 'auth.passwordStrength.good',
+  4: 'auth.passwordStrength.strong',
+}
+
+function PasswordStrengthBar({ password }: { password: string }) {
+  const { t } = useTranslation()
+  const level = calcStrength(password)
+  if (!password) return null
+  const labelKey = STRENGTH_KEYS[level]
+  return (
+    <div className="space-y-1 mt-1.5">
+      <div className="flex gap-1">
+        {([1, 2, 3, 4] as const).map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+              level >= i ? STRENGTH_COLOURS[level] : 'bg-surface-700'
+            }`}
+          />
+        ))}
+      </div>
+      {labelKey && (
+        <p className={`text-[11px] ${STRENGTH_COLOURS[level].replace('bg-', 'text-')}`}>
+          {t(labelKey)}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function RegisterPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -109,6 +166,7 @@ export default function RegisterPage() {
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            <PasswordStrengthBar password={password} />
             <p className="text-[11px] text-gray-600">{t('auth.passwordHint')}</p>
           </div>
 

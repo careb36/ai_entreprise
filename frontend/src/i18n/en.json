@@ -514,7 +514,37 @@
     "hidePassword": "Hide password",
     "passwordHint": "Minimum 8 characters",
     "logOut": "Sign out",
-    "loggedInAs": "Signed in as"
+    "loggedInAs": "Signed in as",
+    "myProfile": "My profile",
+    "passwordStrength": {
+      "label": "Password strength",
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong"
+    }
+  },
+  "profile": {
+    "title": "My Profile",
+    "subtitle": "Manage your account settings",
+    "avatarSection": "Avatar",
+    "initials": "Initials",
+    "personalInfo": "Personal information",
+    "fullNameLabel": "Display name",
+    "fullNamePlaceholder": "Jane Doe",
+    "emailLabel": "Email address",
+    "emailHint": "Email cannot be changed",
+    "roleLabel": "Platform role",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saveSuccess": "Profile updated",
+    "saveError": "Failed to update profile",
+    "dangerZone": "Session",
+    "signOut": "Sign out of all devices",
+    "signOutDesc": "This will clear your local session. You'll need to sign in again.",
+    "accountInfo": "Account info",
+    "userId": "User ID",
+    "memberSince": "Member since"
   },
   "common": {
     "loading": "Loading...",

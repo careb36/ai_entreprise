@@ -17,7 +17,7 @@ from sqlmodel import Session, select
 
 from database import get_session
 from models import User, CompanyMember
-from schemas import UserCreateRequest, InviteMemberRequest
+from schemas import UserCreateRequest, UserUpdateRequest, InviteMemberRequest
 from passlib.context import CryptContext
 from auth_dependencies import create_access_token, get_current_user, TokenData
 
@@ -99,6 +99,57 @@ async def login(
         "user_id": user.id,
         "email": user.email,
         "role": role,
+    }
+
+
+@router.get("/auth/me")
+async def get_me(
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Return the authenticated user's profile.
+
+    Reads current ``full_name`` from the database and enriches with role
+    information derived from the JWT claims.  Safe to call on every page load
+    so the frontend can keep the navbar / profile page in sync.
+    """
+    user = session.exec(select(User).where(User.email == current_user.email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name or "",
+        "role": current_user.role,
+    }
+
+
+@router.patch("/auth/me")
+async def update_me(
+    req: UserUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Update the authenticated user's editable profile fields.
+
+    Currently only ``full_name`` is mutable.  Email and password changes
+    require separate, more sensitive flows (not yet implemented).
+    """
+    user = session.exec(select(User).where(User.email == current_user.email)).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if req.full_name is not None:
+        user.full_name = req.full_name.strip()
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name or "",
+        "role": current_user.role,
     }
 
 

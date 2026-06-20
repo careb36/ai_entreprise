@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/authStore'
@@ -8,7 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
   LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
-  Globe, Database, Code2, Menu, X, Building2, LogOut,
+  Globe, Database, Code2, Menu, X, Building2, LogOut, UserCircle,
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
 
@@ -25,6 +25,7 @@ const NotFound       = lazy(() => import('./pages/NotFound'))
 const TaskDetails    = lazy(() => import('./pages/TaskDetails'))
 const LoginPage      = lazy(() => import('./pages/LoginPage'))
 const RegisterPage   = lazy(() => import('./pages/RegisterPage'))
+const ProfilePage    = lazy(() => import('./pages/ProfilePage'))
 const GovernancePanelPage = lazy(() => import('./components/GovernancePanel').then(m => ({ default: m.GovernancePanel })))
 const AnalyticsDashboardPage = lazy(() => import('./components/AnalyticsDashboard').then(m => ({ default: m.AnalyticsDashboard })))
 import { SupportBot } from './components/SupportBot'
@@ -70,19 +71,29 @@ function UserMenu() {
   const user = useAuthStore((s) => s.user)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
 
   if (!user) return null
 
   const roleLabel = user.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
     : 'User'
-  const initials = user.email.slice(0, 2).toUpperCase()
+  const initials = (user.full_name?.trim() || user.email)
+    .split(' ')
+    .map((w: string) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   function handleLogout() {
     setOpen(false)
-    // Clear query cache before clearing auth so in-flight refetches don't 401-loop
     clearAuth()
     window.location.replace('/login')
+  }
+
+  function goToProfile() {
+    setOpen(false)
+    navigate('/profile')
   }
 
   return (
@@ -107,6 +118,13 @@ function UserMenu() {
               <p className="text-xs font-medium text-white truncate">{user.email}</p>
               <p className="text-[11px] text-gray-500">{roleLabel}</p>
             </div>
+            <button
+              onClick={goToProfile}
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-300 hover:bg-surface-700 hover:text-white transition-colors"
+            >
+              <UserCircle size={14} />
+              {t('auth.myProfile')}
+            </button>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-300 hover:bg-surface-700 hover:text-white transition-colors"
@@ -245,6 +263,7 @@ function AppContent() {
               <Route path="/glassroom" element={<ProtectedRoute><Glassroom /></ProtectedRoute>} />
               <Route path="/workspace/:sprintId/task/:taskId" element={<ProtectedRoute><TaskDetails /></ProtectedRoute>} />
               <Route path="/task/:taskId" element={<ProtectedRoute><TaskDetails /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
