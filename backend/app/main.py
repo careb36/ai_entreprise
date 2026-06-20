@@ -175,6 +175,14 @@ async def startup():
     logger.info("Initializing Enterprise Backend Components...")
     create_db_and_tables()
 
+    # Warn loudly if the JWT secret key has not been changed from the insecure default.
+    if settings.JWT_SECRET_KEY == "change-me-in-production":
+        logger.warning(
+            "⚠️  JWT_SECRET_KEY is set to the insecure default value. "
+            "Set a strong random secret via the JWT_SECRET_KEY environment variable "
+            "before exposing this service to any network."
+        )
+
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
     # even when the NATS broker is not yet running.

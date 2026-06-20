@@ -28,6 +28,7 @@ from sqlmodel import Session, select, text
 from database import get_session
 from models import BugReport
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
+from auth_dependencies import get_current_user, require_roles, TokenData
 from logging_config import logger
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
@@ -85,6 +86,7 @@ async def list_tickets(
     severity: Optional[str] = Query(None),
     limit: int = Query(50, le=200),
     session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
 ):
     """
     List support tickets with optional filters.
@@ -122,7 +124,11 @@ async def list_tickets(
 
 
 @router.get("/tickets/{ticket_num}")
-async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
+async def get_ticket(
+    ticket_num: str,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Return the full detail of a single ticket by its ``FAB-XXXXX`` identifier.
 
@@ -159,6 +165,7 @@ async def update_ticket_status(
     ticket_num: str,
     req: BugStatusUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: TokenData = Depends(require_roles("Manager")),
 ):
     """
     Update the status (and optionally resolution / assignee) of a ticket.
@@ -243,7 +250,9 @@ async def support_chat(req: SupportChatRequest):
 
 
 @router.get("/logs")
-async def download_support_logs():
+async def download_support_logs(
+    current_user: TokenData = Depends(require_roles("Manager")),
+):
     """
     Download the latest structured audit log as a JSONL file.
 

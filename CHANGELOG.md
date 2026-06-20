@@ -8,13 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-* **OpenTelemetry / Jaeger integration:** `docker-compose.yml` now includes a `jaeger:1.58 all-in-one` service (UI on port 16686, OTLP/HTTP collector on port 4318). Both `backend` and `llm-proxy` automatically export traces via `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`, making the full LangGraph → LLM Proxy → Gemini/DeepSeek trace visible in the Jaeger UI without any local configuration.
+* **JWT Authentication middleware:** All sensitive API endpoints now require a valid JWT `Bearer` token. New endpoint `POST /v1/auth/login` (OAuth2 password-grant) exchanges email + password for a signed HS256 access token. Role-gated endpoints (`init_company`, ticket updates, log download) enforce `Owner`/`Manager` roles. Public endpoints (`/v1/auth/register`, `/v1/support/report_bug`, `/v1/support/chat`, `GET /health`) remain unauthenticated.
+  - New module `backend/app/auth_dependencies.py` with `create_access_token()`, `get_current_user()` dependency, and `require_roles(*roles)` factory.
+  - `JWT_SECRET_KEY`, `JWT_ALGORITHM`, and `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` added to `Settings` (config-driven, safe defaults).
+  - `PyJWT ^2.12.0` added to `pyproject.toml` (no known vulnerabilities, no extra compile deps).
+* **OpenTelemetry / Jaeger integration:** `docker-compose.yml` now includes a `jaeger:1.58 all-in-one` service (UI on port 16686, OTLP/HTTP collector on port 4318). Both `backend` and `llm-proxy` automatically export traces via `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`.
 
 ### Fixed
-* **`backend/llm/model_factory.py`:** Added missing `Any` import from `typing`. The `create_completion` function referenced `Dict[str, Any]` but `Any` was not in the import list, causing a `NameError` at runtime when `bu_id` was provided.
+* **`backend/llm/model_factory.py`:** Added missing `Any` import from `typing`. `create_completion()` raised `NameError` at runtime when `bu_id` was provided.
 
 ### Changed
-* **`REFACTORING_PLAN.md`:** Updated with accurate Phase 4 status, detailed technical debt inventory, and concrete next-step action items for each pending item.
+* **`REFACTORING_PLAN.md`:** Updated with accurate Phase 4 status, technical debt inventory, and JWT now marked complete.
 
 ---
 

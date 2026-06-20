@@ -67,10 +67,9 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
     *   El proxy ya soporta `gemini-2.5-pro` y `gemini-2.5-flash` con resolución dinámica.
     *   Actualizar las entradas del mapa para que los agentes usen modelos más capaces y económicos.
 
-2.  **Autenticación JWT no implementada:**
-    *   `auth.py` hace hash de contraseñas con bcrypt pero los endpoints no requieren token.
-    *   Toda la API es públicamente accesible mientras no haya JWT/session middleware.
-    *   Añadir `python-jose` + middleware de autenticación en los routers sensibles.
+2.  **~~Autenticación JWT no implementada~~:** ✅ COMPLETADO
+    *   `POST /v1/auth/login` genera tokens HS256. `get_current_user` + `require_roles()` protegen todos los endpoints sensibles.
+    *   `PyJWT ^2.12.0` añadido; clave configurable vía `JWT_SECRET_KEY`.
 
 3.  **Sin suite de tests:**
     *   Sólo existe `backend/tests/test_glassroom_sse.py`.

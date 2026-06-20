@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     CONSOLE_ASSISTANT_ALLOWED_ROLES: str = "Developer,Architect,QA,PO,ScrumMaster"
 
     # ---------------------------------------------------------------------------
+    # JWT Authentication
+    # ---------------------------------------------------------------------------
+    JWT_SECRET_KEY: str = "change-me-in-production"   # Override with a strong random secret
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 480         # 8 hours
+    # ---------------------------------------------------------------------------
     # Audit — filesystem path for append-only JSONL audit logs
     # ---------------------------------------------------------------------------
     AUDIT_LOG_PATH: str = "/app/.factory/logs"

@@ -30,6 +30,7 @@ from sqlmodel import Session
 from database import get_session, engine
 from schemas import GenerateRequest, AuditRequest
 from services.agent_service import AgentService
+from auth_dependencies import get_current_user, TokenData
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Agents"])
@@ -165,7 +166,12 @@ async def generate_glassroom_sse(
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest, request: Request, session: Session = Depends(get_session)):
+async def generate(
+    req: GenerateRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Trigger a LangGraph agent workflow run.
     """
@@ -182,7 +188,11 @@ async def generate(req: GenerateRequest, request: Request, session: Session = De
 
 
 @router.post("/audit")
-async def audit(req: AuditRequest, session: Session = Depends(get_session)):
+async def audit(
+    req: AuditRequest,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Write an agent decision entry to the audit log.
 
@@ -204,7 +214,12 @@ async def audit(req: AuditRequest, session: Session = Depends(get_session)):
 
 
 @router.get("/memory/search")
-async def search_memory(request: Request, query: str = Query(...), limit: int = 10):
+async def search_memory(
+    request: Request,
+    query: str = Query(...),
+    limit: int = 10,
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Search the vector memory store for content similar to *query*.
 
@@ -219,7 +234,12 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
 
 
 @router.post("/memory/store")
-async def store_memory(request: Request, content: str, metadata: Optional[dict] = None):
+async def store_memory(
+    request: Request,
+    content: str,
+    metadata: Optional[dict] = None,
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
 
@@ -235,7 +255,11 @@ async def store_memory(request: Request, content: str, metadata: Optional[dict] 
 
 
 @router.get("/glassroom/stream")
-async def glassroom_stream(sprint_id: str = Query(...), request: Request = None):
+async def glassroom_stream(
+    sprint_id: str = Query(...),
+    request: Request = None,
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Server-Sent Events (SSE) stream for real-time Glassroom monitoring.
 

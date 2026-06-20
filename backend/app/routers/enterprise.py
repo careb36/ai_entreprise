@@ -18,13 +18,18 @@ from database import get_session, get_neo4j_driver
 from services.discovery_service import DiscoveryService
 from services.company_service import CompanyService
 from schemas import CompanyInitRequest, ApprovalRequest, DiscoveryRequest
+from auth_dependencies import get_current_user, require_roles, TokenData
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
 
 
 @router.post("/init_company", tags=["Core"])
-async def init_company(req: CompanyInitRequest, session: Session = Depends(get_session)):
+async def init_company(
+    req: CompanyInitRequest,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(require_roles("Manager")),
+):
     """
     Bootstrap a new company tenant with its AI agents and project credentials.
     Delegates to CompanyService for transactional logic and team planning.
@@ -47,7 +52,11 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
 
 
 @router.post("/approve_task", tags=["Enterprise"])
-async def approve_task(req: ApprovalRequest, session: Session = Depends(get_session)):
+async def approve_task(
+    req: ApprovalRequest,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Human-in-the-Loop governance: approve or reject an AI-generated task.
     """
@@ -59,7 +68,11 @@ async def approve_task(req: ApprovalRequest, session: Session = Depends(get_sess
 
 
 @router.get("/enterprise/quotas", tags=["Enterprise"])
-async def get_quotas(company_id: int, session: Session = Depends(get_session)):
+async def get_quotas(
+    company_id: int,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Return token usage and limits for all business units of a company.
     """
@@ -68,7 +81,11 @@ async def get_quotas(company_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/analytics/summary", tags=["Enterprise"])
-async def get_project_health(sprint_id: int, session: Session = Depends(get_session)):
+async def get_project_health(
+    sprint_id: int,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     AI Scrum Master: generate a sprint health report from audit and backlog data.
     """
@@ -77,7 +94,10 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
 
 
 @router.get("/models", tags=["Enterprise"])
-async def list_models(request: Request):
+async def list_models(
+    request: Request,
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Return the live LLM model catalogue from the proxy.
 
@@ -113,7 +133,12 @@ async def list_models(request: Request):
 
 
 @router.post("/discover_team", tags=["Enterprise"])
-async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session)):
+async def discover_team(
+    req: DiscoveryRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
@@ -147,7 +172,10 @@ async def discover_team(req: DiscoveryRequest, request: Request, session: Sessio
 
 
 @router.get("/enterprise/lineage", tags=["Enterprise"])
-async def get_code_lineage(file_path: str):
+async def get_code_lineage(
+    file_path: str,
+    current_user: TokenData = Depends(get_current_user),
+):
     """
     Time-Travel Debugging: retrieve all architectural decisions that modified a file.
 
