@@ -1494,7 +1494,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             data = data_from_nats or json.loads(msg.data.decode())
             backlog_item_id = data.get("backlog_item_id")
             sprint_id = data.get("sprint_id")
-            bu_id: Optional[int] = data.get("bu_id") or data.get("business_unit_id")
+            _bu_id = data.get("bu_id")
+            bu_id: Optional[int] = _bu_id if _bu_id is not None else data.get("business_unit_id")
             hitl_feedback: Optional[str] = data.get("hitl_feedback")
 
             if not backlog_item_id:
