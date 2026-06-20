@@ -43,7 +43,7 @@ async def register_user(req: UserCreateRequest, session: Session = Depends(get_s
         raise HTTPException(status_code=400, detail="Email already registered.")
     user = User(
         email=req.email,
-        full_name=req.full_name,
+        full_name=req.full_name or "",
         password_hash=pwd_context.hash(req.password),
     )
     session.add(user)

@@ -11,6 +11,7 @@ import {
   Globe, Database, Code2, Menu, X, Building2, LogOut, UserCircle,
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
+import { getInitials } from './lib/avatar'
 
 // ── Lazy page imports ─────────────────────────────────────────────────────────
 
@@ -78,12 +79,7 @@ function UserMenu() {
   const roleLabel = user.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
     : 'User'
-  const initials = (user.full_name?.trim() || user.email)
-    .split(' ')
-    .map((w: string) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
+  const initials = getInitials(user.full_name, user.email)
 
   function handleLogout() {
     setOpen(false)

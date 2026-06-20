@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   User, Mail, Shield, Save, Loader2, CheckCircle2,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useMe, useUpdateMe } from '../hooks/useQueries'
+import { getInitials } from '../lib/avatar'
 
 // ── Role badge colours ────────────────────────────────────────────────────────
 
@@ -18,9 +19,7 @@ const ROLE_STYLE: Record<string, string> = {
 // ── Avatar with initials ──────────────────────────────────────────────────────
 
 function Avatar({ name, email }: { name?: string; email: string }) {
-  const text = name?.trim()
-    ? name.trim().split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : email.slice(0, 2).toUpperCase()
+  const text = getInitials(name, email)
   return (
     <div className="w-20 h-20 rounded-2xl bg-brand-600/20 border-2 border-brand-600/40 flex items-center justify-center">
       <span className="text-3xl font-black text-brand-300">{text}</span>
@@ -41,6 +40,7 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState('')
   const [saved, setSaved]       = useState(false)
   const [fieldError, setFieldError] = useState<string | null>(null)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Seed the input from the live /me response (preferred) or the store
   useEffect(() => {
@@ -50,6 +50,13 @@ export default function ProfilePage() {
       setFullName(user.full_name)
     }
   }, [me, user])
+
+  // Clear the "saved" timer on unmount to avoid state updates on an unmounted component
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [])
 
   const roleName  = me?.role ?? user?.role ?? 'Viewer'
   const roleStyle = ROLE_STYLE[roleName] ?? ROLE_STYLE['Viewer']
@@ -62,7 +69,7 @@ export default function ProfilePage() {
 
     const trimmed = fullName.trim()
     if (trimmed.length > 80) {
-      setFieldError(t('profile.fullNameLabel') + ': max 80 characters')
+      setFieldError(t('profile.fullNameTooLong'))
       return
     }
 
@@ -71,7 +78,8 @@ export default function ProfilePage() {
       {
         onSuccess: () => {
           setSaved(true)
-          setTimeout(() => setSaved(false), 3000)
+          if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+          savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
         },
         onError: () => {
           setFieldError(t('profile.saveError'))

@@ -96,7 +96,7 @@ class ApprovalRequest(BaseModel):
 class UserCreateRequest(BaseModel):
     """Payload for ``POST /v1/auth/register`` — creates a human platform user."""
     email: str
-    full_name: Optional[str] = ""
+    full_name: Optional[str] = None
     password: str  # Plain-text; hashed with bcrypt before storage
 
 

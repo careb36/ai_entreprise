@@ -532,6 +532,7 @@
     "personalInfo": "Personal information",
     "fullNameLabel": "Display name",
     "fullNamePlaceholder": "Jane Doe",
+    "fullNameTooLong": "Display name must be 80 characters or fewer.",
     "emailLabel": "Email address",
     "emailHint": "Email cannot be changed",
     "roleLabel": "Platform role",

@@ -27,6 +27,14 @@ const STRENGTH_COLOURS: Record<StrengthLevel, string> = {
   4: 'bg-green-500',
 }
 
+const STRENGTH_TEXT_COLOURS: Record<StrengthLevel, string> = {
+  0: 'text-gray-500',
+  1: 'text-red-400',
+  2: 'text-orange-400',
+  3: 'text-yellow-400',
+  4: 'text-green-400',
+}
+
 const STRENGTH_KEYS: Record<StrengthLevel, string> = {
   0: '',
   1: 'auth.passwordStrength.weak',
@@ -53,7 +61,7 @@ function PasswordStrengthBar({ password }: { password: string }) {
         ))}
       </div>
       {labelKey && (
-        <p className={`text-[11px] ${STRENGTH_COLOURS[level].replace('bg-', 'text-')}`}>
+        <p className={`text-[11px] ${STRENGTH_TEXT_COLOURS[level]}`}>
           {t(labelKey)}
         </p>
       )}

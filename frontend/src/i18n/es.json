@@ -532,6 +532,7 @@
     "personalInfo": "Información personal",
     "fullNameLabel": "Nombre de usuario",
     "fullNamePlaceholder": "Jane Doe",
+    "fullNameTooLong": "El nombre de usuario no puede superar los 80 caracteres.",
     "emailLabel": "Correo electrónico",
     "emailHint": "El correo no se puede cambiar",
     "roleLabel": "Rol en la plataforma",
