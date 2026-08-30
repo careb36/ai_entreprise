@@ -21,6 +21,7 @@ class Sprint(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
+    business_unit_id: Optional[int] = Field(default=None, foreign_key="business_units.id")
     sprint_name: str
     start_date: Optional[str] = None  # ISO-8601 date string
     scope_size: str = "M"             # "S" (≤4 items) | "M" (≤8) | "L" (≤12)

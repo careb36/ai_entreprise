@@ -165,6 +165,10 @@ class CompanyService:
     def approve_task(self, task_id: int, approver_name: str, decision: str, feedback: Optional[str] = None) -> Dict[str, Any]:
         """
         Human-in-the-Loop governance: approve or reject an AI-generated task.
+
+        On rejection with feedback, a new ``OutboxEvent`` is inserted to re-dispatch
+        the workflow with the PO's feedback injected, and an ``AuditLog`` entry is
+        written for governance lineage.
         """
         task = self.session.get(TaskQueue, task_id)
         if not task:
@@ -176,6 +180,33 @@ class CompanyService:
         task.status = "pending"  # Workflow resumes processing
 
         self.session.add(task)
+
+        if decision == "rejected" and feedback and task.interaction_id:
+            # Re-dispatch the workflow with the rejection feedback so agents can revise.
+            self.session.add(OutboxEvent(
+                aggregate_type="task_queue",
+                aggregate_id=str(task.id),
+                event_type="nats_publish",
+                payload={
+                    "subject": "workspace.generate",
+                    "message": {
+                        "interaction_id": task.interaction_id,
+                        "story": f"[REVISION REQUESTED]\nOriginal interaction: {task.interaction_id}",
+                        "po_feedback": feedback,
+                        "constraints": "Address the PO rejection feedback and revise the approach.",
+                    },
+                },
+            ))
+            # Persist the rejection in the audit log for lineage queries.
+            self.session.add(AuditLog(
+                interaction_id=task.interaction_id,
+                agent_id=f"human:{approver_name}",
+                action="po_rejection",
+                details={"task_id": task_id, "approver": approver_name},
+                result={"feedback": feedback},
+                cost_tokens=0,
+            ))
+
         self.session.commit()
         return {"status": "success", "task_id": task_id, "new_status": task.approval_status}
 
@@ -185,9 +216,19 @@ class CompanyService:
             select(BusinessUnit).where(BusinessUnit.company_id == company_id)
         ).all()
         return [
-            {"unit": u.unit_name, "limit": u.token_quota_limit, "used": u.token_quota_used}
+            {"id": u.id, "unit": u.unit_name, "limit": u.token_quota_limit, "used": u.token_quota_used}
             for u in units
         ]
+
+    def reset_quota(self, bu_id: int) -> Dict[str, Any]:
+        """Reset the token usage counter for a business unit to zero."""
+        unit = self.session.get(BusinessUnit, bu_id)
+        if not unit:
+            raise ValueError(f"Business Unit {bu_id} not found")
+        unit.token_quota_used = 0
+        self.session.add(unit)
+        self.session.commit()
+        return {"status": "reset", "bu_id": bu_id, "unit": unit.unit_name, "token_quota_used": 0}
 
     def get_project_health(self, sprint_id: int) -> Dict[str, Any]:
         """Generate a sprint health report using SQLModel idiomatic queries."""

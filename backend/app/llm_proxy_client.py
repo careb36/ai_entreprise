@@ -131,7 +131,12 @@ class LLMProxyClient:
                     )
 
                 if response.is_success:
-                    return response.json()
+                    result = response.json()
+                    if response.headers.get("X-Quota-Warning") == "true":
+                        result["quota_warning"] = True
+                        result["quota_used"] = response.headers.get("X-Quota-Used")
+                        result["quota_limit"] = response.headers.get("X-Quota-Limit")
+                    return result
 
                 if response.status_code >= 500 and attempt < self.max_retries:
                     delay = self.retry_backoff_sec * (attempt + 1)

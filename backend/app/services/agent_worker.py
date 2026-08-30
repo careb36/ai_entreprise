@@ -90,6 +90,7 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
             interaction_id = data.get("interaction_id", "unknown")
             bu_id = data.get("business_unit_id")
             sprint_id = data.get("sprint_id")  # included when triggered from task_worker
+            po_feedback = data.get("po_feedback")  # present when re-dispatched after PO rejection
 
             logger.info(
                 "workspace.generate received: interaction_id=%s bu_id=%s sprint_id=%s story=%.80s",
@@ -115,6 +116,7 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 company_id=data.get("company_id"),
                 nats_client=nats_client,
                 interaction_id=interaction_id,
+                po_feedback=po_feedback,
             )
 
             if result.get("needs_split") and sprint_id:

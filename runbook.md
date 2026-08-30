@@ -2,6 +2,40 @@
 
 This document describes steps to harden the Factory system for production deployment.
 
+## Service URLs
+
+| Service | URL | Description |
+|---|---|---|
+| Frontend | `http://localhost:5173` | React dashboard |
+| Backend API | `http://localhost:8000/docs` | FastAPI + Swagger |
+| LLM Proxy | `http://localhost:5100` | Token budget gateway |
+| **Jaeger Tracing UI** | **`http://localhost:16686`** | Distributed trace explorer |
+| Neo4j Browser | `http://localhost:7474` | Knowledge graph UI |
+
+---
+
+## Distributed Tracing (OpenTelemetry + Jaeger)
+
+La Fabrique ships with OpenTelemetry instrumentation across the backend, LLM proxy, and agent worker.
+Traces flow to the Jaeger all-in-one container via OTLP/HTTP on port `4318`.
+
+**Enabling traces** (default in Docker Compose):
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+```
+
+**Disabling traces** (e.g. to reduce overhead):
+```
+OTEL_SDK_DISABLED=true
+```
+
+**Key service names in Jaeger:**
+- `fabrique-api` — FastAPI request traces
+- `agent-worker` — LangGraph node spans (`graph.po`, `graph.architect`, …)
+- `llm-proxy` — LLM API call traces with quota context
+
+---
+
 ## 1. Secrets Management
 
 ### Current State (Development)

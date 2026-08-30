@@ -13,13 +13,14 @@ delivered to NATS by the ``process_outbox`` background worker.
 
 import json
 from datetime import datetime
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
 
 from database import get_session
-from models import Sprint, BacklogItem, OutboxEvent, Company, Agent, ProjectDiscovery
+from models import Sprint, BacklogItem, OutboxEvent, Company, Agent, ProjectDiscovery, BusinessUnit
 from schemas import SprintStartRequest, BacklogItemUpdate, SprintPlanRequest, SelfImprovementSprintRequest
 from logging_config import logger
 from services.sprint_planner import plan_execution_sprint, plan_self_improvement_sprint as build_self_improvement_plan, build_self_improvement_objective
@@ -163,6 +164,13 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
         scope_size=scope_size,
         goal=req.goal,
     )
+
+    # Resolve the company's default business unit for quota tracking.
+    default_bu = session.exec(
+        select(BusinessUnit).where(BusinessUnit.company_id == req.company_id)
+    ).first()
+    default_bu_id: Optional[int] = default_bu.id if default_bu else None
+    sprint.business_unit_id = default_bu_id
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
 
@@ -217,7 +225,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             "message": {
                 "interaction_id": str(uuid4()),
                 "company_id": req.company_id,
-                "business_unit_id": None,
+                "business_unit_id": default_bu_id,
                 "sprint_id": sprint.id,
                 "story": kickoff_story,
                 "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",

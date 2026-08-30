@@ -357,7 +357,15 @@
       "high": "Destructivo — difícil de revertir",
       "medium": "Significativo — revisar con cuidado",
       "low": "Rutinario — bajo impacto"
-    }
+    },
+    "quotaTitle": "Uso de Cuota de Tokens",
+    "quotaExceeded": "Cuota Superada",
+    "quotaWarning": "Cerca del Límite",
+    "tokens": "tokens",
+    "resetQuota": "Reiniciar contador de cuota",
+    "feedbackRequired": "Se requiere retroalimentación al rechazar una tarea.",
+    "feedbackPlaceholderApprove": "¡Se ve bien! Adelante.",
+    "feedbackPlaceholderReject": "Razón del rechazo (obligatorio)..."
   },
   "analytics": {
     "title": "Analíticas",

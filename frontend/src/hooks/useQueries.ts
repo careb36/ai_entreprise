@@ -117,6 +117,17 @@ export function useQuotas(companyId: number | null) {
   })
 }
 
+export function useResetQuota() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (buId: number) => api.resetQuota(buId),
+    onSuccess: (_data, buId) => {
+      // Invalidate all quota queries so the bar refreshes immediately.
+      queryClient.invalidateQueries({ queryKey: ['enterprise'] })
+    },
+  })
+}
+
 export function useAnalyticsSummary(sprintId: number | null) {
   return useQuery({
     queryKey: QUERY_KEYS.analytics(sprintId || 0),

@@ -2,6 +2,35 @@
 
 Este documento describe los pasos para fortalecer el sistema Factory para su despliegue en producción.
 
+## URLs de Servicios
+
+| Servicio | URL | Descripción |
+|---|---|---|
+| Frontend | `http://localhost:5173` | Dashboard React |
+| Backend API | `http://localhost:8000/docs` | FastAPI + Swagger |
+| LLM Proxy | `http://localhost:5100` | Gateway de presupuesto de tokens |
+| **Jaeger Tracing UI** | **`http://localhost:16686`** | Explorador de trazas distribuidas |
+| Neo4j Browser | `http://localhost:7474` | UI del grafo de conocimiento |
+
+---
+
+## Trazabilidad Distribuida (OpenTelemetry + Jaeger)
+
+La Fabrique incluye instrumentación OpenTelemetry en el backend, el proxy LLM y el agente worker.
+Las trazas fluyen al contenedor Jaeger all-in-one via OTLP/HTTP en el puerto `4318`.
+
+**Habilitar trazas** (por defecto en Docker Compose):
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+```
+
+**Deshabilitar trazas** (para reducir sobrecarga):
+```
+OTEL_SDK_DISABLED=true
+```
+
+---
+
 ## 1. Gestión de Secretos
 
 ### Estado Actual (Desarrollo)

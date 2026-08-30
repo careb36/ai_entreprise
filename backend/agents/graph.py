@@ -16,6 +16,7 @@ from llm_proxy_client import LLMProxyClient
 from llm.model_factory import AgentRole, ModelFactory
 from memory.engram_processor import get_engram_processor
 from telemetry import configure_telemetry, get_tracer
+from opentelemetry.trace import StatusCode
 
 configure_telemetry("agent-worker")
 tracer = get_tracer(__name__)
@@ -39,6 +40,7 @@ class AgentState(TypedDict):
     needs_split: Optional[bool]
     created_at: str
     publish_event: Optional[PublishEvent]
+    po_feedback: Optional[str]
 
 
 def _resolve_model_name(role: str) -> str:
@@ -133,6 +135,23 @@ async def _invoke_agent(
     if result.get("error"):
         raise RuntimeError(str(result["error"]))
 
+    if result.get("quota_warning"):
+        await _publish(
+            state,
+            {
+                "type": "quota.warning",
+                "semantic_type": "quota.warning",
+                "agent": "System",
+                "role": "System",
+                "task_status": "kickoff",
+                "phase": "kickoff",
+                "task": task,
+                "message": f"⚠️ Token quota usage is above 80% (used={result.get('quota_used')}, limit={result.get('quota_limit')}). Consider resetting the quota or splitting the sprint.",
+                "quota_used": result.get("quota_used"),
+                "quota_limit": result.get("quota_limit"),
+            },
+        )
+
     content = (
         result.get("choices", [{}])[0]
         .get("message", {})
@@ -216,7 +235,10 @@ async def kickoff_node(state: AgentState) -> dict[str, Any]:
 
 
 async def po_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.po"):
+    with tracer.start_as_current_span("graph.po") as span:
+        span.set_attribute("agent.role", "PO")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             backlog_items = state.get("backlog_items") or _extract_backlog(state["story"])
             first_ticket = backlog_items[0] if backlog_items else state["story"].splitlines()[0]
@@ -258,11 +280,15 @@ async def po_node(state: AgentState) -> dict[str, Any]:
                     "message": f"PO failed: {exc}",
                 },
             )
+            span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def architect_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.architect"):
+    with tracer.start_as_current_span("graph.architect") as span:
+        span.set_attribute("agent.role", "Architect")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             backlog_items = state.get("backlog_items") or []
             items_text = "\n".join(f"- {i}" for i in backlog_items) if backlog_items else "(see sprint brief)"
@@ -295,11 +321,15 @@ async def architect_node(state: AgentState) -> dict[str, Any]:
                     "message": f"Architect failed: {exc}",
                 },
             )
+            span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def scrum_master_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.scrum_master"):
+    with tracer.start_as_current_span("graph.scrum_master") as span:
+        span.set_attribute("agent.role", "ScrumMaster")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             prompt = (
                 f"Sprint brief:\n{state['story']}\n\n"
@@ -324,11 +354,15 @@ async def scrum_master_node(state: AgentState) -> dict[str, Any]:
                     "message": f"Scrum Master failed: {exc}",
                 },
             )
+            span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def developer_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.developer"):
+    with tracer.start_as_current_span("graph.developer") as span:
+        span.set_attribute("agent.role", "Developer")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             prompt = (
                 f"Sprint brief:\n{state['story']}\n\n"
@@ -352,11 +386,15 @@ async def developer_node(state: AgentState) -> dict[str, Any]:
                     "message": f"Developer failed: {exc}",
                 },
             )
+            span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def po_wrap_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.po_wrap"):
+    with tracer.start_as_current_span("graph.po_wrap") as span:
+        span.set_attribute("agent.role", "PO")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             prompt = (
                 f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
@@ -379,6 +417,7 @@ async def po_wrap_node(state: AgentState) -> dict[str, Any]:
                     "message": f"PO wrap-up failed: {exc}",
                 },
             )
+            span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
 
@@ -450,6 +489,66 @@ def _route_from(state: AgentState, fallback: str, success: str) -> str:
     return success
 
 
+def _route_entry(state: AgentState) -> str:
+    """Route to rejection_node if PO feedback is present, otherwise start with kickoff."""
+    if state.get("po_feedback"):
+        return "rejection"
+    return "kickoff"
+
+
+async def rejection_node(state: AgentState) -> dict[str, Any]:
+    """
+    Process PO rejection feedback and route to the appropriate agent for revision.
+
+    Reads ``state["po_feedback"]``, announces the rejection in the GlassRoom,
+    then delegates to the Developer (code changes) or Architect (design concerns)
+    based on a lightweight keyword heuristic on the feedback text.
+    """
+    with tracer.start_as_current_span("graph.rejection") as span:
+        feedback = state.get("po_feedback", "")
+        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
+        span.set_attribute("company.id", str(state.get("company_id") or ""))
+        span.set_attribute("po_feedback.length", len(feedback))
+
+        await _publish(
+            state,
+            {
+                "type": "status",
+                "semantic_type": "hitl.rejection_received",
+                "agent": "System",
+                "role": "System",
+                "task_status": "rejected",
+                "phase": "rejection",
+                "task": "Process PO rejection feedback",
+                "message": f"🔄 PO rejected task. Re-routing with feedback: {feedback[:200]}",
+            },
+        )
+
+        # Route to Architect for design/scope concerns, Developer otherwise.
+        design_keywords = {"architect", "design", "scope", "interface", "schema", "model", "api"}
+        route_to = "architect" if any(kw in feedback.lower() for kw in design_keywords) else "developer"
+
+        try:
+            prompt = (
+                f"Sprint brief:\n{state['story']}\n\n"
+                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
+                f"⚠️ PO REJECTION FEEDBACK: {feedback}\n\n"
+                f"As {'Architect' if route_to == 'architect' else 'Developer'}, "
+                "address the PO's specific concerns point-by-point and propose a revised approach."
+            )
+            role = "Architect" if route_to == "architect" else "Developer"
+            content = await _invoke_agent(state, role, "Address PO rejection feedback", prompt)
+            return {
+                "messages": [AIMessage(content=content, name=role)],
+                "next_agent": "po_wrap",
+                "last_error": None,
+                "po_feedback": None,  # Clear feedback after processing
+            }
+        except Exception as exc:
+            span.set_status(StatusCode.ERROR, str(exc))
+            return {"last_error": str(exc), "next_agent": "burn"}
+
+
 def create_agent_graph():
     workflow = StateGraph(AgentState)
     workflow.add_node("kickoff", kickoff_node)
@@ -459,13 +558,15 @@ def create_agent_graph():
     workflow.add_node("developer", developer_node)
     workflow.add_node("po_wrap", po_wrap_node)
     workflow.add_node("burn", burn_node)
+    workflow.add_node("rejection", rejection_node)
 
-    workflow.set_entry_point("kickoff")
+    workflow.set_conditional_entry_point(_route_entry, {"kickoff": "kickoff", "rejection": "rejection"})
     workflow.add_edge("kickoff", "po")
     workflow.add_conditional_edges("po", lambda state: _route_from(state, "burn", "architect"))
     workflow.add_conditional_edges("architect", lambda state: _route_from(state, "burn", "scrum_master"))
     workflow.add_conditional_edges("scrum_master", lambda state: _route_from(state, "burn", "developer"))
     workflow.add_conditional_edges("developer", lambda state: _route_from(state, "burn", "po_wrap"))
+    workflow.add_conditional_edges("rejection", lambda state: _route_from(state, "burn", "po_wrap"))
     workflow.add_edge("po_wrap", "burn")
     workflow.add_edge("burn", END)
     return workflow.compile()
@@ -479,6 +580,7 @@ async def run_fabrique_workflow(
     company_id: Optional[int] = None,
     nats_client: Any = None,
     interaction_id: Optional[str] = None,
+    po_feedback: Optional[str] = None,
 ) -> dict[str, Any]:
     interaction_id = interaction_id or str(uuid4())
 
@@ -502,6 +604,7 @@ async def run_fabrique_workflow(
         "needs_split": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "publish_event": publish_event,
+        "po_feedback": po_feedback,
     }
 
     logger.info(
