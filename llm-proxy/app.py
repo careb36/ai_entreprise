@@ -210,12 +210,6 @@ def add_quota_warning_header(response):
     except Exception as e:
         logger.error(f"Quota warning check failed: {e}")
     return response
-    if not bu_id: return
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("UPDATE business_units SET token_quota_used = token_quota_used + :t WHERE id = :id"), {"t": tokens, "id": bu_id})
-    except Exception as e:
-        logger.error(f"Usage tracking failed: {e}")
 
 # --- API Endpoints ---
 

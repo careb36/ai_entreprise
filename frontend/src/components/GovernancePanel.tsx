@@ -128,6 +128,7 @@ export const GovernancePanel: React.FC = () => {
 
   const [confirm, setConfirm] = useState<{ task: PendingTask; decision: 'approved' | 'rejected' } | null>(null)
   const [page, setPage] = useState(0)
+  const [pendingResets, setPendingResets] = useState<Set<number>>(new Set())
   const PER_PAGE = 10
 
   const tasks = (data?.pending_approvals || []) as PendingTask[]
@@ -215,12 +216,17 @@ export const GovernancePanel: React.FC = () => {
                       </span>
                       {unit.id && (
                         <button
-                          onClick={() => resetQuotaMutation.mutate(unit.id)}
-                          disabled={resetQuotaMutation.isPending}
+                          onClick={() => {
+                            setPendingResets(prev => new Set(prev).add(unit.id))
+                            resetQuotaMutation.mutate(unit.id, {
+                              onSettled: () => setPendingResets(prev => { const s = new Set(prev); s.delete(unit.id); return s })
+                            })
+                          }}
+                          disabled={pendingResets.has(unit.id)}
                           className="btn-ghost btn-sm p-1"
                           title={t('governance.resetQuota')}
                         >
-                          <RotateCcw size={12} className={resetQuotaMutation.isPending ? 'animate-spin' : ''} />
+                          <RotateCcw size={12} className={pendingResets.has(unit.id) ? 'animate-spin' : ''} />
                         </button>
                       )}
                     </div>
