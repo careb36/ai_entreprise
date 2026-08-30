@@ -383,7 +383,13 @@
     "loading": "Loading...",
     "noData": "No data available",
     "error": "Failed to load analytics",
-    "inProgress": "In Progress"
+    "inProgress": "In Progress",
+    "orchestration_health": {
+      "title": "Orchestration Health",
+      "qa_rate": "QA Needs Work Rate",
+      "avg_tokens": "Avg Developer Tokens",
+      "consult_freq": "Architect Consult Frequency"
+    }
   },
   "memorySearch": {
     "title": "Memory Search",

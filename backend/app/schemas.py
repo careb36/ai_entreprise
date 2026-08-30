@@ -152,3 +152,36 @@ class SupportChatRequest(BaseModel):
     """Payload for ``POST /v1/support/chat`` — multi-turn LLM support conversation."""
     messages: List[ChatMessage]  # Full conversation history (oldest first)
 
+
+# ---------------------------------------------------------------------------
+# Orchestration health analytics (GET /v1/analytics/orchestration_health)
+# ---------------------------------------------------------------------------
+
+class OrchestrationHealthWeek(BaseModel):
+    """Per-week KPI snapshot for the orchestration health endpoint."""
+    week: str                         # ISO week label, e.g. "2026-W18"
+    qa_needs_work_rate: float         # Fraction of QA decisions marked NEEDS_WORK
+    avg_developer_tokens: float       # Mean tokens consumed by Developer agent
+    architect_consult_count: int      # Number of ARCHITECT_CONSULTED comments
+    task_count: int                   # Total QA audit rows in the week
+    post_batch1: bool                 # True when the week falls after 2026-05-02
+
+
+class OrchestrationHealthSummary(BaseModel):
+    """Aggregated pre/post Batch-1 averages."""
+    qa_needs_work_rate: float
+    avg_developer_tokens: float
+
+
+class OrchestrationHealthSummaries(BaseModel):
+    pre_batch1: OrchestrationHealthSummary
+    post_batch1: OrchestrationHealthSummary
+
+
+class OrchestrationHealthResponse(BaseModel):
+    """Response shape for ``GET /v1/analytics/orchestration_health``."""
+    anchor_commit: str
+    anchor_date: str                  # ISO-8601 date of the Batch-1 anchor
+    weeks: List[OrchestrationHealthWeek]
+    summary: OrchestrationHealthSummaries
+
