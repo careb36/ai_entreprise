@@ -2,18 +2,16 @@
 Enterprise router — multi-tenancy governance, quota management, and analytics.
 
 Endpoints:
-- ``POST /v1/init_company``                         — bootstrap a new company with agents and credentials.
-- ``POST /v1/approve_task``                         — human-in-the-loop approval for AI-generated tasks.
-- ``GET  /v1/enterprise/quotas``                    — token usage per business unit.
-- ``GET  /v1/analytics/summary``                    — AI Scrum Master sprint health report.
-- ``GET  /v1/analytics/orchestration_health``       — 3-KPI weekly trend vs Batch-1 anchor.
-- ``POST /v1/discover_team``                        — auto-detect project stack and suggest an AI team.
-- ``GET  /v1/enterprise/lineage``                   — time-travel debugging: architectural decisions for a file.
+- ``POST /v1/init_company``        — bootstrap a new company with agents and credentials.
+- ``POST /v1/approve_task``        — human-in-the-loop approval for AI-generated tasks.
+- ``GET  /v1/enterprise/quotas``   — token usage per business unit.
+- ``GET  /v1/analytics/summary``   — AI Scrum Master sprint health report.
+- ``POST /v1/discover_team``       — auto-detect project stack and suggest an AI team.
+- ``GET  /v1/enterprise/lineage``  — time-travel debugging: architectural decisions for a file.
 """
 
 import asyncio
-from datetime import date, datetime, timedelta
-from typing import List
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from sqlalchemy import text
@@ -27,13 +25,16 @@ from schemas import (
     ApprovalRequest,
     DiscoveryRequest,
     OrchestrationHealthResponse,
-    OrchestrationHealthWeek,
-    OrchestrationHealthSummary,
     OrchestrationHealthSummaries,
+    OrchestrationHealthSummary,
+    OrchestrationHealthWeek,
 )
 from logging_config import logger
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
+
+_ANCHOR_COMMIT = "116138e"
+_ANCHOR_DATE = date(2026, 5, 2)
 
 
 @router.post("/init_company", tags=["Core"])
@@ -100,6 +101,180 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
     """
     service = CompanyService(session)
     return service.get_project_health(sprint_id)
+
+
+@router.get(
+    "/analytics/orchestration_health",
+    response_model=OrchestrationHealthResponse,
+    tags=["Enterprise"],
+)
+async def get_orchestration_health(
+    company_id: int = Query(..., description="Company whose orchestration history will be analysed"),
+    weeks: int = Query(8, ge=1, le=52, description="Trailing weeks to include"),
+    session: Session = Depends(get_session),
+):
+    """
+    Return weekly KPI trends that measure the Batch-1 orchestration rollout.
+    """
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(weeks=weeks)
+    params = {"company_id": company_id, "cutoff": cutoff}
+
+    qa_sql = text("""
+        SELECT
+            to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
+            COALESCE(
+                COUNT(*) FILTER (WHERE a.details->>'result_type' = 'NEEDS_WORK') * 1.0
+                / NULLIF(COUNT(*), 0),
+                0
+            ) AS qa_needs_work_rate,
+            COUNT(*) AS task_count
+        FROM audit_log a
+        WHERE a.details->>'role' = 'QA'
+          AND NULLIF(a.details->>'company_id', '')::int = :company_id
+          AND a.created_at >= :cutoff
+        GROUP BY 1
+        ORDER BY 1
+    """)
+
+    qa_fallback_sql = text("""
+        WITH review_comments AS (
+            SELECT
+                to_char(date_trunc('week', bi.updated_at), 'IYYY-"W"IW') AS week,
+                UPPER(COALESCE(c->>'text', '')) AS review_text
+            FROM backlog_items bi
+            JOIN sprints s ON s.id = bi.sprint_id
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE
+                    WHEN bi.comments IS NULL THEN '[]'::jsonb
+                    WHEN jsonb_typeof(bi.comments::jsonb) = 'array' THEN bi.comments::jsonb
+                    ELSE '[]'::jsonb
+                END
+            ) AS c
+            WHERE s.company_id = :company_id
+              AND bi.updated_at >= :cutoff
+              AND (
+                  UPPER(COALESCE(c->>'text', '')) LIKE 'APPROVED:%'
+                  OR UPPER(COALESCE(c->>'text', '')) LIKE 'NEEDS WORK:%'
+              )
+        )
+        SELECT
+            week,
+            COALESCE(
+                COUNT(*) FILTER (WHERE review_text LIKE 'NEEDS WORK:%') * 1.0
+                / NULLIF(COUNT(*), 0),
+                0
+            ) AS qa_needs_work_rate,
+            COUNT(*) AS task_count
+        FROM review_comments
+        GROUP BY 1
+        ORDER BY 1
+    """)
+
+    tokens_sql = text("""
+        SELECT
+            to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
+            COALESCE(AVG(a.cost_tokens), 0) AS avg_developer_tokens,
+            COUNT(*) AS developer_turn_count
+        FROM audit_log a
+        WHERE a.details->>'role' = 'Developer'
+          AND NULLIF(a.details->>'company_id', '')::int = :company_id
+          AND a.created_at >= :cutoff
+        GROUP BY 1
+        ORDER BY 1
+    """)
+
+    consult_sql = text("""
+        SELECT
+            to_char(date_trunc('week', bi.updated_at), 'IYYY-"W"IW') AS week,
+            COUNT(*) AS architect_consult_count
+        FROM backlog_items bi
+        JOIN sprints s ON s.id = bi.sprint_id
+        CROSS JOIN LATERAL jsonb_array_elements(
+            CASE
+                WHEN bi.comments IS NULL THEN '[]'::jsonb
+                WHEN jsonb_typeof(bi.comments::jsonb) = 'array' THEN bi.comments::jsonb
+                ELSE '[]'::jsonb
+            END
+        ) AS c
+        WHERE s.company_id = :company_id
+          AND bi.updated_at >= :cutoff
+          AND c->>'author' = 'Architect'
+          AND UPPER(COALESCE(c->>'text', '')) LIKE 'ARCHITECT_CONSULTED:%'
+        GROUP BY 1
+        ORDER BY 1
+    """)
+
+    try:
+        qa_rows = session.execute(qa_sql, params).mappings().all()
+        if not qa_rows:
+            qa_rows = session.execute(qa_fallback_sql, params).mappings().all()
+        token_rows = session.execute(tokens_sql, params).mappings().all()
+        consult_rows = session.execute(consult_sql, params).mappings().all()
+    except Exception as exc:
+        logger.error("Orchestration health query failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Analytics query failed.")
+
+    qa_by_week = {row["week"]: row for row in qa_rows}
+    tokens_by_week = {row["week"]: row for row in token_rows}
+    consult_by_week = {row["week"]: row for row in consult_rows}
+    developer_turn_counts = {
+        row["week"]: int(row.get("developer_turn_count", 0))
+        for row in token_rows
+    }
+    all_weeks = sorted(set(qa_by_week) | set(tokens_by_week) | set(consult_by_week))
+    anchor_week = _ANCHOR_DATE.strftime("%G-W%V")
+
+    week_rows: list[OrchestrationHealthWeek] = []
+    for week_label in all_weeks:
+        qa_row = qa_by_week.get(week_label, {})
+        token_row = tokens_by_week.get(week_label, {})
+        consult_row = consult_by_week.get(week_label, {})
+        week_rows.append(
+            OrchestrationHealthWeek(
+                week=week_label,
+                qa_needs_work_rate=float(qa_row.get("qa_needs_work_rate", 0.0)),
+                avg_developer_tokens=float(token_row.get("avg_developer_tokens", 0.0)),
+                architect_consult_count=int(consult_row.get("architect_consult_count", 0)),
+                task_count=int(qa_row.get("task_count", 0)),
+                post_batch1=week_label >= anchor_week,
+            )
+        )
+
+    def _weighted_qa_rate(items: list[OrchestrationHealthWeek]) -> float:
+        total_reviews = sum(item.task_count for item in items)
+        if not total_reviews:
+            return 0.0
+        weighted_sum = sum(item.qa_needs_work_rate * item.task_count for item in items)
+        return weighted_sum / total_reviews
+
+    def _weighted_token_average(items: list[OrchestrationHealthWeek]) -> float:
+        total_turns = sum(developer_turn_counts.get(item.week, 0) for item in items)
+        if not total_turns:
+            return 0.0
+        weighted_sum = sum(
+            item.avg_developer_tokens * developer_turn_counts.get(item.week, 0)
+            for item in items
+        )
+        return weighted_sum / total_turns
+
+    pre_batch1 = [row for row in week_rows if not row.post_batch1]
+    post_batch1 = [row for row in week_rows if row.post_batch1]
+
+    return OrchestrationHealthResponse(
+        anchor_commit=_ANCHOR_COMMIT,
+        anchor_date=_ANCHOR_DATE.isoformat(),
+        weeks=week_rows,
+        summary=OrchestrationHealthSummaries(
+            pre_batch1=OrchestrationHealthSummary(
+                qa_needs_work_rate=_weighted_qa_rate(pre_batch1),
+                avg_developer_tokens=_weighted_token_average(pre_batch1),
+            ),
+            post_batch1=OrchestrationHealthSummary(
+                qa_needs_work_rate=_weighted_qa_rate(post_batch1),
+                avg_developer_tokens=_weighted_token_average(post_batch1),
+            ),
+        ),
+    )
 
 
 @router.get("/models", tags=["Enterprise"])
@@ -198,211 +373,3 @@ async def get_code_lineage(file_path: str):
     except Exception as e:
         logger.error(f"Lineage query failed: {e}")
         raise HTTPException(status_code=500, detail="Neo4j Time Travel query failed.")
-
-
-# ---------------------------------------------------------------------------
-# Orchestration health — 3 KPI weekly trend (Batch-1 impact measurement)
-# ---------------------------------------------------------------------------
-
-_ANCHOR_COMMIT = "116138e"
-_ANCHOR_DATE = date(2026, 5, 2)
-
-
-@router.get(
-    "/analytics/orchestration_health",
-    response_model=OrchestrationHealthResponse,
-    tags=["Enterprise"],
-)
-async def get_orchestration_health(
-    company_id: int = Query(..., description="Company whose sprint history to analyse"),
-    weeks: int = Query(8, ge=1, le=52, description="Number of trailing weeks to include"),
-    session: Session = Depends(get_session),
-):
-    """
-    Return three weekly KPIs that measure the impact of the Batch-1
-    orchestration improvements (anchor commit ``116138e``, 2026-05-02):
-
-    1. **QA NEEDS_WORK rate** — fraction of QA decisions requesting rework.
-    2. **Average Developer tokens** — mean LLM tokens consumed per Developer turn.
-    3. **ARCHITECT_CONSULTED frequency** — architect consultation comments per week.
-
-    Each week is tagged ``post_batch1=true`` when it falls on or after
-    ``2026-05-02``.  A ``summary`` block aggregates pre/post averages for
-    quick comparison.
-
-    Returns ``weeks: []`` gracefully when no data exists (new install).
-    ``company_id`` is enforced on every query — no cross-tenant data leakage.
-    """
-    engine = session.get_bind()
-
-    # Compute the cutoff timestamp once in Python to avoid PostgreSQL interval
-    # arithmetic with bound parameters (which is not supported by all drivers).
-    cutoff = datetime.utcnow() - timedelta(weeks=weeks)
-
-    # ------------------------------------------------------------------
-    # KPI 1 — QA NEEDS_WORK rate  (audit_log, scoped via details JSON)
-    # NOTE: company_id scoping relies on the 'company_id' key being present in
-    # the audit_log.details JSON blob.  Rows without that key are excluded.
-    # ------------------------------------------------------------------
-    qa_sql = text("""
-        SELECT
-            to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
-            COALESCE(
-                COUNT(*) FILTER (WHERE a.details->>'result_type' = 'NEEDS_WORK') * 1.0
-                / NULLIF(COUNT(*), 0),
-                0
-            )                                                         AS qa_needs_work_rate,
-            COUNT(*)                                                   AS task_count
-        FROM audit_log a
-        WHERE (a.details->>'role') = 'QA'
-          AND (a.details->>'company_id')::int = :company_id
-          AND a.created_at >= :cutoff
-        GROUP BY 1
-        ORDER BY 1
-    """)
-
-    # ------------------------------------------------------------------
-    # KPI 1 fallback — scan backlog_items.comments for 'NEEDS WORK:' prefix
-    # (used when audit_log role/company_id is not populated)
-    # ------------------------------------------------------------------
-    qa_fallback_sql = text("""
-        SELECT
-            to_char(date_trunc('week', bi.updated_at), 'IYYY-"W"IW') AS week,
-            COALESCE(
-                COUNT(*) FILTER (
-                    WHERE c->>'text' ILIKE 'NEEDS WORK:%'
-                ) * 1.0 / NULLIF(COUNT(*), 0),
-                0
-            )                                                         AS qa_needs_work_rate,
-            COUNT(*)                                                   AS task_count
-        FROM backlog_items bi
-        JOIN sprints s ON s.id = bi.sprint_id
-        CROSS JOIN LATERAL jsonb_array_elements(
-            CASE
-                WHEN bi.comments IS NULL THEN '[]'::jsonb
-                WHEN jsonb_typeof(bi.comments::jsonb) = 'array' THEN bi.comments::jsonb
-                ELSE '[]'::jsonb
-            END
-        ) AS c
-        WHERE s.company_id = :company_id
-          AND bi.updated_at >= :cutoff
-        GROUP BY 1
-        ORDER BY 1
-    """)
-
-    # ------------------------------------------------------------------
-    # KPI 2 — Average Developer tokens (audit_log, scoped via details JSON)
-    # ------------------------------------------------------------------
-    tokens_sql = text("""
-        SELECT
-            to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
-            COALESCE(AVG(a.cost_tokens), 0)                           AS avg_developer_tokens
-        FROM audit_log a
-        WHERE (a.details->>'role') = 'Developer'
-          AND (a.details->>'company_id')::int = :company_id
-          AND a.created_at >= :cutoff
-        GROUP BY 1
-        ORDER BY 1
-    """)
-
-    # ------------------------------------------------------------------
-    # KPI 3 — ARCHITECT_CONSULTED frequency (backlog_items.comments)
-    # ------------------------------------------------------------------
-    consult_sql = text("""
-        SELECT
-            to_char(date_trunc('week', bi.updated_at), 'IYYY-"W"IW') AS week,
-            COUNT(*)                                                   AS architect_consult_count
-        FROM backlog_items bi
-        JOIN sprints s ON s.id = bi.sprint_id
-        CROSS JOIN LATERAL jsonb_array_elements(
-            CASE
-                WHEN bi.comments IS NULL THEN '[]'::jsonb
-                WHEN jsonb_typeof(bi.comments::jsonb) = 'array' THEN bi.comments::jsonb
-                ELSE '[]'::jsonb
-            END
-        ) AS c
-        WHERE c->>'author' = 'Architect'
-          AND (c->>'text') ILIKE 'ARCHITECT_CONSULTED:%'
-          AND s.company_id = :company_id
-          AND bi.updated_at >= :cutoff
-        GROUP BY 1
-        ORDER BY 1
-    """)
-
-    params = {"company_id": company_id, "cutoff": cutoff}
-
-    try:
-        with engine.connect() as conn:
-            qa_rows = conn.execute(qa_sql, params).mappings().all()
-
-            # Fall back to comments scan when audit_log has no matching rows
-            if not qa_rows:
-                qa_rows = conn.execute(qa_fallback_sql, params).mappings().all()
-
-            tokens_rows = conn.execute(tokens_sql, params).mappings().all()
-            consult_rows = conn.execute(consult_sql, params).mappings().all()
-    except Exception as exc:
-        logger.error("orchestration_health query failed: %s", exc)
-        raise HTTPException(status_code=500, detail="Analytics query failed.")
-
-    # ------------------------------------------------------------------
-    # Merge the three result sets by ISO week key
-    # ------------------------------------------------------------------
-    qa_by_week: dict = {r["week"]: r for r in qa_rows}
-    tokens_by_week: dict = {r["week"]: r for r in tokens_rows}
-    consult_by_week: dict = {r["week"]: r for r in consult_rows}
-
-    all_weeks: List[str] = sorted(
-        set(qa_by_week) | set(tokens_by_week) | set(consult_by_week)
-    )
-
-    week_items: List[OrchestrationHealthWeek] = []
-    # ISO week labels are sortable as strings; compute the anchor once outside
-    # the loop to avoid redundant computation on every iteration.
-    anchor_week_label = _ANCHOR_DATE.strftime("%G-W%V")
-    for week_label in all_weeks:
-        qa = qa_by_week.get(week_label, {})
-        tok = tokens_by_week.get(week_label, {})
-        con = consult_by_week.get(week_label, {})
-
-        # Determine whether the week falls on or after the anchor date.
-        post = week_label >= anchor_week_label
-
-        week_items.append(
-            OrchestrationHealthWeek(
-                week=week_label,
-                qa_needs_work_rate=float(qa.get("qa_needs_work_rate", 0.0)),
-                avg_developer_tokens=float(tok.get("avg_developer_tokens", 0.0)),
-                architect_consult_count=int(con.get("architect_consult_count", 0)),
-                task_count=int(qa.get("task_count", 0)),
-                post_batch1=post,
-            )
-        )
-
-    # ------------------------------------------------------------------
-    # Pre / post summary averages
-    # ------------------------------------------------------------------
-    def _avg(items: List[OrchestrationHealthWeek], field: str) -> float:
-        values = [getattr(w, field) for w in items]
-        return sum(values) / len(values) if values else 0.0
-
-    pre_weeks = [w for w in week_items if not w.post_batch1]
-    post_weeks = [w for w in week_items if w.post_batch1]
-
-    summary = OrchestrationHealthSummaries(
-        pre_batch1=OrchestrationHealthSummary(
-            qa_needs_work_rate=_avg(pre_weeks, "qa_needs_work_rate"),
-            avg_developer_tokens=_avg(pre_weeks, "avg_developer_tokens"),
-        ),
-        post_batch1=OrchestrationHealthSummary(
-            qa_needs_work_rate=_avg(post_weeks, "qa_needs_work_rate"),
-            avg_developer_tokens=_avg(post_weeks, "avg_developer_tokens"),
-        ),
-    )
-
-    return OrchestrationHealthResponse(
-        anchor_commit=_ANCHOR_COMMIT,
-        anchor_date=_ANCHOR_DATE.isoformat(),
-        weeks=week_items,
-        summary=summary,
-    )
