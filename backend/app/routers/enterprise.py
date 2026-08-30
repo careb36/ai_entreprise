@@ -173,7 +173,8 @@ async def get_orchestration_health(
     tokens_sql = text("""
         SELECT
             to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
-            COALESCE(AVG(a.cost_tokens), 0) AS avg_developer_tokens
+            COALESCE(AVG(a.cost_tokens), 0) AS avg_developer_tokens,
+            COUNT(*) AS developer_turn_count
         FROM audit_log a
         WHERE a.details->>'role' = 'Developer'
           AND NULLIF(a.details->>'company_id', '')::int = :company_id
@@ -235,16 +236,22 @@ async def get_orchestration_health(
             )
         )
 
-    def _avg(items: list[OrchestrationHealthWeek], field: str) -> float:
-        values = [getattr(item, field) for item in items]
-        return sum(values) / len(values) if values else 0.0
-
     def _weighted_qa_rate(items: list[OrchestrationHealthWeek]) -> float:
         total_reviews = sum(item.task_count for item in items)
         if not total_reviews:
             return 0.0
         weighted_sum = sum(item.qa_needs_work_rate * item.task_count for item in items)
         return weighted_sum / total_reviews
+
+    def _weighted_token_average(items: list[OrchestrationHealthWeek]) -> float:
+        total_turns = sum(int(tokens_by_week.get(item.week, {}).get("developer_turn_count", 0)) for item in items)
+        if not total_turns:
+            return 0.0
+        weighted_sum = sum(
+            item.avg_developer_tokens * int(tokens_by_week.get(item.week, {}).get("developer_turn_count", 0))
+            for item in items
+        )
+        return weighted_sum / total_turns
 
     pre_batch1 = [row for row in week_rows if not row.post_batch1]
     post_batch1 = [row for row in week_rows if row.post_batch1]
@@ -256,11 +263,11 @@ async def get_orchestration_health(
         summary=OrchestrationHealthSummaries(
             pre_batch1=OrchestrationHealthSummary(
                 qa_needs_work_rate=_weighted_qa_rate(pre_batch1),
-                avg_developer_tokens=_avg(pre_batch1, "avg_developer_tokens"),
+                avg_developer_tokens=_weighted_token_average(pre_batch1),
             ),
             post_batch1=OrchestrationHealthSummary(
                 qa_needs_work_rate=_weighted_qa_rate(post_batch1),
-                avg_developer_tokens=_avg(post_batch1, "avg_developer_tokens"),
+                avg_developer_tokens=_weighted_token_average(post_batch1),
             ),
         ),
     )
