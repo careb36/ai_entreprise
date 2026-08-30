@@ -11,7 +11,7 @@ Endpoints:
 """
 
 import asyncio
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Query
 from sqlalchemy import text
@@ -116,7 +116,7 @@ async def get_orchestration_health(
     """
     Return weekly KPI trends that measure the Batch-1 orchestration rollout.
     """
-    cutoff = datetime.utcnow() - timedelta(weeks=weeks)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(weeks=weeks)
     params = {"company_id": company_id, "cutoff": cutoff}
 
     qa_sql = text("""
@@ -217,6 +217,10 @@ async def get_orchestration_health(
     qa_by_week = {row["week"]: row for row in qa_rows}
     tokens_by_week = {row["week"]: row for row in token_rows}
     consult_by_week = {row["week"]: row for row in consult_rows}
+    developer_turn_counts = {
+        row["week"]: int(row.get("developer_turn_count", 0))
+        for row in token_rows
+    }
     all_weeks = sorted(set(qa_by_week) | set(tokens_by_week) | set(consult_by_week))
     anchor_week = _ANCHOR_DATE.strftime("%G-W%V")
 
@@ -244,11 +248,11 @@ async def get_orchestration_health(
         return weighted_sum / total_reviews
 
     def _weighted_token_average(items: list[OrchestrationHealthWeek]) -> float:
-        total_turns = sum(int(tokens_by_week.get(item.week, {}).get("developer_turn_count", 0)) for item in items)
+        total_turns = sum(developer_turn_counts.get(item.week, 0) for item in items)
         if not total_turns:
             return 0.0
         weighted_sum = sum(
-            item.avg_developer_tokens * int(tokens_by_week.get(item.week, {}).get("developer_turn_count", 0))
+            item.avg_developer_tokens * developer_turn_counts.get(item.week, 0)
             for item in items
         )
         return weighted_sum / total_turns
