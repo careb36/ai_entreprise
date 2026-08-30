@@ -116,7 +116,6 @@ async def get_orchestration_health(
     """
     Return weekly KPI trends that measure the Batch-1 orchestration rollout.
     """
-    engine = session.get_bind()
     cutoff = datetime.utcnow() - timedelta(weeks=weeks)
     params = {"company_id": company_id, "cutoff": cutoff}
 
@@ -205,12 +204,11 @@ async def get_orchestration_health(
     """)
 
     try:
-        with engine.connect() as conn:
-            qa_rows = conn.execute(qa_sql, params).mappings().all()
-            if not qa_rows:
-                qa_rows = conn.execute(qa_fallback_sql, params).mappings().all()
-            token_rows = conn.execute(tokens_sql, params).mappings().all()
-            consult_rows = conn.execute(consult_sql, params).mappings().all()
+        qa_rows = session.execute(qa_sql, params).mappings().all()
+        if not qa_rows:
+            qa_rows = session.execute(qa_fallback_sql, params).mappings().all()
+        token_rows = session.execute(tokens_sql, params).mappings().all()
+        consult_rows = session.execute(consult_sql, params).mappings().all()
     except Exception as exc:
         logger.error("Orchestration health query failed: %s", exc)
         raise HTTPException(status_code=500, detail="Analytics query failed.")
@@ -241,6 +239,13 @@ async def get_orchestration_health(
         values = [getattr(item, field) for item in items]
         return sum(values) / len(values) if values else 0.0
 
+    def _weighted_qa_rate(items: list[OrchestrationHealthWeek]) -> float:
+        total_reviews = sum(item.task_count for item in items)
+        if not total_reviews:
+            return 0.0
+        weighted_sum = sum(item.qa_needs_work_rate * item.task_count for item in items)
+        return weighted_sum / total_reviews
+
     pre_batch1 = [row for row in week_rows if not row.post_batch1]
     post_batch1 = [row for row in week_rows if row.post_batch1]
 
@@ -250,11 +255,11 @@ async def get_orchestration_health(
         weeks=week_rows,
         summary=OrchestrationHealthSummaries(
             pre_batch1=OrchestrationHealthSummary(
-                qa_needs_work_rate=_avg(pre_batch1, "qa_needs_work_rate"),
+                qa_needs_work_rate=_weighted_qa_rate(pre_batch1),
                 avg_developer_tokens=_avg(pre_batch1, "avg_developer_tokens"),
             ),
             post_batch1=OrchestrationHealthSummary(
-                qa_needs_work_rate=_avg(post_batch1, "qa_needs_work_rate"),
+                qa_needs_work_rate=_weighted_qa_rate(post_batch1),
                 avg_developer_tokens=_avg(post_batch1, "avg_developer_tokens"),
             ),
         ),
