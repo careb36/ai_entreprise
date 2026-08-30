@@ -135,6 +135,7 @@ The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `
 - **Frontend:** `http://localhost:5173`
 - **Backend API + Swagger:** `http://localhost:8000/docs`
 - **LLM Proxy:** `http://localhost:5100`
+- **Jaeger Tracing UI:** `http://localhost:16686`
 
 **Prerequisites:** Docker Desktop, Docker Compose v2
 

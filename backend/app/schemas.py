@@ -11,7 +11,7 @@ Naming convention:
 - ``Chat*``     — support-chat specific schemas.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict, Any
 
 
@@ -90,6 +90,13 @@ class ApprovalRequest(BaseModel):
     approver_name: str
     decision: str  # "approved" | "rejected"
     feedback: Optional[str] = None
+    rejection_category: Optional[str] = None  # "scope" | "quality" | "security" | "other"
+
+    @model_validator(mode="after")
+    def feedback_required_on_rejection(self) -> "ApprovalRequest":
+        if self.decision == "rejected" and not self.feedback:
+            raise ValueError("feedback is required when decision is 'rejected'")
+        return self
 
 
 

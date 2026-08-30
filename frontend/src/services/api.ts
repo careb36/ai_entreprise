@@ -226,6 +226,9 @@ export const api = {
   getQuotas: (companyId: number) =>
     api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),
 
+  resetQuota: (buId: number) =>
+    api.post<any>(`/v1/enterprise/quotas/${buId}/reset`, {}),
+
   getAnalyticsSummary: (sprintId: number) =>
     api.get<any>('/v1/analytics/summary', { sprint_id: sprintId }),
 

@@ -188,7 +188,28 @@ def enforce_business_unit_quota():
     except Exception as e:
         logger.error(f"Quota check failed: {e}")
 
-def track_usage_in_db(bu_id: str, tokens: int):
+
+@app.after_request
+def add_quota_warning_header(response):
+    """Add X-Quota-Warning header when a business unit has consumed ≥ 80 % of its limit."""
+    bu_id = request.headers.get("X-Business-Unit-ID")
+    if not bu_id:
+        return response
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(
+                text("SELECT token_quota_limit, token_quota_used FROM business_units WHERE id = :id"),
+                {"id": bu_id},
+            ).fetchone()
+            if res:
+                limit, used = res
+                if limit > 0 and used >= limit * 0.8:
+                    response.headers["X-Quota-Warning"] = "true"
+                    response.headers["X-Quota-Used"] = str(used)
+                    response.headers["X-Quota-Limit"] = str(limit)
+    except Exception as e:
+        logger.error(f"Quota warning check failed: {e}")
+    return response
     if not bu_id: return
     try:
         with engine.begin() as conn:

@@ -2,9 +2,12 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { 
   usePendingApprovals, 
-  useApproveTask 
+  useApproveTask,
+  useQuotas,
+  useResetQuota,
 } from '../hooks/useQueries'
-import { ShieldCheck, CheckCircle2, XCircle, Loader2, RefreshCw, AlertTriangle, Info } from 'lucide-react'
+import { useAppStore } from '../store/useAppStore'
+import { ShieldCheck, CheckCircle2, XCircle, Loader2, RefreshCw, AlertTriangle, Info, RotateCcw } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +49,15 @@ function ConfirmModal({
   const { t } = useTranslation()
   const isApprove = decision === 'approved'
   const [feedback, setFeedback] = useState('')
+  const [feedbackError, setFeedbackError] = useState(false)
+
+  function handleConfirm() {
+    if (!isApprove && !feedback.trim()) {
+      setFeedbackError(true)
+      return
+    }
+    onConfirm(feedback || undefined)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -67,15 +79,23 @@ function ConfirmModal({
         <div className="mb-5">
           <label className="input-label flex items-center gap-1.5">
             <Info size={12} />
-            {t('governance.feedbackLabel')} <span className="text-gray-600 font-normal">({t('common.optional', t('common.na'))})</span>
+            {t('governance.feedbackLabel')}
+            {!isApprove && <span className="text-status-error ml-0.5">*</span>}
+            {isApprove && <span className="text-gray-600 font-normal">({t('common.optional', t('common.na'))})</span>}
           </label>
           <textarea
             value={feedback}
-            onChange={e => setFeedback(e.target.value)}
+            onChange={e => { setFeedback(e.target.value); setFeedbackError(false) }}
             rows={3}
-            placeholder={isApprove ? 'Looks good! Go ahead.' : 'Reason for rejection...'}
-            className="textarea w-full text-sm"
+            placeholder={isApprove ? t('governance.feedbackPlaceholderApprove') : t('governance.feedbackPlaceholderReject')}
+            className={`textarea w-full text-sm ${feedbackError ? 'border-status-error' : ''}`}
           />
+          {feedbackError && (
+            <p className="text-xs text-status-error mt-1 flex items-center gap-1">
+              <AlertTriangle size={11} />
+              {t('governance.feedbackRequired')}
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 justify-end">
@@ -83,7 +103,7 @@ function ConfirmModal({
             {t('common.cancel', 'Cancel')}
           </button>
           <button
-            onClick={() => onConfirm(feedback)}
+            onClick={handleConfirm}
             disabled={loading}
             className={`btn ${isApprove ? 'btn-success' : 'btn-danger'}`}
           >
@@ -100,8 +120,11 @@ function ConfirmModal({
 
 export const GovernancePanel: React.FC = () => {
   const { t } = useTranslation()
+  const { companyId } = useAppStore()
   const { data, isLoading, isError, refetch } = usePendingApprovals()
   const approveMutation = useApproveTask()
+  const { data: quotaData } = useQuotas(companyId)
+  const resetQuotaMutation = useResetQuota()
 
   const [confirm, setConfirm] = useState<{ task: PendingTask; decision: 'approved' | 'rejected' } | null>(null)
   const [page, setPage] = useState(0)
@@ -154,6 +177,69 @@ export const GovernancePanel: React.FC = () => {
           <span className="hidden sm:inline">{t('common.refresh', 'Refresh')}</span>
         </button>
       </div>
+
+      {/* Token Quota Usage Bars */}
+      {quotaData && Array.isArray(quotaData) && quotaData.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            {t('governance.quotaTitle')}
+          </h3>
+          <div className="space-y-3">
+            {quotaData.map((unit: any) => {
+              const pct = unit.limit > 0 ? Math.min(100, Math.round((unit.used / unit.limit) * 100)) : 0
+              const isWarning = pct >= 80 && pct < 100
+              const isExceeded = unit.limit > 0 && unit.used >= unit.limit
+              const barColor = isExceeded
+                ? 'bg-status-error'
+                : isWarning
+                ? 'bg-yellow-500'
+                : 'bg-brand-500'
+              return (
+                <div key={unit.id ?? unit.unit} className="card p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-300">{unit.unit}</span>
+                    <div className="flex items-center gap-2">
+                      {isExceeded && (
+                        <span className="badge bg-red-900/60 text-red-300 border-red-700/40 text-xs">
+                          {t('governance.quotaExceeded')}
+                        </span>
+                      )}
+                      {isWarning && !isExceeded && (
+                        <span className="badge bg-yellow-900/60 text-yellow-300 border-yellow-700/40 text-xs flex items-center gap-1">
+                          <AlertTriangle size={10} />
+                          {t('governance.quotaWarning')}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500">
+                        {unit.used.toLocaleString()} / {unit.limit > 0 ? unit.limit.toLocaleString() : '∞'} {t('governance.tokens')}
+                      </span>
+                      {unit.id && (
+                        <button
+                          onClick={() => resetQuotaMutation.mutate(unit.id)}
+                          disabled={resetQuotaMutation.isPending}
+                          className="btn-ghost btn-sm p-1"
+                          title={t('governance.resetQuota')}
+                        >
+                          <RotateCcw size={12} className={resetQuotaMutation.isPending ? 'animate-spin' : ''} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="w-full bg-surface-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${barColor}`}
+                      style={{ width: `${unit.limit > 0 ? pct : 0}%` }}
+                    />
+                  </div>
+                  {unit.limit > 0 && (
+                    <p className="text-xs text-gray-600 mt-1 text-right">{pct}%</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {error && <div className="alert-error mb-4 flex items-center gap-2"><AlertTriangle size={14} />{error}</div>}
 
@@ -228,7 +314,7 @@ export const GovernancePanel: React.FC = () => {
           task={confirm.task}
           decision={confirm.decision}
           loading={actioningId === confirm.task.id}
-          onConfirm={() => executeDecision(confirm.task.id, confirm.decision)}
+          onConfirm={(feedback) => executeDecision(confirm.task.id, confirm.decision, feedback)}
           onCancel={() => setConfirm(null)}
         />
       )}

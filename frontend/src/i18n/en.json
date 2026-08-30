@@ -357,7 +357,15 @@
       "high": "Destructive — cannot be undone easily",
       "medium": "Significant — review carefully",
       "low": "Routine — low impact"
-    }
+    },
+    "quotaTitle": "Token Quota Usage",
+    "quotaExceeded": "Quota Exceeded",
+    "quotaWarning": "Near Limit",
+    "tokens": "tokens",
+    "resetQuota": "Reset quota counter",
+    "feedbackRequired": "Feedback is required when rejecting a task.",
+    "feedbackPlaceholderApprove": "Looks good! Go ahead.",
+    "feedbackPlaceholderReject": "Reason for rejection (required)..."
   },
   "analytics": {
     "title": "Analytics",

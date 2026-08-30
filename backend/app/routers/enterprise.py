@@ -67,6 +67,19 @@ async def get_quotas(company_id: int, session: Session = Depends(get_session)):
     return service.get_quotas(company_id)
 
 
+@router.post("/enterprise/quotas/{bu_id}/reset", tags=["Enterprise"])
+async def reset_quota(bu_id: int, session: Session = Depends(get_session)):
+    """
+    Reset the token usage counter for a business unit to zero.
+    Intended for use at the start of a new billing cycle.
+    """
+    service = CompanyService(session)
+    try:
+        return service.reset_quota(bu_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
 @router.get("/analytics/summary", tags=["Enterprise"])
 async def get_project_health(sprint_id: int, session: Session = Depends(get_session)):
     """
