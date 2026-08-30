@@ -383,7 +383,13 @@
     "loading": "Cargando...",
     "noData": "Sin datos disponibles",
     "error": "Error al cargar analíticas",
-    "inProgress": "En Progreso"
+    "inProgress": "En Progreso",
+    "orchestration_health": {
+      "title": "Salud de Orquestación",
+      "qa_rate": "Tasa QA Necesita Trabajo",
+      "avg_tokens": "Tokens Promedio del Desarrollador",
+      "consult_freq": "Frecuencia de Consultas al Arquitecto"
+    }
   },
   "memorySearch": {
     "title": "Búsqueda de Memoria",

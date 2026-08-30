@@ -152,3 +152,28 @@ class SupportChatRequest(BaseModel):
     """Payload for ``POST /v1/support/chat`` — multi-turn LLM support conversation."""
     messages: List[ChatMessage]  # Full conversation history (oldest first)
 
+
+class OrchestrationHealthWeek(BaseModel):
+    week: str
+    qa_needs_work_rate: float
+    avg_developer_tokens: float
+    architect_consult_count: int
+    task_count: int
+    post_batch1: bool
+
+
+class OrchestrationHealthSummary(BaseModel):
+    qa_needs_work_rate: float
+    avg_developer_tokens: float
+
+
+class OrchestrationHealthSummaries(BaseModel):
+    pre_batch1: OrchestrationHealthSummary
+    post_batch1: OrchestrationHealthSummary
+
+
+class OrchestrationHealthResponse(BaseModel):
+    anchor_commit: str
+    anchor_date: str
+    weeks: List[OrchestrationHealthWeek]
+    summary: OrchestrationHealthSummaries
