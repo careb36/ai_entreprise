@@ -130,6 +130,7 @@ async def get_orchestration_health(
             COUNT(*) AS task_count
         FROM audit_log a
         WHERE a.details->>'role' = 'QA'
+          AND a.action = 'qa_review'
           AND NULLIF(a.details->>'company_id', '')::int = :company_id
           AND a.created_at >= :cutoff
         GROUP BY 1

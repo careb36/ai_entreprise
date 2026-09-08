@@ -35,6 +35,19 @@ from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from nats_client import NATSClient
 from services.sprint_planner import build_self_improvement_objective, plan_self_improvement_sprint
+from services.orchestration_metrics import (
+    ACTION_ARCHITECT_CONSULT,
+    ACTION_EXECUTE_TASK,
+    ACTION_QA_REVIEW,
+    ARCHITECT_COMMENT_AUTHOR,
+    KPI_ROLE_ARCHITECT,
+    build_architect_consult_prompt,
+    classify_review_result,
+    format_architect_consult_comment,
+    is_architect_consult_comment,
+    record_agent_turn,
+    should_consult_architect,
+)
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -47,6 +60,7 @@ AUTOPILOT_MAX_REWORK_CYCLES = int(os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(M
 DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90"))
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
 CONSOLE_ASSISTANTS_ENABLED = settings.CONSOLE_ASSISTANTS_ENABLED
+ARCHITECT_CONSULT_ENABLED = settings.ARCHITECT_CONSULT_ENABLED
 CONSOLE_ASSISTANT_TIMEOUT = float(os.getenv("CONSOLE_ASSISTANT_TIMEOUT", "90"))
 COPILOT_CLI_COMMAND_TEMPLATE = settings.COPILOT_CLI_COMMAND_TEMPLATE
 CLAUDE_CLI_COMMAND_TEMPLATE = settings.CLAUDE_CLI_COMMAND_TEMPLATE or ""
@@ -243,12 +257,19 @@ def _execute_task(
     external_advice: Optional[str] = None,
     memory_context: Optional[str] = None,
     completed_tasks_context: Optional[str] = None,
+    architect_advice: Optional[str] = None,
+    company_id: Optional[int] = None,
+    sprint_id: Optional[int] = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
 
     Runs synchronously (called via ``asyncio.to_thread``).
     Returns the LLM response text.
+
+    When ``company_id`` is provided the turn is also written to ``audit_log``
+    (role, company, token cost) so ``GET /v1/analytics/orchestration_health``
+    can compute the Developer token KPI.
     """
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
@@ -281,6 +302,14 @@ def _execute_task(
         user_prompt += (
             "\n\n## Sprint Context: Already Completed Tasks\n"
             f"{completed_tasks_context[:2000]}"
+        )
+
+    if architect_advice:
+        user_prompt += (
+            "\n\n## Architect Guidance\n"
+            "The team Architect reviewed this task before implementation. "
+            "Follow this brief unless it conflicts with the task requirements.\n\n"
+            f"{architect_advice[:3000]}"
         )
 
     if external_advice:
@@ -317,7 +346,98 @@ def _execute_task(
         .get("message", {})
         .get("content", "")
     )
+
+    if company_id is not None:
+        record_agent_turn(
+            company_id=company_id,
+            sprint_id=sprint_id,
+            backlog_item_id=item.get("id"),
+            agent=agent,
+            action=ACTION_EXECUTE_TASK,
+            llm_result=result,
+            result_preview=content,
+        )
     return content.strip()
+
+
+def _consult_architect(
+    item: Dict[str, Any],
+    developer: Dict[str, Any],
+    sprint: Dict[str, Any],
+    prior_feedback: Optional[list[str]] = None,
+) -> str:
+    """
+    Ask the company's Architect agent for a short technical brief on *item*.
+
+    Runs synchronously (called via ``asyncio.to_thread``).  Returns the advice
+    text, or ``""`` when no Architect agent exists or the call fails; callers
+    treat an empty brief as "no consultation happened".  Successful calls are
+    written to ``audit_log`` with ``role=Architect``.
+    """
+    with Session(engine) as session:
+        architect_row = session.exec(
+            select(Agent).where(
+                Agent.company_id == sprint["company_id"],
+                Agent.role == KPI_ROLE_ARCHITECT,
+            )
+        ).first()
+
+    if not architect_row:
+        logger.info("No Architect agent for company=%s; skipping consultation for item=%s", sprint["company_id"], item.get("id"))
+        return ""
+
+    architect = {
+        "role": architect_row.role or KPI_ROLE_ARCHITECT,
+        "name": architect_row.name or KPI_ROLE_ARCHITECT,
+        "model": architect_row.model or "gemini-2.5-flash",
+        "seniority": architect_row.seniority,
+        "specialty": architect_row.specialty,
+        "system_prompt": architect_row.system_prompt,
+    }
+    system_prompt = architect["system_prompt"] or (
+        f"You are a {architect.get('seniority') or 'Senior'} Software Architect "
+        f"specializing in {architect.get('specialty') or 'system design'}. "
+        "You advise developers with concise, decisive technical briefs."
+    )
+    prompt = build_architect_consult_prompt(item, developer, sprint.get("name", ""), prior_feedback or ())
+
+    client = LLMProxyClient(base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.timeout = 90
+    try:
+        result = client.chat(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            model=architect["model"],
+            role=architect["role"],
+        )
+    except Exception as exc:  # network / proxy failure must not block the developer
+        logger.warning("Architect consultation failed for item=%s: %s", item.get("id"), exc)
+        return ""
+
+    if result.get("error"):
+        logger.warning("Architect consultation returned error for item=%s: %s", item.get("id"), result["error"])
+        return ""
+
+    advice = (
+        result.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+    ).strip()
+    if not advice:
+        return ""
+
+    record_agent_turn(
+        company_id=sprint["company_id"],
+        sprint_id=sprint.get("id"),
+        backlog_item_id=item.get("id"),
+        agent=architect,
+        action=ACTION_ARCHITECT_CONSULT,
+        llm_result=result,
+        result_preview=advice,
+    )
+    return advice
 
 
 def _validate_minimum_deliverable(item: Dict[str, Any], deliverable: str) -> tuple[bool, str]:
@@ -483,6 +603,8 @@ def _extract_latest_reviewable_comment(comments: Any, assignee_role: Optional[st
         if author == "qa" and assignee_normalized != "qa":
             continue
         if text.upper().startswith("APPROVED:") or text.upper().startswith("NEEDS WORK:"):
+            continue
+        if is_architect_consult_comment(comment):
             continue
         return text
 
@@ -1577,6 +1699,51 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     comment_author="System",
                 )
 
+            # Architect consultation for design-sensitive or reworked Developer tasks.
+            # Recorded as an ``ARCHITECT_CONSULTED:`` comment so the orchestration
+            # health analytics can count it.
+            architect_advice = ""
+            if should_consult_architect(item, agent, item.get("comments"), enabled=ARCHITECT_CONSULT_ENABLED):
+                prior_feedback = [
+                    str(c.get("text", ""))
+                    for c in (item.get("comments") or [])
+                    if isinstance(c, dict) and classify_review_result(str(c.get("text", ""))) == "NEEDS_WORK"
+                ][-2:]
+                await _publish_glassroom(nats_client, sprint["id"], {
+                    "type": "status",
+                    "semantic_type": "task.architect_consult_started",
+                    "source": "task_worker",
+                    "agent": ARCHITECT_COMMENT_AUTHOR,
+                    "role": ARCHITECT_COMMENT_AUTHOR,
+                    "task_id": item["id"],
+                    "task_status": "in_progress",
+                    "phase": "architect_consult",
+                    "task": item["title"],
+                    "message": f"📐 {agent.get('name') or agent['role']} is consulting the Architect on: {item['title']}",
+                })
+                architect_advice = await asyncio.to_thread(_consult_architect, item, agent, sprint, prior_feedback)
+                if architect_advice:
+                    await asyncio.to_thread(
+                        _update_item_status,
+                        item["id"],
+                        "in_progress",
+                        comment_text=format_architect_consult_comment(architect_advice),
+                        comment_author=ARCHITECT_COMMENT_AUTHOR,
+                    )
+                    await _publish_glassroom(nats_client, sprint["id"], {
+                        "type": "message",
+                        "semantic_type": "task.architect_consulted",
+                        "source": "task_worker",
+                        "agent": ARCHITECT_COMMENT_AUTHOR,
+                        "role": ARCHITECT_COMMENT_AUTHOR,
+                        "task_id": item["id"],
+                        "task_status": "in_progress",
+                        "phase": "architect_consult",
+                        "task": item["title"],
+                        "message": f"📐 Architect brief delivered for: {item['title']}",
+                        "preview": architect_advice[:200],
+                    })
+
             await _publish_glassroom(nats_client, sprint["id"], {
                 "type": "status",
                 "semantic_type": "task.progress",
@@ -1596,7 +1763,16 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
             # 3. Call the LLM (in a thread).
             deliverable = await asyncio.to_thread(
-                _execute_task, item, agent, sprint["name"], external_advice, memory_ctx, completed_ctx,
+                _execute_task,
+                item,
+                agent,
+                sprint["name"],
+                external_advice,
+                memory_ctx,
+                completed_ctx,
+                architect_advice or None,
+                sprint["company_id"],
+                sprint["id"],
             )
             deliverable = await asyncio.to_thread(_sanitize_deliverable_text, deliverable)
 
@@ -1957,7 +2133,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 })
 
                 review_result = await asyncio.to_thread(
-                    _call_llm_for_review, reviewer_dict, review_prompt
+                    functools.partial(
+                        _call_llm_for_review,
+                        reviewer_dict,
+                        review_prompt,
+                        company_id=sprint.company_id,
+                        sprint_id=sprint.id,
+                        backlog_item_id=item.id,
+                    )
                 )
 
                 normalized_review = (review_result or "").strip()
@@ -2200,8 +2383,20 @@ async def _review_cycle(nats_client: NATSClient) -> None:
     await _dispatch_todo_items(nats_client)
 
 
-def _call_llm_for_review(agent: Dict[str, Any], prompt: str) -> str:
-    """Synchronous LLM call for code review (runs in thread)."""
+def _call_llm_for_review(
+    agent: Dict[str, Any],
+    prompt: str,
+    *,
+    company_id: Optional[int] = None,
+    sprint_id: Optional[int] = None,
+    backlog_item_id: Optional[int] = None,
+) -> str:
+    """Synchronous LLM call for code review (runs in thread).
+
+    When ``company_id`` is provided the review is written to ``audit_log`` with
+    ``role=QA`` and ``result_type`` (APPROVED / NEEDS_WORK) so the QA rate KPI
+    reads from the audit trail instead of its comment-scan fallback.
+    """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
@@ -2219,8 +2414,20 @@ def _call_llm_for_review(agent: Dict[str, Any], prompt: str) -> str:
         result.get("choices", [{}])[0]
         .get("message", {})
         .get("content", "")
-    )
-    return content.strip()
+    ).strip()
+
+    if company_id is not None:
+        record_agent_turn(
+            company_id=company_id,
+            sprint_id=sprint_id,
+            backlog_item_id=backlog_item_id,
+            agent=agent,
+            action=ACTION_QA_REVIEW,
+            llm_result=result,
+            result_type=classify_review_result(content),
+            result_preview=content,
+        )
+    return content
 
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:
