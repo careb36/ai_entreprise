@@ -102,9 +102,26 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 - RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
 - Passwords hashed with passlib/bcrypt; no JWT — session-based auth
 
-## No Test Suite
+## Test Suite
 
-There is no test framework configured. To validate changes:
+The backend has a pytest test suite under `backend/tests/`.  No external services (Postgres, NATS, Neo4j, LLM proxy) are required — every boundary is stubbed with an in-memory SQLite engine or `unittest.mock`.
+
+```bash
+# Run all backend tests (fast, DB-free)
+cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
+```
+
+Test files:
+
+| File | What it covers |
+|------|----------------|
+| `test_glassroom_sse.py` | SSE fan-out and stream ordering |
+| `test_orchestration_metrics.py` | Orchestration metric helpers |
+| `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
+| `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
+| `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
+
+### Manual validation (no test deps needed)
 
 ```bash
 # Health check
