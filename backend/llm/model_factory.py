@@ -7,11 +7,12 @@ and exposes a convenience ``create_completion()`` function used by every
 LangGraph node.
 
 Model selection rationale:
-- **PO / Architect / SecOps**: Gemini 1.5 Pro — best at natural language,
+- **PO / Architect / SecOps**: Gemini 2.5 Pro — best at natural language,
   architecture and security reasoning.
 - **Developer / QA**: DeepSeek Coder — lower latency and cost for code-heavy
   tasks.
-- **TechWriter**: Gemini 1.5 Flash — fast and fluent for documentation.
+- **TechWriter / fallback**: Gemini 2.5 Flash — fast and fluent for
+  documentation and general prompts.
 - **EngramProcessor**: DeepSeek Coder — deterministic (low temperature) for
   structured JSON extraction from decision summaries.
 
@@ -21,7 +22,7 @@ so API keys and token budgets are enforced centrally.
 
 import os
 import logging
-from typing import Optional, Dict
+from typing import Any, Optional, Dict
 from enum import Enum
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
@@ -61,13 +62,13 @@ class ModelFactory:
 
     # Maps each role to its preferred model and generation parameters.
     ROLE_MODEL_MAP: Dict[AgentRole, LLMConfig] = {
-        AgentRole.PO:               LLMConfig(model_name="gemini-1.5-pro",   temperature=0.3, max_tokens=4096),
-        AgentRole.ARCHITECT:        LLMConfig(model_name="gemini-1.5-pro",   temperature=0.2, max_tokens=4096),
-        AgentRole.SCRUM_MASTER:     LLMConfig(model_name="gemini-1.5-pro",   temperature=0.5, max_tokens=2048),
+        AgentRole.PO:               LLMConfig(model_name="gemini-2.5-pro",   temperature=0.3, max_tokens=4096),
+        AgentRole.ARCHITECT:        LLMConfig(model_name="gemini-2.5-pro",   temperature=0.2, max_tokens=4096),
+        AgentRole.SCRUM_MASTER:     LLMConfig(model_name="gemini-2.5-pro",   temperature=0.5, max_tokens=2048),
         AgentRole.DEVELOPER:        LLMConfig(model_name="deepseek-coder",   temperature=0.2, max_tokens=4096),
         AgentRole.QA:               LLMConfig(model_name="deepseek-coder",   temperature=0.2, max_tokens=4096),
-        AgentRole.SECOPS:           LLMConfig(model_name="gemini-1.5-pro",   temperature=0.1, max_tokens=4096),  # precision-critical
-        AgentRole.TECH_WRITER:      LLMConfig(model_name="gemini-1.5-flash", temperature=0.4, max_tokens=4096),
+        AgentRole.SECOPS:           LLMConfig(model_name="gemini-2.5-pro",   temperature=0.1, max_tokens=4096),  # precision-critical
+        AgentRole.TECH_WRITER:      LLMConfig(model_name="gemini-2.5-flash", temperature=0.4, max_tokens=4096),
         AgentRole.ENGRAM_PROCESSOR: LLMConfig(model_name="deepseek-coder",   temperature=0.1, max_tokens=2048),
     }
 
@@ -92,7 +93,7 @@ class ModelFactory:
         if role in cls._model_cache:
             return cls._model_cache[role]
 
-        config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name="gemini-1.5-flash"))
+        config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name="gemini-2.5-flash"))
         proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
 
         model = ChatOpenAI(
