@@ -1,0 +1,90 @@
+# Backend test suite — runs pytest on every push and pull request that touches
+# backend code or this workflow.
+#
+# The suite is deliberately service-free: no Postgres, Neo4j, NATS or LLM proxy
+# is required. Every external boundary is stubbed with an in-memory SQLite
+# engine or unittest.mock (see backend/tests/conftest.py), so this job needs
+# nothing beyond the Python dependencies.
+#
+# Run the same checks locally with:
+#   cd backend && PYTHONPATH=.:app poetry run pytest tests -q
+
+name: Backend Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  workflow_dispatch:
+
+# A new push to the same branch cancels the run still in flight for it.
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Matches the `python = "^3.11"` constraint in backend/pyproject.toml
+        # and the python:3.11-slim base image in backend/Dockerfile.
+        python-version: ['3.11']
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry==2.3.3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          # Caches the Poetry-resolved dependencies keyed on backend/poetry.lock.
+          cache: poetry
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Verify poetry.lock is in sync with pyproject.toml
+        run: poetry check --lock
+
+      - name: Install dependencies
+        # Includes the dev group (pytest, pytest-asyncio); --no-root because the
+        # backend is application code, not an installable package.
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Run tests
+        # PYTHONPATH mirrors the Dockerfile's ENV PYTHONPATH="/app:/app/app",
+        # which is what lets modules inside backend/app use bare imports
+        # (`from models import ...`).
+        env:
+          PYTHONPATH: .:app
+        run: poetry run pytest tests -q --junit-xml=pytest-report.xml
+
+      - name: Upload test report
+        # Runs even when the suite fails, so the report is available either way.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-py${{ matrix.python-version }}
+          path: backend/pytest-report.xml
+          if-no-files-found: warn
+          retention-days: 14

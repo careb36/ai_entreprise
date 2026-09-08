@@ -120,6 +120,13 @@ Test files:
 | `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
 | `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
+| `test_model_factory.py` | Role-to-model map and business-unit header propagation |
+
+CI runs this suite on every push and pull request that touches `backend/`
+(`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
+from `backend/poetry.lock`. Add new backend dependencies to
+`backend/pyproject.toml` and commit the refreshed lock file, or CI will fail
+the `poetry check --lock` step.
 
 ### Manual validation (no test deps needed)
 
