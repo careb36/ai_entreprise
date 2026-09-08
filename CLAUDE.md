@@ -122,9 +122,11 @@ Test files:
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
 
-CI runs this suite on every push and pull request that touches `backend/`
+CI runs this suite on every pull request that touches `backend/` or the
+workflow itself, and on pushes to `main` and `develop`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
-from `backend/poetry.lock`. Add new backend dependencies to
+from `backend/poetry.lock`. Feature-branch pushes do not trigger it; open a
+pull request to get a run. Add new backend dependencies to
 `backend/pyproject.toml` and commit the refreshed lock file, or CI will fail
 the `poetry check --lock` step.
 

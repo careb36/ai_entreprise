@@ -1,5 +1,6 @@
-# Backend test suite — runs pytest on every push and pull request that touches
-# backend code or this workflow.
+# Backend test suite — runs pytest on every pull request that touches backend
+# code or this workflow, and on pushes to the main and develop branches.
+# Pushes to other branches do not trigger it; open a pull request for a run.
 #
 # The suite is deliberately service-free: no Postgres, Neo4j, NATS or LLM proxy
 # is required. Every external boundary is stubbed with an in-memory SQLite
