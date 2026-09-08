@@ -85,7 +85,7 @@ export default function ControlPanel({ onSprintStart }: ControlPanelProps) {
           company_name: bootstrapCompanyName,
           default_scope_size: config.scopeSize,
         })
-        resolvedCompanyId = companyResponse?.company_id ?? companyResponse?.id ?? null
+        resolvedCompanyId = companyResponse?.company_id ?? null
         if (resolvedCompanyId) {
           useAppStore.getState().setCompany(resolvedCompanyId, bootstrapCompanyName)
         }

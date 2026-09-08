@@ -388,7 +388,13 @@
       "title": "Salud de Orquestación",
       "qa_rate": "Tasa QA Necesita Trabajo",
       "avg_tokens": "Tokens Promedio del Desarrollador",
-      "consult_freq": "Frecuencia de Consultas al Arquitecto"
+      "consult_freq": "Frecuencia de Consultas al Arquitecto",
+      "pre_batch1": "Pre Lote 1",
+      "post_batch1": "Post Lote 1",
+      "empty": "Aún no hay datos semanales. Ejecuta sprints para poblar las métricas de salud de orquestación.",
+      "summary_averages": "Promedios por Período",
+      "weekly_trend": "Tendencia Semanal",
+      "anchor_date": "Ancla Lote 1"
     }
   },
   "memorySearch": {

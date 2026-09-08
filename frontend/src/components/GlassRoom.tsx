@@ -124,7 +124,7 @@ function extractBlockedReason(comments: BacklogItem['comments'] | undefined): st
   return undefined
 }
 
-function phaseLabel(t: (key: string, fallback?: string) => string, phase?: string): string {
+function phaseLabel(t: (key: string) => string, phase?: string): string {
   const labels: Record<string, string> = {
     queued: 'Queued',
     claimed: 'Claimed',
@@ -147,7 +147,7 @@ function phaseLabel(t: (key: string, fallback?: string) => string, phase?: strin
     unknown: 'Unknown',
   }
   const key = phase || 'unknown'
-  return t(`glassroom.phaseLabels.${key}`, labels[key] ?? phase ?? 'Unknown')
+  return t(`glassroom.phaseLabels.${key}`) || labels[key] || phase || 'Unknown'
 }
 
 function renderInlineMarkdown(text: string): Array<string | JSX.Element> {
@@ -278,14 +278,14 @@ function groupMessages(messages: AgentMessage[]): { date: string; groups: Messag
   return result
 }
 
-function getEventTypes(t: (key: string, fallback?: string) => string) {
+function getEventTypes(t: (key: string, opts?: Record<string, unknown>) => string) {
   return [
-    { value: '', label: t('glassroom.eventTypes.all', 'All types') },
-    { value: 'message', label: t('glassroom.eventTypes.message', 'Message') },
-    { value: 'agent_start', label: t('glassroom.eventTypes.working', 'Working') },
-    { value: 'agent_complete', label: t('glassroom.eventTypes.delivered', 'Delivered') },
-    { value: 'status', label: t('glassroom.eventTypes.status', 'Status') },
-    { value: 'error', label: t('glassroom.eventTypes.error', 'Error') },
+    { value: '', label: t('glassroom.eventTypes.all', { defaultValue: 'All types' }) },
+    { value: 'message', label: t('glassroom.eventTypes.message', { defaultValue: 'Message' }) },
+    { value: 'agent_start', label: t('glassroom.eventTypes.working', { defaultValue: 'Working' }) },
+    { value: 'agent_complete', label: t('glassroom.eventTypes.delivered', { defaultValue: 'Delivered' }) },
+    { value: 'status', label: t('glassroom.eventTypes.status', { defaultValue: 'Status' }) },
+    { value: 'error', label: t('glassroom.eventTypes.error', { defaultValue: 'Error' }) },
   ] as const
 }
 
@@ -390,7 +390,7 @@ function AssistantBadge({ msg }: { msg: AgentMessage }) {
       )}
       {msg.assistantDecision && (
         <span className={decisionTone[msg.assistantDecision] ?? 'text-gray-400'}>
-          {t(`glassroom.assistantDecisions.${msg.assistantDecision}`, msg.assistantDecision.replaceAll('_', ' '))}
+          {t(`glassroom.assistantDecisions.${msg.assistantDecision}`, { defaultValue: msg.assistantDecision.split('_').join(' ') })}
         </span>
       )}
     </div>
@@ -599,7 +599,7 @@ function TaskAutonomyTree({ tasks }: { tasks: TaskAutonomyEntry[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium text-gray-200 break-words">{task.title}</p>
                 <p className="mt-1 text-[10px] text-gray-500">
-                  {phaseLabel(t, task.currentPhase)} · {t('glassroom.reworksCount', '{{n}} reworks').replace('{{n}}', String(task.reworkCount))} · {t('glassroom.qaReviewsCount', '{{n}} QA reviews').replace('{{n}}', String(task.reviewCount))}
+                  {phaseLabel(t, task.currentPhase)} · {t('glassroom.reworksCount', { defaultValue: '{{n}} reworks' }).replace('{{n}}', String(task.reworkCount))} · {t('glassroom.qaReviewsCount', { defaultValue: '{{n}} QA reviews' }).replace('{{n}}', String(task.reviewCount))}
                 </p>
               </div>
               <span className="text-[10px] text-gray-500">#{task.id}</span>
