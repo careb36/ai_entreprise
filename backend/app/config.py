@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     AUTO_SELF_IMPROVEMENT_ENABLED: bool = True
     CONSOLE_ASSISTANTS_ENABLED: bool = True
+    # Consult the Architect agent before Developers start high-priority, design-sensitive
+    # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
+    ARCHITECT_CONSULT_ENABLED: bool = True
     COPILOT_CLI_COMMAND_TEMPLATE: str = 'copilot -p {prompt} --output-format json'
     CLAUDE_CLI_COMMAND_TEMPLATE: Optional[str] = 'claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}'
     CLAUDE_CLI_ALLOWED_TOOLS: str = 'Read,Grep,Glob,LS,Bash(git *)'
