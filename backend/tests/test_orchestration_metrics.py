@@ -252,4 +252,6 @@ def test_router_queries_use_the_same_contract_as_the_emitters():
     assert f"a.details->>'role' = '{om.KPI_ROLE_DEVELOPER}'" in source
     assert f"a.details->>'role' = '{om.KPI_ROLE_QA}'" in source
     assert f"a.details->>'result_type' = '{om.RESULT_NEEDS_WORK}'" in source
+    # QA-assigned *executions* also carry role=QA; only review turns may feed the QA rate.
+    assert f"a.action = '{om.ACTION_QA_REVIEW}'" in source
     assert "a.details->>'company_id'" in source
