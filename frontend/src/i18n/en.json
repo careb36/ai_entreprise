@@ -284,6 +284,8 @@
       "qa_gate": "QA gate",
       "implementation_complete": "Implementation complete",
       "kickoff_complete": "Kickoff complete",
+      "architect_consult": "Architect consult",
+      "todo_recovery": "Todo recovery",
       "unknown": "Unknown"
     },
     "taskSummaryTitle": "Sprint Tasks",
@@ -388,7 +390,13 @@
       "title": "Orchestration Health",
       "qa_rate": "QA Needs Work Rate",
       "avg_tokens": "Avg Developer Tokens",
-      "consult_freq": "Architect Consult Frequency"
+      "consult_freq": "Architect Consult Frequency",
+      "pre_batch1": "Pre Batch 1",
+      "post_batch1": "Post Batch 1",
+      "empty": "No weekly data yet. Run sprints to populate orchestration health metrics.",
+      "summary_averages": "Period Averages",
+      "weekly_trend": "Weekly Trend",
+      "anchor_date": "Batch 1 anchor"
     }
   },
   "memorySearch": {

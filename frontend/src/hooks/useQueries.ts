@@ -11,6 +11,7 @@ export const QUERY_KEYS = {
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
+  orchestrationHealth: (companyId: number, weeks: number) => ['orchestration_health', companyId, weeks] as const,
   tickets: () => ['tickets'] as const,
   memory: (query: string) => ['memory', query] as const,
   models: () => ['models'] as const,
@@ -121,7 +122,7 @@ export function useResetQuota() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (buId: number) => api.resetQuota(buId),
-    onSuccess: (_data, buId) => {
+    onSuccess: (_data, _buId) => {
       // Invalidate all quota queries so the bar refreshes immediately.
       queryClient.invalidateQueries({ queryKey: ['enterprise'] })
     },
@@ -133,6 +134,14 @@ export function useAnalyticsSummary(sprintId: number | null) {
     queryKey: QUERY_KEYS.analytics(sprintId || 0),
     queryFn: () => api.getAnalyticsSummary(sprintId!),
     enabled: !!sprintId,
+  })
+}
+
+export function useOrchestrationHealth(companyId: number | null, weeks = 8) {
+  return useQuery({
+    queryKey: QUERY_KEYS.orchestrationHealth(companyId || 0, weeks),
+    queryFn: () => api.getOrchestrationHealth(companyId!, weeks),
+    enabled: !!companyId,
   })
 }
 
