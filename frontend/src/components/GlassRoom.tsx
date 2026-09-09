@@ -124,7 +124,7 @@ function extractBlockedReason(comments: BacklogItem['comments'] | undefined): st
   return undefined
 }
 
-function phaseLabel(t: (key: string) => string, phase?: string): string {
+function phaseLabel(t: (key: string, opts?: Record<string, unknown>) => string, phase?: string): string {
   const labels: Record<string, string> = {
     queued: 'Queued',
     claimed: 'Claimed',
@@ -144,10 +144,12 @@ function phaseLabel(t: (key: string) => string, phase?: string): string {
     qa_gate: 'QA gate',
     implementation_complete: 'Implementation complete',
     kickoff_complete: 'Kickoff complete',
+    architect_consult: 'Architect consult',
+    todo_recovery: 'Todo recovery',
     unknown: 'Unknown',
   }
   const key = phase || 'unknown'
-  return t(`glassroom.phaseLabels.${key}`) || labels[key] || phase || 'Unknown'
+  return t(`glassroom.phaseLabels.${key}`, { defaultValue: labels[key] ?? phase ?? 'Unknown' })
 }
 
 function renderInlineMarkdown(text: string): Array<string | JSX.Element> {

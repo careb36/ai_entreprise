@@ -284,6 +284,8 @@
       "qa_gate": "QA gate",
       "implementation_complete": "Implementation complete",
       "kickoff_complete": "Kickoff complete",
+      "architect_consult": "Architect consult",
+      "todo_recovery": "Todo recovery",
       "unknown": "Unknown"
     },
     "taskSummaryTitle": "Sprint Tasks",

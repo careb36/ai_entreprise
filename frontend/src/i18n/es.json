@@ -284,6 +284,8 @@
       "qa_gate": "Gate de QA",
       "implementation_complete": "Implementación completa",
       "kickoff_complete": "Kickoff completo",
+      "architect_consult": "Consulta al arquitecto",
+      "todo_recovery": "Recuperación de pendientes",
       "unknown": "Desconocida"
     },
     "taskSummaryTitle": "Tareas del sprint",
