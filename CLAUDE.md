@@ -130,6 +130,12 @@ pull request to get a run. Add new backend dependencies to
 `backend/pyproject.toml` and commit the refreshed lock file, or CI will fail
 the `poetry check --lock` step.
 
+Frontend changes are checked separately by
+`.github/workflows/frontend-build.yml` on every pull request that touches
+`frontend/` or the workflow itself, and on pushes to `main` and `develop`.
+That job runs `npm ci`, `npx tsc --noEmit`, and `npm run build` from the
+`frontend/` directory, using `frontend/package-lock.json` as the cache key.
+
 ### Manual validation (no test deps needed)
 
 ```bash
