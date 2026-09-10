@@ -27,7 +27,8 @@ from sqlalchemy.pool import StaticPool
 # the sprint router / agent worker tests is listed here; adding more is safe.
 # ---------------------------------------------------------------------------
 from models.company import Company, BusinessUnit  # noqa: F401
-from models.sprint import Sprint, BacklogItem, OutboxEvent  # noqa: F401
+from models.sprint import Sprint, BacklogItem, OutboxEvent, TaskQueue  # noqa: F401
+from models.audit import AuditLog  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,8 @@ SQLModel.metadata.create_all(
         Sprint.__table__,
         BacklogItem.__table__,
         OutboxEvent.__table__,
+        TaskQueue.__table__,
+        AuditLog.__table__,
     ],
 )
 

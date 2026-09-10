@@ -9,7 +9,7 @@ Responsibilities:
 """
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import uuid4
 from typing import List, Dict, Any, Optional
 
@@ -167,7 +167,7 @@ class CompanyService:
         Human-in-the-Loop governance: approve or reject an AI-generated task.
 
         On rejection with feedback, a new ``OutboxEvent`` is inserted to re-dispatch
-        the workflow with the PO's feedback injected, and an ``AuditLog`` entry is
+        the workflow with the human review feedback injected, and an ``AuditLog`` entry is
         written for governance lineage.
         """
         task = self.session.get(TaskQueue, task_id)
@@ -182,21 +182,26 @@ class CompanyService:
         self.session.add(task)
 
         if decision == "rejected" and feedback and task.interaction_id:
-            # Re-dispatch the workflow with the rejection feedback so agents can revise.
-            self.session.add(OutboxEvent(
-                aggregate_type="task_queue",
-                aggregate_id=str(task.id),
-                event_type="nats_publish",
-                payload={
-                    "subject": "workspace.generate",
-                    "message": {
-                        "interaction_id": task.interaction_id,
-                        "story": f"[REVISION REQUESTED]\nOriginal interaction: {task.interaction_id}",
-                        "po_feedback": feedback,
-                        "constraints": "Address the PO rejection feedback and revise the approach.",
+            backlog_item = self.session.get(BacklogItem, task.id)
+            if backlog_item:
+                backlog_item.status = "todo"
+                backlog_item.updated_at = datetime.now(timezone.utc)
+                self.session.add(backlog_item)
+                self.session.add(OutboxEvent(
+                    aggregate_type="backlog_item",
+                    aggregate_id=str(backlog_item.id),
+                    event_type="nats_publish",
+                    payload={
+                        "subject": "task.assign",
+                        "message": {
+                            "backlog_item_id": backlog_item.id,
+                            "interaction_id": task.interaction_id,
+                            "agent": backlog_item.assignee or "Dev",
+                            "sprint_id": backlog_item.sprint_id,
+                            "human_review_feedback": feedback,
+                        },
                     },
-                },
-            ))
+                ))
             # Persist the rejection in the audit log for lineage queries.
             self.session.add(AuditLog(
                 interaction_id=task.interaction_id,

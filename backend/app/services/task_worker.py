@@ -97,6 +97,7 @@ CLAUDE_RESET_TIME_PATTERNS = (
     re.compile(r"(?P<time>\d{1,2}:\d{2}\s?(?:am|pm))", re.IGNORECASE),
 )
 LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
+HUMAN_REVIEW_FEEDBACK_MAX_CHARS = 2000
 
 
 def _normalize_utc(value: Optional[datetime]) -> Optional[datetime]:
@@ -260,6 +261,7 @@ def _execute_task(
     architect_advice: Optional[str] = None,
     company_id: Optional[int] = None,
     sprint_id: Optional[int] = None,
+    human_review_feedback: Optional[str] = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -289,6 +291,13 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
     )
+
+    if human_review_feedback:
+        user_prompt += (
+            "\n\n## Human Review Feedback\n"
+            "A human reviewer rejected the previous attempt. Address this feedback first before relying on retrieved history.\n\n"
+            f"{human_review_feedback[:HUMAN_REVIEW_FEEDBACK_MAX_CHARS]}"
+        )
 
     if memory_context:
         user_prompt += (
@@ -1605,6 +1614,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             data = data_from_nats or json.loads(msg.data.decode())
             backlog_item_id = data.get("backlog_item_id")
             sprint_id = data.get("sprint_id")
+            human_review_feedback = str(data.get("human_review_feedback") or "").strip()
 
             if not backlog_item_id:
                 logger.warning("task.assign message missing backlog_item_id: %s", data)
@@ -1666,6 +1676,20 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 "task": item["title"],
                 "message": f"🧭 {agent.get('name') or agent['role']} claimed the card and is gathering context for: {item['title']}",
             })
+
+            if human_review_feedback:
+                await _publish_glassroom(nats_client, sprint["id"], {
+                    "type": "status",
+                    "semantic_type": "task.hitl_rework",
+                    "source": "task_worker",
+                    "agent": agent.get("name") or agent["role"],
+                    "role": agent["role"],
+                    "task_id": item["id"],
+                    "task_status": "in_progress",
+                    "phase": "rework",
+                    "task": item["title"],
+                    "message": f"↩️ Human review requested rework for: {item['title']}",
+                })
 
             # Fetch memory context and cross-task context concurrently (non-blocking).
             memory_ctx, completed_ctx, assistant_context = await asyncio.gather(
@@ -1773,6 +1797,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 architect_advice or None,
                 sprint["company_id"],
                 sprint["id"],
+                human_review_feedback or None,
             )
             deliverable = await asyncio.to_thread(_sanitize_deliverable_text, deliverable)
 
