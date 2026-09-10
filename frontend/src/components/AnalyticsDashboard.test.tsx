@@ -13,6 +13,12 @@ vi.mock('../hooks/useQueries', () => ({
 const mockedUseAnalyticsSummary = vi.mocked(useAnalyticsSummary)
 const mockedUseOrchestrationHealth = vi.mocked(useOrchestrationHealth)
 
+function getCard(label: string) {
+  const card = screen.getByText(label).closest('.card') as HTMLElement | null
+  expect(card).not.toBeNull()
+  return card!
+}
+
 const analyticsSummary = {
   health_score: 88,
   tokens_consumed: 45678,
@@ -114,23 +120,19 @@ describe('AnalyticsDashboard orchestration health', () => {
 
     const { container } = render(<AnalyticsDashboard sprintId={9} />)
 
-    const qaRateCard = screen.getByText(i18n.t('analytics.orchestration_health.qa_rate')).closest('.card')
-    const avgTokensCard = screen.getByText(i18n.t('analytics.orchestration_health.avg_tokens')).closest('.card')
-    const consultCard = screen.getByText(i18n.t('analytics.orchestration_health.consult_freq')).closest('.card')
+    const qaRateCard = getCard(i18n.t('analytics.orchestration_health.qa_rate'))
+    const avgTokensCard = getCard(i18n.t('analytics.orchestration_health.avg_tokens'))
+    const consultCard = getCard(i18n.t('analytics.orchestration_health.consult_freq'))
 
-    expect(qaRateCard).not.toBeNull()
-    expect(avgTokensCard).not.toBeNull()
-    expect(consultCard).not.toBeNull()
+    expect(within(qaRateCard).getByText(i18n.t('analytics.orchestration_health.pre_batch1'))).toBeInTheDocument()
+    expect(within(qaRateCard).getByText(i18n.t('analytics.orchestration_health.post_batch1'))).toBeInTheDocument()
+    expect(within(qaRateCard).getByText('32.0%')).toBeInTheDocument()
+    expect(within(qaRateCard).getByText('12.5%')).toBeInTheDocument()
+    expect(within(qaRateCard).queryByText('0.32%')).not.toBeInTheDocument()
 
-    expect(within(qaRateCard!).getByText(i18n.t('analytics.orchestration_health.pre_batch1'))).toBeInTheDocument()
-    expect(within(qaRateCard!).getByText(i18n.t('analytics.orchestration_health.post_batch1'))).toBeInTheDocument()
-    expect(within(qaRateCard!).getByText('32.0%')).toBeInTheDocument()
-    expect(within(qaRateCard!).getByText('12.5%')).toBeInTheDocument()
-    expect(within(qaRateCard!).queryByText('0.32%')).not.toBeInTheDocument()
-
-    expect(within(avgTokensCard!).getByText('1,235')).toBeInTheDocument()
-    expect(within(avgTokensCard!).getByText('9,876')).toBeInTheDocument()
-    expect(within(consultCard!).getByText('9')).toBeInTheDocument()
+    expect(within(avgTokensCard).getByText('1,235')).toBeInTheDocument()
+    expect(within(avgTokensCard).getByText('9,876')).toBeInTheDocument()
+    expect(within(consultCard).getByText('9')).toBeInTheDocument()
 
     expect(screen.getByText(`(${i18n.t('analytics.orchestration_health.anchor_date')}: 2026-04-01)`)).toBeInTheDocument()
 
