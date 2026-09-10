@@ -1,10 +1,10 @@
-# Frontend build — runs typecheck and build on every pull request that touches
+# Frontend build — runs typecheck, tests, and build on every pull request that touches
 # frontend code or this workflow, and on pushes to the main and develop
 # branches. Pushes to other branches do not trigger it; open a pull request for
 # a run.
 #
 # Run the same checks locally with:
-#   cd frontend && npm ci && npx tsc --noEmit && npm run build
+#   cd frontend && npm ci && npx tsc --noEmit && npm run test:run && npm run build
 
 name: Frontend Build
 
@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   build:
-    name: typecheck and build (Node 20)
+    name: typecheck, test, and build (Node 20)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -53,6 +53,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Test
+        run: npm run test:run
 
       - name: Build
         run: npm run build

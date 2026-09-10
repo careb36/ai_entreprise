@@ -133,8 +133,17 @@ the `poetry check --lock` step.
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
 `frontend/` or the workflow itself, and on pushes to `main` and `develop`.
-That job runs `npm ci`, `npx tsc --noEmit`, and `npm run build` from the
-`frontend/` directory, using `frontend/package-lock.json` as the cache key.
+That job runs `npm ci`, `npx tsc --noEmit`, `npm run test:run`, and
+`npm run build` from the `frontend/` directory, using
+`frontend/package-lock.json` as the cache key.
+
+The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
+`frontend/` with `npm run test` for watch mode during development, or
+`npm run test:run` for the non-watch CI/local verification command.
+
+| File | What it covers |
+|------|----------------|
+| `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
 
 ### Manual validation (no test deps needed)
 
