@@ -73,6 +73,14 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     AUDIT_LOG_PATH: str = "/app/.factory/logs"
 
+    # ---------------------------------------------------------------------------
+    # Credential encryption — Fernet key for ProjectCredential.encrypted_value.
+    # Unset means values are stored with a "plaintext:" prefix and a warning.
+    # Generate one with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # ---------------------------------------------------------------------------
+    FERNET_SECRET_KEY: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True

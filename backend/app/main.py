@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import Settings
+from crypto import is_encryption_enabled
 from database import create_db_and_tables, get_neo4j_driver
 from logging_config import logger
 from nats_client import NATSClient
@@ -219,6 +220,16 @@ async def startup():
         )
 
     app.state.llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
+
+    # Credential encryption degrades gracefully like the services above: without
+    # a key the backend still runs, but stored credentials are not encrypted.
+    if not is_encryption_enabled():
+        logger.warning(
+            "FERNET_SECRET_KEY is not configured. Project credentials will be "
+            "stored unencrypted with a 'plaintext:' prefix. Generate a key with: "
+            'python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
+        )
 
 
 @app.on_event("shutdown")

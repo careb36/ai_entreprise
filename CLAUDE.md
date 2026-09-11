@@ -43,6 +43,10 @@ Copy `.env.example` to `.env` and fill in:
 - `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
 - `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
+- `FERNET_SECRET_KEY` — optional. Encrypts `ProjectCredential.encrypted_value`
+  at rest. Without it those values are stored with a `plaintext:` prefix and the
+  backend warns at startup. Generate one with:
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
 ## Architecture Overview
 
@@ -121,6 +125,7 @@ Test files:
 | `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
+| `test_crypto.py` | Fernet credential encryption: round trip, tamper and wrong-key rejection, keyless fallback, legacy rows |
 
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
