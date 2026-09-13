@@ -6,6 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Le Fabrique** is an AI-powered autonomous software development platform. It orchestrates a multi-agent team (PO, Architect, ScrumMaster, Developer, QA, SecOps, TechWriter) using LangGraph to execute software sprints — from backlog to code generation and execution — inside a user's VS Code workspace.
 
+> **Direction under review.** A repositioning is proposed in
+> [`docs/POSITIONING.md`](docs/POSITIONING.md) and tracked in issue #38: the
+> agents become interchangeable producers, and the product becomes the layer
+> that verifies their work and records evidence. The description above still
+> reflects what the code does today. Read the positioning document before
+> planning new work, and note the design rules in it — in particular that a
+> claim and an observation must never share a field, that an agent's report of
+> its own test run is a claim rather than an observation, and that hashes and
+> signatures are never accepted from the party being recorded.
+
 ## Running the System
 
 ```bash
