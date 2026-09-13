@@ -51,13 +51,13 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Poetry
         run: pipx install poetry==2.3.3
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           # Caches the Poetry-resolved dependencies keyed on backend/poetry.lock.
@@ -83,7 +83,7 @@ jobs:
       - name: Upload test report
         # Runs even when the suite fails, so the report is available either way.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pytest-report-py${{ matrix.python-version }}
           path: backend/pytest-report.xml
