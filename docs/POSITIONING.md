@@ -1,9 +1,9 @@
 # Positioning: what le-fabrique is for
 
-> **Status: proposed.** This document states a direction, not a settled fact. It
-> is the written form of the argument in issue #38 and is subject to revision.
-> The code findings cited here are verified and reproducible; the market reading
-> is a judgment.
+> **Status: adopted, 2026-09-19.** This is the project's direction, confirmed by
+> the repository owner. It is the written form of the argument in issue #38. The
+> code findings cited here are verified and reproducible; the market reading is
+> a judgment, and remains open to revision if the market moves.
 
 ## The one-line version
 
