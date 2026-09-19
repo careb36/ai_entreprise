@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 # SQLModel.metadata.create_all() is called.  Only the subset actually used by
 # the sprint router / agent worker tests is listed here; adding more is safe.
 # ---------------------------------------------------------------------------
-from models.company import Company, BusinessUnit  # noqa: F401
+from models.company import Company, BusinessUnit, Agent, ProjectCredential  # noqa: F401
 from models.sprint import Sprint, BacklogItem, OutboxEvent  # noqa: F401
 
 
@@ -47,6 +47,8 @@ SQLModel.metadata.create_all(
     tables=[
         Company.__table__,
         BusinessUnit.__table__,
+        Agent.__table__,
+        ProjectCredential.__table__,
         Sprint.__table__,
         BacklogItem.__table__,
         OutboxEvent.__table__,

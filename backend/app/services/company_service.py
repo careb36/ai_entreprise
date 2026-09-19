@@ -22,6 +22,7 @@ from models import (
     OutboxEvent, TaskQueue, AuditLog, BusinessUnit
 )
 from services.sprint_planner import plan_foundation_sprint
+from crypto import encrypt_value
 from logging_config import logger
 
 
@@ -80,11 +81,17 @@ class CompanyService:
         if permissions:
             for cred_type, access_level in permissions.items():
                 if access_level != "none":
+                    # Routed through encrypt_value so the column holds a
+                    # self-describing value from the moment a row is written.
+                    # The placeholder carries no secret today — init_company
+                    # receives only credential_type -> access_level, never a
+                    # value — but wiring it now means the first real secret
+                    # written here is encrypted rather than retrofitted.
                     self.session.add(ProjectCredential(
                         company_id=company.id,
                         credential_type=cred_type,
                         access_level=access_level,
-                        encrypted_value="vault_encrypted_placeholder",
+                        encrypted_value=encrypt_value("vault_encrypted_placeholder"),
                     ))
 
         # 4. Plan and Create Foundation Sprint
