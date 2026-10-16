@@ -114,20 +114,40 @@ def check_claimed_tests_evidenced(
             "observation": "no test or build claims made",
         }
 
-    if evidence is None or "ci" not in evidence:
+    if not isinstance(evidence, dict) or "ci" not in evidence:
         return {
             "name": "claimed_tests_evidenced",
             "outcome": VERDICT_UNVERIFIABLE,
             "observation": (
-                f"agent claims {test_claims[0]!r}; no independent evidence supplied"
+                f"agent claims {test_claims[0]!r}; no CI evidence supplied"
             ),
         }
 
     ci = evidence.get("ci")
-    ci = ci if isinstance(ci, dict) else {}
+    if not isinstance(ci, dict):
+        return {
+            "name": "claimed_tests_evidenced",
+            "outcome": VERDICT_UNVERIFIABLE,
+            "observation": (
+                f"agent claims {test_claims[0]!r}; CI evidence has no conclusion "
+                "(run not finished or malformed)"
+            ),
+        }
+
     conclusion = ci.get("conclusion")
     source = ci.get("source")
+    source = source if isinstance(source, str) and source else "CI"
     ref = ci.get("ref")
+    ref = ref if isinstance(ref, str) and ref else "unknown ref"
+    if conclusion is None:
+        return {
+            "name": "claimed_tests_evidenced",
+            "outcome": VERDICT_UNVERIFIABLE,
+            "observation": (
+                f"agent claims {test_claims[0]!r}; CI evidence has no conclusion "
+                "(run not finished or malformed)"
+            ),
+        }
     if conclusion == "success":
         return {
             "name": "claimed_tests_evidenced",
@@ -136,11 +156,30 @@ def check_claimed_tests_evidenced(
                 f"independent evidence from {source} reports {conclusion} ({ref})"
             ),
         }
+    if isinstance(conclusion, str) and conclusion in {"failure", "timed_out"}:
+        return {
+            "name": "claimed_tests_evidenced",
+            "outcome": VERDICT_REFUTED,
+            "observation": (
+                f"agent claims {test_claims[0]!r}; {source} reports "
+                f"{conclusion} ({ref})"
+            ),
+        }
+    if not isinstance(conclusion, str):
+        return {
+            "name": "claimed_tests_evidenced",
+            "outcome": VERDICT_UNVERIFIABLE,
+            "observation": (
+                f"agent claims {test_claims[0]!r}; {source} reports a malformed "
+                f"conclusion ({ref}), which neither confirms nor refutes the claim"
+            ),
+        }
     return {
         "name": "claimed_tests_evidenced",
-        "outcome": VERDICT_REFUTED,
+        "outcome": VERDICT_UNVERIFIABLE,
         "observation": (
-            f"agent claims {test_claims[0]!r}; {source} reports {conclusion} ({ref})"
+            f"agent claims {test_claims[0]!r}; {source} reports {conclusion} "
+            f"({ref}), which neither confirms nor refutes the claim"
         ),
     }
 

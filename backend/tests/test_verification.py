@@ -1,3 +1,4 @@
+import pytest
 from sqlmodel import select
 
 from models.agent_run import AgentRun, Verification
@@ -108,6 +109,138 @@ def test_test_claim_without_independent_evidence_is_unverifiable(
 
     assert response.json()["verdict"] == "unverifiable"
     assert response.json()["verdict"] not in {"verified", "refuted"}
+
+
+@pytest.mark.parametrize(
+    ("evidence", "outcome", "observation_text"),
+    [
+        (None, "unverifiable", "no CI evidence supplied"),
+        ({}, "unverifiable", "no CI evidence supplied"),
+        ({"ci": "success"}, "unverifiable", "no conclusion"),
+        ({"ci": {}}, "unverifiable", "no conclusion"),
+        ({"ci": {"conclusion": None}}, "unverifiable", "no conclusion"),
+        (
+            {
+                "ci": {
+                    "conclusion": "success",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "pass",
+            "reports success (run/1)",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "failure",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "refuted",
+            "reports failure (run/1)",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "timed_out",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "refuted",
+            "reports timed_out (run/1)",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "cancelled",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "skipped",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "neutral",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "action_required",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "stale",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+        (
+            {
+                "ci": {
+                    "conclusion": "new-conclusion",
+                    "source": "github-check-run",
+                    "ref": "run/1",
+                }
+            },
+            "unverifiable",
+            "neither confirms nor refutes",
+        ),
+    ],
+)
+def test_ci_evidence_conclusion_verdicts(
+    evidence, outcome, observation_text, sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    run = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, claims={"summary": "all tests pass"}),
+    ).json()
+
+    response = _verify(test_client, run["id"], company_id, evidence)
+
+    check = next(
+        c
+        for c in response.json()["checks"]
+        if c["name"] == "claimed_tests_evidenced"
+    )
+    assert check["outcome"] == outcome
+    assert observation_text in check["observation"]
+    assert "None" not in check["observation"]
 
 
 def test_test_claim_with_successful_ci_and_present_paths_is_verified(
