@@ -25,10 +25,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from database import get_session, engine
 from config import settings
+from audit_signing import verify_audit_row
+from models import AuditLog
 from schemas import GenerateRequest, AuditRequest
 from services.agent_service import AgentService
 from logging_config import logger
@@ -198,6 +200,11 @@ async def audit(req: AuditRequest, session: Session = Depends(get_session)):
     Writes to both the filesystem JSONL file and the ``audit_log`` database
     table via ``AgentService.audit_interaction()``.
     """
+    if req.decision_signature is not None:
+        logger.warning(
+            "decision_signature supplied by caller is ignored; signatures are computed server-side"
+        )
+
     service = AgentService()
     service.audit_interaction(
         session=session,
@@ -206,10 +213,42 @@ async def audit(req: AuditRequest, session: Session = Depends(get_session)):
         action=req.action,
         details=req.details,
         result=req.result,
-        decision_signature=req.decision_signature,
+        decision_signature=None,
         cost_tokens=req.cost_tokens
     )
     return {"status": "ok"}
+
+
+@router.get("/audit/verify")
+async def verify_audit(interaction_id: str = Query(...), session: Session = Depends(get_session)):
+    """Verify every audit row associated with an interaction."""
+    rows = session.exec(
+        select(AuditLog)
+        .where(AuditLog.interaction_id == interaction_id)
+        .order_by(AuditLog.id)
+    ).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No audit rows found for interaction_id.")
+
+    summary = {"valid": 0, "invalid": 0, "unsigned": 0, "legacy": 0}
+    verified_rows = []
+    for row in rows:
+        verification = verify_audit_row(row)
+        summary[verification["status"]] += 1
+        verified_rows.append(
+            {
+                "id": row.id,
+                "action": row.action,
+                "status": verification["status"],
+                "mode": verification["mode"],
+            }
+        )
+
+    return {
+        "interaction_id": interaction_id,
+        "rows": verified_rows,
+        "summary": summary,
+    }
 
 
 @router.get("/memory/search")
