@@ -3,18 +3,26 @@ Auth router — human user registration and company membership management.
 
 Endpoints:
 - ``POST /v1/auth/register``  — create a new platform user account.
+- ``POST /v1/auth/login``     — authenticate and issue an access token.
+- ``GET /v1/auth/me``         — return the authenticated user's profile.
 - ``POST /v1/company/invite`` — invite an existing user to collaborate on a company.
 
 Passwords are hashed with bcrypt via ``passlib`` before storage.
-JWT-based session authentication is planned for a future phase.
+JWT login and user resolution are available; enforcing authentication on other
+endpoints is a follow-up.
 """
+
+from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
 
+import auth_tokens
+from auth_deps import get_current_user
+from config import settings
 from database import get_session
 from models import User, CompanyMember
-from schemas import UserCreateRequest, InviteMemberRequest
+from schemas import UserCreateRequest, LoginRequest, InviteMemberRequest
 from passlib.context import CryptContext
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
@@ -46,6 +54,48 @@ async def register_user(req: UserCreateRequest, session: Session = Depends(get_s
     session.commit()
     session.refresh(user)
     return {"user_id": user.id, "email": user.email}
+
+
+@router.post("/auth/login")
+async def login(req: LoginRequest, session: Session = Depends(get_session)):
+    """Authenticate a human user and return a signed access token."""
+    if not auth_tokens.is_auth_configured():
+        raise HTTPException(status_code=503, detail="Authentication is not configured")
+
+    user = session.exec(select(User).where(User.email == req.email)).first()
+    if user is None or not pwd_context.verify(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    token = auth_tokens.create_access_token(
+        user_id=user.id,
+        email=user.email,
+        expires_delta=expires_delta,
+    )
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
+
+
+@router.get("/auth/me")
+async def get_me(
+    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+):
+    """Return the authenticated user's public profile and company memberships."""
+    memberships = session.exec(
+        select(CompanyMember).where(CompanyMember.user_id == user.id)
+    ).all()
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "memberships": [
+            {"company_id": membership.company_id, "human_role": membership.human_role}
+            for membership in memberships
+        ],
+    }
 
 
 @router.post("/company/invite")
