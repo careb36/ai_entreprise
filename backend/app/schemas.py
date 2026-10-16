@@ -36,6 +36,11 @@ class AgentRunCreate(BaseModel):
     finished_at: Optional[datetime] = None
 
 
+class AgentRunVerificationRequest(BaseModel):
+    company_id: int
+    evidence: Optional[Dict[str, Any]] = None
+
+
 class CompanyInitRequest(BaseModel):
     """Payload for ``POST /v1/init_company`` — bootstraps a new tenant."""
     company_name: str

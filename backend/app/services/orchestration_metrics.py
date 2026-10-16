@@ -49,6 +49,11 @@ RESULT_NEEDS_WORK = "NEEDS_WORK"
 ACTION_EXECUTE_TASK = "execute_task"
 ACTION_QA_REVIEW = "qa_review"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
+ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
+
+VERDICT_VERIFIED = "verified"
+VERDICT_REFUTED = "refuted"
+VERDICT_UNVERIFIABLE = "unverifiable"
 
 # Agent roles are free text in the ``agents`` table ("Dev", "Developer",
 # "QA", "Tester", ...).  The KPI queries filter on canonical names, so every
