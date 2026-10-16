@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   api,
+  type AgentRunApprovalRequest,
+  type AgentRunStatus,
   type BacklogItem,
   type InitCompanyRequest,
 } from '../services/api'
@@ -15,26 +17,80 @@ export const QUERY_KEYS = {
   tickets: () => ['tickets'] as const,
   memory: (query: string) => ['memory', query] as const,
   models: () => ['models'] as const,
-  pendingApprovals: () => ['governance', 'pending'] as const,
+  agentRuns: (companyId: number, producer?: string, status?: AgentRunStatus, limit?: number) =>
+    ['agent-runs', companyId, producer ?? '', status ?? '', limit ?? 50] as const,
+  agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
+  verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
+  approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
+  auditVerification: (externalRef: string) => ['audit-verification', externalRef] as const,
 }
 
 // ── Enterprise & Company ─────────────────────────────────────────────────────
 
-export function usePendingApprovals() {
+export function useAgentRuns(
+  companyId: number | null,
+  filters: { producer?: string; status?: AgentRunStatus; limit?: number } = {},
+) {
   return useQuery({
-    queryKey: QUERY_KEYS.pendingApprovals(),
-    queryFn: () => api.get<{ pending_approvals: any[] }>('/v1/pending_approvals'),
-    refetchInterval: 30_000, // Check every 30s
+    queryKey: QUERY_KEYS.agentRuns(companyId ?? 0, filters.producer, filters.status, filters.limit),
+    queryFn: () => api.getAgentRuns(companyId!, filters),
+    enabled: companyId !== null,
   })
 }
 
-export function useApproveTask() {
+export function useAgentRun(companyId: number | null, runId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.agentRun(companyId ?? 0, runId ?? 0),
+    queryFn: () => api.getAgentRun(runId!, companyId!),
+    enabled: companyId !== null && runId !== null,
+  })
+}
+
+export function useAgentRunVerifications(companyId: number | null, runId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.verifications(companyId ?? 0, runId ?? 0),
+    queryFn: () => api.getAgentRunVerifications(runId!, companyId!),
+    enabled: companyId !== null && runId !== null,
+  })
+}
+
+export function useAgentRunApprovals(companyId: number | null, runId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.approvals(companyId ?? 0, runId ?? 0),
+    queryFn: () => api.getAgentRunApprovals(runId!, companyId!),
+    enabled: companyId !== null && runId !== null,
+  })
+}
+
+export function useAuditVerification(externalRef: string | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.auditVerification(externalRef ?? ''),
+    queryFn: () => api.getAuditVerification(externalRef!),
+    enabled: externalRef !== null,
+  })
+}
+
+export function useVerifyAgentRun(companyId: number, runId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ taskId, decision, approverName, feedback }: { taskId: number, decision: 'approved' | 'rejected', approverName: string, feedback?: string }) => 
-      api.approveTask(taskId, approverName, decision, feedback),
+    mutationFn: () => api.verifyAgentRun(runId, companyId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApprovals() })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRun(companyId, runId) })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.verifications(companyId, runId) })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRuns(companyId) })
+      queryClient.invalidateQueries({ queryKey: ['audit-verification'] })
+    },
+  })
+}
+
+export function useApproveAgentRun(companyId: number, runId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: AgentRunApprovalRequest) => api.approveAgentRun(runId, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.approvals(companyId, runId) })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRuns(companyId) })
+      queryClient.invalidateQueries({ queryKey: ['audit-verification'] })
     },
   })
 }

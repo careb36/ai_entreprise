@@ -10,6 +10,8 @@ import { GovernancePanel } from './components/GovernancePanel'
 import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
+import Evidence from './pages/Evidence'
+import EvidenceDetail from './pages/EvidenceDetail'
 import Generate from './pages/Generate'
 import Glassroom from './pages/Glassroom'
 import NotFound from './pages/NotFound'
@@ -17,7 +19,7 @@ import TaskDetails from './pages/TaskDetails'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
-  LayoutDashboard, ShieldCheck, PieChart, MonitorPlay,
+  LayoutDashboard, ShieldCheck, PieChart, MonitorPlay, ClipboardCheck,
   Globe, Database, Code2, Menu, X, Building2
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
@@ -51,13 +53,14 @@ function LanguageSwitcher() {
 function useNavLinks() {
   const { t } = useTranslation()
   const activeSprintId = useAppStore(state => state.activeSprintId)
-   const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/glassroom'
+   const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/evidence'
   return [
      { to: '/',           icon: LayoutDashboard, label: t('nav.home') },
      { to: '/companies/new', icon: Building2, label: t('nav.newCompany') },
      { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
      { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
      { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
+     { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence') },
     { to: '/analytics',  icon: PieChart,       label: t('nav.analytics') },
     { to: '/memory',     icon: Database,       label: t('nav.memory') },
     { to: '/generate',   icon: Code2,          label: t('nav.generate') },
@@ -154,6 +157,8 @@ function AppContent() {
               path="/governance"
               element={<div className="page-container"><GovernancePanel /></div>}
             />
+            <Route path="/evidence" element={<Evidence />} />
+            <Route path="/evidence/:runId" element={<EvidenceDetail />} />
             <Route
               path="/analytics"
               element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
