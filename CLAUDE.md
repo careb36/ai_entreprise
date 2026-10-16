@@ -80,7 +80,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/main.py`** — All FastAPI routes (single large file). Responsible for: company init, sprint management, kanban board state, memory search/store, enterprise quotas, support tickets, and analytics.
 
-**`backend/agents/graph.py`** — LangGraph `StateGraph` defining the agent workflow. Nodes run in order: `design → generate → execute → burn`. Each node maps to an agent role calling the LLM proxy.
+**`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
 **`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. Use `model_preference="fast"` (flash models) or `"powerful"` (pro models).
 
@@ -100,6 +100,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 1. User creates a sprint via frontend → `POST /v1/start_sprint`
 2. Backend enqueues sprint in `task_queue` (Postgres) and publishes to NATS
+   Steps 3–6 only happen when `AGENT_GRAPH_ENABLED=true`.
 3. LangGraph graph executes agent nodes sequentially, each calling LLM proxy
 4. Architect/PO nodes use Gemini (high reasoning); Developer/QA nodes use DeepSeek (cost-effective)
 5. Agent decisions and code are published back to NATS as `workspace.generate` / `workspace.execute`
@@ -115,7 +116,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 - Company-scoped: all data (agents, sprints, memory, budgets) is namespaced by `company_id`
 - RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
-- Passwords hashed with passlib/bcrypt; no JWT — session-based auth
+- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. No endpoint is enforced yet.
 
 ## Test Suite
 
