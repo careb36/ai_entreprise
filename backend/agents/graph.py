@@ -633,6 +633,60 @@ async def run_fabrique_workflow(
             result.get("engram_id"),
             result.get("needs_split"),
         )
+        if company_id is None:
+            logger.info(
+                "Skipping AgentRun ingestion without company_id interaction_id=%s",
+                interaction_id,
+            )
+        else:
+            try:
+                from sqlmodel import Session
+
+                import database
+                from schemas import AgentRunCreate
+                from services import agent_run_service
+
+                summary_message = next(
+                    (
+                        message
+                        for message in reversed(result.get("messages", []))
+                        if _message_name(message) == "PO"
+                    ),
+                    result.get("messages", [])[-1]
+                    if result.get("messages")
+                    else None,
+                )
+                payload = AgentRunCreate(
+                    company_id=company_id,
+                    external_ref=f"graph:{interaction_id}",
+                    producer="le-fabrique-graph",
+                    model=_resolve_model_name("Developer"),
+                    agent_role="Developer",
+                    subject={
+                        "sprint_id": sprint_id,
+                        "business_unit_id": bu_id,
+                        "backlog_items": result.get("backlog_items"),
+                    },
+                    claims={
+                        "summary": _message_text(summary_message)
+                        if summary_message
+                        else "",
+                        "engram_id": result.get("engram_id"),
+                        "needs_split": result.get("needs_split"),
+                    },
+                    artifact=_transcript(result.get("messages", [])),
+                    started_at=datetime.fromisoformat(initial_state["created_at"]),
+                    finished_at=datetime.now(timezone.utc),
+                )
+                with Session(database.engine) as session:
+                    agent_run_service.ingest_agent_run(session, payload)
+            except Exception as exc:
+                logger.warning(
+                    "AgentRun ingestion failed for graph interaction_id=%s: %s",
+                    interaction_id,
+                    exc,
+                    exc_info=True,
+                )
         return result
     except GraphRecursionError as exc:
         logger.error(
