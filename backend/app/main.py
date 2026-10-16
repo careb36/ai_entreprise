@@ -33,7 +33,15 @@ from logging_config import logger
 from nats_client import NATSClient
 from memory_client import MemoryClient
 from llm_proxy_client import LLMProxyClient
-from routers import auth_router, enterprise_router, sprint_router, agents_router, agent_runs_router, support_router
+from routers import (
+    auth_router,
+    enterprise_router,
+    sprint_router,
+    agents_router,
+    agent_runs_router,
+    support_router,
+    github_router,
+)
 from routers.agents import publish_sse_event, sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
@@ -68,6 +76,7 @@ app.include_router(sprint_router)
 app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(support_router)
+app.include_router(github_router)
 
 # Initialise state slots so type checkers and docs know what lives here.
 # Actual values are set in the startup handler — never accessed before that.

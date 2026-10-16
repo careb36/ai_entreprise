@@ -12,6 +12,7 @@ from routers.sprint import router as sprint_router
 from routers.agents import router as agents_router
 from routers.agent_runs import router as agent_runs_router
 from routers.support import router as support_router
+from routers.github import router as github_router
 
 __all__ = [
     "auth_router",
@@ -20,4 +21,5 @@ __all__ = [
     "agents_router",
     "agent_runs_router",
     "support_router",
+    "github_router",
 ]

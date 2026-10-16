@@ -30,6 +30,7 @@ from models.company import Company, BusinessUnit, Agent, ProjectCredential  # no
 from models.sprint import Sprint, BacklogItem, OutboxEvent  # noqa: F401
 from models.agent_run import AgentRun, Verification  # noqa: F401
 from models.audit import AuditLog  # noqa: F401
+from models.github import GitHubRepoBinding  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,7 @@ SQLModel.metadata.create_all(
         AgentRun.__table__,
         Verification.__table__,
         AuditLog.__table__,
+        GitHubRepoBinding.__table__,
     ],
 )
 
