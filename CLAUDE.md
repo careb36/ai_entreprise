@@ -115,7 +115,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 - Company-scoped: all data (agents, sprints, memory, budgets) is namespaced by `company_id`
 - RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
-- Passwords hashed with passlib/bcrypt; no JWT — session-based auth
+- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. No endpoint is enforced yet.
 
 ## Test Suite
 

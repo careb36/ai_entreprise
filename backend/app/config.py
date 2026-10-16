@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     FERNET_SECRET_KEY: Optional[str] = None
 
+    # ---------------------------------------------------------------------------
+    # Human-user authentication — HS256 signing key for access tokens.
+    # ---------------------------------------------------------------------------
+    JWT_SECRET_KEY: Optional[str] = None
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
     class Config:
         env_file = ".env"
         case_sensitive = True

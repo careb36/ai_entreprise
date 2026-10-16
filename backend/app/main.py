@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import Settings
+from auth_tokens import is_auth_configured
 from crypto import is_encryption_enabled
 from database import create_db_and_tables, get_neo4j_driver
 from logging_config import logger
@@ -229,6 +230,11 @@ async def startup():
             "stored unencrypted with a 'plaintext:' prefix. Generate a key with: "
             'python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
+        )
+
+    if not is_auth_configured():
+        logger.warning(
+            "JWT_SECRET_KEY is not configured. POST /v1/auth/login will return 503 until it is set."
         )
 
 

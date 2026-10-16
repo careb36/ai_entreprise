@@ -107,6 +107,12 @@ class UserCreateRequest(BaseModel):
     password: str  # Plain-text; hashed with bcrypt before storage
 
 
+class LoginRequest(BaseModel):
+    """Payload for ``POST /v1/auth/login`` — authenticates a human user."""
+    email: str
+    password: str
+
+
 class InviteMemberRequest(BaseModel):
     """Payload for ``POST /v1/company/invite`` — adds a user to a company."""
     company_id: int
