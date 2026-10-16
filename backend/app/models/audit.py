@@ -40,7 +40,7 @@ class AuditLog(SQLModel, table=True):
     # JSON-serialised outcome returned by the action.
     result: Optional[Any] = Field(default=None, sa_column=Column(JSON))
 
-    # SHA-256 hash of (interaction_id + action + result) for tamper detection.
+    # Server-computed HMAC-SHA256 or explicit unsigned digest; legacy rows may be null.
     decision_signature: Optional[str] = None
 
     # Number of LLM tokens consumed; used for quota accounting per business unit.
