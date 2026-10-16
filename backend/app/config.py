@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     FERNET_SECRET_KEY: Optional[str] = None
 
+    # ---------------------------------------------------------------------------
+    # Audit signing — separate HMAC key for decision_signature values.
+    # ---------------------------------------------------------------------------
+    AUDIT_SIGNING_KEY: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 
 from config import Settings
 from crypto import is_encryption_enabled
+from audit_signing import is_signing_enabled
 from database import create_db_and_tables, get_neo4j_driver
 from logging_config import logger
 from nats_client import NATSClient
@@ -229,6 +230,12 @@ async def startup():
             "stored unencrypted with a 'plaintext:' prefix. Generate a key with: "
             'python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
+        )
+    if not is_signing_enabled():
+        logger.warning(
+            "AUDIT_SIGNING_KEY is not configured. Audit rows will be stored with "
+            "an 'unsigned:' prefix. Generate a key with: "
+            'python -c "import secrets; print(secrets.token_hex(32))"'
         )
 
 

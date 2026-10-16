@@ -11,6 +11,7 @@ event bus and the LangGraph agents.
 """
 
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,9 @@ from uuid import uuid4
 from typing import Optional
 from sqlmodel import Session
 from models import AuditLog
+from audit_signing import canonical_payload, sign_audit_payload
+
+logger = logging.getLogger("fabrique-backend")
 
 
 class AgentService:
@@ -100,24 +104,52 @@ class AgentService:
             action:             Short label (e.g. ``"generate_code"``).
             details:            Arbitrary context dict / string for the action.
             result:             Outcome dict / string returned by the action.
-            decision_signature: Cryptographic hash for tamper detection.
+            decision_signature: Deprecated caller value; ignored in favor of a server signature.
             cost_tokens:        LLM tokens consumed; credited to the business unit.
 
         Returns:
             The persisted ``AuditLog`` ORM instance.
         """
+        if decision_signature is not None:
+            logger.warning(
+                "decision_signature supplied by caller is ignored; signatures are computed server-side"
+            )
+
+        now = datetime.utcnow()
+        log = AuditLog(
+            interaction_id=interaction_id,
+            agent_id=agent_id,
+            action=action,
+            details=details,
+            result=result,
+            cost_tokens=cost_tokens,
+            created_at=now,
+        )
+        signature = sign_audit_payload(
+            canonical_payload(
+                interaction_id=log.interaction_id,
+                agent_id=log.agent_id,
+                action=log.action,
+                details=log.details,
+                result=log.result,
+                cost_tokens=log.cost_tokens,
+                created_at=log.created_at,
+            )
+        )
+        log.decision_signature = signature
+
         audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
         audit_log_path.mkdir(parents=True, exist_ok=True)
 
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "interaction_id": interaction_id,
-            "agent_id": agent_id,
-            "action": action,
-            "details": details,
-            "result": result,
-            "decision_signature": decision_signature,
-            "cost_tokens": cost_tokens,
+            "timestamp": now.isoformat(),
+            "interaction_id": log.interaction_id,
+            "agent_id": log.agent_id,
+            "action": log.action,
+            "details": log.details,
+            "result": log.result,
+            "decision_signature": signature,
+            "cost_tokens": log.cost_tokens,
         }
 
         # Filesystem audit — append-only JSONL; one JSON object per line.
@@ -125,15 +157,6 @@ class AgentService:
             f.write(json.dumps(entry) + "\n")
 
         # Database audit — queryable via the governance dashboard.
-        log = AuditLog(
-            interaction_id=interaction_id,
-            agent_id=agent_id,
-            action=action,
-            details=details,
-            result=result,
-            decision_signature=decision_signature,
-            cost_tokens=cost_tokens,
-        )
         session.add(log)
         session.commit()
         return log

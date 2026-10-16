@@ -74,7 +74,7 @@ class AuditRequest(BaseModel):
     action: str                                  # Short action label (e.g. "generate_code")
     details: Optional[Dict[str, Any]] = None     # Arbitrary context for the action
     result: Optional[Dict[str, Any]] = None      # Outcome data
-    decision_signature: Optional[str] = None     # Cryptographic hash for non-repudiation
+    decision_signature: Optional[str] = None     # Deprecated; caller values are ignored
     cost_tokens: int = 0                         # Token cost billed to the business unit
 
 
