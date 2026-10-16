@@ -28,6 +28,7 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
 from database import get_session, engine
+from config import settings
 from schemas import GenerateRequest, AuditRequest
 from services.agent_service import AgentService
 from logging_config import logger
@@ -169,6 +170,14 @@ async def generate(req: GenerateRequest, request: Request, session: Session = De
     """
     Trigger a LangGraph agent workflow run.
     """
+    if not settings.AGENT_GRAPH_ENABLED:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "AGENT_GRAPH_ENABLED is false; the internal agent graph is disabled. "
+                "Ingest externally-produced work via POST /v1/agent_runs."
+            ),
+        )
     service = AgentService(nats_client=request.app.state.nats_client)
     interaction_id = await service.generate_package(
         company_id=req.company_id,
