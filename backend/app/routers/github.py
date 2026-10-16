@@ -205,8 +205,12 @@ def backfill_github_repository(
                 status_code=503,
                 detail={"message": "GitHub API rate limited", "reset_at": exc.reset_at},
             ) from exc
-        except ArtifactTooLargeError as exc:
-            errors.append({"number": pr.get("number"), "error": str(exc)})
-        except Exception as exc:
-            errors.append({"number": pr.get("number"), "error": str(exc)})
+        except ArtifactTooLargeError:
+            errors.append(
+                {"number": pr.get("number"), "error": "artifact exceeds the 2 MiB limit"}
+            )
+        except Exception:
+            errors.append(
+                {"number": pr.get("number"), "error": "unable to ingest pull request"}
+            )
     return {"ingested": ingested, "skipped": skipped, "errors": errors}
