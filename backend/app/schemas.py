@@ -106,18 +106,30 @@ class DiscoveryRequest(BaseModel):
     company_id: Optional[int] = None  # Optional for pre-creation discovery
 
 
-class ApprovalRequest(BaseModel):
-    """Payload for ``POST /v1/approve_task`` — human governance action."""
-    task_id: int
+class AgentRunApprovalRequest(BaseModel):
+    """Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."""
+    company_id: int
     approver_name: str
     decision: str  # "approved" | "rejected"
     feedback: Optional[str] = None
     rejection_category: Optional[str] = None  # "scope" | "quality" | "security" | "other"
 
     @model_validator(mode="after")
-    def feedback_required_on_rejection(self) -> "ApprovalRequest":
-        if self.decision == "rejected" and not self.feedback:
+    def feedback_required_on_rejection(self) -> "AgentRunApprovalRequest":
+        if self.decision not in {"approved", "rejected"}:
+            raise ValueError("decision must be 'approved' or 'rejected'")
+        self.approver_name = self.approver_name.strip()
+        if not self.approver_name:
+            raise ValueError("approver_name must not be empty")
+        if self.decision == "rejected" and (
+            not self.feedback or not self.feedback.strip()
+        ):
             raise ValueError("feedback is required when decision is 'rejected'")
+        if self.rejection_category is not None:
+            if self.rejection_category not in {"scope", "quality", "security", "other"}:
+                raise ValueError("invalid rejection_category")
+            if self.decision != "rejected":
+                raise ValueError("rejection_category is only allowed with 'rejected'")
         return self
 
 

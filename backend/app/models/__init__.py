@@ -9,18 +9,18 @@ imported, so this ``__init__`` must be imported before
 """
 
 from .company import Company, Agent, BusinessUnit, User, CompanyMember, ProjectCredential, ProjectDiscovery
-from .sprint import Sprint, BacklogItem, OutboxEvent, TaskQueue
+from .sprint import Sprint, BacklogItem, OutboxEvent
 from .audit import AuditLog
-from .agent_run import AgentRun, Verification
+from .agent_run import AgentRun, Verification, AgentRunApproval
 from .support import BugReport
 from .runtime import AssistantRuntimeState
 
 __all__ = [
     "Company", "Agent", "BusinessUnit", "User", "CompanyMember",
     "ProjectCredential", "ProjectDiscovery",
-    "Sprint", "BacklogItem", "OutboxEvent", "TaskQueue",
+    "Sprint", "BacklogItem", "OutboxEvent",
     "AuditLog",
-    "AgentRun", "Verification",
+    "AgentRun", "Verification", "AgentRunApproval",
     "BugReport",
     "AssistantRuntimeState",
 ]

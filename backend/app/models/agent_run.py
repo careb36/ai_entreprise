@@ -39,3 +39,17 @@ class Verification(SQLModel, table=True):
     evidence: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     observed_at: datetime = Field(default_factory=datetime.utcnow)
     audit_log_id: Optional[int] = Field(default=None, foreign_key="audit_log.id")
+
+
+class AgentRunApproval(SQLModel, table=True):
+    __tablename__ = "agent_run_approvals"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id")
+    agent_run_id: int = Field(foreign_key="agent_runs.id")
+    approver_name: str
+    decision: str
+    feedback: Optional[str] = None
+    rejection_category: Optional[str] = None
+    decided_at: datetime = Field(default_factory=datetime.utcnow)
+    audit_log_id: Optional[int] = Field(default=None, foreign_key="audit_log.id")

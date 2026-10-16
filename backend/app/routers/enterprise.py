@@ -3,7 +3,7 @@ Enterprise router — multi-tenancy governance, quota management, and analytics.
 
 Endpoints:
 - ``POST /v1/init_company``        — bootstrap a new company with agents and credentials.
-- ``POST /v1/approve_task``        — human-in-the-loop approval for AI-generated tasks.
+- ``POST /v1/approve_task``        — retired approval endpoint (410 Gone).
 - ``GET  /v1/enterprise/quotas``   — token usage per business unit.
 - ``GET  /v1/analytics/summary``   — AI Scrum Master sprint health report.
 - ``POST /v1/discover_team``       — auto-detect project stack and suggest an AI team.
@@ -22,7 +22,6 @@ from services.discovery_service import DiscoveryService
 from services.company_service import CompanyService
 from schemas import (
     CompanyInitRequest,
-    ApprovalRequest,
     DiscoveryRequest,
     OrchestrationHealthResponse,
     OrchestrationHealthSummaries,
@@ -61,15 +60,11 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
 
 
 @router.post("/approve_task", tags=["Enterprise"])
-async def approve_task(req: ApprovalRequest, session: Session = Depends(get_session)):
-    """
-    Human-in-the-Loop governance: approve or reject an AI-generated task.
-    """
-    service = CompanyService(session)
-    try:
-        return service.approve_task(req.task_id, req.approver_name, req.decision, req.feedback)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+async def approve_task():
+    raise HTTPException(
+        status_code=410,
+        detail="POST /v1/approve_task was removed; use POST /v1/agent_runs/{id}/approve (issue #42)",
+    )
 
 
 @router.get("/enterprise/quotas", tags=["Enterprise"])

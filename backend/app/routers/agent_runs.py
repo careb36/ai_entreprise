@@ -8,9 +8,10 @@ from sqlmodel import Session, select
 
 from database import get_session
 from logging_config import logger
-from models.agent_run import AgentRun, Verification
-from schemas import AgentRunCreate, AgentRunVerificationRequest
+from models.agent_run import AgentRun, AgentRunApproval, Verification
+from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from services.agent_service import AgentService
 from services.verification import verify_agent_run
 
 router = APIRouter(prefix="/v1/agent_runs", tags=["Agent Runs"])
@@ -57,7 +58,32 @@ def list_agent_runs(
     runs = session.exec(
         statement.order_by(AgentRun.ingested_at.desc(), AgentRun.id.desc()).limit(limit)
     ).all()
-    return {"agent_runs": [run.model_dump(exclude={"artifact_text"}) for run in runs]}
+    latest_approvals = {}
+    if runs:
+        approvals = session.exec(
+            select(AgentRunApproval)
+            .where(
+                AgentRunApproval.company_id == company_id,
+                AgentRunApproval.agent_run_id.in_([run.id for run in runs]),
+            )
+            .order_by(AgentRunApproval.decided_at.desc(), AgentRunApproval.id.desc())
+        ).all()
+        for approval in approvals:
+            latest_approvals.setdefault(approval.agent_run_id, approval)
+
+    items = []
+    for run in runs:
+        item = run.model_dump(exclude={"artifact_text"})
+        approval = latest_approvals.get(run.id)
+        item["latest_approval"] = (
+            approval.model_dump(
+                include={"decision", "feedback", "approver_name", "decided_at"}
+            )
+            if approval
+            else None
+        )
+        items.append(item)
+    return {"agent_runs": items}
 
 
 @router.get("/{run_id}")
@@ -118,3 +144,68 @@ def list_run_verifications(
         .order_by(Verification.observed_at, Verification.id)
     ).all()
     return {"verifications": verifications}
+
+
+@router.post("/{run_id}/approve", status_code=201)
+def approve_run(
+    run_id: int,
+    payload: AgentRunApprovalRequest,
+    session: Session = Depends(get_session),
+):
+    run = session.exec(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.company_id == payload.company_id,
+        )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+
+    approval = AgentRunApproval(agent_run_id=run.id, **payload.model_dump())
+    session.add(approval)
+    audit_log = AgentService().audit_interaction(
+        session=session,
+        interaction_id=f"agent-run:{run.external_ref}",
+        agent_id=f"human:{approval.approver_name}",
+        action=f"agent_run_{approval.decision}",
+        details={
+            "company_id": str(run.company_id),
+            "agent_run_id": run.id,
+            "version": run.version,
+            "rejection_category": approval.rejection_category,
+        },
+        result={"decision": approval.decision, "feedback": approval.feedback},
+        decision_signature=None,
+        cost_tokens=0,
+    )
+    approval.audit_log_id = audit_log.id
+    session.add(approval)
+    session.commit()
+    session.refresh(approval)
+    return approval
+
+
+@router.get("/{run_id}/approvals")
+def list_run_approvals(
+    run_id: int,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),
+):
+    run = session.exec(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.company_id == company_id,
+        )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+
+    approvals = session.exec(
+        select(AgentRunApproval)
+        .where(
+            AgentRunApproval.agent_run_id == run_id,
+            AgentRunApproval.company_id == company_id,
+        )
+        .order_by(AgentRunApproval.decided_at, AgentRunApproval.id)
+    ).all()
+    return {"approvals": approvals}

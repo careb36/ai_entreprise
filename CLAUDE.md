@@ -94,12 +94,12 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
 
-**`backend/janitor/main.py`** — Background maintenance container (runs daily). Cleans outbox events, task queue, and rebuilds pgvector indices with `REINDEX CONCURRENTLY`.
+**`backend/janitor/main.py`** — Background maintenance container (runs daily). Cleans outbox events and rebuilds pgvector indices with `REINDEX CONCURRENTLY`.
 
 ### Data Flow for a Sprint
 
 1. User creates a sprint via frontend → `POST /v1/start_sprint`
-2. Backend enqueues sprint in `task_queue` (Postgres) and publishes to NATS
+2. Backend publishes the sprint to NATS via the transactional outbox
 3. LangGraph graph executes agent nodes sequentially, each calling LLM proxy
 4. Architect/PO nodes use Gemini (high reasoning); Developer/QA nodes use DeepSeek (cost-effective)
 5. Agent decisions and code are published back to NATS as `workspace.generate` / `workspace.execute`
