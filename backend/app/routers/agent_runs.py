@@ -8,9 +8,10 @@ from sqlmodel import Session, select
 
 from database import get_session
 from logging_config import logger
-from models.agent_run import AgentRun
-from schemas import AgentRunCreate
+from models.agent_run import AgentRun, Verification
+from schemas import AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from services.verification import verify_agent_run
 
 router = APIRouter(prefix="/v1/agent_runs", tags=["Agent Runs"])
 
@@ -74,3 +75,46 @@ def get_agent_run(
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
+
+
+@router.post("/{run_id}/verify", status_code=201)
+def verify_run(
+    run_id: int,
+    payload: AgentRunVerificationRequest,
+    session: Session = Depends(get_session),
+):
+    run = session.exec(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.company_id == payload.company_id,
+        )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return verify_agent_run(session, run, payload.evidence)
+
+
+@router.get("/{run_id}/verifications")
+def list_run_verifications(
+    run_id: int,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),
+):
+    run = session.exec(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.company_id == company_id,
+        )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+
+    verifications = session.exec(
+        select(Verification)
+        .where(
+            Verification.agent_run_id == run_id,
+            Verification.company_id == company_id,
+        )
+        .order_by(Verification.observed_at, Verification.id)
+    ).all()
+    return {"verifications": verifications}
