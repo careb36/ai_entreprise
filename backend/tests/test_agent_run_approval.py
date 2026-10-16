@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock, call
 
 import pytest
@@ -314,6 +315,8 @@ def test_task_queue_model_is_removed():
     with pytest.raises(ImportError):
         from models import TaskQueue  # noqa: F401
     assert "task_queue" not in SQLModel.metadata.tables
+    init_sql = Path(__file__).resolve().parents[2] / "db" / "init-db" / "init.sql"
+    assert "task_queue" not in init_sql.read_text()
 
 
 def test_janitor_drops_retired_queue_before_cleanup(monkeypatch, sqlite_session):
