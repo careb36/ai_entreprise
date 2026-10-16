@@ -94,6 +94,11 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     AUDIT_SIGNING_KEY: Optional[str] = None
 
+    # ---------------------------------------------------------------------------
+    # GitHub integration — optional token for API rate-limit headroom
+    # ---------------------------------------------------------------------------
+    GITHUB_TOKEN: Optional[str] = None
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -14,6 +14,7 @@ from .audit import AuditLog
 from .agent_run import AgentRun, Verification
 from .support import BugReport
 from .runtime import AssistantRuntimeState
+from .github import GitHubRepoBinding
 
 __all__ = [
     "Company", "Agent", "BusinessUnit", "User", "CompanyMember",
@@ -23,4 +24,5 @@ __all__ = [
     "AgentRun", "Verification",
     "BugReport",
     "AssistantRuntimeState",
+    "GitHubRepoBinding",
 ]
