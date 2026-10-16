@@ -208,6 +208,27 @@ def test_runs_are_isolated_between_companies(
     assert hidden.status_code == 404
 
 
+def test_list_omits_artifact_but_detail_includes_it(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    artifact = "large diff content"
+    ingested = _ingest(
+        test_client, monkeypatch, tmp_path, _payload(company_id, artifact=artifact)
+    ).json()
+
+    listed = test_client.get(
+        "/v1/agent_runs", params={"company_id": company_id}
+    ).json()["agent_runs"][0]
+    detail = test_client.get(
+        f"/v1/agent_runs/{ingested['id']}", params={"company_id": company_id}
+    ).json()
+
+    assert "artifact_text" not in listed
+    assert "artifact_text" in detail
+    assert detail["artifact_text"] == artifact
+
+
 def test_oversized_artifact_returns_413_without_writing(
     sqlite_session, test_client, monkeypatch, tmp_path
 ):

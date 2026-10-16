@@ -56,7 +56,7 @@ def list_agent_runs(
     runs = session.exec(
         statement.order_by(AgentRun.ingested_at.desc(), AgentRun.id.desc()).limit(limit)
     ).all()
-    return {"agent_runs": runs}
+    return {"agent_runs": [run.model_dump(exclude={"artifact_text"}) for run in runs]}
 
 
 @router.get("/{run_id}")
