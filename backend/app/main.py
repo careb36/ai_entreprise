@@ -28,12 +28,13 @@ from fastapi.responses import JSONResponse
 from config import Settings
 from auth_tokens import is_auth_configured
 from crypto import is_encryption_enabled
+from audit_signing import is_signing_enabled
 from database import create_db_and_tables, get_neo4j_driver
 from logging_config import logger
 from nats_client import NATSClient
 from memory_client import MemoryClient
 from llm_proxy_client import LLMProxyClient
-from routers import auth_router, enterprise_router, sprint_router, agents_router, support_router
+from routers import auth_router, enterprise_router, sprint_router, agents_router, agent_runs_router, support_router
 from routers.agents import publish_sse_event, sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
@@ -66,6 +67,7 @@ app.include_router(auth_router)
 app.include_router(enterprise_router)
 app.include_router(sprint_router)
 app.include_router(agents_router)
+app.include_router(agent_runs_router)
 app.include_router(support_router)
 
 # Initialise state slots so type checkers and docs know what lives here.
@@ -231,6 +233,12 @@ async def startup():
             'python -c "from cryptography.fernet import Fernet; '
             'print(Fernet.generate_key().decode())"'
         )
+    if not is_signing_enabled():
+        logger.warning(
+            "AUDIT_SIGNING_KEY is not configured. Audit rows will be stored with "
+            "an 'unsigned:' prefix. Generate a key with: "
+            'python -c "import secrets; print(secrets.token_hex(32))"'
+        )
 
     if not is_auth_configured():
         logger.warning(
@@ -282,4 +290,3 @@ async def _listen_to_nats():
         await app.state.nats_client.subscribe("glassroom.>", callback)
     except Exception as e:
         logger.error(f"Failed to subscribe to Glassroom events: {e}")
-

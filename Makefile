@@ -2,7 +2,7 @@
 
 # Variables
 PYTHON_VERSION = 3.11
-NODE_VERSION = 20
+NODE_VERSION = 24
 
 # Colores para la consola
 GREEN  := $(shell tput -Txterm setaf 2)

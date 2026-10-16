@@ -11,6 +11,7 @@ imported, so this ``__init__`` must be imported before
 from .company import Company, Agent, BusinessUnit, User, CompanyMember, ProjectCredential, ProjectDiscovery
 from .sprint import Sprint, BacklogItem, OutboxEvent, TaskQueue
 from .audit import AuditLog
+from .agent_run import AgentRun, Verification
 from .support import BugReport
 from .runtime import AssistantRuntimeState
 
@@ -19,6 +20,7 @@ __all__ = [
     "ProjectCredential", "ProjectDiscovery",
     "Sprint", "BacklogItem", "OutboxEvent", "TaskQueue",
     "AuditLog",
+    "AgentRun", "Verification",
     "BugReport",
     "AssistantRuntimeState",
 ]

@@ -80,7 +80,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/main.py`** — All FastAPI routes (single large file). Responsible for: company init, sprint management, kanban board state, memory search/store, enterprise quotas, support tickets, and analytics.
 
-**`backend/agents/graph.py`** — LangGraph `StateGraph` defining the agent workflow. Nodes run in order: `design → generate → execute → burn`. Each node maps to an agent role calling the LLM proxy.
+**`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
 **`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. Use `model_preference="fast"` (flash models) or `"powerful"` (pro models).
 
@@ -100,6 +100,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 1. User creates a sprint via frontend → `POST /v1/start_sprint`
 2. Backend enqueues sprint in `task_queue` (Postgres) and publishes to NATS
+   Steps 3–6 only happen when `AGENT_GRAPH_ENABLED=true`.
 3. LangGraph graph executes agent nodes sequentially, each calling LLM proxy
 4. Architect/PO nodes use Gemini (high reasoning); Developer/QA nodes use DeepSeek (cost-effective)
 5. Agent decisions and code are published back to NATS as `workspace.generate` / `workspace.execute`

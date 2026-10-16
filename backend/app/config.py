@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True
+    # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.
+    AGENT_GRAPH_ENABLED: bool = False
     COPILOT_CLI_COMMAND_TEMPLATE: str = 'copilot -p {prompt} --output-format json'
     CLAUDE_CLI_COMMAND_TEMPLATE: Optional[str] = 'claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}'
     CLAUDE_CLI_ALLOWED_TOOLS: str = 'Read,Grep,Glob,LS,Bash(git *)'
@@ -87,6 +89,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # Audit signing — separate HMAC key for decision_signature values.
+    # ---------------------------------------------------------------------------
+    AUDIT_SIGNING_KEY: Optional[str] = None
 
     class Config:
         env_file = ".env"

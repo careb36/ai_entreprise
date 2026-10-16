@@ -11,13 +11,35 @@ Naming convention:
 - ``Chat*``     — support-chat specific schemas.
 """
 
-from pydantic import BaseModel, Field, model_validator
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional, List, Dict, Any
 
 
 # ---------------------------------------------------------------------------
 # Request schemas (Pydantic — not persisted directly, used for API validation)
 # ---------------------------------------------------------------------------
+
+class AgentRunCreate(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    company_id: int
+    external_ref: str
+    producer: str
+    model: Optional[str] = None
+    agent_role: Optional[str] = None
+    subject: Optional[Dict[str, Any]] = None
+    claims: Optional[Dict[str, Any]] = None
+    artifact: str = ""
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class AgentRunVerificationRequest(BaseModel):
+    company_id: int
+    evidence: Optional[Dict[str, Any]] = None
+
 
 class CompanyInitRequest(BaseModel):
     """Payload for ``POST /v1/init_company`` — bootstraps a new tenant."""
@@ -74,7 +96,7 @@ class AuditRequest(BaseModel):
     action: str                                  # Short action label (e.g. "generate_code")
     details: Optional[Dict[str, Any]] = None     # Arbitrary context for the action
     result: Optional[Dict[str, Any]] = None      # Outcome data
-    decision_signature: Optional[str] = None     # Cryptographic hash for non-repudiation
+    decision_signature: Optional[str] = None     # Deprecated; caller values are ignored
     cost_tokens: int = 0                         # Token cost billed to the business unit
 
 
@@ -190,4 +212,3 @@ class OrchestrationHealthResponse(BaseModel):
     anchor_date: str                  # ISO-8601 date of the Batch-1 anchor
     weeks: List[OrchestrationHealthWeek]
     summary: OrchestrationHealthSummaries
-
