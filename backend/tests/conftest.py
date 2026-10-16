@@ -35,7 +35,7 @@ from models.company import (  # noqa: F401
     CompanyMember,
 )
 from models.sprint import Sprint, BacklogItem, OutboxEvent  # noqa: F401
-from models.agent_run import AgentRun, Verification  # noqa: F401
+from models.agent_run import AgentRun, AgentRunApproval, Verification  # noqa: F401
 from models.audit import AuditLog  # noqa: F401
 from models.github import GitHubRepoBinding  # noqa: F401
 
@@ -65,6 +65,7 @@ SQLModel.metadata.create_all(
         BacklogItem.__table__,
         OutboxEvent.__table__,
         AgentRun.__table__,
+        AgentRunApproval.__table__,
         Verification.__table__,
         AuditLog.__table__,
         GitHubRepoBinding.__table__,

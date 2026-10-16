@@ -3,7 +3,6 @@ CompanyService — logic for company lifecycle, tenant bootstrapping, and team d
 
 Responsibilities:
 - Initialise a new company tenant with agents and credentials.
-- Handle human-in-the-loop task approvals and governance.
 - Aggregate sprint health and token usage analytics for the dashboard.
 - Bridge Postgres multi-tenant data to the Neo4j Temporal Knowledge Graph.
 """
@@ -19,7 +18,7 @@ from sqlalchemy import text
 from database import get_neo4j_driver
 from models import (
     Company, Agent, ProjectCredential, Sprint, BacklogItem,
-    OutboxEvent, TaskQueue, AuditLog, BusinessUnit
+    OutboxEvent, AuditLog, BusinessUnit
 )
 from services.sprint_planner import plan_foundation_sprint
 from crypto import encrypt_value
@@ -169,54 +168,6 @@ class CompanyService:
         except Exception as e:
             logger.error(f"Neo4j seed failed (non-critical): {e}")
 
-    def approve_task(self, task_id: int, approver_name: str, decision: str, feedback: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Human-in-the-Loop governance: approve or reject an AI-generated task.
-
-        On rejection with feedback, a new ``OutboxEvent`` is inserted to re-dispatch
-        the workflow with the PO's feedback injected, and an ``AuditLog`` entry is
-        written for governance lineage.
-        """
-        task = self.session.get(TaskQueue, task_id)
-        if not task:
-            raise ValueError(f"Task {task_id} not found")
-
-        task.approval_status = "approved" if decision == "approved" else "rejected"
-        task.approved_by = approver_name
-        task.review_comments = feedback
-        task.status = "pending"  # Workflow resumes processing
-
-        self.session.add(task)
-
-        if decision == "rejected" and feedback and task.interaction_id:
-            # Re-dispatch the workflow with the rejection feedback so agents can revise.
-            self.session.add(OutboxEvent(
-                aggregate_type="task_queue",
-                aggregate_id=str(task.id),
-                event_type="nats_publish",
-                payload={
-                    "subject": "workspace.generate",
-                    "message": {
-                        "interaction_id": task.interaction_id,
-                        "story": f"[REVISION REQUESTED]\nOriginal interaction: {task.interaction_id}",
-                        "po_feedback": feedback,
-                        "constraints": "Address the PO rejection feedback and revise the approach.",
-                    },
-                },
-            ))
-            # Persist the rejection in the audit log for lineage queries.
-            self.session.add(AuditLog(
-                interaction_id=task.interaction_id,
-                agent_id=f"human:{approver_name}",
-                action="po_rejection",
-                details={"task_id": task_id, "approver": approver_name},
-                result={"feedback": feedback},
-                cost_tokens=0,
-            ))
-
-        self.session.commit()
-        return {"status": "success", "task_id": task_id, "new_status": task.approval_status}
-
     def get_quotas(self, company_id: int) -> List[Dict[str, Any]]:
         """Return token usage and limits for all business units of a company."""
         units = self.session.exec(
@@ -239,13 +190,17 @@ class CompanyService:
 
     def get_project_health(self, sprint_id: int) -> Dict[str, Any]:
         """Generate a sprint health report using SQLModel idiomatic queries."""
-        # 1. Calculate total tokens (aggregate across interactions linked to task_queue)
-        # Using a subquery for the interaction IDs
-        subq = select(TaskQueue.interaction_id)
-        total_tokens = self.session.exec(
-            select(func.sum(AuditLog.cost_tokens))
-            .where(AuditLog.interaction_id.in_(subq))
-        ).one() or 0
+        # 1. Calculate total tokens for this sprint's backlog interactions
+        item_ids = self.session.exec(
+            select(BacklogItem.id).where(BacklogItem.sprint_id == sprint_id)
+        ).all()
+        interaction_ids = [f"task-{item_id}" for item_id in item_ids]
+        total_tokens = 0
+        if interaction_ids:
+            total_tokens = self.session.exec(
+                select(func.sum(AuditLog.cost_tokens))
+                .where(AuditLog.interaction_id.in_(interaction_ids))
+            ).one() or 0
 
         # 2. Count tasks per status
         status_counts_rows = self.session.exec(

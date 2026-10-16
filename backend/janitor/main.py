@@ -1,17 +1,14 @@
 """
 Fabrique AI Janitor — daily database maintenance service.
 
-Runs as a standalone long-lived container (or bare process).  Executes three
+Runs as a standalone long-lived container (or bare process).  Executes two
 maintenance tasks every 24 hours:
 
 1. **Outbox cleanup** — deletes ``outbox_events`` rows with status
    ``'completed'`` that are older than 7 days, keeping the table small and
    the partial index efficient.
 
-2. **Task-queue cleanup** — deletes ``task_queue`` rows with terminal statuses
-   (``'completed'`` or ``'failed'``) older than 30 days.
-
-3. **Vector index rebuild** — runs ``REINDEX INDEX CONCURRENTLY`` on the
+2. **Vector index rebuild** — runs ``REINDEX INDEX CONCURRENTLY`` on the
    ``vector_memory_idx`` HNSW/IVFFlat index so that ANN search stays fast
    after large insert batches.  ``CONCURRENTLY`` means read queries are not
    blocked during the rebuild.
@@ -53,7 +50,7 @@ def run_janitor_tasks():
     Execute all daily maintenance tasks in a single database session.
 
     Connects with ``autocommit = True`` so each statement commits immediately
-    — a requirement for ``REINDEX CONCURRENTLY``.  All three tasks are
+    — a requirement for ``REINDEX CONCURRENTLY``.  All tasks are
     idempotent and safe to run repeatedly.
     """
     conn = None
@@ -64,17 +61,15 @@ def run_janitor_tasks():
         conn.autocommit = True
         cursor = conn.cursor()
 
+        # One-time migration for the retired approval queue (issue #42).
+        cursor.execute("DROP TABLE IF EXISTS task_queue")
+        logger.info("Janitor: Dropped retired task_queue table if present.")
+
         # 1. Clean Outbox (Uses the new partial index)
         cursor.execute(
             "DELETE FROM outbox_events WHERE status = 'completed' AND processed_at < NOW() - INTERVAL '7 days'"
         )
         logger.info(f"Janitor: Deleted {cursor.rowcount} old outbox events.")
-
-        # 2. Clean Task Queue (Uses the new partial index and completed_at)
-        cursor.execute(
-            "DELETE FROM task_queue WHERE status IN ('completed', 'failed') AND completed_at < NOW() - INTERVAL '30 days'"
-        )
-        logger.info(f"Janitor: Deleted {cursor.rowcount} old tasks from queue.")
 
         # 3. Vector Index Rebuild (NON-BLOCKING for RAG queries)
         logger.info("Janitor: Rebuilding vector memory index concurrently to prevent read blocks...")

@@ -93,21 +93,6 @@ CREATE INDEX IF NOT EXISTS idx_backlog_sprint ON backlog_items(sprint_id);
 CREATE INDEX IF NOT EXISTS idx_backlog_status ON backlog_items(status);
 
 -- 4. LangGraph & Orchestration
-CREATE TABLE IF NOT EXISTS task_queue (
-    id SERIAL PRIMARY KEY,
-    interaction_id VARCHAR(100) NOT NULL,
-    task_type VARCHAR(50) NOT NULL,
-    payload JSONB NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending',
-    retry_count INTEGER DEFAULT 0,
-    requires_approval BOOLEAN DEFAULT FALSE,
-    approval_status VARCHAR(50) DEFAULT 'not_required',
-    approved_by VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS outbox_events (
     id SERIAL PRIMARY KEY,
     aggregate_type VARCHAR(100) NOT NULL,
@@ -197,7 +182,6 @@ CREATE TABLE IF NOT EXISTS bug_reports (
 
 -- Indexes & Triggers
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox_events(status) WHERE status = 'pending';
-CREATE INDEX IF NOT EXISTS idx_taskqueue_pending ON task_queue(status) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
 
 -- Auto-update updated_at for all tables
@@ -209,5 +193,4 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_companies_updated_at BEFORE UPDATE ON companies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_sprints_updated_at BEFORE UPDATE ON sprints FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_backlog_items_updated_at BEFORE UPDATE ON backlog_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER trg_task_queue_updated_at BEFORE UPDATE ON task_queue FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER trg_bug_reports_updated_at BEFORE UPDATE ON bug_reports FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

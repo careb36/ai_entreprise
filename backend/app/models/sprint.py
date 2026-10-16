@@ -5,7 +5,6 @@ Tables:
 - ``Sprint``       — a time-boxed iteration for a company.
 - ``BacklogItem``  — a single task on the sprint board (Kanban card).
 - ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
-- ``TaskQueue``    — human-approval queue for AI-generated tasks (Human-in-the-Loop).
 """
 
 from typing import Optional, Any
@@ -76,22 +75,3 @@ class OutboxEvent(SQLModel, table=True):
     retry_count: int = 0             # Incremented on each failed delivery attempt
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     processed_at: Optional[datetime] = None  # Set when status transitions to completed/failed
-
-
-class TaskQueue(SQLModel, table=True):
-    """
-    Human-in-the-Loop approval queue for AI-generated tasks.
-
-    When ``autonomy_level < 3``, generated tasks are inserted here and
-    paused until a human manager approves or rejects them via
-    ``POST /v1/approve_task``.
-    """
-
-    __tablename__ = "task_queue"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    interaction_id: Optional[str] = None      # Links back to the originating workflow run
-    approval_status: Optional[str] = None     # "approved" | "rejected" | None (pending)
-    approved_by: Optional[str] = None         # Name of the human who reviewed the task
-    status: str = "pending"                   # "pending" | "in_progress" | "completed" | "failed"
-    review_comments: Optional[str] = None     # Feedback from the human reviewer
