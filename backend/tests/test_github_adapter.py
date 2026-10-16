@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -331,6 +332,36 @@ def test_valid_webhook_ingests_pull_request(
         )
         == 1
     )
+
+
+def test_webhook_fetches_github_off_the_event_loop(
+    test_client, sqlite_session, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
+    _bind(test_client, company_id)
+    monkeypatch.setattr(github_adapter, "fetch_pr_commits", lambda *args, **kwargs: [])
+    loop_absent = []
+
+    def fake_fetch_pr_diff(*args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop_absent.append(True)
+            return "diff"
+        loop_absent.append(False)
+        return "diff"
+
+    monkeypatch.setattr(github_adapter, "fetch_pr_diff", fake_fetch_pr_diff)
+
+    response = _webhook(
+        test_client,
+        _fixture("pr27.json"),
+        repository=f"careb36/le-fabrique-{company_id}",
+    )
+
+    assert response.status_code == 202
+    assert loop_absent == [True]
 
 
 def test_invalid_webhook_signature_writes_nothing(sqlite_session, test_client):

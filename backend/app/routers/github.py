@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -154,7 +155,7 @@ async def github_webhook(request: Request, session: Session = Depends(get_sessio
         return Response(status_code=204)
 
     try:
-        run, created = _ingest_pr(session, binding, pr)
+        run, created = await run_in_threadpool(_ingest_pr, session, binding, pr)
     except ArtifactTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     if run is None:
