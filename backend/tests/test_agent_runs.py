@@ -1,0 +1,344 @@
+import hashlib
+import logging
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
+
+from models.agent_run import AgentRun
+from models.audit import AuditLog
+from models.company import Company
+
+
+def _make_company(session, name="Agent Run Test"):
+    company = Company(company_name=name)
+    session.add(company)
+    session.commit()
+    session.refresh(company)
+    return company.id
+
+
+def _payload(company_id, **overrides):
+    payload = {
+        "company_id": company_id,
+        "external_ref": "github:careb36/le-fabrique#35",
+        "producer": "copilot",
+        "artifact": "diff contents",
+        "claims": {"summary": "opened a PR"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _ingest(test_client, monkeypatch, tmp_path, payload):
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
+    return test_client.post("/v1/agent_runs", json=payload)
+
+
+def test_new_run_is_ingested_with_server_digest(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    artifact = "diff contents"
+
+    response = _ingest(test_client, monkeypatch, tmp_path, _payload(company_id))
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["created"] is True
+    assert body["version"] == 1
+    assert body["status"] == "ingested"
+    assert (
+        body["artifact_digest"] == hashlib.sha256(artifact.encode("utf-8")).hexdigest()
+    )
+
+
+def test_identical_reingest_is_noop(sqlite_session, test_client, monkeypatch, tmp_path):
+    company_id = _make_company(sqlite_session)
+    payload = _payload(company_id)
+    first = _ingest(test_client, monkeypatch, tmp_path, payload)
+    second = _ingest(test_client, monkeypatch, tmp_path, payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert second.json()["created"] is False
+    assert second.json()["id"] == first.json()["id"]
+    assert (
+        len(
+            sqlite_session.exec(
+                select(AgentRun).where(
+                    AgentRun.company_id == company_id,
+                    AgentRun.external_ref == payload["external_ref"],
+                )
+            ).all()
+        )
+        == 1
+    )
+
+
+def test_changed_artifact_creates_immutable_new_version(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    first_response = _ingest(test_client, monkeypatch, tmp_path, _payload(company_id))
+    first_id = first_response.json()["id"]
+    before = sqlite_session.get(AgentRun, first_id)
+    original_columns = {
+        column.name: getattr(before, column.name)
+        for column in AgentRun.__table__.columns
+    }
+
+    second_response = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, artifact="changed diff"),
+    )
+
+    assert second_response.status_code == 201
+    assert second_response.json()["version"] == 2
+    after = sqlite_session.get(AgentRun, first_id)
+    assert {
+        column.name: getattr(after, column.name)
+        for column in AgentRun.__table__.columns
+    } == original_columns
+
+
+def test_changed_claims_create_new_version(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    _ingest(test_client, monkeypatch, tmp_path, _payload(company_id))
+
+    response = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, claims={"summary": "opened a different PR"}),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["version"] == 2
+
+
+def test_caller_digest_is_ignored_and_logged(
+    sqlite_session, test_client, monkeypatch, tmp_path, caplog
+):
+    company_id = _make_company(sqlite_session)
+    caplog.set_level(logging.WARNING)
+
+    response = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, artifact_digest="deadbeef"),
+    )
+
+    assert response.status_code == 201
+    assert (
+        response.json()["artifact_digest"]
+        == hashlib.sha256(b"diff contents").hexdigest()
+    )
+    assert "artifact_digest supplied by caller is ignored" in caplog.text
+
+
+def test_model_is_nullable_and_preserved_when_known(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    omitted = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="github:unknown-model"),
+    )
+    known = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="github:known-model", model="gpt-x"),
+    )
+
+    assert omitted.json()["model"] is None
+    assert known.json()["model"] == "gpt-x"
+
+
+def test_nested_claims_round_trip_unchanged(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    claims = {"z": {"emoji": "🧪", "nested": [1, {"é": "雪"}]}, "a": "first"}
+
+    response = _ingest(
+        test_client, monkeypatch, tmp_path, _payload(company_id, claims=claims)
+    )
+    stored = sqlite_session.get(AgentRun, response.json()["id"])
+
+    assert response.status_code == 201
+    assert stored.claims == claims
+    assert response.json()["claims"] == claims
+
+
+def test_runs_are_isolated_between_companies(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_a = _make_company(sqlite_session, name="Company A")
+    company_b = _make_company(sqlite_session, name="Company B")
+    external_ref = "github:x/y#1"
+    run_a = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_a, external_ref=external_ref),
+    ).json()
+    run_b = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_b, external_ref=external_ref),
+    ).json()
+
+    assert run_a["version"] == run_b["version"] == 1
+    assert run_a["id"] != run_b["id"]
+    listed = test_client.get("/v1/agent_runs", params={"company_id": company_a}).json()
+    assert [run["id"] for run in listed["agent_runs"]] == [run_a["id"]]
+    hidden = test_client.get(
+        f"/v1/agent_runs/{run_b['id']}", params={"company_id": company_a}
+    )
+    assert hidden.status_code == 404
+
+
+def test_oversized_artifact_returns_413_without_writing(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    response = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, artifact="x" * (2 * 1024 * 1024 + 1)),
+    )
+
+    assert response.status_code == 413
+    assert (
+        sqlite_session.exec(
+            select(AgentRun).where(AgentRun.company_id == company_id)
+        ).all()
+        == []
+    )
+    company_audits = sqlite_session.exec(select(AuditLog)).all()
+    assert not any(
+        audit.details and audit.details.get("company_id") == str(company_id)
+        for audit in company_audits
+    )
+
+
+def test_each_insert_has_linked_audit_and_noop_does_not_add_one(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    payload = _payload(company_id)
+    first = _ingest(test_client, monkeypatch, tmp_path, payload)
+    audit_rows = [
+        audit
+        for audit in sqlite_session.exec(
+            select(AuditLog).where(
+                AuditLog.interaction_id == f"agent-run:{payload['external_ref']}"
+            )
+        ).all()
+        if audit.details.get("company_id") == str(company_id)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "agent_run_ingested"
+    assert audit_rows[0].details["company_id"] == str(company_id)
+    assert (
+        sqlite_session.get(AgentRun, first.json()["id"]).audit_log_id
+        == audit_rows[0].id
+    )
+
+    noop = _ingest(test_client, monkeypatch, tmp_path, payload)
+
+    assert noop.status_code == 200
+    audit_rows_after_noop = [
+        audit
+        for audit in sqlite_session.exec(
+            select(AuditLog).where(
+                AuditLog.interaction_id == f"agent-run:{payload['external_ref']}"
+            )
+        ).all()
+        if audit.details.get("company_id") == str(company_id)
+    ]
+    assert len(audit_rows_after_noop) == 1
+
+
+def test_list_filters_and_requires_company_id(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session)
+    _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(
+            company_id,
+            external_ref="github:first",
+            producer="copilot",
+        ),
+    )
+    _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="github:second", producer="claude-code"),
+    )
+    claude_run = sqlite_session.exec(
+        select(AgentRun).where(
+            AgentRun.company_id == company_id, AgentRun.producer == "claude-code"
+        )
+    ).first()
+    claude_run.status = "verified"
+    sqlite_session.add(claude_run)
+    sqlite_session.commit()
+
+    filtered = test_client.get(
+        "/v1/agent_runs",
+        params={
+            "company_id": company_id,
+            "producer": "claude-code",
+            "status": "verified",
+            "limit": 1,
+            "since": "2000-01-01T00:00:00",
+            "until": "2100-01-01T00:00:00",
+        },
+    )
+    missing_company = test_client.get("/v1/agent_runs")
+
+    assert filtered.status_code == 200
+    assert len(filtered.json()["agent_runs"]) == 1
+    assert filtered.json()["agent_runs"][0]["producer"] == "claude-code"
+    assert missing_company.status_code == 422
+
+
+def test_company_external_ref_version_is_unique(sqlite_session):
+    company_id = _make_company(sqlite_session)
+    first = AgentRun(
+        company_id=company_id,
+        external_ref="github:duplicate",
+        producer="copilot",
+        artifact_digest="a",
+        artifact_size=0,
+    )
+    duplicate = AgentRun(
+        company_id=company_id,
+        external_ref="github:duplicate",
+        producer="copilot",
+        artifact_digest="b",
+        artifact_size=0,
+    )
+    sqlite_session.add(first)
+    sqlite_session.commit()
+    sqlite_session.add(duplicate)
+
+    with pytest.raises(IntegrityError):
+        sqlite_session.commit()
+    sqlite_session.rollback()
