@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from sqlmodel import Session
 
 from agents.graph import run_fabrique_workflow
+from config import settings
 from database import engine
 from models import Sprint
 from nats_client import NATSClient
@@ -59,6 +60,31 @@ async def _publish_glassroom_error(
         logger.warning("Failed to publish Glassroom error event: %s", pub_err)
 
 
+async def _publish_glassroom_info(
+    nats_client: NATSClient,
+    sprint_id: int | str | None,
+    interaction_id: str,
+    message: str,
+) -> None:
+    """Emit an informational event to the Glassroom SSE stream for the given sprint."""
+    if not sprint_id:
+        return
+    try:
+        await nats_client.publish(
+            f"glassroom.{sprint_id}",
+            {
+                "type": "info",
+                "agent": "System",
+                "role": "System",
+                "task": f"LangGraph workflow ({interaction_id})",
+                "message": message,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except Exception as pub_err:
+        logger.warning("Failed to publish Glassroom info event: %s", pub_err)
+
+
 async def process_agent_tasks(nats_client: NATSClient) -> None:
     """
     Background loop that subscribes to ``workspace.generate`` and runs workflows.
@@ -91,6 +117,19 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
             bu_id = data.get("business_unit_id")
             sprint_id = data.get("sprint_id")  # included when triggered from task_worker
             po_feedback = data.get("po_feedback")  # present when re-dispatched after PO rejection
+
+            if not settings.AGENT_GRAPH_ENABLED:
+                message = (
+                    "AGENT_GRAPH_ENABLED is false; the internal agent graph is disabled."
+                )
+                logger.info(
+                    "AGENT_GRAPH_ENABLED is false; ignoring workspace.generate interaction_id=%s",
+                    interaction_id,
+                )
+                await _publish_glassroom_info(
+                    nats_client, sprint_id, interaction_id, message
+                )
+                return
 
             logger.info(
                 "workspace.generate received: interaction_id=%s bu_id=%s sprint_id=%s story=%.80s",

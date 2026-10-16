@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import Settings
+from auth_tokens import is_auth_configured
 from crypto import is_encryption_enabled
 from audit_signing import is_signing_enabled
 from database import create_db_and_tables, get_neo4j_driver
@@ -237,6 +238,11 @@ async def startup():
             "AUDIT_SIGNING_KEY is not configured. Audit rows will be stored with "
             "an 'unsigned:' prefix. Generate a key with: "
             'python -c "import secrets; print(secrets.token_hex(32))"'
+        )
+
+    if not is_auth_configured():
+        logger.warning(
+            "JWT_SECRET_KEY is not configured. POST /v1/auth/login will return 503 until it is set."
         )
 
 
