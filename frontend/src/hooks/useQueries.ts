@@ -77,7 +77,7 @@ export function useVerifyAgentRun(companyId: number, runId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRun(companyId, runId) })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.verifications(companyId, runId) })
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRuns(companyId) })
+      queryClient.invalidateQueries({ queryKey: ['agent-runs', companyId] })
       queryClient.invalidateQueries({ queryKey: ['audit-verification'] })
     },
   })
@@ -89,7 +89,7 @@ export function useApproveAgentRun(companyId: number, runId: number) {
     mutationFn: (request: AgentRunApprovalRequest) => api.approveAgentRun(runId, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.approvals(companyId, runId) })
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agentRuns(companyId) })
+      queryClient.invalidateQueries({ queryKey: ['agent-runs', companyId] })
       queryClient.invalidateQueries({ queryKey: ['audit-verification'] })
     },
   })
