@@ -6,7 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from sqlmodel import select
+from sqlmodel import Session
 
 import audit_signing
 from audit_signing import (
@@ -42,6 +42,7 @@ def audit_log_path(tmp_path, monkeypatch):
 def _write_audit(
     session,
     interaction_id="test-interaction",
+    agent_id="agent-1",
     details=None,
     result=None,
     cost_tokens=7,
@@ -50,7 +51,7 @@ def _write_audit(
     return AgentService().audit_interaction(
         session=session,
         interaction_id=interaction_id,
-        agent_id="agent-1",
+        agent_id=agent_id,
         action="execute",
         details=details if details is not None else {"input": "value"},
         result=result if result is not None else {"output": "complete"},
@@ -198,6 +199,22 @@ def test_jsonl_and_database_share_signature_and_timestamp(
 
     assert entry["decision_signature"] == row.decision_signature
     assert entry["timestamp"] == row.created_at.isoformat()
+
+
+def test_integer_agent_id_verifies_after_loading_in_a_new_session(
+    with_key, sqlite_session, audit_log_path
+):
+    written = _write_audit(
+        sqlite_session,
+        interaction_id="integer-agent-id",
+        agent_id=7,
+    )
+
+    with Session(sqlite_session.get_bind()) as read_session:
+        row = read_session.get(AuditLog, written.id)
+
+    assert row.agent_id == "7"
+    assert verify_audit_row(row)["status"] == "valid"
 
 
 def test_verify_endpoint_reports_valid_and_legacy_rows(

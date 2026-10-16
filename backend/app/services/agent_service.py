@@ -125,6 +125,10 @@ class AgentService:
             cost_tokens=cost_tokens,
             created_at=now,
         )
+        session.add(log)
+        session.flush()
+        session.refresh(log)
+
         signature = sign_audit_payload(
             canonical_payload(
                 interaction_id=log.interaction_id,
@@ -138,11 +142,8 @@ class AgentService:
         )
         log.decision_signature = signature
 
-        audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
-        audit_log_path.mkdir(parents=True, exist_ok=True)
-
         entry = {
-            "timestamp": now.isoformat(),
+            "timestamp": log.created_at.isoformat(),
             "interaction_id": log.interaction_id,
             "agent_id": log.agent_id,
             "action": log.action,
@@ -152,11 +153,13 @@ class AgentService:
             "cost_tokens": log.cost_tokens,
         }
 
+        audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
+        audit_log_path.mkdir(parents=True, exist_ok=True)
+
         # Filesystem audit — append-only JSONL; one JSON object per line.
         with open(audit_log_path / "audit.jsonl", "a") as f:
             f.write(json.dumps(entry) + "\n")
 
         # Database audit — queryable via the governance dashboard.
-        session.add(log)
         session.commit()
         return log
