@@ -154,6 +154,73 @@ export interface OrchestrationHealthResponse {
   }
 }
 
+export type AgentRunStatus = 'ingested' | 'verified' | 'refuted' | 'unverifiable'
+
+export interface AgentRunApproval {
+  id: number
+  company_id: number
+  agent_run_id: number
+  approver_name: string
+  decision: 'approved' | 'rejected'
+  feedback: string | null
+  rejection_category: 'scope' | 'quality' | 'security' | 'other' | null
+  decided_at: string
+  audit_log_id: number | null
+}
+
+export interface AgentRunListItem {
+  id: number
+  company_id: number
+  external_ref: string
+  version: number
+  producer: string
+  model: string | null
+  agent_role: string | null
+  subject: Record<string, unknown> | null
+  claims: Record<string, unknown> | null
+  artifact_digest: string
+  artifact_size: number
+  status: AgentRunStatus
+  started_at: string | null
+  finished_at: string | null
+  ingested_at: string
+  audit_log_id: number | null
+  latest_approval: Pick<AgentRunApproval, 'decision' | 'feedback' | 'approver_name' | 'decided_at'> | null
+}
+
+export interface AgentRun extends Omit<AgentRunListItem, 'latest_approval'> {
+  artifact_text: string | null
+}
+
+export interface VerificationCheck {
+  name: string
+  outcome: 'pass' | 'refuted' | 'unverifiable'
+  observation: string
+}
+
+export interface AgentRunVerification {
+  id: number
+  verdict: Exclude<AgentRunStatus, 'ingested'>
+  checks: VerificationCheck[] | null
+  evidence: Record<string, unknown> | null
+  observed_at: string
+  audit_log_id: number | null
+}
+
+export interface AuditVerification {
+  interaction_id: string
+  rows: { id: number; action: string; status: 'valid' | 'invalid' | 'unsigned' | 'legacy'; mode: string }[]
+  summary: { valid: number; invalid: number; unsigned: number; legacy: number }
+}
+
+export interface AgentRunApprovalRequest {
+  company_id: number
+  approver_name: string
+  decision: 'approved' | 'rejected'
+  feedback?: string
+  rejection_category?: 'scope' | 'quality' | 'security' | 'other'
+}
+
 // ── Core fetch ───────────────────────────────────────────────────────────────
 
 interface FetchOptions extends RequestInit {
@@ -246,8 +313,26 @@ export const api = {
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
 
-  approveTask: (taskId: number, approverName: string, decision: 'approved' | 'rejected', feedback?: string) =>
-    api.post<any>('/v1/approve_task', { task_id: taskId, approver_name: approverName, decision, feedback }),
+  getAgentRuns: (companyId: number, filters: { producer?: string; status?: AgentRunStatus; limit?: number } = {}) =>
+    api.get<{ agent_runs: AgentRunListItem[] }>('/v1/agent_runs', { company_id: companyId, ...filters }),
+
+  getAgentRun: (runId: number, companyId: number) =>
+    api.get<AgentRun>(`/v1/agent_runs/${runId}`, { company_id: companyId }),
+
+  getAgentRunVerifications: (runId: number, companyId: number) =>
+    api.get<{ verifications: AgentRunVerification[] }>(`/v1/agent_runs/${runId}/verifications`, { company_id: companyId }),
+
+  verifyAgentRun: (runId: number, companyId: number) =>
+    api.post<AgentRunVerification>(`/v1/agent_runs/${runId}/verify`, { company_id: companyId }),
+
+  getAgentRunApprovals: (runId: number, companyId: number) =>
+    api.get<{ approvals: AgentRunApproval[] }>(`/v1/agent_runs/${runId}/approvals`, { company_id: companyId }),
+
+  approveAgentRun: (runId: number, request: AgentRunApprovalRequest) =>
+    api.post<AgentRunApproval>(`/v1/agent_runs/${runId}/approve`, request),
+
+  getAuditVerification: (externalRef: string) =>
+    api.get<AuditVerification>('/v1/audit/verify', { interaction_id: `agent-run:${externalRef}` }),
 
   getQuotas: (companyId: number) =>
     api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),
@@ -292,4 +377,3 @@ export const api = {
   getTickets: () => api.get<any[]>('/v1/tickets'),
   reportBug: (data: any) => api.post<any>('/v1/report_bug', data),
 }
-
