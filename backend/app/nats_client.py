@@ -18,10 +18,10 @@ NATS subjects in use:
 import asyncio
 import json
 import os
-from typing import Optional, Callable, Dict, Any
+from collections.abc import Callable
+from typing import Any
 
 import nats
-
 from logging_config import setup_logger
 
 logger = setup_logger("fabrique-nats")
@@ -42,11 +42,11 @@ class NATSClient:
         subscriptions: Map of subject pattern → asyncio Task for active listeners.
     """
 
-    def __init__(self, nats_url: Optional[str] = None):
+    def __init__(self, nats_url: str | None = None):
         self.nats_url = nats_url or os.getenv("NATS_URL", "nats://localhost:4222")
-        self.nc: Optional[nats.NATS] = None
+        self.nc: nats.NATS | None = None
         # Tracks running listener tasks so they can be cancelled on shutdown.
-        self.subscriptions: Dict[str, asyncio.Task] = {}
+        self.subscriptions: dict[str, asyncio.Task] = {}
 
     async def connect(self):
         """
@@ -63,7 +63,7 @@ class NATSClient:
             logger.error(f"Failed to connect to NATS: {e}")
             raise
 
-    async def publish(self, subject: str, payload: Dict[str, Any]):
+    async def publish(self, subject: str, payload: dict[str, Any]):
         """
         Publish a JSON-serialisable payload to a NATS subject.
 
@@ -81,7 +81,9 @@ class NATSClient:
         await self.nc.publish(subject, data)
         logger.info(f"Published to {subject}: {payload}")
 
-    async def request(self, subject: str, payload: Dict[str, Any], timeout: float = 120.0) -> Dict[str, Any]:
+    async def request(
+        self, subject: str, payload: dict[str, Any], timeout: float = 120.0
+    ) -> dict[str, Any]:
         """
         Send a request and wait for a JSON reply from a NATS subject.
 
@@ -107,7 +109,9 @@ class NATSClient:
         except json.JSONDecodeError:
             return {"ok": False, "raw": decoded}
 
-    async def subscribe(self, subject: str, callback: Callable, queue: Optional[str] = None):
+    async def subscribe(
+        self, subject: str, callback: Callable, queue: str | None = None
+    ):
         """
         Subscribe to a subject pattern and dispatch messages to *callback*.
 
@@ -152,7 +156,9 @@ class NATSClient:
                 except Exception as e:
                     logger.error(
                         "Error processing NATS message on subject=%s: %s",
-                        getattr(msg, "subject", "?"), e, exc_info=True,
+                        getattr(msg, "subject", "?"),
+                        e,
+                        exc_info=True,
                     )
         except asyncio.CancelledError:
             logger.info("NATS _listen task cancelled (normal shutdown).")
@@ -160,10 +166,13 @@ class NATSClient:
         except Exception as outer_err:
             logger.error(
                 "NATS _listen loop exited unexpectedly (subscription lost?): %s",
-                outer_err, exc_info=True,
+                outer_err,
+                exc_info=True,
             )
 
-    async def request(self, subject: str, payload: Dict[str, Any], timeout: float = 5.0) -> Dict[str, Any]:
+    async def request(
+        self, subject: str, payload: dict[str, Any], timeout: float = 5.0
+    ) -> dict[str, Any]:
         """
         Send a request and block until a reply is received (request-reply pattern).
 

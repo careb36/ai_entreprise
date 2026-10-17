@@ -7,7 +7,6 @@ import traceback
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-
 from logging_config import logger
 
 
@@ -33,30 +32,42 @@ def register_exception_handlers(app):
         if vendor_webhook:
             try:
                 import httpx
+
                 async with httpx.AsyncClient() as client:
-                    await client.post(vendor_webhook, json={
-                        "vendor_id": "CAROLINA_PEREIRA_PROD",
-                        "system_version": "2026.4.1",
-                        "error_type": error_type,
-                        "error_message": error_msg,
-                        "traceback": trace,
-                        "endpoint": f"{request.method} {request.url.path}",
-                    }, timeout=2.0)
+                    await client.post(
+                        vendor_webhook,
+                        json={
+                            "vendor_id": "CAROLINA_PEREIRA_PROD",
+                            "system_version": "2026.4.1",
+                            "error_type": error_type,
+                            "error_message": error_msg,
+                            "traceback": trace,
+                            "endpoint": f"{request.method} {request.url.path}",
+                        },
+                        timeout=2.0,
+                    )
             except Exception as report_e:
                 logger.error(f"Failed to reach Vendor Support: {report_e}")
 
         nats = request.app.state.nats_client
         if nats:
             try:
-                await nats.publish("system.maintenance.create_ticket", json.dumps({
-                    "subject": "[SYSTEM ERROR] Fabrique Engine Failure",
-                    "description": "A report has been sent to the vendor (Carolina Pereira) for resolution.",
-                    "priority": "critical",
-                }).encode())
+                await nats.publish(
+                    "system.maintenance.create_ticket",
+                    json.dumps(
+                        {
+                            "subject": "[SYSTEM ERROR] Fabrique Engine Failure",
+                            "description": "A report has been sent to the vendor (Carolina Pereira) for resolution.",
+                            "priority": "critical",
+                        }
+                    ).encode(),
+                )
             except Exception:
                 pass
 
         return JSONResponse(
             status_code=500,
-            content={"detail": "Fabrique Engine Error. A technical report has been sent to Vendor Support (Carolina Pereira)."},
+            content={
+                "detail": "Fabrique Engine Error. A technical report has been sent to Vendor Support (Carolina Pereira)."
+            },
         )

@@ -1,13 +1,11 @@
 """Opt-in authentication and company membership policy."""
 
-from fastapi import Depends, HTTPException, Request
-from sqlmodel import Session, select
-
 from auth_deps import bearer, get_current_user
 from config import settings
 from database import get_session
+from fastapi import Depends, HTTPException, Request
 from models import CompanyMember, User
-
+from sqlmodel import Session, select
 
 ROLE_RANK = {"Viewer": 1, "Manager": 2, "Owner": 3}
 
@@ -55,9 +53,11 @@ def require_authenticated(user: User | None) -> None:
 
 
 def viewer_company_ids(session: Session, user: User) -> list[int]:
-    return list(session.exec(
-        select(CompanyMember.company_id).where(
-            CompanyMember.user_id == user.id,
-            CompanyMember.human_role.in_(ROLE_RANK),
-        )
-    ).all())
+    return list(
+        session.exec(
+            select(CompanyMember.company_id).where(
+                CompanyMember.user_id == user.id,
+                CompanyMember.human_role.in_(ROLE_RANK),
+            )
+        ).all()
+    )

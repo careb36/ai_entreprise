@@ -12,9 +12,9 @@ Tables defined here represent the multi-tenancy core of Fabrique:
 - ``ProjectDiscovery`` — result of the automatic stack-detection scan.
 """
 
-from typing import Optional
 from datetime import datetime
-from sqlmodel import SQLModel, Field
+
+from sqlmodel import Field, SQLModel
 
 
 class Company(SQLModel, table=True):
@@ -22,11 +22,11 @@ class Company(SQLModel, table=True):
 
     __tablename__ = "companies"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_name: str
-    default_scope_size: str = "M"          # "S" | "M" | "L" — default scope for new sprints
-    default_sprint_length_days: Optional[int] = None  # deprecated
-    autonomy_level: int = 2               # 1 = human-led  2 = assisted  3 = autonomous
+    default_scope_size: str = "M"  # "S" | "M" | "L" — default scope for new sprints
+    default_sprint_length_days: int | None = None  # deprecated
+    autonomy_level: int = 2  # 1 = human-led  2 = assisted  3 = autonomous
 
 
 class Agent(SQLModel, table=True):
@@ -40,16 +40,16 @@ class Agent(SQLModel, table=True):
 
     __tablename__ = "agents"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
-    name: str = ""                        # Display alias (e.g. "Atlas")
-    role: Optional[str] = None            # e.g. "Architect", "Developer", "QA"
-    persona: Optional[str] = None         # Free-text system-prompt personality description
-    seniority: str = "Senior"             # e.g. "Junior", "Mid", "Senior", "Staff"
-    specialty: str = ""                   # Domain speciality (e.g. "Cloud/DB", "Frontend/React")
-    model: str = ""                       # LLM model ID (e.g. "deepseek-coder", "gemini-2.5-pro")
-    system_prompt: Optional[str] = None   # Full system prompt for the agent's LLM calls
-    token_budget: int = 500000            # Monthly token budget (soft limit)
+    name: str = ""  # Display alias (e.g. "Atlas")
+    role: str | None = None  # e.g. "Architect", "Developer", "QA"
+    persona: str | None = None  # Free-text system-prompt personality description
+    seniority: str = "Senior"  # e.g. "Junior", "Mid", "Senior", "Staff"
+    specialty: str = ""  # Domain speciality (e.g. "Cloud/DB", "Frontend/React")
+    model: str = ""  # LLM model ID (e.g. "deepseek-coder", "gemini-2.5-pro")
+    system_prompt: str | None = None  # Full system prompt for the agent's LLM calls
+    token_budget: int = 500000  # Monthly token budget (soft limit)
 
 
 class BusinessUnit(SQLModel, table=True):
@@ -63,11 +63,11 @@ class BusinessUnit(SQLModel, table=True):
 
     __tablename__ = "business_units"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
     unit_name: str
     token_quota_limit: int = 0  # Maximum tokens allowed (0 = unlimited)
-    token_quota_used: int = 0   # Running total of tokens consumed this period
+    token_quota_used: int = 0  # Running total of tokens consumed this period
 
 
 class User(SQLModel, table=True):
@@ -79,10 +79,10 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     email: str = Field(unique=True)  # Used as the login identifier
     full_name: str
-    password_hash: str               # bcrypt-hashed; raw password is never stored
+    password_hash: str  # bcrypt-hashed; raw password is never stored
 
 
 class CompanyMember(SQLModel, table=True):
@@ -95,7 +95,7 @@ class CompanyMember(SQLModel, table=True):
 
     __tablename__ = "company_members"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
     user_id: int = Field(foreign_key="users.id")
     human_role: str  # "Owner" | "Manager" | "Viewer"
@@ -111,11 +111,11 @@ class ProjectCredential(SQLModel, table=True):
 
     __tablename__ = "project_credentials"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
-    credential_type: str   # e.g. "github_token", "openproject_token"
-    access_level: str      # e.g. "read", "write", "admin"
-    encrypted_value: str   # Vault path or envelope-encrypted ciphertext
+    credential_type: str  # e.g. "github_token", "openproject_token"
+    access_level: str  # e.g. "read", "write", "admin"
+    encrypted_value: str  # Vault path or envelope-encrypted ciphertext
 
 
 class ProjectDiscovery(SQLModel, table=True):
@@ -128,10 +128,10 @@ class ProjectDiscovery(SQLModel, table=True):
 
     __tablename__ = "project_discovery"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
     project_path: str
-    detected_stack: Optional[str] = None    # JSON: language, framework, database, complexity
-    suggested_team: Optional[str] = None    # JSON: list of {role, seniority, specialty}
+    detected_stack: str | None = None  # JSON: language, framework, database, complexity
+    suggested_team: str | None = None  # JSON: list of {role, seniority, specialty}
     status: str = "completed"
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)

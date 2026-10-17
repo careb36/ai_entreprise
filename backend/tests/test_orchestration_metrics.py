@@ -10,9 +10,9 @@ cannot silently drift back to always-zero.
 import inspect
 
 import pytest
+from models import AuditLog
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from models import AuditLog
 from app.services import orchestration_metrics as om
 from app.services.orchestration_metrics import (
     ARCHITECT_CONSULT_MARKER,
@@ -40,6 +40,7 @@ def audit_session():
 # Pure helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "raw, expected",
     [
@@ -61,7 +62,10 @@ def test_canonical_kpi_role(raw, expected):
 
 def test_extract_usage_tokens_prefers_total_then_sums_split():
     assert extract_usage_tokens({"usage": {"total_tokens": 4120}}) == 4120
-    assert extract_usage_tokens({"usage": {"prompt_tokens": 100, "completion_tokens": 50}}) == 150
+    assert (
+        extract_usage_tokens({"usage": {"prompt_tokens": 100, "completion_tokens": 50}})
+        == 150
+    )
     assert extract_usage_tokens({"usage": {"total_tokens": "oops"}}) == 0
     assert extract_usage_tokens({}) == 0
     assert extract_usage_tokens(None) == 0
@@ -102,14 +106,21 @@ def test_build_agent_turn_details_matches_query_contract():
 
 
 def test_architect_consult_comment_roundtrip():
-    text = format_architect_consult_comment("  Use the existing repository pattern.\n\n")
+    text = format_architect_consult_comment(
+        "  Use the existing repository pattern.\n\n"
+    )
     assert text.startswith(ARCHITECT_CONSULT_MARKER + " ")
     assert text.endswith("repository pattern.")
     comment = {"author": "Architect", "text": text}
     assert is_architect_consult_comment(comment)
     assert not is_architect_consult_comment({"author": "Developer", "text": text})
-    assert not is_architect_consult_comment({"author": "Architect", "text": "APPROVED: fine"})
-    assert count_architect_consults([comment, {"author": "System", "text": "x"}, comment]) == 2
+    assert not is_architect_consult_comment(
+        {"author": "Architect", "text": "APPROVED: fine"}
+    )
+    assert (
+        count_architect_consults([comment, {"author": "System", "text": "x"}, comment])
+        == 2
+    )
 
 
 def test_format_architect_consult_comment_truncates():
@@ -131,7 +142,11 @@ def test_should_consult_architect_for_high_priority_dev_task():
 
 
 def test_should_consult_architect_for_design_keywords():
-    item = {"title": "Add pagination", "description": "Requires a schema migration", "priority": "medium"}
+    item = {
+        "title": "Add pagination",
+        "description": "Requires a schema migration",
+        "priority": "medium",
+    }
     assert should_consult_architect(item, _DEV, [])
 
 
@@ -141,7 +156,11 @@ def test_should_not_consult_architect_for_routine_dev_task():
 
 
 def test_should_not_consult_architect_for_non_developer_roles():
-    item = {"title": "Design system architecture", "description": "", "priority": "critical"}
+    item = {
+        "title": "Design system architecture",
+        "description": "",
+        "priority": "critical",
+    }
     assert not should_consult_architect(item, {"role": "Architect"}, [])
     assert not should_consult_architect(item, {"role": "QA"}, [])
     assert not should_consult_architect(item, {"role": "PO"}, [])
@@ -165,7 +184,9 @@ def test_should_consult_architect_once_per_attempt_and_again_after_rework():
     low = {"title": "Fix typo", "description": "", "priority": "low"}
     assert should_consult_architect(low, _DEV, [deliverable, needs_work])
     # Consulted again for the rework → stop until the next rework.
-    assert not should_consult_architect(item, _DEV, [consulted, deliverable, needs_work, consulted])
+    assert not should_consult_architect(
+        item, _DEV, [consulted, deliverable, needs_work, consulted]
+    )
 
 
 def test_should_consult_architect_accepts_json_string_comments():
@@ -178,6 +199,7 @@ def test_should_consult_architect_accepts_json_string_comments():
 # ---------------------------------------------------------------------------
 # Persistence — the row shape the KPI queries consume
 # ---------------------------------------------------------------------------
+
 
 def test_record_agent_turn_writes_developer_row_with_tokens(audit_session):
     row = record_agent_turn(
@@ -228,20 +250,24 @@ def test_record_agent_turn_never_raises(audit_session, monkeypatch):
         def commit(self):  # pragma: no cover
             pass
 
-    assert record_agent_turn(
-        company_id=1,
-        sprint_id=1,
-        backlog_item_id=1,
-        agent={"role": "Dev"},
-        action="execute_task",
-        llm_result={},
-        session=BrokenSession(),
-    ) is None
+    assert (
+        record_agent_turn(
+            company_id=1,
+            sprint_id=1,
+            backlog_item_id=1,
+            agent={"role": "Dev"},
+            action="execute_task",
+            llm_result={},
+            session=BrokenSession(),
+        )
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
 # Contract with the analytics router
 # ---------------------------------------------------------------------------
+
 
 def test_router_queries_use_the_same_contract_as_the_emitters():
     from app.routers import enterprise

@@ -28,7 +28,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -58,7 +59,7 @@ VERDICT_UNVERIFIABLE = "unverifiable"
 # Agent roles are free text in the ``agents`` table ("Dev", "Developer",
 # "QA", "Tester", ...).  The KPI queries filter on canonical names, so every
 # emitter normalises through this table before writing.
-_ROLE_ALIASES: Dict[str, str] = {
+_ROLE_ALIASES: dict[str, str] = {
     "dev": KPI_ROLE_DEVELOPER,
     "developer": KPI_ROLE_DEVELOPER,
     "engineer": KPI_ROLE_DEVELOPER,
@@ -99,7 +100,8 @@ ARCHITECT_CONSULT_PRIORITIES = {"high", "critical"}
 # Pure helpers
 # ---------------------------------------------------------------------------
 
-def canonical_kpi_role(role: Optional[str]) -> str:
+
+def canonical_kpi_role(role: str | None) -> str:
     """Map a free-text agent role onto the canonical name the KPI queries use.
 
     Unknown roles are returned stripped but otherwise untouched so they still
@@ -111,7 +113,7 @@ def canonical_kpi_role(role: Optional[str]) -> str:
     return _ROLE_ALIASES.get(raw.lower(), raw)
 
 
-def extract_usage_tokens(llm_result: Optional[Dict[str, Any]]) -> int:
+def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
     """Return the total token count reported by the LLM proxy for one call.
 
     The proxy always returns an OpenAI-style ``usage`` block; when only the
@@ -136,7 +138,7 @@ def extract_usage_tokens(llm_result: Optional[Dict[str, Any]]) -> int:
     return _as_int(usage.get("prompt_tokens")) + _as_int(usage.get("completion_tokens"))
 
 
-def classify_review_result(review_text: Optional[str]) -> Optional[str]:
+def classify_review_result(review_text: str | None) -> str | None:
     """Classify a QA review by its leading verdict prefix.
 
     Returns ``"APPROVED"``, ``"NEEDS_WORK"`` or ``None`` when the reviewer did
@@ -152,22 +154,22 @@ def classify_review_result(review_text: Optional[str]) -> Optional[str]:
 
 def build_agent_turn_details(
     *,
-    role: Optional[str],
-    company_id: Optional[int],
-    sprint_id: Optional[int] = None,
-    backlog_item_id: Optional[int] = None,
-    model: Optional[str] = None,
-    agent_name: Optional[str] = None,
-    result_type: Optional[str] = None,
-    extra: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    role: str | None,
+    company_id: int | None,
+    sprint_id: int | None = None,
+    backlog_item_id: int | None = None,
+    model: str | None = None,
+    agent_name: str | None = None,
+    result_type: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build the ``audit_log.details`` payload in the shape the KPI queries read.
 
     ``role`` and ``company_id`` are the two keys every analytics query filters
     on; ``result_type`` feeds the QA rate.  The remaining keys are lineage
     context for dashboards and debugging.
     """
-    details: Dict[str, Any] = {
+    details: dict[str, Any] = {
         "role": canonical_kpi_role(role),
         "agent_role": (role or "").strip() or None,
         # Stored as text on purpose: the SQL side casts ``details->>'company_id'``.
@@ -199,7 +201,9 @@ def is_architect_consult_comment(comment: Any) -> bool:
         return False
     author = str(comment.get("author", "")).strip().lower()
     text = str(comment.get("text", "")).strip().upper()
-    return author == ARCHITECT_COMMENT_AUTHOR.lower() and text.startswith(ARCHITECT_CONSULT_MARKER)
+    return author == ARCHITECT_COMMENT_AUTHOR.lower() and text.startswith(
+        ARCHITECT_CONSULT_MARKER
+    )
 
 
 def _coerce_comments(comments: Any) -> list:
@@ -227,8 +231,8 @@ def count_qa_rework_requests(comments: Any) -> int:
 
 
 def should_consult_architect(
-    item: Dict[str, Any],
-    agent: Dict[str, Any],
+    item: dict[str, Any],
+    agent: dict[str, Any],
     comments: Any = None,
     *,
     enabled: bool = True,
@@ -244,7 +248,9 @@ def should_consult_architect(
     if canonical_kpi_role(agent.get("role")) != KPI_ROLE_DEVELOPER:
         return False
 
-    comments = _coerce_comments(comments if comments is not None else item.get("comments"))
+    comments = _coerce_comments(
+        comments if comments is not None else item.get("comments")
+    )
     consults = count_architect_consults(comments)
     reworks = count_qa_rework_requests(comments)
     # One consult per attempt: the first attempt plus one per rework cycle.
@@ -263,13 +269,15 @@ def should_consult_architect(
 
 
 def build_architect_consult_prompt(
-    item: Dict[str, Any],
-    developer: Dict[str, Any],
+    item: dict[str, Any],
+    developer: dict[str, Any],
     sprint_name: str,
     prior_feedback: Iterable[str] = (),
 ) -> str:
     """Prompt asking the Architect for a compact technical brief on a task."""
-    feedback_lines = [f"- {line.strip()[:600]}" for line in prior_feedback if line and line.strip()]
+    feedback_lines = [
+        f"- {line.strip()[:600]}" for line in prior_feedback if line and line.strip()
+    ]
     prompt = (
         f"## Consultation request from {developer.get('name') or developer.get('role') or 'Developer'}\n\n"
         f"Sprint: {sprint_name}\n"
@@ -281,7 +289,9 @@ def build_architect_consult_prompt(
         "include. Do not write the implementation yourself."
     )
     if feedback_lines:
-        prompt += "\n\n## QA feedback from the previous attempt\n" + "\n".join(feedback_lines)
+        prompt += "\n\n## QA feedback from the previous attempt\n" + "\n".join(
+            feedback_lines
+        )
     return prompt
 
 
@@ -289,16 +299,17 @@ def build_architect_consult_prompt(
 # Persistence
 # ---------------------------------------------------------------------------
 
+
 def record_agent_turn(
     *,
-    company_id: Optional[int],
-    sprint_id: Optional[int],
-    backlog_item_id: Optional[int],
-    agent: Dict[str, Any],
+    company_id: int | None,
+    sprint_id: int | None,
+    backlog_item_id: int | None,
+    agent: dict[str, Any],
     action: str,
-    llm_result: Optional[Dict[str, Any]],
-    result_type: Optional[str] = None,
-    result_preview: Optional[str] = None,
+    llm_result: dict[str, Any] | None,
+    result_type: str | None = None,
+    result_preview: str | None = None,
     session=None,
 ):
     """Persist one LLM turn to ``audit_log`` in the shape the KPI queries read.
@@ -310,7 +321,9 @@ def record_agent_turn(
     Returns the persisted ``AuditLog`` row, or ``None`` when nothing was written.
     """
     try:
-        from models import AuditLog  # local import: keeps this module importable without DB config
+        from models import (
+            AuditLog,  # local import: keeps this module importable without DB config
+        )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("Audit model unavailable, skipping KPI audit write: %s", exc)
         return None
@@ -325,13 +338,15 @@ def record_agent_turn(
         agent_name=agent.get("name"),
         result_type=result_type,
     )
-    result_payload: Dict[str, Any] = {"result_type": result_type} if result_type else {}
+    result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]
 
     row = AuditLog(
         company_id=company_id,
-        interaction_id=f"task-{backlog_item_id}" if backlog_item_id is not None else None,
+        interaction_id=f"task-{backlog_item_id}"
+        if backlog_item_id is not None
+        else None,
         agent_id=(agent.get("name") or canonical_kpi_role(role) or None),
         action=action,
         details=details,
@@ -346,8 +361,8 @@ def record_agent_turn(
             session.refresh(row)
             return row
 
-        from sqlmodel import Session
         from database import engine
+        from sqlmodel import Session
 
         with Session(engine) as own_session:
             own_session.add(row)
@@ -357,6 +372,9 @@ def record_agent_turn(
     except Exception as exc:
         logger.warning(
             "KPI audit write failed (action=%s item=%s company=%s): %s",
-            action, backlog_item_id, company_id, exc,
+            action,
+            backlog_item_id,
+            company_id,
+            exc,
         )
         return None

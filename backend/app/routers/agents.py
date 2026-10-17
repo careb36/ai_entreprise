@@ -16,34 +16,35 @@ this router's SSE generator reads and forwards to the connected browser.
 
 import asyncio
 import json
-import os
 from collections import defaultdict
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime
-from pathlib import Path
-from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional
 from uuid import uuid4
 
+from audit_signing import verify_audit_row
+from auth_policy import (
+    current_user_if_required,
+    require_authenticated,
+    require_company_role,
+    viewer_company_ids,
+)
+from config import settings
+from database import engine, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select, or_
-
-from database import get_session, engine
-from config import settings
-from auth_policy import current_user_if_required, require_authenticated, require_company_role, viewer_company_ids
-from models import User
-from audit_signing import verify_audit_row
-from models import AuditLog
-from models.agent_run import AgentRun
-from schemas import GenerateRequest, AuditRequest
-from services.agent_service import AgentService
 from logging_config import logger
+from models import AuditLog, User
+from models.agent_run import AgentRun
+from schemas import AuditRequest, GenerateRequest
+from services.agent_service import AgentService
+from sqlmodel import Session, or_, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
 # Shared SSE connection map — keys are sprint IDs, values are active subscriber queues.
 # Also consumed by the NATS listener in main.py to forward Glassroom events.
-sse_connections: Dict[str, List[asyncio.Queue[str]]] = {}
-recent_sse_events: Dict[str, List[dict]] = defaultdict(list)
+sse_connections: dict[str, list[asyncio.Queue[str]]] = {}
+recent_sse_events: dict[str, list[dict]] = defaultdict(list)
 MAX_RECENT_SSE_EVENTS = 50
 
 HistoryLoader = Callable[[], Awaitable[list[dict]]]
@@ -58,7 +59,9 @@ def unregister_sse_connection(sprint_id: str, queue: asyncio.Queue[str]) -> None
     subscribers = sse_connections.get(sprint_id)
     if not subscribers:
         return
-    sse_connections[sprint_id] = [subscriber for subscriber in subscribers if subscriber is not queue]
+    sse_connections[sprint_id] = [
+        subscriber for subscriber in subscribers if subscriber is not queue
+    ]
     if not sse_connections[sprint_id]:
         sse_connections.pop(sprint_id, None)
 
@@ -72,13 +75,17 @@ async def publish_sse_event(sprint_id: str, payload: str) -> None:
     if isinstance(parsed, dict):
         recent_sse_events[sprint_id].append(parsed)
         if len(recent_sse_events[sprint_id]) > MAX_RECENT_SSE_EVENTS:
-            recent_sse_events[sprint_id] = recent_sse_events[sprint_id][-MAX_RECENT_SSE_EVENTS:]
+            recent_sse_events[sprint_id] = recent_sse_events[sprint_id][
+                -MAX_RECENT_SSE_EVENTS:
+            ]
 
     for subscriber in list(sse_connections.get(sprint_id, [])):
         await subscriber.put(payload)
 
 
-def _merge_sse_history(db_history: list[dict], recent_history: list[dict]) -> list[dict]:
+def _merge_sse_history(
+    db_history: list[dict], recent_history: list[dict]
+) -> list[dict]:
     merged: list[dict] = []
     seen: set[tuple[str, str, str, str, str, str]] = set()
     combined = [*db_history, *recent_history]
@@ -152,7 +159,9 @@ async def generate_glassroom_sse(
         if not nats_available:
             yield f"data: {json.dumps({'type': 'error', 'semantic_type': 'stream.unavailable', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
 
-        history = _merge_sse_history(await history_loader(), recent_sse_events.get(sprint_id, []))
+        history = _merge_sse_history(
+            await history_loader(), recent_sse_events.get(sprint_id, [])
+        )
         for evt in history:
             yield f"data: {json.dumps(evt)}\n\n"
 
@@ -164,14 +173,19 @@ async def generate_glassroom_sse(
                 except (json.JSONDecodeError, TypeError):
                     parsed = {"type": "message", "message": str(data)}
                 yield f"data: {json.dumps(parsed)}\n\n"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 yield f"data: {json.dumps({'ping': True})}\n\n"
     finally:
         unregister_sse_connection(sprint_id, queue)
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest, request: Request, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def generate(
+    req: GenerateRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Trigger a LangGraph agent workflow run.
     """
@@ -191,7 +205,7 @@ async def generate(req: GenerateRequest, request: Request, session: Session = De
         story=req.story,
         constraints=req.constraints,
         interaction_id=req.interaction_id,
-        session=session
+        session=session,
     )
     return {"interaction_id": interaction_id, "package_url": None}
 
@@ -200,18 +214,22 @@ def _write_company(session, user, company_id, context, interaction_id=None):
     """Resolve ownership from membership and stored interactions, never metadata."""
     owners = set()
     if interaction_id:
-        owners.update(session.exec(
-            select(AuditLog.company_id).where(
-                AuditLog.interaction_id == interaction_id,
-                AuditLog.company_id.is_not(None),
-            )
-        ).all())
-        if interaction_id.startswith("agent-run:"):
-            owners.update(session.exec(
-                select(AgentRun.company_id).where(
-                    AgentRun.external_ref == interaction_id[len("agent-run:"):]
+        owners.update(
+            session.exec(
+                select(AuditLog.company_id).where(
+                    AuditLog.interaction_id == interaction_id,
+                    AuditLog.company_id.is_not(None),
                 )
-            ).all())
+            ).all()
+        )
+        if interaction_id.startswith("agent-run:"):
+            owners.update(
+                session.exec(
+                    select(AgentRun.company_id).where(
+                        AgentRun.external_ref == interaction_id[len("agent-run:") :]
+                    )
+                ).all()
+            )
     if company_id is None:
         if len(owners) == 1:
             company_id = next(iter(owners))
@@ -221,27 +239,40 @@ def _write_company(session, user, company_id, context, interaction_id=None):
                 company_id = companies[0]
     require_company_role(session, user, company_id, "Manager")
     if owners and company_id not in owners:
-        raise HTTPException(status_code=403, detail="Interaction belongs to another company")
+        raise HTTPException(
+            status_code=403, detail="Interaction belongs to another company"
+        )
     supplied = (context or {}).get("company_id")
     if supplied is not None and str(supplied) != str(company_id):
-        raise HTTPException(status_code=403, detail="Company metadata does not match ownership")
+        raise HTTPException(
+            status_code=403, detail="Company metadata does not match ownership"
+        )
     run_id = (context or {}).get("agent_run_id")
     if run_id is not None:
         run = session.get(AgentRun, run_id)
         if run is None or run.company_id != company_id:
-            raise HTTPException(status_code=403, detail="Agent run belongs to another company")
+            raise HTTPException(
+                status_code=403, detail="Agent run belongs to another company"
+            )
     return company_id
 
 
 @router.post("/audit")
-async def audit(req: AuditRequest, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def audit(
+    req: AuditRequest,
+    company_id: int | None = None,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Write an agent decision entry to the audit log.
 
     Writes to both the filesystem JSONL file and the ``audit_log`` database
     table via ``AgentService.audit_interaction()``.
     """
-    company_id = _write_company(session, user, company_id, req.details, req.interaction_id)
+    company_id = _write_company(
+        session, user, company_id, req.details, req.interaction_id
+    )
     if req.decision_signature is not None:
         logger.warning(
             "decision_signature supplied by caller is ignored; signatures are computed server-side"
@@ -257,26 +288,35 @@ async def audit(req: AuditRequest, company_id: int | None = None, session: Sessi
         details=req.details,
         result=req.result,
         decision_signature=None,
-        cost_tokens=req.cost_tokens
+        cost_tokens=req.cost_tokens,
     )
     return {"status": "ok"}
 
 
 @router.get("/audit/verify")
-async def verify_audit(interaction_id: str = Query(...), company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def verify_audit(
+    interaction_id: str = Query(...),
+    company_id: int | None = None,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """Verify every audit row associated with an interaction."""
     require_authenticated(user)
     statement = select(AuditLog).where(AuditLog.interaction_id == interaction_id)
     if user is not None:
-        statement = statement.where(or_(
-            AuditLog.company_id.in_(viewer_company_ids(session, user)),
-            AuditLog.company_id.is_(None) if company_id is None else False,
-        ))
+        statement = statement.where(
+            or_(
+                AuditLog.company_id.in_(viewer_company_ids(session, user)),
+                AuditLog.company_id.is_(None) if company_id is None else False,
+            )
+        )
     if company_id is not None:
         statement = statement.where(AuditLog.company_id == company_id)
     rows = session.exec(statement.order_by(AuditLog.id)).all()
     if not rows:
-        raise HTTPException(status_code=404, detail="No audit rows found for interaction_id.")
+        raise HTTPException(
+            status_code=404, detail="No audit rows found for interaction_id."
+        )
 
     summary = {"valid": 0, "invalid": 0, "unsigned": 0, "legacy": 0}
     verified_rows = []
@@ -302,7 +342,14 @@ async def verify_audit(interaction_id: str = Query(...), company_id: int | None 
 
 
 @router.get("/memory/search")
-async def search_memory(request: Request, query: str = Query(...), limit: int = 10, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def search_memory(
+    request: Request,
+    query: str = Query(...),
+    limit: int = 10,
+    company_id: int | None = None,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Search the vector memory store for content similar to *query*.
 
@@ -316,7 +363,9 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
         company_ids = [company_id]
     client = request.app.state.memory_client
     if not client:
-        raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
+        raise HTTPException(
+            status_code=503, detail="Memory service unavailable (Neo4j not connected)."
+        )
     results = client.search_similar(
         query, limit, company_ids=company_ids, include_legacy=company_id is None
     )
@@ -324,7 +373,14 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
 
 
 @router.post("/memory/store")
-async def store_memory(request: Request, content: str, metadata: Optional[dict] = None, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def store_memory(
+    request: Request,
+    content: str,
+    metadata: dict | None = None,
+    company_id: int | None = None,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
 
@@ -337,7 +393,9 @@ async def store_memory(request: Request, content: str, metadata: Optional[dict] 
     )
     client = request.app.state.memory_client
     if not client:
-        raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
+        raise HTTPException(
+            status_code=503, detail="Memory service unavailable (Neo4j not connected)."
+        )
     client.store(content, metadata, company_id=company_id)
     return {"status": "stored"}
 
@@ -360,8 +418,9 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
 
     def _load_history() -> list[dict]:
         """Load past agent comments from the DB as GlassRoom messages."""
-        from sqlmodel import Session, select, text
         from models import BacklogItem
+        from sqlmodel import Session, select, text
+
         events = []
         try:
             with Session(engine) as session:
@@ -379,56 +438,70 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
                             comments = []
                     for c in comments:
                         text = c.get("text") or ""
-                        if text.startswith("External assistant context used for this task:"):
-                            events.append({
-                                "type": "status",
-                                "semantic_type": "assistant.history_context",
+                        if text.startswith(
+                            "External assistant context used for this task:"
+                        ):
+                            events.append(
+                                {
+                                    "type": "status",
+                                    "semantic_type": "assistant.history_context",
+                                    "source": "history",
+                                    "semantic_version": 1,
+                                    "event_id": str(uuid4()),
+                                    "agent": "System",
+                                    "role": "System",
+                                    "task_id": item.id,
+                                    "task": item.title,
+                                    "message": "External assistant context was used for this task.",
+                                    "preview": text[:300],
+                                    "timestamp": c.get("created_at", ""),
+                                    "status": item.status,
+                                }
+                            )
+                            continue
+                        events.append(
+                            {
+                                "type": "agent_complete",
+                                "semantic_type": "task.history_comment",
                                 "source": "history",
                                 "semantic_version": 1,
                                 "event_id": str(uuid4()),
-                                "agent": "System",
-                                "role": "System",
+                                "agent": c.get("author", item.assignee or "Agent"),
+                                "role": item.assignee or "Agent",
                                 "task_id": item.id,
+                                "task_status": item.status,
                                 "task": item.title,
-                                "message": "External assistant context was used for this task.",
+                                "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
                                 "preview": text[:300],
                                 "timestamp": c.get("created_at", ""),
                                 "status": item.status,
-                            })
-                            continue
-                        events.append({
-                            "type": "agent_complete",
-                            "semantic_type": "task.history_comment",
-                            "source": "history",
-                            "semantic_version": 1,
-                            "event_id": str(uuid4()),
-                            "agent": c.get("author", item.assignee or "Agent"),
-                            "role": item.assignee or "Agent",
-                            "task_id": item.id,
-                            "task_status": item.status,
-                            "task": item.title,
-                            "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
-                            "preview": text[:300],
-                            "timestamp": c.get("created_at", ""),
-                            "status": item.status,
-                        })
+                            }
+                        )
                     # Show current status for items without comments too
                     if not comments and item.status not in ("todo",):
-                        events.append({
-                            "type": "status",
-                            "semantic_type": "task.status_snapshot",
-                            "source": "history",
-                            "semantic_version": 1,
-                            "event_id": str(uuid4()),
-                            "agent": item.assignee or "System",
-                            "role": item.assignee or "System",
-                            "task_id": item.id,
-                            "task_status": item.status,
-                            "task": item.title,
-                            "message": f"📋 {item.title} → {item.status}",
-                            "timestamp": (item.updated_at or item.created_at or "").isoformat() if hasattr(item.updated_at or item.created_at, "isoformat") else "",
-                            "status": item.status,
-                        })
+                        events.append(
+                            {
+                                "type": "status",
+                                "semantic_type": "task.status_snapshot",
+                                "source": "history",
+                                "semantic_version": 1,
+                                "event_id": str(uuid4()),
+                                "agent": item.assignee or "System",
+                                "role": item.assignee or "System",
+                                "task_id": item.id,
+                                "task_status": item.status,
+                                "task": item.title,
+                                "message": f"📋 {item.title} → {item.status}",
+                                "timestamp": (
+                                    item.updated_at or item.created_at or ""
+                                ).isoformat()
+                                if hasattr(
+                                    item.updated_at or item.created_at, "isoformat"
+                                )
+                                else "",
+                                "status": item.status,
+                            }
+                        )
         except Exception:
             pass
         return events

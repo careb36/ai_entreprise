@@ -13,7 +13,7 @@ falling back to a deterministic task list when the LLM is unavailable.
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
@@ -169,16 +169,52 @@ Rules:
 """
 
 _DEFAULT_EXECUTION_TEAM = [
-    {"role": "PO", "name": "PO", "seniority": "Senior", "specialty": "product planning", "model": ""},
-    {"role": "ScrumMaster", "name": "Scrum Master", "seniority": "Senior", "specialty": "delivery orchestration", "model": ""},
-    {"role": "Developer", "name": "Developer", "seniority": "Senior", "specialty": "implementation", "model": ""},
-    {"role": "QA", "name": "QA", "seniority": "Senior", "specialty": "quality assurance", "model": ""},
-    {"role": "Architect", "name": "Architect", "seniority": "Senior", "specialty": "system design", "model": ""},
-    {"role": "DevOps", "name": "DevOps", "seniority": "Senior", "specialty": "delivery infrastructure", "model": ""},
+    {
+        "role": "PO",
+        "name": "PO",
+        "seniority": "Senior",
+        "specialty": "product planning",
+        "model": "",
+    },
+    {
+        "role": "ScrumMaster",
+        "name": "Scrum Master",
+        "seniority": "Senior",
+        "specialty": "delivery orchestration",
+        "model": "",
+    },
+    {
+        "role": "Developer",
+        "name": "Developer",
+        "seniority": "Senior",
+        "specialty": "implementation",
+        "model": "",
+    },
+    {
+        "role": "QA",
+        "name": "QA",
+        "seniority": "Senior",
+        "specialty": "quality assurance",
+        "model": "",
+    },
+    {
+        "role": "Architect",
+        "name": "Architect",
+        "seniority": "Senior",
+        "specialty": "system design",
+        "model": "",
+    },
+    {
+        "role": "DevOps",
+        "name": "DevOps",
+        "seniority": "Senior",
+        "specialty": "delivery infrastructure",
+        "model": "",
+    },
 ]
 
 
-def _build_stack_summary(stack: Dict[str, Any]) -> str:
+def _build_stack_summary(stack: dict[str, Any]) -> str:
     """Format the detected stack dict into a readable summary for the prompt."""
     parts = []
     if stack.get("language"):
@@ -212,7 +248,7 @@ def _list_root_files(project_path: str, max_files: int = 60) -> str:
             marker = "📁" if entry.is_dir() else "📄"
             entries.append(f"  {marker} {entry.name}")
             if len(entries) >= max_files:
-                entries.append(f"  ... and more")
+                entries.append("  ... and more")
                 break
         return "\n".join(entries) if entries else "(empty directory)"
     except Exception as e:
@@ -220,7 +256,7 @@ def _list_root_files(project_path: str, max_files: int = 60) -> str:
         return "(could not read directory)"
 
 
-def _build_team_roster(agents: List[Dict[str, Any]]) -> str:
+def _build_team_roster(agents: list[dict[str, Any]]) -> str:
     """Format the agent list into a readable roster for the prompt."""
     lines = []
     for a in agents:
@@ -234,16 +270,20 @@ def _build_team_roster(agents: List[Dict[str, Any]]) -> str:
     return "\n".join(lines) if lines else "- (no agents defined)"
 
 
-def _find_po_agent(agents: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _find_po_agent(agents: list[dict[str, Any]]) -> dict[str, Any]:
     """Find the PO agent; fall back to Architect, then first agent."""
     for role_pref in ("PO", "Architect"):
         for a in agents:
             if a.get("role") == role_pref:
                 return a
-    return agents[0] if agents else {"role": "PO", "model": "", "name": "PO", "seniority": "Senior"}
+    return (
+        agents[0]
+        if agents
+        else {"role": "PO", "model": "", "name": "PO", "seniority": "Senior"}
+    )
 
 
-def _ensure_execution_team(agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _ensure_execution_team(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Guarantee a minimum delivery roster even when the company has no stored agents yet."""
     if agents:
         return agents
@@ -252,12 +292,14 @@ def _ensure_execution_team(agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 def build_self_improvement_objective(
     company_name: str,
-    detected_stack: Optional[Dict[str, Any]] = None,
-    sprint_metrics: Optional[Dict[str, Any]] = None,
+    detected_stack: dict[str, Any] | None = None,
+    sprint_metrics: dict[str, Any] | None = None,
 ) -> str:
     """Build a bounded, data-driven objective for a self-improvement sprint."""
     stack = detected_stack or {}
-    framework_summary = ", ".join(stack.get("frameworks") or []) or "current application stack"
+    framework_summary = (
+        ", ".join(stack.get("frameworks") or []) or "current application stack"
+    )
     language_summary = stack.get("language") or "the detected primary language"
     base = (
         f"Inspect the current {company_name} codebase and improve the factory's own autonomous delivery loop using Scrumban. "
@@ -273,21 +315,33 @@ def build_self_improvement_objective(
     signals: list[str] = []
     completion = sprint_metrics.get("completion_rate", 100)
     if completion < 80:
-        signals.append(f"Last sprint completion rate was {completion}% — prioritize reducing task blocking and improving agent resilience.")
+        signals.append(
+            f"Last sprint completion rate was {completion}% — prioritize reducing task blocking and improving agent resilience."
+        )
     rework = sprint_metrics.get("rework_cycles", 0)
     if rework > 3:
-        signals.append(f"There were {rework} QA rework cycles — focus on improving first-pass output quality or tightening pre-review validation.")
+        signals.append(
+            f"There were {rework} QA rework cycles — focus on improving first-pass output quality or tightening pre-review validation."
+        )
     qa_failures = sprint_metrics.get("qa_failures", 0)
     if qa_failures > 2:
-        signals.append(f"QA failed {qa_failures} times — consider hardening the quality gate or improving agent prompts.")
+        signals.append(
+            f"QA failed {qa_failures} times — consider hardening the quality gate or improving agent prompts."
+        )
     blocked = sprint_metrics.get("blocked_tasks", 0)
     if blocked > 0:
-        signals.append(f"{blocked} tasks ended blocked — improve error recovery, task decomposition, or agent fallback behavior.")
+        signals.append(
+            f"{blocked} tasks ended blocked — improve error recovery, task decomposition, or agent fallback behavior."
+        )
     for reason in (sprint_metrics.get("blocked_reasons") or [])[:2]:
         signals.append(f"Known block pattern: {reason}")
 
     if signals:
-        return base + "\n\nRetro signals from last sprint (use to focus improvement area):\n" + "\n".join(f"- {s}" for s in signals)
+        return (
+            base
+            + "\n\nRetro signals from last sprint (use to focus improvement area):\n"
+            + "\n".join(f"- {s}" for s in signals)
+        )
     return base
 
 
@@ -299,69 +353,71 @@ _FALLBACK_TASKS = [
     {
         "title": "Verify and complete README.md",
         "description": "Ensure the README includes: project description, setup instructions, "
-                       "architecture overview, contribution guidelines link, and license.",
+        "architecture overview, contribution guidelines link, and license.",
         "priority": "critical",
         "assignee": "PO",
     },
     {
         "title": "Create or update CONTRIBUTING.md",
         "description": "Document the contribution workflow: branching strategy, commit conventions, "
-                       "code review process, and PR template.",
+        "code review process, and PR template.",
         "priority": "high",
         "assignee": "PO",
     },
     {
         "title": "Document system architecture",
         "description": "Create ARCHITECTURE.md with component diagram, data flow, service boundaries, "
-                       "and technology decisions with rationale.",
+        "and technology decisions with rationale.",
         "priority": "critical",
         "assignee": "Architect",
     },
     {
         "title": "Define coding standards and conventions",
         "description": "Document language-specific coding standards, naming conventions, file structure, "
-                       "and linter/formatter configuration.",
+        "and linter/formatter configuration.",
         "priority": "high",
         "assignee": "Dev",
     },
     {
         "title": "Create testing strategy document",
         "description": "Define testing pyramid: unit, integration, e2e test expectations, coverage "
-                       "targets, and test framework choices.",
+        "targets, and test framework choices.",
         "priority": "high",
         "assignee": "QA",
     },
     {
         "title": "Document CI/CD pipeline and deployment process",
         "description": "Create deployment guide covering CI/CD pipeline stages, environment configuration, "
-                       "secrets management, and rollback procedures.",
+        "secrets management, and rollback procedures.",
         "priority": "high",
         "assignee": "DevOps",
     },
     {
         "title": "Verify environment configuration files",
         "description": "Ensure .env.example exists with all required variables documented, Docker configs "
-                       "are complete, and local dev setup is reproducible.",
+        "are complete, and local dev setup is reproducible.",
         "priority": "medium",
         "assignee": "DevOps",
     },
     {
         "title": "Create security baseline document",
         "description": "Document authentication/authorization approach, secrets management policy, "
-                       "dependency scanning setup, and security review checklist.",
+        "dependency scanning setup, and security review checklist.",
         "priority": "medium",
         "assignee": "Security",
     },
 ]
 
 
-def _filter_fallback_tasks(agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _filter_fallback_tasks(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return only fallback tasks whose assignee role exists in the team."""
     available_roles = {a.get("role") for a in agents}
     return [t for t in _FALLBACK_TASKS if t["assignee"] in available_roles]
 
 
-def _build_execution_fallback(objective: str, agents: List[Dict[str, Any]], scope_size: str) -> Dict[str, Any]:
+def _build_execution_fallback(
+    objective: str, agents: list[dict[str, Any]], scope_size: str
+) -> dict[str, Any]:
     """Deterministic fallback when no planner model is available."""
     team = _ensure_execution_team(agents)
     available_roles = {a.get("role") for a in team}
@@ -404,7 +460,9 @@ def _build_execution_fallback(objective: str, agents: List[Dict[str, Any]], scop
     }
 
 
-def _build_self_improvement_fallback(company_name: str, agents: List[Dict[str, Any]], scope_size: str) -> Dict[str, Any]:
+def _build_self_improvement_fallback(
+    company_name: str, agents: list[dict[str, Any]], scope_size: str
+) -> dict[str, Any]:
     """Deterministic self-improvement backlog that preserves healthy artifacts."""
     team = _ensure_execution_team(agents)
     available_roles = {a.get("role") for a in team}
@@ -436,7 +494,9 @@ def _build_self_improvement_fallback(company_name: str, agents: List[Dict[str, A
     ]
 
     scoped_limit = {"S": 4, "M": 8, "L": 12}.get(scope_size.upper(), 8)
-    tasks = [task for task in defaults if task["assignee"] in available_roles][:scoped_limit]
+    tasks = [task for task in defaults if task["assignee"] in available_roles][
+        :scoped_limit
+    ]
     if not tasks:
         tasks = defaults[: min(4, scoped_limit)]
 
@@ -451,12 +511,13 @@ def _build_self_improvement_fallback(company_name: str, agents: List[Dict[str, A
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def plan_foundation_sprint(
     company_name: str,
-    agents: List[Dict[str, Any]],
-    detected_stack: Optional[Dict[str, Any]],
-    project_path: Optional[str],
-) -> Dict[str, Any]:
+    agents: list[dict[str, Any]],
+    detected_stack: dict[str, Any] | None,
+    project_path: str | None,
+) -> dict[str, Any]:
     """
     Have the PO agent plan "Sprint 0 — Foundations" via LLM.
 
@@ -486,7 +547,9 @@ def plan_foundation_sprint(
     client = LLMProxyClient(base_url=llm_url)
 
     stack_summary = _build_stack_summary(detected_stack)
-    file_listing = _list_root_files(project_path) if project_path else "(no project path)"
+    file_listing = (
+        _list_root_files(project_path) if project_path else "(no project path)"
+    )
     team_roster = _build_team_roster(agents)
 
     prompt = _FOUNDATION_PROMPT.format(
@@ -536,13 +599,16 @@ def plan_foundation_sprint(
             assignee = t.get("assignee", "PO")
             if assignee not in valid_roles:
                 assignee = "PO"
-            validated.append({
-                "title": str(t["title"])[:80],
-                "description": str(t.get("description", ""))[:500],
-                "priority": t.get("priority", "medium") if t.get("priority") in (
-                    "critical", "high", "medium", "low") else "medium",
-                "assignee": assignee,
-            })
+            validated.append(
+                {
+                    "title": str(t["title"])[:80],
+                    "description": str(t.get("description", ""))[:500],
+                    "priority": t.get("priority", "medium")
+                    if t.get("priority") in ("critical", "high", "medium", "low")
+                    else "medium",
+                    "assignee": assignee,
+                }
+            )
 
         if not validated:
             logger.warning("LLM returned no valid tasks — using fallback")
@@ -572,10 +638,10 @@ def plan_execution_sprint(
     company_name: str,
     objective: str,
     scope_size: str,
-    agents: List[Dict[str, Any]],
-    detected_stack: Optional[Dict[str, Any]] = None,
-    project_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    agents: list[dict[str, Any]],
+    detected_stack: dict[str, Any] | None = None,
+    project_path: str | None = None,
+) -> dict[str, Any]:
     """Plan an executable sprint from a strategic prompt."""
     team = _ensure_execution_team(agents)
     po = _find_po_agent(team)
@@ -601,11 +667,17 @@ def plan_execution_sprint(
         scope_size=normalized_scope,
         item_limit=item_limit,
         stack_summary=_build_stack_summary(detected_stack or {}),
-        file_listing=_list_root_files(project_path) if project_path else "(no project path)",
+        file_listing=_list_root_files(project_path)
+        if project_path
+        else "(no project path)",
         available_roles=", ".join(available_roles),
     )
 
-    logger.info("PO planning execution sprint with model=%s scope=%s", po_model, normalized_scope)
+    logger.info(
+        "PO planning execution sprint with model=%s scope=%s",
+        po_model,
+        normalized_scope,
+    )
 
     try:
         result = client.chat(
@@ -615,7 +687,9 @@ def plan_execution_sprint(
         )
 
         if result.get("error"):
-            logger.warning("LLM error during execution sprint planning: %s", result["error"])
+            logger.warning(
+                "LLM error during execution sprint planning: %s", result["error"]
+            )
             return _build_execution_fallback(objective, team, normalized_scope)
 
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -626,7 +700,9 @@ def plan_execution_sprint(
             cleaned = cleaned.rsplit("```", 1)[0]
         parsed = json.loads(cleaned.strip())
 
-        sprint_name = str(parsed.get("sprint_name") or f"Sprint - {objective[:40].strip()}")[:70]
+        sprint_name = str(
+            parsed.get("sprint_name") or f"Sprint - {objective[:40].strip()}"
+        )[:70]
         goal = str(parsed.get("goal") or objective.strip())[:140]
         tasks = parsed.get("tasks", [])
 
@@ -638,16 +714,22 @@ def plan_execution_sprint(
             assignee = str(task.get("assignee", "PO"))
             if assignee not in valid_roles:
                 assignee = "PO"
-            validated.append({
-                "title": str(task.get("title", ""))[:80],
-                "description": str(task.get("description", ""))[:500],
-                "priority": task.get("priority", "medium") if task.get("priority") in ("critical", "high", "medium", "low") else "medium",
-                "assignee": assignee,
-            })
+            validated.append(
+                {
+                    "title": str(task.get("title", ""))[:80],
+                    "description": str(task.get("description", ""))[:500],
+                    "priority": task.get("priority", "medium")
+                    if task.get("priority") in ("critical", "high", "medium", "low")
+                    else "medium",
+                    "assignee": assignee,
+                }
+            )
 
         validated = validated[:item_limit]
         if len(validated) < 2:
-            logger.warning("Planner returned too few valid execution tasks — using fallback")
+            logger.warning(
+                "Planner returned too few valid execution tasks — using fallback"
+            )
             return _build_execution_fallback(objective, team, normalized_scope)
 
         return {
@@ -667,10 +749,10 @@ def plan_self_improvement_sprint(
     company_name: str,
     objective: str,
     scope_size: str,
-    agents: List[Dict[str, Any]],
-    detected_stack: Optional[Dict[str, Any]] = None,
-    project_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    agents: list[dict[str, Any]],
+    detected_stack: dict[str, Any] | None = None,
+    project_path: str | None = None,
+) -> dict[str, Any]:
     """Plan a bounded self-improvement sprint using explicit preservation and Scrumban rules."""
     team = _ensure_execution_team(agents)
     po = _find_po_agent(team)
@@ -696,11 +778,17 @@ def plan_self_improvement_sprint(
         scope_size=normalized_scope,
         item_limit=item_limit,
         stack_summary=_build_stack_summary(detected_stack or {}),
-        file_listing=_list_root_files(project_path) if project_path else "(no project path)",
+        file_listing=_list_root_files(project_path)
+        if project_path
+        else "(no project path)",
         available_roles=", ".join(available_roles),
     )
 
-    logger.info("PO planning self-improvement sprint with model=%s scope=%s", po_model, normalized_scope)
+    logger.info(
+        "PO planning self-improvement sprint with model=%s scope=%s",
+        po_model,
+        normalized_scope,
+    )
 
     try:
         result = client.chat(
@@ -710,8 +798,12 @@ def plan_self_improvement_sprint(
         )
 
         if result.get("error"):
-            logger.warning("LLM error during self-improvement sprint planning: %s", result["error"])
-            return _build_self_improvement_fallback(company_name, team, normalized_scope)
+            logger.warning(
+                "LLM error during self-improvement sprint planning: %s", result["error"]
+            )
+            return _build_self_improvement_fallback(
+                company_name, team, normalized_scope
+            )
 
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         cleaned = raw.strip()
@@ -721,7 +813,9 @@ def plan_self_improvement_sprint(
             cleaned = cleaned.rsplit("```", 1)[0]
         parsed = json.loads(cleaned.strip())
 
-        sprint_name = str(parsed.get("sprint_name") or f"Sprint - Improve {company_name}")[:70]
+        sprint_name = str(
+            parsed.get("sprint_name") or f"Sprint - Improve {company_name}"
+        )[:70]
         goal = str(parsed.get("goal") or objective.strip())[:140]
         tasks = parsed.get("tasks", [])
 
@@ -733,17 +827,25 @@ def plan_self_improvement_sprint(
             assignee = str(task.get("assignee", "PO"))
             if assignee not in valid_roles:
                 assignee = "PO"
-            validated.append({
-                "title": str(task.get("title", ""))[:80],
-                "description": str(task.get("description", ""))[:500],
-                "priority": task.get("priority", "medium") if task.get("priority") in ("critical", "high", "medium", "low") else "medium",
-                "assignee": assignee,
-            })
+            validated.append(
+                {
+                    "title": str(task.get("title", ""))[:80],
+                    "description": str(task.get("description", ""))[:500],
+                    "priority": task.get("priority", "medium")
+                    if task.get("priority") in ("critical", "high", "medium", "low")
+                    else "medium",
+                    "assignee": assignee,
+                }
+            )
 
         validated = validated[:item_limit]
         if len(validated) < 2:
-            logger.warning("Planner returned too few valid self-improvement tasks — using fallback")
-            return _build_self_improvement_fallback(company_name, team, normalized_scope)
+            logger.warning(
+                "Planner returned too few valid self-improvement tasks — using fallback"
+            )
+            return _build_self_improvement_fallback(
+                company_name, team, normalized_scope
+            )
 
         return {
             "sprint_name": sprint_name,

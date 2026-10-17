@@ -2,8 +2,6 @@
 Tests for Prometheus metrics.
 """
 
-import pytest
-
 
 def test_metrics_endpoint_accessible(test_client):
     """Verify /metrics endpoint is accessible."""

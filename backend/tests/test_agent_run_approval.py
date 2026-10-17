@@ -3,8 +3,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, call
 
 import pytest
-from sqlmodel import SQLModel, select
-
 from audit_signing import verify_audit_row
 from config import settings
 from models.agent_run import AgentRunApproval
@@ -12,6 +10,7 @@ from models.audit import AuditLog
 from models.company import Company
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from services.company_service import CompanyService
+from sqlmodel import SQLModel, select
 
 
 @pytest.fixture()

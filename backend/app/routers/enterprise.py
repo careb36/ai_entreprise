@@ -11,17 +11,18 @@ Endpoints:
 """
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
-from sqlalchemy import text
-from sqlmodel import Session
-
-from database import get_session, get_neo4j_driver
-from auth_policy import current_user_if_required, require_authenticated, require_company_role, viewer_company_ids
-from models import User, BusinessUnit, Sprint
-from services.discovery_service import DiscoveryService
-from services.company_service import CompanyService
+from auth_policy import (
+    current_user_if_required,
+    require_authenticated,
+    require_company_role,
+    viewer_company_ids,
+)
+from database import get_neo4j_driver, get_session
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from logging_config import logger
+from models import BusinessUnit, Sprint, User
 from schemas import (
     CompanyInitRequest,
     DiscoveryRequest,
@@ -30,7 +31,10 @@ from schemas import (
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
-from logging_config import logger
+from services.company_service import CompanyService
+from services.discovery_service import DiscoveryService
+from sqlalchemy import text
+from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
 
@@ -39,7 +43,11 @@ _ANCHOR_DATE = date(2026, 5, 2)
 
 
 @router.post("/init_company", tags=["Core"])
-async def init_company(req: CompanyInitRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def init_company(
+    req: CompanyInitRequest,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Bootstrap a new company tenant with its AI agents and project credentials.
     Delegates to CompanyService for transactional logic and team planning.
@@ -60,7 +68,9 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
         return result
     except Exception as exc:
         logger.error(f"Company initialization failed: {exc}")
-        raise HTTPException(status_code=500, detail="Internal server error during initialization")
+        raise HTTPException(
+            status_code=500, detail="Internal server error during initialization"
+        )
 
 
 @router.post("/approve_task", tags=["Enterprise"])
@@ -72,7 +82,11 @@ async def approve_task():
 
 
 @router.get("/enterprise/quotas", tags=["Enterprise"])
-async def get_quotas(company_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def get_quotas(
+    company_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Return token usage and limits for all business units of a company.
     """
@@ -82,7 +96,11 @@ async def get_quotas(company_id: int, session: Session = Depends(get_session), u
 
 
 @router.post("/enterprise/quotas/{bu_id}/reset", tags=["Enterprise"])
-async def reset_quota(bu_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def reset_quota(
+    bu_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Reset the token usage counter for a business unit to zero.
     Intended for use at the start of a new billing cycle.
@@ -90,7 +108,9 @@ async def reset_quota(bu_id: int, session: Session = Depends(get_session), user:
     if user is not None:
         unit = session.get(BusinessUnit, bu_id)
         if not unit:
-            raise HTTPException(status_code=404, detail=f"Business Unit {bu_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Business Unit {bu_id} not found"
+            )
         require_company_role(session, user, unit.company_id, "Manager")
     service = CompanyService(session)
     try:
@@ -100,7 +120,11 @@ async def reset_quota(bu_id: int, session: Session = Depends(get_session), user:
 
 
 @router.get("/analytics/summary", tags=["Enterprise"])
-async def get_project_health(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def get_project_health(
+    sprint_id: int,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     AI Scrum Master: generate a sprint health report from audit and backlog data.
     """
@@ -119,7 +143,9 @@ async def get_project_health(sprint_id: int, session: Session = Depends(get_sess
     tags=["Enterprise"],
 )
 async def get_orchestration_health(
-    company_id: int = Query(..., description="Company whose orchestration history will be analysed"),
+    company_id: int = Query(
+        ..., description="Company whose orchestration history will be analysed"
+    ),
     weeks: int = Query(8, ge=1, le=52, description="Trailing weeks to include"),
     session: Session = Depends(get_session),
     user: User | None = Depends(current_user_if_required),
@@ -128,7 +154,7 @@ async def get_orchestration_health(
     Return weekly KPI trends that measure the Batch-1 orchestration rollout.
     """
     require_company_role(session, user, company_id, "Viewer")
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(weeks=weeks)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(weeks=weeks)
     params = {"company_id": company_id, "cutoff": cutoff}
 
     qa_sql = text("""
@@ -231,8 +257,7 @@ async def get_orchestration_health(
     tokens_by_week = {row["week"]: row for row in token_rows}
     consult_by_week = {row["week"]: row for row in consult_rows}
     developer_turn_counts = {
-        row["week"]: int(row.get("developer_turn_count", 0))
-        for row in token_rows
+        row["week"]: int(row.get("developer_turn_count", 0)) for row in token_rows
     }
     all_weeks = sorted(set(qa_by_week) | set(tokens_by_week) | set(consult_by_week))
     anchor_week = _ANCHOR_DATE.strftime("%G-W%V")
@@ -247,7 +272,9 @@ async def get_orchestration_health(
                 week=week_label,
                 qa_needs_work_rate=float(qa_row.get("qa_needs_work_rate", 0.0)),
                 avg_developer_tokens=float(token_row.get("avg_developer_tokens", 0.0)),
-                architect_consult_count=int(consult_row.get("architect_consult_count", 0)),
+                architect_consult_count=int(
+                    consult_row.get("architect_consult_count", 0)
+                ),
                 task_count=int(qa_row.get("task_count", 0)),
                 post_batch1=week_label >= anchor_week,
             )
@@ -317,7 +344,9 @@ async def list_models(request: Request):
     try:
         data = await asyncio.to_thread(llm_client.get_available_models)
         if not data:
-            raise HTTPException(status_code=502, detail="LLM proxy returned empty catalogue")
+            raise HTTPException(
+                status_code=502, detail="LLM proxy returned empty catalogue"
+            )
         return data
     except HTTPException:
         raise
@@ -327,7 +356,12 @@ async def list_models(request: Request):
 
 
 @router.post("/discover_team", tags=["Enterprise"])
-async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def discover_team(
+    req: DiscoveryRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
@@ -362,7 +396,12 @@ async def discover_team(req: DiscoveryRequest, request: Request, session: Sessio
 
 
 @router.get("/enterprise/lineage", tags=["Enterprise"])
-async def get_code_lineage(file_path: str, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def get_code_lineage(
+    file_path: str,
+    company_id: int | None = None,
+    session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
+):
     """
     Time-Travel Debugging: retrieve all architectural decisions that modified a file.
 
@@ -377,8 +416,11 @@ async def get_code_lineage(file_path: str, company_id: int | None = None, sessio
     driver = get_neo4j_driver()
     try:
         company_filter = (
-            "AND e.company_id = $company_id" if company_id is not None else
-            "AND (e.company_id IN $company_ids OR e.company_id IS NULL)" if user is not None else ""
+            "AND e.company_id = $company_id"
+            if company_id is not None
+            else "AND (e.company_id IN $company_ids OR e.company_id IS NULL)"
+            if user is not None
+            else ""
         )
         cypher = f"""
         MATCH (e:Episodic)-[r:MODIFIED_BY]->(s)
@@ -390,12 +432,18 @@ async def get_code_lineage(file_path: str, company_id: int | None = None, sessio
         """
         with driver.session() as neo_session:
             result = neo_session.run(
-                cypher, file_path=file_path,
-                company_id=company_id, company_ids=company_ids,
+                cypher,
+                file_path=file_path,
+                company_id=company_id,
+                company_ids=company_ids,
             )
             lineage = [dict(record) for record in result]
         if not lineage:
-            return {"file": file_path, "status": "No historical engrams found.", "lineage": []}
+            return {
+                "file": file_path,
+                "status": "No historical engrams found.",
+                "lineage": [],
+            }
         return {"file": file_path, "status": "success", "lineage": lineage}
     except Exception as e:
         logger.error(f"Lineage query failed: {e}")

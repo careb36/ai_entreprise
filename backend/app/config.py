@@ -11,9 +11,7 @@ Usage::
     db_url = settings.POSTGRES_HOST
 """
 
-import os
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -43,8 +41,8 @@ class Settings(BaseSettings):
     # In production, tokens should be retrieved from Vault/KMS instead.
     # ---------------------------------------------------------------------------
     OPENPROJECT_URL: str = "http://localhost:8080"
-    OPENPROJECT_TOKEN_PO: Optional[str] = None   # Product Owner API token
-    OPENPROJECT_TOKEN_DEV: Optional[str] = None  # Developer API token
+    OPENPROJECT_TOKEN_PO: str | None = None  # Product Owner API token
+    OPENPROJECT_TOKEN_DEV: str | None = None  # Developer API token
 
     # ---------------------------------------------------------------------------
     # LLM Proxy — internal gateway that routes requests to Gemini / DeepSeek
@@ -61,12 +59,14 @@ class Settings(BaseSettings):
     ARCHITECT_CONSULT_ENABLED: bool = True
     # Enable the internal LangGraph producer; externally-produced runs use AgentRun ingestion.
     AGENT_GRAPH_ENABLED: bool = False
-    COPILOT_CLI_COMMAND_TEMPLATE: str = 'copilot -p {prompt} --output-format json'
-    CLAUDE_CLI_COMMAND_TEMPLATE: Optional[str] = 'claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}'
-    CLAUDE_CLI_ALLOWED_TOOLS: str = 'Read,Grep,Glob,LS,Bash(git *)'
-    CLAUDE_CLI_APPEND_SYSTEM_PROMPT: str = 'You are being used as a bounded external coding advisor. Stay read-mostly, prefer incremental changes, preserve healthy behavior, and return concise actionable guidance for the current repository task.'
-    CONSOLE_ASSISTANT_STRATEGY: str = 'copilot_first'
-    CLAUDE_CLI_HIGH_VALUE_ROLES: str = 'Architect,PO,QA,ScrumMaster'
+    COPILOT_CLI_COMMAND_TEMPLATE: str = "copilot -p {prompt} --output-format json"
+    CLAUDE_CLI_COMMAND_TEMPLATE: str | None = (
+        "claude --print --output-format json --add-dir {workspace_root} --allowedTools {allowed_tools} --append-system-prompt {system_prompt} {prompt}"
+    )
+    CLAUDE_CLI_ALLOWED_TOOLS: str = "Read,Grep,Glob,LS,Bash(git *)"
+    CLAUDE_CLI_APPEND_SYSTEM_PROMPT: str = "You are being used as a bounded external coding advisor. Stay read-mostly, prefer incremental changes, preserve healthy behavior, and return concise actionable guidance for the current repository task."
+    CONSOLE_ASSISTANT_STRATEGY: str = "copilot_first"
+    CLAUDE_CLI_HIGH_VALUE_ROLES: str = "Architect,PO,QA,ScrumMaster"
     CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES: int = 10
     CONSOLE_ASSISTANT_ALLOWED_ROLES: str = "Developer,Architect,QA,PO,ScrumMaster"
 
@@ -81,31 +81,31 @@ class Settings(BaseSettings):
     # Generate one with:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     # ---------------------------------------------------------------------------
-    FERNET_SECRET_KEY: Optional[str] = None
+    FERNET_SECRET_KEY: str | None = None
 
     # ---------------------------------------------------------------------------
     # Human-user authentication — HS256 signing key for access tokens.
     # ---------------------------------------------------------------------------
-    JWT_SECRET_KEY: Optional[str] = None
+    JWT_SECRET_KEY: str | None = None
     AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------
-    AUDIT_SIGNING_KEY: Optional[str] = None
+    AUDIT_SIGNING_KEY: str | None = None
 
     # ---------------------------------------------------------------------------
     # GitHub integration — optional token for API rate-limit headroom
     # ---------------------------------------------------------------------------
-    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_TOKEN: str | None = None
 
     # ---------------------------------------------------------------------------
     # LLM API Keys
     # ---------------------------------------------------------------------------
-    GEMINI_API_KEY: Optional[str] = None
-    DEEPSEEK_API_KEY: Optional[str] = None
-    QWEN_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: str | None = None
+    DEEPSEEK_API_KEY: str | None = None
+    QWEN_API_KEY: str | None = None
 
     # ---------------------------------------------------------------------------
     # Security — rate limiting and CORS

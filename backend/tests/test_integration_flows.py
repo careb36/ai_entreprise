@@ -13,16 +13,14 @@ import json
 import secrets
 from uuid import uuid4
 
-import pytest
-from sqlmodel import select
-
 import auth_tokens
+import pytest
 from config import settings
-from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.agent_run import AgentRun, AgentRunApproval
 from models.audit import AuditLog
-from models.company import Company, User, CompanyMember
-from models.sprint import Sprint, BacklogItem, OutboxEvent
-
+from models.company import Company, CompanyMember, User
+from models.sprint import BacklogItem, Sprint
+from sqlmodel import select
 
 # ---------------------------------------------------------------------------
 # Helper fixtures
@@ -174,7 +172,9 @@ class TestSprintLifecycle:
 class TestAuthenticationFlow:
     """Test the complete authentication flow."""
 
-    def test_register_login_access_protected_route(self, sqlite_session, test_client, signing_key):
+    def test_register_login_access_protected_route(
+        self, sqlite_session, test_client, signing_key
+    ):
         """Full auth flow: register → login → access protected route."""
         # Register
         register_response = test_client.post(
@@ -208,7 +208,9 @@ class TestAuthenticationFlow:
         assert me_response.status_code == 200
         assert me_response.json()["email"] == "auth-test@example.com"
 
-    def test_login_with_wrong_password_fails(self, sqlite_session, test_client, signing_key):
+    def test_login_with_wrong_password_fails(
+        self, sqlite_session, test_client, signing_key
+    ):
         """Verify login fails with wrong password."""
         # Register first
         test_client.post(
@@ -229,7 +231,9 @@ class TestAuthenticationFlow:
         )
         assert response.status_code == 401
 
-    def test_protected_route_requires_auth(self, sqlite_session, test_client, monkeypatch):
+    def test_protected_route_requires_auth(
+        self, sqlite_session, test_client, monkeypatch
+    ):
         """Verify protected routes reject unauthenticated requests."""
         monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
         response = test_client.get("/v1/auth/me")
@@ -247,7 +251,9 @@ class TestAuthenticationFlow:
 class TestAgentRunVerificationCycle:
     """Test the complete agent run lifecycle."""
 
-    def test_ingest_verify_approve_cycle(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_ingest_verify_approve_cycle(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Full cycle: ingest → verify → approve."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -290,7 +296,11 @@ class TestAgentRunVerificationCycle:
         # Approve
         approve_response = test_client.post(
             f"/v1/agent_runs/{run_id}/approve",
-            json={"company_id": company_id, "approver_name": "Test User", "decision": "approved"},
+            json={
+                "company_id": company_id,
+                "approver_name": "Test User",
+                "decision": "approved",
+            },
         )
         assert approve_response.status_code == 201
 
@@ -300,7 +310,9 @@ class TestAgentRunVerificationCycle:
         ).one()
         assert approval.decision == "approved"
 
-    def test_ingest_refuted_run(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_ingest_refuted_run(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Test that a run with failed CI is refuted."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -338,7 +350,9 @@ class TestAgentRunVerificationCycle:
         run = sqlite_session.get(AgentRun, run_id)
         assert run.status == "refuted"
 
-    def test_cross_tenant_access_denied(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_cross_tenant_access_denied(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify cross-tenant access is properly denied."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_a = _make_company(sqlite_session, "Company A")
@@ -373,9 +387,10 @@ class TestAgentRunVerificationCycle:
 class TestGitHubToVerificationPipeline:
     """Test the complete GitHub adapter pipeline."""
 
-    def test_github_pr_ingestion_to_verification(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_github_pr_ingestion_to_verification(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Full pipeline: GitHub PR → agent run → verification."""
-        import json
         from pathlib import Path
 
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
@@ -399,24 +414,28 @@ class TestGitHubToVerificationPipeline:
         assert bind_response.status_code == 201
 
         # Mock GitHub API calls
-        import services.github_adapter as github_adapter
+        from services import github_adapter
 
-        monkeypatch.setattr(github_adapter, "fetch_pr_commits", lambda *args, **kwargs: [])
+        monkeypatch.setattr(
+            github_adapter, "fetch_pr_commits", lambda *args, **kwargs: []
+        )
         monkeypatch.setattr(github_adapter, "fetch_pr_diff", lambda *args, **kwargs: "")
 
         # Send webhook
-        body = json.dumps({
-            "action": "opened",
-            "repository": {"full_name": "careb36/test-repo"},
-            "pull_request": pr,
-        }, separators=(",", ":")).encode()
+        body = json.dumps(
+            {
+                "action": "opened",
+                "repository": {"full_name": "careb36/test-repo"},
+                "pull_request": pr,
+            },
+            separators=(",", ":"),
+        ).encode()
 
         import hmac
-        import hashlib
 
-        signature = "sha256=" + hmac.new(
-            b"test-secret", body, hashlib.sha256
-        ).hexdigest()
+        signature = (
+            "sha256=" + hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+        )
 
         webhook_response = test_client.post(
             "/v1/integrations/github/webhook",
@@ -454,7 +473,9 @@ class TestGitHubToVerificationPipeline:
 class TestAuditTrail:
     """Test that audit trails are properly maintained."""
 
-    def test_agent_run_creates_audit_entry(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_agent_run_creates_audit_entry(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify that agent run ingestion creates an audit entry."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -480,7 +501,9 @@ class TestAuditTrail:
         ).all()
         assert len(audits) == 1
 
-    def test_verification_creates_audit_entry(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_verification_creates_audit_entry(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify that verification creates an audit entry."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)

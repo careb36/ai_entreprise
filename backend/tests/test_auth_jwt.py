@@ -1,12 +1,11 @@
 """Tests for human-user JWT login and identity resolution."""
 
-from datetime import datetime, timedelta, timezone
 import secrets
-
-import jwt
-import pytest
+from datetime import UTC, datetime, timedelta
 
 import auth_tokens
+import jwt
+import pytest
 from models.company import Company, User
 
 
@@ -160,7 +159,7 @@ def test_me_rejects_a_token_signed_with_a_different_key(test_client, signing_key
         {
             "sub": "1",
             "email": "jules@example.com",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
             "typ": "access",
         },
         secrets.token_urlsafe(48),
@@ -194,7 +193,7 @@ def test_me_rejects_a_refresh_token(test_client, signing_key):
         {
             "sub": "1",
             "email": "jules@example.com",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
             "typ": "refresh",
         },
         signing_key,

@@ -6,18 +6,17 @@ LangGraph agent graph asynchronously so agent turns can publish GlassRoom
 events in real time while the workflow is still running.
 """
 
-import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlmodel import Session
-
-from agents.graph import run_fabrique_workflow
 from config import settings
 from database import engine
 from models import Sprint
 from nats_client import NATSClient
+from sqlmodel import Session
+
+from agents.graph import run_fabrique_workflow
 
 logger = logging.getLogger("fabrique-worker")
 
@@ -53,7 +52,7 @@ async def _publish_glassroom_error(
                 "role": "System",
                 "task": f"LangGraph workflow ({interaction_id})",
                 "message": f"❌ LangGraph workflow failed: {error_msg}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
     except Exception as pub_err:
@@ -78,7 +77,7 @@ async def _publish_glassroom_info(
                 "role": "System",
                 "task": f"LangGraph workflow ({interaction_id})",
                 "message": message,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
     except Exception as pub_err:
@@ -115,13 +114,15 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
             files = data.get("files")
             interaction_id = data.get("interaction_id", "unknown")
             bu_id = data.get("business_unit_id")
-            sprint_id = data.get("sprint_id")  # included when triggered from task_worker
-            po_feedback = data.get("po_feedback")  # present when re-dispatched after PO rejection
+            sprint_id = data.get(
+                "sprint_id"
+            )  # included when triggered from task_worker
+            po_feedback = data.get(
+                "po_feedback"
+            )  # present when re-dispatched after PO rejection
 
             if not settings.AGENT_GRAPH_ENABLED:
-                message = (
-                    "AGENT_GRAPH_ENABLED is false; the internal agent graph is disabled."
-                )
+                message = "AGENT_GRAPH_ENABLED is false; the internal agent graph is disabled."
                 logger.info(
                     "AGENT_GRAPH_ENABLED is false; ignoring workspace.generate interaction_id=%s",
                     interaction_id,
@@ -133,7 +134,10 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
 
             logger.info(
                 "workspace.generate received: interaction_id=%s bu_id=%s sprint_id=%s story=%.80s",
-                interaction_id, bu_id, sprint_id, story,
+                interaction_id,
+                bu_id,
+                sprint_id,
+                story,
             )
 
             if files and not story:
@@ -145,7 +149,10 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 return
 
             if not story:
-                logger.warning("workspace.generate message missing 'story' field — skipping: %s", data)
+                logger.warning(
+                    "workspace.generate message missing 'story' field — skipping: %s",
+                    data,
+                )
                 return
 
             result = await run_fabrique_workflow(
@@ -162,13 +169,15 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 _mark_sprint_needs_split(sprint_id)
                 logger.warning(
                     "Sprint sprint_id=%s marked needs_split after workflow interaction_id=%s",
-                    sprint_id, interaction_id,
+                    sprint_id,
+                    interaction_id,
                 )
 
             if result.get("error"):
                 logger.error(
                     "LangGraph workflow returned error for interaction_id=%s: %s",
-                    interaction_id, result["error"],
+                    interaction_id,
+                    result["error"],
                 )
                 await _publish_glassroom_error(
                     nats_client, sprint_id, interaction_id, result["error"]
@@ -176,16 +185,22 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
             else:
                 logger.info(
                     "LangGraph workflow completed: interaction_id=%s engram_id=%s needs_split=%s",
-                    interaction_id, result.get("engram_id"), result.get("needs_split"),
+                    interaction_id,
+                    result.get("engram_id"),
+                    result.get("needs_split"),
                 )
 
         except Exception as e:
             logger.error(
                 "Fatal error in workspace.generate handler (interaction_id=%s): %s",
-                interaction_id, e, exc_info=True,
+                interaction_id,
+                e,
+                exc_info=True,
             )
             await _publish_glassroom_error(
-                nats_client, sprint_id, interaction_id,
+                nats_client,
+                sprint_id,
+                interaction_id,
                 f"{type(e).__name__}: {e}",
             )
 

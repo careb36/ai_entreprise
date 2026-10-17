@@ -2,12 +2,10 @@ import hashlib
 import hmac
 import os
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from urllib.parse import quote, urlsplit
 
 import httpx
-
 from schemas import AgentRunCreate
 
 GITHUB_API_URL = "https://api.github.com"
@@ -16,7 +14,7 @@ _DIFF_FILE = re.compile(r"^diff --git a/(.*?) b/(.*)$", re.MULTILINE)
 
 
 class GitHubRateLimited(Exception):
-    def __init__(self, reset_at: Optional[str] = None):
+    def __init__(self, reset_at: str | None = None):
         self.reset_at = reset_at
         super().__init__(
             f"GitHub API rate limit exceeded; reset at {reset_at or 'unknown'}"
@@ -24,7 +22,7 @@ class GitHubRateLimited(Exception):
 
 
 def verify_webhook_signature(
-    secret: str, body: bytes, signature_header: Optional[str]
+    secret: str, body: bytes, signature_header: str | None
 ) -> bool:
     if not isinstance(signature_header, str) or not signature_header.startswith(
         "sha256="
@@ -38,7 +36,7 @@ def verify_webhook_signature(
 
 
 def infer_producer(
-    author_login: str, author_type: Optional[str], commit_messages: list[str]
+    author_login: str, author_type: str | None, commit_messages: list[str]
 ) -> tuple[str, str]:
     login = author_login or "unknown"
     normalized_login = login.casefold()
@@ -114,13 +112,13 @@ def should_include(producer: str, inclusion_rule: str) -> bool:
     raise ValueError(f"unsupported GitHub inclusion rule: {inclusion_rule}")
 
 
-def _default_token() -> Optional[str]:
+def _default_token() -> str | None:
     from config import settings
 
     return os.getenv("GITHUB_TOKEN") or settings.GITHUB_TOKEN
 
 
-def _headers(token: Optional[str], accept: str) -> dict[str, str]:
+def _headers(token: str | None, accept: str) -> dict[str, str]:
     headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28"}
     resolved_token = token or _default_token()
     if resolved_token:
@@ -128,7 +126,7 @@ def _headers(token: Optional[str], accept: str) -> dict[str, str]:
     return headers
 
 
-def _next_link(response: httpx.Response) -> Optional[str]:
+def _next_link(response: httpx.Response) -> str | None:
     for link in response.headers.get("Link", "").split(","):
         match = re.match(r'\s*<([^>]+)>;\s*rel="([^"]+)"', link)
         if match and match.group(2) == "next":
@@ -137,7 +135,7 @@ def _next_link(response: httpx.Response) -> Optional[str]:
 
 
 def _get(
-    url: str, *, token: Optional[str], accept: str, params: Optional[dict] = None
+    url: str, *, token: str | None, accept: str, params: dict | None = None
 ) -> httpx.Response:
     response = httpx.get(
         url, headers=_headers(token, accept), params=params, timeout=30.0
@@ -151,7 +149,7 @@ def _get(
     return response
 
 
-def _paged_json(url: str, *, token: Optional[str], params: Optional[dict] = None):
+def _paged_json(url: str, *, token: str | None, params: dict | None = None):
     results = []
     visited = set()
     next_url = url
@@ -176,7 +174,7 @@ def _paged_json(url: str, *, token: Optional[str], params: Optional[dict] = None
     return results
 
 
-def _parse_datetime(value) -> Optional[datetime]:
+def _parse_datetime(value) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
     try:
@@ -190,9 +188,9 @@ def fetch_pull_requests(
     owner: str,
     repo: str,
     *,
-    token: Optional[str] = None,
+    token: str | None = None,
     state: str = "all",
-    since: Optional[str] = None,
+    since: str | None = None,
     base_url: str = GITHUB_API_URL,
 ) -> list[dict]:
     url = (
@@ -218,14 +216,10 @@ def fetch_pull_requests(
         if created_at is None:
             continue
         comparable_created = (
-            created_at.replace(tzinfo=timezone.utc)
-            if created_at.tzinfo is None
-            else created_at
+            created_at.replace(tzinfo=UTC) if created_at.tzinfo is None else created_at
         )
         comparable_since = (
-            since_dt.replace(tzinfo=timezone.utc)
-            if since_dt.tzinfo is None
-            else since_dt
+            since_dt.replace(tzinfo=UTC) if since_dt.tzinfo is None else since_dt
         )
         if comparable_created >= comparable_since:
             filtered.append(pr)
@@ -237,7 +231,7 @@ def fetch_pr_commits(
     repo: str,
     number: int,
     *,
-    token: Optional[str] = None,
+    token: str | None = None,
     base_url: str = GITHUB_API_URL,
 ) -> list[dict]:
     url = (
@@ -252,13 +246,11 @@ def fetch_pr_diff(
     repo: str,
     number: int,
     *,
-    token: Optional[str] = None,
+    token: str | None = None,
     base_url: str = GITHUB_API_URL,
 ) -> str:
     url = (
         f"{base_url.rstrip('/')}/repos/{quote(owner, safe='')}/"
         f"{quote(repo, safe='')}/pulls/{number}"
     )
-    return _get(
-        url, token=token, accept="application/vnd.github.v3.diff"
-    ).text
+    return _get(url, token=token, accept="application/vnd.github.v3.diff").text

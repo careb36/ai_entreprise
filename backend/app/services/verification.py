@@ -1,9 +1,9 @@
 import re
-from typing import Any, Optional
-
-from sqlmodel import Session
+from typing import Any
 
 from models.agent_run import AgentRun, Verification
+from sqlmodel import Session
+
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -19,7 +19,9 @@ _URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 _TEST_PATTERNS = (
     re.compile(r"\b\d+\s+(?:tests?\s+)?pass(?:ed|ing)?\b", re.IGNORECASE),
     re.compile(r"\ball tests pass\b", re.IGNORECASE),
-    re.compile(r"\b(build|ci)\s+(?:is\s+)?(green|passing|passes|succeeds)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(build|ci)\s+(?:is\s+)?(green|passing|passes|succeeds)\b", re.IGNORECASE
+    ),
     re.compile(r"\bpytest\b.*\bpassed\b", re.IGNORECASE),
     re.compile(r"\bnpm (?:run )?test\b", re.IGNORECASE),
 )
@@ -56,7 +58,7 @@ def check_artifact_nonempty(run: AgentRun) -> dict:
     }
 
 
-def extract_claimed_paths(claims: Optional[dict]) -> list[str]:
+def extract_claimed_paths(claims: dict | None) -> list[str]:
     paths = []
     seen = set()
     for text in _claim_strings(claims):
@@ -93,7 +95,7 @@ def check_claimed_files_present(run: AgentRun) -> dict:
     }
 
 
-def extract_test_claims(claims: Optional[dict]) -> list[str]:
+def extract_test_claims(claims: dict | None) -> list[str]:
     matches = []
     seen = set()
     for text in _claim_strings(claims):
@@ -103,9 +105,7 @@ def extract_test_claims(claims: Optional[dict]) -> list[str]:
     return matches
 
 
-def check_claimed_tests_evidenced(
-    run: AgentRun, evidence: Optional[dict]
-) -> dict:
+def check_claimed_tests_evidenced(run: AgentRun, evidence: dict | None) -> dict:
     test_claims = extract_test_claims(run.claims)
     if not test_claims:
         return {
@@ -194,7 +194,7 @@ def aggregate_verdict(checks: list[dict]) -> str:
 
 
 def verify_agent_run(
-    session: Session, run: AgentRun, evidence: Optional[dict]
+    session: Session, run: AgentRun, evidence: dict | None
 ) -> Verification:
     checks = [
         check_artifact_nonempty(run),

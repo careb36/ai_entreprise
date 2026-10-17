@@ -10,23 +10,22 @@ Responsibilities:
 
 from datetime import datetime
 
+from config import Settings
+from exception_handlers import register_exception_handlers
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from config import Settings
+from lifecycle import shutdown, startup
+from metrics import setup_metrics
 from routers import (
+    agent_runs_router,
+    agents_router,
     auth_router,
     enterprise_router,
-    sprint_router,
-    agents_router,
-    agent_runs_router,
-    support_router,
     github_router,
+    sprint_router,
+    support_router,
 )
-from exception_handlers import register_exception_handlers
-from lifecycle import startup, shutdown
-from security import setup_security, get_cors_origins
-from metrics import setup_metrics
+from security import get_cors_origins, setup_security
 
 settings = Settings()
 
@@ -67,6 +66,7 @@ app.include_router(github_router)
 
 # Register exception handlers
 register_exception_handlers(app)
+
 
 # Register lifecycle handlers
 async def on_startup():

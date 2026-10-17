@@ -5,16 +5,14 @@ Uses the in-memory SQLite session and a FastAPI TestClient defined in conftest.p
 No Postgres, NATS, or LLM proxy is required.
 """
 
-import pytest
+from models.company import Company
+from models.sprint import BacklogItem, OutboxEvent, Sprint
 from sqlmodel import select
-
-from models.company import Company, BusinessUnit
-from models.sprint import Sprint, BacklogItem, OutboxEvent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_company(session, name="Acme Corp"):
     """Insert a minimal Company row and return its id."""
@@ -44,6 +42,7 @@ def _sprint_payload(company_id: int, **overrides):
 # ---------------------------------------------------------------------------
 # Happy-path tests
 # ---------------------------------------------------------------------------
+
 
 def test_start_sprint_creates_sprint_and_items(sqlite_session, test_client):
     """Happy path: sprint + backlog items are persisted, correct IDs returned."""
@@ -100,8 +99,10 @@ def test_start_sprint_inserts_outbox_events(sqlite_session, test_client):
     assert "workspace.generate" in subjects
 
     kickoff_events = [
-        e for e in events
-        if e.payload and e.payload.get("subject") == "workspace.generate"
+        e
+        for e in events
+        if e.payload
+        and e.payload.get("subject") == "workspace.generate"
         and e.aggregate_type == "sprint"
         and e.aggregate_id == str(sprint_id)
     ]
@@ -121,6 +122,7 @@ def test_start_sprint_sprint_url_in_response(sqlite_session, test_client):
 # ---------------------------------------------------------------------------
 # Scope validation
 # ---------------------------------------------------------------------------
+
 
 def test_start_sprint_rejects_invalid_scope(sqlite_session, test_client):
     """Invalid scope_size must return HTTP 422."""
@@ -154,6 +156,7 @@ def test_start_sprint_rejects_too_many_items_hard_limit(sqlite_session, test_cli
 # ---------------------------------------------------------------------------
 # Unknown company
 # ---------------------------------------------------------------------------
+
 
 def test_start_sprint_unknown_company_returns_404(sqlite_session, test_client):
     """A company_id that does not exist must return HTTP 404."""

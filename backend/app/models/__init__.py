@@ -8,21 +8,38 @@ imported, so this ``__init__`` must be imported before
 ``database.create_db_and_tables()`` is called.
 """
 
-from .company import Company, Agent, BusinessUnit, User, CompanyMember, ProjectCredential, ProjectDiscovery
-from .sprint import Sprint, BacklogItem, OutboxEvent
+from .agent_run import AgentRun, AgentRunApproval, Verification
 from .audit import AuditLog
-from .agent_run import AgentRun, Verification, AgentRunApproval
-from .support import BugReport
-from .runtime import AssistantRuntimeState
+from .company import (
+    Agent,
+    BusinessUnit,
+    Company,
+    CompanyMember,
+    ProjectCredential,
+    ProjectDiscovery,
+    User,
+)
 from .github import GitHubRepoBinding
+from .runtime import AssistantRuntimeState
+from .sprint import BacklogItem, OutboxEvent, Sprint
+from .support import BugReport
 
 __all__ = [
-    "Company", "Agent", "BusinessUnit", "User", "CompanyMember",
-    "ProjectCredential", "ProjectDiscovery",
-    "Sprint", "BacklogItem", "OutboxEvent",
-    "AuditLog",
-    "AgentRun", "Verification", "AgentRunApproval",
-    "BugReport",
+    "Agent",
+    "AgentRun",
+    "AgentRunApproval",
     "AssistantRuntimeState",
+    "AuditLog",
+    "BacklogItem",
+    "BugReport",
+    "BusinessUnit",
+    "Company",
+    "CompanyMember",
     "GitHubRepoBinding",
+    "OutboxEvent",
+    "ProjectCredential",
+    "ProjectDiscovery",
+    "Sprint",
+    "User",
+    "Verification",
 ]

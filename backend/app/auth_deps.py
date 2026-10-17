@@ -1,13 +1,11 @@
 """FastAPI dependencies for resolving authenticated human users."""
 
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlmodel import Session
-
 import auth_tokens
 from database import get_session
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from models import User
-
+from sqlmodel import Session
 
 bearer = HTTPBearer(auto_error=False)
 

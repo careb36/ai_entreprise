@@ -19,17 +19,15 @@ Gemini 1.5 Flash via the LLM Proxy.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import FileResponse
-from sqlmodel import Session, select, text
-
-from database import get_session
 from auth_policy import current_user_if_required
+from database import get_session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+from logging_config import logger
 from models import BugReport
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
-from logging_config import logger
+from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
 
@@ -41,7 +39,9 @@ def _next_ticket_num(session: Session) -> str:
     Uses ``MAX(id)`` on the ``bug_reports`` table so that ticket numbers are
     monotonically increasing even if rows are deleted.
     """
-    result = session.exec(text("SELECT COALESCE(MAX(id), 0) + 1 FROM bug_reports")).scalar()
+    result = session.exec(
+        text("SELECT COALESCE(MAX(id), 0) + 1 FROM bug_reports")
+    ).scalar()
     return f"FAB-{result:05d}"
 
 
@@ -81,9 +81,9 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
 
 @router.get("/tickets", dependencies=[Depends(current_user_if_required)])
 async def list_tickets(
-    reporter_email: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    severity: Optional[str] = Query(None),
+    reporter_email: str | None = Query(None),
+    status: str | None = Query(None),
+    severity: str | None = Query(None),
     limit: int = Query(50, le=200),
     session: Session = Depends(get_session),
 ):
@@ -169,7 +169,9 @@ async def update_ticket_status(
     """
     valid_statuses = {"open", "in_progress", "waiting", "resolved", "closed"}
     if req.status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Use: {valid_statuses}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid status. Use: {valid_statuses}"
+        )
 
     report = session.exec(
         select(BugReport).where(BugReport.ticket_num == ticket_num.upper())

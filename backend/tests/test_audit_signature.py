@@ -5,10 +5,8 @@ import logging
 from datetime import datetime
 from types import SimpleNamespace
 
-import pytest
-from sqlmodel import Session
-
 import audit_signing
+import pytest
 from audit_signing import (
     SIGNED_PREFIX,
     UNSIGNED_PREFIX,
@@ -18,6 +16,7 @@ from audit_signing import (
 )
 from models.audit import AuditLog
 from services.agent_service import AgentService
+from sqlmodel import Session
 
 
 @pytest.fixture

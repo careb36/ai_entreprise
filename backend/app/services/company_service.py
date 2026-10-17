@@ -7,22 +7,27 @@ Responsibilities:
 - Bridge Postgres multi-tenant data to the Neo4j Temporal Knowledge Graph.
 """
 
-import json
 from datetime import date
+from typing import Any
 from uuid import uuid4
-from typing import List, Dict, Any, Optional
 
-from sqlmodel import Session, select, func
-from sqlalchemy import text
-
-from database import get_neo4j_driver
-from models import (
-    Company, Agent, ProjectCredential, Sprint, BacklogItem,
-    OutboxEvent, AuditLog, BusinessUnit, CompanyMember
-)
-from services.sprint_planner import plan_foundation_sprint
 from crypto import encrypt_value
+from database import get_neo4j_driver
 from logging_config import logger
+from models import (
+    Agent,
+    AuditLog,
+    BacklogItem,
+    BusinessUnit,
+    Company,
+    CompanyMember,
+    OutboxEvent,
+    ProjectCredential,
+    Sprint,
+)
+from sqlmodel import Session, func, select
+
+from services.sprint_planner import plan_foundation_sprint
 
 
 class CompanyService:
@@ -39,15 +44,15 @@ class CompanyService:
     def init_company(
         self,
         company_name: str,
-        agents: List[Dict[str, Any]],
+        agents: list[dict[str, Any]],
         default_scope_size: str = "M",
-        default_sprint_length_days: Optional[int] = None,  # deprecated
+        default_sprint_length_days: int | None = None,  # deprecated
         autonomy_level: int = 2,
-        permissions: Optional[Dict[str, str]] = None,
-        project_path: Optional[str] = None,
-        detected_stack: Optional[Dict[str, Any]] = None,
-        owner_user_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        permissions: dict[str, str] | None = None,
+        project_path: str | None = None,
+        detected_stack: dict[str, Any] | None = None,
+        owner_user_id: int | None = None,
+    ) -> dict[str, Any]:
         """
         Bootstrap a new company tenant with its AI agents and project credentials.
 
@@ -64,23 +69,27 @@ class CompanyService:
         self.session.flush()
 
         if owner_user_id is not None:
-            self.session.add(CompanyMember(
-                company_id=company.id, user_id=owner_user_id, human_role="Owner"
-            ))
+            self.session.add(
+                CompanyMember(
+                    company_id=company.id, user_id=owner_user_id, human_role="Owner"
+                )
+            )
 
         # 2. Create Agents
         for agent_data in agents:
-            self.session.add(Agent(
-                company_id=company.id,
-                name=agent_data.get("name", ""),
-                role=agent_data.get("role"),
-                persona=agent_data.get("persona"),
-                seniority=agent_data.get("seniority", "Senior"),
-                specialty=agent_data.get("specialty", ""),
-                model=agent_data.get("model", ""),
-                system_prompt=agent_data.get("system_prompt"),
-                token_budget=agent_data.get("token_budget", 500000),
-            ))
+            self.session.add(
+                Agent(
+                    company_id=company.id,
+                    name=agent_data.get("name", ""),
+                    role=agent_data.get("role"),
+                    persona=agent_data.get("persona"),
+                    seniority=agent_data.get("seniority", "Senior"),
+                    specialty=agent_data.get("specialty", ""),
+                    model=agent_data.get("model", ""),
+                    system_prompt=agent_data.get("system_prompt"),
+                    token_budget=agent_data.get("token_budget", 500000),
+                )
+            )
 
         # 3. Create Project Credentials
         if permissions:
@@ -92,12 +101,16 @@ class CompanyService:
                     # receives only credential_type -> access_level, never a
                     # value — but wiring it now means the first real secret
                     # written here is encrypted rather than retrofitted.
-                    self.session.add(ProjectCredential(
-                        company_id=company.id,
-                        credential_type=cred_type,
-                        access_level=access_level,
-                        encrypted_value=encrypt_value("vault_encrypted_placeholder"),
-                    ))
+                    self.session.add(
+                        ProjectCredential(
+                            company_id=company.id,
+                            credential_type=cred_type,
+                            access_level=access_level,
+                            encrypted_value=encrypt_value(
+                                "vault_encrypted_placeholder"
+                            ),
+                        )
+                    )
 
         # 4. Plan and Create Foundation Sprint
         plan = plan_foundation_sprint(
@@ -141,12 +154,14 @@ class CompanyService:
                     "sprint_id": sprint.id,
                 },
             }
-            self.session.add(OutboxEvent(
-                aggregate_type="backlog_item",
-                aggregate_id=str(bi.id),
-                event_type="nats_publish",
-                payload=nats_payload,
-            ))
+            self.session.add(
+                OutboxEvent(
+                    aggregate_type="backlog_item",
+                    aggregate_id=str(bi.id),
+                    event_type="nats_publish",
+                    payload=nats_payload,
+                )
+            )
 
         self.session.commit()
 
@@ -174,17 +189,22 @@ class CompanyService:
         except Exception as e:
             logger.error(f"Neo4j seed failed (non-critical): {e}")
 
-    def get_quotas(self, company_id: int) -> List[Dict[str, Any]]:
+    def get_quotas(self, company_id: int) -> list[dict[str, Any]]:
         """Return token usage and limits for all business units of a company."""
         units = self.session.exec(
             select(BusinessUnit).where(BusinessUnit.company_id == company_id)
         ).all()
         return [
-            {"id": u.id, "unit": u.unit_name, "limit": u.token_quota_limit, "used": u.token_quota_used}
+            {
+                "id": u.id,
+                "unit": u.unit_name,
+                "limit": u.token_quota_limit,
+                "used": u.token_quota_used,
+            }
             for u in units
         ]
 
-    def reset_quota(self, bu_id: int) -> Dict[str, Any]:
+    def reset_quota(self, bu_id: int) -> dict[str, Any]:
         """Reset the token usage counter for a business unit to zero."""
         unit = self.session.get(BusinessUnit, bu_id)
         if not unit:
@@ -192,9 +212,14 @@ class CompanyService:
         unit.token_quota_used = 0
         self.session.add(unit)
         self.session.commit()
-        return {"status": "reset", "bu_id": bu_id, "unit": unit.unit_name, "token_quota_used": 0}
+        return {
+            "status": "reset",
+            "bu_id": bu_id,
+            "unit": unit.unit_name,
+            "token_quota_used": 0,
+        }
 
-    def get_project_health(self, sprint_id: int) -> Dict[str, Any]:
+    def get_project_health(self, sprint_id: int) -> dict[str, Any]:
         """Generate a sprint health report using SQLModel idiomatic queries."""
         # 1. Calculate total tokens for this sprint's backlog interactions
         item_ids = self.session.exec(
@@ -203,10 +228,14 @@ class CompanyService:
         interaction_ids = [f"task-{item_id}" for item_id in item_ids]
         total_tokens = 0
         if interaction_ids:
-            total_tokens = self.session.exec(
-                select(func.sum(AuditLog.cost_tokens))
-                .where(AuditLog.interaction_id.in_(interaction_ids))
-            ).one() or 0
+            total_tokens = (
+                self.session.exec(
+                    select(func.sum(AuditLog.cost_tokens)).where(
+                        AuditLog.interaction_id.in_(interaction_ids)
+                    )
+                ).one()
+                or 0
+            )
 
         # 2. Count tasks per status
         status_counts_rows = self.session.exec(

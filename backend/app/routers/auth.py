@@ -13,17 +13,16 @@ Sensitive-route enforcement is gated by AUTH_REQUIRED.
 
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlmodel import Session, select, text
-
 import auth_tokens
 from auth_deps import get_current_user
 from auth_policy import current_user_if_required, require_company_role
 from config import settings
 from database import get_session
-from models import User, CompanyMember
-from schemas import UserCreateRequest, LoginRequest, InviteMemberRequest
+from fastapi import APIRouter, Depends, HTTPException
+from models import CompanyMember, User
 from passlib.context import CryptContext
+from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
 
@@ -33,7 +32,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.post("/auth/register")
-async def register_user(req: UserCreateRequest, session: Session = Depends(get_session)):
+async def register_user(
+    req: UserCreateRequest, session: Session = Depends(get_session)
+):
     """
     Register a new human user for the platform.
 
@@ -99,7 +100,11 @@ async def get_me(
 
 
 @router.post("/company/invite")
-async def invite_member(req: InviteMemberRequest, session: Session = Depends(get_session), caller: User | None = Depends(current_user_if_required)):
+async def invite_member(
+    req: InviteMemberRequest,
+    session: Session = Depends(get_session),
+    caller: User | None = Depends(current_user_if_required),
+):
     """
     Invite a registered user to collaborate on a company.
 

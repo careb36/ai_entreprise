@@ -7,10 +7,11 @@ They are written by ``AgentService.audit_interaction()`` to both the
 filesystem (JSONL) and this table for queryable history.
 """
 
-from typing import Optional, Any
 from datetime import datetime
-from sqlmodel import SQLModel, Field, Column
+from typing import Any
+
 from sqlalchemy import JSON
+from sqlmodel import Column, Field, SQLModel
 
 
 class AuditLog(SQLModel, table=True):
@@ -23,28 +24,28 @@ class AuditLog(SQLModel, table=True):
 
     __tablename__ = "audit_log"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    company_id: Optional[int] = Field(default=None, foreign_key="companies.id", index=True)
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int | None = Field(default=None, foreign_key="companies.id", index=True)
 
     # Correlates all audit rows that belong to the same workflow execution.
-    interaction_id: Optional[str] = None
+    interaction_id: str | None = None
 
     # Identifier of the AI agent that performed the action (e.g. "developer_1").
-    agent_id: Optional[str] = None
+    agent_id: str | None = None
 
     # Short label describing what was done (e.g. "generate_code", "burn_engram").
     action: str
 
     # Free-form JSON context passed to the action (prompt, config, etc.).
-    details: Optional[Any] = Field(default=None, sa_column=Column(JSON))
+    details: Any | None = Field(default=None, sa_column=Column(JSON))
 
     # JSON-serialised outcome returned by the action.
-    result: Optional[Any] = Field(default=None, sa_column=Column(JSON))
+    result: Any | None = Field(default=None, sa_column=Column(JSON))
 
     # Server-computed HMAC-SHA256 or explicit unsigned digest; legacy rows may be null.
-    decision_signature: Optional[str] = None
+    decision_signature: str | None = None
 
     # Number of LLM tokens consumed; used for quota accounting per business unit.
     cost_tokens: int = 0
 
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=datetime.utcnow)
