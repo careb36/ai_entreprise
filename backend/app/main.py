@@ -25,6 +25,7 @@ from routers import (
 )
 from exception_handlers import register_exception_handlers
 from lifecycle import startup, shutdown
+from security import setup_security, get_cors_origins
 
 settings = Settings()
 
@@ -43,11 +44,14 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Setup security (rate limiting + security headers)
+setup_security(app)
 
 app.include_router(auth_router)
 app.include_router(enterprise_router)
