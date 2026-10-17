@@ -39,7 +39,7 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   const approvalsQuery = useAgentRunApprovals(companyId, runId)
   const run = runQuery.data
   const externalRef = run?.external_ref ?? null
-  const auditQuery = useAuditVerification(externalRef)
+  const auditQuery = useAuditVerification(externalRef, companyId)
   const verifyMutation = useVerifyAgentRun(companyId, runId)
   const approveMutation = useApproveAgentRun(companyId, runId)
   const [approverName, setApproverName] = useState('')

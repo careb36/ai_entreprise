@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import CompanySelect from './CompanySelect'
 import ProtectedRoute from '../components/ProtectedRoute'
@@ -10,18 +11,20 @@ function CurrentPath() {
   return <output data-testid="current-path">{location.pathname}{location.search}{location.hash}</output>
 }
 
-function renderRoutes(path: string) {
+function renderRoutes(path: string, queryClient = new QueryClient()) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <CurrentPath />
-      <Routes>
-        <Route element={<ProtectedRoute />}>
-          <Route path="/companies/select" element={<CompanySelect />} />
-          <Route path="/evidence/5" element={<div>Evidence detail</div>} />
-          <Route path="/" element={<div>Home</div>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}>
+        <CurrentPath />
+        <Routes>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/companies/select" element={<CompanySelect />} />
+            <Route path="/evidence/5" element={<div>Evidence detail</div>} />
+            <Route path="/" element={<div>Home</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 
@@ -65,4 +68,14 @@ describe('company selection return destination', () => {
       expect(screen.getByTestId('current-path').textContent).toBe('/')
     },
   )
+
+  it('removes cached queries when switching companies', async () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(['memory', 14, 'auth'], ['company 14 result'])
+    renderRoutes('/companies/select', queryClient)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Company 28.*Viewer/ }))
+
+    expect(queryClient.getQueryData(['memory', 14, 'auth'])).toBeUndefined()
+  })
 })

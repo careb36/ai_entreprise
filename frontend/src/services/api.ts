@@ -394,8 +394,11 @@ export const api = {
   approveAgentRun: (runId: number, request: AgentRunApprovalRequest) =>
     api.post<AgentRunApproval>(`/v1/agent_runs/${runId}/approve`, request),
 
-  getAuditVerification: (externalRef: string) =>
-    api.get<AuditVerification>('/v1/audit/verify', { interaction_id: `agent-run:${externalRef}` }),
+  getAuditVerification: (externalRef: string, companyId: number) =>
+    api.get<AuditVerification>('/v1/audit/verify', {
+      interaction_id: `agent-run:${externalRef}`,
+      company_id: companyId,
+    }),
 
   getQuotas: (companyId: number) =>
     api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),
