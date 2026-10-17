@@ -16,10 +16,11 @@ export const useAppStore = create<AppState>()(
       companyName: null,
       activeSprintId: null,
 
-      setCompany: (id, name) => set({ 
+      setCompany: (id, name) => set(state => ({
         companyId: id, 
-        companyName: name 
-      }),
+        companyName: name,
+        activeSprintId: id !== state.companyId ? null : state.activeSprintId,
+      })),
 
       setActiveSprint: (id) => set({ 
         activeSprintId: id 

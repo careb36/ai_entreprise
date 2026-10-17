@@ -178,6 +178,7 @@ function AppContent() {
 
   useEffect(() => {
     setOnUnauthorized(() => {
+      if (window.location.pathname === '/login') return
       const from = `${window.location.pathname}${window.location.search}${window.location.hash}`
       navigate(`/login?from=${encodeURIComponent(from)}`, { replace: true })
     })

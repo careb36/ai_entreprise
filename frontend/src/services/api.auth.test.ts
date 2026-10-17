@@ -71,4 +71,46 @@ describe('authenticated API requests', () => {
     expect(useAuthStore.getState().token).toBe('still-valid')
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
+
+  it('handles parallel 401s for the same token only once (issue #1)', async () => {
+    const onUnauthorized = vi.fn()
+    setOnUnauthorized(onUnauthorized)
+    useAuthStore.setState({ token: 'rejected-token', expiresAt: Date.now() + 60_000 })
+    let rejectRequests!: (value: Response) => void
+    vi.mocked(fetch).mockReturnValue(new Promise(resolve => { rejectRequests = resolve }))
+
+    const requests = Promise.allSettled([api.get('/v1/first'), api.get('/v1/second')])
+    expect(fetch).toHaveBeenCalledTimes(2)
+    rejectRequests(response(401))
+    expect((await requests).every(result => result.status === 'rejected')).toBe(true)
+
+    expect(useAuthStore.getState().token).toBeNull()
+    expect(onUnauthorized).toHaveBeenCalledOnce()
+  })
+
+  it('does not log out a newer session for a stale 401 (issue #1)', async () => {
+    const onUnauthorized = vi.fn()
+    setOnUnauthorized(onUnauthorized)
+    useAuthStore.setState({ token: 'old-token', expiresAt: Date.now() + 60_000 })
+    let rejectRequest!: (value: Response) => void
+    vi.mocked(fetch).mockReturnValue(new Promise(resolve => { rejectRequest = resolve }))
+    const request = api.get('/v1/protected')
+    useAuthStore.setState({ token: 'new-token' })
+
+    rejectRequest(response(401))
+    await expect(request).rejects.toBeInstanceOf(ApiError)
+
+    expect(useAuthStore.getState().token).toBe('new-token')
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it('does not invoke the unauthorized hook without a sent token (issue #1)', async () => {
+    const onUnauthorized = vi.fn()
+    setOnUnauthorized(onUnauthorized)
+    vi.mocked(fetch).mockResolvedValue(response(401))
+
+    await expect(api.get('/v1/protected')).rejects.toBeInstanceOf(ApiError)
+
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
 })

@@ -21,11 +21,11 @@ export default function ProtectedRoute() {
 
   useEffect(() => {
     if (token && !authenticated) logout()
-    else if (authenticated && !meLoaded && !loadingMe) void loadMe().catch(() => {})
-  }, [authenticated, loadMe, loadingMe, logout, meLoaded, token])
+    else if (authenticated && !meLoaded && !loadingMe && !profileError) void loadMe().catch(() => {})
+  }, [authenticated, loadMe, loadingMe, logout, meLoaded, profileError, token])
 
   useEffect(() => {
-    if (meLoaded && memberships.length === 1) {
+    if (meLoaded && !loadingMe && !profileError && memberships.length === 1) {
       const membership = memberships[0]
       if (companyId !== membership.company_id) {
         setCompany(
@@ -37,7 +37,7 @@ export default function ProtectedRoute() {
         )
       }
     }
-  }, [companyId, memberships, meLoaded, setCompany, t])
+  }, [companyId, loadingMe, memberships, meLoaded, profileError, setCompany, t])
 
   if (!authenticated) {
     const from = `${location.pathname}${location.search}${location.hash}`
@@ -71,7 +71,8 @@ export default function ProtectedRoute() {
   if (memberships.length > 1) {
     const hasSelectedCompany = memberships.some(membership => membership.company_id === companyId)
     if (!hasSelectedCompany && location.pathname !== '/companies/select') {
-      return <Navigate to="/companies/select" replace />
+      const from = `${location.pathname}${location.search}${location.hash}`
+      return <Navigate to={`/companies/select?from=${encodeURIComponent(from)}`} replace />
     }
   }
 
