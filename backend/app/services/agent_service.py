@@ -85,6 +85,7 @@ class AgentService:
         result: str,
         decision_signature: str,
         cost_tokens: int,
+        company_id: Optional[int] = None,
     ):
         """
         Write a dual-destination audit entry for an agent interaction.
@@ -117,6 +118,7 @@ class AgentService:
 
         now = datetime.utcnow()
         log = AuditLog(
+            company_id=company_id,
             interaction_id=interaction_id,
             agent_id=agent_id,
             action=action,
@@ -143,6 +145,7 @@ class AgentService:
         log.decision_signature = signature
 
         entry = {
+            "company_id": log.company_id,
             "timestamp": log.created_at.isoformat(),
             "interaction_id": log.interaction_id,
             "agent_id": log.agent_id,

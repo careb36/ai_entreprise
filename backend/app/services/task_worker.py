@@ -193,6 +193,7 @@ def _build_sprint_retrospective(sprint_id: int) -> Dict[str, Any]:
             if not items:
                 return {}
 
+            sprint = session.get(Sprint, sprint_id)
             total = len(items)
             done = sum(1 for i in items if i.status == "done")
             blocked = sum(1 for i in items if i.status == "blocked")
@@ -219,6 +220,7 @@ def _build_sprint_retrospective(sprint_id: int) -> Dict[str, Any]:
                         blocked_reasons.append(f"{item.title[:60]}: {reason[:120]}")
 
             return {
+                "company_id": sprint.company_id if sprint else None,
                 "sprint_id": sprint_id,
                 "total_tasks": total,
                 "done_tasks": done,
@@ -1426,6 +1428,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
             from memory.engram_processor import get_engram_processor
             processor = get_engram_processor()
             processor.burn_engram(
+                company_id=retro_metrics.get("company_id"),
                 agent_id=f"retrospective_{sprint_id}",
                 role="ScrumMaster",
                 decision_summary=_format_retrospective_summary(retro_metrics),

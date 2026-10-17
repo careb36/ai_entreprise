@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from database import get_session, get_neo4j_driver
-from auth_policy import current_user_if_required, require_authenticated, require_company_role
+from auth_policy import current_user_if_required, require_authenticated, require_company_role, viewer_company_ids
 from models import User, BusinessUnit, Sprint
 from services.discovery_service import DiscoveryService
 from services.company_service import CompanyService
@@ -370,26 +370,28 @@ async def get_code_lineage(file_path: str, company_id: int | None = None, sessio
     to a ``Semantic`` node whose ``id`` ends with *file_path* via a
     ``MODIFIED_BY`` relationship.  Returns up to 10 most recent decisions.
     """
-    require_company_role(session, user, company_id, "Viewer")
+    require_authenticated(user)
+    if company_id is not None:
+        require_company_role(session, user, company_id, "Viewer")
+    company_ids = viewer_company_ids(session, user) if user is not None else []
     driver = get_neo4j_driver()
     try:
         company_filter = (
-            "AND toString(coalesce(e.company_id, "
-            "apoc.convert.fromJsonMap(coalesce(e.metadata, '{}')).company_id)) "
-            "= toString($company_id)"
-            if user is not None else ""
+            "AND e.company_id = $company_id" if company_id is not None else
+            "AND (e.company_id IN $company_ids OR e.company_id IS NULL)" if user is not None else ""
         )
         cypher = f"""
         MATCH (e:Episodic)-[r:MODIFIED_BY]->(s)
         WHERE s.id ENDS WITH $file_path
         {company_filter}
-        RETURN e.id AS engram_id, e.agent_role AS role, e.summary AS decision, e.created_at AS timestamp
+        RETURN e.id AS engram_id, e.agent_role AS role, e.summary AS decision, e.created_at AS timestamp,
+               e.company_id AS company_id, e.company_id IS NULL AS legacy
         ORDER BY e.created_at DESC LIMIT 10
         """
         with driver.session() as neo_session:
             result = neo_session.run(
                 cypher, file_path=file_path,
-                company_id=company_id if user is not None else None,
+                company_id=company_id, company_ids=company_ids,
             )
             lineage = [dict(record) for record in result]
         if not lineage:

@@ -29,7 +29,7 @@ from config import Settings
 from auth_tokens import is_auth_configured
 from crypto import is_encryption_enabled
 from audit_signing import is_signing_enabled
-from database import create_db_and_tables, get_neo4j_driver
+from database import create_db_and_tables, get_neo4j_driver, ensure_memory_graph_schema
 from logging_config import logger
 from nats_client import NATSClient
 from memory_client import MemoryClient
@@ -223,7 +223,9 @@ async def startup():
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
     try:
-        app.state.memory_client = MemoryClient(neo4j_driver=get_neo4j_driver())
+        driver = get_neo4j_driver()
+        ensure_memory_graph_schema(driver)
+        app.state.memory_client = MemoryClient(neo4j_driver=driver)
         logger.info("Neo4j connected — memory features enabled.")
     except Exception as exc:
         logger.warning(

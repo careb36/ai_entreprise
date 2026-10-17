@@ -214,6 +214,7 @@ def verify_agent_run(
 
     audit_log = AgentService().audit_interaction(
         session=session,
+        company_id=run.company_id,
         interaction_id=f"agent-run:{run.external_ref}",
         agent_id="verifier",
         action=ACTION_AGENT_RUN_VERIFIED,

@@ -237,7 +237,7 @@ export interface AgentRunVerification {
 
 export interface AuditVerification {
   interaction_id: string
-  rows: { id: number; action: string; status: 'valid' | 'invalid' | 'unsigned' | 'legacy'; mode: string }[]
+  rows: { id: number; action: string; status: 'valid' | 'invalid' | 'unsigned' | 'legacy'; mode: string; company_id?: number | null; legacy?: boolean }[]
   summary: { valid: number; invalid: number; unsigned: number; legacy: number }
 }
 

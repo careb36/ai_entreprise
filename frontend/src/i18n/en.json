@@ -447,6 +447,7 @@
     "noAuditRows": "No audit rows are recorded for this run.",
     "auditError": "Failed to verify audit signatures.",
     "auditLineage": "Audit lineage",
+    "legacyCompany": "Legacy — company not recorded",
     "runAuditId": "Run audit row",
     "latestVerificationAuditId": "Latest verification audit row",
     "notRecorded": "Not recorded"

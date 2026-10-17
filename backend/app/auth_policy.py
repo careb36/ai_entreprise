@@ -44,3 +44,12 @@ def require_authenticated(user: User | None) -> None:
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def viewer_company_ids(session: Session, user: User) -> list[int]:
+    return list(session.exec(
+        select(CompanyMember.company_id).where(
+            CompanyMember.user_id == user.id,
+            CompanyMember.human_role.in_(ROLE_RANK),
+        )
+    ).all())

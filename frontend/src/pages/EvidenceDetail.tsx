@@ -264,6 +264,11 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
                     <li key={row.id} className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-mono text-gray-400">#{row.id}</span>
                       <span className="text-gray-300">{row.action}</span>
+                      {row.legacy && (
+                        <span data-testid="legacy-company" className={`rounded border px-2 py-0.5 text-xs ${SIGNATURE_STYLES.legacy}`}>
+                          {t('evidence.legacyCompany')}
+                        </span>
+                      )}
                       <span data-testid={`signature-row-${row.status}`} className={`rounded border px-2 py-0.5 text-xs ${SIGNATURE_STYLES[row.status]}`}>
                         {t(`evidence.signature.${row.status}`)}
                       </span>

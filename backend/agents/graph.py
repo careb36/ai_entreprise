@@ -207,7 +207,7 @@ async def kickoff_node(state: AgentState) -> dict[str, Any]:
     # Retrieve relevant memory from past sprints and inject into planning context.
     try:
         processor = get_engram_processor()
-        memory_context = processor.query_relevant_engrams(state["story"], limit=4)
+        memory_context = processor.query_relevant_engrams(state["story"], limit=4, company_id=state.get("company_id"))
         if memory_context:
             messages.append(SystemMessage(content=f"Relevant memory from past sprints:\n{memory_context}"))
             await _publish(
@@ -429,6 +429,7 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
     try:
         processor = get_engram_processor()
         result = processor.burn_engram(
+            company_id=state.get("company_id"),
             agent_id=f"orchestrator_{state['interaction_id']}",
             role="PO",
             decision_summary=summary[:4000],
