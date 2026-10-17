@@ -25,10 +25,12 @@ limiter = Limiter(
 )
 
 
-class SecurityHeadersMiddleware:
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
         # Prevent MIME type sniffing
