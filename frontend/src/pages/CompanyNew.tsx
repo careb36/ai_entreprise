@@ -484,7 +484,7 @@ export default function CompanyNew() {
       <div className="flex flex-col sm:flex-row gap-2">
         <input type="text" value={projectPath} onChange={e => setProjectPath(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-          placeholder="/home/user/my-project  or  ~/projects/acme-backend"
+          placeholder="/workspace  (path inside the Docker container)"
           className="input flex-1 font-mono text-sm" />
         <button type="button" onClick={async () => {
           try {
