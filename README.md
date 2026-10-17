@@ -335,7 +335,10 @@ la-fabrique/
 
 ## API Reference
 
-Interactive docs at `http://localhost:8000/docs` when running locally.
+Interactive docs at `http://localhost:8000/docs` when running locally. See the
+[API and integration guide](docs/API.md) for examples of every endpoint, errors,
+NATS/SSE events, and producer onboarding. The generated schema is
+[openapi.yaml](openapi.yaml).
 
 | Method | Path | Description |
 |--------|------|-------------|

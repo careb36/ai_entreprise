@@ -1,5 +1,6 @@
-# Backend test suite — runs pytest on every pull request that touches backend
-# code or this workflow, and on pushes to the main and develop branches.
+# Backend test suite — runs pytest and checks the OpenAPI artifact on every pull
+# request that touches backend/API documentation or this workflow, and on pushes
+# to the main and develop branches.
 # Pushes to other branches do not trigger it; open a pull request for a run.
 #
 # The suite is deliberately service-free: no Postgres, Neo4j, NATS or LLM proxy
@@ -17,10 +18,14 @@ on:
     branches: [main, develop]
     paths:
       - 'backend/**'
+      - 'docs/API.md'
+      - 'openapi.yaml'
       - '.github/workflows/backend-tests.yml'
   pull_request:
     paths:
       - 'backend/**'
+      - 'docs/API.md'
+      - 'openapi.yaml'
       - '.github/workflows/backend-tests.yml'
   workflow_dispatch:
 
@@ -71,6 +76,11 @@ jobs:
         # Includes the dev group (pytest, pytest-asyncio); --no-root because the
         # backend is application code, not an installable package.
         run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Regenerate and verify OpenAPI
+        run: |
+          poetry run python scripts/generate_openapi.py
+          git diff --exit-code -- ../openapi.yaml
 
       - name: Run tests
         # PYTHONPATH mirrors the Dockerfile's ENV PYTHONPATH="/app:/app/app",

@@ -88,6 +88,14 @@ cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
 cd frontend && npm run test:run
 ```
 
+### API Integration
+
+The [API and integration guide](docs/API.md) documents endpoint examples,
+authentication, HTTP errors, NATS/SSE events, and onboarding an external
+producer. To regenerate the FastAPI schema after changing a route or request
+model, run `cd backend && PYTHONPATH=.:app poetry run python scripts/generate_openapi.py`.
+The generated `openapi.yaml` is checked for drift by backend CI.
+
 ---
 
 ## Code Standards

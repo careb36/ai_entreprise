@@ -336,6 +336,9 @@ la-fabrique/
 ## Referencia de la API
 
 Documentación interactiva disponible en `http://localhost:8000/docs` con el entorno levantado.
+Consulta la [guía de API e integración](docs/API.md) para ver ejemplos de todos
+los endpoints, errores, eventos NATS/SSE y cómo integrar un productor. El esquema
+generado está en [openapi.yaml](openapi.yaml).
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|

@@ -1,0 +1,2982 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fabrique Enterprise API",
+    "description": "Autonomous AI Engineering Factory API with Multi-Tenancy, Governance, and Auto-Healing support.",
+    "version": "2026.4.1"
+  },
+  "paths": {
+    "/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register User",
+        "description": "Register a new human user for the platform.\n\nChecks for a duplicate email before inserting.  The plain-text password\nis hashed with bcrypt and the raw value is never stored.\n\nReturns the new user's ``user_id`` and ``email``.",
+        "operationId": "register_user_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login",
+        "description": "Authenticate a human user and return a signed access token.",
+        "operationId": "login_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get Me",
+        "description": "Return the authenticated user's public profile and company memberships.",
+        "operationId": "get_me_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/company/invite": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Invite Member",
+        "description": "Invite a registered user to collaborate on a company.\n\nThe user must already have an account (identified by email).  The\n``human_role`` determines which governance capabilities the user has:\n``\"Owner\"`` > ``\"Manager\"`` > ``\"Viewer\"``.",
+        "operationId": "invite_member_v1_company_invite_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/init_company": {
+      "post": {
+        "tags": [
+          "Enterprise",
+          "Core"
+        ],
+        "summary": "Init Company",
+        "description": "Bootstrap a new company tenant with its AI agents and project credentials.\nDelegates to CompanyService for transactional logic and team planning.",
+        "operationId": "init_company_v1_init_company_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyInitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve_task": {
+      "post": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Approve Task",
+        "operationId": "approve_task_v1_approve_task_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enterprise/quotas": {
+      "get": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Get Quotas",
+        "description": "Return token usage and limits for all business units of a company.",
+        "operationId": "get_quotas_v1_enterprise_quotas_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enterprise/quotas/{bu_id}/reset": {
+      "post": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Reset Quota",
+        "description": "Reset the token usage counter for a business unit to zero.\nIntended for use at the start of a new billing cycle.",
+        "operationId": "reset_quota_v1_enterprise_quotas__bu_id__reset_post",
+        "parameters": [
+          {
+            "name": "bu_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Bu Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analytics/summary": {
+      "get": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Get Project Health",
+        "description": "AI Scrum Master: generate a sprint health report from audit and backlog data.",
+        "operationId": "get_project_health_v1_analytics_summary_get",
+        "parameters": [
+          {
+            "name": "sprint_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sprint Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/analytics/orchestration_health": {
+      "get": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Get Orchestration Health",
+        "description": "Return weekly KPI trends that measure the Batch-1 orchestration rollout.",
+        "operationId": "get_orchestration_health_v1_analytics_orchestration_health_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Company whose orchestration history will be analysed",
+              "title": "Company Id"
+            },
+            "description": "Company whose orchestration history will be analysed"
+          },
+          {
+            "name": "weeks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 52,
+              "minimum": 1,
+              "description": "Trailing weeks to include",
+              "default": 8,
+              "title": "Weeks"
+            },
+            "description": "Trailing weeks to include"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestrationHealthResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "List Models",
+        "description": "Return the live LLM model catalogue from the proxy.\n\nProxies the ``/v1/models`` response from the internal LLM proxy so that\nthe frontend can build a dynamic model selector without hardcoding model\nnames or tiers.  The proxy refreshes its catalogue from the Gemini API\nevery hour and classifies models by capability tier.\n\nResponse shape::\n\n    {\n      \"models\": [\n        {\"id\": \"gemini-2.5-pro\", \"provider\": \"gemini\", \"tier\": \"strategic\", \"description\": \"...\"},\n        ...\n      ],\n      \"orchestrator\": \"gemini-2.5-flash\",\n      \"refreshed_at\": 1712345678.0\n    }",
+        "operationId": "list_models_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/discover_team": {
+      "post": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Discover Team",
+        "description": "Scan a project path to detect its technology stack and suggest an AI team.\n\nPhase 1 (deterministic): filesystem walk + config-file parsing.\nPhase 2 (AI): LLM proxy reasons about the stack and suggests a team with\nper-role justifications. Falls back to rule-based team if LLM unavailable.\n\nIf ``company_id`` is provided, the result is persisted in the\n``project_discovery`` table.",
+        "operationId": "discover_team_v1_discover_team_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/enterprise/lineage": {
+      "get": {
+        "tags": [
+          "Enterprise",
+          "Enterprise"
+        ],
+        "summary": "Get Code Lineage",
+        "description": "Time-Travel Debugging: retrieve all architectural decisions that modified a file.\n\nQueries the Neo4j Temporal Knowledge Graph for ``Episodic`` nodes connected\nto a ``Semantic`` node whose ``id`` ends with *file_path* via a\n``MODIFIED_BY`` relationship.  Returns up to 10 most recent decisions.",
+        "operationId": "get_code_lineage_v1_enterprise_lineage_get",
+        "parameters": [
+          {
+            "name": "file_path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Path"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/plan_sprint": {
+      "post": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Plan Sprint",
+        "description": "Turn a strategic prompt into a scoped sprint backlog before sprint creation.",
+        "operationId": "plan_sprint_v1_plan_sprint_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SprintPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/plan_self_improvement_sprint": {
+      "post": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Plan Self Improvement Sprint",
+        "description": "Create a bounded autonomous-improvement plan from the repository's own context.",
+        "operationId": "plan_self_improvement_sprint_v1_plan_self_improvement_sprint_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfImprovementSprintRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/start_sprint": {
+      "post": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Start Sprint",
+        "description": "Create a sprint and its initial backlog items in a single transaction.\n\nFor each backlog item an ``OutboxEvent`` is inserted so the background\nworker can publish a ``task.assign`` NATS message once the DB transaction\ncommits.  This guarantees at-least-once delivery without a distributed\ntransaction between Postgres and NATS.",
+        "operationId": "start_sprint_v1_start_sprint_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SprintStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sprints/{sprint_id}/board": {
+      "get": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Get Sprint Board",
+        "description": "Return sprint metadata and all backlog items grouped by Kanban column.\n\nItems whose ``status`` value is not in ``VALID_STATUSES`` are placed in\nthe ``\"todo\"`` column to avoid breaking the frontend rendering.",
+        "operationId": "get_sprint_board_v1_sprints__sprint_id__board_get",
+        "parameters": [
+          {
+            "name": "sprint_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sprint Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backlog/{item_id}": {
+      "patch": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Update Backlog Item",
+        "description": "Partially update a backlog item.\n\nSupports updating ``status``, ``priority``, ``assignee``, or appending a\nnew comment.  All fields are optional; only provided fields are changed.\nInvalid ``status`` or ``priority`` values return HTTP 422.",
+        "operationId": "update_backlog_item_v1_backlog__item_id__patch",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacklogItemUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sprints/{sprint_id}/dispatch": {
+      "post": {
+        "tags": [
+          "Core"
+        ],
+        "summary": "Dispatch Sprint Tasks",
+        "description": "Dispatch all ``todo`` backlog items in a sprint to their assigned agents.\n\nCreates an ``OutboxEvent`` for each eligible item.  The background worker\npublishes these to NATS as ``task.assign`` messages and the task worker\npicks them up.  Items already dispatched (non-todo status) are skipped.",
+        "operationId": "dispatch_sprint_tasks_v1_sprints__sprint_id__dispatch_post",
+        "parameters": [
+          {
+            "name": "sprint_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sprint Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generate": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Generate",
+        "description": "Trigger a LangGraph agent workflow run.",
+        "operationId": "generate_v1_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Audit",
+        "description": "Write an agent decision entry to the audit log.\n\nWrites to both the filesystem JSONL file and the ``audit_log`` database\ntable via ``AgentService.audit_interaction()``.",
+        "operationId": "audit_v1_audit_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audit/verify": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Verify Audit",
+        "description": "Verify every audit row associated with an interaction.",
+        "operationId": "verify_audit_v1_audit_verify_get",
+        "parameters": [
+          {
+            "name": "interaction_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Interaction Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memory/search": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Search Memory",
+        "description": "Search the vector memory store for content similar to *query*.\n\nUses pgvector cosine similarity on pre-computed embeddings.\nReturns up to *limit* results sorted by descending similarity.",
+        "operationId": "search_memory_v1_memory_search_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memory/store": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Store Memory",
+        "description": "Compute and store an embedding for *content* in pgvector and Neo4j.\n\nEmbeddings are generated by the LLM Proxy (``text-embedding-004``).\n*metadata* is an arbitrary JSON dict stored alongside the embedding for\nlater retrieval context.",
+        "operationId": "store_memory_v1_memory_store_post",
+        "parameters": [
+          {
+            "name": "content",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Metadata"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/glassroom/stream": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Glassroom Stream",
+        "description": "Server-Sent Events (SSE) stream for real-time Glassroom monitoring.\n\nOn connect, replays past agent activity from backlog item comments so the\nuser sees the full conversation history.  Then switches to live streaming\nvia NATS.  A keepalive ping is sent every 15 seconds.\n\nIf NATS is unavailable, a red system error event is emitted immediately so\nthe user sees a clear explanation instead of silent inactivity.",
+        "operationId": "glassroom_stream_v1_glassroom_stream_get",
+        "parameters": [
+          {
+            "name": "sprint_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sprint Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs": {
+      "post": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "Create Agent Run",
+        "operationId": "create_agent_run_v1_agent_runs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "List Agent Runs",
+        "operationId": "list_agent_runs_v1_agent_runs_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Producer"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "Get Agent Run",
+        "operationId": "get_agent_run_v1_agent_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs/{run_id}/verify": {
+      "post": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "Verify Run",
+        "operationId": "verify_run_v1_agent_runs__run_id__verify_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunVerificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs/{run_id}/verifications": {
+      "get": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "List Run Verifications",
+        "operationId": "list_run_verifications_v1_agent_runs__run_id__verifications_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs/{run_id}/approve": {
+      "post": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "Approve Run",
+        "operationId": "approve_run_v1_agent_runs__run_id__approve_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunApprovalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent_runs/{run_id}/approvals": {
+      "get": {
+        "tags": [
+          "Agent Runs"
+        ],
+        "summary": "List Run Approvals",
+        "operationId": "list_run_approvals_v1_agent_runs__run_id__approvals_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/report_bug": {
+      "post": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "Report Bug",
+        "description": "Create a structured support ticket and return its auto-generated ticket number.\n\nThe caller should store the returned ``ticket_num`` for status polling via\n``GET /v1/support/tickets/{ticket_num}``.",
+        "operationId": "report_bug_v1_support_report_bug_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BugReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/tickets": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "List Tickets",
+        "description": "List support tickets with optional filters.\n\nAll filters are additive (AND logic).  Results are ordered by\n``created_at`` descending (newest first) and capped at *limit* rows.",
+        "operationId": "list_tickets_v1_support_tickets_get",
+        "parameters": [
+          {
+            "name": "reporter_email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reporter Email"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/tickets/{ticket_num}": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "Get Ticket",
+        "description": "Return the full detail of a single ticket by its ``FAB-XXXXX`` identifier.\n\nTicket numbers are normalised to upper-case before the database lookup.",
+        "operationId": "get_ticket_v1_support_tickets__ticket_num__get",
+        "parameters": [
+          {
+            "name": "ticket_num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticket Num"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "Update Ticket Status",
+        "description": "Update the status (and optionally resolution / assignee) of a ticket.\n\nWhen the status transitions to ``\"resolved\"`` or ``\"closed\"``,\n``resolved_at`` is automatically set to the current UTC timestamp.",
+        "operationId": "update_ticket_status_v1_support_tickets__ticket_num__patch",
+        "parameters": [
+          {
+            "name": "ticket_num",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticket Num"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BugStatusUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/chat": {
+      "post": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "Support Chat",
+        "description": "Bilingual AI support assistant powered by Gemini 1.5 Flash.\n\nPrepends a fixed system prompt that instructs the model to answer in the\nsame language the user is writing in (English or Spanish).  The entire\nconversation history is forwarded on each request so the model has context\nfrom previous turns.\n\nRaises HTTP 503 if the LLM Proxy is unavailable.",
+        "operationId": "support_chat_v1_support_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/logs": {
+      "get": {
+        "tags": [
+          "Support"
+        ],
+        "summary": "Download Support Logs",
+        "description": "Download the latest structured audit log as a JSONL file.\n\nReturns the file at ``AUDIT_LOG_PATH/audit.jsonl`` as an attachment.\nRaises HTTP 404 if no log file exists yet (e.g. no workflow has run).",
+        "operationId": "download_support_logs_v1_support_logs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/github/bindings": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "Create Github Binding",
+        "operationId": "create_github_binding_v1_integrations_github_bindings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/github/webhook": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "Github Webhook",
+        "operationId": "github_webhook_v1_integrations_github_webhook_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/integrations/github/backfill": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "Backfill Github Repository",
+        "operationId": "backfill_github_repository_v1_integrations_github_backfill_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubBackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentRunApprovalRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "approver_name": {
+            "type": "string",
+            "title": "Approver Name"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "rejection_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Category"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "approver_name",
+          "decision"
+        ],
+        "title": "AgentRunApprovalRequest",
+        "description": "Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."
+      },
+      "AgentRunCreate": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "external_ref": {
+            "type": "string",
+            "title": "External Ref"
+          },
+          "producer": {
+            "type": "string",
+            "title": "Producer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "agent_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Role"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "claims": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims"
+          },
+          "artifact": {
+            "type": "string",
+            "title": "Artifact",
+            "default": ""
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "company_id",
+          "external_ref",
+          "producer"
+        ],
+        "title": "AgentRunCreate"
+      },
+      "AgentRunVerificationRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "AgentRunVerificationRequest"
+      },
+      "AuditRequest": {
+        "properties": {
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "decision_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Signature"
+          },
+          "cost_tokens": {
+            "type": "integer",
+            "title": "Cost Tokens",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "AuditRequest",
+        "description": "Payload for ``POST /v1/audit`` — records an agent decision to the audit log."
+      },
+      "BacklogItemUpdate": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "BacklogItemUpdate",
+        "description": "Payload for ``PATCH /v1/backlog/{item_id}`` — partial backlog item update."
+      },
+      "BugReportRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity",
+            "default": "medium"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": "bug"
+          },
+          "reporter_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporter Email"
+          },
+          "browser_info": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Browser Info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "title": "BugReportRequest",
+        "description": "Payload for ``POST /v1/support/report_bug`` — creates a support ticket."
+      },
+      "BugStatusUpdateRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "assigned_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "BugStatusUpdateRequest",
+        "description": "Payload for ``PATCH /v1/support/tickets/{ticket_num}`` — updates ticket state."
+      },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage",
+        "description": "A single turn in a support-chat conversation."
+      },
+      "CompanyInitRequest": {
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "default_scope_size": {
+            "type": "string",
+            "title": "Default Scope Size",
+            "default": "M"
+          },
+          "default_sprint_length_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Sprint Length Days"
+          },
+          "autonomy_level": {
+            "type": "integer",
+            "title": "Autonomy Level",
+            "default": 2
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "agents": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Agents",
+            "default": []
+          },
+          "permissions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permissions"
+          },
+          "governance": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governance"
+          },
+          "project_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Path"
+          },
+          "detected_stack": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Stack"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_name"
+        ],
+        "title": "CompanyInitRequest",
+        "description": "Payload for ``POST /v1/init_company`` — bootstraps a new tenant."
+      },
+      "DiscoveryRequest": {
+        "properties": {
+          "project_path": {
+            "type": "string",
+            "title": "Project Path"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_path"
+        ],
+        "title": "DiscoveryRequest",
+        "description": "Payload for ``POST /v1/discover_team`` — analyses a project path."
+      },
+      "GenerateRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "business_unit_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Unit Id"
+          },
+          "story": {
+            "type": "string",
+            "title": "Story"
+          },
+          "constraints": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraints"
+          },
+          "interaction_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "story"
+        ],
+        "title": "GenerateRequest",
+        "description": "Payload for ``POST /v1/generate`` — triggers the LangGraph agent workflow."
+      },
+      "GitHubBackfillRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "owner": {
+            "type": "string",
+            "title": "Owner"
+          },
+          "repo": {
+            "type": "string",
+            "title": "Repo"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "owner",
+          "repo"
+        ],
+        "title": "GitHubBackfillRequest"
+      },
+      "GitHubBindingRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Owner"
+          },
+          "repo": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Repo"
+          },
+          "webhook_secret": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Webhook Secret"
+          },
+          "inclusion_rule": {
+            "type": "string",
+            "enum": [
+              "all",
+              "bots_only",
+              "non_bots"
+            ],
+            "title": "Inclusion Rule",
+            "default": "all"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "owner",
+          "repo",
+          "webhook_secret"
+        ],
+        "title": "GitHubBindingRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InviteMemberRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "human_role": {
+            "type": "string",
+            "title": "Human Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "email",
+          "human_role"
+        ],
+        "title": "InviteMemberRequest",
+        "description": "Payload for ``POST /v1/company/invite`` — adds a user to a company."
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "Payload for ``POST /v1/auth/login`` — authenticates a human user."
+      },
+      "OrchestrationHealthResponse": {
+        "properties": {
+          "anchor_commit": {
+            "type": "string",
+            "title": "Anchor Commit"
+          },
+          "anchor_date": {
+            "type": "string",
+            "title": "Anchor Date"
+          },
+          "weeks": {
+            "items": {
+              "$ref": "#/components/schemas/OrchestrationHealthWeek"
+            },
+            "type": "array",
+            "title": "Weeks"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/OrchestrationHealthSummaries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anchor_commit",
+          "anchor_date",
+          "weeks",
+          "summary"
+        ],
+        "title": "OrchestrationHealthResponse",
+        "description": "Response shape for ``GET /v1/analytics/orchestration_health``."
+      },
+      "OrchestrationHealthSummaries": {
+        "properties": {
+          "pre_batch1": {
+            "$ref": "#/components/schemas/OrchestrationHealthSummary"
+          },
+          "post_batch1": {
+            "$ref": "#/components/schemas/OrchestrationHealthSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pre_batch1",
+          "post_batch1"
+        ],
+        "title": "OrchestrationHealthSummaries"
+      },
+      "OrchestrationHealthSummary": {
+        "properties": {
+          "qa_needs_work_rate": {
+            "type": "number",
+            "title": "Qa Needs Work Rate"
+          },
+          "avg_developer_tokens": {
+            "type": "number",
+            "title": "Avg Developer Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "qa_needs_work_rate",
+          "avg_developer_tokens"
+        ],
+        "title": "OrchestrationHealthSummary",
+        "description": "Aggregated pre/post Batch-1 averages."
+      },
+      "OrchestrationHealthWeek": {
+        "properties": {
+          "week": {
+            "type": "string",
+            "title": "Week"
+          },
+          "qa_needs_work_rate": {
+            "type": "number",
+            "title": "Qa Needs Work Rate"
+          },
+          "avg_developer_tokens": {
+            "type": "number",
+            "title": "Avg Developer Tokens"
+          },
+          "architect_consult_count": {
+            "type": "integer",
+            "title": "Architect Consult Count"
+          },
+          "task_count": {
+            "type": "integer",
+            "title": "Task Count"
+          },
+          "post_batch1": {
+            "type": "boolean",
+            "title": "Post Batch1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "week",
+          "qa_needs_work_rate",
+          "avg_developer_tokens",
+          "architect_consult_count",
+          "task_count",
+          "post_batch1"
+        ],
+        "title": "OrchestrationHealthWeek",
+        "description": "Per-week KPI snapshot for the orchestration health endpoint."
+      },
+      "SelfImprovementSprintRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "scope_size": {
+            "type": "string",
+            "title": "Scope Size",
+            "default": "M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id"
+        ],
+        "title": "SelfImprovementSprintRequest",
+        "description": "Payload for ``POST /v1/plan_self_improvement_sprint`` — plans an autonomous improvement sprint."
+      },
+      "SprintPlanRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt"
+          },
+          "scope_size": {
+            "type": "string",
+            "title": "Scope Size",
+            "default": "M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "prompt"
+        ],
+        "title": "SprintPlanRequest",
+        "description": "Payload for ``POST /v1/plan_sprint`` — turns a strategic prompt into a sprint backlog."
+      },
+      "SprintStartRequest": {
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "title": "Company Id"
+          },
+          "sprint_name": {
+            "type": "string",
+            "title": "Sprint Name"
+          },
+          "start_date": {
+            "type": "string",
+            "title": "Start Date"
+          },
+          "scope_size": {
+            "type": "string",
+            "title": "Scope Size",
+            "default": "M"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "duration_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Days"
+          },
+          "backlog_items": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Backlog Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "company_id",
+          "sprint_name",
+          "start_date",
+          "backlog_items"
+        ],
+        "title": "SprintStartRequest",
+        "description": "Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."
+      },
+      "SupportChatRequest": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "SupportChatRequest",
+        "description": "Payload for ``POST /v1/support/chat`` — multi-turn LLM support conversation."
+      },
+      "UserCreateRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "full_name",
+          "password"
+        ],
+        "title": "UserCreateRequest",
+        "description": "Payload for ``POST /v1/auth/register`` — creates a human platform user."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Core",
+      "description": "Factory initialization and sprint management"
+    },
+    {
+      "name": "Enterprise",
+      "description": "Multi-tenancy, Quotas, and Governance"
+    },
+    {
+      "name": "Support",
+      "description": "System health, logs, and bug reporting"
+    },
+    {
+      "name": "Agents",
+      "description": "LangGraph orchestration and Glassroom SSE"
+    },
+    {
+      "name": "Auth",
+      "description": "User registration and company membership"
+    }
+  ]
+}
