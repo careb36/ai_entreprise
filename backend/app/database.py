@@ -128,6 +128,11 @@ def get_neo4j_driver() -> neo4j.Driver:
 
 def ensure_memory_graph_schema(driver) -> None:
     """Backfill historical graph ownership without rewriting evidence metadata."""
+    from models.company import Company
+    from sqlmodel import select
+
+    with Session(engine) as sql_session:
+        company_ids = list(sql_session.exec(select(Company.id)).all())
     with driver.session() as session:
         session.run(
             """
@@ -141,8 +146,11 @@ def ensure_memory_graph_schema(driver) -> None:
             MATCH (e)
             WHERE (e:Memory OR any(label IN labels(e) WHERE label STARTS WITH 'Episodic'))
               AND e.company_id IS NULL AND e.metadata IS NOT NULL
-            SET e.company_id = toInteger(apoc.convert.fromJsonMap(e.metadata).company_id)
-            """
+            WITH e, toInteger(apoc.convert.fromJsonMap(e.metadata).company_id) AS company_id
+            WHERE company_id IN $company_ids
+            SET e.company_id = company_id
+            """,
+            company_ids=company_ids,
         ).consume()
         session.run(
             "CREATE INDEX episodic_company_id IF NOT EXISTS FOR (e:Episodic) ON (e.company_id)"

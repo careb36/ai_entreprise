@@ -77,10 +77,15 @@ def test_engram_vector_insert_has_company_column():
 
 def test_graph_schema_backfills_without_rewriting_metadata():
     driver = MagicMock()
-    ensure_memory_graph_schema(driver)
+    with patch("database.Session") as session:
+        session.return_value.__enter__.return_value.exec.return_value.all.return_value = [7, 8]
+        ensure_memory_graph_schema(driver)
     queries = [call.args[0] for call in driver.session.return_value.__enter__.return_value.run.call_args_list]
     assert "SET e:Episodic" in queries[0]
     assert "e.company_id IS NULL" in queries[1]
     assert "fromJsonMap(e.metadata).company_id" in queries[1]
+    assert "WHERE company_id IN $company_ids" in queries[1]
+    calls = driver.session.return_value.__enter__.return_value.run.call_args_list
+    assert calls[1].kwargs["company_ids"] == [7, 8]
     assert "SET e.metadata" not in queries[1]
     assert "ON (e.company_id)" in queries[2]
