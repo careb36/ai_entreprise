@@ -61,14 +61,15 @@ class ModelFactory:
     """
 
     # Maps each role to its preferred model and generation parameters.
+    # Using DeepSeek + Qwen (Alibaba Cloud) instead of Gemini.
     ROLE_MODEL_MAP: Dict[AgentRole, LLMConfig] = {
-        AgentRole.PO:               LLMConfig(model_name="gemini-2.5-pro",   temperature=0.3, max_tokens=4096),
-        AgentRole.ARCHITECT:        LLMConfig(model_name="gemini-2.5-pro",   temperature=0.2, max_tokens=4096),
-        AgentRole.SCRUM_MASTER:     LLMConfig(model_name="gemini-2.5-pro",   temperature=0.5, max_tokens=2048),
+        AgentRole.PO:               LLMConfig(model_name="qwen-plus",        temperature=0.3, max_tokens=4096),
+        AgentRole.ARCHITECT:        LLMConfig(model_name="qwen-plus",        temperature=0.2, max_tokens=4096),
+        AgentRole.SCRUM_MASTER:     LLMConfig(model_name="qwen-plus",        temperature=0.5, max_tokens=2048),
         AgentRole.DEVELOPER:        LLMConfig(model_name="deepseek-coder",   temperature=0.2, max_tokens=4096),
         AgentRole.QA:               LLMConfig(model_name="deepseek-coder",   temperature=0.2, max_tokens=4096),
-        AgentRole.SECOPS:           LLMConfig(model_name="gemini-2.5-pro",   temperature=0.1, max_tokens=4096),  # precision-critical
-        AgentRole.TECH_WRITER:      LLMConfig(model_name="gemini-2.5-flash", temperature=0.4, max_tokens=4096),
+        AgentRole.SECOPS:           LLMConfig(model_name="qwen-plus",        temperature=0.1, max_tokens=4096),  # precision-critical
+        AgentRole.TECH_WRITER:      LLMConfig(model_name="deepseek-chat",   temperature=0.4, max_tokens=4096),
         AgentRole.ENGRAM_PROCESSOR: LLMConfig(model_name="deepseek-coder",   temperature=0.1, max_tokens=2048),
     }
 

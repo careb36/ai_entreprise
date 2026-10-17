@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: Optional[str] = None
 
     # ---------------------------------------------------------------------------
+    # LLM API Keys
+    # ---------------------------------------------------------------------------
+    GEMINI_API_KEY: Optional[str] = None
+    DEEPSEEK_API_KEY: Optional[str] = None
+    QWEN_API_KEY: Optional[str] = None
+
+    # ---------------------------------------------------------------------------
     # Security — rate limiting and CORS
     # ---------------------------------------------------------------------------
     RATE_LIMIT_DEFAULT: str = "100/minute"

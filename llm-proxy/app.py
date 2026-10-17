@@ -58,8 +58,10 @@ _tracer = trace.get_tracer(__name__)
 # --- Config & Logging ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
 GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
+QWEN_PROXY_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
@@ -211,6 +213,22 @@ def add_quota_warning_header(response):
         logger.error(f"Quota warning check failed: {e}")
     return response
 
+# --- Usage Tracking ---
+def track_usage_in_db(bu_id, tokens):
+    """Track token usage in the database for a business unit."""
+    if not bu_id:
+        return
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("UPDATE business_units SET token_quota_used = token_quota_used + :tokens WHERE id = :id"),
+                {"tokens": tokens, "id": bu_id},
+            )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to track usage in DB: {e}")
+
+
 # --- API Endpoints ---
 
 @app.route("/health")
@@ -256,6 +274,17 @@ def list_models():
              "description": "Balanced reasoning and conversation"},
         ])
 
+    # Qwen models are available only when the API key is configured.
+    if QWEN_API_KEY:
+        models.extend([
+            {"id": "qwen-plus",  "provider": "qwen", "tier": "strategic",
+             "description": "Qwen Plus — strong reasoning, architecture, and stakeholder decisions"},
+            {"id": "qwen-turbo", "provider": "qwen", "tier": "balanced",
+             "description": "Qwen Turbo — fast reasoning and coordination"},
+            {"id": "qwen-max",   "provider": "qwen", "tier": "strategic",
+             "description": "Qwen Max — highest capability model"},
+        ])
+
     # Pick the best non-preview balanced/fast model for orchestration tasks
     # (team suggestion, routing decisions) — prefer stability over power.
     orchestrator = _pick_orchestrator(models)
@@ -292,7 +321,16 @@ def chat_completions():
     agent_role = request.headers.get("X-Agent-Role", "Developer")
 
     try:
-        if "deepseek" in model.lower():
+        if "qwen" in model.lower():
+            resp = requests.post(
+                f"{QWEN_PROXY_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
+                json=data,
+                timeout=60,
+            )
+            result = resp.json()
+            tokens = result.get("usage", {}).get("total_tokens", 0)
+        elif "deepseek" in model.lower():
             resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=data, timeout=60)
             result = resp.json()
             tokens = result.get("usage", {}).get("total_tokens", 0)
