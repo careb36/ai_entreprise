@@ -488,8 +488,9 @@ export default function CompanyNew() {
           className="input flex-1 font-mono text-sm" />
         <button type="button" onClick={async () => {
           try {
-            const res = await fetch('/v1/discover/directories', {
-              headers: { 'Authorization': `Bearer ${useAuthStore.getState().token}` }
+            const token = useAuthStore.getState().token
+            const res = await fetch('http://localhost:8000/v1/discover/directories', {
+              headers: { 'Authorization': `Bearer ${token}` }
             })
             const data = await res.json()
             if (data.directories && data.directories.length > 0) {
