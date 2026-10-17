@@ -455,10 +455,17 @@ export default function CompanyNew() {
         setCompany(companyId, companyName.trim())
         // Navigate immediately, load profile in background
         navigate(`/workspace/${sprintId}`)
+        // Fallback navigation in case React Router doesn't work
+        setTimeout(() => {
+          if (window.location.pathname !== `/workspace/${sprintId}`) {
+            window.location.href = `/workspace/${sprintId}`
+          }
+        }, 1000)
         useAuthStore.getState().loadMe().catch(() => {})
       },
       onError: (error: any) => {
         console.error('Init company failed:', error)
+        alert('Error al inicializar la empresa: ' + (error?.message || 'Error desconocido'))
       }
     })
   }
