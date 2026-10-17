@@ -488,16 +488,26 @@ export default function CompanyNew() {
           className="input flex-1 font-mono text-sm" />
         <button type="button" onClick={async () => {
           try {
-            if ('showDirectoryPicker' in window) {
-              const dirHandle = await (window as any).showDirectoryPicker()
-              setProjectPath(dirHandle.name)
+            const res = await fetch('/v1/discover/directories', {
+              headers: { 'Authorization': `Bearer ${useAuthStore.getState().token}` }
+            })
+            const data = await res.json()
+            if (data.directories && data.directories.length > 0) {
+              const names = data.directories.map((d: { name: string; path: string }) => d.name).join('\n')
+              const selected = prompt(`Directorios disponibles en ${data.root}:\n\n${names}\n\nEscribe el nombre del directorio:`)
+              if (selected) {
+                const dir = data.directories.find((d: { name: string; path: string }) => d.name === selected)
+                if (dir) {
+                  setProjectPath(dir.path)
+                } else {
+                  alert('Directorio no encontrado: ' + selected)
+                }
+              }
             } else {
-              alert('Tu navegador no soporta el selector de directorios. Por favor, escribe la ruta manualmente.')
+              alert('No se encontraron directorios en ' + data.root)
             }
           } catch (err) {
-            if ((err as Error).name !== 'AbortError') {
-              alert('No se pudo seleccionar el directorio: ' + (err as Error).message)
-            }
+            alert('Error al listar directorios: ' + (err as Error).message)
           }
         }}
           className="btn btn-secondary flex-shrink-0">

@@ -400,3 +400,27 @@ async def get_code_lineage(file_path: str, company_id: int | None = None, sessio
     except Exception as e:
         logger.error(f"Lineage query failed: {e}")
         raise HTTPException(status_code=500, detail="Neo4j Time Travel query failed.")
+
+
+@router.get("/discover/directories", tags=["Enterprise"])
+async def list_project_directories(
+    user: User | None = Depends(current_user_if_required),
+):
+    """
+    List available project directories inside the container's /projects mount.
+    Used by the frontend "Examinar" (Browse) button.
+    """
+    require_authenticated(user)
+    import os
+    from pathlib import Path
+
+    projects_root = os.getenv("PROJECTS_ROOT_CONTAINER", "/projects")
+    root = Path(projects_root)
+    if not root.exists() or not root.is_dir():
+        return {"directories": [], "root": projects_root}
+
+    dirs = []
+    for entry in sorted(root.iterdir()):
+        if entry.is_dir() and not entry.name.startswith("."):
+            dirs.append({"name": entry.name, "path": str(entry)})
+    return {"directories": dirs, "root": projects_root}
