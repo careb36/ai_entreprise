@@ -357,6 +357,8 @@ export default function CompanyNew() {
   // Step 0 — Project
   const [projectPath, setProjectPath] = useState(DEFAULT_PROJECT_PATH)
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
+  const [availableDirs, setAvailableDirs] = useState<{ name: string; path: string }[]>([])
+  const [showDirPicker, setShowDirPicker] = useState(false)
 
   // Step 1 — Company
   const [companyName, setCompanyName] = useState('')
@@ -491,7 +493,7 @@ export default function CompanyNew() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col sm:flex-row gap-2 relative">
         <input type="text" value={projectPath} onChange={e => setProjectPath(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleDiscover()}
           placeholder="/projects/le-fabrique  (path inside the Docker container)"
@@ -504,16 +506,9 @@ export default function CompanyNew() {
             })
             const data = await res.json()
             if (data.directories && data.directories.length > 0) {
-              const names = data.directories.map((d: { name: string; path: string }) => d.name).join('\n')
-              const selected = prompt(`Directorios disponibles en ${data.root}:\n\n${names}\n\nEscribe el nombre del directorio:`)
-              if (selected) {
-                const dir = data.directories.find((d: { name: string; path: string }) => d.name === selected)
-                if (dir) {
-                  setProjectPath(dir.path)
-                } else {
-                  alert('Directorio no encontrado: ' + selected)
-                }
-              }
+              // Show a dropdown by setting a state with the directories
+              setAvailableDirs(data.directories)
+              setShowDirPicker(true)
             } else {
               alert('No se encontraron directorios en ' + data.root)
             }
@@ -524,6 +519,30 @@ export default function CompanyNew() {
           className="btn btn-secondary flex-shrink-0">
           📂 Examinar
         </button>
+        {showDirPicker && availableDirs.length > 0 && (
+          <div className="absolute z-10 mt-1 w-full bg-surface-800 border border-surface-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            {availableDirs.map((dir: { name: string; path: string }) => (
+              <button
+                key={dir.path}
+                type="button"
+                onClick={() => {
+                  setProjectPath(dir.path)
+                  setShowDirPicker(false)
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-surface-700 transition-colors font-mono"
+              >
+                📁 {dir.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowDirPicker(false)}
+              className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-surface-700 transition-colors"
+            >
+              ✕ Cerrar
+            </button>
+          </div>
+        )}
         <button type="button" onClick={handleDiscover}
           disabled={discoverTeamMutation.isPending || !projectPath.trim()}
           className="btn btn-primary flex-shrink-0 min-w-28">
