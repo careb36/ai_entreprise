@@ -16,6 +16,14 @@ async def current_user_if_required(
     request: Request, session: Session = Depends(get_session)
 ) -> User | None:
     if not settings.AUTH_REQUIRED:
+        # Even when auth is not required, resolve the user from the token
+        # if one is provided, so company ownership and memberships work.
+        try:
+            creds = await bearer(request)
+            if creds is not None and creds.credentials:
+                return get_current_user(credentials=creds, session=session)
+        except Exception:
+            pass
         return None
     return get_current_user(credentials=await bearer(request), session=session)
 
