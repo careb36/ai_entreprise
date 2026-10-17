@@ -293,7 +293,9 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
     if (!response.ok) {
       if (
         response.status === 401 &&
-        endpoint.split('?')[0] !== '/v1/auth/login'
+        endpoint.split('?')[0] !== '/v1/auth/login' &&
+        token &&
+        useAuthStore.getState().token === token
       ) {
         useAuthStore.getState().logout()
         onUnauthorized?.()

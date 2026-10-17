@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import ProtectedRoute from './ProtectedRoute'
 import CompanySelect from '../pages/CompanySelect'
 import { useAuthStore } from '../store/useAuthStore'
 import { useAppStore } from '../store/useAppStore'
+import { api } from '../services/api'
 
 function CurrentPath() {
   const location = useLocation()
@@ -40,6 +41,8 @@ function authenticate(memberships: { company_id: number; human_role: 'Owner' | '
 }
 
 describe('ProtectedRoute company access', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   beforeEach(() => {
     useAuthStore.getState().logout()
     useAppStore.getState().setCompany(null, null)
@@ -101,5 +104,21 @@ describe('ProtectedRoute company access', () => {
     expect(useAppStore.getState().companyId).toBeNull()
     expect(useAppStore.getState().companyName).toBeNull()
     expect(useAppStore.getState().activeSprintId).toBeNull()
+  })
+
+  it('loads a failed profile once until Retry is clicked (issue #3)', async () => {
+    const me = vi.spyOn(api, 'me')
+      .mockRejectedValueOnce(new Error('Profile unavailable'))
+      .mockImplementationOnce(() => new Promise(() => {}))
+    authenticate([{ company_id: 14, human_role: 'Owner' }])
+    useAuthStore.setState({ meLoaded: false })
+
+    await act(async () => { renderRoutes('/dashboard') })
+
+    expect(me).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert')).toHaveTextContent('Profile unavailable')
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(me).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })

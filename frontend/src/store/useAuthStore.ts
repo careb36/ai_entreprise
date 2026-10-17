@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { api, type AuthProfile, type AuthUser, type CompanyMembership } from '../services/api'
 import { useAppStore } from './useAppStore'
+import { queryClient } from '../lib/queryClient'
 
 interface AuthState {
   token: string | null
@@ -29,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
       profileError: null,
 
       login: async (email, password) => {
+        queryClient.clear()
         const response = await api.login(email, password)
         set({
           token: response.access_token,
@@ -40,9 +42,11 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loadMe: async () => {
+        const token = get().token
         set({ loadingMe: true, profileError: null })
         try {
           const profile: AuthProfile = await api.me()
+          if (get().token !== token) return
           const { user_id, email, full_name, memberships } = profile
           set({
             user: { user_id, email, full_name },
@@ -50,14 +54,16 @@ export const useAuthStore = create<AuthState>()(
             meLoaded: true,
           })
         } catch (error) {
+          if (get().token !== token) return
           set({ profileError: error instanceof Error ? error.message : String(error) })
           throw error
         } finally {
-          set({ loadingMe: false })
+          if (get().token === token) set({ loadingMe: false })
         }
       },
 
       logout: () => {
+        queryClient.clear()
         set({
           token: null,
           expiresAt: null,

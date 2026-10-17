@@ -449,12 +449,13 @@ export default function CompanyNew() {
     }
 
     initCompanyMutation.mutate(payload, {
-      onSuccess: async (response: InitCompanyResponse) => {
+      onSuccess: (response: InitCompanyResponse) => {
         const companyId = response.company_id
         const sprintId = response?.sprint_id ?? companyId
-        await useAuthStore.getState().loadMe()
+        const refresh = useAuthStore.getState().loadMe()
         setCompany(companyId, companyName.trim())
         navigate(`/workspace/${sprintId}`)
+        void refresh.catch(() => {})
       }
     })
   }

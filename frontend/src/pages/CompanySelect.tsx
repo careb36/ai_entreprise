@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
@@ -6,6 +6,7 @@ import { useAuthStore } from '../store/useAuthStore'
 export default function CompanySelect() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const memberships = useAuthStore(state => state.memberships)
   const setCompany = useAppStore(state => state.setCompany)
 
@@ -14,7 +15,10 @@ export default function CompanySelect() {
       companyId,
       t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' }),
     )
-    navigate('/', { replace: true })
+    const from = searchParams.get('from') || '/'
+    const destination = from.startsWith('/') && !from.startsWith('//') &&
+      from.split(/[?#]/)[0] !== '/companies/select' ? from : '/'
+    navigate(destination, { replace: true })
   }
 
   return (
