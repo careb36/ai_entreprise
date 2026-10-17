@@ -27,8 +27,8 @@
       "tooltip": "Search distributed traces for the LangGraph agent worker",
       "type": "link",
       "url": "http://localhost:16686/search?service=agent-worker"
-      },
-      {
+    },
+    {
       "asDropdown": true,
       "icon": "external link",
       "includeVars": false,
@@ -39,7 +39,7 @@
       "tooltip": "Search distributed traces for the LLM proxy",
       "type": "link",
       "url": "http://localhost:16686/search?service=llm-proxy"
-      }
+    }
   ],
   "panels": [
     {
