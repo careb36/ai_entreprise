@@ -8,6 +8,7 @@ Endpoints:
 - ``GET  /v1/analytics/summary``   — AI Scrum Master sprint health report.
 - ``POST /v1/discover_team``       — auto-detect project stack and suggest an AI team.
 - ``GET  /v1/enterprise/lineage``  — time-travel debugging: architectural decisions for a file.
+- ``GET  /v1/capabilities``        — public report of which optional backend features are enabled.
 """
 
 import asyncio
@@ -19,6 +20,7 @@ from auth_policy import (
     require_company_role,
     viewer_company_ids,
 )
+from config import settings
 from database import get_neo4j_driver, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logging_config import logger
@@ -315,6 +317,22 @@ async def get_orchestration_health(
             ),
         ),
     )
+
+
+@router.get("/capabilities", tags=["Enterprise"])
+async def get_capabilities(request: Request) -> dict[str, bool]:
+    """
+    Report which optional backend features are available.
+
+    Public like ``/health``: it exposes configuration flags, never company
+    data, so the frontend can hide navigation for disabled features.
+    """
+    return {
+        "agent_graph": bool(settings.AGENT_GRAPH_ENABLED),
+        "memory": getattr(request.app.state, "memory_client", None) is not None,
+        "github": bool(settings.GITHUB_TOKEN),
+        "auth_required": bool(settings.AUTH_REQUIRED),
+    }
 
 
 @router.get("/models", tags=["Enterprise"])
