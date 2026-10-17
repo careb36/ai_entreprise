@@ -13,8 +13,10 @@ from routers.agents import router as agents_router
 from routers.agent_runs import router as agent_runs_router
 from routers.support import router as support_router
 from routers.github import router as github_router
+from routers.core import router as core_router
 
 __all__ = [
+    "core_router",
     "auth_router",
     "enterprise_router",
     "sprint_router",

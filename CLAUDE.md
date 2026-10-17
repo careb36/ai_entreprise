@@ -83,7 +83,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Key Components
 
-**`backend/app/main.py`** — All FastAPI routes (single large file). Responsible for: company init, sprint management, kanban board state, memory search/store, enterprise quotas, support tickets, and analytics.
+**`backend/app/main.py`** — FastAPI app configuration and router composition. HTTP endpoints live in `backend/app/routers/`; application startup, shutdown, and exception handling live in `backend/app/lifecycle.py`.
 
 **`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 

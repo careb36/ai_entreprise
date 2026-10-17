@@ -1,0 +1,7 @@
+def test_health_endpoint(test_client):
+    response = test_client.get("/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "healthy"
+    assert "timestamp" in body

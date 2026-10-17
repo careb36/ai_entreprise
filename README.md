@@ -289,11 +289,12 @@ la-fabrique/
 │   │   └── tools/
 │   │       └── openproject_tools.py  # Work package creation
 │   ├── app/
-│   │   ├── main.py                   # FastAPI entry point · 4 bg workers · SSE bridge
+│   │   ├── main.py                   # FastAPI app setup and router composition
+│   │   ├── lifecycle.py              # Startup/shutdown hooks and exception handling
 │   │   ├── models/                   # SQLModel ORM (Sprint, Company, BacklogItem…)
 │   │   ├── schemas.py                # Pydantic request/response schemas
 │   │   ├── database.py               # Engine · session · _ensure_runtime_schema()
-│   │   ├── routers/                  # sprint · agents · enterprise · support
+│   │   ├── routers/                  # auth · core · sprint · agents · enterprise · support · GitHub
 │   │   ├── services/
 │   │   │   ├── agent_worker.py       # NATS consumer → LangGraph execution
 │   │   │   ├── task_worker.py        # Task assignment worker
