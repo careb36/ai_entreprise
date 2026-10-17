@@ -8,8 +8,7 @@ Endpoints:
 - ``POST /v1/company/invite`` — invite an existing user to collaborate on a company.
 
 Passwords are hashed with bcrypt via ``passlib`` before storage.
-JWT login and user resolution are available; enforcing authentication on other
-endpoints is a follow-up.
+Sensitive-route enforcement is gated by AUTH_REQUIRED.
 """
 
 from datetime import timedelta
@@ -19,6 +18,7 @@ from sqlmodel import Session, select, text
 
 import auth_tokens
 from auth_deps import get_current_user
+from auth_policy import current_user_if_required, require_company_role
 from config import settings
 from database import get_session
 from models import User, CompanyMember
@@ -99,7 +99,7 @@ async def get_me(
 
 
 @router.post("/company/invite")
-async def invite_member(req: InviteMemberRequest, session: Session = Depends(get_session)):
+async def invite_member(req: InviteMemberRequest, session: Session = Depends(get_session), caller: User | None = Depends(current_user_if_required)):
     """
     Invite a registered user to collaborate on a company.
 
@@ -107,6 +107,7 @@ async def invite_member(req: InviteMemberRequest, session: Session = Depends(get
     ``human_role`` determines which governance capabilities the user has:
     ``"Owner"`` > ``"Manager"`` > ``"Viewer"``.
     """
+    require_company_role(session, caller, req.company_id, "Owner")
     user = session.exec(select(User).where(User.email == req.email)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

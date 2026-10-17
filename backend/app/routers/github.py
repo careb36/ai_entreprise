@@ -10,6 +10,8 @@ from sqlmodel import Session, select
 
 from crypto import CredentialCryptoError, decrypt_value, encrypt_value
 from database import get_session
+from auth_policy import current_user_if_required, require_company_role
+from models import User
 from models.github import GitHubRepoBinding
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services import github_adapter
@@ -73,8 +75,10 @@ def _ingest_pr(
 
 @router.post("/bindings", status_code=201)
 def create_github_binding(
-    payload: GitHubBindingRequest, session: Session = Depends(get_session)
+    payload: GitHubBindingRequest, session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, payload.company_id, "Manager")
     owner, repo = payload.owner.casefold(), payload.repo.casefold()
     if _repository_binding(session, owner, repo) is not None:
         raise HTTPException(status_code=409, detail="Repository is already bound")
@@ -169,8 +173,10 @@ async def github_webhook(request: Request, session: Session = Depends(get_sessio
 
 @router.post("/backfill")
 def backfill_github_repository(
-    payload: GitHubBackfillRequest, session: Session = Depends(get_session)
+    payload: GitHubBackfillRequest, session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, payload.company_id, "Manager")
     binding = _repository_binding(session, payload.owner, payload.repo)
     if binding is None or binding.company_id != payload.company_id:
         raise HTTPException(status_code=404, detail="Repository binding not found")
