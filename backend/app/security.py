@@ -45,8 +45,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Strict transport security (HTTPS only)
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
-        # Content security policy
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        # Content security policy (allow unsafe-eval for Vite/React dev mode)
+        response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:"
 
         # Referrer policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
