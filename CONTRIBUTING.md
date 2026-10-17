@@ -67,8 +67,8 @@ All commits must follow the [Conventional Commits](https://www.conventionalcommi
 
 ```bash
 # Clone the repository
-git clone https://github.com/careb36/le-fabrique.git
-cd le-fabrique
+git clone https://github.com/careb36/la-fabrique.git
+cd la-fabrique
 
 # Configure environment
 cp .env.example .env
@@ -145,4 +145,4 @@ When working with AI assistants (Copilot, Claude, etc.):
 
 ## Questions?
 
-If you have questions about contributing, please open a [GitHub Discussion](https://github.com/careb36/le-fabrique/discussions) or contact the maintainer.
+If you have questions about contributing, please open a [GitHub Discussion](https://github.com/careb36/la-fabrique/discussions) or contact the maintainer.

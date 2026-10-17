@@ -63,6 +63,51 @@ GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
 
+# --- API Key Validation ---
+def _validate_api_keys():
+    """Validate API keys at startup and log warnings for invalid/missing keys."""
+    errors = []
+    if DEEPSEEK_API_KEY:
+        try:
+            resp = requests.post(
+                f"{DEEPSEEK_PROXY_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
+                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
+                timeout=10,
+            )
+            if resp.status_code == 401 or resp.status_code == 403:
+                errors.append("DEEPSEEK_API_KEY is invalid")
+            else:
+                logger.info("DeepSeek API key validated successfully")
+        except Exception as e:
+            logger.warning(f"Could not validate DeepSeek API key: {e}")
+    else:
+        logger.warning("DEEPSEEK_API_KEY is not set")
+
+    if QWEN_API_KEY:
+        try:
+            resp = requests.post(
+                f"{QWEN_PROXY_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
+                json={"model": "qwen3.6-flash", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
+                timeout=10,
+            )
+            if resp.status_code == 401 or resp.status_code == 403 or "invalid_api_key" in resp.text:
+                errors.append("QWEN_API_KEY is invalid")
+            else:
+                logger.info("Qwen API key validated successfully")
+        except Exception as e:
+            logger.warning(f"Could not validate Qwen API key: {e}")
+    else:
+        logger.warning("QWEN_API_KEY is not set")
+
+    if errors:
+        for err in errors:
+            logger.error(f"API KEY VALIDATION FAILED: {err}")
+        logger.error("Some API keys are invalid. Agent tasks will fail until keys are corrected.")
+
+_validate_api_keys()
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
 if endpoint_base:

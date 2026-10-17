@@ -12,7 +12,7 @@ If you discover a security vulnerability in La Fabrique, please report it respon
 
 **Do not** open a public GitHub issue for security vulnerabilities.
 
-Instead, please report vulnerabilities by opening a [private security advisory](https://github.com/careb36/le-fabrique/security/advisories/new) on GitHub.
+Instead, please report vulnerabilities by opening a [private security advisory](https://github.com/careb36/la-fabrique/security/advisories/new) on GitHub.
 
 Please include:
 - A description of the vulnerability

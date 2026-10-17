@@ -30,5 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **CI/CD Pipeline Foundation:** Set up the initial continuous integration and deployment pipeline using GitHub Actions. The pipeline currently handles automated builds and runs placeholder unit tests on every commit to the `main` branch.
 * **Core Documentation:** Created essential project documentation including `README.md`, `CONTRIBUTING.md`, and this `CHANGELOG.md` to establish development standards and provide a baseline for future contributors.
 
-[unreleased]: https://github.com/careb36/le-fabrique/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/careb36/le-fabrique/releases/tag/v0.1.0
+[unreleased]: https://github.com/careb36/la-fabrique/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/careb36/la-fabrique/releases/tag/v0.1.0
