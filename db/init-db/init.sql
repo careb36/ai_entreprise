@@ -118,7 +118,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details JSONB,
     result JSONB,
     decision_signature VARCHAR(500),
-    cost_tokens INTEGER DEFAULT 0
+    cost_tokens INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS vector_memory (
