@@ -61,9 +61,20 @@ function getAgent(key: string): AgentIdentity {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Memoized date formatters to avoid repeated Intl.DateTimeFormat instantiation
+const _timeFormatter = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hour12: true })
+const _dateFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function _getDateFormatter(lang: string): Intl.DateTimeFormat {
+  if (!_dateFormatters.has(lang)) {
+    _dateFormatters.set(lang, new Intl.DateTimeFormat(lang || 'en', { weekday: 'long', month: 'long', day: 'numeric' }))
+  }
+  return _dateFormatters.get(lang)!
+}
+
 function formatTime(iso: string): string {
   try {
-    return new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(iso))
+    return _timeFormatter.format(new Date(iso))
   } catch { return '' }
 }
 
@@ -75,7 +86,7 @@ function formatDate(iso: string): string {
     yesterday.setDate(today.getDate() - 1)
     if (d.toDateString() === today.toDateString())     return i18n.t('glassroom.today', 'Today')
     if (d.toDateString() === yesterday.toDateString()) return i18n.t('glassroom.yesterday', 'Yesterday')
-    return new Intl.DateTimeFormat(i18n.language || 'en', { weekday: 'long', month: 'long', day: 'numeric' }).format(d)
+    return _getDateFormatter(i18n.language || 'en').format(d)
   } catch { return '' }
 }
 
@@ -992,7 +1003,11 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
   }, [])
 
   useEffect(() => {
-    if (isAtBottom) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (isAtBottom) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      })
+    }
   }, [messages, isAtBottom])
 
   useEffect(() => {
