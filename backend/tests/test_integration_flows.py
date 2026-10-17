@@ -10,10 +10,14 @@ Covers:
 
 import hashlib
 import json
+import secrets
+from uuid import uuid4
 
 import pytest
 from sqlmodel import select
 
+import auth_tokens
+from config import settings
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.audit import AuditLog
 from models.company import Company, User, CompanyMember
@@ -23,6 +27,13 @@ from models.sprint import Sprint, BacklogItem, OutboxEvent
 # ---------------------------------------------------------------------------
 # Helper fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def signing_key(monkeypatch):
+    key = secrets.token_urlsafe(48)
+    monkeypatch.setattr(auth_tokens, "_configured_key", lambda: key)
+    return key
 
 
 def _make_company(session, name="Integration Test Corp"):
@@ -76,24 +87,32 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "M",
-                "backlog": ["Task 1", "Task 2", "Task 3"],
+                "sprint_name": "Integration sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "M",
+                "backlog_items": [{"title": f"Task {i}"} for i in range(1, 4)],
             },
         )
 
         assert response.status_code == 200
         body = response.json()
-        assert body["company_id"] == company_id
-        assert body["scope"] == "M"
-        assert body["status"] == "active"
-        assert len(body["backlog_items"]) == 3
+        assert len(body["backlog_item_ids"]) == 3
+        board_response = test_client.get(body["sprint_url"])
+        assert board_response.status_code == 200
+        assert board_response.json()["sprint"]["scope_size"] == "M"
+        assert board_response.json()["sprint"]["status"] == "active"
 
         # Verify in database
         sprint = sqlite_session.exec(
             select(Sprint).where(Sprint.company_id == company_id)
         ).one()
+        assert sprint.id == body["sprint_id"]
+        assert sprint.company_id == company_id
         assert sprint.status == "active"
-        assert len(sprint.backlog_items) == 3
+        items = sqlite_session.exec(
+            select(BacklogItem).where(BacklogItem.sprint_id == sprint.id)
+        ).all()
+        assert len(items) == 3
 
     def test_sprint_scope_validation(self, sqlite_session, test_client):
         """Verify sprint scope constraints are enforced."""
@@ -104,8 +123,10 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "S",
-                "backlog": ["Task 1", "Task 2", "Task 3", "Task 4", "Task 5"],
+                "sprint_name": "Oversized sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "S",
+                "backlog_items": [{"title": f"Task {i}"} for i in range(1, 6)],
             },
         )
 
@@ -119,13 +140,15 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "S",
-                "backlog": ["Task 1"],
+                "sprint_name": "Transition sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "S",
+                "backlog_items": [{"title": "Task 1"}],
             },
         )
 
         assert response.status_code == 200
-        sprint_id = response.json()["id"]
+        sprint_id = response.json()["sprint_id"]
 
         # Get the backlog item
         item = sqlite_session.exec(
@@ -151,7 +174,7 @@ class TestSprintLifecycle:
 class TestAuthenticationFlow:
     """Test the complete authentication flow."""
 
-    def test_register_login_access_protected_route(self, sqlite_session, test_client):
+    def test_register_login_access_protected_route(self, sqlite_session, test_client, signing_key):
         """Full auth flow: register → login → access protected route."""
         # Register
         register_response = test_client.post(
@@ -162,7 +185,7 @@ class TestAuthenticationFlow:
                 "full_name": "Auth Test User",
             },
         )
-        assert register_response.status_code == 201
+        assert register_response.status_code == 200
         user_id = register_response.json()["user_id"]
 
         # Login
@@ -185,7 +208,7 @@ class TestAuthenticationFlow:
         assert me_response.status_code == 200
         assert me_response.json()["email"] == "auth-test@example.com"
 
-    def test_login_with_wrong_password_fails(self, sqlite_session, test_client):
+    def test_login_with_wrong_password_fails(self, sqlite_session, test_client, signing_key):
         """Verify login fails with wrong password."""
         # Register first
         test_client.post(
@@ -206,12 +229,13 @@ class TestAuthenticationFlow:
         )
         assert response.status_code == 401
 
-    def test_protected_route_requires_auth(self, sqlite_session, test_client):
+    def test_protected_route_requires_auth(self, sqlite_session, test_client, monkeypatch):
         """Verify protected routes reject unauthenticated requests."""
+        monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
         response = test_client.get("/v1/auth/me")
         assert response.status_code == 401
 
-        response = test_client.get("/v1/enterprise/quotas")
+        response = test_client.get("/v1/enterprise/quotas", params={"company_id": 1})
         assert response.status_code == 401
 
 
@@ -233,7 +257,7 @@ class TestAgentRunVerificationCycle:
             "/v1/agent_runs",
             json={
                 "company_id": company_id,
-                "external_ref": "github:test/repo#1",
+                "external_ref": f"integration:{uuid4()}",
                 "producer": "copilot",
                 "artifact": "diff --git a/file.py b/file.py",
                 "claims": {"summary": "Added feature"},
@@ -266,9 +290,9 @@ class TestAgentRunVerificationCycle:
         # Approve
         approve_response = test_client.post(
             f"/v1/agent_runs/{run_id}/approve",
-            json={"company_id": company_id, "decision": "approved"},
+            json={"company_id": company_id, "approver_name": "Test User", "decision": "approved"},
         )
-        assert approve_response.status_code == 200
+        assert approve_response.status_code == 201
 
         # Check approval recorded
         approval = sqlite_session.exec(
@@ -451,7 +475,7 @@ class TestAuditTrail:
         audits = sqlite_session.exec(
             select(AuditLog).where(
                 AuditLog.action == "agent_run_ingested",
-                AuditLog.details["company_id"].astext == str(company_id),
+                AuditLog.company_id == company_id,
             )
         ).all()
         assert len(audits) == 1
@@ -484,7 +508,7 @@ class TestAuditTrail:
         audits = sqlite_session.exec(
             select(AuditLog).where(
                 AuditLog.action == "agent_run_verified",
-                AuditLog.details["company_id"].astext == str(company_id),
+                AuditLog.company_id == company_id,
             )
         ).all()
         assert len(audits) == 1

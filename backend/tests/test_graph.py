@@ -37,9 +37,8 @@ def _canned_result(content: str = "OK", quota_warning: bool = False) -> dict:
 def test_resolve_model_name_known_role():
     from agents.graph import _resolve_model_name
 
-    # PO → Gemini pro
     model = _resolve_model_name("PO")
-    assert "gemini" in model.lower()
+    assert model == "qwen3.7-plus"
 
 
 def test_resolve_model_name_unknown_role_falls_back_to_developer():

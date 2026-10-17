@@ -1,12 +1,15 @@
 from llm.model_factory import AgentRole, ModelFactory, create_completion
 
 
-def test_role_model_map_uses_gemini_2_5_models():
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.PO].model_name == "gemini-2.5-pro"
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.ARCHITECT].model_name == "gemini-2.5-pro"
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.SCRUM_MASTER].model_name == "gemini-2.5-pro"
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.SECOPS].model_name == "gemini-2.5-pro"
-    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.TECH_WRITER].model_name == "gemini-2.5-flash"
+def test_role_model_map_uses_deepseek_and_qwen_models():
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.PO].model_name == "qwen3.7-plus"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.ARCHITECT].model_name == "qwen3.7-plus"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.SCRUM_MASTER].model_name == "qwen3.7-plus"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.SECOPS].model_name == "qwen3.7-plus"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.TECH_WRITER].model_name == "qwen3.6-flash"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name == "deepseek-v4-pro"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.QA].model_name == "deepseek-v4-pro"
+    assert ModelFactory.ROLE_MODEL_MAP[AgentRole.ENGRAM_PROCESSOR].model_name == "deepseek-v4-pro"
 
 
 def test_create_completion_passes_bu_header(monkeypatch):

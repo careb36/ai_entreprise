@@ -19,7 +19,6 @@ import { useAgentStore } from '../store/agentStore'
 import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
-import { ErrorState } from '../components/ErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
