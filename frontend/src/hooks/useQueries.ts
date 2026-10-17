@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useAppStore } from '../store/useAppStore'
 import {
   api,
+  ApiError,
+  isClientError,
   type AgentRunApprovalRequest,
   type AgentRunStatus,
   type BacklogItem,
@@ -141,13 +145,24 @@ export function usePlanSelfImprovementSprint() {
 }
 
 export function useSprintBoard(sprintId: number | null) {
-  return useQuery({
+  const query = useQuery({
     queryKey: QUERY_KEYS.sprintBoard(sprintId || 0),
     queryFn: () => api.getSprintBoard(sprintId!),
     enabled: !!sprintId,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    refetchInterval: 10_000,   // Auto-poll every 10s while agents work
+    refetchInterval: query => isClientError(query.state.error) ? false : 10_000,
   })
+
+  useEffect(() => {
+    if (query.error instanceof ApiError && query.error.status === 404) {
+      const state = useAppStore.getState()
+      if (sprintId !== null && state.activeSprintId === sprintId) {
+        state.setActiveSprint(null)
+      }
+    }
+  }, [sprintId, query.error])
+
+  return query
 }
 
 export function useUpdateBacklogItem() {
@@ -223,7 +238,7 @@ export function useHealth() {
   return useQuery({
     queryKey: ['health'],
     queryFn: api.health,
-    refetchInterval: 30000, // Check every 30s
+    refetchInterval: query => isClientError(query.state.error) ? false : 30_000,
   })
 }
 

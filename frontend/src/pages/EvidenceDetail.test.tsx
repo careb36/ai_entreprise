@@ -12,6 +12,7 @@ import {
   useVerifyAgentRun,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
+import { ApiError } from '../services/api'
 
 vi.mock('../hooks/useQueries', () => ({
   useAgentRun: vi.fn(),
@@ -30,15 +31,38 @@ const mockedUseAuditVerification = vi.mocked(useAuditVerification)
 const mockedUseVerifyAgentRun = vi.mocked(useVerifyAgentRun)
 const approveMutation = vi.fn()
 
-function setup() {
+function setup(id = '7') {
   return render(
-    <MemoryRouter initialEntries={['/evidence/7']}>
+    <MemoryRouter initialEntries={[`/evidence/${id}`]}>
       <Routes><Route path="/evidence/:runId" element={<EvidenceDetail />} /></Routes>
     </MemoryRouter>,
   )
 }
 
 describe('Evidence detail', () => {
+  it.each(['bad', '7x', '0', '-1', '1.5', '9007199254740992'])('rejects malformed run ID %s without querying', id => {
+    setup(id)
+    expect(screen.getByRole('alert')).toHaveTextContent(`Invalid run ID: ${id}`)
+    expect(mockedUseAgentRun).not.toHaveBeenCalled()
+  })
+
+  it('names a run that was not found', () => {
+    mockedUseAgentRun.mockReturnValue({ isError: true, error: new ApiError(404, 'missing') } as never)
+    setup()
+    expect(screen.getByRole('alert')).toHaveTextContent('Run #7 was not found')
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to evidence' })).toHaveAttribute('href', '/evidence')
+  })
+
+  it('names a run that failed to load and offers Retry', () => {
+    const refetch = vi.fn()
+    mockedUseAgentRun.mockReturnValue({ isError: true, error: new ApiError(503, 'failed'), refetch } as never)
+    setup()
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load run #7')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(refetch).toHaveBeenCalledOnce()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     void i18n.changeLanguage('en')

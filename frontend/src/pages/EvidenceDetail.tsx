@@ -13,6 +13,7 @@ import {
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { Verdict } from './Evidence'
+import { parseRouteId } from '../lib/routeId'
 
 function claimValue(value: unknown): string {
   if (typeof value === 'string') return value
@@ -75,7 +76,14 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
     return <div role="status" className="skeleton h-48 rounded-lg" aria-label={t('evidence.loading')} />
   }
   if (runQuery.isError || !run) {
-    return <div role="alert" className="alert-error">{t('evidence.error')}</div>
+    const notFound = runQuery.error instanceof ApiError && runQuery.error.status === 404
+    return (
+      <div className="space-y-4">
+        <div role="alert" className="alert-error">{t(notFound ? 'evidence.notFound' : 'evidence.loadError', { id: runId })}</div>
+        {!notFound && <button onClick={() => runQuery.refetch()} className="btn btn-ghost mr-3">{t('common.retry')}</button>}
+        <Link to="/evidence" className="btn btn-ghost">{t('evidence.backToRuns')}</Link>
+      </div>
+    )
   }
 
   const verdict: AgentRunStatus = latestVerification?.verdict ?? run.status
@@ -291,13 +299,16 @@ export default function EvidenceDetail() {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
   const { runId: rawRunId } = useParams()
-  const runId = Number(rawRunId)
+  const runId = parseRouteId(rawRunId)
 
   if (companyId === null) {
     return <div className="page-container"><div className="empty-state py-16"><p className="text-gray-400">{t('evidence.selectCompany')}</p></div></div>
   }
-  if (!Number.isSafeInteger(runId) || runId < 1) {
-    return <div className="page-container"><p role="alert" className="alert-error">{t('evidence.error')}</p></div>
+  if (runId === null) {
+    return <div className="page-container">
+      <p role="alert" className="alert-error mb-4">{t('evidence.invalidId', { id: rawRunId })}</p>
+      <Link to="/evidence" className="btn btn-ghost">{t('evidence.backToRuns')}</Link>
+    </div>
   }
 
   return <div className="page-container max-w-6xl"><RunDetail companyId={companyId} runId={runId} /></div>

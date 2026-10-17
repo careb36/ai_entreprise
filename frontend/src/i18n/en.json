@@ -107,6 +107,9 @@
   },
   "workspace": {
     "title": "Sprint Workspace",
+    "invalidId": "Invalid sprint ID: {{id}}.",
+    "notFound": "Sprint #{{id}} was not found.",
+    "loadError": "Failed to load sprint #{{id}}.",
     "activeContext": "Active Context",
     "aiAgentsActive": "AI Agents Active",
     "sprintBoard": "Sprint Board",
@@ -115,6 +118,13 @@
     "expandSidebar": "Expand sidebar",
     "noSprint": "No active sprint",
     "noSprintDesc": "Start a sprint to begin working"
+  },
+  "taskDetails": {
+    "invalidId": "Invalid task ID: {{taskId}}.",
+    "noSprint": "Select a sprint to look up task #{{taskId}}.",
+    "notFound": "Task #{{taskId}} was not found in sprint #{{sprintId}}.",
+    "sprintNotFound": "Sprint #{{sprintId}} was not found while looking for task #{{taskId}}.",
+    "loadError": "Failed to load sprint #{{sprintId}} for task #{{taskId}}."
   },
   "controlPanel": {
     "title": "Control Panel",
@@ -379,6 +389,9 @@
     "selectCompany": "Select or create a company to view its evidence.",
     "loading": "Loading evidence",
     "error": "Failed to load evidence.",
+    "invalidId": "Invalid run ID: {{id}}.",
+    "notFound": "Run #{{id}} was not found.",
+    "loadError": "Failed to load run #{{id}}.",
     "retry": "Retry",
     "empty": "No evidence matches these filters.",
     "producer": "Producer",
