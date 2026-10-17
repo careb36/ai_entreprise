@@ -126,6 +126,7 @@ services:
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       PROJECTS_ROOT_CONTAINER: /projects
+      AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8000:8000"
