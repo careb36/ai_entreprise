@@ -11,7 +11,8 @@ ROLE_RANK = {"Viewer": 1, "Manager": 2, "Owner": 3}
 
 
 async def current_user_if_required(
-    request: Request, session: Session = Depends(get_session)
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ) -> User | None:
     if not settings.AUTH_REQUIRED:
         # Even when auth is not required, resolve the user from the token
@@ -20,7 +21,7 @@ async def current_user_if_required(
             creds = await bearer(request)
             if creds is not None and creds.credentials:
                 return get_current_user(credentials=creds, session=session)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - Optional identity is ignored when auth is disabled.
             pass
         return None
     return get_current_user(credentials=await bearer(request), session=session)

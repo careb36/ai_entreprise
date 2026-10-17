@@ -33,7 +33,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @router.post("/auth/register")
 async def register_user(
-    req: UserCreateRequest, session: Session = Depends(get_session)
+    req: UserCreateRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Register a new human user for the platform.
@@ -58,7 +59,7 @@ async def register_user(
 
 
 @router.post("/auth/login")
-async def login(req: LoginRequest, session: Session = Depends(get_session)):
+async def login(req: LoginRequest, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
     """Authenticate a human user and return a signed access token."""
     if not auth_tokens.is_auth_configured():
         raise HTTPException(status_code=503, detail="Authentication is not configured")
@@ -82,7 +83,8 @@ async def login(req: LoginRequest, session: Session = Depends(get_session)):
 
 @router.get("/auth/me")
 async def get_me(
-    user: User = Depends(get_current_user), session: Session = Depends(get_session)
+    user: User = Depends(get_current_user),  # noqa: B008 - FastAPI dependency marker.
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
     """Return the authenticated user's public profile and company memberships."""
     memberships = session.exec(
@@ -102,8 +104,8 @@ async def get_me(
 @router.post("/company/invite")
 async def invite_member(
     req: InviteMemberRequest,
-    session: Session = Depends(get_session),
-    caller: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    caller: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Invite a registered user to collaborate on a company.

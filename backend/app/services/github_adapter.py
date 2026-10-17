@@ -168,7 +168,7 @@ def _paged_json(url: str, *, token: str | None, params: dict | None = None):
         first_page = False
         data = response.json()
         if not isinstance(data, list):
-            raise ValueError("GitHub API returned an unexpected paginated response")
+            raise ValueError("GitHub API returned an unexpected paginated response")  # noqa: TRY004 - Preserve the adapter's response-value error contract.
         results.extend(data)
         next_url = _next_link(response)
     return results
@@ -178,7 +178,7 @@ def _parse_datetime(value) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(str(value))
     except ValueError:
         return None
     return parsed

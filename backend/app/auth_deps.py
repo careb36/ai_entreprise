@@ -11,8 +11,8 @@ bearer = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-    session: Session = Depends(get_session),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),  # noqa: B008 - FastAPI dependency marker.
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ) -> User:
     """Resolve a bearer access token to its current user row."""
     unauthorized_headers = {"WWW-Authenticate": "Bearer"}

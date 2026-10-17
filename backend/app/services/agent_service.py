@@ -13,7 +13,7 @@ event bus and the LangGraph agents.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -43,7 +43,7 @@ class AgentService:
         story: str,
         constraints: str,
         business_unit_id: int | None = None,
-        interaction_id: str = None,
+        interaction_id: str | None = None,
         session: Session = None,
     ) -> str:
         """
@@ -123,7 +123,7 @@ class AgentService:
                 "decision_signature supplied by caller is ignored; signatures are computed server-side"
             )
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         log = AuditLog(
             company_id=company_id,
             interaction_id=interaction_id,

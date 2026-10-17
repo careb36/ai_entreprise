@@ -145,7 +145,7 @@ def classify_review_result(review_text: str | None) -> str | None:
     not follow the expected ``APPROVED:`` / ``NEEDS WORK:`` convention.
     """
     normalized = (review_text or "").strip().upper()
-    if normalized.startswith("NEEDS WORK:") or normalized.startswith("NEEDS_WORK:"):
+    if normalized.startswith(("NEEDS WORK:", "NEEDS_WORK:")):
         return RESULT_NEEDS_WORK
     if normalized.startswith("APPROVED:"):
         return RESULT_APPROVED
@@ -324,7 +324,7 @@ def record_agent_turn(
         from models import (
             AuditLog,  # local import: keeps this module importable without DB config
         )
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # noqa: BLE001 - Optional KPI recording must tolerate unavailable models.  # pragma: no cover - defensive
         logger.warning("Audit model unavailable, skipping KPI audit write: %s", exc)
         return None
 
@@ -369,7 +369,7 @@ def record_agent_turn(
             own_session.commit()
             own_session.refresh(row)
             return row
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - KPI recording must not abort the primary operation.
         logger.warning(
             "KPI audit write failed (action=%s item=%s company=%s): %s",
             action,

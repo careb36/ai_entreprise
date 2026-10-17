@@ -8,7 +8,7 @@ Responsibilities:
 - Registers lifecycle handlers (startup/shutdown)
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from config import Settings
 from exception_handlers import register_exception_handlers
@@ -83,4 +83,7 @@ app.add_event_handler("shutdown", on_shutdown)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+    }

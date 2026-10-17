@@ -18,7 +18,7 @@ import asyncio
 import json
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from audit_signing import verify_audit_row
@@ -157,7 +157,7 @@ async def generate_glassroom_sse(
         yield f"data: {json.dumps({'type': 'connected', 'semantic_type': 'stream.connected', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'sprint_id': sprint_id})}\n\n"
 
         if not nats_available:
-            yield f"data: {json.dumps({'type': 'error', 'semantic_type': 'stream.unavailable', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'semantic_type': 'stream.unavailable', 'source': 'sse', 'semantic_version': 1, 'event_id': str(uuid4()), 'agent': 'System', 'role': 'System', 'message': '⚠️ NATS message broker is not connected. Agents cannot run. Start NATS and restart the backend.', 'timestamp': datetime.now(UTC).replace(tzinfo=None).isoformat()})}\n\n"
 
         history = _merge_sse_history(
             await history_loader(), recent_sse_events.get(sprint_id, [])
@@ -183,8 +183,8 @@ async def generate_glassroom_sse(
 async def generate(
     req: GenerateRequest,
     request: Request,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Trigger a LangGraph agent workflow run.
@@ -261,8 +261,8 @@ def _write_company(session, user, company_id, context, interaction_id=None):
 async def audit(
     req: AuditRequest,
     company_id: int | None = None,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Write an agent decision entry to the audit log.
@@ -297,8 +297,8 @@ async def audit(
 async def verify_audit(
     interaction_id: str = Query(...),
     company_id: int | None = None,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """Verify every audit row associated with an interaction."""
     require_authenticated(user)
@@ -347,8 +347,8 @@ async def search_memory(
     query: str = Query(...),
     limit: int = 10,
     company_id: int | None = None,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Search the vector memory store for content similar to *query*.
@@ -378,8 +378,8 @@ async def store_memory(
     content: str,
     metadata: dict | None = None,
     company_id: int | None = None,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
@@ -502,7 +502,7 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
                                 "status": item.status,
                             }
                         )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - SSE history is best-effort; live events remain available.
             pass
         return events
 

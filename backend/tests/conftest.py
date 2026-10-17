@@ -135,11 +135,11 @@ def test_client(sqlite_session):
             "lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")
         ),
         mock.patch("lifecycle.NATSClient", return_value=fake_nats),
+        TestClient(app, raise_server_exceptions=False) as client,
     ):
-        with TestClient(app, raise_server_exceptions=False) as client:
-            # Ensure app.state has a nats_client so router code that reads it won't crash
-            if not hasattr(app.state, "nats_client") or app.state.nats_client is None:
-                app.state.nats_client = fake_nats
-            yield client
+        # Ensure app.state has a nats_client so router code that reads it won't crash
+        if not hasattr(app.state, "nats_client") or app.state.nats_client is None:
+            app.state.nats_client = fake_nats
+        yield client
 
     app.dependency_overrides.clear()

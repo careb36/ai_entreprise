@@ -226,12 +226,14 @@ def test_active_and_needs_split_block_follow_up(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.task_worker.engine", sqlite_engine):
+    with (
+        patch("services.task_worker.engine", sqlite_engine),
         # Also stub out plan_self_improvement_sprint so no LLM call happens
-        with patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True):
-            from services.task_worker import _complete_sprint_and_plan_follow_up
+        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
+    ):
+        from services.task_worker import _complete_sprint_and_plan_follow_up
 
-            result = _complete_sprint_and_plan_follow_up(sprint_to_complete_id)
+        result = _complete_sprint_and_plan_follow_up(sprint_to_complete_id)
 
     # Sprint should still be marked completed
     assert result["completed"] is True

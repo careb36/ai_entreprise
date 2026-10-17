@@ -81,34 +81,6 @@ class NATSClient:
         await self.nc.publish(subject, data)
         logger.info(f"Published to {subject}: {payload}")
 
-    async def request(
-        self, subject: str, payload: dict[str, Any], timeout: float = 120.0
-    ) -> dict[str, Any]:
-        """
-        Send a request and wait for a JSON reply from a NATS subject.
-
-        Args:
-            subject: NATS subject string (e.g. ``"workspace.execute"``).
-            payload: JSON-serialisable request body.
-            timeout: Maximum seconds to wait for a reply.
-
-        Returns:
-            Decoded JSON response payload.
-
-        Raises:
-            RuntimeError: If called before ``connect()``.
-        """
-        if not self.nc:
-            raise RuntimeError("NATS not connected")
-
-        data = json.dumps(payload).encode()
-        response = await self.nc.request(subject, data, timeout=timeout)
-        decoded = response.data.decode()
-        try:
-            return json.loads(decoded)
-        except json.JSONDecodeError:
-            return {"ok": False, "raw": decoded}
-
     async def subscribe(
         self, subject: str, callback: Callable, queue: str | None = None
     ):
@@ -154,20 +126,18 @@ class NATSClient:
                 except asyncio.CancelledError:
                     raise  # Let cancellation propagate normally on shutdown.
                 except Exception as e:
-                    logger.error(
+                    logger.exception(
                         "Error processing NATS message on subject=%s: %s",
                         getattr(msg, "subject", "?"),
-                        e,
-                        exc_info=True,
+                        e,  # noqa: TRY401 - Preserve the existing log message as well as its traceback.
                     )
         except asyncio.CancelledError:
             logger.info("NATS _listen task cancelled (normal shutdown).")
             raise
         except Exception as outer_err:
-            logger.error(
+            logger.exception(
                 "NATS _listen loop exited unexpectedly (subscription lost?): %s",
-                outer_err,
-                exc_info=True,
+                outer_err,  # noqa: TRY401 - Preserve the existing log message as well as its traceback.
             )
 
     async def request(

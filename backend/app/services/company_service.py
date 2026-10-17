@@ -186,7 +186,7 @@ class CompanyService:
                     id=company_id,
                     name=company_name,
                 )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Optional graph seeding must not fail company creation.
             logger.error(f"Neo4j seed failed (non-critical): {e}")
 
     def get_quotas(self, company_id: int) -> list[dict[str, Any]]:

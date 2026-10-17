@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import audit_signing
@@ -229,7 +229,7 @@ def test_verify_endpoint_reports_valid_and_legacy_rows(
             details={},
             result={},
             cost_tokens=0,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
             decision_signature=None,
         )
     )

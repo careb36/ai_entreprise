@@ -11,7 +11,7 @@ an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from auth_policy import current_user_if_required, require_company_role
@@ -94,8 +94,8 @@ def _serialize_plan_response(
 @router.post("/plan_sprint")
 async def plan_sprint(
     req: SprintPlanRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """Turn a strategic prompt into a scoped sprint backlog before sprint creation."""
     require_company_role(session, user, req.company_id, "Manager")
@@ -129,8 +129,8 @@ async def plan_sprint(
 @router.post("/plan_self_improvement_sprint")
 async def plan_self_improvement_sprint(
     req: SelfImprovementSprintRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """Create a bounded autonomous-improvement plan from the repository's own context."""
     require_company_role(session, user, req.company_id, "Manager")
@@ -166,8 +166,8 @@ async def plan_self_improvement_sprint(
 @router.post("/start_sprint")
 async def start_sprint(
     req: SprintStartRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Create a sprint and its initial backlog items in a single transaction.
@@ -287,8 +287,8 @@ async def start_sprint(
 @router.get("/sprints/{sprint_id}/board")
 async def get_sprint_board(
     sprint_id: int,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Return sprint metadata and all backlog items grouped by Kanban column.
@@ -343,8 +343,8 @@ async def get_sprint_board(
 async def update_backlog_item(
     item_id: int,
     req: BacklogItemUpdate,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Partially update a backlog item.
@@ -385,11 +385,11 @@ async def update_backlog_item(
             {
                 "author": "user",
                 "text": req.comment,
-                "created_at": str(datetime.utcnow()),
+                "created_at": str(datetime.now(UTC).replace(tzinfo=None)),
             }
         )
         item.comments = comments
-    item.updated_at = datetime.utcnow()
+    item.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     session.add(item)
     session.commit()
@@ -407,8 +407,8 @@ async def update_backlog_item(
 @router.post("/sprints/{sprint_id}/dispatch")
 async def dispatch_sprint_tasks(
     sprint_id: int,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Dispatch all ``todo`` backlog items in a sprint to their assigned agents.

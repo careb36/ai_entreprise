@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, call
 
@@ -64,9 +64,9 @@ def test_approve_records_named_human_and_server_timestamp(
         "/v1/agent_runs", params={"company_id": run["company_id"]}
     ).json()["agent_runs"]
     assert pending[0]["latest_approval"] is None
-    before = datetime.utcnow()
+    before = datetime.now(UTC).replace(tzinfo=None)
     response = _approve(test_client, run, approver_name=" Ada Reviewer ")
-    after = datetime.utcnow()
+    after = datetime.now(UTC).replace(tzinfo=None)
 
     assert response.status_code == 201
     body = response.json()

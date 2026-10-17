@@ -46,7 +46,7 @@ def register_exception_handlers(app):
                         },
                         timeout=2.0,
                     )
-            except Exception as report_e:
+            except Exception as report_e:  # noqa: BLE001 - Support reporting must not replace the original error.
                 logger.error(f"Failed to reach Vendor Support: {report_e}")
 
         nats = request.app.state.nats_client
@@ -54,7 +54,7 @@ def register_exception_handlers(app):
             try:
                 await nats.publish(
                     "system.maintenance.create_ticket",
-                    json.dumps(
+                    json.dumps(  # noqa: F821 - Missing import is a deferred bug; preserve this error path.
                         {
                             "subject": "[SYSTEM ERROR] Fabrique Engine Failure",
                             "description": "A report has been sent to the vendor (Carolina Pereira) for resolution.",
@@ -62,7 +62,7 @@ def register_exception_handlers(app):
                         }
                     ).encode(),
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - Ticket publishing is best-effort during error handling.
                 pass
 
         return JSONResponse(

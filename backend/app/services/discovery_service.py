@@ -101,14 +101,14 @@ def _detect_language(files: list[Path]) -> tuple[str, Counter]:
 def _read_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8", errors="ignore"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - Unreadable discovery inputs are treated as unavailable.
         return {}
 
 
 def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except Exception:  # noqa: BLE001 - Unreadable discovery inputs are treated as unavailable.
         return ""
 
 
@@ -606,7 +606,7 @@ def _ai_suggest_team(
         valid_seniorities = {"Junior", "Mid", "Senior", "Staff"}
 
         # Build a quick tier lookup for fallback model selection
-        model_tier: dict[str, str] = {
+        _model_tier: dict[str, str] = {
             m["id"]: m.get("tier", "balanced") for m in models
         }
         best_strategic = next(
@@ -650,7 +650,7 @@ def _ai_suggest_team(
         )
         return normalised
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Fall back to the default team if AI discovery fails.
         import logging
 
         logging.getLogger("fabrique-backend").warning(

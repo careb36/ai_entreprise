@@ -251,7 +251,7 @@ def _list_root_files(project_path: str, max_files: int = 60) -> str:
                 entries.append("  ... and more")
                 break
         return "\n".join(entries) if entries else "(empty directory)"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - Directory context is optional for sprint planning.
         logger.warning(f"Could not list project root: {e}")
         return "(could not read directory)"
 
@@ -626,7 +626,7 @@ def plan_foundation_sprint(
             "goal": f"Establish documentation and configuration foundations for {company_name}",
             "tasks": _filter_fallback_tasks(agents),
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - Planning failures use the deterministic fallback.
         logger.error(f"Unexpected error in sprint planning: {e}")
         return {
             "goal": f"Establish documentation and configuration foundations for {company_name}",
@@ -740,7 +740,7 @@ def plan_execution_sprint(
     except (json.JSONDecodeError, KeyError, IndexError) as exc:
         logger.warning("Failed to parse execution sprint plan: %s", exc)
         return _build_execution_fallback(objective, team, normalized_scope)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
         logger.error("Unexpected error planning execution sprint: %s", exc)
         return _build_execution_fallback(objective, team, normalized_scope)
 
@@ -855,6 +855,6 @@ def plan_self_improvement_sprint(
     except (json.JSONDecodeError, KeyError, IndexError) as exc:
         logger.warning("Failed to parse self-improvement sprint plan: %s", exc)
         return _build_self_improvement_fallback(company_name, team, normalized_scope)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
         logger.error("Unexpected error planning self-improvement sprint: %s", exc)
         return _build_self_improvement_fallback(company_name, team, normalized_scope)

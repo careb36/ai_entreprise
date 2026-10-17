@@ -17,7 +17,7 @@ Gemini 1.5 Flash via the LLM Proxy.
 """
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from auth_policy import current_user_if_required
@@ -46,7 +46,7 @@ def _next_ticket_num(session: Session) -> str:
 
 
 @router.post("/report_bug")
-async def report_bug(req: BugReportRequest, session: Session = Depends(get_session)):
+async def report_bug(req: BugReportRequest, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
     """
     Create a structured support ticket and return its auto-generated ticket number.
 
@@ -85,7 +85,7 @@ async def list_tickets(
     status: str | None = Query(None),
     severity: str | None = Query(None),
     limit: int = Query(50, le=200),
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     List support tickets with optional filters.
@@ -123,7 +123,7 @@ async def list_tickets(
 
 
 @router.get("/tickets/{ticket_num}", dependencies=[Depends(current_user_if_required)])
-async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
+async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
     """
     Return the full detail of a single ticket by its ``FAB-XXXXX`` identifier.
 
@@ -159,7 +159,7 @@ async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
 async def update_ticket_status(
     ticket_num: str,
     req: BugStatusUpdateRequest,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Update the status (and optionally resolution / assignee) of a ticket.
@@ -184,10 +184,10 @@ async def update_ticket_status(
         report.resolution = req.resolution
     if req.assigned_to:
         report.assigned_to = req.assigned_to
-    report.updated_at = datetime.utcnow()
+    report.updated_at = datetime.now(UTC).replace(tzinfo=None)
     # Stamp resolution time when the ticket reaches a terminal state.
     if req.status in ("resolved", "closed"):
-        report.resolved_at = datetime.utcnow()
+        report.resolved_at = datetime.now(UTC).replace(tzinfo=None)
 
     session.add(report)
     session.commit()
@@ -240,7 +240,7 @@ async def support_chat(req: SupportChatRequest):
             r.raise_for_status()
             reply = r.json()["choices"][0]["message"]["content"]
             return {"reply": reply}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - Translate upstream chat failures to a sanitized API error.
         logger.warning(f"Support chat LLM error: {e}")
         raise HTTPException(status_code=503, detail="LLM service unavailable")
 

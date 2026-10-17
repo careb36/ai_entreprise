@@ -82,7 +82,7 @@ async def startup(app):
             "NATS connected — background workers started: %s",
             list(worker_coros.keys()),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional broker fails.
         logger.warning(
             "NATS unavailable at startup (%s). "
             "Agent workflow and SSE streaming are DISABLED. "
@@ -97,7 +97,7 @@ async def startup(app):
         ensure_memory_graph_schema(driver)
         app.state.memory_client = MemoryClient(neo4j_driver=driver)
         logger.info("Neo4j connected — memory features enabled.")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
         logger.warning(
             f"Neo4j unavailable at startup ({exc}). "
             "Memory search and lineage endpoints will return errors until Neo4j is reachable."
@@ -168,5 +168,5 @@ async def _listen_to_nats(app):
 
     try:
         await app.state.nats_client.subscribe("glassroom.>", callback)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - A streaming subscription failure must not abort startup.
         logger.error(f"Failed to subscribe to Glassroom events: {e}")

@@ -183,7 +183,7 @@ def _fetch_memory_context(item: dict[str, Any], agent: dict[str, Any]) -> str:
 
         processor = get_engram_processor()
         return processor.query_relevant_engrams(task_text, limit=3, role_filter=role)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Optional memory context must not block task execution.
         logger.debug("Memory context fetch failed for item=%s: %s", item.get("id"), exc)
         return ""
 
@@ -211,7 +211,7 @@ def _load_sprint_completed_tasks(
                 if isinstance(comments, str):
                     try:
                         comments = json.loads(comments)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                         comments = []
                 deliverable_excerpt = _extract_latest_reviewable_comment(
                     comments, assignee_role=it.assignee
@@ -223,7 +223,7 @@ def _load_sprint_completed_tasks(
                 )
                 lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
             return "\n".join(lines)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Completed-task context is best-effort.
         logger.debug(
             "Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc
         )
@@ -258,7 +258,7 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                 if isinstance(comments, str):
                     try:
                         comments = json.loads(comments)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                         comments = []
                 for comment in comments:
                     text = str(comment.get("text", ""))
@@ -287,7 +287,7 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                 "qa_failures": qa_fail_count,
                 "blocked_reasons": blocked_reasons[:5],
             }
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Retrospective context is best-effort.
         logger.warning(
             "Sprint retrospective build failed for sprint=%s: %s", sprint_id, exc
         )
@@ -481,7 +481,7 @@ def _consult_architect(
             model=architect["model"],
             role=architect["role"],
         )
-    except Exception as exc:  # network / proxy failure must not block the developer
+    except Exception as exc:  # noqa: BLE001 - Network/proxy failure must not block the developer.
         logger.warning(
             "Architect consultation failed for item=%s: %s", item.get("id"), exc
         )
@@ -668,7 +668,7 @@ def _extract_latest_reviewable_comment(
     if isinstance(comments, str):
         try:
             comments = json.loads(comments)
-        except Exception:
+        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
             comments = []
 
     if not isinstance(comments, list):
@@ -726,7 +726,7 @@ def _can_resume_blocked_item_from_deliverable(
     if isinstance(comments, str):
         try:
             comments = json.loads(comments)
-        except Exception:
+        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
             comments = []
 
     if not isinstance(comments, list) or not comments:
@@ -750,7 +750,7 @@ def _has_manual_freeze_marker(comments: Any) -> bool:
     if isinstance(comments, str):
         try:
             comments = json.loads(comments)
-        except Exception:
+        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
             comments = []
 
     if not isinstance(comments, list):
@@ -774,7 +774,7 @@ def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
         if isinstance(comments, str):
             try:
                 comments = json.loads(comments)
-            except Exception:
+            except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                 comments = []
 
         return {
@@ -795,7 +795,7 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
         if isinstance(comments, str):
             try:
                 comments = json.loads(comments)
-            except Exception:
+            except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                 comments = []
 
         if not _has_manual_freeze_marker(comments):
@@ -824,7 +824,7 @@ def _recover_inflight_items_for_restart() -> list[dict[str, Any]]:
             if isinstance(comments, str):
                 try:
                     comments = json.loads(comments)
-                except Exception:
+                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
             if _has_manual_freeze_marker(comments):
@@ -867,7 +867,7 @@ def _coerce_json_dict(value: Any) -> dict[str, Any]:
             parsed = json.loads(value)
             if isinstance(parsed, dict):
                 return parsed
-        except Exception:
+        except Exception:  # noqa: BLE001 - Invalid stored structured data is treated as unavailable.
             return {}
     return {}
 
@@ -1469,7 +1469,7 @@ async def _collect_console_assistant_advice(
                 },
                 timeout=CONSOLE_ASSISTANT_TIMEOUT,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - Assistant failures fall back without aborting task execution.
             logger.warning(
                 "Console assistant request failed for %s on item=%s: %s",
                 label,
@@ -1631,7 +1631,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
                     **retro_metrics,
                 },
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - Optional engram writes must not abort sprint completion.
             logger.warning(
                 "Retrospective engram write failed for sprint=%s: %s", sprint_id, exc
             )
@@ -2165,7 +2165,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                                 "message": f"🧱 Workspace artifact generation requested for: {item['title']}",
                             },
                         )
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - Record command failure and preserve the task workflow.
                         await asyncio.to_thread(
                             _update_item_status,
                             item["id"],
@@ -2233,11 +2233,10 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             )
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Error processing task.assign (item=%s): %s",
                 data.get("backlog_item_id", "?"),
-                e,
-                exc_info=True,
+                e,  # noqa: TRY401 - Preserve the existing log message as well as its traceback.
             )
 
             # Mark as blocked on failure.
@@ -2250,7 +2249,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         comment_text=f"Agent error: {str(e)[:500]}",
                         comment_author="System",
                     )
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - Recovery bookkeeping must not mask the task failure.
                     pass
 
             if data.get("sprint_id"):
@@ -2299,7 +2298,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     while True:
         try:
             await _review_cycle(nats_client)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Keep the review polling loop alive across cycle failures.
             logger.error("Review cycle error: %s", e)
         await asyncio.sleep(30)  # Run every 30s
 
@@ -2345,7 +2344,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             if isinstance(comments, str):
                 try:
                     comments = json.loads(comments)
-                except Exception:
+                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
             if _has_manual_freeze_marker(comments):
@@ -2601,7 +2600,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     )
                     await _finalize_sprint_if_ready(nats_client, sprint.id)
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - Isolate review failures to the affected item.
                 logger.warning("Review failed for item=%s: %s", item.id, e)
 
                 comments.append(
@@ -2646,7 +2645,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             if isinstance(comments, str):
                 try:
                     comments = json.loads(comments)
-                except Exception:
+                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
             if _has_manual_freeze_marker(comments):
@@ -2832,7 +2831,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             if isinstance(comments, str):
                 try:
                     comments = json.loads(comments)
-                except Exception:
+                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
             if _has_manual_freeze_marker(comments):
@@ -2926,5 +2925,5 @@ async def _publish_glassroom(
         event.setdefault("semantic_version", 1)
         event["timestamp"] = datetime.now(UTC).isoformat()
         await nats_client.publish(f"glassroom.{sprint_id}", event)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - Glassroom notifications are best-effort.
         logger.warning("Failed to publish glassroom event: %s", e)

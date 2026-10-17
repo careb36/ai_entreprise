@@ -45,8 +45,8 @@ _ANCHOR_DATE = date(2026, 5, 2)
 @router.post("/init_company", tags=["Core"])
 async def init_company(
     req: CompanyInitRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Bootstrap a new company tenant with its AI agents and project credentials.
@@ -66,7 +66,7 @@ async def init_company(
             owner_user_id=user.id if user is not None else None,
         )
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.
         logger.error(f"Company initialization failed: {exc}")
         raise HTTPException(
             status_code=500, detail="Internal server error during initialization"
@@ -84,8 +84,8 @@ async def approve_task():
 @router.get("/enterprise/quotas", tags=["Enterprise"])
 async def get_quotas(
     company_id: int,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Return token usage and limits for all business units of a company.
@@ -98,8 +98,8 @@ async def get_quotas(
 @router.post("/enterprise/quotas/{bu_id}/reset", tags=["Enterprise"])
 async def reset_quota(
     bu_id: int,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Reset the token usage counter for a business unit to zero.
@@ -122,8 +122,8 @@ async def reset_quota(
 @router.get("/analytics/summary", tags=["Enterprise"])
 async def get_project_health(
     sprint_id: int,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     AI Scrum Master: generate a sprint health report from audit and backlog data.
@@ -147,8 +147,8 @@ async def get_orchestration_health(
         ..., description="Company whose orchestration history will be analysed"
     ),
     weeks: int = Query(8, ge=1, le=52, description="Trailing weeks to include"),
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Return weekly KPI trends that measure the Batch-1 orchestration rollout.
@@ -249,7 +249,7 @@ async def get_orchestration_health(
             qa_rows = session.execute(qa_fallback_sql, params).mappings().all()
         token_rows = session.execute(tokens_sql, params).mappings().all()
         consult_rows = session.execute(consult_sql, params).mappings().all()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Translate analytics failures to a sanitized API error.
         logger.error("Orchestration health query failed: %s", exc)
         raise HTTPException(status_code=500, detail="Analytics query failed.")
 
@@ -350,7 +350,7 @@ async def list_models(request: Request):
         return data
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Translate upstream catalogue failures to an API error.
         logger.error("Failed to fetch model catalogue: %s", exc)
         raise HTTPException(status_code=502, detail="Could not reach LLM proxy")
 
@@ -359,8 +359,8 @@ async def list_models(request: Request):
 async def discover_team(
     req: DiscoveryRequest,
     request: Request,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
@@ -399,8 +399,8 @@ async def discover_team(
 async def get_code_lineage(
     file_path: str,
     company_id: int | None = None,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Time-Travel Debugging: retrieve all architectural decisions that modified a file.
@@ -445,14 +445,14 @@ async def get_code_lineage(
                 "lineage": [],
             }
         return {"file": file_path, "status": "success", "lineage": lineage}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - Translate graph failures to a sanitized API error.
         logger.error(f"Lineage query failed: {e}")
         raise HTTPException(status_code=500, detail="Neo4j Time Travel query failed.")
 
 
 @router.get("/discover/directories", tags=["Enterprise"])
 async def list_project_directories(
-    user: User | None = Depends(current_user_if_required),
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     List available project directories inside the container's /projects mount.

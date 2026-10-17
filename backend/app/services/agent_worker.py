@@ -30,7 +30,7 @@ def _mark_sprint_needs_split(sprint_id: int) -> None:
                 sprint.status = "needs_split"
                 session.add(sprint)
                 session.commit()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Failure bookkeeping must not mask the original worker error.
         logger.warning("Could not mark sprint %s as needs_split: %s", sprint_id, exc)
 
 
@@ -55,7 +55,7 @@ async def _publish_glassroom_error(
                 "timestamp": datetime.now(UTC).isoformat(),
             },
         )
-    except Exception as pub_err:
+    except Exception as pub_err:  # noqa: BLE001 - Glassroom notifications are best-effort.
         logger.warning("Failed to publish Glassroom error event: %s", pub_err)
 
 
@@ -80,7 +80,7 @@ async def _publish_glassroom_info(
                 "timestamp": datetime.now(UTC).isoformat(),
             },
         )
-    except Exception as pub_err:
+    except Exception as pub_err:  # noqa: BLE001 - Glassroom notifications are best-effort.
         logger.warning("Failed to publish Glassroom info event: %s", pub_err)
 
 
@@ -191,11 +191,10 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 )
 
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Fatal error in workspace.generate handler (interaction_id=%s): %s",
                 interaction_id,
-                e,
-                exc_info=True,
+                e,  # noqa: TRY401 - Preserve the existing log message as well as its traceback.
             )
             await _publish_glassroom_error(
                 nats_client,

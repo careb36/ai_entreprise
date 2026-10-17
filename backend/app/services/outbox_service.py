@@ -96,7 +96,7 @@ async def process_outbox(nats_client) -> None:
                             ).bindparams(id=event_id)
                         )
                         logger.debug("Outbox event_id=%s marked completed", event_id)
-                    except Exception as row_e:
+                    except Exception as row_e:  # noqa: BLE001 - Retain failed rows for retry without stopping delivery.
                         logger.error(
                             "Failed to process outbox event_id=%s (retry=%d): %s",
                             event_id,
@@ -119,7 +119,7 @@ async def process_outbox(nats_client) -> None:
 
                 session.commit()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Keep the outbox polling loop alive across failures.
             logger.error(f"Outbox processor error: {e}")
 
         # Poll every 2 seconds — keeps end-to-end NATS latency low.
