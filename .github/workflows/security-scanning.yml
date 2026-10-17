@@ -50,7 +50,9 @@ jobs:
 
   dependency-review:
     name: Dependency review (critical vulnerabilities)
-    if: github.event_name == 'pull_request'
+    # This action requires Dependency Graph and GitHub Advanced Security, which
+    # are not available by default for this private repository.
+    if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -99,7 +101,7 @@ jobs:
       - name: Summarize Python advisories
         if: steps.pip-audit.outcome == 'failure'
         run: |
-          echo "pip-audit reported dependency advisories or could not complete; review its step log. The dependency-review job blocks critical vulnerabilities introduced by pull requests." >> "$GITHUB_STEP_SUMMARY"
+          echo "pip-audit reported dependency advisories or could not complete; review its step log. When enabled, the dependency-review job blocks critical vulnerabilities introduced by pull requests." >> "$GITHUB_STEP_SUMMARY"
 
   frontend-audit:
     name: Frontend dependency audit
