@@ -7,14 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Documentation overhaul.** README.md, README.es.md, CONTRIBUTING.md, and CLAUDE.md restructured following industry best practices. Added SECURITY.md, CODE_OF_CONDUCT.md, and GitHub issue/PR templates.
+* **Architect consultation step.** Before a Developer starts a high-priority, design-sensitive, or QA-reworked task, the worker asks the company's Architect agent for a short technical brief, appends it to the card as an `ARCHITECT_CONSULTED:` comment (feeding the *Architect Consult Frequency* KPI), streams it to the Glassroom, and injects it into the Developer prompt. At most one consultation per implementation attempt. Disable with `ARCHITECT_CONSULT_ENABLED=false`.
+* Backend tests for the KPI emitters and their contract with the analytics queries (`backend/tests/test_orchestration_metrics.py`).
+
 ### Fixed
 
 * **Orchestration health KPIs were structurally zero.** `GET /v1/analytics/orchestration_health` filtered `audit_log` on `details.role` / `details.company_id` and counted `ARCHITECT_CONSULTED:` comments, but the task pipeline never wrote either. The worker now records every Developer execution and QA review to `audit_log` (canonical role, company scope, `result_type`, proxy-reported token cost) via the new `services/orchestration_metrics.py` module, so *Avg Developer Tokens* and the QA *NEEDS WORK* rate read real data.
-
-### Added
-
-* **Architect consultation step.** Before a Developer starts a high-priority, design-sensitive, or QA-reworked task, the worker asks the company's Architect agent for a short technical brief, appends it to the card as an `ARCHITECT_CONSULTED:` comment (feeding the *Architect Consult Frequency* KPI), streams it to the Glassroom, and injects it into the Developer prompt. At most one consultation per implementation attempt. Disable with `ARCHITECT_CONSULT_ENABLED=false`.
-* Backend tests for the KPI emitters and their contract with the analytics queries (`backend/tests/test_orchestration_metrics.py`).
 
 ---
 
@@ -29,5 +30,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **CI/CD Pipeline Foundation:** Set up the initial continuous integration and deployment pipeline using GitHub Actions. The pipeline currently handles automated builds and runs placeholder unit tests on every commit to the `main` branch.
 * **Core Documentation:** Created essential project documentation including `README.md`, `CONTRIBUTING.md`, and this `CHANGELOG.md` to establish development standards and provide a baseline for future contributors.
 
-[unreleased]: https://github.com/la-fabrique-dev/la-fabrique/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/la-fabrique-dev/la-fabrique/releases/tag/v0.1.0
+[unreleased]: https://github.com/careb36/le-fabrique/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/careb36/le-fabrique/releases/tag/v0.1.0

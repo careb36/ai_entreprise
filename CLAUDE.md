@@ -58,6 +58,11 @@ Copy `.env.example` to `.env` and fill in:
   at rest. Without it those values are stored with a `plaintext:` prefix and the
   backend warns at startup. Generate one with:
   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
+  Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+- `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
+  Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 
 ## Architecture Overview
 
@@ -66,14 +71,14 @@ React Frontend (Vite + TypeScript + TailwindCSS)
         ↓ REST / SSE
 FastAPI Backend  ←→  LangGraph Agent Orchestration
         ↓                   ↓
-   Postgres           NATS JetStream (pubsub)
-   (pgvector)               ↓
-   Neo4j             VS Code Daemon
-   (knowledge graph)  (writes files, runs shell)
-        ↓
-   LLM Proxy (Flask, port 5100)
-        ↓ ↓
-   Gemini API    DeepSeek API
+    Postgres           NATS JetStream (pubsub)
+    (pgvector)               ↓
+    Neo4j             VS Code Daemon
+    (knowledge graph)  (writes files, runs shell)
+         ↓
+    LLM Proxy (Flask, port 5100)
+         ↓ ↓
+    Gemini API    DeepSeek API
 ```
 
 ### Key Components
@@ -184,7 +189,7 @@ All user-facing strings must be added to both:
 - `frontend/src/i18n/en.json`
 - `frontend/src/i18n/es.json`
 
-Use the `useTranslation` hook from `i18next`; never hardcode English strings in JSX.
+Use the `useTranslation` hook from i18next; never hardcode English strings in JSX.
 
 ## LLM Proxy Model Routing
 
@@ -193,3 +198,12 @@ When adding new LLM calls in agents, pass `model_preference` to the proxy client
 - `"powerful"` → Gemini Pro (reserved for Architect and high-stakes reasoning)
 
 Token budgets are enforced per company at the proxy layer — the backend never calls Gemini/DeepSeek directly.
+
+## Documentation
+
+- [`README.md`](README.md) — Project overview, architecture, setup, and API reference
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
+- [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
+- [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
+- [`runbook.md`](runbook.md) — Production hardening guide
+- [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) — Current refactoring strategy

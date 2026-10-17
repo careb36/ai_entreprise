@@ -7,7 +7,8 @@
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/react-%2320232b.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/typescript-%23007acc.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg?style=for-the-badge)](LICENSE.md)
 
 **AI-powered autonomous software development platform**
 
@@ -15,7 +16,20 @@
 
 </div>
 
-👔 **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
+---
+
+## About
+
+La Fabrique is a multi-agent platform that orchestrates AI agents through a structured sprint lifecycle. Work is organized into **AI Sprints** — units of bounded, verifiable scope rather than fixed durations.
+
+The platform provides:
+- **Multi-agent orchestration** via LangGraph workflows
+- **Real-time observability** through the GlassRoom SSE stream
+- **Knowledge graph memory** with Neo4j Engram nodes
+- **Vector semantic search** via pgvector
+- **Enterprise governance** with RBAC, token budgets, and audit trails
+
+> **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
 
 ---
 
@@ -24,11 +38,16 @@
 - [System Overview](#system-overview)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
-- [Local Setup](#local-setup)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
 - [Agent Orchestration](#agent-orchestration)
 - [GlassRoom](#glassroom)
 - [Project Structure](#project-structure)
 - [API Reference](#api-reference)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [Security](#security)
 - [License](#license)
 
 ---
@@ -116,7 +135,18 @@ sequenceDiagram
 
 ---
 
-## Local Setup
+## Requirements
+
+- **Docker** 24.0+ with Docker Compose v2
+- **Python** 3.12+ (for local development)
+- **Node.js** 20+ (for frontend development)
+- **API Keys:** Google AI Studio (Gemini), DeepSeek
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Installation
 
 The canonical way to start a clean local environment is `reset_infra.sh`:
 
@@ -124,7 +154,7 @@ The canonical way to start a clean local environment is `reset_infra.sh`:
 # 1. Copy and configure environment
 cp .env.example .env
 # Edit .env — fill in GEMINI_API_KEY, DEEPSEEK_API_KEY,
-# POSTGRES_PASSWORD, NEO4J_PASSWORD
+# POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
 
 # 2. Full clean start
 ./reset_infra.sh
@@ -136,8 +166,6 @@ The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `
 - **Backend API + Swagger:** `http://localhost:8000/docs`
 - **LLM Proxy:** `http://localhost:5100`
 - **Jaeger Tracing UI:** `http://localhost:16686`
-
-**Prerequisites:** Docker Desktop, Docker Compose v2
 
 **Incremental restarts** (after code changes):
 
@@ -151,6 +179,36 @@ docker compose up -d --build frontend
 ```bash
 pip install nats-py
 python vscode-daemon/daemon.py
+```
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Getting Started
+
+Once the stack is running, you can interact with the API:
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Create a company
+curl -X POST http://localhost:8000/v1/init_company \
+  -H "Content-Type: application/json" \
+  -d '{"company_name": "My Company"}'
+
+# Start a sprint
+curl -X POST http://localhost:8000/v1/start_sprint \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company_id": "<company_id>",
+    "scope": "M",
+    "backlog": ["Implement user authentication", "Add dashboard widgets"]
+  }'
+
+# Open API docs
+open http://localhost:8000/docs
 ```
 
 [⬆ Back to Top](#la-fabrique)
@@ -294,12 +352,47 @@ Interactive docs at `http://localhost:8000/docs` when running locally.
 
 ---
 
-## Support & Observability
+## Testing
 
-- **Structured Logging:** All events logged in JSON — compatible with ELK, Datadog, or Splunk.
-- **OpenTelemetry:** Distributed traces exported from the agent worker and graph nodes.
-- **Support Bot:** Built-in AI help desk with ticket creation, severity levels, and status tracking (EN/ES).
-- **Log Export:** Administrators can download a full audit bundle via `GET /v1/support/logs`.
+### Backend
+
+```bash
+cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
+```
+
+The backend test suite uses pytest with in-memory SQLite — no external services required.
+
+### Frontend
+
+```bash
+cd frontend
+npm run test:run    # Vitest + Testing Library (CI mode)
+npm run test        # Watch mode during development
+```
+
+### CI
+
+Tests run automatically on every pull request via GitHub Actions:
+- `.github/workflows/backend-tests.yml` — backend pytest suite
+- `.github/workflows/frontend-build.yml` — frontend tsc + vitest + build
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development standards, branch strategy, and commit conventions.
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the security policy and vulnerability reporting process.
+
+[⬆ Back to Top](#la-fabrique)
 
 ---
 
@@ -309,6 +402,8 @@ Interactive docs at `http://localhost:8000/docs` when running locally.
 Copyright © 2026 Carolina Pereira.
 
 Unauthorized copying, distribution, or commercial use of this system, via any medium, is strictly prohibited without explicit written permission from the owner.
+
+[⬆ Back to Top](#la-fabrique)
 
 ---
 

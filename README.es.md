@@ -7,7 +7,8 @@
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/react-%2320232b.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/typescript-%23007acc.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Licencia: Propietaria](https://img.shields.io/badge/licencia-Propietaria-red.svg?style=for-the-badge)](LICENSE.md)
 
 **Plataforma autónoma de desarrollo de software impulsada por IA**
 
@@ -15,7 +16,20 @@
 
 </div>
 
-👔 **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
+---
+
+## Acerca de
+
+La Fabrique es una plataforma multiagente que orquesta equipos de IA a través de un ciclo de vida de sprint estructurado. El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija.
+
+La plataforma proporciona:
+- **Orquestación multiagente** mediante workflows de LangGraph
+- **Observabilidad en tiempo real** a través del stream SSE del GlassRoom
+- **Memoria en grafo de conocimiento** con nodos Engram de Neo4j
+- **Búsqueda semántica vectorial** mediante pgvector
+- **Gobernanza enterprise** con RBAC, presupuestos de tokens y auditoría
+
+> **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
 
 ---
 
@@ -24,11 +38,16 @@
 - [Descripción General](#descripción-general)
 - [Arquitectura](#arquitectura)
 - [Stack Tecnológico](#stack-tecnológico)
-- [Configuración Local](#configuración-local)
+- [Requisitos](#requisitos)
+- [Instalación](#instalación)
+- [Primeros Pasos](#primeros-pasos)
 - [Orquestación de Agentes](#orquestación-de-agentes)
 - [GlassRoom](#glassroom)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Referencia de la API](#referencia-de-la-api)
+- [Pruebas](#pruebas)
+- [Contribuir](#contribuir)
+- [Seguridad](#seguridad)
 - [Licencia](#licencia)
 
 ---
@@ -116,7 +135,18 @@ sequenceDiagram
 
 ---
 
-## Configuración Local
+## Requisitos
+
+- **Docker** 24.0+ con Docker Compose v2
+- **Python** 3.12+ (para desarrollo local)
+- **Node.js** 20+ (para desarrollo frontend)
+- **API Keys:** Google AI Studio (Gemini), DeepSeek
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Instalación
 
 La forma canónica de levantar el entorno local es `reset_infra.sh`:
 
@@ -124,7 +154,7 @@ La forma canónica de levantar el entorno local es `reset_infra.sh`:
 # 1. Copiar y configurar el entorno
 cp .env.example .env
 # Editar .env — completar GEMINI_API_KEY, DEEPSEEK_API_KEY,
-# POSTGRES_PASSWORD, NEO4J_PASSWORD
+# POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
 
 # 2. Inicio limpio completo
 ./reset_infra.sh
@@ -135,8 +165,7 @@ El script ejecuta 6 pasos: `down -v` → prune de Docker → `build --no-cache` 
 - **Frontend:** `http://localhost:5173`
 - **API Backend + Swagger:** `http://localhost:8000/docs`
 - **LLM Proxy:** `http://localhost:5100`
-
-**Prerrequisitos:** Docker Desktop, Docker Compose v2
+- **Jaeger Tracing UI:** `http://localhost:16686`
 
 **Reinicios incrementales** (tras cambios en el código):
 
@@ -150,6 +179,36 @@ docker compose up -d --build frontend
 ```bash
 pip install nats-py
 python vscode-daemon/daemon.py
+```
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Primeros Pasos
+
+Una vez que el stack esté en marcha, puedes interactuar con la API:
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Crear una empresa
+curl -X POST http://localhost:8000/v1/init_company \
+  -H "Content-Type: application/json" \
+  -d '{"company_name": "Mi Empresa"}'
+
+# Iniciar un sprint
+curl -X POST http://localhost:8000/v1/start_sprint \
+  -H "Content-Type: application/json" \
+  -d '{
+    "company_id": "<company_id>",
+    "scope": "M",
+    "backlog": ["Implementar autenticación de usuario", "Añadir widgets al dashboard"]
+  }'
+
+# Abrir documentación de la API
+open http://localhost:8000/docs
 ```
 
 [⬆ Volver al inicio](#la-fabrique)
@@ -293,12 +352,47 @@ Documentación interactiva disponible en `http://localhost:8000/docs` con el ent
 
 ---
 
-## Soporte y Observabilidad
+## Pruebas
 
-- **Logs Estructurados:** Todos los eventos se registran en JSON — compatible con ELK, Datadog o Splunk.
-- **OpenTelemetry:** Trazas distribuidas exportadas desde el agent worker y los nodos del grafo.
-- **Bot de Soporte:** Mesa de ayuda con IA integrada, creación de tickets, niveles de severidad y seguimiento de estado (EN/ES).
-- **Exportación de Logs:** Los administradores pueden descargar un paquete completo de auditoría vía `GET /v1/support/logs`.
+### Backend
+
+```bash
+cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
+```
+
+La suite de pruebas backend usa pytest con SQLite en memoria — no requiere servicios externos.
+
+### Frontend
+
+```bash
+cd frontend
+npm run test:run    # Vitest + Testing Library (modo CI)
+npm run test        # Modo watch durante el desarrollo
+```
+
+### CI
+
+Las pruebas se ejecutan automáticamente en cada pull request vía GitHub Actions:
+- `.github/workflows/backend-tests.yml` — suite pytest backend
+- `.github/workflows/frontend-build.yml` — frontend tsc + vitest + build
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Contribuir
+
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para estándares de desarrollo, estrategia de ramas y convenciones de commits.
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Seguridad
+
+Consulta [SECURITY.md](SECURITY.md) para la política de seguridad y el proceso de reporte de vulnerabilidades.
+
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
@@ -308,6 +402,8 @@ Documentación interactiva disponible en `http://localhost:8000/docs` con el ent
 Copyright © 2026 Carolina Pereira.
 
 Queda estrictamente prohibida la copia, distribución o uso comercial no autorizado de este sistema, por cualquier medio, sin el permiso explícito y por escrito de la propietaria.
+
+[⬆ Volver al inicio](#la-fabrique)
 
 ---
 
