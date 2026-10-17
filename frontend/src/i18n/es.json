@@ -589,6 +589,28 @@
     "networkError": "Error de red — verifica tu conexión",
     "unknownError": "Ocurrió un error inesperado"
   },
+  "auth": {
+    "loginTitle": "Iniciar sesión",
+    "registerTitle": "Crear una cuenta",
+    "email": "Correo electrónico",
+    "fullName": "Nombre completo",
+    "password": "Contraseña",
+    "loggingIn": "Iniciando sesión…",
+    "loginError": "No se pudo iniciar sesión. Inténtalo de nuevo.",
+    "invalidCredentials": "Correo electrónico o contraseña no válidos.",
+    "notConfigured": "La autenticación no está configurada en este servidor.",
+    "registerSuccess": "Cuenta creada. Ya puedes iniciar sesión.",
+    "noAccount": "¿No tienes una cuenta?",
+    "registerLink": "Registrarse",
+    "haveAccount": "¿Ya tienes una cuenta?",
+    "emailExists": "Ya existe una cuenta con este correo electrónico.",
+    "registerError": "No se pudo registrar. Inténtalo de nuevo.",
+    "logout": "Cerrar sesión",
+    "companyPlaceholder": "Empresa {{id}}",
+    "retry": "Intentar de nuevo",
+    "loading": "Cargando tu cuenta…",
+    "selectCompany": "Selecciona una empresa"
+  },
   "common": {
     "loading": "Cargando...",
     "error": "Ocurrió un error",

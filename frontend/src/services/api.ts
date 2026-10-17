@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/useAuthStore'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
@@ -55,6 +57,32 @@ export interface InitCompanyResponse {
   sprint_id: number
   task_count: number
   message: string
+}
+
+export interface AuthUser {
+  user_id: number
+  email: string
+  full_name: string
+}
+
+export interface CompanyMembership {
+  company_id: number
+  human_role: 'Owner' | 'Manager' | 'Viewer'
+}
+
+export interface AuthProfile extends AuthUser {
+  memberships: CompanyMembership[]
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: 'bearer'
+  expires_in: number
+}
+
+export interface RegisterResponse {
+  user_id: number
+  email: string
 }
 
 export interface DetectedStack {
@@ -228,6 +256,12 @@ interface FetchOptions extends RequestInit {
   _attempt?: number
 }
 
+let onUnauthorized: (() => void) | null = null
+
+export function setOnUnauthorized(handler: (() => void) | null) {
+  onUnauthorized = handler
+}
+
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { params, _attempt = 0, ...fetchOptions } = options
 
@@ -243,18 +277,27 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
+    const token = useAuthStore.getState().getValidToken()
+    const headers = new Headers(fetchOptions.headers)
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+    if (token) headers.set('Authorization', ['Bearer', token].join(' '))
+
     const response = await fetch(url, {
       ...fetchOptions,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...fetchOptions.headers,
-      },
+      headers,
     })
 
     clearTimeout(timer)
 
     if (!response.ok) {
+      if (
+        response.status === 401 &&
+        endpoint.split('?')[0] !== '/v1/auth/login'
+      ) {
+        useAuthStore.getState().logout()
+        onUnauthorized?.()
+      }
       if (response.status >= 500 && _attempt < MAX_RETRIES) {
         await delay(600 * (_attempt + 1))
         return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
@@ -301,6 +344,20 @@ export const api = {
 
   delete: <T>(endpoint: string) =>
     fetchApi<T>(endpoint, { method: 'DELETE' }),
+
+  login: (email: string, password: string) =>
+    fetchApi<LoginResponse>('/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  register: (data: { email: string; full_name: string; password: string }) =>
+    fetchApi<RegisterResponse>('/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  me: () => fetchApi<AuthProfile>('/v1/auth/me', { method: 'GET' }),
 
   // ── Domain Endpoints ───────────────────────────────────────────────────────
 

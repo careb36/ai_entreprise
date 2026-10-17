@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthStore } from '../store/useAuthStore'
 import type {
   DetectedStack,
   DiscoverTeamAgent,
@@ -448,9 +449,10 @@ export default function CompanyNew() {
     }
 
     initCompanyMutation.mutate(payload, {
-      onSuccess: (response: InitCompanyResponse) => {
+      onSuccess: async (response: InitCompanyResponse) => {
         const companyId = response.company_id
         const sprintId = response?.sprint_id ?? companyId
+        await useAuthStore.getState().loadMe()
         setCompany(companyId, companyName.trim())
         navigate(`/workspace/${sprintId}`)
       }
