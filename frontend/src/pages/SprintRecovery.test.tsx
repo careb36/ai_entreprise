@@ -21,6 +21,7 @@ describe('stale persisted sprint recovery', () => {
     vi.spyOn(api, 'getSprintBoard').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'getAnalyticsSummary').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy' } as never)
+    vi.spyOn(api, 'get').mockResolvedValue({ agent_graph: false, memory: false })
     vi.spyOn(useAgentStore.getState(), 'connect').mockImplementation(() => {})
     vi.spyOn(useAgentStore.getState(), 'disconnect').mockImplementation(() => {})
   })
@@ -49,5 +50,20 @@ describe('stale persisted sprint recovery', () => {
     } as never)
     render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
     expect(await screen.findByRole('link', { name: 'Live view' })).toHaveAttribute('href', '/workspace/999')
+  })
+
+  it.each([
+    [false, false], [true, false], [false, true], [true, true],
+  ])('gates dashboard shortcuts by capabilities (graph %s, memory %s)', async (agent_graph, memory) => {
+    useAppStore.setState({ activeSprintId: null })
+    vi.mocked(api.get).mockResolvedValue({ agent_graph, memory })
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/capabilities'))
+    await waitFor(() => {
+      expect(Boolean(screen.queryByRole('link', { name: 'Generate' }))).toBe(agent_graph)
+      expect(Boolean(screen.queryByRole('link', { name: 'Memory' }))).toBe(memory)
+    })
+    expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/dashboard/analytics')
+    expect(screen.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/governance')
   })
 })

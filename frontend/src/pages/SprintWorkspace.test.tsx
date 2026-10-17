@@ -51,6 +51,7 @@ describe('workspace sprint validation', () => {
     await act(async () => { resolve({ sprint: { id: 8 }, columns: {}, total: 0 } as SprintBoard) })
     await waitFor(() => expect(useAppStore.getState().activeSprintId).toBe(8))
     expect(screen.getByText('Stream for sprint 8')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sprint Board' })).toHaveAttribute('href', '/dashboard')
   })
 
   it.each(['nope', '8junk', '0', '-1', '1.5', '9007199254740992'])('rejects malformed sprint ID %s without a request', id => {

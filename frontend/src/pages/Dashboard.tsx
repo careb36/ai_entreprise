@@ -16,7 +16,7 @@ import {
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
+import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
@@ -487,6 +487,7 @@ export default function Dashboard() {
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
   const { data: health } = useHealth()
+  const { data: capabilities, isError: capabilitiesError } = useCapabilities()
   const connectToSprintStream = useAgentStore(s => s.connect)
   const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
   const agentStates = useAgentStore(s => s.agentStates)
@@ -694,10 +695,10 @@ export default function Dashboard() {
             {/* Quick nav */}
             <div className="grid grid-cols-2 gap-2">
               {[
-                { to: '/governance', icon: ShieldAlert, label: 'Governance'  },
-                { to: '/analytics',  icon: Activity,   label: 'Analytics'   },
-                { to: '/memory',     icon: Cpu,        label: 'Memory'      },
-                { to: '/generate',   icon: Sparkles,   label: 'Generate'    },
+                { to: '/governance', icon: ShieldAlert, label: t('nav.review') },
+                { to: '/dashboard/analytics', icon: Activity, label: t('nav.analytics') },
+                ...(!capabilitiesError && capabilities?.agent_graph === true ? [{ to: '/generate', icon: Sparkles, label: t('nav.generate') }] : []),
+                ...(!capabilitiesError && capabilities?.memory === true ? [{ to: '/memory', icon: Cpu, label: t('nav.memory') }] : []),
               ].map(({ to, icon: Icon, label }) => (
                 <Link
                   key={to}

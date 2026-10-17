@@ -65,7 +65,7 @@ export const SprintWorkspace: React.FC = () => {
             <Radio size={11} /> {t('workspace.aiAgentsActive')}
           </span>
 
-          <Link to="/" className="btn-ghost btn-sm flex items-center gap-1.5">
+          <Link to="/dashboard" className="btn-ghost btn-sm flex items-center gap-1.5">
             <ArrowLeft size={13} />
             <span>{t('workspace.sprintBoard')}</span>
           </Link>
