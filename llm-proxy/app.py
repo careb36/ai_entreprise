@@ -61,7 +61,7 @@ DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
 GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
-QWEN_PROXY_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
@@ -268,21 +268,21 @@ def list_models():
     # DeepSeek models are available only when the API key is configured.
     if DEEPSEEK_API_KEY:
         models.extend([
-            {"id": "deepseek-coder", "provider": "deepseek", "tier": "code",
-             "description": "State-of-the-art code generation & refactoring (~10x cheaper than Gemini Pro)"},
-            {"id": "deepseek-chat",  "provider": "deepseek", "tier": "balanced",
-             "description": "Balanced reasoning and conversation"},
+            {"id": "deepseek-v4-pro", "provider": "deepseek", "tier": "code",
+             "description": "DeepSeek V4 Pro — state-of-the-art code generation & refactoring"},
+            {"id": "deepseek-v4-flash", "provider": "deepseek", "tier": "balanced",
+             "description": "DeepSeek V4 Flash — fast reasoning and conversation"},
         ])
 
     # Qwen models are available only when the API key is configured.
     if QWEN_API_KEY:
         models.extend([
-            {"id": "qwen-plus",  "provider": "qwen", "tier": "strategic",
-             "description": "Qwen Plus — strong reasoning, architecture, and stakeholder decisions"},
-            {"id": "qwen-turbo", "provider": "qwen", "tier": "balanced",
-             "description": "Qwen Turbo — fast reasoning and coordination"},
-            {"id": "qwen-max",   "provider": "qwen", "tier": "strategic",
-             "description": "Qwen Max — highest capability model"},
+            {"id": "qwen3.7-max",   "provider": "qwen", "tier": "strategic",
+             "description": "Qwen 3.7 Max — highest capability model"},
+            {"id": "qwen3.7-plus", "provider": "qwen", "tier": "strategic",
+             "description": "Qwen 3.7 Plus — strong reasoning, architecture, and stakeholder decisions"},
+            {"id": "qwen3.6-flash", "provider": "qwen", "tier": "balanced",
+             "description": "Qwen 3.6 Flash — fast reasoning and coordination"},
         ])
 
     # Pick the best non-preview balanced/fast model for orchestration tasks
