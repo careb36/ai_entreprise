@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import App from './App'
+import { createInstance } from 'i18next'
+import { I18nextProvider, initReactI18next } from 'react-i18next'
+import App, { LanguageSwitcher } from './App'
+import en from './i18n/en.json'
+import es from './i18n/es.json'
+import { STORAGE_KEY_LANG } from './lib/constants'
 import { api, ApiError, setOnUnauthorized } from './services/api'
 import { useAuthStore } from './store/useAuthStore'
 import { useAppStore } from './store/useAppStore'
@@ -11,6 +16,33 @@ afterEach(() => {
   vi.restoreAllMocks()
   useAuthStore.getState().logout()
   window.history.replaceState(null, '', '/')
+})
+
+describe('LanguageSwitcher', () => {
+  it.each(['en', 'es', 'en-US', 'es-ES'])('shows the current language for %s and names the target', async language => {
+    const i18n = createInstance()
+    await i18n.use(initReactI18next).init({
+      resources: { en: { translation: en }, es: { translation: es } },
+      lng: language,
+      fallbackLng: 'en',
+    })
+    render(<I18nextProvider i18n={i18n}><LanguageSwitcher /></I18nextProvider>)
+
+    const spanish = language.startsWith('es')
+    const button = screen.getByRole('button', {
+      name: spanish ? 'Cambiar a inglés' : 'Switch to Spanish',
+    })
+    expect(button).toHaveTextContent(spanish ? 'ES' : 'EN')
+
+    fireEvent.click(button)
+
+    await waitFor(() => {
+      expect(button).toHaveTextContent(spanish ? 'EN' : 'ES')
+      expect(button).toHaveAccessibleName(spanish ? 'Switch to Spanish' : 'Cambiar a inglés')
+    })
+    expect(localStorage.getItem(STORAGE_KEY_LANG)).toBe(spanish ? 'en' : 'es')
+    expect(i18n.resolvedLanguage).toBe(spanish ? 'en' : 'es')
+  })
 })
 
 describe('unauthorized navigation', () => {

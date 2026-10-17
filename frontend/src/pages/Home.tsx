@@ -19,9 +19,9 @@ export default function Home() {
   return (
     <div className="page-container max-w-6xl">
       <div className="mb-8">
-        <h1 className="page-title">{t('nav.dashboard')} Menu</h1>
+        <h1 className="page-title">{t('home.title')}</h1>
         <p className="page-subtitle">
-          Launch your workflow quickly. Start by creating a company, then run your sprint autopilot.
+          {t('home.subtitle')}
         </p>
       </div>
 
@@ -29,46 +29,48 @@ export default function Home() {
         <Link to="/companies/new" className="card-hover p-5">
           <div className="flex items-center gap-2 text-brand-300 mb-2">
             <Building2 size={18} />
-            <span className="font-semibold">Nueva Compañia</span>
+            <span className="font-semibold">{t('nav.newCompany')}</span>
           </div>
-          <p className="text-xs text-gray-400">Create or configure the company profile and agent team.</p>
+          <p className="text-xs text-gray-400">{t('home.companyDescription')}</p>
         </Link>
 
         <Link to="/dashboard" className="card-hover p-5">
           <div className="flex items-center gap-2 text-cyan-300 mb-2">
             <LayoutDashboard size={18} />
-            <span className="font-semibold">Sprint Board</span>
+            <span className="font-semibold">{t('home.sprintBoard')}</span>
           </div>
-          <p className="text-xs text-gray-400">Kanban + control panel + operational sprint dashboard.</p>
+          <p className="text-xs text-gray-400">{t('home.boardDescription')}</p>
         </Link>
 
         <Link to={workspacePath} className="card-hover p-5">
           <div className="flex items-center gap-2 text-green-300 mb-2">
             <MonitorPlay size={18} />
-            <span className="font-semibold">Agents Room</span>
+            <span className="font-semibold">{t('nav.workspace')}</span>
           </div>
           <p className="text-xs text-gray-400">
             {companyName
-              ? `Live execution for ${companyName}${activeSprintId ? ` · Sprint #${activeSprintId}` : ''}`
-              : 'Open live multi-agent execution and monitoring.'}
+              ? activeSprintId
+                ? t('home.liveSprint', { companyName, sprintId: activeSprintId })
+                : t('home.liveCompany', { companyName })
+              : t('home.agentsDescription')}
           </p>
         </Link>
 
         <Link to="/generate" className="card-hover p-5">
           <div className="flex items-center gap-2 text-yellow-300 mb-2">
             <Sparkles size={18} />
-            <span className="font-semibold">Generate</span>
+            <span className="font-semibold">{t('nav.generate')}</span>
           </div>
-          <p className="text-xs text-gray-400">Describe a feature and let the team generate implementation tasks.</p>
+          <p className="text-xs text-gray-400">{t('home.generateDescription')}</p>
         </Link>
       </div>
 
       <div className="mt-6 card p-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-gray-300">
           <CalendarDays size={16} className="text-brand-400" />
-          <span className="text-sm">Need planning first? Open the sprint board and calendar view.</span>
+          <span className="text-sm">{t('home.planningHint')}</span>
         </div>
-        <Link to="/dashboard" className="btn btn-secondary btn-sm">Open Dashboard</Link>
+        <Link to="/dashboard" className="btn btn-secondary btn-sm">{t('home.openDashboard')}</Link>
       </div>
     </div>
   )
