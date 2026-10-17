@@ -373,14 +373,24 @@ async def get_code_lineage(file_path: str, company_id: int | None = None, sessio
     require_company_role(session, user, company_id, "Viewer")
     driver = get_neo4j_driver()
     try:
-        cypher = """
+        company_filter = (
+            "AND toString(coalesce(e.company_id, "
+            "apoc.convert.fromJsonMap(coalesce(e.metadata, '{}')).company_id)) "
+            "= toString($company_id)"
+            if user is not None else ""
+        )
+        cypher = f"""
         MATCH (e:Episodic)-[r:MODIFIED_BY]->(s)
         WHERE s.id ENDS WITH $file_path
+        {company_filter}
         RETURN e.id AS engram_id, e.agent_role AS role, e.summary AS decision, e.created_at AS timestamp
         ORDER BY e.created_at DESC LIMIT 10
         """
         with driver.session() as neo_session:
-            result = neo_session.run(cypher, file_path=file_path)
+            result = neo_session.run(
+                cypher, file_path=file_path,
+                company_id=company_id if user is not None else None,
+            )
             lineage = [dict(record) for record in result]
         if not lineage:
             return {"file": file_path, "status": "No historical engrams found.", "lineage": []}

@@ -1,6 +1,7 @@
 """Opt-in authentication, company roles, and legacy compatibility."""
 
 import secrets
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -354,3 +355,101 @@ def test_authentication_guard_and_flag_off_role_noop(sqlite_session, monkeypatch
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
     assert require_authenticated(None) is None
     assert require_company_role(sqlite_session, None, 99999999, "Owner") is None
+
+
+@pytest.mark.parametrize("role", [None, "Viewer"])
+@pytest.mark.parametrize(
+    "path, payload",
+    [
+        ("/v1/generate", {"story": "Test"}),
+        ("/v1/audit", {"action": "test"}),
+        ("/v1/memory/store?content=test", None),
+        ("/v1/integrations/github/bindings", {
+            "owner": "test", "repo": "test", "webhook_secret": "test-only",
+        }),
+        ("/v1/integrations/github/backfill", {"owner": "test", "repo": "test"}),
+        ("/v1/plan_sprint", {"prompt": "Test"}),
+        ("/v1/plan_self_improvement_sprint", {}),
+        ("/v1/start_sprint", {
+            "sprint_name": "Test", "start_date": "2026-10-17", "backlog_items": [],
+        }),
+    ],
+)
+def test_company_mutations_require_manager(
+    test_client, sqlite_session, identity, role, path, payload
+):
+    if role:
+        _member(sqlite_session, identity, role)
+    company_id = identity[1].id
+    response = test_client.post(
+        path, params={"company_id": company_id},
+        json={**payload, "company_id": company_id} if payload is not None else None,
+        headers=identity[2],
+    )
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "Requires Manager role" if role else "Not a member of this company"
+    }
+
+
+@pytest.mark.parametrize("role, expected", [("Viewer", 403), ("Manager", 200)])
+def test_quota_reset_uses_business_unit_company(
+    test_client, sqlite_session, identity, role, expected
+):
+    _member(sqlite_session, identity, role)
+    unit = BusinessUnit(
+        company_id=identity[1].id, unit_name="Test", token_quota_used=123
+    )
+    sqlite_session.add(unit)
+    sqlite_session.commit()
+    response = test_client.post(
+        f"/v1/enterprise/quotas/{unit.id}/reset", headers=identity[2]
+    )
+    assert response.status_code == expected
+    sqlite_session.refresh(unit)
+    assert unit.token_quota_used == (0 if expected == 200 else 123)
+
+
+@pytest.mark.parametrize("path", [
+    "/v1/enterprise/quotas",
+    "/v1/analytics/orchestration_health",
+    "/v1/enterprise/lineage?file_path=test",
+])
+def test_enterprise_reads_reject_nonmembers(test_client, identity, path):
+    response = test_client.get(
+        path, params={"company_id": identity[1].id}, headers=identity[2]
+    )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Not a member of this company"}
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_lineage_query_scopes_results_only_when_enforced(
+    test_client, sqlite_session, identity, monkeypatch, enabled
+):
+    monkeypatch.setattr(settings, "AUTH_REQUIRED", enabled)
+    _member(sqlite_session, identity, "Viewer")
+    driver = MagicMock()
+    neo_session = driver.session.return_value.__enter__.return_value
+    neo_session.run.return_value = [{"engram_id": "owned-engram"}]
+    monkeypatch.setattr("routers.enterprise.get_neo4j_driver", lambda: driver)
+
+    response = test_client.get(
+        "/v1/enterprise/lineage",
+        params={"file_path": "src/main.py", "company_id": identity[1].id},
+        headers=identity[2] if enabled else {},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["lineage"] == [{"engram_id": "owned-engram"}]
+    query = neo_session.run.call_args.args[0]
+    params = neo_session.run.call_args.kwargs
+    assert params["file_path"] == "src/main.py"
+    if enabled:
+        assert params["company_id"] == identity[1].id
+        assert "coalesce(e.company_id" in query
+        assert "apoc.convert.fromJsonMap" in query
+        assert "= toString($company_id)" in query
+    else:
+        assert params["company_id"] is None
+        assert "$company_id" not in query
