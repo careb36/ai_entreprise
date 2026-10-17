@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     GITHUB_TOKEN: Optional[str] = None
 
+    # ---------------------------------------------------------------------------
+    # Security — rate limiting and CORS
+    # ---------------------------------------------------------------------------
+    RATE_LIMIT_DEFAULT: str = "100/minute"
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    SECURITY_HEADERS_ENABLED: bool = True
+
     class Config:
         env_file = ".env"
         case_sensitive = True
