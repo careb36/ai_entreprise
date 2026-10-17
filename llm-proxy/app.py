@@ -63,6 +63,16 @@ GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
 
+# --- API Key Validation (deferred to after logger is defined) ---
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("llm-proxy")
+if endpoint_base:
+    logger.info("OpenTelemetry exporter enabled for llm-proxy: %s/v1/traces", endpoint_base)
+else:
+    logger.info("OpenTelemetry exporter disabled for llm-proxy")
+
+
 # --- API Key Validation ---
 def _validate_api_keys():
     """Validate API keys at startup and log warnings for invalid/missing keys."""
@@ -107,13 +117,6 @@ def _validate_api_keys():
         logger.error("Some API keys are invalid. Agent tasks will fail until keys are corrected.")
 
 _validate_api_keys()
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("llm-proxy")
-if endpoint_base:
-    logger.info("OpenTelemetry exporter enabled for llm-proxy: %s/v1/traces", endpoint_base)
-else:
-    logger.info("OpenTelemetry exporter disabled for llm-proxy")
 
 
 def _fallback_embedding(text: str, dims: int = 1536) -> list[float]:
