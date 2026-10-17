@@ -88,6 +88,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-factory}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      QWEN_API_KEY: ${QWEN_API_KEY}
       PROXY_PORT: 5100
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
