@@ -65,6 +65,20 @@ function getAgent(key: string): AgentIdentity {
 const _timeFormatter = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hour12: true })
 const _dateFormatters = new Map<string, Intl.DateTimeFormat>()
 
+// Module-level cache for reference date strings to avoid re-instantiating
+// new Date() on every formatDate call (high-frequency render path).
+let _todayStr = new Date().toDateString()
+let _yesterdayStr = new Date(Date.now() - 86400000).toDateString()
+
+// Periodic update to handle day rollovers (every 60s).
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    const now = new Date()
+    _todayStr = now.toDateString()
+    _yesterdayStr = new Date(now.getTime() - 86400000).toDateString()
+  }, 60000)
+}
+
 function _getDateFormatter(lang: string): Intl.DateTimeFormat {
   if (!_dateFormatters.has(lang)) {
     _dateFormatters.set(lang, new Intl.DateTimeFormat(lang || 'en', { weekday: 'long', month: 'long', day: 'numeric' }))
@@ -81,11 +95,11 @@ function formatTime(iso: string): string {
 function formatDate(iso: string): string {
   try {
     const d = new Date(iso)
-    const today     = new Date()
-    const yesterday = new Date()
-    yesterday.setDate(today.getDate() - 1)
-    if (d.toDateString() === today.toDateString())     return i18n.t('glassroom.today', 'Today')
-    if (d.toDateString() === yesterday.toDateString()) return i18n.t('glassroom.yesterday', 'Yesterday')
+    const dStr = d.toDateString()
+
+    if (dStr === _todayStr) return i18n.t('glassroom.today', 'Today')
+    if (dStr === _yesterdayStr) return i18n.t('glassroom.yesterday', 'Yesterday')
+
     return _getDateFormatter(i18n.language || 'en').format(d)
   } catch { return '' }
 }
