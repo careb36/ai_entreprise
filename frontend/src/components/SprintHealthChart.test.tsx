@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { SprintHealthChart } from './SprintHealthChart'
+import { describe, expect, it } from 'vitest'
 
 describe('SprintHealthChart', () => {
   it('renders with data', () => {
@@ -28,7 +29,7 @@ describe('SprintHealthChart', () => {
       />
     )
 
-    expect(screen.getByText('No sprint data available')).toBeInTheDocument()
+    expect(screen.getByText('No data yet')).toBeInTheDocument()
   })
 
   it('shows correct health color for high score', () => {
