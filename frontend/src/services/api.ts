@@ -1,3 +1,5 @@
+import { useAuthStore } from '../store/useAuthStore'
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
@@ -275,7 +277,6 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const { useAuthStore } = await import('../store/useAuthStore')
     const token = useAuthStore.getState().getValidToken()
     const headers = new Headers(fetchOptions.headers)
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
