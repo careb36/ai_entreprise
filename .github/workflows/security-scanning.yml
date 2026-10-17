@@ -46,6 +46,7 @@ jobs:
         uses: github/codeql-action/analyze@v3.39.0
         with:
           category: /language:${{ matrix.language }}
+          upload: never
 
   dependency-review:
     name: Dependency review (critical vulnerabilities)
