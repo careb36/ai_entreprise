@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     # Human-user authentication — HS256 signing key for access tokens.
     # ---------------------------------------------------------------------------
     JWT_SECRET_KEY: Optional[str] = None
-    AUTH_REQUIRED: bool = False
+    AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 

@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy.pool import StaticPool
+from config import settings
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -51,6 +52,13 @@ _engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+@pytest.fixture(autouse=True)
+def disable_auth_for_legacy_tests(monkeypatch):
+    # The legacy suite predates authentication enforcement.
+    monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
+
 
 SQLModel.metadata.create_all(
     _engine,

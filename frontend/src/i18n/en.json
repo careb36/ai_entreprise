@@ -589,6 +589,28 @@
     "networkError": "Network error — check your connection",
     "unknownError": "An unexpected error occurred"
   },
+  "auth": {
+    "loginTitle": "Log in",
+    "registerTitle": "Create an account",
+    "email": "Email",
+    "fullName": "Full name",
+    "password": "Password",
+    "loggingIn": "Logging in…",
+    "loginError": "Unable to log in. Please try again.",
+    "invalidCredentials": "Invalid email or password.",
+    "notConfigured": "Authentication is not configured on this server.",
+    "registerSuccess": "Account created. You can now log in.",
+    "noAccount": "Don't have an account?",
+    "registerLink": "Register",
+    "haveAccount": "Already have an account?",
+    "emailExists": "An account with this email already exists.",
+    "registerError": "Unable to register. Please try again.",
+    "logout": "Log out",
+    "companyPlaceholder": "Company {{id}}",
+    "retry": "Try again",
+    "loading": "Loading your account…",
+    "selectCompany": "Select a company"
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
