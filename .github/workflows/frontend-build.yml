@@ -4,7 +4,7 @@
 # a run.
 #
 # Run the same checks locally with:
-#   cd frontend && npm ci && npx tsc --noEmit && npm run test:run && npm run build
+#   cd frontend && npm ci && npm run lint -- src && npx tsc --noEmit && npm run test:run && npm run build
 
 name: Frontend Build
 
@@ -40,6 +40,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v5
@@ -51,6 +53,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint frontend
+        run: npm run lint -- src
+
+      - name: Check formatting of changed frontend files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base_sha="$BASE_SHA"
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            base_sha="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD^)"
+          fi
+
+          mapfile -d '' -t formatted_files < <(
+            git -C "$GITHUB_WORKSPACE" diff --name-only --diff-filter=ACMRT -z "$base_sha" "$GITHUB_SHA" -- frontend |
+              while IFS= read -r -d '' file; do
+                case "$file" in
+                  *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.json|*.css|*.html|*.md)
+                    printf '%s\0' "${file#frontend/}"
+                    ;;
+                esac
+              done
+          )
+          if ((${#formatted_files[@]} > 0)); then
+            npm run format:check -- "${formatted_files[@]}"
+          else
+            echo "No changed frontend files supported by Prettier."
+          fi
+
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -59,3 +89,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Add failure notification
+        if: failure()
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "::error title=Frontend CI failed::Review $run_url"
+          echo "Frontend CI failed. [Review the workflow run]($run_url)." >> "$GITHUB_STEP_SUMMARY"

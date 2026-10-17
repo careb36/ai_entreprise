@@ -1,0 +1,136 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: '23 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: security-scanning-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3.39.0
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3.39.0
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3.39.0
+        with:
+          category: /language:${{ matrix.language }}
+
+  dependency-review:
+    name: Dependency review (critical vulnerabilities)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: critical
+
+  python-audit:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Install Poetry
+        run: pipx install poetry==2.3.3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: poetry
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Verify poetry.lock is in sync
+        run: poetry check --lock
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Audit Python dependencies
+        id: pip-audit
+        continue-on-error: true
+        run: poetry run pip-audit
+
+      - name: Summarize Python advisories
+        if: steps.pip-audit.outcome == 'failure'
+        run: |
+          echo "pip-audit reported dependency advisories or could not complete; review its step log. The dependency-review job blocks critical vulnerabilities introduced by pull requests." >> "$GITHUB_STEP_SUMMARY"
+
+  frontend-audit:
+    name: Frontend dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit frontend dependencies
+        run: npm audit --audit-level=critical
+
+  failure-summary:
+    name: Report security workflow failure
+    if: failure()
+    needs: [codeql, dependency-review, python-audit, frontend-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Link the failed run
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "::error title=Security checks failed::Review $run_url"
+          echo "Security checks failed. [Review the workflow run]($run_url)." >> "$GITHUB_STEP_SUMMARY"

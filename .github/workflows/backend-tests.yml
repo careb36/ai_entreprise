@@ -52,6 +52,8 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Install Poetry
         run: pipx install poetry==2.3.3
@@ -68,9 +70,34 @@ jobs:
         run: poetry check --lock
 
       - name: Install dependencies
-        # Includes the dev group (pytest, pytest-asyncio); --no-root because the
+        # Includes test, lint, type-check, and audit tools; --no-root because the
         # backend is application code, not an installable package.
         run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Lint and type-check changed Python files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PYTHONPATH: .:app
+        run: |
+          base_sha="$BASE_SHA"
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            base_sha="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD^)"
+          fi
+
+          mapfile -d '' -t python_files < <(
+            git -C "$GITHUB_WORKSPACE" diff --name-only --diff-filter=ACMRT -z "$base_sha" "$GITHUB_SHA" -- backend |
+              while IFS= read -r -d '' file; do
+                [[ "$file" == backend/*.py ]] && printf '%s\0' "${file#backend/}"
+              done
+          )
+          if ((${#python_files[@]} == 0)); then
+            echo "No changed Python files to lint or type-check."
+            exit 0
+          fi
+
+          poetry run black --check "${python_files[@]}"
+          poetry run ruff check "${python_files[@]}"
+          poetry run mypy --ignore-missing-imports --follow-imports=silent "${python_files[@]}"
 
       - name: Run tests
         # PYTHONPATH mirrors the Dockerfile's ENV PYTHONPATH="/app:/app/app",
@@ -89,3 +116,10 @@ jobs:
           path: backend/pytest-report.xml
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Add failure notification
+        if: failure()
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "::error title=Backend CI failed::Review $run_url"
+          echo "Backend CI failed. [Review the workflow run]($run_url)." >> "$GITHUB_STEP_SUMMARY"
