@@ -447,6 +447,7 @@
     "noAuditRows": "No hay filas de auditoría registradas para esta ejecución.",
     "auditError": "No se pudieron verificar las firmas de auditoría.",
     "auditLineage": "Linaje de auditoría",
+    "legacyCompany": "Heredada — empresa no registrada",
     "runAuditId": "Fila de auditoría de la ejecución",
     "latestVerificationAuditId": "Fila de auditoría de la última verificación",
     "notRecorded": "No registrado"

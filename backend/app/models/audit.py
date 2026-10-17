@@ -24,6 +24,7 @@ class AuditLog(SQLModel, table=True):
     __tablename__ = "audit_log"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    company_id: Optional[int] = Field(default=None, foreign_key="companies.id", index=True)
 
     # Correlates all audit rows that belong to the same workflow execution.
     interaction_id: Optional[str] = None

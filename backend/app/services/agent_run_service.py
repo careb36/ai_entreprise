@@ -61,6 +61,7 @@ def ingest_agent_run(
 
     audit_log = AgentService().audit_interaction(
         session=session,
+        company_id=run.company_id,
         interaction_id=f"agent-run:{payload.external_ref}",
         agent_id=payload.producer,
         action="agent_run_ingested",

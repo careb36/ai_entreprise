@@ -25,14 +25,15 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 
 from database import get_session, engine
 from config import settings
-from auth_policy import current_user_if_required, require_authenticated, require_company_role
+from auth_policy import current_user_if_required, require_authenticated, require_company_role, viewer_company_ids
 from models import User
 from audit_signing import verify_audit_row
 from models import AuditLog
+from models.agent_run import AgentRun
 from schemas import GenerateRequest, AuditRequest
 from services.agent_service import AgentService
 from logging_config import logger
@@ -195,6 +196,43 @@ async def generate(req: GenerateRequest, request: Request, session: Session = De
     return {"interaction_id": interaction_id, "package_url": None}
 
 
+def _write_company(session, user, company_id, context, interaction_id=None):
+    """Resolve ownership from membership and stored interactions, never metadata."""
+    owners = set()
+    if interaction_id:
+        owners.update(session.exec(
+            select(AuditLog.company_id).where(
+                AuditLog.interaction_id == interaction_id,
+                AuditLog.company_id.is_not(None),
+            )
+        ).all())
+        if interaction_id.startswith("agent-run:"):
+            owners.update(session.exec(
+                select(AgentRun.company_id).where(
+                    AgentRun.external_ref == interaction_id[len("agent-run:"):]
+                )
+            ).all())
+    if company_id is None:
+        if len(owners) == 1:
+            company_id = next(iter(owners))
+        elif user is not None:
+            companies = viewer_company_ids(session, user)
+            if len(companies) == 1:
+                company_id = companies[0]
+    require_company_role(session, user, company_id, "Manager")
+    if owners and company_id not in owners:
+        raise HTTPException(status_code=403, detail="Interaction belongs to another company")
+    supplied = (context or {}).get("company_id")
+    if supplied is not None and str(supplied) != str(company_id):
+        raise HTTPException(status_code=403, detail="Company metadata does not match ownership")
+    run_id = (context or {}).get("agent_run_id")
+    if run_id is not None:
+        run = session.get(AgentRun, run_id)
+        if run is None or run.company_id != company_id:
+            raise HTTPException(status_code=403, detail="Agent run belongs to another company")
+    return company_id
+
+
 @router.post("/audit")
 async def audit(req: AuditRequest, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
@@ -203,7 +241,7 @@ async def audit(req: AuditRequest, company_id: int | None = None, session: Sessi
     Writes to both the filesystem JSONL file and the ``audit_log`` database
     table via ``AgentService.audit_interaction()``.
     """
-    require_company_role(session, user, (req.details or {}).get("company_id", company_id), "Manager")
+    company_id = _write_company(session, user, company_id, req.details, req.interaction_id)
     if req.decision_signature is not None:
         logger.warning(
             "decision_signature supplied by caller is ignored; signatures are computed server-side"
@@ -212,6 +250,7 @@ async def audit(req: AuditRequest, company_id: int | None = None, session: Sessi
     service = AgentService()
     service.audit_interaction(
         session=session,
+        company_id=company_id,
         interaction_id=req.interaction_id,
         agent_id=req.agent_id,
         action=req.action,
@@ -224,15 +263,18 @@ async def audit(req: AuditRequest, company_id: int | None = None, session: Sessi
 
 
 @router.get("/audit/verify")
-async def verify_audit(interaction_id: str = Query(...), session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def verify_audit(interaction_id: str = Query(...), company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """Verify every audit row associated with an interaction."""
-    # Keyed by interaction_id, not company; authentication only.
     require_authenticated(user)
-    rows = session.exec(
-        select(AuditLog)
-        .where(AuditLog.interaction_id == interaction_id)
-        .order_by(AuditLog.id)
-    ).all()
+    statement = select(AuditLog).where(AuditLog.interaction_id == interaction_id)
+    if user is not None:
+        statement = statement.where(or_(
+            AuditLog.company_id.in_(viewer_company_ids(session, user)),
+            AuditLog.company_id.is_(None) if company_id is None else False,
+        ))
+    if company_id is not None:
+        statement = statement.where(AuditLog.company_id == company_id)
+    rows = session.exec(statement.order_by(AuditLog.id)).all()
     if not rows:
         raise HTTPException(status_code=404, detail="No audit rows found for interaction_id.")
 
@@ -247,6 +289,8 @@ async def verify_audit(interaction_id: str = Query(...), session: Session = Depe
                 "action": row.action,
                 "status": verification["status"],
                 "mode": verification["mode"],
+                "company_id": row.company_id,
+                "legacy": row.company_id is None,
             }
         )
 
@@ -258,7 +302,7 @@ async def verify_audit(interaction_id: str = Query(...), session: Session = Depe
 
 
 @router.get("/memory/search")
-async def search_memory(request: Request, query: str = Query(...), limit: int = 10, user: User | None = Depends(current_user_if_required)):
+async def search_memory(request: Request, query: str = Query(...), limit: int = 10, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Search the vector memory store for content similar to *query*.
 
@@ -266,10 +310,16 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
     Returns up to *limit* results sorted by descending similarity.
     """
     require_authenticated(user)
+    company_ids = viewer_company_ids(session, user) if user is not None else None
+    if company_id is not None:
+        require_company_role(session, user, company_id, "Viewer")
+        company_ids = [company_id]
     client = request.app.state.memory_client
     if not client:
         raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
-    results = client.search_similar(query, limit)
+    results = client.search_similar(
+        query, limit, company_ids=company_ids, include_legacy=company_id is None
+    )
     return {"results": results}
 
 
@@ -282,11 +332,13 @@ async def store_memory(request: Request, content: str, metadata: Optional[dict] 
     *metadata* is an arbitrary JSON dict stored alongside the embedding for
     later retrieval context.
     """
-    require_company_role(session, user, (metadata or {}).get("company_id", company_id), "Manager")
+    company_id = _write_company(
+        session, user, company_id, metadata, (metadata or {}).get("interaction_id")
+    )
     client = request.app.state.memory_client
     if not client:
         raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
-    client.store(content, metadata)
+    client.store(content, metadata, company_id=company_id)
     return {"status": "stored"}
 
 

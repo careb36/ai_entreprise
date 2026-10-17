@@ -70,6 +70,20 @@ def _ensure_runtime_schema() -> None:
         """,
         "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_company_id ON assistant_runtime_state (company_id)",
         "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_assistant_key ON assistant_runtime_state (assistant_key)",
+        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
+        "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
+        "ALTER TABLE vector_memory ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
+        "CREATE INDEX IF NOT EXISTS ix_vector_memory_company_id ON vector_memory (company_id)",
+        """
+        UPDATE audit_log AS a SET company_id = c.id
+        FROM companies AS c
+        WHERE a.company_id IS NULL AND a.details->>'company_id' = c.id::text
+        """,
+        """
+        UPDATE vector_memory AS m SET company_id = c.id
+        FROM companies AS c
+        WHERE m.company_id IS NULL AND m.metadata->>'company_id' = c.id::text
+        """,
     )
 
     with engine.begin() as connection:
@@ -110,3 +124,26 @@ def get_neo4j_driver() -> neo4j.Driver:
         os.getenv("NEO4J_URI", "bolt://localhost:7687"),
         auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "")),
     )
+
+
+def ensure_memory_graph_schema(driver) -> None:
+    """Backfill historical graph ownership without rewriting evidence metadata."""
+    with driver.session() as session:
+        session.run(
+            """
+            MATCH (e)
+            WHERE any(label IN labels(e) WHERE label STARTS WITH 'Episodic_')
+            SET e:Episodic
+            """
+        ).consume()
+        session.run(
+            """
+            MATCH (e)
+            WHERE (e:Memory OR any(label IN labels(e) WHERE label STARTS WITH 'Episodic'))
+              AND e.company_id IS NULL AND e.metadata IS NOT NULL
+            SET e.company_id = toInteger(apoc.convert.fromJsonMap(e.metadata).company_id)
+            """
+        ).consume()
+        session.run(
+            "CREATE INDEX episodic_company_id IF NOT EXISTS FOR (e:Episodic) ON (e.company_id)"
+        ).consume()

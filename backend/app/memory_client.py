@@ -30,7 +30,7 @@ class MemoryClient:
         self.engine = engine
         self.neo4j_driver = neo4j_driver or get_neo4j_driver()
 
-    def store(self, content: str, metadata: Optional[Dict] = None):
+    def store(self, content: str, metadata: Optional[Dict] = None, *, company_id: Optional[int] = None):
         """
         Persist content to both pgvector (semantic search) and Neo4j (graph).
 
@@ -56,12 +56,13 @@ class MemoryClient:
                 session.execute(
                     text(
                         """
-                        INSERT INTO vector_memory (content, embedding, metadata)
-                        VALUES (:content, :embedding, :metadata)
+                        INSERT INTO vector_memory (content, embedding, metadata, company_id)
+                        VALUES (:content, :embedding, :metadata, :company_id)
                         """
                     ),
                     {
                         "content": content,
+                        "company_id": company_id,
                         "embedding": json.dumps(embedding),
                         "metadata": json.dumps(metadata or {}),
                     },
@@ -74,15 +75,17 @@ class MemoryClient:
                 """
                 CREATE (m:Memory {
                     content: $content,
+                    company_id: $company_id,
                     metadata: $metadata,
                     created: timestamp()
                 })
                 """,
                 content=content,
+                company_id=company_id,
                 metadata=json.dumps(metadata or {}),
             )
 
-    def search_similar(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_similar(self, query: str, limit: int = 10, *, company_ids: Optional[List[int]] = None, include_legacy: bool = False) -> List[Dict[str, Any]]:
         """
         Find semantically similar content using pgvector ANN search.
 
@@ -104,18 +107,28 @@ class MemoryClient:
         if not embedding:
             return []
 
+        company_filter = ""
+        params = {"embedding": json.dumps(embedding), "limit": limit}
+        if company_ids is not None:
+            company_filter = "WHERE (company_id = ANY(:company_ids)"
+            if include_legacy:
+                company_filter += " OR company_id IS NULL"
+            company_filter += ")"
+            params["company_ids"] = company_ids
+
         with Session(self.engine) as session:
             # Cast the parameter to vector so pgvector accepts it.
             results_proxy = session.execute(
                 text(
-                    """
-                    SELECT content, metadata, 1 - (embedding <=> :embedding::vector) as similarity
+                    f"""
+                    SELECT content, metadata, 1 - (embedding <=> CAST(:embedding AS vector)) as similarity, company_id
                     FROM vector_memory
-                    ORDER BY embedding <=> :embedding::vector
+                    {company_filter}
+                    ORDER BY embedding <=> CAST(:embedding AS vector)
                     LIMIT :limit
                     """
                 ),
-                {"embedding": json.dumps(embedding), "limit": limit},
+                params,
             )
 
             results = []
@@ -125,6 +138,8 @@ class MemoryClient:
                         "content": row[0],
                         "metadata": row[1] if isinstance(row[1], dict) else json.loads(row[1] or "{}"),
                         "similarity": row[2],
+                        "company_id": row[3],
+                        "legacy": row[3] is None,
                     }
                 )
             return results

@@ -142,6 +142,23 @@ describe('Evidence detail', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('evidence.feedbackRequired'))
   })
 
+  it('flags legacy company ownership separately from signature verification', () => {
+    mockedUseAuditVerification.mockReturnValue({
+      data: {
+        interaction_id: 'agent-run:issue-27-run',
+        summary: { valid: 1, invalid: 0, unsigned: 0, legacy: 0 },
+        rows: [{ id: 10, action: 'old', status: 'valid', mode: 'hmac-sha256', company_id: null, legacy: true }],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as never)
+    setup()
+    expect(screen.getByTestId('legacy-company')).toHaveTextContent(i18n.t('evidence.legacyCompany'))
+    expect(screen.getByTestId('legacy-company').className).not.toContain('emerald')
+    expect(screen.getByTestId('signature-row-valid')).toBeInTheDocument()
+  })
+
   it('submits the exact rejection body when feedback is provided', () => {
     setup()
     fireEvent.change(screen.getByLabelText(i18n.t('evidence.approverName')), { target: { value: ' Reviewer ' } })

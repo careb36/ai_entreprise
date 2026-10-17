@@ -330,6 +330,7 @@ def record_agent_turn(
         result_payload["preview"] = result_preview[:500]
 
     row = AuditLog(
+        company_id=company_id,
         interaction_id=f"task-{backlog_item_id}" if backlog_item_id is not None else None,
         agent_id=(agent.get("name") or canonical_kpi_role(role) or None),
         action=action,

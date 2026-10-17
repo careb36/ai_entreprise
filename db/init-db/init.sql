@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 -- 5. Memory & Discovery
 CREATE TABLE IF NOT EXISTS audit_log (
     id SERIAL PRIMARY KEY,
+    company_id INTEGER REFERENCES companies(id),
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     interaction_id VARCHAR(100),
     agent_id VARCHAR(100),
@@ -120,6 +121,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE TABLE IF NOT EXISTS vector_memory (
     id SERIAL PRIMARY KEY,
+    company_id INTEGER REFERENCES companies(id),
     content TEXT NOT NULL,
     embedding vector(1536),
     metadata JSONB,
@@ -127,6 +129,8 @@ CREATE TABLE IF NOT EXISTS vector_memory (
 );
 
 CREATE INDEX IF NOT EXISTS vector_memory_idx ON vector_memory USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log(company_id);
+CREATE INDEX IF NOT EXISTS ix_vector_memory_company_id ON vector_memory(company_id);
 
 CREATE TABLE IF NOT EXISTS project_discovery (
     id SERIAL PRIMARY KEY,

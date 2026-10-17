@@ -178,6 +178,7 @@ def approve_run(
     session.add(approval)
     audit_log = AgentService().audit_interaction(
         session=session,
+        company_id=run.company_id,
         interaction_id=f"agent-run:{run.external_ref}",
         agent_id=f"human:{approval.approver_name}",
         action=f"agent_run_{approval.decision}",

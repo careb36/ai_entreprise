@@ -90,7 +90,8 @@ class DeepSeekEngramProcessor:
         role: str,
         decision_summary: str,
         related_semantic_refs: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        company_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Burn an Engram into the Temporal Knowledge Graph and Vector Store.
@@ -118,7 +119,8 @@ class DeepSeekEngramProcessor:
             agent_id=agent_id,
             agent_role=role,
             summary=processed_summary,
-            metadata=metadata
+            metadata=metadata,
+            company_id=company_id,
         )
         
         # 2. Store in pgvector for semantic RAG
@@ -130,7 +132,7 @@ class DeepSeekEngramProcessor:
                 "agent_role": role,
                 "is_engram": True
             }
-            self._store_in_vector_db(processed_summary, vector_metadata)
+            self._store_in_vector_db(processed_summary, vector_metadata, company_id)
         except Exception as e:
             logger.warning(f"Failed to store engram vector: {e}")
 
@@ -147,7 +149,7 @@ class DeepSeekEngramProcessor:
             "summary": processed_summary[:200]
         }
 
-    def _store_in_vector_db(self, content: str, metadata: Dict[str, Any]):
+    def _store_in_vector_db(self, content: str, metadata: Dict[str, Any], company_id: Optional[int] = None):
         """Helper to store in pgvector only."""
         from llm_proxy_client import LLMProxyClient
         from sqlmodel import Session, text
@@ -158,8 +160,8 @@ class DeepSeekEngramProcessor:
         if embedding:
             with Session(engine) as session:
                 session.execute(
-                    text("INSERT INTO vector_memory (content, embedding, metadata) VALUES (:c, :e, :m)"),
-                    {"c": content, "e": json.dumps(embedding), "m": json.dumps(metadata)}
+                    text("INSERT INTO vector_memory (content, embedding, metadata, company_id) VALUES (:c, :e, :m, :company_id)"),
+                    {"c": content, "e": json.dumps(embedding), "m": json.dumps(metadata), "company_id": company_id}
                 )
                 session.commit()
     
@@ -220,15 +222,17 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         agent_id: str,
         agent_role: str,
         summary: str,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        company_id: Optional[int] = None,
     ) -> str:
         """Create an Episodic node in Neo4j."""
         engram_id = f"engram_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{agent_id}"
         
         cypher = f"""
-        CREATE (e:{engram_type.value} {{
+        CREATE (e:Episodic:{engram_type.value} {{
             id: $engram_id,
             agent_id: $agent_id,
+            company_id: $company_id,
             agent_role: $agent_role,
             summary: $summary,
             metadata: $metadata,
@@ -244,6 +248,7 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
                     cypher,
                     engram_id=engram_id,
                     agent_id=agent_id,
+                    company_id=company_id,
                     agent_role=agent_role,
                     summary=summary,
                     metadata=json.dumps(metadata),
@@ -338,6 +343,7 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         story: str,
         limit: int = 5,
         role_filter: Optional[str] = None,
+        company_id: Optional[int] = None,
     ) -> str:
         """
         Improved RAG: Combined Semantic (pgvector) + Structural (Neo4j) search.
@@ -349,12 +355,14 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         semantic_results = []
         try:
             mem_client = MemoryClient(neo4j_driver=self.driver)
-            semantic_results = mem_client.search_similar(story, limit=limit)
+            semantic_results = mem_client.search_similar(
+                story, limit=limit, company_ids=[company_id] if company_id is not None else []
+            )
         except Exception as e:
             logger.warning(f"Semantic engram search failed: {e}")
 
         # 2. Structural/Keyword Search via Neo4j
-        graph_context = self._query_graph_rag(story, limit=limit, role_filter=role_filter)
+        graph_context = self._query_graph_rag(story, limit=limit, role_filter=role_filter, company_id=company_id)
         
         # 3. Combine and Format
         if not semantic_results and not graph_context:
@@ -384,6 +392,7 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         story: str,
         limit: int = 5,
         role_filter: Optional[str] = None,
+        company_id: Optional[int] = None,
     ) -> str:
         """
         Keyword-based search over the Temporal Knowledge Graph.
@@ -395,10 +404,10 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         }
         keywords = [w for w in normalized.split() if len(w) > 3 and w not in stop_words][:10]
 
-        params: Dict[str, Any] = {"limit": limit}
-        role_condition = ""
+        params: Dict[str, Any] = {"limit": limit, "company_id": company_id}
+        role_condition = "AND e.company_id = $company_id "
         if role_filter:
-            role_condition = "AND e.agent_role = $role_filter "
+            role_condition += "AND e.agent_role = $role_filter "
             params["role_filter"] = role_filter
 
         if keywords:
