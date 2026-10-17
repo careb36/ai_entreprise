@@ -12,9 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_generated_openapi_matches_fastapi_app(tmp_path):
     generated = tmp_path / "openapi.yaml"
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(ROOT / "backend"), str(ROOT / "backend" / "app")]
-    )
+    env.pop("PYTHONPATH", None)
 
     subprocess.run(
         [
