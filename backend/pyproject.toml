@@ -35,6 +35,8 @@ opentelemetry-instrumentation-httpx = "^0.45b0"
 langchain-openai = "^1.1.12"
 pyjwt = ">=2.8,<3"
 bcrypt = "<5"
+slowapi = "^0.1.10"
+prometheus-client = "^0.21.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.1.1"
