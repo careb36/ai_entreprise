@@ -15,6 +15,65 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    container_name: factory-mailpit
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - factory-network
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: factory-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks:
+      - factory-network
+    depends_on:
+      - mailpit
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: factory-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - factory-network
+    depends_on:
+      - alertmanager
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: factory-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - factory-network
+    depends_on:
+      - prometheus
+      - jaeger
+
   nats:
     image: nats:latest
     container_name: factory-nats
@@ -210,6 +269,8 @@ volumes:
   neo4j-data:
   neo4j-logs:
   factory-logs:
+  prometheus-data:
+  grafana-data:
 
 networks:
   factory-network:

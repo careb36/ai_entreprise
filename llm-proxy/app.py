@@ -12,9 +12,16 @@ import time
 import threading
 import logging
 import math
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 # --- OpenTelemetry ---
 from opentelemetry import trace
@@ -27,6 +34,25 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
 app = Flask(__name__)
+
+HTTP_REQUESTS = Counter(
+    "llm_proxy_http_requests_total",
+    "Total number of HTTP requests handled by the LLM proxy.",
+    ("method", "route", "status"),
+)
+HTTP_REQUEST_DURATION = Histogram(
+    "llm_proxy_http_request_duration_seconds",
+    "HTTP request duration in seconds.",
+    ("method", "route"),
+)
+TOKEN_QUOTA_UTILIZATION = Gauge(
+    "llm_proxy_token_quota_utilization_ratio",
+    "Highest configured business-unit token quota utilization ratio.",
+)
+QUOTA_DATABASE_UP = Gauge(
+    "llm_proxy_quota_database_up",
+    "Whether the proxy can read token quota metrics from PostgreSQL.",
+)
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -174,6 +200,7 @@ threading.Thread(target=lambda: (time.sleep(3600), _refresh_gemini_models()), da
 # --- Governance Middleware ---
 @app.before_request
 def enforce_business_unit_quota():
+    request.environ["metrics.started_at"] = time.perf_counter()
     if request.path == "/health": return
     bu_id = request.headers.get("X-Business-Unit-ID")
     if not bu_id: return
@@ -192,6 +219,15 @@ def enforce_business_unit_quota():
 @app.after_request
 def add_quota_warning_header(response):
     """Add X-Quota-Warning header when a business unit has consumed ≥ 80 % of its limit."""
+    if request.path != "/metrics":
+        route = request.url_rule.rule if request.url_rule else "unmatched"
+        HTTP_REQUESTS.labels(
+            method=request.method, route=route, status=str(response.status_code)
+        ).inc()
+        HTTP_REQUEST_DURATION.labels(method=request.method, route=route).observe(
+            time.perf_counter() - request.environ.get("metrics.started_at", time.perf_counter())
+        )
+
     bu_id = request.headers.get("X-Business-Unit-ID")
     if not bu_id:
         return response
@@ -216,6 +252,27 @@ def add_quota_warning_header(response):
 @app.route("/health")
 def health():
     return jsonify({"status": "healthy", "database": "connected", "models": sorted(_available_models)})
+
+
+@app.route("/metrics")
+def prometheus_metrics():
+    try:
+        with engine.connect() as conn:
+            utilization = conn.execute(
+                text(
+                    "SELECT COALESCE(MAX(CASE WHEN token_quota_limit > 0 "
+                    "THEN CAST(token_quota_used AS FLOAT) / token_quota_limit "
+                    "ELSE 0 END), 0) FROM business_units"
+                )
+            ).scalar()
+        TOKEN_QUOTA_UTILIZATION.set(float(utilization or 0))
+        QUOTA_DATABASE_UP.set(1)
+    except Exception as exc:
+        TOKEN_QUOTA_UTILIZATION.set(0)
+        QUOTA_DATABASE_UP.set(0)
+        logger.warning("Quota metrics unavailable: %s", exc)
+
+    return Response(generate_latest(), content_type=CONTENT_TYPE_LATEST)
 
 
 @app.route("/v1/models")

@@ -1,0 +1,52 @@
+groups:
+  - name: fabrique-system
+    rules:
+      - alert: FabriqueServiceDown
+        expr: up{job=~"fabrique-backend|llm-proxy|alertmanager"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fabrique service {{ $labels.job }} is unavailable"
+          description: "Prometheus has been unable to scrape {{ $labels.job }} for more than one minute."
+
+      - alert: FabriqueHTTP5xx
+        expr: |
+          sum by (job) (rate(fabrique_http_requests_total{status=~"5.."}[5m])) > 0
+          or
+          sum by (job) (rate(llm_proxy_http_requests_total{status=~"5.."}[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fabrique service {{ $labels.job }} is returning HTTP 5xx errors"
+          description: "HTTP 5xx responses have been observed during the last five minutes."
+
+      - alert: TokenQuotaNearLimit
+        expr: |
+          llm_proxy_token_quota_utilization_ratio >= 0.8
+          and llm_proxy_token_quota_utilization_ratio < 0.95
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A business-unit token quota is near its limit"
+          description: "The highest configured business-unit token quota utilization is {{ $value | humanizePercentage }}."
+
+      - alert: TokenQuotaCritical
+        expr: llm_proxy_token_quota_utilization_ratio >= 0.95
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A business-unit token quota is nearly exhausted"
+          description: "The highest configured business-unit token quota utilization is {{ $value | humanizePercentage }}."
+
+      - alert: TokenQuotaMetricsUnavailable
+        expr: llm_proxy_quota_database_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Token quota metrics cannot reach PostgreSQL"
+          description: "The LLM proxy could not read business-unit quota usage from PostgreSQL."

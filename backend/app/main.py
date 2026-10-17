@@ -17,6 +17,7 @@ Responsibilities:
 import asyncio
 import json
 import os
+import time
 import traceback
 from datetime import datetime
 from typing import Set
@@ -47,6 +48,7 @@ from routers.agents import publish_sse_event, sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
 from services.task_worker import process_backlog_tasks
+from metrics import metrics_response, record_http_request
 
 settings = Settings()
 
@@ -78,6 +80,33 @@ app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(support_router)
 app.include_router(github_router)
+
+
+@app.middleware("http")
+async def collect_http_metrics(request: Request, call_next):
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    started_at = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        record_http_request(
+            request.method,
+            route,
+            status_code,
+            time.perf_counter() - started_at,
+        )
+
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    return metrics_response()
+
 
 # Initialise state slots so type checkers and docs know what lives here.
 # Actual values are set in the startup handler — never accessed before that.

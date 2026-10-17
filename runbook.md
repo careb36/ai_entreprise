@@ -10,6 +10,10 @@ This document describes steps to harden the Factory system for production deploy
 | Backend API | `http://localhost:8000/docs` | FastAPI + Swagger |
 | LLM Proxy | `http://localhost:5100` | Token budget gateway |
 | **Jaeger Tracing UI** | **`http://localhost:16686`** | Distributed trace explorer |
+| **Grafana** | **`http://localhost:3000`** | Provisioned system dashboard (default: `admin` / `admin`) |
+| Prometheus | `http://localhost:9090` | Metrics and alert status |
+| Alertmanager | `http://localhost:9093` | Active alert groups |
+| Alert inbox | `http://localhost:8025` | Local email notifications (Mailpit) |
 | Neo4j Browser | `http://localhost:7474` | Knowledge graph UI |
 
 ---
@@ -30,9 +34,33 @@ OTEL_SDK_DISABLED=true
 ```
 
 **Key service names in Jaeger:**
-- `fabrique-api` — FastAPI request traces
 - `agent-worker` — LangGraph node spans (`graph.po`, `graph.architect`, …)
 - `llm-proxy` — LLM API call traces with quota context
+
+---
+
+## Metrics, Dashboards, and Alerts
+
+Docker Compose starts Prometheus, Grafana, Alertmanager, and a local Mailpit
+inbox with the application. The backend and LLM proxy expose Prometheus metrics
+at `http://localhost:8000/metrics` and `http://localhost:5100/metrics`.
+Prometheus scrapes them every 15 seconds.
+
+Open Grafana at `http://localhost:3000` and sign in with the `GRAFANA_ADMIN_USER`
+and `GRAFANA_ADMIN_PASSWORD` values from `.env` (defaults are `admin` / `admin`
+for local development). The provisioned **La Fabrique — System Overview**
+dashboard shows request rate, HTTP 5xx errors, p95 latency, service availability,
+and the highest token-quota utilization across business units. Dashboard links
+open Jaeger searches for agent-worker and LLM proxy traces; the Jaeger data source is
+also available in Grafana Explore.
+
+Prometheus rules alert on unavailable services, HTTP 5xx responses, token quota
+utilization at 80% and 95%, and inability to read quota data from PostgreSQL.
+Alertmanager sends email to the recipient configured in
+`monitoring/alertmanager.yml`; locally these messages are available at
+`http://localhost:8025`. For production, change the SMTP host, recipient, and
+TLS/authentication settings in that file. Protect or firewall the metrics and
+monitoring endpoints when deploying outside a local development environment.
 
 ---
 
@@ -91,35 +119,10 @@ services:
 
 ## 3. Token Budget Enforcement
 
-### LLM Proxy Routing
-*Note: All models (including DeepSeek for Devs/QA) MUST route through the local `llm-proxy` (`http://localhost:5100`) to ensure global token budgets are respected and keys are centralized.*
-
-### LLM Proxy Token Budget
-
-```python
-# llm-proxy/app.py (add budget tracking)
-from collections import defaultdict
-
-token_budgets = defaultdict(lambda: {"used": 0, "limit": 2_000_000})
-
-@app.middleware("http")
-async def enforce_token_budget(request, call_next):
-    agent_id = request.headers.get("X-Agent-ID")
-    if agent_id:
-        if token_budgets[agent_id]["used"] >= token_budgets[agent_id]["limit"]:
-            return JSONResponse(
-                status_code=429,
-                content={"error": "Token budget exceeded"}
-            )
-    
-    response = await call_next(request)
-    
-    # Track usage
-    tokens_used = int(response.headers.get("X-Tokens-Used", 0))
-    token_budgets[agent_id]["used"] += tokens_used
-    
-    return response
-```
+All models (including DeepSeek for Developers and QA) must route through the
+LLM proxy (`http://localhost:5100`) so global token budgets are enforced and API
+keys remain centralized. Current quota usage and near-limit alerts are described
+in the observability section above.
 
 ## 4. Agent Commit Verification
 

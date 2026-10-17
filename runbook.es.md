@@ -10,14 +10,18 @@ Este documento describe los pasos para fortalecer el sistema Factory para su des
 | Backend API | `http://localhost:8000/docs` | FastAPI + Swagger |
 | LLM Proxy | `http://localhost:5100` | Gateway de presupuesto de tokens |
 | **Jaeger Tracing UI** | **`http://localhost:16686`** | Explorador de trazas distribuidas |
+| **Grafana** | **`http://localhost:3000`** | Dashboard del sistema (por defecto: `admin` / `admin`) |
+| Prometheus | `http://localhost:9090` | Métricas y estado de alertas |
+| Alertmanager | `http://localhost:9093` | Grupos de alertas activas |
+| Bandeja de alertas | `http://localhost:8025` | Notificaciones locales por correo (Mailpit) |
 | Neo4j Browser | `http://localhost:7474` | UI del grafo de conocimiento |
 
 ---
 
 ## Trazabilidad Distribuida (OpenTelemetry + Jaeger)
 
-La Fabrique incluye instrumentación OpenTelemetry en el backend, el proxy LLM y el agente worker.
-Las trazas fluyen al contenedor Jaeger all-in-one via OTLP/HTTP en el puerto `4318`.
+La Fabrique incluye instrumentación OpenTelemetry en el worker de agentes y el proxy LLM.
+Las trazas fluyen al contenedor Jaeger all-in-one vía OTLP/HTTP en el puerto `4318`.
 
 **Habilitar trazas** (por defecto en Docker Compose):
 ```
@@ -28,6 +32,33 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 ```
 OTEL_SDK_DISABLED=true
 ```
+
+---
+
+## Métricas, Dashboards y Alertas
+
+Docker Compose inicia Prometheus, Grafana, Alertmanager y una bandeja local
+Mailpit junto con la aplicación. El backend y el proxy LLM exponen métricas
+Prometheus en `http://localhost:8000/metrics` y
+`http://localhost:5100/metrics`. Prometheus las consulta cada 15 segundos.
+
+Abre Grafana en `http://localhost:3000` e inicia sesión con los valores
+`GRAFANA_ADMIN_USER` y `GRAFANA_ADMIN_PASSWORD` de `.env` (por defecto,
+`admin` / `admin` para desarrollo local). El dashboard provisionado
+**La Fabrique — System Overview** muestra la tasa de solicitudes, errores HTTP
+5xx, latencia p95, disponibilidad de servicios y la mayor utilización de cuota
+de tokens entre unidades de negocio. Los enlaces del dashboard abren búsquedas
+de trazas del worker de agentes y del proxy LLM en Jaeger; la fuente de datos Jaeger también está
+disponible en Grafana Explore.
+
+Las reglas de Prometheus alertan por servicios no disponibles, respuestas HTTP
+5xx, uso de cuota de tokens al 80 % y 95 %, y fallos al consultar las cuotas en
+PostgreSQL. Alertmanager envía correos al destinatario configurado en
+`monitoring/alertmanager.yml`; localmente se pueden ver en
+`http://localhost:8025`. Para producción, configura el host SMTP, el
+destinatario, TLS y la autenticación en ese archivo.
+Protege o restringe por firewall los endpoints de métricas y monitorización
+cuando despliegues fuera de un entorno local.
 
 ---
 
@@ -86,35 +117,10 @@ services:
 
 ## 3. Cumplimiento del Presupuesto de Tokens
 
-### Enrutamiento del Proxy LLM
-*Nota: Todos los modelos (incluyendo DeepSeek para Devs/QA) DEBEN enrutarse a través del `llm-proxy` local (`http://localhost:5100`) para garantizar que se respeten los presupuestos globales de tokens y que las claves estén centralizadas.*
-
-### Presupuesto de Tokens en el Proxy LLM
-
-```python
-# llm-proxy/app.py (agregar seguimiento de presupuesto)
-from collections import defaultdict
-
-token_budgets = defaultdict(lambda: {"used": 0, "limit": 2_000_000})
-
-@app.middleware("http")
-async def enforce_token_budget(request, call_next):
-    agent_id = request.headers.get("X-Agent-ID")
-    if agent_id:
-        if token_budgets[agent_id]["used"] >= token_budgets[agent_id]["limit"]:
-            return JSONResponse(
-                status_code=429,
-                content={"error": "Token budget exceeded"}
-            )
-    
-    response = await call_next(request)
-    
-    # Realizar seguimiento del uso
-    tokens_used = int(response.headers.get("X-Tokens-Used", 0))
-    token_budgets[agent_id]["used"] += tokens_used
-    
-    return response
-```
+Todos los modelos (incluyendo DeepSeek para Developers y QA) deben enrutarse a
+través del proxy LLM (`http://localhost:5100`) para aplicar los presupuestos
+globales y centralizar las claves API. El uso de cuotas y sus alertas se
+describen en la sección de observabilidad anterior.
 
 ## 4. Verificación de Commits de Agentes
 

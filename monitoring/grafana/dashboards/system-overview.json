@@ -1,0 +1,148 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "HTTP health, request latency, token quota usage, and links to distributed traces.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Jaeger agent traces",
+      "tooltip": "Search distributed traces for the LangGraph agent worker",
+      "type": "link",
+      "url": "http://localhost:16686/search?service=agent-worker"
+      },
+      {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Jaeger LLM proxy traces",
+      "tooltip": "Search distributed traces for the LLM proxy",
+      "type": "link",
+      "url": "http://localhost:16686/search?service=llm-proxy"
+      }
+  ],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(fabrique_http_requests_total[5m])) or sum by (job) (rate(llm_proxy_http_requests_total[5m]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(fabrique_http_requests_total{status=~\"5..\"}[5m])) or sum by (job) (rate(llm_proxy_http_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP 5xx errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (job, le) (rate(fabrique_http_request_duration_seconds_bucket[5m]))) or histogram_quantile(0.95, sum by (job, le) (rate(llm_proxy_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{job}} p95",
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP request latency (p95)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 0.8},
+              {"color": "red", "value": 0.95}
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showPercentChange": false, "textMode": "auto"},
+      "targets": [
+        {
+          "expr": "llm_proxy_token_quota_utilization_ratio",
+          "legendFormat": "Highest business-unit quota utilization",
+          "refId": "A"
+        }
+      ],
+      "title": "Token quota utilization",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 16},
+      "id": 5,
+      "options": {"displayMode": "gradient", "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}, "maxVizHeight": 300, "minVizHeight": 10, "minVizWidth": 0, "namePlacement": "auto", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showUnfilled": true},
+      "targets": [
+        {"expr": "up{job=~\"fabrique-backend|llm-proxy|alertmanager\"}", "legendFormat": "{{job}}", "refId": "A"}
+      ],
+      "title": "Service availability",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["fabrique", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "La Fabrique — System Overview",
+  "uid": "fabrique-system-overview",
+  "version": 1,
+  "weekStart": ""
+}
