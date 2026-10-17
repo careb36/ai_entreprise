@@ -18,6 +18,8 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from database import get_session, get_neo4j_driver
+from auth_policy import current_user_if_required, require_authenticated, require_company_role
+from models import User, BusinessUnit, Sprint
 from services.discovery_service import DiscoveryService
 from services.company_service import CompanyService
 from schemas import (
@@ -37,11 +39,12 @@ _ANCHOR_DATE = date(2026, 5, 2)
 
 
 @router.post("/init_company", tags=["Core"])
-async def init_company(req: CompanyInitRequest, session: Session = Depends(get_session)):
+async def init_company(req: CompanyInitRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Bootstrap a new company tenant with its AI agents and project credentials.
     Delegates to CompanyService for transactional logic and team planning.
     """
+    require_authenticated(user)
     service = CompanyService(session)
     try:
         result = service.init_company(
@@ -52,6 +55,7 @@ async def init_company(req: CompanyInitRequest, session: Session = Depends(get_s
             permissions=req.permissions,
             project_path=req.project_path,
             detected_stack=req.detected_stack,
+            owner_user_id=user.id if user is not None else None,
         )
         return result
     except Exception as exc:
@@ -68,20 +72,26 @@ async def approve_task():
 
 
 @router.get("/enterprise/quotas", tags=["Enterprise"])
-async def get_quotas(company_id: int, session: Session = Depends(get_session)):
+async def get_quotas(company_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Return token usage and limits for all business units of a company.
     """
+    require_company_role(session, user, company_id, "Viewer")
     service = CompanyService(session)
     return service.get_quotas(company_id)
 
 
 @router.post("/enterprise/quotas/{bu_id}/reset", tags=["Enterprise"])
-async def reset_quota(bu_id: int, session: Session = Depends(get_session)):
+async def reset_quota(bu_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Reset the token usage counter for a business unit to zero.
     Intended for use at the start of a new billing cycle.
     """
+    if user is not None:
+        unit = session.get(BusinessUnit, bu_id)
+        if not unit:
+            raise HTTPException(status_code=404, detail=f"Business Unit {bu_id} not found")
+        require_company_role(session, user, unit.company_id, "Manager")
     service = CompanyService(session)
     try:
         return service.reset_quota(bu_id)
@@ -90,10 +100,15 @@ async def reset_quota(bu_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/analytics/summary", tags=["Enterprise"])
-async def get_project_health(sprint_id: int, session: Session = Depends(get_session)):
+async def get_project_health(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     AI Scrum Master: generate a sprint health report from audit and backlog data.
     """
+    if user is not None:
+        sprint = session.get(Sprint, sprint_id)
+        if not sprint:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+        require_company_role(session, user, sprint.company_id, "Viewer")
     service = CompanyService(session)
     return service.get_project_health(sprint_id)
 
@@ -107,10 +122,12 @@ async def get_orchestration_health(
     company_id: int = Query(..., description="Company whose orchestration history will be analysed"),
     weeks: int = Query(8, ge=1, le=52, description="Trailing weeks to include"),
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
     """
     Return weekly KPI trends that measure the Batch-1 orchestration rollout.
     """
+    require_company_role(session, user, company_id, "Viewer")
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(weeks=weeks)
     params = {"company_id": company_id, "cutoff": cutoff}
 
@@ -310,7 +327,7 @@ async def list_models(request: Request):
 
 
 @router.post("/discover_team", tags=["Enterprise"])
-async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session)):
+async def discover_team(req: DiscoveryRequest, request: Request, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Scan a project path to detect its technology stack and suggest an AI team.
 
@@ -321,6 +338,7 @@ async def discover_team(req: DiscoveryRequest, request: Request, session: Sessio
     If ``company_id`` is provided, the result is persisted in the
     ``project_discovery`` table.
     """
+    require_authenticated(user)
     llm_proxy_url = None
     llm_client = getattr(request.app.state, "llm_client", None)
     if llm_client:
@@ -344,7 +362,7 @@ async def discover_team(req: DiscoveryRequest, request: Request, session: Sessio
 
 
 @router.get("/enterprise/lineage", tags=["Enterprise"])
-async def get_code_lineage(file_path: str):
+async def get_code_lineage(file_path: str, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Time-Travel Debugging: retrieve all architectural decisions that modified a file.
 
@@ -352,6 +370,7 @@ async def get_code_lineage(file_path: str):
     to a ``Semantic`` node whose ``id`` ends with *file_path* via a
     ``MODIFIED_BY`` relationship.  Returns up to 10 most recent decisions.
     """
+    require_company_role(session, user, company_id, "Viewer")
     driver = get_neo4j_driver()
     try:
         cypher = """

@@ -29,6 +29,8 @@ from sqlmodel import Session, select
 
 from database import get_session, engine
 from config import settings
+from auth_policy import current_user_if_required, require_authenticated, require_company_role
+from models import User
 from audit_signing import verify_audit_row
 from models import AuditLog
 from schemas import GenerateRequest, AuditRequest
@@ -168,10 +170,11 @@ async def generate_glassroom_sse(
 
 
 @router.post("/generate")
-async def generate(req: GenerateRequest, request: Request, session: Session = Depends(get_session)):
+async def generate(req: GenerateRequest, request: Request, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Trigger a LangGraph agent workflow run.
     """
+    require_company_role(session, user, req.company_id, "Manager")
     if not settings.AGENT_GRAPH_ENABLED:
         raise HTTPException(
             status_code=409,
@@ -193,13 +196,14 @@ async def generate(req: GenerateRequest, request: Request, session: Session = De
 
 
 @router.post("/audit")
-async def audit(req: AuditRequest, session: Session = Depends(get_session)):
+async def audit(req: AuditRequest, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Write an agent decision entry to the audit log.
 
     Writes to both the filesystem JSONL file and the ``audit_log`` database
     table via ``AgentService.audit_interaction()``.
     """
+    require_company_role(session, user, (req.details or {}).get("company_id", company_id), "Manager")
     if req.decision_signature is not None:
         logger.warning(
             "decision_signature supplied by caller is ignored; signatures are computed server-side"
@@ -220,8 +224,10 @@ async def audit(req: AuditRequest, session: Session = Depends(get_session)):
 
 
 @router.get("/audit/verify")
-async def verify_audit(interaction_id: str = Query(...), session: Session = Depends(get_session)):
+async def verify_audit(interaction_id: str = Query(...), session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """Verify every audit row associated with an interaction."""
+    # Keyed by interaction_id, not company; authentication only.
+    require_authenticated(user)
     rows = session.exec(
         select(AuditLog)
         .where(AuditLog.interaction_id == interaction_id)
@@ -252,13 +258,14 @@ async def verify_audit(interaction_id: str = Query(...), session: Session = Depe
 
 
 @router.get("/memory/search")
-async def search_memory(request: Request, query: str = Query(...), limit: int = 10):
+async def search_memory(request: Request, query: str = Query(...), limit: int = 10, user: User | None = Depends(current_user_if_required)):
     """
     Search the vector memory store for content similar to *query*.
 
     Uses pgvector cosine similarity on pre-computed embeddings.
     Returns up to *limit* results sorted by descending similarity.
     """
+    require_authenticated(user)
     client = request.app.state.memory_client
     if not client:
         raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
@@ -267,7 +274,7 @@ async def search_memory(request: Request, query: str = Query(...), limit: int = 
 
 
 @router.post("/memory/store")
-async def store_memory(request: Request, content: str, metadata: Optional[dict] = None):
+async def store_memory(request: Request, content: str, metadata: Optional[dict] = None, company_id: int | None = None, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Compute and store an embedding for *content* in pgvector and Neo4j.
 
@@ -275,6 +282,7 @@ async def store_memory(request: Request, content: str, metadata: Optional[dict] 
     *metadata* is an arbitrary JSON dict stored alongside the embedding for
     later retrieval context.
     """
+    require_company_role(session, user, (metadata or {}).get("company_id", company_id), "Manager")
     client = request.app.state.memory_client
     if not client:
         raise HTTPException(status_code=503, detail="Memory service unavailable (Neo4j not connected).")
@@ -294,6 +302,7 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
     If NATS is unavailable, a red system error event is emitted immediately so
     the user sees a clear explanation instead of silent inactivity.
     """
+    # Public: browser EventSource cannot send Authorization headers.
     queue: asyncio.Queue[str] = asyncio.Queue()
     register_sse_connection(sprint_id, queue)
 

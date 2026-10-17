@@ -116,7 +116,8 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 - Company-scoped: all data (agents, sprints, memory, budgets) is namespaced by `company_id`
 - RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
-- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. No endpoint is enforced yet.
+- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. `AUTH_REQUIRED=false` preserves legacy access; when true, sensitive routes require a JWT and company roles follow Owner > Manager > Viewer. Company initialization creates the caller's Owner membership; invitations require Owner.
+- Always public: `/health`, registration/login, the HMAC-signed GitHub webhook, support bug reporting/chat, `/v1/models`, Glassroom SSE (EventSource cannot send headers), and the retired `/v1/approve_task` (410). `/v1/auth/me` always requires a JWT. Audit writes, memory stores, and lineage accept a `company_id` query parameter for role checks; audit verification and the unscoped memory search require authentication only. Help-desk tickets/logs require authentication, not company membership.
 
 ## Test Suite
 

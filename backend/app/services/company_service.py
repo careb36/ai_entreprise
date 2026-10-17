@@ -18,7 +18,7 @@ from sqlalchemy import text
 from database import get_neo4j_driver
 from models import (
     Company, Agent, ProjectCredential, Sprint, BacklogItem,
-    OutboxEvent, AuditLog, BusinessUnit
+    OutboxEvent, AuditLog, BusinessUnit, CompanyMember
 )
 from services.sprint_planner import plan_foundation_sprint
 from crypto import encrypt_value
@@ -46,6 +46,7 @@ class CompanyService:
         permissions: Optional[Dict[str, str]] = None,
         project_path: Optional[str] = None,
         detected_stack: Optional[Dict[str, Any]] = None,
+        owner_user_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Bootstrap a new company tenant with its AI agents and project credentials.
@@ -61,6 +62,11 @@ class CompanyService:
         )
         self.session.add(company)
         self.session.flush()
+
+        if owner_user_id is not None:
+            self.session.add(CompanyMember(
+                company_id=company.id, user_id=owner_user_id, human_role="Owner"
+            ))
 
         # 2. Create Agents
         for agent_data in agents:

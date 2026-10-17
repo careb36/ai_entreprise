@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session, select, text
 
 from database import get_session
+from auth_policy import current_user_if_required
 from models import BugReport
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
 from logging_config import logger
@@ -78,7 +79,7 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
     }
 
 
-@router.get("/tickets")
+@router.get("/tickets", dependencies=[Depends(current_user_if_required)])
 async def list_tickets(
     reporter_email: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -121,7 +122,7 @@ async def list_tickets(
     return {"tickets": tickets, "count": len(tickets)}
 
 
-@router.get("/tickets/{ticket_num}")
+@router.get("/tickets/{ticket_num}", dependencies=[Depends(current_user_if_required)])
 async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
     """
     Return the full detail of a single ticket by its ``FAB-XXXXX`` identifier.
@@ -154,7 +155,7 @@ async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):
     }
 
 
-@router.patch("/tickets/{ticket_num}")
+@router.patch("/tickets/{ticket_num}", dependencies=[Depends(current_user_if_required)])
 async def update_ticket_status(
     ticket_num: str,
     req: BugStatusUpdateRequest,
@@ -242,7 +243,7 @@ async def support_chat(req: SupportChatRequest):
         raise HTTPException(status_code=503, detail="LLM service unavailable")
 
 
-@router.get("/logs")
+@router.get("/logs", dependencies=[Depends(current_user_if_required)])
 async def download_support_logs():
     """
     Download the latest structured audit log as a JSONL file.

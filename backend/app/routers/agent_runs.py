@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
 from database import get_session
+from auth_policy import current_user_if_required, require_company_role
+from models import User
 from logging_config import logger
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
@@ -18,7 +20,8 @@ router = APIRouter(prefix="/v1/agent_runs", tags=["Agent Runs"])
 
 
 @router.post("")
-def create_agent_run(payload: AgentRunCreate, session: Session = Depends(get_session)):
+def create_agent_run(payload: AgentRunCreate, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+    require_company_role(session, user, payload.company_id, "Manager")
     if "artifact_digest" in (payload.model_extra or {}):
         logger.warning(
             "artifact_digest supplied by caller is ignored; digests are computed server-side (company_id=%s external_ref=%s)",
@@ -44,7 +47,9 @@ def list_agent_runs(
     until: Optional[datetime] = None,
     limit: int = Query(50, ge=1, le=500),
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, company_id, "Viewer")
     statement = select(AgentRun).where(AgentRun.company_id == company_id)
     if producer is not None:
         statement = statement.where(AgentRun.producer == producer)
@@ -91,7 +96,9 @@ def get_agent_run(
     run_id: int,
     company_id: int = Query(...),
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, company_id, "Viewer")
     run = session.exec(
         select(AgentRun).where(
             AgentRun.id == run_id,
@@ -108,7 +115,9 @@ def verify_run(
     run_id: int,
     payload: AgentRunVerificationRequest,
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, payload.company_id, "Manager")
     run = session.exec(
         select(AgentRun).where(
             AgentRun.id == run_id,
@@ -125,7 +134,9 @@ def list_run_verifications(
     run_id: int,
     company_id: int = Query(...),
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, company_id, "Viewer")
     run = session.exec(
         select(AgentRun).where(
             AgentRun.id == run_id,
@@ -151,7 +162,9 @@ def approve_run(
     run_id: int,
     payload: AgentRunApprovalRequest,
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, payload.company_id, "Manager")
     run = session.exec(
         select(AgentRun).where(
             AgentRun.id == run_id,
@@ -190,7 +203,9 @@ def list_run_approvals(
     run_id: int,
     company_id: int = Query(...),
     session: Session = Depends(get_session),
+    user: User | None = Depends(current_user_if_required),
 ):
+    require_company_role(session, user, company_id, "Viewer")
     run = session.exec(
         select(AgentRun).where(
             AgentRun.id == run_id,

@@ -20,6 +20,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session, select, text
 
 from database import get_session
+from auth_policy import current_user_if_required, require_company_role
+from models import User
 from models import Sprint, BacklogItem, OutboxEvent, Company, Agent, ProjectDiscovery, BusinessUnit
 from schemas import SprintStartRequest, BacklogItemUpdate, SprintPlanRequest, SelfImprovementSprintRequest
 from logging_config import logger
@@ -74,8 +76,9 @@ def _serialize_plan_response(plan: dict, scope_size: str, fallback_name: str, fa
 
 
 @router.post("/plan_sprint")
-async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_session)):
+async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """Turn a strategic prompt into a scoped sprint backlog before sprint creation."""
+    require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
         raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
@@ -102,8 +105,9 @@ async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_ses
 
 
 @router.post("/plan_self_improvement_sprint")
-async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, session: Session = Depends(get_session)):
+async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """Create a bounded autonomous-improvement plan from the repository's own context."""
+    require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
         raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
@@ -132,7 +136,7 @@ async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, sessio
 
 
 @router.post("/start_sprint")
-async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_session)):
+async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Create a sprint and its initial backlog items in a single transaction.
 
@@ -141,6 +145,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
     commits.  This guarantees at-least-once delivery without a distributed
     transaction between Postgres and NATS.
     """
+    require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
         raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
@@ -242,7 +247,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
 
 
 @router.get("/sprints/{sprint_id}/board")
-async def get_sprint_board(sprint_id: int, session: Session = Depends(get_session)):
+async def get_sprint_board(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Return sprint metadata and all backlog items grouped by Kanban column.
 
@@ -253,6 +258,7 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
 
+    require_company_role(session, user, sprint.company_id, "Viewer")
     sprint_data = {
         "id": sprint.id,
         "sprint_name": sprint.sprint_name,
@@ -292,7 +298,7 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
 
 
 @router.patch("/backlog/{item_id}")
-async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Session = Depends(get_session)):
+async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Partially update a backlog item.
 
@@ -308,6 +314,12 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
     item = session.get(BacklogItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Backlog item not found")
+
+    if user is not None:
+        sprint = session.get(Sprint, item.sprint_id)
+        if not sprint:
+            raise HTTPException(status_code=404, detail="Sprint not found")
+        require_company_role(session, user, sprint.company_id, "Manager")
 
     if req.status:
         item.status = req.status
@@ -340,7 +352,7 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
 
 
 @router.post("/sprints/{sprint_id}/dispatch")
-async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_session)):
+async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
     """
     Dispatch all ``todo`` backlog items in a sprint to their assigned agents.
 
@@ -352,6 +364,7 @@ async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_s
     if not sprint:
         raise HTTPException(status_code=404, detail="Sprint not found")
 
+    require_company_role(session, user, sprint.company_id, "Manager")
     items = session.exec(
         select(BacklogItem).where(
             BacklogItem.sprint_id == sprint_id,
