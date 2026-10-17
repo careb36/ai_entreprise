@@ -17,6 +17,9 @@ import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
 import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
+import { SprintHealthChart } from '../components/SprintHealthChart'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { ErrorState } from '../components/ErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -597,11 +600,18 @@ export default function Dashboard() {
           {/* Sprint card — takes 2 cols */}
           <div className="lg:col-span-2 space-y-4">
             {boardLoading ? (
-              <div className="rounded-xl border border-surface-700 bg-surface-900 p-8 flex items-center justify-center">
-                <Loader2 size={20} className="text-brand-400 animate-spin" />
-              </div>
+              <LoadingSkeleton message="Loading sprint data..." />
             ) : sprint && activeSprintId ? (
-              <SprintCard sprint={sprint} columns={columns} total={total} sprintId={activeSprintId} />
+              <>
+                <SprintCard sprint={sprint} columns={columns} total={total} sprintId={activeSprintId} />
+                <SprintHealthChart
+                  total={total}
+                  done={done}
+                  inProgress={inProg}
+                  blocked={blocked}
+                  healthScore={healthScore}
+                />
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-surface-700 bg-surface-900/40 p-8 text-center">
                 <Cpu size={28} className="text-gray-600 mx-auto mb-3" />
