@@ -270,7 +270,8 @@ required for the HTTP integration flow.
 | `system.maintenance.create_ticket` | Internal system-error notification |
 | `task.update`, `task.progress`, `audit.write`, `system.maintenance.*` | Additional catalogued/internal subjects |
 
-Example assignment and workspace messages:
+An outbox assignment record is stored as below; the worker publishes `message`
+on the recorded `subject`:
 
 ```json
 {
@@ -283,6 +284,8 @@ Example assignment and workspace messages:
   }
 }
 ```
+
+The `workspace.generate` message body contains:
 
 ```json
 {
