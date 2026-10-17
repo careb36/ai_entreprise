@@ -19,7 +19,6 @@ import { useAgentStore } from '../store/agentStore'
 import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
-import { ErrorState } from '../components/ErrorState'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -34,6 +33,13 @@ const STATUS_META: Record<string, { label: string; color: string; dot: string }>
   needs_split: { label: 'Needs Split', color: 'text-amber-400',   dot: 'bg-amber-400 animate-pulse' },
   completed:   { label: 'Completed',   color: 'text-gray-400',    dot: 'bg-gray-400'    },
   cancelled:   { label: 'Cancelled',   color: 'text-red-400',     dot: 'bg-red-400'     },
+}
+
+const PRIORITY_LABELS = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
 }
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
@@ -77,31 +83,36 @@ function KpiCard({
 }
 
 function ScopeBadge({ scope }: { scope?: string }) {
-  const meta = SCOPE_META[scope ?? 'M']
+  const { t } = useTranslation()
+  const scopeKey = scope && SCOPE_META[scope] ? scope : 'M'
+  const meta = SCOPE_META[scopeKey]
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${meta.bg} ${meta.color}`}>
       <Layers size={10} />
-      {meta.label}
+      {t(`dashboard.scope.${scopeKey}.label`, { defaultValue: meta.label })}
     </span>
   )
 }
 
 function StatusBadge({ status }: { status?: string }) {
-  const meta = STATUS_META[status ?? 'active'] ?? STATUS_META.active
+  const { t } = useTranslation()
+  const statusKey = status && STATUS_META[status] ? status : 'active'
+  const meta = STATUS_META[statusKey]
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] font-medium">
       <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-      <span className={meta.color}>{meta.label}</span>
+      <span className={meta.color}>{t(`dashboard.status.${statusKey}`, { defaultValue: meta.label })}</span>
     </span>
   )
 }
 
 function ProgressBar({ done, total }: { done: number; total: number }) {
+  const { t } = useTranslation()
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
   return (
     <div>
       <div className="flex justify-between text-[11px] text-gray-500 mb-1">
-        <span>{done} of {total} tasks done</span>
+        <span>{t('dashboard.tasksDone', { defaultValue: '{{done}} of {{total}} tasks done', done, total })}</span>
         <span className="tabular-nums">{pct}%</span>
       </div>
       <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
@@ -124,16 +135,16 @@ function NeedsSplitAlert({ sprintId, sprintName }: { sprintId: number; sprintNam
         <SplitSquareVertical size={16} className="text-amber-400" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-amber-300">{t('dashboard.needsSplit')}</p>
+        <p className="text-sm font-semibold text-amber-300">{t('dashboard.needsSplit', { defaultValue: 'Sprint needs splitting' })}</p>
         <p className="text-xs text-amber-200/60 mt-0.5">
-          <strong className="text-amber-200/80">{sprintName}</strong> {t('dashboard.needsSplitDesc')}
+          <strong className="text-amber-200/80">{sprintName}</strong> {t('dashboard.needsSplitDesc', { defaultValue: 'This sprint exceeded agent capacity. Split it into smaller scopes.' })}
         </p>
       </div>
       <Link
         to={`/workspace/${sprintId}`}
         className="shrink-0 flex items-center gap-1 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
       >
-        Review <ChevronRight size={12} />
+        {t('dashboard.review', { defaultValue: 'Review' })} <ChevronRight size={12} />
       </Link>
     </div>
   )
@@ -151,6 +162,7 @@ const ROLE_DISPLAY: Record<string, { label: string; initials: string; color: str
 }
 
 function AgentRow({ role, fsmState, activity }: { role: string; fsmState: string; activity: string }) {
+  const { t } = useTranslation()
   const meta = ROLE_DISPLAY[role] ?? { label: role, initials: role.slice(0, 2).toUpperCase(), color: 'text-gray-300', bg: 'bg-gray-600' }
   const isActive = fsmState === 'active'
   const isError = fsmState === 'error'
@@ -158,14 +170,14 @@ function AgentRow({ role, fsmState, activity }: { role: string; fsmState: string
   return (
     <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-surface-800/60 transition-colors">
       <div className={`w-7 h-7 ${meta.bg} rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0`}>
-        {meta.initials}
+        {ROLE_DISPLAY[role] ? t(`dashboard.roles.${role}.initials`, { defaultValue: meta.initials }) : meta.initials}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={`text-xs font-medium ${meta.color}`}>{meta.label}</p>
+        <p className={`text-xs font-medium ${meta.color}`}>{ROLE_DISPLAY[role] ? t(`dashboard.roles.${role}.label`, { defaultValue: meta.label }) : meta.label}</p>
         {activity ? (
           <p className="text-[11px] text-gray-500 truncate">{activity}</p>
         ) : (
-          <p className="text-[11px] text-gray-600 italic">idle</p>
+          <p className="text-[11px] text-gray-600 italic">{t('dashboard.idle', { defaultValue: 'idle' })}</p>
         )}
       </div>
       {isActive && <Loader2 size={12} className="text-emerald-400 animate-spin shrink-0" />}
@@ -211,9 +223,9 @@ function SprintCard({
 
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'In Progress', count: inProg,  color: 'text-brand-400'   },
-            { label: 'Blocked',     count: blocked, color: 'text-red-400'     },
-            { label: 'Done',        count: done,    color: 'text-emerald-400' },
+            { label: t('dashboard.inProgress', { defaultValue: 'In Progress' }), count: inProg,  color: 'text-brand-400'   },
+            { label: t('dashboard.blocked', { defaultValue: 'Blocked' }), count: blocked, color: 'text-red-400'     },
+            { label: t('dashboard.done', { defaultValue: 'Done' }), count: done,    color: 'text-emerald-400' },
           ].map(({ label, count, color }) => (
             <div key={label} className="text-center p-2 rounded-lg bg-surface-800/60">
               <p className={`text-lg font-bold tabular-nums ${color}`}>{count}</p>
@@ -229,7 +241,7 @@ function SprintCard({
           className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-brand-600/15 border border-brand-600/25 text-brand-400 text-xs font-medium hover:bg-brand-600/25 transition-colors"
         >
           <Radio size={12} />
-          {t('dashboard.openAgentsRoom')}
+          {t('dashboard.openAgentsRoom', { defaultValue: 'Open Agents Room' })}
         </Link>
       </div>
     </div>
@@ -239,6 +251,7 @@ function SprintCard({
 // ── Quick Launch ──────────────────────────────────────────────────────────────
 
 function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
+  const { t } = useTranslation()
   const [goal, setGoal] = useState('')
   const [scope, setScope] = useState<'S' | 'M' | 'L'>('M')
   const [plannedSprint, setPlannedSprint] = useState<SprintPlanResponse | null>(null)
@@ -257,7 +270,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
     let cid = companyId
 
     if (!cid) {
-      const resolvedCompanyName = companyName?.trim() || 'Fabrique Demo'
+      const resolvedCompanyName = companyName?.trim() || t('dashboard.demoCompany', { defaultValue: 'Fabrique Demo' })
       const company = await initMutation.mutateAsync({
         company_name: resolvedCompanyName,
         default_scope_size: scope,
@@ -356,7 +369,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
     <div className="rounded-xl border border-surface-700 bg-surface-900 p-4">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles size={14} className="text-brand-400" />
-        <h3 className="text-sm font-semibold text-gray-200">Launch Sprint</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t('dashboard.launchSprint', { defaultValue: 'Launch Sprint' })}</h3>
       </div>
 
       <textarea
@@ -366,21 +379,21 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
           setGoal(e.target.value)
           resetPreview()
         }}
-        placeholder="Describe the sprint goal…"
+        placeholder={t('dashboard.goalPlaceholder', { defaultValue: 'Describe the sprint goal…' })}
         className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-brand-500 resize-none mb-3 transition-colors"
       />
 
       <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-surface-700 bg-surface-800/60 px-3 py-2">
         <div>
-          <p className="text-xs font-medium text-gray-200">Autonomous self-improvement</p>
-          <p className="text-[11px] text-gray-500">Let the factory inspect the repo, preserve what already works, and propose the next Scrumban improvement sprint.</p>
+          <p className="text-xs font-medium text-gray-200">{t('dashboard.autonomousTitle', { defaultValue: 'Autonomous self-improvement' })}</p>
+          <p className="text-[11px] text-gray-500">{t('dashboard.autonomousDescription', { defaultValue: 'Let the factory inspect the repo, preserve what already works, and propose the next Scrumban improvement sprint.' })}</p>
         </div>
         <button
           onClick={generateAutonomousPlan}
           disabled={busy}
           className="shrink-0 px-3 py-1.5 rounded-lg border border-brand-500/30 text-brand-300 text-xs font-medium hover:bg-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {autoPlanMutation.isPending ? 'Scanning…' : 'Auto-Improve'}
+          {autoPlanMutation.isPending ? t('dashboard.scanning', { defaultValue: 'Scanning…' }) : t('dashboard.autoImprove', { defaultValue: 'Auto-Improve' })}
         </button>
       </div>
 
@@ -389,6 +402,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
           {(['S', 'M', 'L'] as const).map(s => (
             <button
               key={s}
+              title={t(`dashboard.scope.${s}.label`, { defaultValue: SCOPE_META[s].label })}
               onClick={() => {
                 setScope(s)
                 resetPreview()
@@ -399,12 +413,16 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
                   : 'text-gray-500 hover:text-gray-300 border-r border-surface-700 last:border-r-0'
               }`}
             >
-              {s}
+              {t(`dashboard.scope.${s}.short`, { defaultValue: s })}
             </button>
           ))}
         </div>
         <span className="text-[11px] text-gray-600 flex-1">
-          {SCOPE_META[scope].label} · up to {SCOPE_META[scope].limit} tasks
+          {t('dashboard.scopeSummary', {
+            defaultValue: '{{scope}} · up to {{count}} tasks',
+            scope: t(`dashboard.scope.${scope}.label`, { defaultValue: SCOPE_META[scope].label }),
+            count: SCOPE_META[scope].limit,
+          })}
         </span>
         {plannedSprint && (
           <button
@@ -412,7 +430,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
             disabled={busy || (planSource !== 'autonomous' && !goal.trim())}
             className="px-3 py-1.5 rounded-lg border border-surface-700 text-gray-300 text-xs font-medium hover:border-brand-500/40 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            Regenerate
+            {t('dashboard.regenerate', { defaultValue: 'Regenerate' })}
           </button>
         )}
         <button
@@ -421,7 +439,13 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-          {busy ? (planMutation.isPending ? 'Planning…' : 'Launching…') : plannedSprint ? 'Launch Sprint' : 'Generate Plan'}
+          {busy
+            ? (planMutation.isPending
+                ? t('dashboard.planning', { defaultValue: 'Planning…' })
+                : t('dashboard.launching', { defaultValue: 'Launching…' }))
+            : plannedSprint
+              ? t('dashboard.launchSprint', { defaultValue: 'Launch Sprint' })
+              : t('dashboard.generatePlan', { defaultValue: 'Generate Plan' })}
         </button>
       </div>
 
@@ -430,13 +454,15 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] uppercase tracking-[0.16em] text-brand-300/80">
-                {planSource === 'autonomous' ? 'Autonomous Plan Preview' : 'Plan Preview'}
+                {planSource === 'autonomous'
+                  ? t('dashboard.autonomousPreview', { defaultValue: 'Autonomous Plan Preview' })
+                  : t('dashboard.planPreview', { defaultValue: 'Plan Preview' })}
               </p>
               <h4 className="text-sm font-semibold text-white mt-1">{plannedSprint.sprint_name}</h4>
             </div>
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-semibold ${SCOPE_META[plannedSprint.scope_size].bg} ${SCOPE_META[plannedSprint.scope_size].color}`}>
               <Layers size={10} />
-              {SCOPE_META[plannedSprint.scope_size].label}
+              {t(`dashboard.scope.${plannedSprint.scope_size}.label`, { defaultValue: SCOPE_META[plannedSprint.scope_size].label })}
             </span>
           </div>
 
@@ -444,7 +470,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
 
           {planSource === 'autonomous' && (
             <p className="text-[11px] text-brand-200/80">
-              This plan was generated from repository context with a preserve-and-iterate rule: improve the next bottleneck, keep healthy assets, and move in bounded Scrumban slices.
+              {t('dashboard.autonomousPlanDescription', { defaultValue: 'This plan was generated from repository context with a preserve-and-iterate rule: improve the next bottleneck, keep healthy assets, and move in bounded Scrumban slices.' })}
             </p>
           )}
 
@@ -457,8 +483,14 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
                     <p className="text-[11px] text-gray-500 mt-1">{task.description}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[10px] uppercase tracking-wide text-brand-300">{task.assignee}</p>
-                    <p className="text-[10px] text-gray-500 mt-1">{task.priority}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-brand-300">
+                      {ROLE_DISPLAY[task.assignee]
+                        ? t(`dashboard.roles.${task.assignee}.label`, { defaultValue: ROLE_DISPLAY[task.assignee].label })
+                        : task.assignee}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {t(`dashboard.priorities.${task.priority}`, { defaultValue: PRIORITY_LABELS[task.priority] ?? task.priority })}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -466,14 +498,14 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
           </div>
 
           <p className="text-[11px] text-gray-500">
-            Review the plan, regenerate if needed, then launch the sprint.
+            {t('dashboard.reviewPlan', { defaultValue: 'Review the plan, regenerate if needed, then launch the sprint.' })}
           </p>
         </div>
       )}
 
       {error && (
         <p className="mt-2 text-[11px] text-red-400 flex items-center gap-1">
-          <AlertTriangle size={11} /> {error instanceof Error ? error.message : 'Launch failed'}
+          <AlertTriangle size={11} /> {error instanceof Error ? error.message : t('dashboard.launchFailed', { defaultValue: 'Launch failed' })}
         </p>
       )}
     </div>
@@ -524,10 +556,10 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-white tracking-tight">
-              {companyName ? `${companyName}` : 'La Fabrique'}
+              {companyName ? `${companyName}` : t('dashboard.title', { defaultValue: 'La Fabrique' })}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              AI Sprint command center
+              {t('dashboard.commandCenter', { defaultValue: 'AI Sprint command center' })}
               {sprint && (
                 <> · <span className="text-gray-400">{sprint.sprint_name}</span></>
               )}
@@ -540,13 +572,13 @@ export default function Dashboard() {
                 : 'bg-red-500/5 border-red-500/20 text-red-400'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              {backendOnline ? t('dashboard.systemOnline') : t('dashboard.systemOffline')}
+              {backendOnline ? t('dashboard.systemOnline', { defaultValue: 'System online' }) : t('dashboard.systemOffline', { defaultValue: 'System offline' })}
             </div>
             <Link
               to="/companies/new"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
             >
-              <Plus size={12} /> New Factory
+              <Plus size={12} /> {t('dashboard.newFactory', { defaultValue: 'New Factory' })}
             </Link>
           </div>
         </div>
@@ -555,36 +587,38 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <KpiCard
             icon={Target}
-            label="Sprint Tasks"
+            label={t('dashboard.sprintTasks', { defaultValue: 'Sprint Tasks' })}
             value={total}
-            sub={sprint ? sprint.sprint_name : 'No active sprint'}
+            sub={sprint ? sprint.sprint_name : t('dashboard.noActiveSprint', { defaultValue: 'No active sprint' })}
           />
           <KpiCard
             icon={CheckCircle2}
-            label="Completed"
+            label={t('dashboard.completed', { defaultValue: 'Completed' })}
             value={done}
-            sub={total > 0 ? `${Math.round((done / total) * 100)}% done` : '—'}
+            sub={total > 0 ? t('dashboard.percentDone', { defaultValue: '{{percent}}% done', percent: Math.round((done / total) * 100) }) : '—'}
             accent
           />
           <KpiCard
             icon={CircleDot}
-            label="Blocked"
+            label={t('dashboard.blocked', { defaultValue: 'Blocked' })}
             value={blocked}
-            sub={blocked > 0 ? 'Needs attention' : 'Clear'}
+            sub={blocked > 0 ? t('dashboard.needsAttention', { defaultValue: 'Needs attention' }) : t('dashboard.clear', { defaultValue: 'Clear' })}
             warn={blocked > 0}
           />
           <KpiCard
             icon={Bot}
-            label="Agents Working"
+            label={t('dashboard.agentsWorking', { defaultValue: 'Agents Working' })}
             value={activeAgentCount}
-            sub={isSSEConnected ? 'Live stream connected' : 'Disconnected'}
+            sub={isSSEConnected ? t('dashboard.streamConnected', { defaultValue: 'Live stream connected' }) : t('dashboard.disconnected', { defaultValue: 'Disconnected' })}
             accent={activeAgentCount > 0}
           />
           <KpiCard
             icon={Zap}
-            label="Health Score"
+            label={t('dashboard.healthScore', { defaultValue: 'Health Score' })}
             value={healthScore !== null ? `${healthScore}` : '—'}
-            sub={healthScore !== null ? (healthScore >= 80 ? 'Sprint healthy' : 'Review needed') : 'No data yet'}
+            sub={healthScore !== null
+              ? (healthScore >= 80 ? t('dashboard.sprintHealthy', { defaultValue: 'Sprint healthy' }) : t('dashboard.reviewNeeded', { defaultValue: 'Review needed' }))
+              : t('dashboard.noData', { defaultValue: 'No data yet' })}
             accent={healthScore !== null && healthScore >= 80}
             warn={healthScore !== null && healthScore < 60}
           />
@@ -601,7 +635,7 @@ export default function Dashboard() {
           {/* Sprint card — takes 2 cols */}
           <div className="lg:col-span-2 space-y-4">
             {boardLoading ? (
-              <LoadingSkeleton message="Loading sprint data..." />
+              <LoadingSkeleton message={t('dashboard.loadingSprint', { defaultValue: 'Loading sprint data...' })} />
             ) : sprint && activeSprintId ? (
               <>
                 <SprintCard sprint={sprint} columns={columns} total={total} sprintId={activeSprintId} />
@@ -616,8 +650,8 @@ export default function Dashboard() {
             ) : (
               <div className="rounded-xl border border-dashed border-surface-700 bg-surface-900/40 p-8 text-center">
                 <Cpu size={28} className="text-gray-600 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-400">No active sprint</p>
-                <p className="text-xs text-gray-600 mt-1">Launch a sprint below to start working with your agents</p>
+                <p className="text-sm font-medium text-gray-400">{t('dashboard.noActiveSprint', { defaultValue: 'No active sprint' })}</p>
+                <p className="text-xs text-gray-600 mt-1">{t('dashboard.launchHint', { defaultValue: 'Launch a sprint below to start working with your agents' })}</p>
               </div>
             )}
 
@@ -632,10 +666,10 @@ export default function Dashboard() {
               <div className="flex items-center justify-between px-3 py-2.5 border-b border-surface-700/60">
                 <div className="flex items-center gap-1.5">
                   <Bot size={13} className="text-brand-400" />
-                  <span className="text-xs font-semibold text-gray-300">Agent Roster</span>
+                  <span className="text-xs font-semibold text-gray-300">{t('dashboard.agentRoster', { defaultValue: 'Agent Roster' })}</span>
                 </div>
                 {hasAgents && (
-                  <span className="text-[10px] text-gray-500">{visibleAgents.length} agents</span>
+                  <span className="text-[10px] text-gray-500">{t('dashboard.agentCount', { defaultValue: '{{count}} agents', count: visibleAgents.length })}</span>
                 )}
               </div>
 
@@ -651,8 +685,8 @@ export default function Dashboard() {
                   ))
                 ) : (
                   <div className="px-3 py-4 text-center">
-                    <p className="text-[11px] text-gray-600">No agents seen yet.</p>
-                    <p className="text-[11px] text-gray-600 mt-0.5">Launch a sprint to activate agents.</p>
+                    <p className="text-[11px] text-gray-600">{t('dashboard.noAgents', { defaultValue: 'No agents seen yet.' })}</p>
+                    <p className="text-[11px] text-gray-600 mt-0.5">{t('dashboard.activateAgents', { defaultValue: 'Launch a sprint to activate agents.' })}</p>
                   </div>
                 )}
               </div>
@@ -664,7 +698,7 @@ export default function Dashboard() {
                     className="flex items-center gap-1 text-[11px] text-brand-400 hover:text-brand-300 transition-colors"
                   >
                     <Activity size={10} />
-                    View live stream <ChevronRight size={10} />
+                    {t('dashboard.viewLiveStream', { defaultValue: 'View live stream' })} <ChevronRight size={10} />
                   </Link>
                 </div>
               )}
@@ -674,18 +708,18 @@ export default function Dashboard() {
             <div className="rounded-xl border border-surface-700 bg-surface-900 p-3">
               <div className="flex items-center gap-1.5 mb-3">
                 <ShieldAlert size={13} className="text-gray-400" />
-                <span className="text-xs font-semibold text-gray-300">System</span>
+                <span className="text-xs font-semibold text-gray-300">{t('dashboard.system', { defaultValue: 'System' })}</span>
               </div>
               <div className="space-y-2">
                 {[
-                  { label: 'Backend API',   ok: backendOnline },
-                  { label: 'Agent Stream',  ok: isSSEConnected },
+                  { label: t('dashboard.backendApi', { defaultValue: 'Backend API' }), ok: backendOnline },
+                  { label: t('dashboard.agentStream', { defaultValue: 'Agent Stream' }), ok: isSSEConnected },
                 ].map(({ label, ok }) => (
                   <div key={label} className="flex items-center justify-between text-[11px]">
                     <span className="text-gray-500">{label}</span>
                     <span className={`flex items-center gap-1 font-medium ${ok ? 'text-emerald-400' : 'text-gray-600'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${ok ? 'bg-emerald-400' : 'bg-surface-600'}`} />
-                      {ok ? 'Online' : 'Offline'}
+                      {ok ? t('dashboard.online', { defaultValue: 'Online' }) : t('dashboard.offline', { defaultValue: 'Offline' })}
                     </span>
                   </div>
                 ))}
@@ -695,10 +729,10 @@ export default function Dashboard() {
             {/* Quick nav */}
             <div className="grid grid-cols-2 gap-2">
               {[
-                { to: '/governance', icon: ShieldAlert, label: 'Governance'  },
-                { to: '/analytics',  icon: Activity,   label: 'Analytics'   },
-                { to: '/memory',     icon: Cpu,        label: 'Memory'      },
-                { to: '/generate',   icon: Sparkles,   label: 'Generate'    },
+                { to: '/governance', icon: ShieldAlert, label: t('dashboard.governance', { defaultValue: 'Governance' }) },
+                { to: '/analytics',  icon: Activity, label: t('dashboard.analytics', { defaultValue: 'Analytics' }) },
+                { to: '/memory',     icon: Cpu, label: t('dashboard.memory', { defaultValue: 'Memory' }) },
+                { to: '/generate',   icon: Sparkles, label: t('dashboard.generateLink', { defaultValue: 'Generate' }) },
               ].map(({ to, icon: Icon, label }) => (
                 <Link
                   key={to}

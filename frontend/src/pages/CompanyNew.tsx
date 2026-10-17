@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import type {
@@ -125,6 +127,31 @@ const DEFAULT_PERMISSIONS: Permissions = {
 const STEPS = ['Project', 'Company', 'Autonomy', 'Permissions', 'Team', 'Review']
 const DEFAULT_PROJECT_PATH = import.meta.env.VITE_DEFAULT_PROJECT_PATH || ''
 
+const localizedRoles = (t: TFunction) => ROLES.map(role => ({
+  ...role,
+  label: t(`companyNew.roles.${role.value}.label`, { defaultValue: role.label }),
+  desc: t(`companyNew.roles.${role.value}.description`, { defaultValue: role.desc }),
+}))
+
+const localizedSeniorities = (t: TFunction) => SENIORITIES.map(seniority => ({
+  ...seniority,
+  label: t(`companyNew.seniorities.${seniority.value}.label`, { defaultValue: seniority.label }),
+  desc: t(`companyNew.seniorities.${seniority.value}.experience`, { defaultValue: seniority.desc }),
+}))
+
+const localizedAutonomy = (t: TFunction) => AUTONOMY_LEVELS.map(level => ({
+  ...level,
+  label: t(`companyNew.autonomy.${level.value}.label`, { defaultValue: level.label }),
+  desc: t(`companyNew.autonomy.${level.value}.description`, { defaultValue: level.desc }),
+  features: level.features.map((feature, index) =>
+    t(`companyNew.autonomy.${level.value}.feature${index + 1}`, { defaultValue: feature })),
+}))
+
+const localizedPermission = (t: TFunction, value: string) =>
+  t(`companyNew.permissionLevels.${value}`, {
+    defaultValue: PERM_LEVELS[value as keyof typeof PERM_LEVELS]?.label ?? value,
+  })
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StepIndicator({ current, steps }: { current: number; steps: string[] }) {
@@ -159,8 +186,11 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
   canRemove: boolean
   availableModels: ModelInfo[]
 }) {
-  const roleInfo  = ROLES.find(r => r.value === agent.role) ?? ROLES[3]
-  const senInfo   = SENIORITIES.find(s => s.value === agent.seniority) ?? SENIORITIES[2]
+  const { t } = useTranslation()
+  const roles = localizedRoles(t)
+  const seniorities = localizedSeniorities(t)
+  const roleInfo  = roles.find(r => r.value === agent.role) ?? roles[3]
+  const senInfo   = seniorities.find(s => s.value === agent.seniority) ?? seniorities[2]
   const modelInfo = availableModels.find(m => m.id === (agent.model ?? ''))
   const tierMeta  = TIER_META[modelInfo?.tier ?? 'balanced']
   const [showPrompt, setShowPrompt] = useState(false)
@@ -194,32 +224,32 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
           {canRemove && (
             <button onClick={() => onRemove(index)}
               className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none p-1 ml-1"
-              title="Remove agent">×</button>
+              title={t('companyNew.removeAgent')}>×</button>
           )}
         </div>
       </div>
 
       {/* Name / Alias */}
       <div>
-        <label className="input-label">Name / Alias</label>
+        <label className="input-label">{t('companyNew.agentName')}</label>
         <input type="text" value={agent.name}
           onChange={e => onUpdate(index, 'name', e.target.value)}
-          placeholder="e.g. Atlas, Nova, Sentinel..."
+          placeholder={t('companyNew.agentNamePlaceholder')}
           className="input w-full" />
       </div>
 
       {/* Role + Seniority */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="input-label">Role</label>
+          <label className="input-label">{t('companyNew.agentRole')}</label>
           <select value={agent.role} onChange={e => onUpdate(index, 'role', e.target.value)} className="select w-full">
-            {ROLES.map(r => <option key={r.value} value={r.value}>{r.icon} {r.label}</option>)}
+            {roles.map(r => <option key={r.value} value={r.value}>{r.icon} {r.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="input-label">Seniority</label>
+          <label className="input-label">{t('companyNew.seniority')}</label>
           <select value={agent.seniority} onChange={e => onUpdate(index, 'seniority', e.target.value)} className="select w-full">
-            {SENIORITIES.map(s => (
+            {seniorities.map(s => (
               <option key={s.value} value={s.value}>{s.label} ({s.desc})</option>
             ))}
           </select>
@@ -228,19 +258,19 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
 
       {/* Model selector */}
       <div>
-        <label className="input-label">LLM Model</label>
+        <label className="input-label">{t('companyNew.llmModel')}</label>
         <select value={agent.model ?? ''}
           onChange={e => onUpdate(index, 'model', e.target.value)} className="select w-full text-xs">
-          <option value="">— Select a model —</option>
+          <option value="">{t('companyNew.selectModel')}</option>
           {availableModels.length === 0 && (
-            <option value="" disabled>Loading models…</option>
+            <option value="" disabled>{t('companyNew.loadingModels')}</option>
           )}
           {Object.keys(TIER_META).map(tier => {
             const group = availableModels.filter(m => m.tier === tier)
             if (!group.length) return null
             const tm = TIER_META[tier]
             return (
-              <optgroup key={tier} label={`${tm.icon} ${tm.label} — ${tier}`}>
+              <optgroup key={tier} label={`${tm.icon} ${t(`companyNew.tiers.${tier}`, { defaultValue: tm.label })}`}>
                 {group.map(m => (
                   <option key={m.id} value={m.id}>
                     {m.id} ({m.provider})
@@ -250,7 +280,7 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
             )
           })}
           {agent.model && !availableModels.find(m => m.id === agent.model) && (
-            <option value={agent.model}>{agent.model} (unresolved)</option>
+            <option value={agent.model}>{t('companyNew.unresolvedModel', { model: agent.model })}</option>
           )}
         </select>
         {modelInfo && (
@@ -260,10 +290,10 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
 
       {/* Specialty */}
       <div>
-        <label className="input-label">Specialty / Focus area</label>
+        <label className="input-label">{t('companyNew.specialty')}</label>
         <input type="text" value={agent.specialty || agent.persona}
           onChange={e => { onUpdate(index, 'persona', e.target.value); onUpdate(index, 'specialty', e.target.value) }}
-          placeholder={`e.g. ${roleInfo.value === 'Dev' ? 'React, TypeScript, REST APIs' : roleInfo.value === 'DevOps' ? 'Docker, Kubernetes, Terraform' : roleInfo.value === 'QA' ? 'Playwright, Cypress, Load Testing' : 'your focus area'}`}
+          placeholder={t(`companyNew.specialtyPlaceholders.${['Dev', 'DevOps', 'QA'].includes(roleInfo.value) ? roleInfo.value : 'other'}`)}
           className="input w-full" />
       </div>
 
@@ -273,7 +303,7 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
           <button type="button"
             onClick={() => setShowPrompt(v => !v)}
             className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors">
-            {showPrompt ? '▾' : '▸'} System prompt
+            {showPrompt ? '▾' : '▸'} {t('companyNew.systemPrompt')}
           </button>
           {showPrompt && (
             <textarea
@@ -288,14 +318,14 @@ function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModel
 
       {/* Token budget */}
       <div>
-        <label className="input-label">Monthly token budget</label>
+        <label className="input-label">{t('companyNew.monthlyBudget')}</label>
         <div className="flex items-center gap-2">
           <input type="range" min={100000} max={5000000} step={100000}
             value={agent.token_budget ?? 500000}
             onChange={e => onUpdate(index, 'token_budget', parseInt(e.target.value))}
             className="flex-1 accent-brand-500" />
           <span className="text-xs text-brand-300 w-20 text-right font-mono">
-            {((agent.token_budget ?? 500000) / 1000).toFixed(0)}K tokens
+            {t('companyNew.thousandTokens', { count: (agent.token_budget ?? 500000) / 1000 })}
           </span>
         </div>
       </div>
@@ -320,6 +350,7 @@ function PermRow({ icon, label, desc, permKey, value, options, onChange }: {
   permKey: string; value: string; options: string[]
   onChange: (key: string, val: string) => void
 }) {
+  const { t } = useTranslation()
   const current = PERM_LEVELS[value as keyof typeof PERM_LEVELS]
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-3 border-b border-surface-700 last:border-0">
@@ -332,12 +363,12 @@ function PermRow({ icon, label, desc, permKey, value, options, onChange }: {
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         <span className={`text-xs font-medium ${current?.color ?? 'text-gray-400'} w-20 text-right`}>
-          {current?.label}
+          {localizedPermission(t, value)}
         </span>
         <select value={value} onChange={e => onChange(permKey, e.target.value)}
           className="select w-36 text-xs">
           {options.map(o => (
-            <option key={o} value={o}>{PERM_LEVELS[o as keyof typeof PERM_LEVELS]?.label ?? o}</option>
+            <option key={o} value={o}>{localizedPermission(t, o)}</option>
           ))}
         </select>
       </div>
@@ -348,6 +379,10 @@ function PermRow({ icon, label, desc, permKey, value, options, onChange }: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CompanyNew() {
+  const { t } = useTranslation()
+  const steps = STEPS.map(step => t(`companyNew.steps.${step}`, { defaultValue: step }))
+  const autonomyLevels = localizedAutonomy(t)
+  const roles = localizedRoles(t)
   const navigate = useNavigate()
   const setCompany = useAppStore(state => state.setCompany)
 
@@ -374,10 +409,10 @@ export default function CompanyNew() {
 
   // Step 4 — Team
   const [agents, setAgents] = useState<Agent[]>([
-    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: 'Product Management & Backlog', token_budget: 500000 },
+    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: t('companyNew.defaults.productSpecialty'), token_budget: 500000 },
     { name: '', role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 1000000 },
     { name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000 },
-    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: 'Automated Testing', token_budget: 300000 },
+    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: t('companyNew.defaults.qaSpecialty'), token_budget: 300000 },
   ])
 
   // Available LLM models — fetched dynamically from the proxy via backend
@@ -467,7 +502,7 @@ export default function CompanyNew() {
       },
       onError: (error: any) => {
         console.error('Init company failed:', error)
-        alert('Error al inicializar la empresa: ' + (error?.message || 'Error desconocido'))
+        alert(t('companyNew.initializationError', { message: error?.message || t('companyNew.unknownError') }))
       }
     })
   }
@@ -486,17 +521,16 @@ export default function CompanyNew() {
   const renderStep0 = () => (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-white mb-1">Scan your project</h2>
+        <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.scanTitle')}</h2>
         <p className="text-sm text-gray-400">
-          Point La Fabrique at your repository. We'll detect the stack and suggest an optimal AI team.
-          You can skip this and configure manually.
+          {t('companyNew.scanDescription')}
         </p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2 relative">
         <input type="text" value={projectPath} onChange={e => setProjectPath(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-          placeholder="/projects/la-fabrique  (path inside the Docker container)"
+          placeholder={t('companyNew.repositoryPlaceholder')}
           className="input flex-1 font-mono text-sm" />
         <button type="button" onClick={async () => {
           try {
@@ -510,14 +544,14 @@ export default function CompanyNew() {
               setAvailableDirs(data.directories)
               setShowDirPicker(true)
             } else {
-              alert('No se encontraron directorios en ' + data.root)
+              alert(t('companyNew.noDirectories', { root: data.root }))
             }
           } catch (err) {
-            alert('Error al listar directorios: ' + (err as Error).message)
+            alert(t('companyNew.directoryError', { message: (err as Error).message || t('companyNew.unknownError') }))
           }
         }}
           className="btn btn-secondary flex-shrink-0">
-          📂 Examinar
+          📂 {t('companyNew.browse')}
         </button>
         {showDirPicker && availableDirs.length > 0 && (
           <div className="absolute z-10 mt-1 w-full bg-surface-800 border border-surface-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
@@ -539,7 +573,7 @@ export default function CompanyNew() {
               onClick={() => setShowDirPicker(false)}
               className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-surface-700 transition-colors"
             >
-              ✕ Cerrar
+              ✕ {t('companyNew.close')}
             </button>
           </div>
         )}
@@ -549,26 +583,26 @@ export default function CompanyNew() {
           {discoverTeamMutation.isPending ? (
             <span className="flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Scanning…
+              {t('companyNew.scanning')}
             </span>
-          ) : '🔍 Scan'}
+          ) : `🔍 ${t('companyNew.scan')}`}
         </button>
       </div>
 
-      {mutationError && <div className="alert-error text-sm">{mutationError}</div>}
+      {mutationError && <div className="alert-error text-sm">{t('companyNew.discoveryError', { message: mutationError })}</div>}
 
       {discoveryResult && (
         <div className="rounded-xl border border-brand-700/40 bg-brand-950/20 overflow-hidden">
           <div className="px-4 py-3 border-b border-brand-700/20 flex items-center gap-2">
             <span className="text-green-400 text-lg">✓</span>
-            <span className="text-sm font-semibold text-brand-200">Stack detected — <span className="font-mono">{discoveryResult.name}</span></span>
+            <span className="text-sm font-semibold text-brand-200">{t('companyNew.stackDetected')} — <span className="font-mono">{discoveryResult.name}</span></span>
           </div>
           <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
             {[
-              { label: 'Primary language', value: discoveryResult.language, icon: '🔷' },
-              { label: 'Frameworks', value: discoveryResult.frameworks?.join(', ') || '—', icon: '🧩' },
-              { label: 'Databases', value: discoveryResult.databases?.join(', ') || '—', icon: '🗄️' },
-              { label: 'Infra', value: discoveryResult.infra?.join(', ') || '—', icon: '⚙️' },
+              { label: t('companyNew.primaryLanguage'), value: discoveryResult.language, icon: '🔷' },
+              { label: t('companyNew.frameworks'), value: discoveryResult.frameworks?.join(', ') || '—', icon: '🧩' },
+              { label: t('companyNew.databases'), value: discoveryResult.databases?.join(', ') || '—', icon: '🗄️' },
+              { label: t('companyNew.infrastructure'), value: discoveryResult.infra?.join(', ') || '—', icon: '⚙️' },
             ].map(({ label, value, icon }) => (
               <div key={label} className="bg-surface-800/70 rounded-lg p-3">
                 <span className="text-base">{icon}</span>
@@ -578,16 +612,16 @@ export default function CompanyNew() {
             ))}
           </div>
           <div className="px-4 py-2 border-t border-brand-700/20 flex items-center justify-between text-xs">
-            <span className="text-gray-500">{discoveryResult.file_count} files scanned</span>
+            <span className="text-gray-500">{t('companyNew.filesScanned', { count: discoveryResult.file_count })}</span>
             <div className="flex items-center gap-2">
               {discoveryResult.team_source === 'ai' && (
-                <span className="badge bg-purple-900/40 text-purple-300">✨ AI team suggestion</span>
+                <span className="badge bg-purple-900/40 text-purple-300">✨ {t('companyNew.aiSuggestion')}</span>
               )}
               {discoveryResult.team_source === 'rules' && (
-                <span className="badge bg-surface-700 text-gray-400">rule-based suggestion</span>
+                <span className="badge bg-surface-700 text-gray-400">{t('companyNew.rulesSuggestion')}</span>
               )}
               <span className={`badge ${discoveryResult.complexity === 'High' ? 'bg-red-900/40 text-red-300' : discoveryResult.complexity === 'Medium' ? 'bg-yellow-900/40 text-yellow-300' : 'bg-green-900/40 text-green-300'}`}>
-                {discoveryResult.complexity} complexity
+                {t('companyNew.complexity', { level: t(`companyNew.complexityLevels.${discoveryResult.complexity}`, { defaultValue: discoveryResult.complexity }) })}
               </span>
             </div>
           </div>
@@ -597,8 +631,8 @@ export default function CompanyNew() {
       {!discoveryResult && (
         <div className="rounded-xl border border-surface-700 bg-surface-800/30 p-5 text-center">
           <p className="text-3xl mb-2">🏗️</p>
-          <p className="text-sm text-gray-400">No project scanned yet.</p>
-          <p className="text-xs text-gray-600 mt-1">You can also configure the team manually in Step 5.</p>
+          <p className="text-sm text-gray-400">{t('companyNew.noProject')}</p>
+          <p className="text-xs text-gray-600 mt-1">{t('companyNew.manualTeamHint')}</p>
         </div>
       )}
     </div>
@@ -607,49 +641,49 @@ export default function CompanyNew() {
   const renderStep1 = () => (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-white mb-1">Company details</h2>
-        <p className="text-sm text-gray-400">Basic information about your AI software factory.</p>
+        <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.companyDetails')}</h2>
+        <p className="text-sm text-gray-400">{t('companyNew.companyDescription')}</p>
       </div>
 
       <div>
-        <label className="input-label">Company / Factory name *</label>
+        <label className="input-label">{t('companyNew.factoryName')} *</label>
         <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)}
-          placeholder="Acme Corp" required className="input w-full text-base" autoFocus />
+          placeholder={t('companyNew.companyNamePlaceholder')} required className="input w-full text-base" autoFocus />
         {companyName.length > 0 && companyName.length < 2 && (
-          <p className="text-xs text-red-400 mt-1">Name must be at least 2 characters.</p>
+          <p className="text-xs text-red-400 mt-1">{t('companyNew.nameTooShort')}</p>
         )}
       </div>
 
       <div>
-        <label className="input-label">Description <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+        <label className="input-label">{t('companyNew.description')} <span className="text-gray-600 normal-case font-normal">{t('companyNew.optional')}</span></label>
         <textarea value={companyDesc} onChange={e => setCompanyDesc(e.target.value)}
-          placeholder="A brief description of what this factory builds…"
+          placeholder={t('companyNew.descriptionPlaceholder')}
           rows={3} className="textarea w-full" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="input-label">Default sprint scope</label>
+          <label className="input-label">{t('companyNew.sprintLength')}</label>
           <select
             value={scopeSize}
             onChange={e => setScopeSize(e.target.value as 'S' | 'M' | 'L')}
             className="select w-full"
           >
-            <option value="S">Small — up to 4 tasks, single concern</option>
-            <option value="M">Medium — up to 8 tasks, one full feature</option>
-            <option value="L">Large — up to 12 tasks, requires review</option>
+            <option value="S">{t('companyNew.scopes.S')}</option>
+            <option value="M">{t('companyNew.scopes.M')}</option>
+            <option value="L">{t('companyNew.scopes.L')}</option>
           </select>
           <p className="text-xs text-gray-500 mt-1">
-            {scopeSize === 'S' ? 'Tight scope — ideal for focused AI passes' : scopeSize === 'M' ? 'Recommended default — balances scope and AI focus' : 'Wide scope — the system may suggest splitting before execution'}
+            {t(`companyNew.scopeHints.${scopeSize}`)}
           </p>
         </div>
         <div>
-          <label className="input-label">Timezone</label>
+          <label className="input-label">{t('companyNew.timezone')}</label>
           <select value={timezone} onChange={e => setTimezone(e.target.value)} className="select w-full">
             {['UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
               'America/Sao_Paulo','America/Argentina/Buenos_Aires','Europe/London','Europe/Paris',
               'Europe/Berlin','Asia/Tokyo','Asia/Singapore','Australia/Sydney'].map(tz => (
-              <option key={tz} value={tz}>{tz}</option>
+              <option key={tz} value={tz}>{t(`companyNew.timezones.${tz}`, { defaultValue: tz })}</option>
             ))}
           </select>
         </div>
@@ -660,12 +694,12 @@ export default function CompanyNew() {
   const renderStep2 = () => (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-white mb-1">Autonomy level</h2>
-        <p className="text-sm text-gray-400">How much authority does the AI have to act without human approval?</p>
+        <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.autonomyLevel')}</h2>
+        <p className="text-sm text-gray-400">{t('companyNew.autonomyDescription')}</p>
       </div>
 
       <div className="space-y-3">
-        {AUTONOMY_LEVELS.map(level => (
+        {autonomyLevels.map(level => (
           <button key={level.value} type="button"
             onClick={() => setAutonomyLevel(level.value)}
             className={`w-full text-left rounded-xl border-2 p-4 transition-all ${autonomyLevel === level.value ? level.color + ' border-opacity-100' : 'border-surface-700 bg-surface-800/30 hover:border-surface-600'}`}>
@@ -675,7 +709,7 @@ export default function CompanyNew() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-white text-sm">{level.label}</span>
                   {autonomyLevel === level.value && (
-                    <span className={`badge text-xs ${level.badge}`}>Selected</span>
+                    <span className={`badge text-xs ${level.badge}`}>{t('companyNew.selected')}</span>
                   )}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">{level.desc}</p>
@@ -707,35 +741,35 @@ export default function CompanyNew() {
     return (
       <div className="space-y-5">
         <div>
-          <h2 className="text-lg font-semibold text-white mb-1">Infrastructure permissions</h2>
+          <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.infraPerms')}</h2>
           <p className="text-sm text-gray-400">
-            Define what the AI agents are allowed to access. Available options scale with the autonomy level.
+            {t('companyNew.permissionsDescription')}
           </p>
         </div>
 
         <div className="card divide-y divide-surface-700 rounded-xl overflow-hidden">
-          <PermRow icon="🔀" label="Git / Version Control" permKey="git_access" value={permissions.git_access}
+          <PermRow icon="🔀" label={t('companyNew.resources.git.label')} permKey="git_access" value={permissions.git_access}
             options={gitOptions} onChange={updatePerm}
-            desc="Clone repos, push branches, create PRs, merge, tag releases" />
-          <PermRow icon="☁️" label="Cloud Infrastructure" permKey="cloud_access" value={permissions.cloud_access}
+            desc={t('companyNew.resources.git.description')} />
+          <PermRow icon="☁️" label={t('companyNew.resources.cloud.label')} permKey="cloud_access" value={permissions.cloud_access}
             options={cloudOptions} onChange={updatePerm}
-            desc="List, deploy, scale, or destroy cloud resources (AWS / GCP / Azure)" />
-          <PermRow icon="🗄️" label="Database" permKey="db_access" value={permissions.db_access}
+            desc={t('companyNew.resources.cloud.description')} />
+          <PermRow icon="🗄️" label={t('companyNew.resources.db.label')} permKey="db_access" value={permissions.db_access}
             options={dbOptions} onChange={updatePerm}
-            desc="SELECT queries, INSERT/UPDATE, or DROP/TRUNCATE operations" />
-          <PermRow icon="🔧" label="CI/CD Pipeline" permKey="ci_access" value={permissions.ci_access}
+            desc={t('companyNew.resources.db.description')} />
+          <PermRow icon="🔧" label={t('companyNew.resources.ci.label')} permKey="ci_access" value={permissions.ci_access}
             options={ciOptions} onChange={updatePerm}
-            desc="Trigger builds, read pipeline logs, cancel/retry runs" />
-          <PermRow icon="🔑" label="Secrets & Credentials" permKey="secrets_access" value={permissions.secrets_access}
+            desc={t('companyNew.resources.ci.description')} />
+          <PermRow icon="🔑" label={t('companyNew.resources.secrets.label')} permKey="secrets_access" value={permissions.secrets_access}
             options={secretOptions} onChange={updatePerm}
-            desc="Read API keys, rotate secrets, manage vault entries" />
+            desc={t('companyNew.resources.secrets.description')} />
         </div>
 
         <div className="card p-4 space-y-3">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Governance gates</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t('companyNew.governance')}</p>
           {[
-            { key: 'require_approval_deploy', label: 'Require human approval before any deployment', icon: '🚀' },
-            { key: 'require_approval_db_write', label: 'Require human approval for database writes', icon: '🗄️' },
+            { key: 'require_approval_deploy', label: t('companyNew.approvalDeploy'), icon: '🚀' },
+            { key: 'require_approval_db_write', label: t('companyNew.approvalDbWrite'), icon: '🗄️' },
           ].map(({ key, label, icon }) => (
             <label key={key} className="flex items-center gap-3 cursor-pointer group">
               <input type="checkbox"
@@ -753,7 +787,7 @@ export default function CompanyNew() {
         {autonomyLevel === 1 && (
           <div className="alert-info text-xs">
             <span>ℹ️</span>
-            <span>At Autonomy Level 1, all AI actions already require manual approval. Governance gates are enforced system-wide.</span>
+            <span>{t('companyNew.manualApprovalHint')}</span>
           </div>
         )}
       </div>
@@ -764,18 +798,18 @@ export default function CompanyNew() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white mb-1">Build your AI team</h2>
+          <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.teamTitle')}</h2>
           <p className="text-sm text-gray-400">
-            {discoveryResult ? 'Team suggested based on detected stack. Customize as needed.' : 'Configure the AI agents that will work in your factory.'}
+            {t(discoveryResult ? 'companyNew.suggestedTeamDescription' : 'companyNew.teamDescription')}
           </p>
         </div>
         <button type="button" onClick={addAgent} className="btn btn-secondary btn-sm flex-shrink-0">
-          + Add agent
+          + {t('companyNew.addTeamAgent')}
         </button>
       </div>
 
       {agents.length === 0 && (
-        <div className="alert-error text-sm">At least 1 agent is required.</div>
+        <div className="alert-error text-sm">{t('companyNew.minAgentError')}</div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -787,68 +821,68 @@ export default function CompanyNew() {
       </div>
 
       <div className="rounded-lg bg-surface-800/30 border border-surface-700 p-3 text-xs text-gray-500 space-y-1">
-        <p className="font-medium text-gray-400">Team token budget</p>
-        <p>Total monthly: <span className="text-brand-300 font-mono">
-          {(agents.reduce((s, a) => s + (a.token_budget ?? 500000), 0) / 1000000).toFixed(1)}M tokens
+        <p className="font-medium text-gray-400">{t('companyNew.teamBudget')}</p>
+        <p>{t('companyNew.totalMonthly')} <span className="text-brand-300 font-mono">
+          {t('companyNew.millionTokens', { amount: (agents.reduce((s, a) => s + (a.token_budget ?? 500000), 0) / 1000000).toFixed(1) })}
         </span></p>
-        <p className="text-gray-600">Budgets are soft limits — alerts fire at 80% usage. Hard caps can be set post-creation.</p>
+        <p className="text-gray-600">{t('companyNew.budgetHint')}</p>
       </div>
     </div>
   )
 
   const renderStep5 = () => {
-    const selectedAutonomy = AUTONOMY_LEVELS.find(l => l.value === autonomyLevel)!
+    const selectedAutonomy = autonomyLevels.find(l => l.value === autonomyLevel)!
     const totalBudget = agents.reduce((s, a) => s + (a.token_budget ?? 500000), 0)
     return (
       <div className="space-y-5">
         <div>
-          <h2 className="text-lg font-semibold text-white mb-1">Review & initialize</h2>
-          <p className="text-sm text-gray-400">Everything looks good? Hit Initialize to create your factory.</p>
+          <h2 className="text-lg font-semibold text-white mb-1">{t('companyNew.reviewTitle')}</h2>
+          <p className="text-sm text-gray-400">{t('companyNew.reviewDescription')}</p>
         </div>
 
         <div className="space-y-3">
           {/* Company */}
           <div className="card p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Company</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('companyNew.steps.Company')}</p>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-semibold text-white">{companyName}</p>
                 {companyDesc && <p className="text-sm text-gray-400 mt-0.5">{companyDesc}</p>}
               </div>
-              <button type="button" onClick={() => setStep(1)} className="text-xs text-brand-400 hover:underline flex-shrink-0">Edit</button>
+              <button type="button" onClick={() => setStep(1)} className="text-xs text-brand-400 hover:underline flex-shrink-0">{t('companyNew.edit')}</button>
             </div>
             <div className="mt-2 flex gap-3 text-xs text-gray-500">
-              <span>🔄 Scope {scopeSize} sprints</span>
+              <span>🔄 {t('companyNew.scopeSummary', { scope: scopeSize })}</span>
               <span>🌍 {timezone}</span>
             </div>
           </div>
 
           {/* Autonomy */}
           <div className="card p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Autonomy</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{t('companyNew.steps.Autonomy')}</p>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-xl">{selectedAutonomy.icon}</span>
                 <span className="text-sm font-medium text-white">{selectedAutonomy.label}</span>
-                <span className={`badge text-xs ${selectedAutonomy.badge}`}>Level {autonomyLevel}</span>
+                <span className={`badge text-xs ${selectedAutonomy.badge}`}>{t('companyNew.level', { level: autonomyLevel })}</span>
               </div>
-              <button type="button" onClick={() => setStep(2)} className="text-xs text-brand-400 hover:underline">Edit</button>
+              <button type="button" onClick={() => setStep(2)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
             </div>
           </div>
 
           {/* Permissions */}
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Permissions</p>
-              <button type="button" onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">Edit</button>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('companyNew.permissions')}</p>
+              <button type="button" onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
             </div>
             <div className="grid grid-cols-5 gap-2">
               {[
-                { label: 'Git', key: 'git_access', icon: '🔀' },
-                { label: 'Cloud', key: 'cloud_access', icon: '☁️' },
-                { label: 'DB', key: 'db_access', icon: '🗄️' },
-                { label: 'CI/CD', key: 'ci_access', icon: '🔧' },
-                { label: 'Secrets', key: 'secrets_access', icon: '🔑' },
+                { label: t('companyNew.resources.git.short'), key: 'git_access', icon: '🔀' },
+                { label: t('companyNew.resources.cloud.short'), key: 'cloud_access', icon: '☁️' },
+                { label: t('companyNew.resources.db.short'), key: 'db_access', icon: '🗄️' },
+                { label: t('companyNew.resources.ci.short'), key: 'ci_access', icon: '🔧' },
+                { label: t('companyNew.resources.secrets.short'), key: 'secrets_access', icon: '🔑' },
               ].map(({ label, key, icon }) => {
                 const val = permissions[key as keyof Permissions] as string
                 const perm = PERM_LEVELS[val as keyof typeof PERM_LEVELS]
@@ -856,7 +890,7 @@ export default function CompanyNew() {
                   <div key={key} className="bg-surface-800/60 rounded-lg p-2 text-center">
                     <span className="text-base">{icon}</span>
                     <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-                    <p className={`text-xs font-medium mt-0.5 ${perm?.color ?? 'text-gray-400'}`}>{perm?.label}</p>
+                    <p className={`text-xs font-medium mt-0.5 ${perm?.color ?? 'text-gray-400'}`}>{localizedPermission(t, val)}</p>
                   </div>
                 )
               })}
@@ -866,19 +900,19 @@ export default function CompanyNew() {
           {/* Team */}
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Team — {agents.length} agents</p>
-              <button type="button" onClick={() => setStep(4)} className="text-xs text-brand-400 hover:underline">Edit</button>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('companyNew.teamSummary', { count: agents.length })}</p>
+              <button type="button" onClick={() => setStep(4)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
             </div>
             <div className="space-y-1.5">
               {agents.map((a, i) => {
-                const roleInfo = ROLES.find(r => r.value === a.role)
+                const roleInfo = roles.find(r => r.value === a.role)
                 return (
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <span>{roleInfo?.icon ?? '🤖'}</span>
                     <span className="text-gray-300 font-medium">
                       {a.name ? `${a.name} — ${roleInfo?.label ?? a.role}` : (roleInfo?.label ?? a.role)}
                     </span>
-                    <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{a.seniority}</span>
+                    <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{t(`companyNew.seniorities.${a.seniority}.label`, { defaultValue: a.seniority })}</span>
                     {a.model && (() => {
                       const mi = availableModels.find(m => m.id === a.model)
                       const tm = TIER_META[mi?.tier ?? 'balanced']
@@ -894,12 +928,12 @@ export default function CompanyNew() {
               })}
             </div>
             <p className="text-xs text-gray-600 mt-2">
-              Total budget: <span className="text-brand-300 font-mono">{(totalBudget / 1000000).toFixed(1)}M tokens/mo</span>
+              {t('companyNew.totalBudget')} <span className="text-brand-300 font-mono">{t('companyNew.millionTokensMonthly', { amount: (totalBudget / 1000000).toFixed(1) })}</span>
             </p>
           </div>
         </div>
 
-        {mutationError && <div className="alert-error text-sm">{mutationError}</div>}
+        {mutationError && <div className="alert-error text-sm">{t('companyNew.initializationError', { message: mutationError })}</div>}
 
         <button type="button" onClick={handleSubmit}
           disabled={loading}
@@ -907,9 +941,9 @@ export default function CompanyNew() {
           {loading ? (
             <span className="flex items-center gap-2 justify-center">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Initializing factory…
+              {t('companyNew.submitting')}
             </span>
-          ) : '🏭 Initialize Factory'}
+          ) : `🏭 ${t('companyNew.submit')}`}
         </button>
       </div>
     )
@@ -922,11 +956,11 @@ export default function CompanyNew() {
   return (
     <div className="page-container max-w-6xl">
       <div className="mb-6">
-        <h1 className="page-title">🏭 New Factory</h1>
-        <p className="text-gray-400 text-sm mt-1">Set up your AI-powered software factory in 6 steps.</p>
+        <h1 className="page-title">🏭 {t('companyNew.newFactory')}</h1>
+        <p className="text-gray-400 text-sm mt-1">{t('companyNew.wizardDescription')}</p>
       </div>
 
-      <StepIndicator current={step} steps={STEPS} />
+      <StepIndicator current={step} steps={steps} />
 
       <div className="card p-6">
         {STEP_RENDERERS[step]()}
@@ -937,7 +971,7 @@ export default function CompanyNew() {
         <button type="button" onClick={() => setStep(s => s - 1)}
           disabled={step === 0}
           className="btn btn-secondary disabled:opacity-30">
-          ← Back
+          ← {t('companyNew.back')}
         </button>
 
         <span className="text-xs text-gray-600">{step + 1} / {STEPS.length}</span>
@@ -946,7 +980,7 @@ export default function CompanyNew() {
           <button type="button" onClick={() => setStep(s => s + 1)}
             disabled={!canProceed()}
             className="btn btn-primary disabled:opacity-50">
-            Next →
+            {t('companyNew.next')} →
           </button>
         ) : null}
       </div>
