@@ -477,14 +477,78 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
   )
 }
 
+function TaskStatusChart({ columns, total }: { columns: Record<string, unknown[]>; total: number }) {
+  const { t } = useTranslation()
+  const statuses = [
+    { id: 'todo', color: 'bg-gray-400' },
+    { id: 'in_progress', color: 'bg-blue-400' },
+    { id: 'in_review', color: 'bg-yellow-400' },
+    { id: 'done', color: 'bg-emerald-400' },
+    { id: 'blocked', color: 'bg-red-400' },
+  ]
+
+  return (
+    <section aria-labelledby="task-status-heading" className="rounded-xl border border-surface-700 bg-surface-900 p-4">
+      <h2 id="task-status-heading" className="text-sm font-semibold text-gray-200 mb-3">
+        {t('dashboard.taskStatusBreakdown')}
+      </h2>
+      {total > 0 ? (
+        <div className="space-y-3">
+          {statuses.map(({ id, color }) => {
+            const count = columns[id]?.length ?? 0
+            const label = t(`kanban.status.${id}`)
+            return (
+              <div key={id} className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-3">
+                <span className="text-xs text-gray-400">{label}</span>
+                <div
+                  role="progressbar"
+                  aria-label={label}
+                  aria-valuenow={count}
+                  aria-valuemin={0}
+                  aria-valuemax={total}
+                  aria-valuetext={t('dashboard.taskProgress', { count, total })}
+                  className="h-2 rounded-full bg-surface-700 overflow-hidden"
+                >
+                  <div
+                    className={`h-full rounded-full ${color}`}
+                    style={{ width: `${Math.min(100, (count / total) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs tabular-nums text-gray-300">{count}</span>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500">{t('dashboard.noTasks')}</p>
+      )}
+    </section>
+  )
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const { t } = useTranslation()
   const { activeSprintId, setActiveSprint, companyName } = useAppStore()
-  const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
-  const { data: analytics } = useAnalyticsSummary(activeSprintId)
-  const { data: health } = useHealth()
+  const {
+    data: board,
+    isLoading: boardLoading,
+    isError: boardError,
+    refetch: refetchBoard,
+  } = useSprintBoard(activeSprintId)
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    isError: analyticsError,
+    refetch: refetchAnalytics,
+  } = useAnalyticsSummary(activeSprintId)
+  const {
+    data: health,
+    isLoading: healthLoading,
+    isError: healthError,
+    refetch: refetchHealth,
+  } = useHealth()
   const connectToSprintStream = useAgentStore(s => s.connect)
   const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
   const agentStates = useAgentStore(s => s.agentStates)
@@ -507,6 +571,13 @@ export default function Dashboard() {
   const healthScore    = analytics?.health_score ?? null
   const needsSplit     = sprint?.status === 'needs_split'
   const backendOnline  = health?.status === 'healthy'
+  const systemStatus = healthLoading
+    ? t('dashboard.checking')
+    : backendOnline
+      ? t('dashboard.systemOnline')
+      : healthError
+        ? t('dashboard.statusUnavailable')
+        : t('dashboard.systemOffline')
 
   const activeAgentCount  = Object.values(agentStates).filter(a => a.fsmState === 'active').length
   const visibleAgents     = Object.entries(agentStates)
@@ -536,8 +607,13 @@ export default function Dashboard() {
                 : 'bg-red-500/5 border-red-500/20 text-red-400'
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              {backendOnline ? t('dashboard.systemOnline') : t('dashboard.systemOffline')}
+              <span role="status" aria-live="polite">{systemStatus}</span>
             </div>
+            {healthError && (
+              <button onClick={() => refetchHealth()} className="btn-ghost btn-sm" aria-label={t('dashboard.retryHealth')}>
+                {t('dashboard.retry')}
+              </button>
+            )}
             <Link
               to="/companies/new"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
@@ -579,17 +655,33 @@ export default function Dashboard() {
           <KpiCard
             icon={Zap}
             label="Health Score"
-            value={healthScore !== null ? `${healthScore}` : '—'}
-            sub={healthScore !== null ? (healthScore >= 80 ? 'Sprint healthy' : 'Review needed') : 'No data yet'}
+            value={analyticsLoading ? '…' : healthScore !== null ? `${healthScore}` : '—'}
+            sub={analyticsError
+              ? t('dashboard.analyticsUnavailable')
+              : analyticsLoading
+                ? t('dashboard.loadingMetrics')
+                : healthScore !== null
+                  ? (healthScore >= 80 ? 'Sprint healthy' : 'Review needed')
+                  : 'No data yet'}
             accent={healthScore !== null && healthScore >= 80}
             warn={healthScore !== null && healthScore < 60}
           />
         </div>
+        {analyticsError && (
+          <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-800/60 bg-red-900/30 p-3 text-xs text-red-300">
+            <span>{t('dashboard.analyticsUnavailable')}</span>
+            <button onClick={() => refetchAnalytics()} className="btn-ghost btn-sm text-red-200">
+              {t('dashboard.retry')}
+            </button>
+          </div>
+        )}
 
         {/* ── Needs Split alert ─────────────────────────────────────── */}
         {needsSplit && sprint && activeSprintId && (
           <NeedsSplitAlert sprintId={activeSprintId} sprintName={sprint.sprint_name} />
         )}
+
+        {sprint && !boardError && !boardLoading && <TaskStatusChart columns={columns} total={total} />}
 
         {/* ── Main grid ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -597,8 +689,16 @@ export default function Dashboard() {
           {/* Sprint card — takes 2 cols */}
           <div className="lg:col-span-2 space-y-4">
             {boardLoading ? (
-              <div className="rounded-xl border border-surface-700 bg-surface-900 p-8 flex items-center justify-center">
+              <div role="status" className="rounded-xl border border-surface-700 bg-surface-900 p-8 flex items-center justify-center gap-2 text-sm text-gray-400">
                 <Loader2 size={20} className="text-brand-400 animate-spin" />
+                {t('dashboard.loadingSprint')}
+              </div>
+            ) : boardError ? (
+              <div role="alert" className="rounded-xl border border-red-800/60 bg-red-900/30 p-4 text-sm text-red-300">
+                <p>{t('dashboard.sprintUnavailable')}</p>
+                <button onClick={() => refetchBoard()} className="btn-ghost btn-sm mt-2 text-red-200">
+                  {t('dashboard.retry')}
+                </button>
               </div>
             ) : sprint && activeSprintId ? (
               <SprintCard sprint={sprint} columns={columns} total={total} sprintId={activeSprintId} />

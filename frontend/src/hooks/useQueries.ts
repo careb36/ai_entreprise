@@ -190,6 +190,7 @@ export function useAnalyticsSummary(sprintId: number | null) {
     queryKey: QUERY_KEYS.analytics(sprintId || 0),
     queryFn: () => api.getAnalyticsSummary(sprintId!),
     enabled: !!sprintId,
+    staleTime: 1000 * 60,
   })
 }
 
@@ -198,6 +199,7 @@ export function useOrchestrationHealth(companyId: number | null, weeks = 8) {
     queryKey: QUERY_KEYS.orchestrationHealth(companyId || 0, weeks),
     queryFn: () => api.getOrchestrationHealth(companyId!, weeks),
     enabled: !!companyId,
+    staleTime: 1000 * 60,
   })
 }
 
@@ -223,6 +225,7 @@ export function useHealth() {
   return useQuery({
     queryKey: ['health'],
     queryFn: api.health,
+    staleTime: 25_000,
     refetchInterval: 30000, // Check every 30s
   })
 }

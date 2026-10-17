@@ -36,7 +36,17 @@
     "needsSplitDesc": "Este sprint superó la capacidad de los agentes. Divídelo en alcances más pequeños.",
     "openAgentsRoom": "Abrir Sala de Agentes",
     "systemOnline": "Sistema en línea",
-    "systemOffline": "Sistema fuera de línea"
+    "systemOffline": "Sistema fuera de línea",
+    "statusUnavailable": "Estado del sistema no disponible",
+    "taskStatusBreakdown": "Estado de las tareas del sprint",
+    "taskProgress": "{{count}} de {{total}} tareas",
+    "noTasks": "Este sprint aún no tiene tareas.",
+    "loadingSprint": "Cargando datos del sprint…",
+    "sprintUnavailable": "No se pudieron cargar los datos del sprint.",
+    "analyticsUnavailable": "No se pudo cargar la puntuación de salud.",
+    "loadingMetrics": "Cargando puntuación de salud…",
+    "retry": "Reintentar",
+    "retryHealth": "Reintentar la comprobación del estado del sistema"
   },
   "companyNew": {
     "title": "Inicializar Fábrica",

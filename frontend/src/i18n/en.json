@@ -36,7 +36,17 @@
     "needsSplitDesc": "This sprint exceeded agent capacity. Split it into smaller scopes.",
     "openAgentsRoom": "Open Agents Room",
     "systemOnline": "System online",
-    "systemOffline": "System offline"
+    "systemOffline": "System offline",
+    "statusUnavailable": "System status unavailable",
+    "taskStatusBreakdown": "Sprint task status",
+    "taskProgress": "{{count}} of {{total}} tasks",
+    "noTasks": "No tasks in this sprint yet.",
+    "loadingSprint": "Loading sprint data…",
+    "sprintUnavailable": "Could not load sprint data.",
+    "analyticsUnavailable": "Could not load the health score.",
+    "loadingMetrics": "Loading health score…",
+    "retry": "Retry",
+    "retryHealth": "Retry system status check"
   },
   "companyNew": {
     "title": "Initialize Factory",
