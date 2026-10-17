@@ -1,11 +1,16 @@
 import { FormEvent, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../services/api'
+import { useAuthStore } from '../store/useAuthStore'
+import { safeReturnPath } from '../lib/returnPath'
 
 export default function Register() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const token = useAuthStore(state => state.token)
+  const expiresAt = useAuthStore(state => state.expiresAt)
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
@@ -28,6 +33,10 @@ export default function Register() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (token && expiresAt && expiresAt > Date.now()) {
+    return <Navigate to={safeReturnPath(searchParams.get('from'))} replace />
   }
 
   return (

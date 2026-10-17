@@ -31,12 +31,12 @@ vi.mock('../services/api', () => ({
 
 function CurrentPath() {
   const location = useLocation()
-  return <output data-testid="current-path">{location.pathname}{location.search}</output>
+  return <output data-testid="current-path">{location.pathname}{location.search}{location.hash}</output>
 }
 
 function renderLogin(initialEntry = '/login') {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[initialEntry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -53,6 +53,38 @@ describe('login and registration', () => {
     useAuthStore.getState().logout()
     useAuthStore.setState({ meLoaded: false, loadingMe: false, profileError: null })
     useAppStore.getState().setActiveSprint(null)
+  })
+
+  it.each(['/login', '/register'])('redirects signed-in visitors from %s to their safe return path', async path => {
+    useAuthStore.setState({ token: 'signed-token', expiresAt: Date.now() + 60_000 })
+    renderLogin(`${path}?from=${encodeURIComponent('/target?tab=mine#details')}`)
+
+    expect(await screen.findByTestId('current-path')).toHaveTextContent('/target?tab=mine#details')
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+    expect(mockApi.login).not.toHaveBeenCalled()
+    expect(mockApi.register).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['/login', undefined],
+    ['/register', undefined],
+    ['/login', '//example.com'],
+    ['/register', '/\\example.com'],
+    ['/login', '/register'],
+    ['/register', '/login?from=/target'],
+    ['/login', '/companies/select'],
+  ])('redirects signed-in visitors home from %s with return path %s', async (path, from) => {
+    useAuthStore.setState({ token: 'signed-token', expiresAt: Date.now() + 60_000 })
+    renderLogin(`${path}${from ? `?from=${encodeURIComponent(from)}` : ''}`)
+
+    expect(await screen.findByTestId('current-path')).toHaveTextContent(/^\/$/)
+  })
+
+  it.each(['/login', '/register'])('keeps %s accessible with an expired token', path => {
+    useAuthStore.setState({ token: 'expired-token', expiresAt: Date.now() - 1 })
+    renderLogin(path)
+
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 
   it('stores the token and profile and navigates to the from destination', async () => {
