@@ -61,8 +61,16 @@ app.include_router(github_router)
 register_exception_handlers(app)
 
 # Register lifecycle handlers
-app.add_event_handler("startup", lambda: startup(app))
-app.add_event_handler("shutdown", lambda: shutdown(app))
+async def on_startup():
+    await startup(app)
+
+
+async def on_shutdown():
+    await shutdown(app)
+
+
+app.add_event_handler("startup", on_startup)
+app.add_event_handler("shutdown", on_shutdown)
 
 
 @app.get("/health")
