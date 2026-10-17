@@ -25,7 +25,7 @@ export default function ProtectedRoute() {
   }, [authenticated, loadMe, loadingMe, logout, meLoaded, profileError, token])
 
   useEffect(() => {
-    if (meLoaded && memberships.length === 1) {
+    if (meLoaded && !loadingMe && !profileError && memberships.length === 1) {
       const membership = memberships[0]
       if (companyId !== membership.company_id) {
         setCompany(
@@ -37,7 +37,7 @@ export default function ProtectedRoute() {
         )
       }
     }
-  }, [companyId, memberships, meLoaded, setCompany, t])
+  }, [companyId, loadingMe, memberships, meLoaded, profileError, setCompany, t])
 
   if (!authenticated) {
     const from = `${location.pathname}${location.search}${location.hash}`

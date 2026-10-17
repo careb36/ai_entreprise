@@ -31,7 +31,12 @@ describe('company creation profile refresh', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
-  it('keeps the created company and workspace when refresh fails (issue #6)', async () => {
+  it.each([
+    { scenario: 'first company', memberships: [] },
+    { scenario: 'second company', memberships: [{ company_id: 7, human_role: 'Owner' as const }] },
+  ])('keeps the created company and workspace when refresh fails ($scenario; issue #6)', async ({ memberships }) => {
+    useAuthStore.setState({ memberships })
+    if (memberships.length) useAppStore.getState().setCompany(7, 'Existing Factory')
     const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
     const init = vi.spyOn(api, 'initCompany').mockResolvedValue({
       company_id: 14, sprint_id: 5, task_count: 0, message: 'Created',
@@ -41,7 +46,7 @@ describe('company creation profile refresh', () => {
       .mockImplementationOnce(() => new Promise((_, reject) => { rejectProfile = reject }))
       .mockResolvedValue({
         user_id: 1, email: 'user@example.com', full_name: 'User',
-        memberships: [{ company_id: 14, human_role: 'Owner' }],
+        memberships: [...memberships, { company_id: 14, human_role: 'Owner' }],
       })
     render(
       <QueryClientProvider client={client}>
@@ -64,6 +69,7 @@ describe('company creation profile refresh', () => {
     fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
     expect(await screen.findByRole('status')).toBeInTheDocument()
     expect(me).toHaveBeenCalledOnce()
+    expect(useAppStore.getState().companyId).toBe(14)
 
     await act(async () => { rejectProfile(new Error('Profile unavailable')) })
 
