@@ -5,6 +5,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY,
     company_name VARCHAR(255) NOT NULL,
+    default_scope_size VARCHAR(1) DEFAULT 'M',
     default_sprint_length_days INTEGER DEFAULT 14,
     autonomy_level INTEGER DEFAULT 2,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS company_members (
 CREATE TABLE IF NOT EXISTS sprints (
     id SERIAL PRIMARY KEY,
     company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    business_unit_id INTEGER REFERENCES business_units(id),
     sprint_name VARCHAR(255) NOT NULL,
     start_date DATE,
     duration_days INTEGER DEFAULT 14,

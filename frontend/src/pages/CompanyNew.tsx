@@ -486,6 +486,23 @@ export default function CompanyNew() {
           onKeyDown={e => e.key === 'Enter' && handleDiscover()}
           placeholder="/home/user/my-project  or  ~/projects/acme-backend"
           className="input flex-1 font-mono text-sm" />
+        <button type="button" onClick={async () => {
+          try {
+            if ('showDirectoryPicker' in window) {
+              const dirHandle = await (window as any).showDirectoryPicker()
+              setProjectPath(dirHandle.name)
+            } else {
+              alert('Tu navegador no soporta el selector de directorios. Por favor, escribe la ruta manualmente.')
+            }
+          } catch (err) {
+            if ((err as Error).name !== 'AbortError') {
+              alert('No se pudo seleccionar el directorio: ' + (err as Error).message)
+            }
+          }
+        }}
+          className="btn btn-secondary flex-shrink-0">
+          📂 Examinar
+        </button>
         <button type="button" onClick={handleDiscover}
           disabled={discoverTeamMutation.isPending || !projectPath.trim()}
           className="btn btn-primary flex-shrink-0 min-w-28">
