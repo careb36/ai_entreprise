@@ -26,6 +26,7 @@ from routers import (
 from exception_handlers import register_exception_handlers
 from lifecycle import startup, shutdown
 from security import setup_security, get_cors_origins
+from metrics import setup_metrics
 
 settings = Settings()
 
@@ -52,6 +53,9 @@ app.add_middleware(
 
 # Setup security (rate limiting + security headers)
 setup_security(app)
+
+# Setup Prometheus metrics
+setup_metrics(app)
 
 app.include_router(auth_router)
 app.include_router(enterprise_router)
