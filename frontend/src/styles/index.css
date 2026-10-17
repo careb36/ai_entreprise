@@ -139,7 +139,7 @@
 
   /* Page layout */
   .page-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24;
   }
   .page-header {
     @apply mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4;
@@ -331,4 +331,3 @@
   border-color: #e0e3e7;
   color: #3c4043;
 }
-

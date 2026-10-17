@@ -823,7 +823,7 @@ function LeftSidebar({
       </div>
 
       {/* Active agents */}
-      <div className="py-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto">
+      <div className="py-2 xl:pb-24 xl:flex-1 xl:min-h-0 xl:overflow-y-auto">
         <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-3 mb-1">
           {t('glassroom.agentsTitle', 'Agents')}
         </p>
@@ -912,7 +912,7 @@ function RightPanel({ agentStates, messageCount, isConnected, assistantSummary, 
   const entries = Object.entries(agentStates)
 
   return (
-    <div className="w-full border-l lg:border-l border-t lg:border-t-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0 max-h-none lg:max-h-none overflow-visible lg:overflow-y-auto lg:overflow-x-hidden">
+    <div className="w-full border-l lg:border-l border-t lg:border-t-0 border-surface-700/60 bg-surface-950 flex flex-col lg:min-h-0 lg:w-auto lg:min-w-0 max-h-none lg:max-h-none overflow-visible lg:overflow-y-auto lg:overflow-x-hidden xl:pb-24">
       <div className="p-3 border-b border-surface-700/60">
         <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">{t('glassroom.liveStateTitle')}</p>
       </div>
@@ -924,7 +924,7 @@ function RightPanel({ agentStates, messageCount, isConnected, assistantSummary, 
       <TaskAutonomyTree tasks={autonomyTree} />
       <AssistantSummaryPanel entries={assistantSummary} />
 
-      <div className="py-2 space-y-px lg:flex-1 lg:min-h-0">
+      <div className="py-2 space-y-px shrink-0">
         {entries.length === 0 ? (
           <p className="text-[11px] text-gray-600 px-3 py-2 italic">{t('glassroom.noAgentActivity')}</p>
         ) : (
@@ -1365,7 +1365,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
           <div
             ref={containerRef}
             onScroll={handleScroll}
-            className="min-h-[20rem] py-2 overflow-visible lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
+            className="min-h-[20rem] py-2 xl:pb-24 overflow-visible lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto"
           >
             {messages.length === 0 ? (
               !isConnected && !connectionError ? (

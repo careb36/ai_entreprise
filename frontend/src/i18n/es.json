@@ -607,6 +607,7 @@
     "emailExists": "Ya existe una cuenta con este correo electrónico.",
     "registerError": "No se pudo registrar. Inténtalo de nuevo.",
     "logout": "Cerrar sesión",
+    "switchCompany": "Cambiar empresa",
     "companyPlaceholder": "Empresa {{id}}",
     "retry": "Intentar de nuevo",
     "loading": "Cargando tu cuenta…",
