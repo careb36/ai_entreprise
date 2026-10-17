@@ -45,7 +45,7 @@ export function SprintHealthChart({
   if (total === 0) {
     return (
       <div className="rounded-xl border border-surface-700 bg-surface-900 p-4">
-        <p className="text-xs text-gray-500 text-center">{t('dashboard.noData', 'No sprint data available')}</p>
+        <p className="text-xs text-gray-500 text-center">{t('dashboard.noData', { defaultValue: 'No sprint data available' })}</p>
       </div>
     )
   }
@@ -53,7 +53,7 @@ export function SprintHealthChart({
   return (
     <div className="rounded-xl border border-surface-700 bg-surface-900 p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-200">{t('dashboard.sprintHealth', 'Sprint Health')}</h3>
+        <h3 className="text-sm font-semibold text-gray-200">{t('dashboard.sprintHealth', { defaultValue: 'Sprint Health' })}</h3>
         {healthScore !== null && (
           <span className={`text-lg font-bold tabular-nums ${healthColor}`}>
             {healthScore}
@@ -68,28 +68,44 @@ export function SprintHealthChart({
             <div
               className="bg-emerald-500 transition-all duration-500"
               style={{ width: `${percentages.done}%` }}
-              title={`Done: ${percentages.done}%`}
+              title={t('dashboard.chartTooltip', {
+                defaultValue: '{{label}}: {{percent}}%',
+                label: t('dashboard.done', { defaultValue: 'Done' }),
+                percent: percentages.done,
+              })}
             />
           )}
           {percentages.inProgress > 0 && (
             <div
               className="bg-brand-500 transition-all duration-500"
               style={{ width: `${percentages.inProgress}%` }}
-              title={`In Progress: ${percentages.inProgress}%`}
+              title={t('dashboard.chartTooltip', {
+                defaultValue: '{{label}}: {{percent}}%',
+                label: t('dashboard.inProgress', { defaultValue: 'In Progress' }),
+                percent: percentages.inProgress,
+              })}
             />
           )}
           {percentages.blocked > 0 && (
             <div
               className="bg-red-500 transition-all duration-500"
               style={{ width: `${percentages.blocked}%` }}
-              title={`Blocked: ${percentages.blocked}%`}
+              title={t('dashboard.chartTooltip', {
+                defaultValue: '{{label}}: {{percent}}%',
+                label: t('dashboard.blocked', { defaultValue: 'Blocked' }),
+                percent: percentages.blocked,
+              })}
             />
           )}
           {percentages.remaining > 0 && (
             <div
               className="bg-surface-600 transition-all duration-500"
               style={{ width: `${percentages.remaining}%` }}
-              title={`Remaining: ${percentages.remaining}%`}
+              title={t('dashboard.chartTooltip', {
+                defaultValue: '{{label}}: {{percent}}%',
+                label: t('dashboard.remaining', { defaultValue: 'Remaining' }),
+                percent: percentages.remaining,
+              })}
             />
           )}
         </div>
@@ -99,19 +115,19 @@ export function SprintHealthChart({
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="text-gray-400">{t('dashboard.done', 'Done')} ({done})</span>
+              <span className="text-gray-400">{t('dashboard.done', { defaultValue: 'Done' })} ({done})</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-brand-500" />
-              <span className="text-gray-400">{t('dashboard.inProgress', 'In Progress')} ({inProgress})</span>
+              <span className="text-gray-400">{t('dashboard.inProgress', { defaultValue: 'In Progress' })} ({inProgress})</span>
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-gray-400">{t('dashboard.blocked', 'Blocked')} ({blocked})</span>
+              <span className="text-gray-400">{t('dashboard.blocked', { defaultValue: 'Blocked' })} ({blocked})</span>
             </span>
           </div>
           <span className="text-gray-500 tabular-nums">
-            {done}/{total} {t('dashboard.tasks', 'tasks')}
+            {done}/{total} {t('dashboard.tasks', { defaultValue: 'tasks' })}
           </span>
         </div>
       </div>
@@ -120,7 +136,7 @@ export function SprintHealthChart({
       {healthScore !== null && (
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] text-gray-500">
-            <span>{t('dashboard.healthScore', 'Health Score')}</span>
+            <span>{t('dashboard.healthScore', { defaultValue: 'Health Score' })}</span>
             <span className="tabular-nums">{healthScore}/100</span>
           </div>
           <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">

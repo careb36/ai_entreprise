@@ -618,7 +618,7 @@ export default function Dashboard() {
             value={healthScore !== null ? `${healthScore}` : '—'}
             sub={healthScore !== null
               ? (healthScore >= 80 ? t('dashboard.sprintHealthy', { defaultValue: 'Sprint healthy' }) : t('dashboard.reviewNeeded', { defaultValue: 'Review needed' }))
-              : t('dashboard.noData', { defaultValue: 'No data yet' })}
+              : t('dashboard.noHealthData', { defaultValue: 'No data yet' })}
             accent={healthScore !== null && healthScore >= 80}
             warn={healthScore !== null && healthScore < 60}
           />

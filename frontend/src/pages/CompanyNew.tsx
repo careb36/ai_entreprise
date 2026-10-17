@@ -30,6 +30,10 @@ interface Agent {
   system_prompt?: string
 }
 
+interface AgentDraft extends Agent {
+  defaultSpecialtyKey?: 'productSpecialty' | 'qaSpecialty'
+}
+
 interface ModelInfo {
   id: string
   provider: 'gemini' | 'deepseek'
@@ -408,12 +412,16 @@ export default function CompanyNew() {
   const [permissions, setPermissions] = useState<Permissions>(DEFAULT_PERMISSIONS)
 
   // Step 4 — Team
-  const [agents, setAgents] = useState<Agent[]>([
-    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: t('companyNew.defaults.productSpecialty'), token_budget: 500000 },
+  const [agentDrafts, setAgents] = useState<AgentDraft[]>([
+    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'productSpecialty', token_budget: 500000 },
     { name: '', role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 1000000 },
     { name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000 },
-    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: t('companyNew.defaults.qaSpecialty'), token_budget: 300000 },
+    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'qaSpecialty', token_budget: 300000 },
   ])
+  const agents: Agent[] = agentDrafts.map(({ defaultSpecialtyKey, ...agent }) => ({
+    ...agent,
+    specialty: defaultSpecialtyKey ? t(`companyNew.defaults.${defaultSpecialtyKey}`) : agent.specialty,
+  }))
 
   // Available LLM models — fetched dynamically from the proxy via backend
   const { data: modelsData } = useModels()
@@ -461,7 +469,11 @@ export default function CompanyNew() {
   const removeAgent = (i: number) => setAgents(prev => prev.filter((_, idx) => idx !== i))
 
   const updateAgent = (i: number, field: keyof Agent, val: string | number) =>
-    setAgents(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: val } : a))
+    setAgents(prev => prev.map((a, idx) => idx === i ? {
+      ...a,
+      [field]: val,
+      defaultSpecialtyKey: field === 'specialty' || field === 'persona' ? undefined : a.defaultSpecialtyKey,
+    } : a))
 
   // ── Permission helpers ────────────────────────────────────────────────────
 

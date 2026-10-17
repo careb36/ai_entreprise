@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import es from '../i18n/es.json'
+import en from '../i18n/en.json'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query'
 import CompanyNew from './CompanyNew'
@@ -40,12 +41,12 @@ describe('company creation profile refresh', () => {
     })
   })
 
-    async function renderSpanishWizard() {
+    async function renderSpanishWizard(language = 'es') {
       const i18n = createInstance()
       await i18n.init({
-        lng: 'es',
+        lng: language,
         fallbackLng: false,
-        resources: { es: { translation: es } },
+        resources: { en: { translation: en }, es: { translation: es } },
         interpolation: { escapeValue: false },
       })
       const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
@@ -58,6 +59,7 @@ describe('company creation profile refresh', () => {
           </QueryClientProvider>
         </I18nextProvider>,
       )
+      return i18n
     }
 
     function nextSpanishStep() {
@@ -68,6 +70,74 @@ describe('company creation profile refresh', () => {
       afterEach(() => {
         vi.restoreAllMocks()
         vi.unstubAllGlobals()
+      })
+
+      it('updates untouched defaults on language changes while retaining edits and clean API payloads', async () => {
+        const init = vi.spyOn(api, 'initCompany').mockImplementation(() => new Promise(() => {}))
+        const i18n = await renderSpanishWizard('en')
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+        fireEvent.change(screen.getByPlaceholderText('Acme Corp'), { target: { value: 'Factory' } })
+        for (let step = 1; step < 4; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+        expect(screen.getByDisplayValue('Product Management & Backlog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Automated Testing')).toBeInTheDocument()
+
+        await act(async () => { await i18n.changeLanguage('es') })
+        expect(screen.getByDisplayValue('Gestión de producto y trabajo pendiente')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Pruebas automatizadas')).toBeInTheDocument()
+        expect(screen.queryByText('Product Management & Backlog')).not.toBeInTheDocument()
+        expect(screen.queryByText('Automated Testing')).not.toBeInTheDocument()
+
+        await act(async () => { await i18n.changeLanguage('en') })
+        fireEvent.change(screen.getByDisplayValue('Product Management & Backlog'), { target: { value: 'Custom specialty' } })
+        fireEvent.change(screen.getByDisplayValue('Custom specialty'), { target: { value: 'Product Management & Backlog' } })
+        await act(async () => { await i18n.changeLanguage('es') })
+        expect(screen.getByDisplayValue('Product Management & Backlog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Pruebas automatizadas')).toBeInTheDocument()
+        nextSpanishStep()
+        expect(screen.getByText('· Product Management & Backlog')).toBeInTheDocument()
+        expect(screen.getByText('· Pruebas automatizadas')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' }))
+        await waitFor(() => expect(init).toHaveBeenCalledOnce())
+        const payload = init.mock.calls[0][0]
+        const agents = payload.agents ?? []
+        expect(agents).toHaveLength(4)
+        expect(agents[0]).toMatchObject({
+          role: 'PO', seniority: 'Senior', specialty: 'Product Management & Backlog',
+          persona: 'Product Management & Backlog',
+        })
+        expect(agents[3].specialty).toBe('Pruebas automatizadas')
+        for (const agent of agents) expect(agent).not.toHaveProperty('defaultSpecialtyKey')
+      })
+
+      it('does not translate discovery-provided specialties when the mounted wizard changes language', async () => {
+        vi.spyOn(api, 'discoverTeam').mockResolvedValue({
+          discovery_id: 1,
+          detected_stack: {
+            name: 'Factory', language: 'TypeScript', frameworks: [], databases: [], infra: [],
+            complexity: 'Low', file_count: 1,
+          },
+          suggested_team: [
+            { role: 'PO', seniority: 'Senior', specialty: 'Product Management & Backlog', persona: 'External persona' },
+            { role: 'QA', seniority: 'Senior', specialty: 'Automated Testing' },
+          ],
+        })
+        const init = vi.spyOn(api, 'initCompany').mockImplementation(() => new Promise(() => {}))
+        const i18n = await renderSpanishWizard('en')
+        fireEvent.change(screen.getByPlaceholderText(/path inside the Docker container/), { target: { value: '/projects/demo' } })
+        fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+        await screen.findByText(/Stack detected/)
+        for (let step = 0; step < 4; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+        await act(async () => { await i18n.changeLanguage('es') })
+        expect(screen.getByDisplayValue('Product Management & Backlog')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('Automated Testing')).toBeInTheDocument()
+        expect(screen.queryByDisplayValue('Pruebas automatizadas')).not.toBeInTheDocument()
+        nextSpanishStep()
+        fireEvent.click(screen.getByRole('button', { name: '🏭 Inicializar Fábrica' }))
+        await waitFor(() => expect(init).toHaveBeenCalledOnce())
+        expect(init.mock.calls[0][0].agents).toEqual([
+          expect.objectContaining({ role: 'PO', specialty: 'Product Management & Backlog', persona: 'External persona' }),
+          expect.objectContaining({ role: 'QA', specialty: 'Automated Testing', persona: 'Automated Testing' }),
+        ])
       })
 
       it('localizes all six steps, validation, generated team defaults, options, and review', async () => {

@@ -85,6 +85,7 @@ describe('Dashboard Spanish localization', () => {
     expect(screen.getByText('Tareas del sprint')).toBeInTheDocument()
     expect(screen.getByText('Agentes trabajando')).toBeInTheDocument()
     expect(screen.getByText('Puntuación de salud')).toBeInTheDocument()
+    expect(screen.getByText('Aún no hay datos')).toBeInTheDocument()
     expect(screen.getByText('Mediano · hasta 8 tareas')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'P' })).toHaveAttribute('title', 'Pequeño')
     expect(screen.getByRole('button', { name: 'G' })).toHaveAttribute('title', 'Grande')
@@ -124,6 +125,12 @@ describe('Dashboard Spanish localization', () => {
     expect(screen.getByText('Pequeño')).toBeInTheDocument()
     expect(screen.getByText('1 de 4 tareas completadas')).toBeInTheDocument()
     expect(screen.getByText('25% completado')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Salud del sprint' })).toBeInTheDocument()
+    expect(screen.getByText('1/4 tareas')).toBeInTheDocument()
+    expect(screen.getByTitle('Hecho: 25%')).toBeInTheDocument()
+    expect(screen.getByTitle('En progreso: 25%')).toBeInTheDocument()
+    expect(screen.getByTitle('Bloqueado: 25%')).toBeInTheDocument()
+    expect(screen.getByTitle('Restante: 25%')).toBeInTheDocument()
     expect(screen.getByText('Necesita atención')).toBeInTheDocument()
     expect(screen.getByText('Revisión necesaria')).toBeInTheDocument()
     expect(screen.getByText('2 agentes')).toBeInTheDocument()
@@ -148,6 +155,21 @@ describe('Dashboard Spanish localization', () => {
     renderDashboard()
     expect(screen.getByText(statusLabel)).toBeInTheDocument()
     expect(screen.getByText(scopeLabel)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['en', 'No sprint data available', 'No data yet'],
+    ['es', 'No hay datos del sprint disponibles', 'Aún no hay datos'],
+  ])('keeps the chart empty state separate from the health KPI in %s', async (language, chartEmpty, healthEmpty) => {
+    await i18n.changeLanguage(language)
+    useAppStore.setState({ activeSprintId: 9 })
+    vi.mocked(useSprintBoard).mockReturnValue({
+      data: { sprint: { sprint_name: 'External sprint', status: 'active', scope_size: 'M' }, total: 0, columns: {} },
+      isLoading: false,
+    } as never)
+    renderDashboard()
+    expect(screen.getByText(chartEmpty)).toBeInTheDocument()
+    expect(screen.getByText(healthEmpty)).toBeInTheDocument()
   })
 
   it('generates and launches a Spanish preview without translating API identifiers or freeform plan data', async () => {
