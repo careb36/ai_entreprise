@@ -1,3 +1,4 @@
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ErrorState } from './ErrorState'
 
@@ -9,7 +10,7 @@ describe('ErrorState', () => {
   })
 
   it('renders retry button when onRetry provided', () => {
-    const onRetry = jest.fn()
+    const onRetry = vi.fn()
     render(<ErrorState message="Error" onRetry={onRetry} />)
 
     const button = screen.getByText('Try again')

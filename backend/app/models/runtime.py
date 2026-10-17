@@ -1,9 +1,8 @@
 """Runtime persistence models for lightweight assistant state."""
 
-from typing import Optional
 from datetime import datetime
 
-from sqlmodel import SQLModel, Field
+from sqlmodel import Field, SQLModel
 
 
 class AssistantRuntimeState(SQLModel, table=True):
@@ -11,9 +10,9 @@ class AssistantRuntimeState(SQLModel, table=True):
 
     __tablename__ = "assistant_runtime_state"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", index=True)
     assistant_key: str = Field(index=True)
-    cooldown_until: Optional[datetime] = None
-    last_error: Optional[str] = None
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    cooldown_until: datetime | None = None
+    last_error: str | None = None
+    updated_at: datetime | None = Field(default_factory=datetime.utcnow)

@@ -7,10 +7,8 @@ is ever committed to this repository.
 
 import logging
 
-import pytest
-from cryptography.fernet import Fernet
-
 import crypto
+import pytest
 from crypto import (
     FERNET_PREFIX,
     PLAINTEXT_PREFIX,
@@ -20,6 +18,7 @@ from crypto import (
     encrypt_value,
     is_encryption_enabled,
 )
+from cryptography.fernet import Fernet
 
 
 @pytest.fixture
@@ -42,12 +41,13 @@ def without_key(monkeypatch):
 # Round trip
 # ---------------------------------------------------------------------------
 
+
 def test_round_trip_returns_the_original_value(with_key):
     secret = "ghp_a_github_token_value"
     stored = encrypt_value(secret)
 
     assert stored.startswith(FERNET_PREFIX)
-    assert secret not in stored          # the plaintext must not survive in the column
+    assert secret not in stored  # the plaintext must not survive in the column
     assert decrypt_value(stored) == secret
 
 
@@ -75,6 +75,7 @@ def test_is_encryption_enabled_reflects_configuration(with_key):
 # Failure modes
 # ---------------------------------------------------------------------------
 
+
 def test_decryption_with_the_wrong_key_is_rejected(monkeypatch):
     right, wrong = Fernet.generate_key().decode(), Fernet.generate_key().decode()
 
@@ -88,7 +89,7 @@ def test_decryption_with_the_wrong_key_is_rejected(monkeypatch):
 
 def test_a_tampered_token_is_rejected_rather_than_returning_garbage(with_key):
     stored = encrypt_value("secret")
-    token = stored[len(FERNET_PREFIX):]
+    token = stored[len(FERNET_PREFIX) :]
     # Flip one character of the ciphertext body, past the version and timestamp.
     flipped = "B" if token[40] != "B" else "C"
     tampered = f"{FERNET_PREFIX}{token[:40]}{flipped}{token[41:]}"
@@ -117,6 +118,7 @@ def test_a_malformed_key_is_reported_clearly(monkeypatch):
 # ---------------------------------------------------------------------------
 # Fallback when no key is configured
 # ---------------------------------------------------------------------------
+
 
 def test_without_a_key_values_are_stored_prefixed_and_still_readable(without_key):
     stored = encrypt_value("secret")
@@ -147,10 +149,11 @@ def test_a_plaintext_prefixed_value_containing_the_prefix_round_trips(without_ke
 # Rows written before this module existed
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "legacy",
     [
-        "vault_encrypted_placeholder",   # what every existing row actually holds
+        "vault_encrypted_placeholder",  # what every existing row actually holds
         "",
         "some-unprefixed-legacy-secret",
     ],
@@ -169,7 +172,10 @@ def test_legacy_rows_are_readable_without_a_key_too(without_key):
 # The write path
 # ---------------------------------------------------------------------------
 
-def test_init_company_stores_credentials_through_encrypt_value(sqlite_session, monkeypatch):
+
+def test_init_company_stores_credentials_through_encrypt_value(
+    sqlite_session, monkeypatch
+):
     """The one production writer must not put a bare value in the column."""
     from models.company import ProjectCredential
     from services import company_service

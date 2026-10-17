@@ -12,14 +12,15 @@ for local development.
 """
 
 import os
-from typing import Generator
+from collections.abc import Generator
 
 import neo4j
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
 
 # ---------------------------------------------------------------------------
 # PostgreSQL — SQLModel / SQLAlchemy engine
 # ---------------------------------------------------------------------------
+
 
 def _build_database_url() -> str:
     """Construct the PostgreSQL DSN from individual environment variables."""
@@ -111,6 +112,7 @@ def get_session() -> Generator[Session, None, None]:
 # ---------------------------------------------------------------------------
 # Neo4j driver (unchanged — Neo4j is not managed by SQLModel)
 # ---------------------------------------------------------------------------
+
 
 def get_neo4j_driver() -> neo4j.Driver:
     """

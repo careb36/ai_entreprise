@@ -27,11 +27,9 @@ Retry policy:
 import asyncio
 import json
 
-from sqlmodel import Session, select, text
-
 from database import engine
-from models import OutboxEvent
 from logging_config import logger
+from sqlmodel import Session, text
 
 
 async def process_outbox(nats_client) -> None:
@@ -72,29 +70,39 @@ async def process_outbox(nats_client) -> None:
 
                 for event_id, event_type, payload_str, retries in rows:
                     try:
-                        payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
+                        payload = (
+                            json.loads(payload_str)
+                            if isinstance(payload_str, str)
+                            else payload_str
+                        )
 
                         if event_type == "nats_publish":
                             subject = payload["subject"]
                             message = payload["message"]
                             logger.info(
                                 "Outbox dispatching event_id=%s subject=%s sprint_id=%s item_id=%s",
-                                event_id, subject,
-                                message.get("sprint_id"), message.get("backlog_item_id"),
+                                event_id,
+                                subject,
+                                message.get("sprint_id"),
+                                message.get("backlog_item_id"),
                             )
                             # Publish the inner message to the specified NATS subject.
                             await nats_client.publish(subject, message)
 
                         # Mark the event as successfully delivered.
                         session.exec(
-                            text("UPDATE outbox_events SET status = 'completed', processed_at = NOW() WHERE id = :id")
-                            .bindparams(id=event_id)
+                            text(
+                                "UPDATE outbox_events SET status = 'completed', processed_at = NOW() WHERE id = :id"
+                            ).bindparams(id=event_id)
                         )
                         logger.debug("Outbox event_id=%s marked completed", event_id)
-                    except Exception as row_e:
+                    except Exception as row_e:  # noqa: BLE001 - Retain failed rows for retry without stopping delivery.
                         logger.error(
                             "Failed to process outbox event_id=%s (retry=%d): %s",
-                            event_id, retries, row_e, exc_info=True,
+                            event_id,
+                            retries,
+                            row_e,
+                            exc_info=True,
                         )
                         # Increment retry counter; mark as failed after 5 attempts.
                         session.exec(
@@ -111,7 +119,7 @@ async def process_outbox(nats_client) -> None:
 
                 session.commit()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - Keep the outbox polling loop alive across failures.
             logger.error(f"Outbox processor error: {e}")
 
         # Poll every 2 seconds — keeps end-to-end NATS latency low.

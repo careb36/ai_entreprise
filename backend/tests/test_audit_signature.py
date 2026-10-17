@@ -2,13 +2,11 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
-import pytest
-from sqlmodel import Session
-
 import audit_signing
+import pytest
 from audit_signing import (
     SIGNED_PREFIX,
     UNSIGNED_PREFIX,
@@ -18,6 +16,7 @@ from audit_signing import (
 )
 from models.audit import AuditLog
 from services.agent_service import AgentService
+from sqlmodel import Session
 
 
 @pytest.fixture
@@ -230,7 +229,7 @@ def test_verify_endpoint_reports_valid_and_legacy_rows(
             details={},
             result={},
             cost_tokens=0,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
             decision_signature=None,
         )
     )

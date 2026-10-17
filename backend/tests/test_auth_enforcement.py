@@ -3,17 +3,24 @@
 import secrets
 from unittest.mock import MagicMock
 
-import pytest
-from fastapi import HTTPException
-from sqlmodel import select
-
 import auth_tokens
+import pytest
 from auth_policy import require_authenticated, require_company_role
 from config import settings
-from models import AuditLog, BacklogItem, BusinessUnit, Company, CompanyMember, Sprint, User
+from fastapi import HTTPException
+from models import (
+    AuditLog,
+    BacklogItem,
+    BusinessUnit,
+    Company,
+    CompanyMember,
+    Sprint,
+    User,
+)
 from models.agent_run import AgentRun
 from models.github import GitHubRepoBinding
 from services.company_service import CompanyService
+from sqlmodel import select
 from test_github_adapter import _webhook
 
 
@@ -42,9 +49,8 @@ def identity(sqlite_session, signing_key):
     sqlite_session.add(company)
     sqlite_session.commit()
     headers = {
-        "Authorization": "Bearer " + auth_tokens.create_access_token(
-            user_id=user.id, email=user.email
-        )
+        "Authorization": "Bearer "
+        + auth_tokens.create_access_token(user_id=user.id, email=user.email)
     }
     return user, company, headers
 
@@ -85,9 +91,7 @@ def test_list_requires_bearer_challenge(test_client):
 
 
 @pytest.mark.parametrize("company_id", [1, 99999999])
-def test_nonmember_gets_403_not_company_existence(
-    test_client, identity, company_id
-):
+def test_nonmember_gets_403_not_company_existence(test_client, identity, company_id):
     response = test_client.get(
         "/v1/agent_runs", params={"company_id": company_id}, headers=identity[2]
     )
@@ -105,7 +109,8 @@ def test_viewer_can_list_but_not_approve(test_client, sqlite_session, identity):
     assert run.id in [item["id"] for item in listed.json()["agent_runs"]]
     response = test_client.post(
         f"/v1/agent_runs/{run.id}/approve",
-        json=_approval(run.company_id), headers=identity[2],
+        json=_approval(run.company_id),
+        headers=identity[2],
     )
     assert response.status_code == 403
     assert response.json() == {"detail": "Requires Manager role"}
@@ -118,7 +123,8 @@ def test_manager_approval_preserves_payload_audit_identity(
     run = _run(sqlite_session, identity[1].id)
     response = test_client.post(
         f"/v1/agent_runs/{run.id}/approve",
-        json=_approval(run.company_id), headers=identity[2],
+        json=_approval(run.company_id),
+        headers=identity[2],
     )
     assert response.status_code == 201
     audit = sqlite_session.get(AuditLog, response.json()["audit_log_id"])
@@ -131,13 +137,18 @@ def test_only_owner_can_invite(test_client, sqlite_session, identity, role, expe
     _member(sqlite_session, identity, role)
     invitee = User(
         email=f"invite-{secrets.token_hex(8)}@example.com",
-        full_name="Invitee", password_hash="unused",
+        full_name="Invitee",
+        password_hash="unused",
     )
     sqlite_session.add(invitee)
     sqlite_session.commit()
     response = test_client.post(
         "/v1/company/invite",
-        json={"company_id": identity[1].id, "email": invitee.email, "human_role": "Owner"},
+        json={
+            "company_id": identity[1].id,
+            "email": invitee.email,
+            "human_role": "Owner",
+        },
         headers=identity[2],
     )
     assert response.status_code == expected
@@ -197,25 +208,33 @@ def test_owner_bootstrap_rolls_back_with_company(
     )
     assert response.status_code == 500
     sqlite_session.rollback()
-    assert sqlite_session.exec(
-        select(Company).where(Company.company_name == "Rollback")
-    ).all() == []
-    assert sqlite_session.exec(
-        select(CompanyMember).where(CompanyMember.user_id == identity[0].id)
-    ).all() == []
+    assert (
+        sqlite_session.exec(
+            select(Company).where(Company.company_name == "Rollback")
+        ).all()
+        == []
+    )
+    assert (
+        sqlite_session.exec(
+            select(CompanyMember).where(CompanyMember.user_id == identity[0].id)
+        ).all()
+        == []
+    )
 
 
 def test_signed_webhook_stays_public(test_client, sqlite_session, identity):
     company_id = identity[1].id
     repo = f"auth-public-{company_id}"
-    sqlite_session.add(GitHubRepoBinding(
-        company_id=company_id, owner="careb36", repo=repo,
-        webhook_secret_encrypted="plaintext:test-webhook-secret",
-    ))
-    sqlite_session.commit()
-    response = _webhook(
-        test_client, {}, event="ping", repository=f"careb36/{repo}"
+    sqlite_session.add(
+        GitHubRepoBinding(
+            company_id=company_id,
+            owner="careb36",
+            repo=repo,
+            webhook_secret_encrypted="plaintext:test-webhook-secret",
+        )
     )
+    sqlite_session.commit()
+    response = _webhook(test_client, {}, event="ping", repository=f"careb36/{repo}")
     assert response.status_code == 204
 
 
@@ -229,7 +248,9 @@ def test_flag_off_list_ignores_invalid_token(test_client, monkeypatch, identity)
         assert response.json() == {"agent_runs": []}
 
 
-def test_flag_off_approve_without_token(test_client, sqlite_session, identity, monkeypatch):
+def test_flag_off_approve_without_token(
+    test_client, sqlite_session, identity, monkeypatch
+):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
     run = _run(sqlite_session, identity[1].id)
     response = test_client.post(
@@ -245,11 +266,14 @@ def test_flag_off_init_creates_no_membership(
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
     response = test_client.post("/v1/init_company", json={"company_name": "Legacy"})
     assert response.status_code == 200
-    assert sqlite_session.exec(
-        select(CompanyMember).where(
-            CompanyMember.company_id == response.json()["company_id"]
-        )
-    ).all() == []
+    assert (
+        sqlite_session.exec(
+            select(CompanyMember).where(
+                CompanyMember.company_id == response.json()["company_id"]
+            )
+        ).all()
+        == []
+    )
 
 
 @pytest.mark.parametrize(
@@ -299,9 +323,7 @@ def test_sprint_scope_uses_owning_company(test_client, sqlite_session, identity)
     other = Company(company_name="Other tenant")
     sqlite_session.add(other)
     sqlite_session.flush()
-    sprint = Sprint(
-        company_id=other.id, sprint_name="Private", start_date="2026-10-17"
-    )
+    sprint = Sprint(company_id=other.id, sprint_name="Private", start_date="2026-10-17")
     sqlite_session.add(sprint)
     sqlite_session.commit()
     response = test_client.get(f"/v1/sprints/{sprint.id}/board", headers=identity[2])
@@ -310,7 +332,9 @@ def test_sprint_scope_uses_owning_company(test_client, sqlite_session, identity)
 
 
 @pytest.mark.parametrize("role, expected", [("Viewer", 403), ("Manager", 200)])
-def test_backlog_and_dispatch_roles(test_client, sqlite_session, identity, role, expected):
+def test_backlog_and_dispatch_roles(
+    test_client, sqlite_session, identity, role, expected
+):
     _member(sqlite_session, identity, role)
     sprint = Sprint(
         company_id=identity[1].id, sprint_name="Scoped", start_date="2026-10-17"
@@ -332,7 +356,9 @@ def test_backlog_and_dispatch_roles(test_client, sqlite_session, identity, role,
     assert item.status == ("done" if expected == 200 else "todo")
 
 
-@pytest.mark.parametrize("path", ["/v1/sprints/99999999/board", "/v1/analytics/summary?sprint_id=99999999"])
+@pytest.mark.parametrize(
+    "path", ["/v1/sprints/99999999/board", "/v1/analytics/summary?sprint_id=99999999"]
+)
 def test_missing_sprint_stays_404(test_client, identity, path):
     response = test_client.get(path, headers=identity[2])
     assert response.status_code == 404
@@ -364,15 +390,25 @@ def test_authentication_guard_and_flag_off_role_noop(sqlite_session, monkeypatch
         ("/v1/generate", {"story": "Test"}),
         ("/v1/audit", {"action": "test"}),
         ("/v1/memory/store?content=test", None),
-        ("/v1/integrations/github/bindings", {
-            "owner": "test", "repo": "test", "webhook_secret": "test-only",
-        }),
+        (
+            "/v1/integrations/github/bindings",
+            {
+                "owner": "test",
+                "repo": "test",
+                "webhook_secret": "test-only",
+            },
+        ),
         ("/v1/integrations/github/backfill", {"owner": "test", "repo": "test"}),
         ("/v1/plan_sprint", {"prompt": "Test"}),
         ("/v1/plan_self_improvement_sprint", {}),
-        ("/v1/start_sprint", {
-            "sprint_name": "Test", "start_date": "2026-10-17", "backlog_items": [],
-        }),
+        (
+            "/v1/start_sprint",
+            {
+                "sprint_name": "Test",
+                "start_date": "2026-10-17",
+                "backlog_items": [],
+            },
+        ),
     ],
 )
 def test_company_mutations_require_manager(
@@ -382,7 +418,8 @@ def test_company_mutations_require_manager(
         _member(sqlite_session, identity, role)
     company_id = identity[1].id
     response = test_client.post(
-        path, params={"company_id": company_id},
+        path,
+        params={"company_id": company_id},
         json={**payload, "company_id": company_id} if payload is not None else None,
         headers=identity[2],
     )
@@ -410,11 +447,14 @@ def test_quota_reset_uses_business_unit_company(
     assert unit.token_quota_used == (0 if expected == 200 else 123)
 
 
-@pytest.mark.parametrize("path", [
-    "/v1/enterprise/quotas",
-    "/v1/analytics/orchestration_health",
-    "/v1/enterprise/lineage?file_path=test",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/enterprise/quotas",
+        "/v1/analytics/orchestration_health",
+        "/v1/enterprise/lineage?file_path=test",
+    ],
+)
 def test_enterprise_reads_reject_nonmembers(test_client, identity, path):
     response = test_client.get(
         path, params={"company_id": identity[1].id}, headers=identity[2]
@@ -462,22 +502,28 @@ def test_audit_rejects_another_company_interaction(
     run = _run(sqlite_session, other.id)
     interaction_id = f"agent-run:{run.external_ref}"
     if existing_audit:
-        sqlite_session.add(AuditLog(
-            company_id=other.id, interaction_id=interaction_id, action="original"
-        ))
+        sqlite_session.add(
+            AuditLog(
+                company_id=other.id, interaction_id=interaction_id, action="original"
+            )
+        )
         sqlite_session.commit()
     response = test_client.post(
-        "/v1/audit", params={"company_id": identity[1].id},
+        "/v1/audit",
+        params={"company_id": identity[1].id},
         json={
-            "interaction_id": interaction_id, "action": "forged",
+            "interaction_id": interaction_id,
+            "action": "forged",
             "details": {"company_id": identity[1].id},
         },
         headers=identity[2],
     )
     assert response.status_code == 403
-    assert not sqlite_session.exec(select(AuditLog).where(
-        AuditLog.interaction_id == interaction_id, AuditLog.action == "forged"
-    )).all()
+    assert not sqlite_session.exec(
+        select(AuditLog).where(
+            AuditLog.interaction_id == interaction_id, AuditLog.action == "forged"
+        )
+    ).all()
 
 
 def test_audit_verify_hides_nonmember_rows_and_flags_legacy(
@@ -488,44 +534,61 @@ def test_audit_verify_hides_nonmember_rows_and_flags_legacy(
     sqlite_session.add(other)
     sqlite_session.commit()
     interaction_id = secrets.token_hex(16)
-    sqlite_session.add(AuditLog(
-        company_id=other.id, interaction_id=interaction_id, action="private"
-    ))
+    sqlite_session.add(
+        AuditLog(company_id=other.id, interaction_id=interaction_id, action="private")
+    )
     sqlite_session.commit()
     params = {"interaction_id": interaction_id}
-    assert test_client.get(
-        "/v1/audit/verify", params=params, headers=identity[2]
-    ).status_code == 404
+    assert (
+        test_client.get(
+            "/v1/audit/verify", params=params, headers=identity[2]
+        ).status_code
+        == 404
+    )
     legacy = AuditLog(interaction_id=interaction_id, action="legacy")
     sqlite_session.add(legacy)
     sqlite_session.commit()
     response = test_client.get("/v1/audit/verify", params=params, headers=identity[2])
     assert response.status_code == 200
-    assert response.json()["rows"] == [{
-        "id": legacy.id, "action": "legacy", "status": "legacy", "mode": "legacy",
-        "company_id": None, "legacy": True,
-    }]
-    assert test_client.get(
-        "/v1/audit/verify", params={**params, "company_id": identity[1].id},
-        headers=identity[2],
-    ).status_code == 404
+    assert response.json()["rows"] == [
+        {
+            "id": legacy.id,
+            "action": "legacy",
+            "status": "legacy",
+            "mode": "legacy",
+            "company_id": None,
+            "legacy": True,
+        }
+    ]
+    assert (
+        test_client.get(
+            "/v1/audit/verify",
+            params={**params, "company_id": identity[1].id},
+            headers=identity[2],
+        ).status_code
+        == 404
+    )
 
 
-def test_audit_write_sets_authorized_company_column(test_client, sqlite_session, identity):
+def test_audit_write_sets_authorized_company_column(
+    test_client, sqlite_session, identity
+):
     _member(sqlite_session, identity, "Manager")
     interaction_id = secrets.token_hex(16)
     response = test_client.post(
-        "/v1/audit", params={"company_id": identity[1].id},
+        "/v1/audit",
+        params={"company_id": identity[1].id},
         json={"interaction_id": interaction_id, "action": "owned"},
         headers=identity[2],
     )
     assert response.status_code == 200
-    row = sqlite_session.exec(select(AuditLog).where(
-        AuditLog.interaction_id == interaction_id
-    )).one()
+    row = sqlite_session.exec(
+        select(AuditLog).where(AuditLog.interaction_id == interaction_id)
+    ).one()
     assert row.company_id == identity[1].id
     response = test_client.get(
-        "/v1/audit/verify", params={"interaction_id": interaction_id},
+        "/v1/audit/verify",
+        params={"interaction_id": interaction_id},
         headers=identity[2],
     )
     assert response.json()["rows"][0]["legacy"] is False
@@ -540,8 +603,10 @@ def test_payload_company_cannot_override_authorized_context(
     if operation == "audit":
         payload = {"action": "forged", "details": payload}
     response = test_client.post(
-        f"/v1/{operation}", params={"company_id": identity[1].id},
-        json=payload, headers=identity[2],
+        f"/v1/{operation}",
+        params={"company_id": identity[1].id},
+        json=payload,
+        headers=identity[2],
     )
     assert response.status_code == 403
 
@@ -560,7 +625,10 @@ def test_memory_search_passes_membership_scope(
     response = test_client.get("/v1/memory/search", params=params, headers=identity[2])
     assert response.status_code == 200
     memory.search_similar.assert_called_once_with(
-        "architecture", 10, company_ids=[identity[1].id], include_legacy=not company_filter
+        "architecture",
+        10,
+        company_ids=[identity[1].id],
+        include_legacy=not company_filter,
     )
 
 
@@ -569,8 +637,10 @@ def test_memory_store_passes_server_company(test_client, sqlite_session, identit
     memory = MagicMock()
     test_client.app.state.memory_client = memory
     response = test_client.post(
-        "/v1/memory/store", params={"content": "decision", "company_id": identity[1].id},
-        json={"source": "test"}, headers=identity[2],
+        "/v1/memory/store",
+        params={"content": "decision", "company_id": identity[1].id},
+        json={"source": "test"},
+        headers=identity[2],
     )
     assert response.status_code == 200
     memory.store.assert_called_once_with(
@@ -578,14 +648,18 @@ def test_memory_store_passes_server_company(test_client, sqlite_session, identit
     )
 
 
-def test_memory_store_rejects_foreign_interaction(test_client, sqlite_session, identity):
+def test_memory_store_rejects_foreign_interaction(
+    test_client, sqlite_session, identity
+):
     _member(sqlite_session, identity, "Manager")
     other = Company(company_name="Private memory owner")
     sqlite_session.add(other)
     sqlite_session.commit()
     run = _run(sqlite_session, other.id)
     response = test_client.post(
-        "/v1/memory/store", params={"content": "forged", "company_id": identity[1].id},
-        json={"interaction_id": f"agent-run:{run.external_ref}"}, headers=identity[2],
+        "/v1/memory/store",
+        params={"content": "forged", "company_id": identity[1].id},
+        json={"interaction_id": f"agent-run:{run.external_ref}"},
+        headers=identity[2],
     )
     assert response.status_code == 403

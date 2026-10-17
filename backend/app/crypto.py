@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -64,7 +63,7 @@ class CredentialDecryptionError(CredentialCryptoError):
     """
 
 
-def _configured_key() -> Optional[str]:
+def _configured_key() -> str | None:
     """Return the configured Fernet key, or ``None`` when unset or blank."""
     from config import settings  # imported lazily so this module loads without env
 
@@ -139,14 +138,14 @@ def decrypt_value(stored: str) -> str:
         InvalidFernetKeyError: if the configured key is malformed.
     """
     if stored.startswith(PLAINTEXT_PREFIX):
-        return stored[len(PLAINTEXT_PREFIX):]
+        return stored[len(PLAINTEXT_PREFIX) :]
 
     if not stored.startswith(FERNET_PREFIX):
         # Legacy row written before encryption existed. Pass it through rather
         # than failing, so existing databases keep working without a migration.
         return stored
 
-    token = stored[len(FERNET_PREFIX):]
+    token = stored[len(FERNET_PREFIX) :]
     key = _configured_key()
     if key is None:
         raise CredentialDecryptionError(

@@ -1,7 +1,6 @@
 """Creation and validation of signed human-user access tokens."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -18,7 +17,7 @@ class InvalidTokenError(AuthTokenError):
     """Raised when a token is malformed, invalid, or expired."""
 
 
-def _configured_key() -> Optional[str]:
+def _configured_key() -> str | None:
     """Return the configured JWT key, or ``None`` when unset or blank."""
     from config import settings
 
@@ -47,7 +46,7 @@ def create_access_token(
     if key is None:
         raise AuthNotConfiguredError("JWT_SECRET_KEY is not configured")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + (
         expires_delta
         if expires_delta is not None

@@ -8,15 +8,14 @@ Run with:
     cd backend && PYTHONPATH=.:app python3 -m pytest tests/test_graph.py -q
 """
 
-import asyncio
+from unittest.mock import AsyncMock, patch
+
 import pytest
-
-from unittest.mock import AsyncMock, MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _canned_result(content: str = "OK", quota_warning: bool = False) -> dict:
     """Build a minimal OpenAI-style chat response dict."""
@@ -34,12 +33,12 @@ def _canned_result(content: str = "OK", quota_warning: bool = False) -> dict:
 # _resolve_model_name
 # ---------------------------------------------------------------------------
 
+
 def test_resolve_model_name_known_role():
     from agents.graph import _resolve_model_name
 
-    # PO → Gemini pro
     model = _resolve_model_name("PO")
-    assert "gemini" in model.lower()
+    assert model == "qwen3.7-plus"
 
 
 def test_resolve_model_name_unknown_role_falls_back_to_developer():
@@ -53,6 +52,7 @@ def test_resolve_model_name_unknown_role_falls_back_to_developer():
 # ---------------------------------------------------------------------------
 # _extract_backlog
 # ---------------------------------------------------------------------------
+
 
 def test_extract_backlog_parses_bullet_lines():
     from agents.graph import _extract_backlog
@@ -79,6 +79,7 @@ def test_extract_backlog_empty_when_no_bullets():
 # Graph compilation and node order
 # ---------------------------------------------------------------------------
 
+
 def test_create_agent_graph_compiles():
     """create_agent_graph() must return a compiled graph without raising."""
     from agents.graph import create_agent_graph
@@ -94,7 +95,16 @@ def test_create_agent_graph_has_expected_nodes():
     graph = create_agent_graph()
     # LangGraph stores nodes on the underlying graph object
     node_names = set(graph.get_graph().nodes.keys())
-    expected = {"kickoff", "po", "architect", "scrum_master", "developer", "po_wrap", "burn", "rejection"}
+    expected = {
+        "kickoff",
+        "po",
+        "architect",
+        "scrum_master",
+        "developer",
+        "po_wrap",
+        "burn",
+        "rejection",
+    }
     assert expected.issubset(node_names), f"Missing nodes: {expected - node_names}"
 
 
@@ -198,6 +208,7 @@ def test_route_from_sends_to_success_when_no_error():
 # _invoke_agent — event publication and quota warning
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_invoke_agent_publishes_agent_start_message_complete():
     """_invoke_agent must publish agent_start, message, and agent_complete events."""
@@ -230,7 +241,9 @@ async def test_invoke_agent_publishes_agent_start_message_complete():
         "agents.graph.LLMProxyClient.chat_async",
         new=AsyncMock(return_value=_canned_result("Sure, I'll do it")),
     ):
-        content = await _invoke_agent(state, "Developer", "Write tests", "Please write tests")
+        content = await _invoke_agent(
+            state, "Developer", "Write tests", "Please write tests"
+        )
 
     assert content == "Sure, I'll do it"
     event_types = [e["type"] for e in published]
@@ -303,9 +316,11 @@ async def test_invoke_agent_raises_on_error_response():
         "publish_event": None,
     }
 
-    with patch(
-        "agents.graph.LLMProxyClient.chat_async",
-        new=AsyncMock(return_value={"error": "rate limited"}),
+    with (
+        patch(
+            "agents.graph.LLMProxyClient.chat_async",
+            new=AsyncMock(return_value={"error": "rate limited"}),
+        ),
+        pytest.raises(RuntimeError, match="rate limited"),
     ):
-        with pytest.raises(RuntimeError, match="rate limited"):
-            await _invoke_agent(state, "Developer", "task", "prompt")
+        await _invoke_agent(state, "Developer", "task", "prompt")

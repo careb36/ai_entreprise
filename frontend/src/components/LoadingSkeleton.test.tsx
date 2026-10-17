@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { LoadingSkeleton, CardSkeleton, TableSkeleton } from './LoadingSkeleton'
 
@@ -8,8 +9,8 @@ describe('LoadingSkeleton', () => {
   })
 
   it('renders without message', () => {
-    render(<LoadingSkeleton />)
-    expect(screen.getByRole('img', { hidden: true })).toBeInTheDocument()
+    const { container } = render(<LoadingSkeleton />)
+    expect(container.querySelector('svg.animate-spin')).toBeInTheDocument()
   })
 })
 

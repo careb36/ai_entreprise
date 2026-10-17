@@ -8,16 +8,14 @@ Run with:
     cd backend && PYTHONPATH=.:app python3 -m pytest tests/test_needs_split.py -q
 """
 
-import pytest
-from sqlmodel import Session, select
-
 from models.company import Company
-from models.sprint import Sprint, BacklogItem
-
+from models.sprint import BacklogItem, Sprint
+from sqlmodel import Session
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _insert_company(session: Session, name: str = "Acme Corp") -> int:
     company = Company(company_name=name, autonomy_level=2)
@@ -44,21 +42,21 @@ def _insert_sprint(session: Session, company_id: int, status: str = "active") ->
 # _mark_sprint_needs_split
 # ---------------------------------------------------------------------------
 
+
 def test_mark_sprint_needs_split_sets_status(sqlite_session):
     """_mark_sprint_needs_split transitions an active sprint to 'needs_split'."""
     company_id = _insert_company(sqlite_session, "NeedsSplit Corp")
     sprint_id = _insert_sprint(sqlite_session, company_id, status="active")
 
     # Patch the module-level engine in agent_worker to use our SQLite engine
-    import database
-    from sqlalchemy.pool import StaticPool
-    from sqlmodel import create_engine
 
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.agent_worker.engine", sqlite_engine):
         from services.agent_worker import _mark_sprint_needs_split
+
         _mark_sprint_needs_split(sprint_id)
 
     # Re-read the sprint row from the same session
@@ -76,8 +74,10 @@ def test_mark_sprint_needs_split_ignores_already_split(sqlite_session):
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.agent_worker.engine", sqlite_engine):
         from services.agent_worker import _mark_sprint_needs_split
+
         _mark_sprint_needs_split(sprint_id)
 
     sqlite_session.expire_all()
@@ -93,8 +93,10 @@ def test_mark_sprint_needs_split_ignores_completed_sprint(sqlite_session):
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.agent_worker.engine", sqlite_engine):
         from services.agent_worker import _mark_sprint_needs_split
+
         _mark_sprint_needs_split(sprint_id)
 
     sqlite_session.expire_all()
@@ -107,8 +109,10 @@ def test_mark_sprint_needs_split_unknown_id_is_noop(sqlite_session):
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.agent_worker.engine", sqlite_engine):
         from services.agent_worker import _mark_sprint_needs_split
+
         # Should not raise
         _mark_sprint_needs_split(99999)
 
@@ -116,6 +120,7 @@ def test_mark_sprint_needs_split_unknown_id_is_noop(sqlite_session):
 # ---------------------------------------------------------------------------
 # _complete_sprint_and_plan_follow_up — status-based dispatch guard
 # ---------------------------------------------------------------------------
+
 
 def test_complete_sprint_skips_when_sprint_not_active(sqlite_session):
     """_complete_sprint_and_plan_follow_up returns not-completed for a 'needs_split' sprint."""
@@ -125,8 +130,10 @@ def test_complete_sprint_skips_when_sprint_not_active(sqlite_session):
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.task_worker.engine", sqlite_engine):
         from services.task_worker import _complete_sprint_and_plan_follow_up
+
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
     assert result["completed"] is False
@@ -140,16 +147,18 @@ def test_complete_sprint_skips_when_items_not_done(sqlite_session):
 
     # Add one done item and one todo item
     for status in ("done", "todo"):
-        sqlite_session.add(BacklogItem(
-            sprint_id=sprint_id, title=f"Item {status}", status=status
-        ))
+        sqlite_session.add(
+            BacklogItem(sprint_id=sprint_id, title=f"Item {status}", status=status)
+        )
     sqlite_session.commit()
 
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.task_worker.engine", sqlite_engine):
         from services.task_worker import _complete_sprint_and_plan_follow_up
+
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
     assert result["completed"] is False
@@ -162,16 +171,18 @@ def test_complete_sprint_marks_completed_when_all_done(sqlite_session):
     sprint_id = _insert_sprint(sqlite_session, company_id, status="active")
 
     for i in range(2):
-        sqlite_session.add(BacklogItem(
-            sprint_id=sprint_id, title=f"Item {i}", status="done"
-        ))
+        sqlite_session.add(
+            BacklogItem(sprint_id=sprint_id, title=f"Item {i}", status="done")
+        )
     sqlite_session.commit()
 
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
+
     with patch("services.task_worker.engine", sqlite_engine):
         from services.task_worker import _complete_sprint_and_plan_follow_up
+
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
     assert result["completed"] is True
@@ -196,9 +207,9 @@ def test_active_and_needs_split_block_follow_up(sqlite_session):
 
     # Sprint to be completed (all items done)
     sprint_to_complete_id = _insert_sprint(sqlite_session, company_id, status="active")
-    sqlite_session.add(BacklogItem(
-        sprint_id=sprint_to_complete_id, title="Work", status="done"
-    ))
+    sqlite_session.add(
+        BacklogItem(sprint_id=sprint_to_complete_id, title="Work", status="done")
+    )
 
     # Blocking sprint — status can be "active" or "needs_split"
     blocking_sprint = Sprint(
@@ -214,11 +225,15 @@ def test_active_and_needs_split_block_follow_up(sqlite_session):
     sqlite_engine = sqlite_session.get_bind()
 
     from unittest.mock import patch
-    with patch("services.task_worker.engine", sqlite_engine):
+
+    with (
+        patch("services.task_worker.engine", sqlite_engine),
         # Also stub out plan_self_improvement_sprint so no LLM call happens
-        with patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True):
-            from services.task_worker import _complete_sprint_and_plan_follow_up
-            result = _complete_sprint_and_plan_follow_up(sprint_to_complete_id)
+        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
+    ):
+        from services.task_worker import _complete_sprint_and_plan_follow_up
+
+        result = _complete_sprint_and_plan_follow_up(sprint_to_complete_id)
 
     # Sprint should still be marked completed
     assert result["completed"] is True

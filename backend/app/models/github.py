@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
@@ -9,7 +8,7 @@ class GitHubRepoBinding(SQLModel, table=True):
     __tablename__ = "github_repo_bindings"
     __table_args__ = (UniqueConstraint("owner", "repo"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id")
     owner: str
     repo: str

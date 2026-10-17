@@ -20,7 +20,7 @@ import hmac
 import json
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("fabrique-backend")
 
@@ -30,7 +30,7 @@ UNSIGNED_PREFIX = "unsigned:"
 _missing_key_warned = False
 
 
-def _configured_key() -> Optional[str]:
+def _configured_key() -> str | None:
     """Return the configured audit signing key, or None when unset or blank."""
     from config import settings
 

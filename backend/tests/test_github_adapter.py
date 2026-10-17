@@ -4,21 +4,20 @@ import hmac
 import json
 from pathlib import Path
 
+import crypto
 import pytest
 from cryptography.fernet import Fernet
-from sqlmodel import select
-
-import crypto
-import services.github_adapter as github_adapter
 from models.agent_run import AgentRun
 from models.audit import AuditLog
 from models.company import Company
 from models.github import GitHubRepoBinding
+from services import github_adapter
 from services.github_adapter import (
     infer_producer,
     pr_to_agent_run_payload,
     verify_webhook_signature,
 )
+from sqlmodel import select
 
 FIXTURES = Path(__file__).parent / "fixtures" / "github"
 
@@ -140,7 +139,12 @@ def test_verify_webhook_signature_checks_raw_body_and_header():
     [
         ("Copilot", "User", [], "copilot"),
         ("copilot-swe-agent[bot]", "Bot", [], "copilot"),
-        ("contributor", "User", ["Change\n\nCo-Authored-By: Claude <claude@example.com>"], "claude-code"),
+        (
+            "contributor",
+            "User",
+            ["Change\n\nCo-Authored-By: Claude <claude@example.com>"],
+            "claude-code",
+        ),
         ("dependabot[bot]", "Bot", [], "bot:dependabot[bot]"),
         ("octocat", "User", [], "human:octocat"),
     ],
@@ -198,9 +202,7 @@ def test_fetch_pull_requests_paginates_and_filters_by_since(monkeypatch):
     def fake_get(url, *, headers, params, timeout):
         requests.append((url, headers, params, timeout))
         index = len(requests) - 1
-        response_headers = (
-            {"Link": f'<{next_url}>; rel="next"'} if index == 0 else {}
-        )
+        response_headers = {"Link": f'<{next_url}>; rel="next"'} if index == 0 else {}
         return github_adapter.httpx.Response(
             200,
             json=responses[index],
@@ -367,9 +369,7 @@ def test_webhook_fetches_github_off_the_event_loop(
 def test_invalid_webhook_signature_writes_nothing(sqlite_session, test_client):
     company_id = _make_company(sqlite_session)
     _bind(test_client, company_id)
-    body = json.dumps(
-        {"repository": {"full_name": "careb36/le-fabrique"}}
-    ).encode()
+    body = json.dumps({"repository": {"full_name": "careb36/le-fabrique"}}).encode()
 
     response = test_client.post(
         "/v1/integrations/github/webhook",
@@ -422,12 +422,8 @@ def test_synchronize_creates_new_version_and_identical_diff_is_noop(
     }
 
     diff["value"] = "second"
-    second = _webhook(
-        test_client, pr, action="synchronize", repository=repository
-    )
-    third = _webhook(
-        test_client, pr, action="synchronize", repository=repository
-    )
+    second = _webhook(test_client, pr, action="synchronize", repository=repository)
+    third = _webhook(test_client, pr, action="synchronize", repository=repository)
     original = sqlite_session.get(AgentRun, first_id)
     updated_columns = {
         column.name: getattr(original, column.name)
@@ -456,9 +452,7 @@ def test_non_pull_request_event_is_ignored(sqlite_session, test_client):
     _no_ingestion(sqlite_session, company_id)
 
 
-def test_backfill_is_idempotent(
-    sqlite_session, test_client, monkeypatch, tmp_path
-):
+def test_backfill_is_idempotent(sqlite_session, test_client, monkeypatch, tmp_path):
     company_id = _make_company(sqlite_session)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
     _bind(test_client, company_id)
@@ -503,7 +497,9 @@ def test_inclusion_rule_filters_producers(
     assert response.json()["ingested"] == expected_ingested
     assert response.json()["skipped"] == 1
     assert (
-        sqlite_session.exec(select(AgentRun).where(AgentRun.company_id == company_id)).all()
+        sqlite_session.exec(
+            select(AgentRun).where(AgentRun.company_id == company_id)
+        ).all()
         == []
     )
 
@@ -547,9 +543,7 @@ def test_binding_encrypts_secret_and_duplicate_returns_conflict(
 
     response = _bind(test_client, company_id)
     binding = sqlite_session.exec(
-        select(GitHubRepoBinding).where(
-            GitHubRepoBinding.company_id == company_id
-        )
+        select(GitHubRepoBinding).where(GitHubRepoBinding.company_id == company_id)
     ).one()
     duplicate = _bind(test_client, company_id)
 
@@ -558,7 +552,6 @@ def test_binding_encrypts_secret_and_duplicate_returns_conflict(
         "fernet:" if with_key else "plaintext:"
     )
     assert (
-        crypto.decrypt_value(binding.webhook_secret_encrypted)
-        == "test-webhook-secret"
+        crypto.decrypt_value(binding.webhook_secret_encrypted) == "test-webhook-secret"
     )
     assert duplicate.status_code == 409

@@ -11,21 +11,37 @@ an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
-import json
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
-from sqlmodel import Session, select, text
-
-from database import get_session
 from auth_policy import current_user_if_required, require_company_role
-from models import User
-from models import Sprint, BacklogItem, OutboxEvent, Company, Agent, ProjectDiscovery, BusinessUnit
-from schemas import SprintStartRequest, BacklogItemUpdate, SprintPlanRequest, SelfImprovementSprintRequest
+from database import get_session
+from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
-from services.sprint_planner import plan_execution_sprint, plan_self_improvement_sprint as build_self_improvement_plan, build_self_improvement_objective
+from models import (
+    Agent,
+    BacklogItem,
+    BusinessUnit,
+    Company,
+    OutboxEvent,
+    ProjectDiscovery,
+    Sprint,
+    User,
+)
+from schemas import (
+    BacklogItemUpdate,
+    SelfImprovementSprintRequest,
+    SprintPlanRequest,
+    SprintStartRequest,
+)
+from services.sprint_planner import (
+    build_self_improvement_objective,
+    plan_execution_sprint,
+)
+from services.sprint_planner import (
+    plan_self_improvement_sprint as build_self_improvement_plan,
+)
+from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
@@ -43,9 +59,7 @@ def _load_planning_context(session: Session, company_id: int):
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    agents = session.exec(
-        select(Agent).where(Agent.company_id == company_id)
-    ).all()
+    agents = session.exec(select(Agent).where(Agent.company_id == company_id)).all()
     agent_dicts = [
         {
             "role": agent.role,
@@ -66,7 +80,9 @@ def _load_planning_context(session: Session, company_id: int):
     return company, agent_dicts, discovery
 
 
-def _serialize_plan_response(plan: dict, scope_size: str, fallback_name: str, fallback_goal: str):
+def _serialize_plan_response(
+    plan: dict, scope_size: str, fallback_name: str, fallback_goal: str
+):
     return {
         "sprint_name": plan.get("sprint_name", fallback_name),
         "goal": plan.get("goal", fallback_goal),
@@ -76,12 +92,18 @@ def _serialize_plan_response(plan: dict, scope_size: str, fallback_name: str, fa
 
 
 @router.post("/plan_sprint")
-async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def plan_sprint(
+    req: SprintPlanRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """Turn a strategic prompt into a scoped sprint backlog before sprint creation."""
     require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
-        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+        raise HTTPException(
+            status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
+        )
     if not req.prompt.strip():
         raise HTTPException(status_code=422, detail="Prompt is required")
 
@@ -105,12 +127,18 @@ async def plan_sprint(req: SprintPlanRequest, session: Session = Depends(get_ses
 
 
 @router.post("/plan_self_improvement_sprint")
-async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def plan_self_improvement_sprint(
+    req: SelfImprovementSprintRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """Create a bounded autonomous-improvement plan from the repository's own context."""
     require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
-        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+        raise HTTPException(
+            status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
+        )
 
     company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
     objective = build_self_improvement_objective(
@@ -136,7 +164,11 @@ async def plan_self_improvement_sprint(req: SelfImprovementSprintRequest, sessio
 
 
 @router.post("/start_sprint")
-async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def start_sprint(
+    req: SprintStartRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Create a sprint and its initial backlog items in a single transaction.
 
@@ -148,7 +180,9 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
     require_company_role(session, user, req.company_id, "Manager")
     scope_size = req.scope_size.upper()
     if scope_size not in SCOPE_LIMITS:
-        raise HTTPException(status_code=422, detail="Invalid scope_size. Valid values: S, M, L")
+        raise HTTPException(
+            status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
+        )
 
     item_limit = SCOPE_LIMITS[scope_size]
     if len(req.backlog_items) > SCOPE_HARD_MAX:
@@ -174,7 +208,7 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
     default_bu = session.exec(
         select(BusinessUnit).where(BusinessUnit.company_id == req.company_id)
     ).first()
-    default_bu_id: Optional[int] = default_bu.id if default_bu else None
+    default_bu_id: int | None = default_bu.id if default_bu else None
     sprint.business_unit_id = default_bu_id
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
@@ -202,12 +236,14 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
                 "sprint_id": sprint.id,
             },
         }
-        session.add(OutboxEvent(
-            aggregate_type="backlog_item",
-            aggregate_id=str(backlog_item.id),
-            event_type="nats_publish",
-            payload=nats_payload,
-        ))
+        session.add(
+            OutboxEvent(
+                aggregate_type="backlog_item",
+                aggregate_id=str(backlog_item.id),
+                event_type="nats_publish",
+                payload=nats_payload,
+            )
+        )
 
     kickoff_story = "\n".join(
         [
@@ -221,22 +257,24 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
             "Goal: PO, Scrum Master and Developer must coordinate, surface blockers, and agree the first execution plan.",
         ]
     )
-    session.add(OutboxEvent(
-        aggregate_type="sprint",
-        aggregate_id=str(sprint.id),
-        event_type="nats_publish",
-        payload={
-            "subject": "workspace.generate",
-            "message": {
-                "interaction_id": str(uuid4()),
-                "company_id": req.company_id,
-                "business_unit_id": default_bu_id,
-                "sprint_id": sprint.id,
-                "story": kickoff_story,
-                "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",
+    session.add(
+        OutboxEvent(
+            aggregate_type="sprint",
+            aggregate_id=str(sprint.id),
+            event_type="nats_publish",
+            payload={
+                "subject": "workspace.generate",
+                "message": {
+                    "interaction_id": str(uuid4()),
+                    "company_id": req.company_id,
+                    "business_unit_id": default_bu_id,
+                    "sprint_id": sprint.id,
+                    "story": kickoff_story,
+                    "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",
+                },
             },
-        },
-    ))
+        )
+    )
 
     session.commit()
     return {
@@ -247,7 +285,11 @@ async def start_sprint(req: SprintStartRequest, session: Session = Depends(get_s
 
 
 @router.get("/sprints/{sprint_id}/board")
-async def get_sprint_board(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def get_sprint_board(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Return sprint metadata and all backlog items grouped by Kanban column.
 
@@ -298,7 +340,12 @@ async def get_sprint_board(sprint_id: int, session: Session = Depends(get_sessio
 
 
 @router.patch("/backlog/{item_id}")
-async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def update_backlog_item(
+    item_id: int,
+    req: BacklogItemUpdate,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Partially update a backlog item.
 
@@ -307,9 +354,13 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
     Invalid ``status`` or ``priority`` values return HTTP 422.
     """
     if req.status and req.status not in VALID_STATUSES:
-        raise HTTPException(status_code=422, detail=f"Invalid status. Valid: {VALID_STATUSES}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid status. Valid: {VALID_STATUSES}"
+        )
     if req.priority and req.priority not in VALID_PRIORITIES:
-        raise HTTPException(status_code=422, detail=f"Invalid priority. Valid: {VALID_PRIORITIES}")
+        raise HTTPException(
+            status_code=422, detail=f"Invalid priority. Valid: {VALID_PRIORITIES}"
+        )
 
     item = session.get(BacklogItem, item_id)
     if not item:
@@ -330,13 +381,15 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
     if req.comment:
         # Append the new comment to the existing JSON list.
         comments = list(item.comments or [])
-        comments.append({
-            "author": "user",
-            "text": req.comment,
-            "created_at": str(datetime.utcnow()),
-        })
+        comments.append(
+            {
+                "author": "user",
+                "text": req.comment,
+                "created_at": str(datetime.now(UTC).replace(tzinfo=None)),
+            }
+        )
         item.comments = comments
-    item.updated_at = datetime.utcnow()
+    item.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     session.add(item)
     session.commit()
@@ -352,7 +405,11 @@ async def update_backlog_item(item_id: int, req: BacklogItemUpdate, session: Ses
 
 
 @router.post("/sprints/{sprint_id}/dispatch")
-async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+async def dispatch_sprint_tasks(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Dispatch all ``todo`` backlog items in a sprint to their assigned agents.
 
@@ -386,12 +443,14 @@ async def dispatch_sprint_tasks(sprint_id: int, session: Session = Depends(get_s
                 "sprint_id": sprint.id,
             },
         }
-        session.add(OutboxEvent(
-            aggregate_type="backlog_item",
-            aggregate_id=str(item.id),
-            event_type="nats_publish",
-            payload=nats_payload,
-        ))
+        session.add(
+            OutboxEvent(
+                aggregate_type="backlog_item",
+                aggregate_id=str(item.id),
+                event_type="nats_publish",
+                payload=nats_payload,
+            )
+        )
         dispatched += 1
 
     session.commit()

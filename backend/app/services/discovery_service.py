@@ -17,36 +17,58 @@ import os
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Optional
-
-from sqlmodel import Session
 
 from models import ProjectDiscovery
+from sqlmodel import Session
 
 # Directories that should never be walked (vendor code, build artefacts, VCS).
 _SKIP_DIRS = {
-    ".git", ".svn", "node_modules", "__pycache__", ".venv", "venv", "env",
-    "dist", "build", ".next", ".nuxt", "target", ".gradle", ".idea",
-    ".vscode", "coverage", ".pytest_cache", ".mypy_cache", "vendor",
+    ".git",
+    ".svn",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    "target",
+    ".gradle",
+    ".idea",
+    ".vscode",
+    "coverage",
+    ".pytest_cache",
+    ".mypy_cache",
+    "vendor",
 }
 
 # Extension → canonical language name.
 _EXT_LANGUAGE: dict[str, str] = {
-    ".py": "Python", ".pyw": "Python",
-    ".ts": "TypeScript", ".tsx": "TypeScript",
-    ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript",
+    ".py": "Python",
+    ".pyw": "Python",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".mjs": "JavaScript",
     ".java": "Java",
-    ".kt": "Kotlin", ".kts": "Kotlin",
+    ".kt": "Kotlin",
+    ".kts": "Kotlin",
     ".go": "Go",
     ".rs": "Rust",
     ".rb": "Ruby",
     ".php": "PHP",
     ".cs": "C#",
-    ".cpp": "C++", ".cc": "C++", ".cxx": "C++",
+    ".cpp": "C++",
+    ".cc": "C++",
+    ".cxx": "C++",
     ".c": "C",
     ".swift": "Swift",
     ".scala": "Scala",
-    ".ex": "Elixir", ".exs": "Elixir",
+    ".ex": "Elixir",
+    ".exs": "Elixir",
     ".dart": "Dart",
 }
 
@@ -79,14 +101,14 @@ def _detect_language(files: list[Path]) -> tuple[str, Counter]:
 def _read_json(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8", errors="ignore"))
-    except Exception:
+    except Exception:  # noqa: BLE001 - Unreadable discovery inputs are treated as unavailable.
         return {}
 
 
 def _read_text(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except Exception:  # noqa: BLE001 - Unreadable discovery inputs are treated as unavailable.
         return ""
 
 
@@ -132,7 +154,9 @@ def _detect_frameworks(root: Path, primary_lang: str) -> list[str]:
             frameworks.append("Fastify")
         if ("nestjs" in deps or "@nestjs/core" in deps) and "NestJS" not in frameworks:
             frameworks.append("NestJS")
-        if ("angular" in deps or "@angular/core" in deps) and "Angular" not in frameworks:
+        if (
+            "angular" in deps or "@angular/core" in deps
+        ) and "Angular" not in frameworks:
             frameworks.append("Angular")
         if "vite" in deps and "Vite" not in frameworks:
             frameworks.append("Vite")
@@ -146,7 +170,9 @@ def _detect_frameworks(root: Path, primary_lang: str) -> list[str]:
             frameworks.append("Django")
         if "flask" in content and "Flask" not in frameworks:
             frameworks.append("Flask")
-        if ("langgraph" in content or "langchain" in content) and "LangGraph/LangChain" not in frameworks:
+        if (
+            "langgraph" in content or "langchain" in content
+        ) and "LangGraph/LangChain" not in frameworks:
             frameworks.append("LangGraph/LangChain")
         if "sqlalchemy" in content and "SQLAlchemy" not in frameworks:
             frameworks.append("SQLAlchemy")
@@ -159,13 +185,17 @@ def _detect_frameworks(root: Path, primary_lang: str) -> list[str]:
             frameworks.append("Django")
         if "flask" in content and "Flask" not in frameworks:
             frameworks.append("Flask")
-        if ("langgraph" in content or "langchain" in content) and "LangGraph/LangChain" not in frameworks:
+        if (
+            "langgraph" in content or "langchain" in content
+        ) and "LangGraph/LangChain" not in frameworks:
             frameworks.append("LangGraph/LangChain")
 
     # ── Java / Kotlin ─────────────────────────────────────────────────────────
     for pom_path in _find_config_files(root, "pom.xml"):
         content = _read_text(pom_path)
-        if ("spring-boot" in content or "spring-web" in content) and "Spring Boot" not in frameworks:
+        if (
+            "spring-boot" in content or "spring-web" in content
+        ) and "Spring Boot" not in frameworks:
             frameworks.append("Spring Boot")
 
     for gradle_name in ("build.gradle", "build.gradle.kts"):
@@ -236,9 +266,13 @@ def _detect_infra(root: Path) -> dict:
     """Detect containerisation, CI, cloud, and IaC tooling."""
     infra: dict[str, bool] = {}
     infra["docker"] = (root / "Dockerfile").exists() or any(root.glob("*/Dockerfile"))
-    infra["docker_compose"] = (root / "docker-compose.yml").exists() or (root / "docker-compose.yaml").exists()
+    infra["docker_compose"] = (root / "docker-compose.yml").exists() or (
+        root / "docker-compose.yaml"
+    ).exists()
     infra["kubernetes"] = any(root.glob("**/*.yaml")) and any(
-        "kind:" in _read_text(p) for p in root.glob("**/*.yaml") if "k8s" in str(p) or "kubernetes" in str(p)
+        "kind:" in _read_text(p)
+        for p in root.glob("**/*.yaml")
+        if "k8s" in str(p) or "kubernetes" in str(p)
     )
     infra["github_actions"] = (root / ".github" / "workflows").is_dir()
     infra["terraform"] = any(root.glob("**/*.tf"))
@@ -280,41 +314,100 @@ def _build_team(
     # Build specialty strings from real detections.
     fw_str = "/".join(frameworks[:2]) if frameworks else primary_lang
     db_str = "/".join(databases[:2]) if databases else "SQL"
-    backend_langs = {"Python", "Java", "Go", "Rust", "Ruby", "PHP", "C#", "Kotlin", "Scala"}
+    backend_langs = {
+        "Python",
+        "Java",
+        "Go",
+        "Rust",
+        "Ruby",
+        "PHP",
+        "C#",
+        "Kotlin",
+        "Scala",
+    }
     frontend_langs = {"TypeScript", "JavaScript"}
 
     team = [
-        {"role": "PO", "seniority": "Senior", "specialty": "Product Management & Backlog"},
-        {"role": "Architect", "seniority": dev_seniority, "specialty": f"{fw_str}/{db_str} Architecture"},
+        {
+            "role": "PO",
+            "seniority": "Senior",
+            "specialty": "Product Management & Backlog",
+        },
+        {
+            "role": "Architect",
+            "seniority": dev_seniority,
+            "specialty": f"{fw_str}/{db_str} Architecture",
+        },
     ]
 
     # Frontend developer if JS/TS is present
-    if primary_lang in frontend_langs or any(f in frameworks for f in ("React", "Vue", "Angular", "Svelte", "Next.js")):
-        team.append({"role": "Dev", "seniority": dev_seniority, "specialty": f"Frontend/{fw_str}"})
+    if primary_lang in frontend_langs or any(
+        f in frameworks for f in ("React", "Vue", "Angular", "Svelte", "Next.js")
+    ):
+        team.append(
+            {
+                "role": "Dev",
+                "seniority": dev_seniority,
+                "specialty": f"Frontend/{fw_str}",
+            }
+        )
 
     # Backend developer
-    if primary_lang in backend_langs or any(f in frameworks for f in ("FastAPI", "Django", "Flask", "Spring Boot", "Express", "NestJS")):
-        be_specialty = f"Backend/{primary_lang}" + (f"/{frameworks[0]}" if frameworks else "")
-        team.append({"role": "Dev", "seniority": dev_seniority, "specialty": be_specialty})
+    if primary_lang in backend_langs or any(
+        f in frameworks
+        for f in ("FastAPI", "Django", "Flask", "Spring Boot", "Express", "NestJS")
+    ):
+        be_specialty = f"Backend/{primary_lang}" + (
+            f"/{frameworks[0]}" if frameworks else ""
+        )
+        team.append(
+            {"role": "Dev", "seniority": dev_seniority, "specialty": be_specialty}
+        )
     elif primary_lang not in frontend_langs:
         # Catch-all backend if nothing matched above
-        team.append({"role": "Dev", "seniority": dev_seniority, "specialty": f"Backend/{primary_lang}"})
+        team.append(
+            {
+                "role": "Dev",
+                "seniority": dev_seniority,
+                "specialty": f"Backend/{primary_lang}",
+            }
+        )
 
     # AI/ML agent when AI frameworks detected
     if any(f in " ".join(frameworks) for f in ("LangGraph", "LangChain", "ML", "AI")):
-        team.append({"role": "Dev", "seniority": "Staff", "specialty": "AI/ML Engineering"})
+        team.append(
+            {"role": "Dev", "seniority": "Staff", "specialty": "AI/ML Engineering"}
+        )
 
     # DevOps when infrastructure tooling detected
     if infra.get("docker") or infra.get("kubernetes") or infra.get("terraform"):
-        infra_specialty = "/".join(k for k in ("Docker", "K8s", "Terraform") if infra.get(k.lower().replace("k8s", "kubernetes")))
-        team.append({"role": "DevOps", "seniority": dev_seniority, "specialty": infra_specialty or "Cloud Infrastructure"})
+        infra_specialty = "/".join(
+            k
+            for k in ("Docker", "K8s", "Terraform")
+            if infra.get(k.lower().replace("k8s", "kubernetes"))
+        )
+        team.append(
+            {
+                "role": "DevOps",
+                "seniority": dev_seniority,
+                "specialty": infra_specialty or "Cloud Infrastructure",
+            }
+        )
 
     # Always add QA
-    team.append({"role": "QA", "seniority": "Senior", "specialty": "Automated Testing & Quality"})
+    team.append(
+        {
+            "role": "QA",
+            "seniority": "Senior",
+            "specialty": "Automated Testing & Quality",
+        }
+    )
 
     # Scrum Master only for High complexity
     if complexity == "High":
-        team.append({"role": "SM", "seniority": "Senior", "specialty": "Agile Delivery"})
+        team.append(
+            {"role": "SM", "seniority": "Senior", "specialty": "Agile Delivery"}
+        )
 
     return team
 
@@ -376,10 +469,10 @@ def _build_dynamic_catalog(models: list[dict]) -> tuple[str, set[str]]:
     tier_order = ["strategic", "balanced", "code", "fast", "preview"]
     tier_labels = {
         "strategic": "STRATEGIC — deep reasoning (expensive, use sparingly)",
-        "balanced":  "BALANCED  — fast reasoning, coordination, reviews",
-        "code":      "CODE      — specialised code generation (cheapest, use for Dev/QA/DevOps/Data)",
-        "fast":      "FAST      — lightweight, quick responses",
-        "preview":   "PREVIEW   — experimental, may be unstable (avoid unless necessary)",
+        "balanced": "BALANCED  — fast reasoning, coordination, reviews",
+        "code": "CODE      — specialised code generation (cheapest, use for Dev/QA/DevOps/Data)",
+        "fast": "FAST      — lightweight, quick responses",
+        "preview": "PREVIEW   — experimental, may be unstable (avoid unless necessary)",
     }
 
     grouped: dict[str, list[dict]] = {t: [] for t in tier_order}
@@ -433,8 +526,10 @@ def _ai_suggest_team(
     Returns a list of agent dicts on success, or ``None`` on failure.
     """
     try:
-        from llm_proxy_client import LLMProxyClient
         import logging
+
+        from llm_proxy_client import LLMProxyClient
+
         log = logging.getLogger("fabrique-backend")
 
         client = LLMProxyClient(base_url=llm_proxy_url)
@@ -449,7 +544,11 @@ def _ai_suggest_team(
             log.warning("Empty model catalogue from proxy — falling back to rules")
             return None
 
-        log.info("Model catalogue: %d models, orchestrator=%s", len(models), orchestrator_model)
+        log.info(
+            "Model catalogue: %d models, orchestrator=%s",
+            len(models),
+            orchestrator_model,
+        )
 
         # ── Step 2: build dynamic catalog string ─────────────────────────────
         catalog_text, valid_model_ids = _build_dynamic_catalog(models)
@@ -481,10 +580,7 @@ def _ai_suggest_team(
             return None
 
         content = (
-            result.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-            .strip()
+            result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         )
 
         # Strip accidental markdown fences
@@ -497,13 +593,25 @@ def _ai_suggest_team(
             return None
 
         # ── Step 4: validate and normalise ───────────────────────────────────
-        valid_roles       = {"PO", "SM", "Architect", "Dev", "QA", "DevOps", "Security", "Data"}
+        valid_roles = {
+            "PO",
+            "SM",
+            "Architect",
+            "Dev",
+            "QA",
+            "DevOps",
+            "Security",
+            "Data",
+        }
         valid_seniorities = {"Junior", "Mid", "Senior", "Staff"}
 
         # Build a quick tier lookup for fallback model selection
-        model_tier: dict[str, str] = {m["id"]: m.get("tier", "balanced") for m in models}
+        _model_tier: dict[str, str] = {
+            m["id"]: m.get("tier", "balanced") for m in models
+        }
         best_strategic = next(
-            (m["id"] for m in models if m.get("tier") == "strategic"), orchestrator_model
+            (m["id"] for m in models if m.get("tier") == "strategic"),
+            orchestrator_model,
         )
         best_code = next(
             (m["id"] for m in models if m.get("tier") == "code"), orchestrator_model
@@ -523,15 +631,17 @@ def _ai_suggest_team(
                 # LLM hallucinated a model — assign sensible default
                 model = best_code if role in code_roles else best_strategic
             specialty = str(agent.get("specialty", ""))[:80]
-            normalised.append({
-                "role": role,
-                "seniority": seniority,
-                "specialty": specialty,
-                "model": model,
-                "system_prompt": str(agent.get("system_prompt", ""))[:1500],
-                "reasoning": str(agent.get("reasoning", ""))[:300],
-                "persona": specialty,
-            })
+            normalised.append(
+                {
+                    "role": role,
+                    "seniority": seniority,
+                    "specialty": specialty,
+                    "model": model,
+                    "system_prompt": str(agent.get("system_prompt", ""))[:1500],
+                    "reasoning": str(agent.get("reasoning", ""))[:300],
+                    "persona": specialty,
+                }
+            )
 
         log.info(
             "AI team: %d agents | %s",
@@ -540,8 +650,9 @@ def _ai_suggest_team(
         )
         return normalised
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Fall back to the default team if AI discovery fails.
         import logging
+
         logging.getLogger("fabrique-backend").warning(
             "AI team suggestion error (will use rule-based fallback): %s", exc
         )
@@ -565,9 +676,11 @@ class DiscoveryService:
 
     def __init__(self, session: Session, llm_proxy_url: str | None = None):
         self.session = session
-        self.llm_proxy_url = llm_proxy_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+        self.llm_proxy_url = llm_proxy_url or os.getenv(
+            "LLM_PROXY_URL", "http://localhost:5100"
+        )
 
-    def discover_project_team(self, company_id: Optional[int], project_path: str):
+    def discover_project_team(self, company_id: int | None, project_path: str):
         """
         Scan a project path and recommend an AI engineering team.
 
@@ -592,7 +705,9 @@ class DiscoveryService:
         root = Path(project_path).expanduser().resolve()
 
         if not root.is_dir():
-            raise ValueError(f"Project path does not exist or is not a directory: {root}")
+            raise ValueError(
+                f"Project path does not exist or is not a directory: {root}"
+            )
 
         folder_name = root.name or "New Project"
 
@@ -618,7 +733,9 @@ class DiscoveryService:
         # ── Phase 2: AI team suggestion (with rule-based fallback) ────────────
         suggested_team = _ai_suggest_team(detected_stack, root, self.llm_proxy_url)
         if suggested_team is None:
-            suggested_team = _build_team(primary_lang, frameworks, databases, infra, complexity)
+            suggested_team = _build_team(
+                primary_lang, frameworks, databases, infra, complexity
+            )
             # Tag as rule-based so the frontend can show a different indicator
             detected_stack["team_source"] = "rules"
         else:

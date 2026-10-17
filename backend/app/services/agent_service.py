@@ -13,13 +13,13 @@ event bus and the LangGraph agents.
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
-from typing import Optional
-from sqlmodel import Session
-from models import AuditLog
+
 from audit_signing import canonical_payload, sign_audit_payload
+from models import AuditLog
+from sqlmodel import Session
 
 logger = logging.getLogger("fabrique-backend")
 
@@ -42,8 +42,8 @@ class AgentService:
         company_id: int,
         story: str,
         constraints: str,
-        business_unit_id: Optional[int] = None,
-        interaction_id: str = None,
+        business_unit_id: int | None = None,
+        interaction_id: str | None = None,
         session: Session = None,
     ) -> str:
         """
@@ -56,23 +56,30 @@ class AgentService:
         if not business_unit_id:
             if not session:
                 raise ValueError("Session required to resolve default Business Unit")
-            
+
             from models.company import BusinessUnit
             from sqlmodel import select
-            
-            unit = session.exec(select(BusinessUnit).where(BusinessUnit.company_id == company_id)).first()
+
+            unit = session.exec(
+                select(BusinessUnit).where(BusinessUnit.company_id == company_id)
+            ).first()
             if not unit:
-                raise ValueError(f"No Business Unit found for company {company_id}. Governance requires a cost centre.")
+                raise ValueError(
+                    f"No Business Unit found for company {company_id}. Governance requires a cost centre."
+                )
             business_unit_id = unit.id
 
         interaction_id = interaction_id or str(uuid4())
-        await self.nats_client.publish("workspace.generate", {
-            "interaction_id": interaction_id,
-            "company_id": company_id,
-            "business_unit_id": business_unit_id,
-            "story": story,
-            "constraints": constraints,
-        })
+        await self.nats_client.publish(
+            "workspace.generate",
+            {
+                "interaction_id": interaction_id,
+                "company_id": company_id,
+                "business_unit_id": business_unit_id,
+                "story": story,
+                "constraints": constraints,
+            },
+        )
         return interaction_id
 
     def audit_interaction(
@@ -85,7 +92,7 @@ class AgentService:
         result: str,
         decision_signature: str,
         cost_tokens: int,
-        company_id: Optional[int] = None,
+        company_id: int | None = None,
     ):
         """
         Write a dual-destination audit entry for an agent interaction.
@@ -116,7 +123,7 @@ class AgentService:
                 "decision_signature supplied by caller is ignored; signatures are computed server-side"
             )
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         log = AuditLog(
             company_id=company_id,
             interaction_id=interaction_id,
