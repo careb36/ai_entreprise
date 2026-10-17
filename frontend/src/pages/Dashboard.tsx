@@ -506,6 +506,7 @@ export default function Dashboard() {
   const total   = board?.total ?? 0
   const done    = columns.done?.length ?? 0
   const blocked = columns.blocked?.length ?? 0
+  const inProg  = columns.in_progress?.length ?? 0
 
   const healthScore    = analytics?.health_score ?? null
   const needsSplit     = sprint?.status === 'needs_split'
