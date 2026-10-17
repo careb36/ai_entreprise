@@ -68,8 +68,8 @@ jobs:
         run: poetry check --lock
 
       - name: Install dependencies
-        # Includes the dev group (pytest, pytest-asyncio); --no-root because the
-        # backend is application code, not an installable package.
+        # Includes the dev test and coverage tools; --no-root because the backend
+        # is application code, not an installable package.
         run: poetry install --no-interaction --no-ansi --no-root
 
       - name: Run tests
@@ -78,7 +78,14 @@ jobs:
         # (`from models import ...`).
         env:
           PYTHONPATH: .:app
-        run: poetry run pytest tests -q --junit-xml=pytest-report.xml
+        run: >-
+          poetry run pytest tests -q
+          --junit-xml=pytest-report.xml
+          --cov=services.agent_run_service
+          --cov=services.verification
+          --cov=services.github_adapter
+          --cov=routers.auth
+          --cov-fail-under=80
 
       - name: Upload test report
         # Runs even when the suite fails, so the report is available either way.

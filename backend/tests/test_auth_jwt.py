@@ -49,6 +49,25 @@ def test_correct_login_issues_an_access_token(test_client, signing_key):
     assert claims["typ"] == "access"
 
 
+def test_register_login_accesses_protected_profile(test_client, signing_key):
+    registered = _register_user(test_client)
+    login = test_client.post(
+        "/v1/auth/login",
+        json={"email": registered["email"], "password": "correct-password"},
+    )
+
+    assert login.status_code == 200
+    profile = test_client.get(
+        "/v1/auth/me",
+        headers={"Authorization": "Bearer " + login.json()["access_token"]},
+    )
+
+    assert profile.status_code == 200
+    assert profile.json()["user_id"] == registered["user_id"]
+    assert profile.json()["email"] == registered["email"]
+    assert "password_hash" not in profile.json()
+
+
 def test_wrong_password_returns_the_generic_authentication_error(
     test_client, signing_key
 ):
