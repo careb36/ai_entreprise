@@ -30,7 +30,7 @@ describe('SprintHealthChart', () => {
       />
     )
 
-    expect(screen.getByText('No data yet')).toBeInTheDocument()
+    expect(screen.getByText('No sprint data available')).toBeInTheDocument()
   })
 
   it('shows correct health color for high score', () => {
