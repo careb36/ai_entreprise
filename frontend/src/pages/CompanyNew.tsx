@@ -452,10 +452,13 @@ export default function CompanyNew() {
       onSuccess: (response: InitCompanyResponse) => {
         const companyId = response.company_id
         const sprintId = response?.sprint_id ?? companyId
-        const refresh = useAuthStore.getState().loadMe()
         setCompany(companyId, companyName.trim())
+        // Navigate immediately, load profile in background
         navigate(`/workspace/${sprintId}`)
-        void refresh.catch(() => {})
+        useAuthStore.getState().loadMe().catch(() => {})
+      },
+      onError: (error: any) => {
+        console.error('Init company failed:', error)
       }
     })
   }
