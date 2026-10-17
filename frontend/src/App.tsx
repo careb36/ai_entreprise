@@ -84,6 +84,7 @@ function NavBar() {
   const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
+  const memberships = useAuthStore(state => state.memberships)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -93,7 +94,7 @@ function NavBar() {
        : 'text-gray-400 hover:text-white hover:bg-surface-800'}`
 
   return (
-    <header className="h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center px-4 lg:px-6 z-20 flex-shrink-0">
+    <header className="min-h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center px-4 lg:px-6 z-20 flex-shrink-0">
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
         <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
@@ -102,9 +103,9 @@ function NavBar() {
 
       {/* Desktop nav */}
       {authenticated && (
-        <nav className="hidden lg:flex items-center gap-1 ml-8" aria-label="Main navigation">
+        <nav className="hidden 2xl:flex flex-1 min-w-0 flex-wrap items-center gap-1 ml-8" aria-label="Main navigation">
           {links.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} end={to === '/'} className={linkClass}>
+            <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
               <Icon size={16} />
               <span>{label}</span>
             </NavLink>
@@ -113,13 +114,19 @@ function NavBar() {
       )}
 
       {/* Right side */}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <LanguageSwitcher />
         {authenticated && (
           <>
-            <span className="hidden sm:inline text-sm text-gray-400">
+            <span className="hidden md:inline max-w-40 truncate text-sm text-gray-400" title={user?.full_name || user?.email}>
               {user?.full_name || user?.email}
             </span>
+            {memberships.length > 1 && (
+              <Link to="/companies/select" className="btn-ghost btn-sm">
+                <Building2 size={14} className="sm:hidden" />
+                <span className="sr-only sm:not-sr-only">{t('auth.switchCompany')}</span>
+              </Link>
+            )}
             <button
               type="button"
               className="btn-ghost btn-sm"
@@ -134,7 +141,7 @@ function NavBar() {
         )}
 
         {/* Status pill — desktop only */}
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
           <span className="status-dot-pulse" />
           Online
         </div>
@@ -144,7 +151,7 @@ function NavBar() {
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(v => !v)}
-          className="btn-ghost btn-icon lg:hidden"
+          className="btn-ghost btn-icon 2xl:hidden"
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>}
@@ -153,12 +160,12 @@ function NavBar() {
       {/* Mobile dropdown */}
       {authenticated && menuOpen && (
         <div
-          className="absolute top-14 left-0 right-0 bg-surface-900 border-b border-surface-700 lg:hidden z-30 animate-fade-in"
+          className="absolute top-14 left-0 right-0 bg-surface-900 border-b border-surface-700 2xl:hidden z-30 animate-fade-in"
           onClick={() => setMenuOpen(false)}
         >
           <nav className="flex flex-col p-3 gap-1" aria-label="Mobile navigation">
             {links.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to === '/'} className={linkClass}>
+              <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
                 <Icon size={16} />
                 <span>{label}</span>
               </NavLink>
@@ -227,7 +234,7 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppContent />
     </BrowserRouter>
   )

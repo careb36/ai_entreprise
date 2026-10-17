@@ -329,6 +329,9 @@
   },
   "workspace": {
     "title": "Espacio de Trabajo del Sprint",
+    "invalidId": "ID de sprint no válido: {{id}}.",
+    "notFound": "No se encontró el sprint #{{id}}.",
+    "loadError": "No se pudo cargar el sprint #{{id}}.",
     "activeContext": "Contexto Activo",
     "aiAgentsActive": "Agentes IA Activos",
     "sprintBoard": "Tablero del Sprint",
@@ -337,6 +340,13 @@
     "expandSidebar": "Expandir barra lateral",
     "noSprint": "Sin sprint activo",
     "noSprintDesc": "Inicia un sprint para comenzar a trabajar"
+  },
+  "taskDetails": {
+    "invalidId": "ID de tarea no válido: {{taskId}}.",
+    "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
+    "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
+    "sprintNotFound": "No se encontró el sprint #{{sprintId}} al buscar la tarea #{{taskId}}.",
+    "loadError": "No se pudo cargar el sprint #{{sprintId}} para la tarea #{{taskId}}."
   },
   "controlPanel": {
     "title": "Panel de Control",
@@ -601,6 +611,9 @@
     "selectCompany": "Selecciona o crea una compañía para ver su evidencia.",
     "loading": "Cargando evidencia",
     "error": "No se pudo cargar la evidencia.",
+    "invalidId": "ID de ejecución no válido: {{id}}.",
+    "notFound": "No se encontró la ejecución #{{id}}.",
+    "loadError": "No se pudo cargar la ejecución #{{id}}.",
     "retry": "Reintentar",
     "empty": "Ninguna evidencia coincide con estos filtros.",
     "producer": "Productor",
@@ -829,6 +842,7 @@
     "emailExists": "Ya existe una cuenta con este correo electrónico.",
     "registerError": "No se pudo registrar. Inténtalo de nuevo.",
     "logout": "Cerrar sesión",
+    "switchCompany": "Cambiar empresa",
     "companyPlaceholder": "Empresa {{id}}",
     "retry": "Intentar de nuevo",
     "loading": "Cargando tu cuenta…",

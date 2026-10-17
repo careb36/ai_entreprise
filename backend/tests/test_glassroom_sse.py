@@ -85,7 +85,11 @@ async def test_glassroom_stream_emits_final_po_close_before_completion():
     emitted = [await anext(stream), await anext(stream), await anext(stream)]
     decoded = [json.loads(chunk.removeprefix("data: ").strip()) for chunk in emitted]
 
-    assert [event["type"] for event in decoded] == ["message", "agent_complete", "status"]
+    assert [event["type"] for event in decoded] == [
+        "message",
+        "agent_complete",
+        "status",
+    ]
     assert decoded[0]["agent"] == "PO"
     assert decoded[0]["task"] == "Close sprint kickoff"
     assert decoded[2]["message"] == "Sprint kickoff conversation finished."

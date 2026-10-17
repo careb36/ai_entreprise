@@ -10,19 +10,28 @@ Covers:
 
 import hashlib
 import json
+import secrets
+from uuid import uuid4
 
+import auth_tokens
 import pytest
-from sqlmodel import select
-
-from models.agent_run import AgentRun, AgentRunApproval, Verification
+from config import settings
+from models.agent_run import AgentRun, AgentRunApproval
 from models.audit import AuditLog
-from models.company import Company, User, CompanyMember
-from models.sprint import Sprint, BacklogItem, OutboxEvent
-
+from models.company import Company, CompanyMember, User
+from models.sprint import BacklogItem, Sprint
+from sqlmodel import select
 
 # ---------------------------------------------------------------------------
 # Helper fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def signing_key(monkeypatch):
+    key = secrets.token_urlsafe(48)
+    monkeypatch.setattr(auth_tokens, "_configured_key", lambda: key)
+    return key
 
 
 def _make_company(session, name="Integration Test Corp"):
@@ -76,24 +85,32 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "M",
-                "backlog": ["Task 1", "Task 2", "Task 3"],
+                "sprint_name": "Integration sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "M",
+                "backlog_items": [{"title": f"Task {i}"} for i in range(1, 4)],
             },
         )
 
         assert response.status_code == 200
         body = response.json()
-        assert body["company_id"] == company_id
-        assert body["scope"] == "M"
-        assert body["status"] == "active"
-        assert len(body["backlog_items"]) == 3
+        assert len(body["backlog_item_ids"]) == 3
+        board_response = test_client.get(body["sprint_url"])
+        assert board_response.status_code == 200
+        assert board_response.json()["sprint"]["scope_size"] == "M"
+        assert board_response.json()["sprint"]["status"] == "active"
 
         # Verify in database
         sprint = sqlite_session.exec(
             select(Sprint).where(Sprint.company_id == company_id)
         ).one()
+        assert sprint.id == body["sprint_id"]
+        assert sprint.company_id == company_id
         assert sprint.status == "active"
-        assert len(sprint.backlog_items) == 3
+        items = sqlite_session.exec(
+            select(BacklogItem).where(BacklogItem.sprint_id == sprint.id)
+        ).all()
+        assert len(items) == 3
 
     def test_sprint_scope_validation(self, sqlite_session, test_client):
         """Verify sprint scope constraints are enforced."""
@@ -104,8 +121,10 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "S",
-                "backlog": ["Task 1", "Task 2", "Task 3", "Task 4", "Task 5"],
+                "sprint_name": "Oversized sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "S",
+                "backlog_items": [{"title": f"Task {i}"} for i in range(1, 6)],
             },
         )
 
@@ -119,13 +138,15 @@ class TestSprintLifecycle:
             "/v1/start_sprint",
             json={
                 "company_id": company_id,
-                "scope": "S",
-                "backlog": ["Task 1"],
+                "sprint_name": "Transition sprint",
+                "start_date": "2026-10-17",
+                "scope_size": "S",
+                "backlog_items": [{"title": "Task 1"}],
             },
         )
 
         assert response.status_code == 200
-        sprint_id = response.json()["id"]
+        sprint_id = response.json()["sprint_id"]
 
         # Get the backlog item
         item = sqlite_session.exec(
@@ -151,7 +172,9 @@ class TestSprintLifecycle:
 class TestAuthenticationFlow:
     """Test the complete authentication flow."""
 
-    def test_register_login_access_protected_route(self, sqlite_session, test_client):
+    def test_register_login_access_protected_route(
+        self, sqlite_session, test_client, signing_key
+    ):
         """Full auth flow: register → login → access protected route."""
         # Register
         register_response = test_client.post(
@@ -162,8 +185,8 @@ class TestAuthenticationFlow:
                 "full_name": "Auth Test User",
             },
         )
-        assert register_response.status_code == 201
-        user_id = register_response.json()["user_id"]
+        assert register_response.status_code == 200
+        _user_id = register_response.json()["user_id"]
 
         # Login
         login_response = test_client.post(
@@ -185,7 +208,9 @@ class TestAuthenticationFlow:
         assert me_response.status_code == 200
         assert me_response.json()["email"] == "auth-test@example.com"
 
-    def test_login_with_wrong_password_fails(self, sqlite_session, test_client):
+    def test_login_with_wrong_password_fails(
+        self, sqlite_session, test_client, signing_key
+    ):
         """Verify login fails with wrong password."""
         # Register first
         test_client.post(
@@ -206,12 +231,15 @@ class TestAuthenticationFlow:
         )
         assert response.status_code == 401
 
-    def test_protected_route_requires_auth(self, sqlite_session, test_client):
+    def test_protected_route_requires_auth(
+        self, sqlite_session, test_client, monkeypatch
+    ):
         """Verify protected routes reject unauthenticated requests."""
+        monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
         response = test_client.get("/v1/auth/me")
         assert response.status_code == 401
 
-        response = test_client.get("/v1/enterprise/quotas")
+        response = test_client.get("/v1/enterprise/quotas", params={"company_id": 1})
         assert response.status_code == 401
 
 
@@ -223,7 +251,9 @@ class TestAuthenticationFlow:
 class TestAgentRunVerificationCycle:
     """Test the complete agent run lifecycle."""
 
-    def test_ingest_verify_approve_cycle(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_ingest_verify_approve_cycle(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Full cycle: ingest → verify → approve."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -233,7 +263,7 @@ class TestAgentRunVerificationCycle:
             "/v1/agent_runs",
             json={
                 "company_id": company_id,
-                "external_ref": "github:test/repo#1",
+                "external_ref": f"integration:{uuid4()}",
                 "producer": "copilot",
                 "artifact": "diff --git a/file.py b/file.py",
                 "claims": {"summary": "Added feature"},
@@ -266,9 +296,13 @@ class TestAgentRunVerificationCycle:
         # Approve
         approve_response = test_client.post(
             f"/v1/agent_runs/{run_id}/approve",
-            json={"company_id": company_id, "decision": "approved"},
+            json={
+                "company_id": company_id,
+                "approver_name": "Test User",
+                "decision": "approved",
+            },
         )
-        assert approve_response.status_code == 200
+        assert approve_response.status_code == 201
 
         # Check approval recorded
         approval = sqlite_session.exec(
@@ -276,7 +310,9 @@ class TestAgentRunVerificationCycle:
         ).one()
         assert approval.decision == "approved"
 
-    def test_ingest_refuted_run(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_ingest_refuted_run(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Test that a run with failed CI is refuted."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -314,7 +350,9 @@ class TestAgentRunVerificationCycle:
         run = sqlite_session.get(AgentRun, run_id)
         assert run.status == "refuted"
 
-    def test_cross_tenant_access_denied(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_cross_tenant_access_denied(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify cross-tenant access is properly denied."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_a = _make_company(sqlite_session, "Company A")
@@ -349,9 +387,10 @@ class TestAgentRunVerificationCycle:
 class TestGitHubToVerificationPipeline:
     """Test the complete GitHub adapter pipeline."""
 
-    def test_github_pr_ingestion_to_verification(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_github_pr_ingestion_to_verification(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Full pipeline: GitHub PR → agent run → verification."""
-        import json
         from pathlib import Path
 
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
@@ -375,24 +414,28 @@ class TestGitHubToVerificationPipeline:
         assert bind_response.status_code == 201
 
         # Mock GitHub API calls
-        import services.github_adapter as github_adapter
+        from services import github_adapter
 
-        monkeypatch.setattr(github_adapter, "fetch_pr_commits", lambda *args, **kwargs: [])
+        monkeypatch.setattr(
+            github_adapter, "fetch_pr_commits", lambda *args, **kwargs: []
+        )
         monkeypatch.setattr(github_adapter, "fetch_pr_diff", lambda *args, **kwargs: "")
 
         # Send webhook
-        body = json.dumps({
-            "action": "opened",
-            "repository": {"full_name": "careb36/test-repo"},
-            "pull_request": pr,
-        }, separators=(",", ":")).encode()
+        body = json.dumps(
+            {
+                "action": "opened",
+                "repository": {"full_name": "careb36/test-repo"},
+                "pull_request": pr,
+            },
+            separators=(",", ":"),
+        ).encode()
 
         import hmac
-        import hashlib
 
-        signature = "sha256=" + hmac.new(
-            b"test-secret", body, hashlib.sha256
-        ).hexdigest()
+        signature = (
+            "sha256=" + hmac.new(b"test-secret", body, hashlib.sha256).hexdigest()
+        )
 
         webhook_response = test_client.post(
             "/v1/integrations/github/webhook",
@@ -430,7 +473,9 @@ class TestGitHubToVerificationPipeline:
 class TestAuditTrail:
     """Test that audit trails are properly maintained."""
 
-    def test_agent_run_creates_audit_entry(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_agent_run_creates_audit_entry(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify that agent run ingestion creates an audit entry."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -451,12 +496,14 @@ class TestAuditTrail:
         audits = sqlite_session.exec(
             select(AuditLog).where(
                 AuditLog.action == "agent_run_ingested",
-                AuditLog.details["company_id"].astext == str(company_id),
+                AuditLog.company_id == company_id,
             )
         ).all()
         assert len(audits) == 1
 
-    def test_verification_creates_audit_entry(self, sqlite_session, test_client, monkeypatch, tmp_path):
+    def test_verification_creates_audit_entry(
+        self, sqlite_session, test_client, monkeypatch, tmp_path
+    ):
         """Verify that verification creates an audit entry."""
         monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
         company_id = _make_company(sqlite_session)
@@ -484,7 +531,7 @@ class TestAuditTrail:
         audits = sqlite_session.exec(
             select(AuditLog).where(
                 AuditLog.action == "agent_run_verified",
-                AuditLog.details["company_id"].astext == str(company_id),
+                AuditLog.company_id == company_id,
             )
         ).all()
         assert len(audits) == 1

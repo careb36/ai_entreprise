@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
@@ -10,6 +10,8 @@ export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const login = useAuthStore(state => state.login)
+  const token = useAuthStore(state => state.token)
+  const expiresAt = useAuthStore(state => state.expiresAt)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -40,6 +42,10 @@ export default function Login() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (token && expiresAt && expiresAt > Date.now() && !submitting) {
+    return <Navigate to={safeReturnPath(from)} replace />
   }
 
   return (

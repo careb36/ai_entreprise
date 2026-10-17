@@ -2,9 +2,6 @@
 Tests for security features: rate limiting, CORS, and security headers.
 """
 
-import pytest
-from fastapi.testclient import TestClient
-
 
 def test_security_headers_present(test_client):
     """Verify security headers are added to responses."""

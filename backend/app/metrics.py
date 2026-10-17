@@ -4,12 +4,16 @@ Prometheus metrics for the Fabrique Enterprise API.
 Exposes application metrics at /metrics endpoint.
 """
 
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from logging_config import logger
-
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Request metrics
 REQUEST_COUNT = Counter(

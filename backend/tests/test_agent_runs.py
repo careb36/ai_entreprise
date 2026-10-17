@@ -2,12 +2,11 @@ import hashlib
 import logging
 
 import pytest
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
-
 from models.agent_run import AgentRun
 from models.audit import AuditLog
 from models.company import Company
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 
 def _make_company(session, name="Agent Run Test"):

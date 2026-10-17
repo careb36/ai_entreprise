@@ -4,23 +4,21 @@ Application lifecycle handlers for startup and shutdown events.
 
 import asyncio
 import os
-from typing import Set
 
-from logging_config import logger
-from nats_client import NATSClient
-from memory_client import MemoryClient
-from llm_proxy_client import LLMProxyClient
-from database import create_db_and_tables, get_neo4j_driver, ensure_memory_graph_schema
-from crypto import is_encryption_enabled
 from audit_signing import is_signing_enabled
 from auth_tokens import is_auth_configured
-from services.outbox_service import process_outbox
+from crypto import is_encryption_enabled
+from database import create_db_and_tables, ensure_memory_graph_schema, get_neo4j_driver
+from llm_proxy_client import LLMProxyClient
+from logging_config import logger
+from memory_client import MemoryClient
+from nats_client import NATSClient
 from services.agent_worker import process_agent_tasks
+from services.outbox_service import process_outbox
 from services.task_worker import process_backlog_tasks
 
-
 # Retained task references for graceful cancellation on shutdown.
-_background_tasks: Set[asyncio.Task] = set()
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _on_task_done(task: asyncio.Task) -> None:
@@ -32,7 +30,9 @@ def _on_task_done(task: asyncio.Task) -> None:
     if exc is not None:
         logger.error(
             "Background worker task '%s' exited with an exception: %s",
-            task.get_name(), exc, exc_info=exc,
+            task.get_name(),
+            exc,
+            exc_info=exc,
         )
 
 
@@ -61,7 +61,9 @@ async def startup(app):
     # even when the NATS broker is not yet running.
     app.state.nats_client = None
     try:
-        app.state.nats_client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+        app.state.nats_client = NATSClient(
+            os.getenv("NATS_URL", "nats://localhost:4222")
+        )
         await app.state.nats_client.connect()
 
         # Background tasks only make sense when NATS is connected.
@@ -80,7 +82,7 @@ async def startup(app):
             "NATS connected — background workers started: %s",
             list(worker_coros.keys()),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional broker fails.
         logger.warning(
             "NATS unavailable at startup (%s). "
             "Agent workflow and SSE streaming are DISABLED. "
@@ -95,13 +97,15 @@ async def startup(app):
         ensure_memory_graph_schema(driver)
         app.state.memory_client = MemoryClient(neo4j_driver=driver)
         logger.info("Neo4j connected — memory features enabled.")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
         logger.warning(
             f"Neo4j unavailable at startup ({exc}). "
             "Memory search and lineage endpoints will return errors until Neo4j is reachable."
         )
 
-    app.state.llm_client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://localhost:5100"))
+    app.state.llm_client = LLMProxyClient(
+        os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+    )
 
     # Credential encryption degrades gracefully like the services above: without
     # a key the backend still runs, but stored credentials are not encrypted.
@@ -164,5 +168,5 @@ async def _listen_to_nats(app):
 
     try:
         await app.state.nats_client.subscribe("glassroom.>", callback)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - A streaming subscription failure must not abort startup.
         logger.error(f"Failed to subscribe to Glassroom events: {e}")

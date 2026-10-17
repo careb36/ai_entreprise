@@ -13,6 +13,10 @@ export class ApiError extends Error {
   }
 }
 
+export function isClientError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500
+}
+
 function friendlyMessage(status: number): string {
   const map: Record<number, string> = {
     400: 'Invalid request. Please check the form and try again.',

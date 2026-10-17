@@ -1,10 +1,9 @@
 import pytest
-from sqlmodel import select
-
 from models.agent_run import AgentRun, Verification
 from models.audit import AuditLog
 from models.company import Company
 from services.verification import extract_claimed_paths, extract_test_claims
+from sqlmodel import select
 
 
 def _make_company(session, name="Verification Test"):
@@ -83,7 +82,13 @@ def test_failed_ci_evidence_refutes_green_build_claim(
         test_client,
         run["id"],
         company_id,
-        {"ci": {"conclusion": "failure", "source": "github-check-run", "ref": "run/123"}},
+        {
+            "ci": {
+                "conclusion": "failure",
+                "source": "github-check-run",
+                "ref": "run/123",
+            }
+        },
     )
 
     assert response.json()["verdict"] == "refuted"
@@ -221,7 +226,13 @@ def test_test_claim_without_independent_evidence_is_unverifiable(
     ],
 )
 def test_ci_evidence_conclusion_verdicts(
-    evidence, outcome, observation_text, sqlite_session, test_client, monkeypatch, tmp_path
+    evidence,
+    outcome,
+    observation_text,
+    sqlite_session,
+    test_client,
+    monkeypatch,
+    tmp_path,
 ):
     company_id = _make_company(sqlite_session)
     run = _ingest(
@@ -234,9 +245,7 @@ def test_ci_evidence_conclusion_verdicts(
     response = _verify(test_client, run["id"], company_id, evidence)
 
     check = next(
-        c
-        for c in response.json()["checks"]
-        if c["name"] == "claimed_tests_evidenced"
+        c for c in response.json()["checks"] if c["name"] == "claimed_tests_evidenced"
     )
     assert check["outcome"] == outcome
     assert observation_text in check["observation"]
@@ -260,7 +269,13 @@ def test_test_claim_with_successful_ci_and_present_paths_is_verified(
         test_client,
         run["id"],
         company_id,
-        {"ci": {"conclusion": "success", "source": "github-check-run", "ref": "run/124"}},
+        {
+            "ci": {
+                "conclusion": "success",
+                "source": "github-check-run",
+                "ref": "run/124",
+            }
+        },
     )
 
     assert response.json()["verdict"] == "verified"
@@ -336,7 +351,9 @@ def test_claimed_path_extraction_walks_nested_claims_and_ignores_urls():
     claims = {
         "body": [
             "Changed backend/app/crypto.py and README.md",
-            {"more": "backend/app/crypto.py; see https://github.com/acme/repo/blob/main/backend/app/secret.py"},
+            {
+                "more": "backend/app/crypto.py; see https://github.com/acme/repo/blob/main/backend/app/secret.py"
+            },
         ],
         "bare": "crypto.py",
     }
@@ -377,7 +394,13 @@ def test_reverification_appends_history_and_returns_oldest_first(
         test_client,
         run["id"],
         company_id,
-        {"ci": {"conclusion": "success", "source": "github-check-run", "ref": "run/125"}},
+        {
+            "ci": {
+                "conclusion": "success",
+                "source": "github-check-run",
+                "ref": "run/125",
+            }
+        },
     )
     history_response = test_client.get(
         f"/v1/agent_runs/{run['id']}/verifications",
@@ -424,7 +447,9 @@ def test_verification_does_not_call_llm(
         raise AssertionError("LLM must not be called")
 
     monkeypatch.setattr(llm_proxy_client.LLMProxyClient, "chat", unexpected_llm_call)
-    monkeypatch.setattr(llm_proxy_client.LLMProxyClient, "chat_async", unexpected_llm_call)
+    monkeypatch.setattr(
+        llm_proxy_client.LLMProxyClient, "chat_async", unexpected_llm_call
+    )
     response = _verify(test_client, run["id"], company_id)
 
     assert response.status_code == 201
@@ -479,13 +504,10 @@ def test_cross_tenant_verification_returns_404_without_writes(
         ).all()
         == []
     )
-    assert (
-        [
-            audit
-            for audit in sqlite_session.exec(
-                select(AuditLog).where(AuditLog.action == "agent_run_verified")
-            ).all()
-            if audit.details.get("company_id") == str(company_a)
-        ]
-        == []
-    )
+    assert [
+        audit
+        for audit in sqlite_session.exec(
+            select(AuditLog).where(AuditLog.action == "agent_run_verified")
+        ).all()
+        if audit.details.get("company_id") == str(company_a)
+    ] == []

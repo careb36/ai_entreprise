@@ -12,34 +12,31 @@ Usage::
         ...
 """
 
-import asyncio
-import types
-import unittest.mock as mock
+from unittest import mock
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
-from sqlalchemy.pool import StaticPool
 from config import settings
+from fastapi.testclient import TestClient
+from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.audit import AuditLog
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
 # SQLModel.metadata.create_all() is called.  Only the subset actually used by
 # the sprint router / agent worker tests is listed here; adding more is safe.
 # ---------------------------------------------------------------------------
-from models.company import (  # noqa: F401
-    Company,
-    BusinessUnit,
+from models.company import (
     Agent,
+    BusinessUnit,
+    Company,
+    CompanyMember,
     ProjectCredential,
     User,
-    CompanyMember,
 )
-from models.sprint import Sprint, BacklogItem, OutboxEvent  # noqa: F401
-from models.agent_run import AgentRun, AgentRunApproval, Verification  # noqa: F401
-from models.audit import AuditLog  # noqa: F401
-from models.github import GitHubRepoBinding  # noqa: F401
-
+from models.github import GitHubRepoBinding
+from models.sprint import BacklogItem, OutboxEvent, Sprint
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
 
 # ---------------------------------------------------------------------------
 # In-memory SQLite engine — shared across all tests within a session via
@@ -120,9 +117,9 @@ def test_client(sqlite_session):
     Startup hooks that touch Postgres (create_db_and_tables), NATS, and Neo4j
     are all patched out so no external services are required.
     """
-    import database
-    from app.main import app
     from database import get_session
+
+    from app.main import app
 
     def override_get_session():
         yield sqlite_session
@@ -134,13 +131,15 @@ def test_client(sqlite_session):
     with (
         # Lifecycle dependencies are imported into the lifecycle module namespace.
         mock.patch("lifecycle.create_db_and_tables", return_value=None),
-        mock.patch("lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")),
+        mock.patch(
+            "lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")
+        ),
         mock.patch("lifecycle.NATSClient", return_value=fake_nats),
+        TestClient(app, raise_server_exceptions=False) as client,
     ):
-        with TestClient(app, raise_server_exceptions=False) as client:
-            # Ensure app.state has a nats_client so router code that reads it won't crash
-            if not hasattr(app.state, "nats_client") or app.state.nats_client is None:
-                app.state.nats_client = fake_nats
-            yield client
+        # Ensure app.state has a nats_client so router code that reads it won't crash
+        if not hasattr(app.state, "nats_client") or app.state.nats_client is None:
+            app.state.nats_client = fake_nats
+        yield client
 
     app.dependency_overrides.clear()

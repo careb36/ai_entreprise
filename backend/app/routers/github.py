@@ -1,20 +1,19 @@
 import json
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
-from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
-
+from auth_policy import current_user_if_required, require_company_role
 from crypto import CredentialCryptoError, decrypt_value, encrypt_value
 from database import get_session
-from auth_policy import current_user_if_required, require_company_role
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from models import User
 from models.github import GitHubRepoBinding
-from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from pydantic import BaseModel, Field
 from services import github_adapter
+from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/integrations/github", tags=["GitHub"])
 
@@ -31,12 +30,12 @@ class GitHubBackfillRequest(BaseModel):
     company_id: int
     owner: str
     repo: str
-    since: Optional[datetime] = None
+    since: datetime | None = None
 
 
 def _repository_binding(
     session: Session, owner: str, repo: str
-) -> Optional[GitHubRepoBinding]:
+) -> GitHubRepoBinding | None:
     return session.exec(
         select(GitHubRepoBinding).where(
             GitHubRepoBinding.owner == owner.casefold(),
@@ -46,7 +45,7 @@ def _repository_binding(
 
 
 def _ingest_pr(
-    session: Session, binding: GitHubRepoBinding, pr: dict, token: Optional[str] = None
+    session: Session, binding: GitHubRepoBinding, pr: dict, token: str | None = None
 ):
     user = pr.get("user") or {}
     commits = github_adapter.fetch_pr_commits(
@@ -75,8 +74,9 @@ def _ingest_pr(
 
 @router.post("/bindings", status_code=201)
 def create_github_binding(
-    payload: GitHubBindingRequest, session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    payload: GitHubBindingRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, payload.company_id, "Manager")
     owner, repo = payload.owner.casefold(), payload.repo.casefold()
@@ -108,7 +108,7 @@ def create_github_binding(
 
 
 @router.post("/webhook", status_code=202)
-async def github_webhook(request: Request, session: Session = Depends(get_session)):
+async def github_webhook(request: Request, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
     raw_body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256")
     if not signature:
@@ -145,7 +145,9 @@ async def github_webhook(request: Request, session: Session = Depends(get_sessio
     try:
         bound_secret = decrypt_value(binding.webhook_secret_encrypted)
     except CredentialCryptoError as exc:
-        raise HTTPException(status_code=401, detail="Invalid webhook signature") from exc
+        raise HTTPException(
+            status_code=401, detail="Invalid webhook signature"
+        ) from exc
     if not github_adapter.verify_webhook_signature(bound_secret, raw_body, signature):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -173,8 +175,9 @@ async def github_webhook(request: Request, session: Session = Depends(get_sessio
 
 @router.post("/backfill")
 def backfill_github_repository(
-    payload: GitHubBackfillRequest, session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    payload: GitHubBackfillRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, payload.company_id, "Manager")
     binding = _repository_binding(session, payload.owner, payload.repo)
@@ -195,7 +198,9 @@ def backfill_github_repository(
             detail={"message": "GitHub API rate limited", "reset_at": exc.reset_at},
         ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="GitHub API request failed") from exc
+        raise HTTPException(
+            status_code=502, detail="GitHub API request failed"
+        ) from exc
 
     ingested = 0
     skipped = 0
@@ -214,9 +219,12 @@ def backfill_github_repository(
             ) from exc
         except ArtifactTooLargeError:
             errors.append(
-                {"number": pr.get("number"), "error": "artifact exceeds the 2 MiB limit"}
+                {
+                    "number": pr.get("number"),
+                    "error": "artifact exceeds the 2 MiB limit",
+                }
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - Isolate each PR so backfill can report partial failures.
             errors.append(
                 {"number": pr.get("number"), "error": "unable to ingest pull request"}
             )

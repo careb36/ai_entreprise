@@ -1,26 +1,28 @@
 from datetime import datetime
-from typing import Optional
 
+from auth_policy import current_user_if_required, require_company_role
+from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from sqlmodel import Session, select
-
-from database import get_session
-from auth_policy import current_user_if_required, require_company_role
-from models import User
 from logging_config import logger
+from models import User
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.agent_service import AgentService
 from services.verification import verify_agent_run
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/agent_runs", tags=["Agent Runs"])
 
 
 @router.post("")
-def create_agent_run(payload: AgentRunCreate, session: Session = Depends(get_session), user: User | None = Depends(current_user_if_required)):
+def create_agent_run(
+    payload: AgentRunCreate,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     require_company_role(session, user, payload.company_id, "Manager")
     if "artifact_digest" in (payload.model_extra or {}):
         logger.warning(
@@ -41,13 +43,13 @@ def create_agent_run(payload: AgentRunCreate, session: Session = Depends(get_ses
 @router.get("")
 def list_agent_runs(
     company_id: int = Query(...),
-    producer: Optional[str] = None,
-    status: Optional[str] = None,
-    since: Optional[datetime] = None,
-    until: Optional[datetime] = None,
+    producer: str | None = None,
+    status: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
     limit: int = Query(50, ge=1, le=500),
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, company_id, "Viewer")
     statement = select(AgentRun).where(AgentRun.company_id == company_id)
@@ -95,8 +97,8 @@ def list_agent_runs(
 def get_agent_run(
     run_id: int,
     company_id: int = Query(...),
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, company_id, "Viewer")
     run = session.exec(
@@ -114,8 +116,8 @@ def get_agent_run(
 def verify_run(
     run_id: int,
     payload: AgentRunVerificationRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, payload.company_id, "Manager")
     run = session.exec(
@@ -133,8 +135,8 @@ def verify_run(
 def list_run_verifications(
     run_id: int,
     company_id: int = Query(...),
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, company_id, "Viewer")
     run = session.exec(
@@ -161,8 +163,8 @@ def list_run_verifications(
 def approve_run(
     run_id: int,
     payload: AgentRunApprovalRequest,
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, payload.company_id, "Manager")
     run = session.exec(
@@ -203,8 +205,8 @@ def approve_run(
 def list_run_approvals(
     run_id: int,
     company_id: int = Query(...),
-    session: Session = Depends(get_session),
-    user: User | None = Depends(current_user_if_required),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     require_company_role(session, user, company_id, "Viewer")
     run = session.exec(

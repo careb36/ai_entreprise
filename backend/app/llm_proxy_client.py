@@ -10,16 +10,18 @@ All methods return a plain dict so callers can inspect ``result.get("error")``
 without catching exceptions for common failure paths.
 """
 
-import os
-import requests
-import logging
-import time
 import asyncio
+import logging
+import os
+import time
+from typing import Any
+
 import httpx
-from typing import Optional, Dict, Any
+import requests
 from opentelemetry import propagate
 
 logger = logging.getLogger("fabrique-backend")
+
 
 class LLMProxyClient:
     """
@@ -30,13 +32,15 @@ class LLMProxyClient:
                   Override via the ``LLM_PROXY_URL`` environment variable in production.
     """
 
-    def __init__(self, base_url: Optional[str] = None):
+    def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
         self.timeout = 60  # Increased for complex agentic prompts
         self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
         self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
 
-    def _get_headers(self, role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, str]:
+    def _get_headers(
+        self, role: str = "Developer", bu_id: int | None = None
+    ) -> dict[str, str]:
         """Construct headers for trace propagation and governance."""
         headers = {
             "Content-Type": "application/json",
@@ -44,12 +48,18 @@ class LLMProxyClient:
         }
         if bu_id:
             headers["X-Business-Unit-ID"] = str(bu_id)
-        
+
         # Propagate OpenTelemetry context (TraceParent)
         propagate.inject(headers)
         return headers
 
-    def chat(self, messages: list, model: str = "gemini-pro", role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, Any]:
+    def chat(
+        self,
+        messages: list,
+        model: str = "gemini-pro",
+        role: str = "Developer",
+        bu_id: int | None = None,
+    ) -> dict[str, Any]:
         """
         Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
         """
@@ -114,7 +124,13 @@ class LLMProxyClient:
                 logger.error(f"LLM Proxy call failed after retries: {e}")
                 return {"error": str(e), "ok": False}
 
-    async def chat_async(self, messages: list, model: str = "gemini-pro", role: str = "Developer", bu_id: Optional[int] = None) -> Dict[str, Any]:
+    async def chat_async(
+        self,
+        messages: list,
+        model: str = "gemini-pro",
+        role: str = "Developer",
+        bu_id: int | None = None,
+    ) -> dict[str, Any]:
         """
         Async variant of ``chat()`` used by LangGraph async nodes.
         """
@@ -201,7 +217,9 @@ class LLMProxyClient:
             logger.warning(f"Failed to fetch model catalogue: {e}")
             return {}
 
-    def embed(self, text: str, role: str = "Developer", bu_id: Optional[int] = None) -> Optional[list]:
+    def embed(
+        self, text: str, role: str = "Developer", bu_id: int | None = None
+    ) -> list | None:
         """Retrieve a dense vector embedding."""
         try:
             headers = self._get_headers(role, bu_id)

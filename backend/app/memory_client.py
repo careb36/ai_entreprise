@@ -12,9 +12,10 @@ The ``embed()`` call is delegated to ``LLMProxyClient`` (Gemini
 """
 
 import json
-from typing import List, Dict, Any, Optional
-from sqlmodel import Session, text
+from typing import Any
+
 from database import engine, get_neo4j_driver
+from sqlmodel import Session, text
 
 
 class MemoryClient:
@@ -30,7 +31,13 @@ class MemoryClient:
         self.engine = engine
         self.neo4j_driver = neo4j_driver or get_neo4j_driver()
 
-    def store(self, content: str, metadata: Optional[Dict] = None, *, company_id: Optional[int] = None):
+    def store(
+        self,
+        content: str,
+        metadata: dict | None = None,
+        *,
+        company_id: int | None = None,
+    ):
         """
         Persist content to both pgvector (semantic search) and Neo4j (graph).
 
@@ -47,6 +54,7 @@ class MemoryClient:
             metadata: Arbitrary key-value metadata persisted as JSONB / JSON.
         """
         from llm_proxy_client import LLMProxyClient
+
         client = LLMProxyClient()
         embedding = client.embed(content)
 
@@ -85,7 +93,14 @@ class MemoryClient:
                 metadata=json.dumps(metadata or {}),
             )
 
-    def search_similar(self, query: str, limit: int = 10, *, company_ids: Optional[List[int]] = None, include_legacy: bool = False) -> List[Dict[str, Any]]:
+    def search_similar(
+        self,
+        query: str,
+        limit: int = 10,
+        *,
+        company_ids: list[int] | None = None,
+        include_legacy: bool = False,
+    ) -> list[dict[str, Any]]:
         """
         Find semantically similar content using pgvector ANN search.
 
@@ -101,6 +116,7 @@ class MemoryClient:
             (float in [0, 1] where 1 = identical).
         """
         from llm_proxy_client import LLMProxyClient
+
         client = LLMProxyClient()
         embedding = client.embed(query)
 
@@ -136,7 +152,9 @@ class MemoryClient:
                 results.append(
                     {
                         "content": row[0],
-                        "metadata": row[1] if isinstance(row[1], dict) else json.loads(row[1] or "{}"),
+                        "metadata": row[1]
+                        if isinstance(row[1], dict)
+                        else json.loads(row[1] or "{}"),
                         "similarity": row[2],
                         "company_id": row[3],
                         "legacy": row[3] is None,
@@ -144,7 +162,7 @@ class MemoryClient:
                 )
             return results
 
-    def store_entity(self, entity_type: str, properties: Dict[str, Any]):
+    def store_entity(self, entity_type: str, properties: dict[str, Any]):
         """
         Create a labelled node in Neo4j.
 
@@ -155,7 +173,7 @@ class MemoryClient:
         with self.neo4j_driver.session() as neo_session:
             neo_session.run(f"CREATE (e:{entity_type} $props)", props=properties)
 
-    def query_graph(self, cypher: str, **kwargs) -> List[Dict[str, Any]]:
+    def query_graph(self, cypher: str, **kwargs) -> list[dict[str, Any]]:
         """
         Execute an arbitrary read Cypher query against Neo4j.
 
@@ -174,8 +192,8 @@ class MemoryClient:
         self,
         node_type: str,
         node_id: str,
-        rel_type: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        rel_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Retrieve outgoing relationships for a node identified by ``id``.
 
@@ -189,7 +207,9 @@ class MemoryClient:
             List of record dicts containing ``n`` (source), ``r`` (rel), ``m`` (target).
         """
         if rel_type:
-            cypher = f"MATCH (n:{node_type} {{id: $id}})-[r:{rel_type}]->(m) RETURN n, r, m"
+            cypher = (
+                f"MATCH (n:{node_type} {{id: $id}})-[r:{rel_type}]->(m) RETURN n, r, m"
+            )
         else:
             cypher = f"MATCH (n:{node_type} {{id: $id}})-[r]->(m) RETURN n, r, m"
 
