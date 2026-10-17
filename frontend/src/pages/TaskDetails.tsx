@@ -1,10 +1,12 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, User, Flag, MessageSquare, Clock } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
-import type { BacklogItem } from '../services/api'
+import { ApiError, type BacklogItem } from '../services/api'
+import { parseRouteId } from '../lib/routeId'
 
 const PRIORITY_STYLES: Record<BacklogItem['priority'], string> = {
   critical: 'bg-red-900/40 text-red-300 border-red-700/40',
@@ -32,13 +34,17 @@ function formatDate(iso: string) {
 export default function TaskDetails() {
   const { t } = useTranslation()
   const { taskId, sprintId: paramSprintId } = useParams<{ taskId: string; sprintId: string }>()
-  const { activeSprintId } = useAppStore()
+  const { activeSprintId, companyId } = useAppStore()
+  // Keep the lookup context visible if a 404 clears the persisted selection.
+  const [lookup] = useState({ sprintId: activeSprintId, companyId })
 
-  const resolvedSprintId = paramSprintId ? Number(paramSprintId) : activeSprintId
-  const { data: board, isLoading, isError } = useSprintBoard(resolvedSprintId)
+  const parsedTaskId = parseRouteId(taskId)
+  const resolvedSprintId = paramSprintId ? parseRouteId(paramSprintId)
+    : activeSprintId ?? (companyId === lookup.companyId ? lookup.sprintId : null)
+  const { data: board, isLoading, isError, error, refetch } = useSprintBoard(parsedTaskId === null ? null : resolvedSprintId)
 
   const task: BacklogItem | undefined = board
-    ? Object.values(board.columns).flat().find(item => String(item.id) === taskId)
+    ? Object.values(board.columns).flat().find(item => item.id === parsedTaskId)
     : undefined
 
   const backTo = resolvedSprintId ? `/workspace/${resolvedSprintId}` : '/dashboard'
@@ -57,11 +63,20 @@ export default function TaskDetails() {
     )
   }
 
-  if (isError || !task) {
+  if (parsedTaskId === null || resolvedSprintId === null || isError || !task) {
+    const sprintNotFound = error instanceof ApiError && error.status === 404
+    const message = parsedTaskId === null ? 'taskDetails.invalidId'
+      : paramSprintId && resolvedSprintId === null ? 'workspace.invalidId'
+      : resolvedSprintId === null ? 'taskDetails.noSprint'
+      : isError ? sprintNotFound ? 'taskDetails.sprintNotFound' : 'taskDetails.loadError'
+      : 'taskDetails.notFound'
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center">
-        <p className="text-gray-400 mb-4">{t('common.noData')}</p>
-        <Link to={backTo} className="btn btn-ghost text-sm">
+        <p role="alert" className="text-gray-400 mb-4">{t(message, { id: paramSprintId, taskId, sprintId: resolvedSprintId })}</p>
+        {parsedTaskId !== null && resolvedSprintId !== null && isError && !sprintNotFound && (
+          <button onClick={() => refetch()} className="btn btn-ghost text-sm mr-3">{t('common.retry')}</button>
+        )}
+        <Link to={sprintNotFound ? '/dashboard' : backTo} className="btn btn-ghost text-sm">
           <ArrowLeft size={14} className="mr-1" /> {t('common.back')}
         </Link>
       </div>

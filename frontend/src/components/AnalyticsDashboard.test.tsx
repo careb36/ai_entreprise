@@ -8,6 +8,7 @@ import { useAppStore } from '../store/useAppStore'
 vi.mock('../hooks/useQueries', () => ({
   useAnalyticsSummary: vi.fn(),
   useOrchestrationHealth: vi.fn(),
+  useSprintBoard: vi.fn(),
 }))
 
 const mockedUseAnalyticsSummary = vi.mocked(useAnalyticsSummary)

@@ -1,6 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAnalyticsSummary, useOrchestrationHealth } from '../hooks/useQueries'
+import { Link } from 'react-router-dom'
+import { useAnalyticsSummary, useOrchestrationHealth, useSprintBoard } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { TrendingUp, Zap, CheckSquare, XSquare, Info, RefreshCw, Activity } from 'lucide-react'
 import type { OrchestrationHealthWeek } from '../services/api'
@@ -187,8 +188,18 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
 
 export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId }) => {
   const { t } = useTranslation()
+  useSprintBoard(sprintId || null)
   const { data, isLoading, isError, refetch } = useAnalyticsSummary(sprintId)
   const companyId = useAppStore(state => state.companyId)
+
+  if (!sprintId) {
+    return (
+      <div className="empty-state py-16">
+        <p className="text-gray-400 mb-4">{t('workspace.noSprint')}</p>
+        <Link to="/dashboard" className="btn btn-ghost">{t('nav.dashboard')}</Link>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -205,6 +216,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
     return (
       <div className="alert-error flex items-center gap-2">
         <XSquare size={16} /> {t('analytics.error')}
+        <button onClick={() => refetch()} className="btn btn-ghost btn-sm">{t('common.retry')}</button>
       </div>
     )
   }
