@@ -13,11 +13,10 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "AGENT_GRAPH_ENABLED", False)
     monkeypatch.setattr(settings, "GITHUB_TOKEN", None)
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(app.state, "memory_client", None, raising=False)
 
 
 def test_default_capabilities(test_client, default_settings):
-    app.state.memory_client = None
-
     response = test_client.get("/v1/capabilities")
 
     assert response.status_code == 200
@@ -38,13 +37,11 @@ def test_agent_graph_enabled(test_client, default_settings, monkeypatch):
     assert response.json()["agent_graph"] is True
 
 
-def test_memory_follows_memory_client(test_client, default_settings):
-    app.state.memory_client = MagicMock()
-    try:
-        assert test_client.get("/v1/capabilities").json()["memory"] is True
-    finally:
-        app.state.memory_client = None
+def test_memory_follows_memory_client(test_client, default_settings, monkeypatch):
+    monkeypatch.setattr(app.state, "memory_client", MagicMock())
+    assert test_client.get("/v1/capabilities").json()["memory"] is True
 
+    monkeypatch.setattr(app.state, "memory_client", None)
     assert test_client.get("/v1/capabilities").json()["memory"] is False
 
 
@@ -58,6 +55,9 @@ def test_github_token_enables_github(test_client, default_settings, monkeypatch)
 
 
 def test_public_when_auth_required(test_client, default_settings):
+    # Sanity check: the same client is rejected on a protected route.
+    assert test_client.get("/v1/agent_runs?company_id=1").status_code == 401
+
     response = test_client.get("/v1/capabilities")
 
     assert response.status_code == 200
