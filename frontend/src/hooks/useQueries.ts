@@ -14,6 +14,7 @@ import {
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
 export const QUERY_KEYS = {
+  capabilities: () => ['capabilities'] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
@@ -27,6 +28,15 @@ export const QUERY_KEYS = {
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
   approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
   auditVerification: (externalRef: string) => ['audit-verification', externalRef] as const,
+}
+
+export function useCapabilities(enabled = true) {
+  return useQuery({
+    queryKey: QUERY_KEYS.capabilities(),
+    queryFn: () => api.get<{ agent_graph: boolean; memory: boolean; github: boolean; auth_required: boolean }>('/v1/capabilities'),
+    enabled,
+    refetchInterval: 30_000,
+  })
 }
 
 // ── Enterprise & Company ─────────────────────────────────────────────────────

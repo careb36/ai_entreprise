@@ -1,34 +1,34 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Link, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
 import { setOnUnauthorized } from './services/api'
 import ProtectedRoute from './components/ProtectedRoute'
 import Dashboard from './pages/Dashboard'
-import Home from './pages/Home'
 import CompanyNew from './pages/CompanyNew'
 import CompanySelect from './pages/CompanySelect'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import { SprintWorkspace } from './pages/SprintWorkspace'
 import { GovernancePanel } from './components/GovernancePanel'
+import { CompanyQuotas } from './components/CompanyQuotas'
 import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Evidence from './pages/Evidence'
 import EvidenceDetail from './pages/EvidenceDetail'
 import Generate from './pages/Generate'
-import Glassroom from './pages/Glassroom'
 import NotFound from './pages/NotFound'
 import TaskDetails from './pages/TaskDetails'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
-  LayoutDashboard, ShieldCheck, PieChart, MonitorPlay, ClipboardCheck,
-  Globe, Database, Code2, Menu, X, Building2
+  LayoutDashboard, ShieldCheck, ClipboardCheck,
+  Globe, Database, Code2, Menu, X, Building2, ChevronDown
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
+import { useCapabilities } from './hooks/useQueries'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -56,20 +56,15 @@ function LanguageSwitcher() {
 
 // ── Nav links config ──────────────────────────────────────────────────────────
 
-function useNavLinks() {
+function useNavLinks(authenticated: boolean) {
   const { t } = useTranslation()
-  const activeSprintId = useAppStore(state => state.activeSprintId)
-   const workspaceTo = activeSprintId ? `/workspace/${activeSprintId}` : '/evidence'
+  const { data, isError } = useCapabilities(authenticated)
   return [
-     { to: '/',           icon: LayoutDashboard, label: t('nav.home') },
-     { to: '/companies/new', icon: Building2, label: t('nav.newCompany') },
-     { to: '/dashboard',  icon: LayoutDashboard, label: t('nav.dashboard') },
-     { to: workspaceTo,   icon: MonitorPlay, label: t('nav.workspace') },
-     { to: '/governance', icon: ShieldCheck,    label: t('nav.governance') },
-     { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence') },
-    { to: '/analytics',  icon: PieChart,       label: t('nav.analytics') },
-    { to: '/memory',     icon: Database,       label: t('nav.memory') },
-    { to: '/generate',   icon: Code2,          label: t('nav.generate') },
+    { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence') },
+    { to: '/governance', icon: ShieldCheck, label: t('nav.review') },
+    { to: '/dashboard', icon: LayoutDashboard, label: t('nav.sprints') },
+    ...(!isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate') }] : []),
+    ...(!isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory') }] : []),
   ]
 }
 
@@ -77,15 +72,23 @@ function useNavLinks() {
 
 function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [companyOpen, setCompanyOpen] = useState(false)
   const { t } = useTranslation()
-  const links = useNavLinks()
+  const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore(state => state.user)
   const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
+  const companyName = useAppStore(state => state.companyName)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
+  const links = useNavLinks(authenticated)
+
+  useEffect(() => {
+    setMenuOpen(false)
+    setCompanyOpen(false)
+  }, [location])
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg transition-colors
@@ -94,7 +97,7 @@ function NavBar() {
        : 'text-gray-400 hover:text-white hover:bg-surface-800'}`
 
   return (
-    <header className="min-h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center px-4 lg:px-6 z-20 flex-shrink-0">
+    <header className="relative min-h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0">
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
         <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
@@ -103,7 +106,7 @@ function NavBar() {
 
       {/* Desktop nav */}
       {authenticated && (
-        <nav className="hidden 2xl:flex flex-1 min-w-0 flex-wrap items-center gap-1 ml-8" aria-label="Main navigation">
+        <nav className="hidden xl:flex flex-1 min-w-0 flex-wrap items-center gap-1 ml-4" aria-label={t('nav.mainNavigation')}>
           {links.map(({ to, icon: Icon, label }) => (
             <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
               <Icon size={16} />
@@ -118,40 +121,52 @@ function NavBar() {
         <LanguageSwitcher />
         {authenticated && (
           <>
-            <span className="hidden md:inline max-w-40 truncate text-sm text-gray-400" title={user?.full_name || user?.email}>
-              {user?.full_name || user?.email}
-            </span>
-            {memberships.length > 1 && (
-              <Link to="/companies/select" className="btn-ghost btn-sm">
-                <Building2 size={14} className="sm:hidden" />
-                <span className="sr-only sm:not-sr-only">{t('auth.switchCompany')}</span>
-              </Link>
-            )}
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => {
-                logout()
-                navigate('/login', { replace: true })
-              }}
-            >
-              {t('auth.logout', { defaultValue: 'Log out' })}
-            </button>
+            <div className="relative" onKeyDown={event => {
+              if (event.key === 'Escape') setCompanyOpen(false)
+            }} onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setCompanyOpen(false)
+            }}>
+              <button type="button" className="btn-ghost btn-sm" aria-expanded={companyOpen}
+                aria-controls="company-menu" onClick={() => {
+                  setCompanyOpen(open => !open)
+                  setMenuOpen(false)
+                }}>
+                <Building2 size={14} />{t('nav.company')}<ChevronDown size={14} />
+              </button>
+              {companyOpen && (
+                <div id="company-menu" className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
+                  <p className="truncate px-3 py-2 text-sm font-semibold" title={companyName ?? undefined}>
+                    {companyName ?? t('auth.selectCompany')}
+                  </p>
+                  <p className="truncate px-3 pb-2 text-xs text-gray-400" title={user?.full_name || user?.email}>{user?.full_name || user?.email}</p>
+                  {memberships.length > 1 && <Link to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany')}</Link>}
+                  <Link to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany')}</Link>
+                  <Link to="/companies/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas')}</Link>
+                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
+                    logout()
+                    navigate('/login', { replace: true })
+                  }}>{t('auth.logout', { defaultValue: 'Log out' })}</button>
+                </div>
+              )}
+            </div>
           </>
         )}
 
         {/* Status pill — desktop only */}
         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
           <span className="status-dot-pulse" />
-          Online
+          {t('dashboard.online')}
         </div>
 
         {/* Hamburger — mobile/tablet */}
         {authenticated && <button
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-label={t(menuOpen ? 'nav.closeMenu' : 'nav.openMenu')}
           aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(v => !v)}
-          className="btn-ghost btn-icon 2xl:hidden"
+          onClick={() => {
+            setMenuOpen(v => !v)
+            setCompanyOpen(false)
+          }}
+          className="btn-ghost btn-icon xl:hidden"
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>}
@@ -160,10 +175,10 @@ function NavBar() {
       {/* Mobile dropdown */}
       {authenticated && menuOpen && (
         <div
-          className="absolute top-14 left-0 right-0 bg-surface-900 border-b border-surface-700 2xl:hidden z-30 animate-fade-in"
+          className="absolute top-full left-0 right-0 bg-surface-900 border-b border-surface-700 xl:hidden z-30 animate-fade-in"
           onClick={() => setMenuOpen(false)}
         >
-          <nav className="flex flex-col p-3 gap-1" aria-label="Mobile navigation">
+          <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation')}>
             {links.map(({ to, icon: Icon, label }) => (
               <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
                 <Icon size={16} />
@@ -175,6 +190,17 @@ function NavBar() {
       )}
     </header>
   )
+}
+
+function SprintPages() {
+  const { t } = useTranslation()
+  return <div>
+    <nav className="flex gap-2 px-4 pt-4 lg:px-6" aria-label={t('nav.sprints')}>
+      <NavLink to="/dashboard" end className={({ isActive }) => `btn-ghost btn-sm ${isActive ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.overview')}</NavLink>
+      <NavLink to="/dashboard/analytics" className={({ isActive }) => `btn-ghost btn-sm ${isActive ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.analytics')}</NavLink>
+    </nav>
+    <Outlet />
+  </div>
 }
 
 // ── App shell ─────────────────────────────────────────────────────────────────
@@ -201,10 +227,14 @@ function AppContent() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route element={<ProtectedRoute />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<Navigate to="/evidence" replace />} />
+              <Route path="/dashboard" element={<SprintPages />}>
+                <Route index element={<Dashboard />} />
+                <Route path="analytics" element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>} />
+              </Route>
               <Route path="/companies/new" element={<CompanyNew />} />
               <Route path="/companies/select" element={<CompanySelect />} />
+              <Route path="/companies/quotas" element={<div className="page-container"><CompanyQuotas /></div>} />
               <Route path="/workspace/:id" element={<SprintWorkspace />} />
               <Route
                 path="/governance"
@@ -214,11 +244,10 @@ function AppContent() {
               <Route path="/evidence/:runId" element={<EvidenceDetail />} />
               <Route
                 path="/analytics"
-                element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>}
+                element={<Navigate to="/dashboard/analytics" replace />}
               />
               <Route path="/memory" element={<MemorySearch />} />
               <Route path="/generate" element={<Generate />} />
-              <Route path="/glassroom" element={<Glassroom />} />
               <Route path="/workspace/:sprintId/task/:taskId" element={<TaskDetails />} />
               <Route path="/task/:taskId" element={<TaskDetails />} />
               <Route path="*" element={<NotFound />} />

@@ -228,7 +228,7 @@ function SprintCard({
           className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-brand-600/15 border border-brand-600/25 text-brand-400 text-xs font-medium hover:bg-brand-600/25 transition-colors"
         >
           <Radio size={12} />
-          {t('dashboard.openAgentsRoom')}
+          {t('dashboard.liveView')}
         </Link>
       </div>
     </div>

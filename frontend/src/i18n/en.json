@@ -1,5 +1,14 @@
 {
   "nav": {
+    "review": "Review",
+    "sprints": "Sprints",
+    "company": "Company",
+    "quotas": "Quotas",
+    "overview": "Overview",
+    "mainNavigation": "Main navigation",
+    "mobileNavigation": "Mobile navigation",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "home": "Home",
     "newCompany": "New company",
     "dashboard": "Dashboard",
@@ -11,6 +20,7 @@
     "generate": "Generate"
   },
   "dashboard": {
+    "liveView": "Live view",
     "title": "La Fabrique",
     "subtitle": "AI-powered autonomous development platform",
     "systemStatus": "System Status",

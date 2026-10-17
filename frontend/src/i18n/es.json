@@ -1,5 +1,14 @@
 {
   "nav": {
+    "review": "Revisión",
+    "sprints": "Sprints",
+    "company": "Compañía",
+    "quotas": "Cuotas",
+    "overview": "Resumen",
+    "mainNavigation": "Navegación principal",
+    "mobileNavigation": "Navegación móvil",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú",
     "home": "Inicio",
     "newCompany": "Nueva compañía",
     "dashboard": "Panel Principal",
@@ -11,6 +20,7 @@
     "generate": "Generar"
   },
   "dashboard": {
+    "liveView": "Vista en vivo",
     "title": "La Fabrique",
     "subtitle": "Plataforma de desarrollo autónomo con IA",
     "systemStatus": "Estado del Sistema",

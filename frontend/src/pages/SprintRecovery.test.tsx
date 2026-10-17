@@ -41,4 +41,13 @@ describe('stale persisted sprint recovery', () => {
     expect(api.getSprintBoard).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('link', { name: 'View live stream' })).not.toBeInTheDocument()
   })
+
+  it('links an existing sprint to its Live view', async () => {
+    vi.mocked(api.getSprintBoard).mockResolvedValue({
+      sprint: { sprint_name: 'Sprint 999', status: 'active', scope_size: 'M' },
+      columns: {}, total: 0,
+    } as never)
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
+    expect(await screen.findByRole('link', { name: 'Live view' })).toHaveAttribute('href', '/workspace/999')
+  })
 })
