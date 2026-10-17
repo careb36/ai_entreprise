@@ -161,6 +161,7 @@ services:
     command: sh -lc "pip install --no-cache-dir nats-py==2.3.1 && python /app/daemon.py"
     volumes:
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}
+      - ${PROJECTS_ROOT:-/Users/carolinar.pereira/DEV}:/projects
       - ./vscode-daemon/daemon.py:/app/daemon.py:ro
     networks:
       - factory-network
