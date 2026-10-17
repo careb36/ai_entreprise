@@ -167,6 +167,21 @@ The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `
 - **LLM Proxy:** `http://localhost:5100`
 - **Jaeger Tracing UI:** `http://localhost:16686`
 
+### API security configuration
+
+The API applies a per-client-IP fixed-window limit to `/v1/*` requests
+(`API_RATE_LIMIT=120` requests per `API_RATE_LIMIT_WINDOW_SECONDS=60` by
+default); excess requests receive HTTP 429 and a `Retry-After` header. This
+limit is in-memory per backend process, so deployments with multiple workers
+should enforce a shared limit at the reverse proxy or API gateway as well.
+
+Browser access is limited to `http://localhost:5173` and
+`http://localhost:3000` by default. Set `CORS_ALLOWED_ORIGINS` to a
+comma-separated list of the exact trusted frontend origins in deployment.
+Security response headers are applied by the API, with HSTS enabled only for
+HTTPS requests. Database queries bind user values instead of interpolating SQL,
+and the React UI renders API text as text rather than trusted HTML.
+
 **Incremental restarts** (after code changes):
 
 ```bash

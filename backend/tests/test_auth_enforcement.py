@@ -363,7 +363,7 @@ def test_authentication_guard_and_flag_off_role_noop(sqlite_session, monkeypatch
     [
         ("/v1/generate", {"story": "Test"}),
         ("/v1/audit", {"action": "test"}),
-        ("/v1/memory/store?content=test", None),
+        ("/v1/memory/store", None),
         ("/v1/integrations/github/bindings", {
             "owner": "test", "repo": "test", "webhook_secret": "test-only",
         }),
@@ -381,8 +381,11 @@ def test_company_mutations_require_manager(
     if role:
         _member(sqlite_session, identity, role)
     company_id = identity[1].id
+    params = {"company_id": company_id}
+    if path == "/v1/memory/store":
+        params["content"] = "test"
     response = test_client.post(
-        path, params={"company_id": company_id},
+        path, params=params,
         json={**payload, "company_id": company_id} if payload is not None else None,
         headers=identity[2],
     )
@@ -413,11 +416,13 @@ def test_quota_reset_uses_business_unit_company(
 @pytest.mark.parametrize("path", [
     "/v1/enterprise/quotas",
     "/v1/analytics/orchestration_health",
-    "/v1/enterprise/lineage?file_path=test",
+    "/v1/enterprise/lineage",
 ])
 def test_enterprise_reads_reject_nonmembers(test_client, identity, path):
     response = test_client.get(
-        path, params={"company_id": identity[1].id}, headers=identity[2]
+        path,
+        params={"company_id": identity[1].id, "file_path": "test"},
+        headers=identity[2],
     )
     assert response.status_code == 403
     assert response.json() == {"detail": "Not a member of this company"}
@@ -531,16 +536,19 @@ def test_audit_write_sets_authorized_company_column(test_client, sqlite_session,
     assert response.json()["rows"][0]["legacy"] is False
 
 
-@pytest.mark.parametrize("operation", ["audit", "memory/store?content=test"])
+@pytest.mark.parametrize("operation", ["audit", "memory/store"])
 def test_payload_company_cannot_override_authorized_context(
     test_client, sqlite_session, identity, operation
 ):
     _member(sqlite_session, identity, "Manager")
     payload = {"company_id": identity[1].id + 100000}
+    params = {"company_id": identity[1].id}
     if operation == "audit":
         payload = {"action": "forged", "details": payload}
+    else:
+        params["content"] = "test"
     response = test_client.post(
-        f"/v1/{operation}", params={"company_id": identity[1].id},
+        f"/v1/{operation}", params=params,
         json=payload, headers=identity[2],
     )
     assert response.status_code == 403

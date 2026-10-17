@@ -25,7 +25,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from config import Settings
+from config import settings
 from auth_tokens import is_auth_configured
 from crypto import is_encryption_enabled
 from audit_signing import is_signing_enabled
@@ -47,8 +47,7 @@ from routers.agents import publish_sse_event, sse_connections
 from services.outbox_service import process_outbox
 from services.agent_worker import process_agent_tasks
 from services.task_worker import process_backlog_tasks
-
-settings = Settings()
+from security import SecurityMiddleware
 
 app = FastAPI(
     title="Fabrique Enterprise API",
@@ -64,11 +63,20 @@ app = FastAPI(
 )
 
 app.add_middleware(
+    SecurityMiddleware,
+    max_requests=settings.API_RATE_LIMIT,
+    window_seconds=settings.API_RATE_LIMIT_WINDOW_SECONDS,
+)
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        origin.strip()
+        for origin in settings.CORS_ALLOWED_ORIGINS.split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 app.include_router(auth_router)

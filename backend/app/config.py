@@ -12,6 +12,7 @@ Usage::
 """
 
 import os
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -90,6 +91,11 @@ class Settings(BaseSettings):
     AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    # API security
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    API_RATE_LIMIT: int = Field(default=120, ge=1)
+    API_RATE_LIMIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
 
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------

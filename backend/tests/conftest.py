@@ -124,6 +124,8 @@ def test_client(sqlite_session):
     from app.main import app
     from database import get_session
 
+    app.middleware_stack = None
+
     def override_get_session():
         yield sqlite_session
 

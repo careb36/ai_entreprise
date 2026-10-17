@@ -43,11 +43,11 @@
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
     "electron": "^28.1.0",
-    "electron-builder": "^24.9.1",
+    "electron-builder": "^26.15.3",
     "jsdom": "^30.0.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.10",
-    "vitest": "^3.2.6"
+    "vite": "^7.3.7",
+    "vitest": "^5.0.5"
   },
   "build": {
     "appId": "com.fabrique.enterprise",

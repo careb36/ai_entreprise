@@ -167,6 +167,22 @@ El script ejecuta 6 pasos: `down -v` → prune de Docker → `build --no-cache` 
 - **LLM Proxy:** `http://localhost:5100`
 - **Jaeger Tracing UI:** `http://localhost:16686`
 
+### Configuración de seguridad de la API
+
+La API limita las solicitudes por IP en rutas `/v1/*` a
+`API_RATE_LIMIT=120` por ventana de `API_RATE_LIMIT_WINDOW_SECONDS=60` por
+defecto; el exceso devuelve HTTP 429 y `Retry-After`. El contador reside en
+memoria por proceso, así que los despliegues con varios workers también deben
+limitar solicitudes en un proxy o gateway compartido.
+
+Por defecto, el acceso desde navegadores solo permite los orígenes
+`http://localhost:5173` y `http://localhost:3000`. Configure
+`CORS_ALLOWED_ORIGINS` con una lista separada por comas de los orígenes exactos
+del frontend. HSTS solo se envía en solicitudes HTTPS; la API también añade
+encabezados de seguridad a sus respuestas. Las consultas enlazan los valores
+del usuario en vez de interpolarlos en SQL, y la interfaz React muestra el
+texto de la API como texto, no como HTML confiable.
+
 **Reinicios incrementales** (tras cambios en el código):
 
 ```bash
