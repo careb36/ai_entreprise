@@ -132,12 +132,10 @@ def test_client(sqlite_session):
     fake_nats = _FakeNATSClient()
 
     with (
-        # Patch the startup-time calls inside main.py:
-        # main.py is loaded as the "app.main" module in this PYTHONPATH setup,
-        # so we must patch names inside that module's namespace.
-        mock.patch("app.main.create_db_and_tables", return_value=None),
-        mock.patch("app.main.get_neo4j_driver", side_effect=Exception("neo4j stubbed")),
-        mock.patch("app.main.NATSClient", return_value=fake_nats),
+        # Lifecycle dependencies are imported into the lifecycle module namespace.
+        mock.patch("lifecycle.create_db_and_tables", return_value=None),
+        mock.patch("lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")),
+        mock.patch("lifecycle.NATSClient", return_value=fake_nats),
     ):
         with TestClient(app, raise_server_exceptions=False) as client:
             # Ensure app.state has a nats_client so router code that reads it won't crash
