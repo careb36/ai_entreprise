@@ -55,7 +55,7 @@ describe('company selection return destination', () => {
     },
   )
 
-  it.each(['', 'https://example.com', '//example.com', '/companies/select'])(
+  it.each(['', 'https://example.com', '//example.com', '/\\example.com', '/companies/select'])(
     'falls back to home for an invalid or recursive destination %s',
     async destination => {
       renderRoutes(`/companies/select?from=${encodeURIComponent(destination)}`)

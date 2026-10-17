@@ -41,6 +41,7 @@ function renderLogin(initialEntry = '/login') {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/target" element={<CurrentPath />} />
+        <Route path="/" element={<CurrentPath />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -80,6 +81,27 @@ describe('login and registration', () => {
       full_name: 'Ada Lovelace',
     })
     expect(mockApi.me).toHaveBeenCalledOnce()
+  })
+
+  it('falls back home for a backslash-based cross-origin return path', async () => {
+    mockApi.login.mockResolvedValue({
+      access_token: 'signed-token',
+      token_type: 'bearer',
+      expires_in: 3600,
+    })
+    mockApi.me.mockResolvedValue({
+      user_id: 8,
+      email: 'a@example.com',
+      full_name: 'Ada Lovelace',
+      memberships: [],
+    })
+    renderLogin('/login?from=%2F%5Cexample.com')
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByTestId('current-path')).toHaveTextContent('/')
   })
 
   it('shows an invalid-credentials error without populating the store', async () => {

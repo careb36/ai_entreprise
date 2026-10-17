@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
+import { safeReturnPath } from '../lib/returnPath'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -21,8 +22,7 @@ export default function Login() {
     setSubmitting(true)
     try {
       await login(email, password)
-      const destination = from?.startsWith('/') && !from.startsWith('//') ? from : '/'
-      navigate(destination, { replace: true })
+      navigate(safeReturnPath(from), { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.status === 503) {
         setError(t('auth.notConfigured', {

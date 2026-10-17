@@ -2,6 +2,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
+import { safeReturnPath } from '../lib/returnPath'
 
 export default function CompanySelect() {
   const { t } = useTranslation()
@@ -15,10 +16,7 @@ export default function CompanySelect() {
       companyId,
       t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' }),
     )
-    const from = searchParams.get('from') || '/'
-    const destination = from.startsWith('/') && !from.startsWith('//') &&
-      from.split(/[?#]/)[0] !== '/companies/select' ? from : '/'
-    navigate(destination, { replace: true })
+    navigate(safeReturnPath(searchParams.get('from')), { replace: true })
   }
 
   return (
