@@ -505,11 +505,6 @@ export default function CompanyNew() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [inspected, setInspected] = useState<WorkspaceInspection | null>(null)
   const [inspecting, setInspecting] = useState(false)
-  const [availableDirs, setAvailableDirs] = useState<{ name: string; path: string }[]>([])
-  const [showDirPicker, setShowDirPicker] = useState(false)
-  const [browseCurrent, setBrowseCurrent] = useState('')
-  const [browseParent, setBrowseParent] = useState<string | null>(null)
-  const [browseAbsolute, setBrowseAbsolute] = useState<string>('')
   const [inspectError, setInspectError] = useState<{ status: number; message: string } | null>(null)
   const inspectRequest = useRef(0)
   const pendingInspect = useRef<{ path: string; promise: Promise<InspectOutcome> } | null>(null)
@@ -610,26 +605,12 @@ export default function CompanyNew() {
   }
 
   const handleBrowse = async () => {
-    try {
-      const token = useAuthStore.getState().token
-      const url = browseCurrent
-        ? `http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseCurrent)}&root=projects`
-        : 'http://localhost:8000/v1/browse_fs?root=projects'
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const data = await res.json()
-      const entries = data.entries || data.directories || []
-      if (entries.length >= 0) {
-        setAvailableDirs(entries)
-        setBrowseCurrent(data.current || '')
-        setBrowseParent(data.parent)
-        setBrowseAbsolute(data.absolute || '')
-        setShowDirPicker(true)
-      }
-    } catch (err) {
-      alert(t('companyNew.directoryError', { message: (err as Error).message || t('companyNew.unknownError') }))
+    if (!selectDirectory) {
+      setPickerOpen(true)
+      return
     }
+    const chosen = await selectDirectory()
+    if (chosen) chooseFolder(chosen)
   }
 
   const closePicker = () => {
@@ -785,78 +766,6 @@ export default function CompanyNew() {
             📂 {t('companyNew.browse')}
           </button>
         </div>
-        {showDirPicker && (
-          <div className="absolute z-10 mt-1 w-full bg-surface-800 border border-surface-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700 text-xs text-gray-400">
-              <span className="font-mono truncate">{browseCurrent || '.'}</span>
-              {browseParent && (
-                <button type="button" onClick={async () => {
-                  try {
-                    const token = useAuthStore.getState().token
-                    const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseParent)}&root=projects`, {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                    const data = await res.json()
-                    const entries = data.entries || data.directories || []
-                    if (entries.length >= 0) {
-                      setAvailableDirs(entries)
-                      setBrowseCurrent(data.current || '')
-                      setBrowseParent(data.parent)
-                      setBrowseAbsolute(data.absolute || '')
-                    }
-                  } catch {}
-                }} className="text-brand-400 hover:text-brand-300">⬆ Subir</button>
-              )}
-            </div>
-            {availableDirs.map((dir: { name: string; path: string }) => (
-              <div key={dir.path} className="flex items-center gap-1 px-3 py-2 hover:bg-surface-700 transition-colors">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const abs = browseAbsolute ? `${browseAbsolute}/${dir.name}` : dir.path
-                    setProjectPath(abs)
-                    setShowDirPicker(false)
-                  }}
-                  className="text-sm text-gray-200 font-mono flex-1 text-left"
-                >
-                  📁 {dir.name}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    (async () => {
-                      try {
-                        const token = useAuthStore.getState().token
-                        const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(dir.path)}&root=projects`, {
-                          headers: { 'Authorization': `Bearer ${token}` }
-                        })
-                        const data = await res.json()
-                        const entries = data.entries || data.directories || []
-                        if (entries.length >= 0) {
-                          setAvailableDirs(entries)
-                          setBrowseCurrent(data.current || '')
-                          setBrowseParent(data.parent)
-                          setBrowseAbsolute(data.absolute || '')
-                        }
-                      } catch {}
-                    })()
-                  }}
-                  className="text-xs text-gray-400 hover:text-gray-200 px-2"
-                  title="Entrar"
-                >
-                  →
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowDirPicker(false)}
-              className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-surface-700 transition-colors"
-            >
-              ✕ {t('companyNew.close')}
-            </button>
-          </div>
-        )}
         {selectDirectory && (
           <button type="button" onClick={() => setPickerOpen(true)}
             className="text-xs text-brand-400 hover:text-brand-300 hover:underline">
