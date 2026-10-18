@@ -17,6 +17,7 @@ from unittest import mock
 import pytest
 from config import settings
 from fastapi.testclient import TestClient
+from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.audit import AuditLog
 
@@ -76,6 +77,7 @@ SQLModel.metadata.create_all(
         AuditLog.__table__,
         GitHubRepoBinding.__table__,
         BugReport.__table__,
+        AgentMessage.__table__,
     ],
 )
 

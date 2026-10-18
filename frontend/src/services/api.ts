@@ -414,6 +414,32 @@ export interface AgentRunApproval {
   audit_log_id: number | null
 }
 
+/** What a message does in the conversation between roles. */
+export const MESSAGE_KINDS = ['question', 'answer', 'handoff', 'request', 'decision', 'escalation', 'retrospective'] as const
+export type MessageKind = typeof MESSAGE_KINDS[number]
+
+/** One message between the company's agents. A claim, never evidence. */
+export interface AgentMessage {
+  id: number
+  sprint_id: number | null
+  backlog_item_id: number | null
+  task_title: string | null
+  from_name: string
+  from_role: string
+  /** null: the whole team. */
+  to_role: string | null
+  kind: MessageKind
+  body: string
+  created_at: string | null
+}
+
+export interface MessageFilters {
+  sprint_id?: number
+  backlog_item_id?: number
+  kind?: MessageKind
+  limit?: number
+}
+
 export interface AgentRunListItem {
   id: number
   company_id: number
@@ -728,6 +754,14 @@ export const api = {
       params: { path },
       retryServerErrors: false,
     }),
+
+  getMessages: (companyId: number, filters: MessageFilters = {}) => {
+    const params: Record<string, string | number> = { company_id: companyId }
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined) params[key] = value
+    }
+    return api.get<{ messages: AgentMessage[] }>('/v1/messages', params)
+  },
 
   getAgentRuns: (companyId: number, filters: AgentRunFilters = {}) => {
     // Omit unset filters rather than sending them as the string "undefined".

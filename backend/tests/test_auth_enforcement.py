@@ -298,6 +298,7 @@ def test_flag_off_init_creates_no_membership(
         ("POST", "/v1/memory/store?content=test"),
         ("GET", "/v1/memory/search?query=test"),
         ("GET", "/v1/audit/verify?interaction_id=test"),
+        ("GET", "/v1/messages?company_id=1"),
         ("GET", "/v1/support/tickets"),
         ("GET", "/v1/support/tickets/FAB-00001"),
         ("PATCH", "/v1/support/tickets/FAB-00001"),

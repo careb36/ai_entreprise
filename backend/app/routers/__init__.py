@@ -11,6 +11,7 @@ from routers.agents import router as agents_router
 from routers.auth import router as auth_router
 from routers.enterprise import router as enterprise_router
 from routers.github import router as github_router
+from routers.messages import router as messages_router
 from routers.sprint import router as sprint_router
 from routers.support import router as support_router
 from routers.workspace import router as workspace_router
@@ -21,6 +22,7 @@ __all__ = [
     "auth_router",
     "enterprise_router",
     "github_router",
+    "messages_router",
     "sprint_router",
     "support_router",
     "workspace_router",

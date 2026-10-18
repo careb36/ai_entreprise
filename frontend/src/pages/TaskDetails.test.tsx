@@ -6,7 +6,12 @@ import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueri
 import { ApiError } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 
-vi.mock('../hooks/useQueries', () => ({ useSprintBoard: vi.fn(), useAgentRuns: vi.fn(), useCapabilities: vi.fn() }))
+vi.mock('../hooks/useQueries', () => ({
+  useSprintBoard: vi.fn(),
+  useAgentRuns: vi.fn(),
+  useCapabilities: vi.fn(),
+  useAgentMessages: vi.fn(() => ({ data: { messages: [] }, isLoading: false, isError: false })),
+}))
 const boardQuery = vi.mocked(useSprintBoard)
 const runsQuery = vi.mocked(useAgentRuns)
 const capabilitiesQuery = vi.mocked(useCapabilities)

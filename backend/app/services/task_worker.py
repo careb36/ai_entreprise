@@ -33,6 +33,7 @@ from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from models import (
     Agent,
+    AgentMessage,
     AssistantRuntimeState,
     BacklogItem,
     Company,
@@ -1880,6 +1881,19 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     if not result.get("completed"):
         return
 
+    if retro_metrics and retro_metrics.get("company_id") is not None:
+        await asyncio.to_thread(
+            _post_message,
+            company_id=retro_metrics["company_id"],
+            sprint_id=sprint_id,
+            item_id=None,
+            from_name=SCRUM_MASTER_ROLE,
+            from_role=SCRUM_MASTER_ROLE,
+            to_role=None,
+            kind="retrospective",
+            body=_format_retrospective_summary(retro_metrics),
+        )
+
     # Burn retrospective engram to memory so future sprints can learn from it.
     if retro_metrics:
         try:
@@ -2100,6 +2114,58 @@ def _update_item_status(
 
         session.add(item)
         session.commit()
+
+
+# ---------------------------------------------------------------------------
+# The conversation between roles. Messages are claims: the record of who said
+# what to whom. The board and the AgentRun evidence decide what happened.
+# ---------------------------------------------------------------------------
+
+SCRUM_MASTER_ROLE = "ScrumMaster"
+MESSAGE_BODY_LIMIT = 4000
+
+
+def _message(
+    company_id: int,
+    sprint_id: int | None,
+    item_id: int | None,
+    from_name: str,
+    from_role: str,
+    to_role: str | None,
+    kind: str,
+    body: str,
+) -> AgentMessage:
+    return AgentMessage(
+        company_id=company_id,
+        sprint_id=sprint_id,
+        backlog_item_id=item_id,
+        from_name=from_name,
+        from_role=from_role,
+        to_role=to_role,
+        kind=kind,
+        body=body[:MESSAGE_BODY_LIMIT],
+    )
+
+
+def _post_message(**fields: Any) -> None:
+    """Record a message in its own transaction; never stops the task."""
+    try:
+        with Session(engine) as session:
+            session.add(_message(**fields))
+            session.commit()
+    except Exception as exc:  # noqa: BLE001 - The conversation record is best-effort.
+        logger.warning("Agent message not recorded (%s): %s", fields.get("kind"), exc)
+
+
+def _handoff_body(title: str, deliverable: str) -> str:
+    """What the developer hands to review: the files it declared, by path."""
+    paths = [entry["path"] for entry in parse_file_manifest(deliverable or "")]
+    if not paths:
+        return f'Delivered "{title}" for review (no files declared).'
+    listed = ", ".join(paths[:10]) + (
+        f" and {len(paths) - 10} more" if len(paths) > 10 else ""
+    )
+    return f'Delivered "{title}" for review: {len(paths)} file(s) declared — {listed}.'
 
 
 # ---------------------------------------------------------------------------
@@ -2805,6 +2871,35 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     _consult_architect, item, agent, sprint, prior_feedback
                 )
                 if architect_advice:
+                    # Recorded once the Architect has answered: a company with
+                    # no Architect asked no one.
+                    question = f'Before I implement "{item["title"]}", what design should I follow?'
+                    if prior_feedback:
+                        question += " The last review sent it back: " + " / ".join(
+                            str(text)[:300] for text in prior_feedback[:3]
+                        )
+                    await asyncio.to_thread(
+                        _post_message,
+                        company_id=sprint["company_id"],
+                        sprint_id=sprint["id"],
+                        item_id=item["id"],
+                        from_name=agent.get("name") or agent["role"],
+                        from_role=agent["role"],
+                        to_role=ARCHITECT_COMMENT_AUTHOR,
+                        kind="question",
+                        body=question,
+                    )
+                    await asyncio.to_thread(
+                        _post_message,
+                        company_id=sprint["company_id"],
+                        sprint_id=sprint["id"],
+                        item_id=item["id"],
+                        from_name=ARCHITECT_COMMENT_AUTHOR,
+                        from_role=ARCHITECT_COMMENT_AUTHOR,
+                        to_role=agent["role"],
+                        kind="answer",
+                        body=architect_advice,
+                    )
                     await asyncio.to_thread(
                         _update_item_status,
                         item["id"],
@@ -2960,6 +3055,17 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 "in_review",
                 comment_text=review_text,
                 comment_author=agent.get("name") or agent["role"],
+            )
+            await asyncio.to_thread(
+                _post_message,
+                company_id=sprint["company_id"],
+                sprint_id=sprint["id"],
+                item_id=item["id"],
+                from_name=agent.get("name") or agent["role"],
+                from_role=agent["role"],
+                to_role="QA",
+                kind="handoff",
+                body=_handoff_body(item["title"], deliverable),
             )
 
             await _publish_glassroom(
@@ -3258,6 +3364,18 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 item.status = "todo" if rework else "blocked"
                 item.updated_at = datetime.now(UTC)
                 session.add(item)
+                session.add(
+                    _message(
+                        sprint.company_id,
+                        sprint.id,
+                        item.id,
+                        DELIVERY_GATE_AUTHOR,
+                        DELIVERY_GATE_AUTHOR,
+                        (item.assignee or "Developer") if rework else SCRUM_MASTER_ROLE,
+                        "request" if rework else "escalation",
+                        comments[-1]["text"],
+                    )
+                )
                 session.commit()
                 if not rework:
                     quality_gate_blocked_ids.add(item.id)
@@ -3381,6 +3499,32 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     item.comments = comments
 
                 session.add(item)
+                session.add(
+                    _message(
+                        sprint.company_id,
+                        sprint.id,
+                        item.id,
+                        reviewer_dict["name"],
+                        reviewer_dict["role"],
+                        item.assignee or "Developer",
+                        "request" if needs_work else "decision",
+                        normalized_review[:2000],
+                    )
+                )
+                if needs_work and not autopilot_rework_allowed:
+                    session.add(
+                        _message(
+                            sprint.company_id,
+                            sprint.id,
+                            item.id,
+                            reviewer_dict["name"],
+                            reviewer_dict["role"],
+                            SCRUM_MASTER_ROLE,
+                            "escalation",
+                            f'"{item.title}" is blocked: still not accepted after '
+                            f"{previous_reworks} rework(s). Last review: {normalized_review[:500]}",
+                        )
+                    )
                 session.commit()
 
                 if needs_work:

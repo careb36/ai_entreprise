@@ -94,6 +94,24 @@ CREATE TABLE IF NOT EXISTS backlog_items (
 CREATE INDEX IF NOT EXISTS idx_backlog_sprint ON backlog_items(sprint_id);
 CREATE INDEX IF NOT EXISTS idx_backlog_status ON backlog_items(status);
 
+-- The conversation between the company's agents (claims, never evidence)
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    sprint_id INTEGER REFERENCES sprints(id) ON DELETE CASCADE,
+    backlog_item_id INTEGER REFERENCES backlog_items(id) ON DELETE CASCADE,
+    from_name VARCHAR(255) NOT NULL,
+    from_role VARCHAR(100) NOT NULL,
+    to_role VARCHAR(100),
+    kind VARCHAR(50) NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_messages_company ON agent_messages(company_id);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_sprint ON agent_messages(sprint_id);
+CREATE INDEX IF NOT EXISTS idx_agent_messages_item ON agent_messages(backlog_item_id);
+
 -- 4. LangGraph & Orchestration
 CREATE TABLE IF NOT EXISTS outbox_events (
     id SERIAL PRIMARY KEY,

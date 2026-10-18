@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Verdict } from '../components/Verdict'
+import { Conversation } from '../components/Conversation'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
@@ -209,6 +210,12 @@ export default function TaskDetails() {
       </div>
 
       {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
+
+      {companyId !== null && (
+        <div className="card p-4 mb-4">
+          <Conversation companyId={companyId} taskId={task.id} />
+        </div>
+      )}
 
       {/* Comments */}
       {task.comments.length > 0 && (

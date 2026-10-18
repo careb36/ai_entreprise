@@ -170,10 +170,21 @@ the LangGraph graph is only an optional kickoff conversation.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
    `APPROVED:` closes the task.
-7. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
+7. Each hand-over between roles is also recorded as an `AgentMessage`
+   (`agent_messages`), the company's conversation:
+   - the Developer's question to the Architect and its answer;
+   - the handoff to QA, listing the declared files;
+   - QA's decision or rework request, and the Verifier's;
+   - escalations to the ScrumMaster when a task is blocked;
+   - the ScrumMaster's retrospective to the team when a sprint closes.
+
+   Messages are claims: comments still drive the review loop, and the evidence
+   decides. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
+   `kind`) feeds the sprint's Conversation tab and the task page.
+8. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
    the sprint; its transcript is ingested as an `AgentRun` (`le-fabrique-graph`).
    A failed kickoff never blocks the sprint.
-8. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
+9. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
 
 ### Memory Architecture
 
@@ -218,6 +229,7 @@ Test files:
 | `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
+| `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
@@ -265,6 +277,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
 | `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
+| `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)

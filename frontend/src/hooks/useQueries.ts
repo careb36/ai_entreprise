@@ -8,6 +8,7 @@ import {
   isClientError,
   type AgentRunApprovalRequest,
   type AgentRunFilters,
+  type MessageFilters,
   type BacklogItem,
   type CompanyRole,
   type InitCompanyRequest,
@@ -37,6 +38,8 @@ export const QUERY_KEYS = {
     ['agent-runs', companyId, filters.producer ?? '', filters.status ?? '', filters.limit ?? 50,
       filters.external_ref ?? '', filters.sprint_id ?? ''] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
+  messages: (companyId: number, filters: MessageFilters = {}) =>
+    ['messages', companyId, filters.sprint_id ?? '', filters.backlog_item_id ?? '', filters.kind ?? '', filters.limit ?? ''] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
   approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
   auditVerification: (companyId: number | null, externalRef: string) =>
@@ -74,6 +77,16 @@ export function useAgentRuns(
     queryKey: QUERY_KEYS.agentRuns(companyId ?? 0, filters),
     queryFn: () => api.getAgentRuns(companyId!, filters),
     enabled: companyId !== null,
+  })
+}
+
+/** The conversation between roles; refreshed while the sprint is running. */
+export function useAgentMessages(companyId: number | null, filters: MessageFilters = {}, refreshMs: number | false = false) {
+  return useQuery({
+    queryKey: QUERY_KEYS.messages(companyId ?? 0, filters),
+    queryFn: () => api.getMessages(companyId!, filters),
+    enabled: companyId !== null,
+    refetchInterval: refreshMs,
   })
 }
 

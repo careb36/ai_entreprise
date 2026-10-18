@@ -207,7 +207,11 @@ replaces none of it.
    they work without Neo4j. The prompt labels review requests as reviewers'
    opinions, not facts. It leaves out the verifier's infrastructure messages
    and keeps its failed test runs, which are observations.
-2. Threads and messages between roles, persisted and visible.
+2. **Messages between roles, persisted and visible** (done). Each hand-over is
+   an `AgentMessage` with sender, recipient and kind (question, answer,
+   handoff, request, decision, escalation, retrospective). The sprint's
+   Conversation tab and the task page show them. Messages sit beside the
+   evidence and never replace it.
 3. Versioned procedures, and the retrospective that proposes and measures
    changes to them.
 4. Operational agents (support, and the other tasks people do today).

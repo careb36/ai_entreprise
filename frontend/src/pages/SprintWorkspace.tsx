@@ -1,7 +1,8 @@
 /**
- * Sprint page — one page per sprint at `/sprints/:id`, with four tabs:
- * Overview (`/sprints/:id`), Board (`/board`), Live (`/live`) and Analytics
- * (`/analytics`). An unknown tab falls back to Overview.
+ * Sprint page — one page per sprint at `/sprints/:id`, with five tabs:
+ * Overview (`/sprints/:id`), Board (`/board`), Live (`/live`), Conversation
+ * (`/conversation`) and Analytics (`/analytics`). An unknown tab falls back to
+ * Overview.
  *
  * The page validates the sprint before rendering any tab, and only remembers
  * it as the active sprint when it belongs to the selected company; a sprint of
@@ -16,6 +17,7 @@ import { useAgentStore } from '../store/agentStore'
 import GlassRoom from '../components/GlassRoom'
 import KanbanBoard from '../components/KanbanBoard'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
+import { Conversation } from '../components/Conversation'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import SprintOverview from './Dashboard'
 import { useDispatchSprint, usePauseSprint, useResumeSprint, useSprintBoard } from '../hooks/useQueries'
@@ -23,13 +25,14 @@ import { useToast } from '../store/toastStore'
 import { ApiError, errorDetail } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
 
-export const SPRINT_TABS = ['overview', 'board', 'live', 'analytics'] as const
+export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'analytics'] as const
 export type SprintTab = typeof SPRINT_TABS[number]
 
 const TAB_LABELS: Record<SprintTab, { key: string; defaultValue: string }> = {
   overview: { key: 'sprint.tabs.overview', defaultValue: 'Overview' },
   board: { key: 'sprint.tabs.board', defaultValue: 'Board' },
   live: { key: 'sprint.tabs.live', defaultValue: 'Live' },
+  conversation: { key: 'sprint.tabs.conversation', defaultValue: 'Conversation' },
   analytics: { key: 'sprint.tabs.analytics', defaultValue: 'Analytics' },
 }
 
@@ -277,6 +280,8 @@ export const SprintWorkspace: React.FC = () => {
             <BoardPanel sprintId={sprintId} />
           ) : tab === 'live' ? (
             <LivePanel sprintId={sprintId} />
+          ) : tab === 'conversation' ? (
+            <Conversation companyId={board.sprint.company_id} sprintId={sprintId} live={board.sprint.status === 'active'} />
           ) : tab === 'analytics' ? (
             <AnalyticsDashboard sprintId={sprintId} />
           ) : (

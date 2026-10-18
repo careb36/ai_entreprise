@@ -22,6 +22,7 @@ from routers import (
     auth_router,
     enterprise_router,
     github_router,
+    messages_router,
     sprint_router,
     support_router,
     workspace_router,
@@ -71,6 +72,7 @@ app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(support_router)
 app.include_router(github_router)
+app.include_router(messages_router)
 app.include_router(workspace_router)
 
 # Register exception handlers
