@@ -2180,11 +2180,16 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         )
 
             # 4. Save result and mark as in_review.
+            # Ensure the deliverable is persisted as a reviewable comment even if
+            # artifact normalization produced an empty payload.
+            review_text = (review_payload or deliverable or "").strip()
+            if not review_text:
+                review_text = "(no deliverable text produced)"
             await asyncio.to_thread(
                 _update_item_status,
                 item["id"],
                 "in_review",
-                comment_text=review_payload,
+                comment_text=review_text,
                 comment_author=agent.get("name") or agent["role"],
             )
 
