@@ -610,7 +610,7 @@ export default function CompanyNew() {
                   }}
                   className="text-sm text-gray-200 font-mono flex-1 text-left"
                 >
-                  📁 {dir.name}
+                  📁 {dir.path}
                 </button>
                 <button
                   type="button"
