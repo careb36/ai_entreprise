@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger("fabrique-events")
@@ -38,26 +38,26 @@ def build_event(
     *,
     event_type: str,
     role: str,
-    interaction_id: Optional[str] = None,
-    sprint_id: Optional[Any] = None,
-    task_id: Optional[Any] = None,
-    semantic_type: Optional[str] = None,
+    interaction_id: str | None = None,
+    sprint_id: Any | None = None,
+    task_id: Any | None = None,
+    semantic_type: str | None = None,
     semantic_version: int = 1,
     source: str = "backend",
-    agent: Optional[str] = None,
-    model: Optional[str] = None,
-    message: Optional[str] = None,
-    extra: Optional[Dict[str, Any]] = None,
+    agent: str | None = None,
+    model: str | None = None,
+    message: str | None = None,
+    extra: dict[str, Any] | None = None,
     require_sprint: bool = False,
     require_task: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a normalized event payload with required correlation fields.
 
     Missing-but-required fields are reported on the event itself as
     ``correlation_missing`` and logged at WARNING. We never drop the event —
     silent dropping is far worse for ops than a noisy event.
     """
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "event_id": str(uuid4()),
         "type": event_type,
         "semantic_type": semantic_type or event_type,
@@ -86,19 +86,24 @@ def build_event(
         required.append("task_id")
 
     missing = [
-        field for field in required
-        if payload.get(field) in (None, "", "unknown")
+        field for field in required if payload.get(field) in (None, "", "unknown")
     ]
     if missing:
         payload["correlation_missing"] = missing
         logger.warning(
             "event missing correlation fields: type=%s missing=%s role=%s sprint=%s task=%s",
-            event_type, missing, role, sprint_id, task_id,
+            event_type,
+            missing,
+            role,
+            sprint_id,
+            task_id,
         )
     return payload
 
 
-def ensure_envelope(event: Dict[str, Any], *, source: str = "backend") -> Dict[str, Any]:
+def ensure_envelope(
+    event: dict[str, Any], *, source: str = "backend"
+) -> dict[str, Any]:
     """Backfill missing envelope fields on a pre-built event dict.
 
     Used at the publish boundary so existing callers that built dicts manually
@@ -125,6 +130,8 @@ def ensure_envelope(event: Dict[str, Any], *, source: str = "backend") -> Dict[s
             event["correlation_missing"] = missing
         logger.debug(
             "event missing interaction_id at publish boundary: type=%s sprint=%s task=%s",
-            event.get("type"), event.get("sprint_id"), event.get("task_id"),
+            event.get("type"),
+            event.get("sprint_id"),
+            event.get("task_id"),
         )
     return event

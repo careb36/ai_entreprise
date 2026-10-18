@@ -25,13 +25,12 @@ Old rows are pruned by the existing janitor service.
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from database import engine
 from logging_config import logger
 
 
-def claim_event(event_key: Optional[str], subject: str) -> bool:
+def claim_event(event_key: str | None, subject: str) -> bool:
     """Claim *event_key* for *subject*. Return ``True`` if this is the first claim.
 
     If *event_key* is empty/None we cannot dedupe — log a warning and let the
@@ -39,7 +38,9 @@ def claim_event(event_key: Optional[str], subject: str) -> bool:
     composite key) when they care about exactly-once semantics.
     """
     if not event_key:
-        logger.debug("idempotency: missing event_key for subject=%s — skipping dedupe", subject)
+        logger.debug(
+            "idempotency: missing event_key for subject=%s — skipping dedupe", subject
+        )
         return True
 
     try:
@@ -51,14 +52,18 @@ def claim_event(event_key: Optional[str], subject: str) -> bool:
             )
             claimed = (result.rowcount or 0) > 0
         if not claimed:
-            logger.info("idempotency: dropping duplicate %s event_key=%s", subject, event_key)
+            logger.info(
+                "idempotency: dropping duplicate %s event_key=%s", subject, event_key
+            )
         return claimed
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Never block real work on a dedupe storage failure. Surface the issue
         # in logs so ops can act, but allow the consumer to proceed.
         logger.warning(
             "idempotency: claim failed for subject=%s event_key=%s err=%s — allowing through",
-            subject, event_key, exc,
+            subject,
+            event_key,
+            exc,
         )
         return True
 
@@ -80,10 +85,13 @@ def prune_expired(retention_days: int) -> int:
             )
             removed = int(result.rowcount or 0)
         if removed:
-            logger.info("idempotency: pruned %d processed_events rows older than %d day(s)",
-                        removed, retention_days)
+            logger.info(
+                "idempotency: pruned %d processed_events rows older than %d day(s)",
+                removed,
+                retention_days,
+            )
         return removed
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("idempotency: prune failed: %s", exc)
         return 0
 
@@ -92,7 +100,7 @@ async def run_retention_loop(
     retention_days: int,
     interval_seconds: int,
     *,
-    sleep: Optional[asyncio.AbstractEventLoop] = None,
+    sleep: asyncio.AbstractEventLoop | None = None,
 ) -> None:
     """Background loop that prunes expired ``processed_events`` rows.
 
@@ -108,6 +116,6 @@ async def run_retention_loop(
             await asyncio.to_thread(prune_expired, retention_days)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("idempotency: retention loop iteration failed: %s", exc)
         await asyncio.sleep(interval_seconds)

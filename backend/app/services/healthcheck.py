@@ -19,33 +19,31 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
-from sqlmodel import Session, text
-
 from database import engine, get_neo4j_driver
 from logging_config import logger
-
+from sqlmodel import Session, text
 
 _PROBE_TIMEOUT_SECONDS = 3.0
 
 
-def _ok(detail: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"status": "up"}
+def _ok(detail: str | None = None, **extra: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {"status": "up"}
     if detail:
         payload["detail"] = detail
     payload.update(extra)
     return payload
 
 
-def _down(reason: str, **extra: Any) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"status": "down", "reason": reason[:500]}
+def _down(reason: str, **extra: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {"status": "down", "reason": reason[:500]}
     payload.update(extra)
     return payload
 
 
-async def probe_nats(nats_client: Any) -> Dict[str, Any]:
+async def probe_nats(nats_client: Any) -> dict[str, Any]:
     if not nats_client:
         return _down("not_initialized")
     nc = getattr(nats_client, "nc", None)
@@ -53,7 +51,7 @@ async def probe_nats(nats_client: Any) -> Dict[str, Any]:
         return _down("not_connected")
     try:
         is_connected = bool(nc.is_connected)
-    except Exception as exc:  # defensive: SDK shape can change
+    except Exception as exc:  # noqa: BLE001  # defensive: SDK shape can change
         return _down(f"introspection_error: {exc}")
     if not is_connected:
         return _down("disconnected")
@@ -63,20 +61,20 @@ async def probe_nats(nats_client: Any) -> Dict[str, Any]:
     )
 
 
-def _sync_probe_postgres() -> Dict[str, Any]:
+def _sync_probe_postgres() -> dict[str, Any]:
     try:
         with Session(engine) as session:
             session.exec(text("SELECT 1")).first()
         return _ok()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return _down(f"{type(exc).__name__}: {exc}")
 
 
-async def probe_postgres() -> Dict[str, Any]:
+async def probe_postgres() -> dict[str, Any]:
     return await asyncio.to_thread(_sync_probe_postgres)
 
 
-def _sync_probe_neo4j() -> Dict[str, Any]:
+def _sync_probe_neo4j() -> dict[str, Any]:
     driver = None
     try:
         driver = get_neo4j_driver()
@@ -84,21 +82,21 @@ def _sync_probe_neo4j() -> Dict[str, Any]:
             record = session.run("RETURN 1 AS ok").single()
             ok = record and record.get("ok") == 1
             return _ok() if ok else _down("unexpected_response")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return _down(f"{type(exc).__name__}: {exc}")
     finally:
         if driver is not None:
             try:
                 driver.close()
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
 
-async def probe_neo4j() -> Dict[str, Any]:
+async def probe_neo4j() -> dict[str, Any]:
     return await asyncio.to_thread(_sync_probe_neo4j)
 
 
-async def probe_llm_proxy() -> Dict[str, Any]:
+async def probe_llm_proxy() -> dict[str, Any]:
     base_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100").rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS) as client:
@@ -107,18 +105,18 @@ async def probe_llm_proxy() -> Dict[str, Any]:
             return _down(f"http_{response.status_code}")
         try:
             body = response.json()
-        except Exception:
+        except Exception:  # noqa: BLE001
             body = {}
         models = body.get("models")
         return _ok(
             detail=body.get("status"),
             models_count=len(models) if isinstance(models, list) else None,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return _down(f"{type(exc).__name__}: {exc}")
 
 
-async def aggregate(nats_client: Any) -> Dict[str, Any]:
+async def aggregate(nats_client: Any) -> dict[str, Any]:
     """Run all probes concurrently and return a structured health document."""
     nats_result, postgres_result, neo4j_result, llm_result = await asyncio.gather(
         probe_nats(nats_client),

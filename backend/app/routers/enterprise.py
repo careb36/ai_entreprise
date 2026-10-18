@@ -512,8 +512,12 @@ _ROLE_RESPONSIBILITIES: dict[str, str] = {
 }
 
 
-def _build_template_prompt(role: str, seniority: str, specialty: str, persona: str) -> str:
-    responsibilities = _ROLE_RESPONSIBILITIES.get(role, f"Deliver high-quality work for the {role} discipline.")
+def _build_template_prompt(
+    role: str, seniority: str, specialty: str, persona: str
+) -> str:
+    responsibilities = _ROLE_RESPONSIBILITIES.get(
+        role, f"Deliver high-quality work for the {role} discipline."
+    )
     return (
         f"You are a {seniority} {role}. {responsibilities} "
         f"Communication style: {persona or 'professional, precise, collaborative'}."
@@ -521,7 +525,7 @@ def _build_template_prompt(role: str, seniority: str, specialty: str, persona: s
 
 
 @router.get("/agents", tags=["Enterprise"])
-async def list_agents(company_id: int, session: Session = Depends(get_session)):
+async def list_agents(company_id: int, session: Session = Depends(get_session)):  # noqa: B008
     """List all agents for a company."""
     service = CompanyService(session)
     try:
@@ -531,11 +535,15 @@ async def list_agents(company_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/agents", tags=["Enterprise"])
-async def create_agent(req: AgentCreateRequest, session: Session = Depends(get_session)):
+async def create_agent(
+    req: AgentCreateRequest, session: Session = Depends(get_session)
+):  # noqa: B008
     """Create a new agent configuration."""
     service = CompanyService(session)
     try:
-        return service.create_agent(req.company_id, req.model_dump(exclude={"company_id"}))
+        return service.create_agent(
+            req.company_id, req.model_dump(exclude={"company_id"})
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -544,13 +552,17 @@ async def create_agent(req: AgentCreateRequest, session: Session = Depends(get_s
 async def generate_agent_prompt(req: AgentPromptRequest):
     """Auto-generate a system prompt for an agent."""
     return {
-        "system_prompt": _build_template_prompt(req.role, req.seniority, req.specialty, req.persona),
+        "system_prompt": _build_template_prompt(
+            req.role, req.seniority, req.specialty, req.persona
+        ),
         "source": "template",
     }
 
 
 @router.patch("/agents/{agent_id}", tags=["Enterprise"])
-async def update_agent(agent_id: int, req: AgentUpdateRequest, session: Session = Depends(get_session)):
+async def update_agent(
+    agent_id: int, req: AgentUpdateRequest, session: Session = Depends(get_session)
+):  # noqa: B008
     """Update an existing agent configuration."""
     service = CompanyService(session)
     try:
@@ -561,7 +573,7 @@ async def update_agent(agent_id: int, req: AgentUpdateRequest, session: Session 
 
 
 @router.delete("/agents/{agent_id}", tags=["Enterprise"])
-async def delete_agent(agent_id: int, session: Session = Depends(get_session)):
+async def delete_agent(agent_id: int, session: Session = Depends(get_session)):  # noqa: B008
     """Delete an existing agent configuration."""
     service = CompanyService(session)
     try:

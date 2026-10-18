@@ -123,7 +123,7 @@ class CompanyService:
         sprint = Sprint(
             company_id=company.id,
             sprint_name="Sprint 0 — Foundations",
-            start_date=date.today().isoformat(),
+            start_date=date.today().isoformat(),  # noqa: DTZ011
             scope_size=default_scope_size,
             status="active",
             goal=plan.get("goal", f"Foundation sprint for {company_name}"),
@@ -259,7 +259,6 @@ class CompanyService:
             "ai_executive_summary": ai_summary,
         }
 
-
     def list_agents(self, company_id: int) -> list[dict[str, Any]]:
         """Return all configured agents for a company, with activity stats inlined."""
         company = self.session.get(Company, company_id)
@@ -278,7 +277,8 @@ class CompanyService:
     def _load_agent_activity(self, company_id: int) -> dict[str, dict[str, Any]]:
         """Aggregate audit_log into per-agent activity stats for the company."""
         sprint_ids = [
-            sid for (sid,) in self.session.exec(
+            sid
+            for (sid,) in self.session.exec(
                 select(Sprint.id).where(Sprint.company_id == company_id)
             ).all()
         ]
@@ -366,13 +366,25 @@ class CompanyService:
         if not agent:
             raise ValueError(f"Agent {agent_id} not found")
 
-        for field in ("name", "role", "persona", "seniority", "specialty", "model", "system_prompt", "token_budget"):
+        for field in (
+            "name",
+            "role",
+            "persona",
+            "seniority",
+            "specialty",
+            "model",
+            "system_prompt",
+            "token_budget",
+        ):
             if field not in payload:
                 continue
             value = payload[field]
             if field == "token_budget" and value is not None:
                 setattr(agent, field, int(value))
-            elif field in {"name", "role", "seniority", "specialty", "model"} and value is not None:
+            elif (
+                field in {"name", "role", "seniority", "specialty", "model"}
+                and value is not None
+            ):
                 setattr(agent, field, str(value).strip())
             else:
                 setattr(agent, field, value)
@@ -414,7 +426,8 @@ class CompanyService:
             "model": agent.model,
             "system_prompt": agent.system_prompt,
             "token_budget": agent.token_budget,
-            "activity": stats or {
+            "activity": stats
+            or {
                 "total_tasks": 0,
                 "last_run_at": None,
                 "total_cost_usd": 0.0,

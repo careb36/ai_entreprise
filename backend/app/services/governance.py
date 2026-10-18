@@ -32,8 +32,8 @@ Behavior
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence
 
 from config import settings
 from logging_config import logger
@@ -41,14 +41,14 @@ from logging_config import logger
 
 @dataclass(frozen=True)
 class GateDecision:
-    status: str            # "allow" | "sandbox" | "block"
-    path: str              # final path to write to (may be redirected)
+    status: str  # "allow" | "sandbox" | "block"
+    path: str  # final path to write to (may be redirected)
     original_path: str
     reason: str
-    matched_pattern: Optional[str] = None
+    matched_pattern: str | None = None
 
 
-def _split_csv(value: Optional[str]) -> List[str]:
+def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [part.strip() for part in value.split(",") if part.strip()]
@@ -58,7 +58,7 @@ def _normalize(path: str) -> str:
     return (path or "").strip().lstrip("./").replace("\\", "/")
 
 
-def _matches_protected(path: str, patterns: Sequence[str]) -> Optional[str]:
+def _matches_protected(path: str, patterns: Sequence[str]) -> str | None:
     """Return the first pattern that matches *path*.
 
     Patterns can be:
@@ -88,12 +88,16 @@ def _matches_protected(path: str, patterns: Sequence[str]) -> Optional[str]:
     return None
 
 
-def get_protected_patterns() -> List[str]:
+def get_protected_patterns() -> list[str]:
     return _split_csv(getattr(settings, "SELF_IMPROVEMENT_PROTECTED_PATHS", ""))
 
 
-def get_sandbox_root(override: Optional[str] = None) -> Optional[str]:
-    sandbox = override if override is not None else (getattr(settings, "SELF_IMPROVEMENT_SANDBOX_ROOT", "") or "")
+def get_sandbox_root(override: str | None = None) -> str | None:
+    sandbox = (
+        override
+        if override is not None
+        else (getattr(settings, "SELF_IMPROVEMENT_SANDBOX_ROOT", "") or "")
+    )
     return sandbox.strip() or None
 
 
@@ -101,8 +105,8 @@ def classify_artifact(
     path: str,
     *,
     is_self_improvement: bool,
-    sandbox_root: Optional[str] = None,
-    extra_protected: Optional[Iterable[str]] = None,
+    sandbox_root: str | None = None,
+    extra_protected: Iterable[str] | None = None,
 ) -> GateDecision:
     """Decide what to do with a proposed artifact write.
 
@@ -133,7 +137,9 @@ def classify_artifact(
         sandboxed = f"{sandbox.rstrip('/')}/{norm}"
         logger.info(
             "governance: redirecting protected path %s → %s (matched %s)",
-            norm, sandboxed, matched,
+            norm,
+            sandboxed,
+            matched,
         )
         return GateDecision(
             status="sandbox",
@@ -143,10 +149,13 @@ def classify_artifact(
             matched_pattern=matched,
         )
 
-    if is_self_improvement and getattr(settings, "SELF_IMPROVEMENT_REQUIRE_APPROVAL", True):
+    if is_self_improvement and getattr(
+        settings, "SELF_IMPROVEMENT_REQUIRE_APPROVAL", True
+    ):
         logger.warning(
             "governance: BLOCK self-improvement write to protected path %s (matched %s)",
-            norm, matched,
+            norm,
+            matched,
         )
         return GateDecision(
             status="block",
@@ -161,7 +170,8 @@ def classify_artifact(
     # cannot accidentally overwrite the factory runtime.
     logger.warning(
         "governance: BLOCK third-party write to protected path %s (matched %s)",
-        norm, matched,
+        norm,
+        matched,
     )
     return GateDecision(
         status="block",
@@ -176,15 +186,15 @@ def classify_artifacts(
     artifacts: Sequence[dict],
     *,
     is_self_improvement: bool,
-    sandbox_root: Optional[str] = None,
-) -> List[tuple[GateDecision, dict]]:
+    sandbox_root: str | None = None,
+) -> list[tuple[GateDecision, dict]]:
     """Classify every artifact in a workspace.generate batch.
 
     Returns a list of ``(decision, artifact)`` tuples in the original order.
     The artifact dict is returned untouched; callers are responsible for
     rewriting ``path`` based on ``decision.path`` and dropping blocked entries.
     """
-    out: List[tuple[GateDecision, dict]] = []
+    out: list[tuple[GateDecision, dict]] = []
     for art in artifacts:
         decision = classify_artifact(
             str(art.get("path", "")),

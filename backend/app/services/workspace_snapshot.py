@@ -24,7 +24,7 @@ import os
 import re
 import threading
 import time
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from logging_config import setup_logger
 
@@ -35,59 +35,183 @@ logger = setup_logger("fabrique-workspace-snapshot")
 # Tunables — overridable via env without redeploy.
 # ---------------------------------------------------------------------------
 
-WORKSPACE_SNAPSHOT_ENABLED = os.getenv("WORKSPACE_SNAPSHOT_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
-SNAPSHOT_CACHE_TTL_SECONDS = max(10, int(os.getenv("WORKSPACE_SNAPSHOT_CACHE_TTL", "60")))
+WORKSPACE_SNAPSHOT_ENABLED = os.getenv(
+    "WORKSPACE_SNAPSHOT_ENABLED", "true"
+).lower() in {"1", "true", "yes", "on"}
+SNAPSHOT_CACHE_TTL_SECONDS = max(
+    10, int(os.getenv("WORKSPACE_SNAPSHOT_CACHE_TTL", "60"))
+)
 SNAPSHOT_MAX_FILES = max(20, int(os.getenv("WORKSPACE_SNAPSHOT_MAX_FILES", "4000")))
 SNAPSHOT_TOP_RELEVANT = max(3, int(os.getenv("WORKSPACE_SNAPSHOT_TOP_RELEVANT", "5")))
-SNAPSHOT_LINES_PER_FILE = max(20, int(os.getenv("WORKSPACE_SNAPSHOT_LINES_PER_FILE", "60")))
-EVIDENCE_LINES_PER_FILE = max(20, int(os.getenv("WORKSPACE_EVIDENCE_LINES_PER_FILE", "80")))
-EVIDENCE_MAX_FILE_BYTES = max(2048, int(os.getenv("WORKSPACE_EVIDENCE_MAX_FILE_BYTES", "65536")))
+SNAPSHOT_LINES_PER_FILE = max(
+    20, int(os.getenv("WORKSPACE_SNAPSHOT_LINES_PER_FILE", "60"))
+)
+EVIDENCE_LINES_PER_FILE = max(
+    20, int(os.getenv("WORKSPACE_EVIDENCE_LINES_PER_FILE", "80"))
+)
+EVIDENCE_MAX_FILE_BYTES = max(
+    2048, int(os.getenv("WORKSPACE_EVIDENCE_MAX_FILE_BYTES", "65536"))
+)
 
 
-_IGNORED_DIRS = frozenset({
-    ".git", ".hg", ".svn",
-    "node_modules", "bower_components",
-    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache",
-    ".venv", "venv", "env", ".tox",
-    "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache",
-    "target", "vendor",
-    ".idea", ".vscode",
-    ".fabrique",  # our own runtime artifacts
-})
+_IGNORED_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        "bower_components",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".venv",
+        "venv",
+        "env",
+        ".tox",
+        "dist",
+        "build",
+        "out",
+        ".next",
+        ".nuxt",
+        ".turbo",
+        ".cache",
+        "target",
+        "vendor",
+        ".idea",
+        ".vscode",
+        ".fabrique",  # our own runtime artifacts
+    }
+)
 
-_INTERESTING_EXTS = frozenset({
-    ".py", ".pyi",
-    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-    ".go", ".rs", ".java", ".kt", ".rb", ".php", ".cs", ".swift",
-    ".sql", ".graphql", ".proto",
-    ".yaml", ".yml", ".json", ".toml",
-    ".md", ".rst",
-    ".sh", ".bash",
-    ".tf", ".hcl",
-    ".css", ".scss",
-    ".html",
-})
+_INTERESTING_EXTS = frozenset(
+    {
+        ".py",
+        ".pyi",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".rb",
+        ".php",
+        ".cs",
+        ".swift",
+        ".sql",
+        ".graphql",
+        ".proto",
+        ".yaml",
+        ".yml",
+        ".json",
+        ".toml",
+        ".md",
+        ".rst",
+        ".sh",
+        ".bash",
+        ".tf",
+        ".hcl",
+        ".css",
+        ".scss",
+        ".html",
+    }
+)
 
-_SIGNAL_BASENAMES = frozenset({
-    "README.md", "README.rst", "README",
-    "CLAUDE.md", "ARCHITECTURE.md", "CONTRIBUTING.md",
-    "package.json", "tsconfig.json",
-    "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile",
-    "go.mod", "go.sum",
-    "Cargo.toml",
-    "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
-    "Makefile",
-})
+_SIGNAL_BASENAMES = frozenset(
+    {
+        "README.md",
+        "README.rst",
+        "README",
+        "CLAUDE.md",
+        "ARCHITECTURE.md",
+        "CONTRIBUTING.md",
+        "package.json",
+        "tsconfig.json",
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        "Pipfile",
+        "go.mod",
+        "go.sum",
+        "Cargo.toml",
+        "Dockerfile",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "Makefile",
+    }
+)
 
-_STOPWORDS = frozenset({
-    "the", "a", "an", "and", "or", "but", "of", "to", "for", "in", "on", "at",
-    "by", "with", "from", "this", "that", "is", "are", "be", "as", "it", "its",
-    "task", "build", "create", "add", "implement", "update", "fix", "make",
-    "use", "via", "into", "via", "new", "all", "any", "must", "should", "can",
-    "will", "have", "has", "should", "ensure", "support", "handle", "plus",
-    "del", "la", "el", "los", "las", "y", "o", "para", "que", "con", "por",
-    "una", "un", "se", "lo", "del",
-})
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "of",
+        "to",
+        "for",
+        "in",
+        "on",
+        "at",
+        "by",
+        "with",
+        "from",
+        "this",
+        "that",
+        "is",
+        "are",
+        "be",
+        "as",
+        "it",
+        "its",
+        "task",
+        "build",
+        "create",
+        "add",
+        "implement",
+        "update",
+        "fix",
+        "make",
+        "use",
+        "via",
+        "into",
+        "new",
+        "all",
+        "any",
+        "must",
+        "should",
+        "can",
+        "will",
+        "have",
+        "has",
+        "ensure",
+        "support",
+        "handle",
+        "plus",
+        "del",
+        "la",
+        "el",
+        "los",
+        "las",
+        "y",
+        "o",
+        "para",
+        "que",
+        "con",
+        "por",
+        "una",
+        "un",
+        "se",
+        "lo",
+    }
+)
 
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 
@@ -112,7 +236,11 @@ def _list_workspace_files(workspace_root: str) -> list[str]:
     try:
         for dirpath, dirnames, filenames in os.walk(workspace_root, followlinks=False):
             # Prune ignored dirs in-place so os.walk does not descend.
-            dirnames[:] = [d for d in dirnames if d not in _IGNORED_DIRS and not d.startswith(".terraform")]
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d not in _IGNORED_DIRS and not d.startswith(".terraform")
+            ]
             rel_dir = os.path.relpath(dirpath, workspace_root)
             for name in filenames:
                 if name.startswith(".") and name not in _SIGNAL_BASENAMES:
@@ -134,7 +262,7 @@ def _list_workspace_files(workspace_root: str) -> list[str]:
     return files
 
 
-def invalidate_cache(workspace_root: Optional[str] = None) -> None:
+def invalidate_cache(workspace_root: str | None = None) -> None:
     """Drop cached tree for a workspace (or all). Useful for tests."""
     with _cache_lock:
         if workspace_root is None:
@@ -146,6 +274,7 @@ def invalidate_cache(workspace_root: Optional[str] = None) -> None:
 # ---------------------------------------------------------------------------
 # Relevance scoring
 # ---------------------------------------------------------------------------
+
 
 def _tokenize(text: str) -> set[str]:
     if not text:
@@ -189,7 +318,9 @@ def _score_path(path: str, task_tokens: set[str]) -> int:
     return score
 
 
-def _read_excerpt(abs_path: str, max_lines: int, max_bytes: int = EVIDENCE_MAX_FILE_BYTES) -> tuple[Optional[str], int]:
+def _read_excerpt(
+    abs_path: str, max_lines: int, max_bytes: int = EVIDENCE_MAX_FILE_BYTES
+) -> tuple[str | None, int]:
     """Read first ``max_lines`` of a file; return (excerpt, total_byte_size).
 
     Returns (None, 0) if the file is unreadable. Empty file yields ("", 0)
@@ -209,7 +340,9 @@ def _read_excerpt(abs_path: str, max_lines: int, max_bytes: int = EVIDENCE_MAX_F
 
     lines = chunk.splitlines()
     if len(lines) > max_lines:
-        excerpt = "\n".join(lines[:max_lines]) + f"\n… [+{len(lines) - max_lines} more lines]"
+        excerpt = (
+            "\n".join(lines[:max_lines]) + f"\n… [+{len(lines) - max_lines} more lines]"
+        )
     else:
         excerpt = "\n".join(lines)
     if size > max_bytes:
@@ -221,10 +354,11 @@ def _read_excerpt(abs_path: str, max_lines: int, max_bytes: int = EVIDENCE_MAX_F
 # Public API — snapshot for execution
 # ---------------------------------------------------------------------------
 
+
 def build_task_snapshot(
     task_title: str,
     task_description: str,
-    workspace_root: Optional[str],
+    workspace_root: str | None,
     *,
     max_chars: int = 4500,
 ) -> str:
@@ -241,12 +375,12 @@ def build_task_snapshot(
 
     # Always include high-signal top-level files even if they did not match.
     pinned: list[str] = [
-        f for f in files
-        if "/" not in f and os.path.basename(f) in _SIGNAL_BASENAMES
+        f for f in files if "/" not in f and os.path.basename(f) in _SIGNAL_BASENAMES
     ]
 
     candidates = [
-        f for f in files
+        f
+        for f in files
         if os.path.splitext(f)[1].lower() in _INTERESTING_EXTS
         or os.path.basename(f) in _SIGNAL_BASENAMES
     ]
@@ -312,8 +446,9 @@ def build_task_snapshot(
 # Public API — evidence for QA review
 # ---------------------------------------------------------------------------
 
+
 def read_artifact_evidence(
-    workspace_root: Optional[str],
+    workspace_root: str | None,
     artifact_paths: Iterable[str],
     *,
     max_total_chars: int = 4500,
@@ -358,7 +493,9 @@ def read_artifact_evidence(
         except OSError:
             exists = False
         if not exists:
-            parts.append(f"✗ MISSING — `{rel}` (no file on disk; deliverable claimed it would exist)")
+            parts.append(
+                f"✗ MISSING — `{rel}` (no file on disk; deliverable claimed it would exist)"
+            )
             continue
         excerpt, size = _read_excerpt(abs_path, max_lines=EVIDENCE_LINES_PER_FILE)
         if excerpt is None:
@@ -375,5 +512,7 @@ def read_artifact_evidence(
 
     rendered = "\n".join(parts).strip()
     if len(rendered) > max_total_chars:
-        rendered = rendered[: max_total_chars - 40].rstrip() + "\n… [evidence truncated]"
+        rendered = (
+            rendered[: max_total_chars - 40].rstrip() + "\n… [evidence truncated]"
+        )
     return rendered
