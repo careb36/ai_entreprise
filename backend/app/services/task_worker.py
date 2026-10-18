@@ -18,6 +18,7 @@ Workflow per task:
 
 import asyncio
 import functools
+import hashlib
 import json
 import os
 import re
@@ -40,14 +41,17 @@ from models import (
     Sprint,
 )
 from nats_client import NATSClient
+from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
+from services import agent_run_service
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
     ACTION_QA_REVIEW,
     ARCHITECT_COMMENT_AUTHOR,
     KPI_ROLE_ARCHITECT,
+    VERDICT_REFUTED,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -59,6 +63,7 @@ from services.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
 )
+from services.verification import evaluate_workspace_writes, verify_agent_run
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -165,8 +170,43 @@ ALLOWED_ARTIFACT_EXTENSIONS = {
     ".tsx",
     ".jsx",
     ".css",
+    ".scss",
     ".html",
+    ".sql",
+    ".sh",
+    ".go",
+    ".java",
+    ".kt",
+    ".rs",
+    ".rb",
+    ".php",
+    ".cs",
+    ".vue",
+    ".svelte",
+    ".xml",
+    ".ini",
+    ".cfg",
+    ".graphql",
 }
+
+# Fenced block whose info string carries ``path=<relative path>``, e.g.
+# ```python path=src/auth/login.py
+_MANIFEST_BLOCK = re.compile(
+    r"^```(?P<info>[^\n`]*\bpath=[^\n`]*)\n(?P<body>.*?)^```[ \t]*$",
+    flags=re.DOTALL | re.MULTILINE,
+)
+_MANIFEST_PATH = re.compile(r"""\bpath=(?:"([^"]+)"|'([^']+)'|(\S+))""")
+
+FILE_MANIFEST_INSTRUCTIONS = (
+    "\n\n## Output format for files\n"
+    "When your deliverable creates or changes files, write each file in full as its own "
+    "fenced code block whose opening line carries the path relative to the project root, "
+    "for example:\n\n"
+    "```python path=src/example/module.py\n<entire file content>\n```\n\n"
+    "Use one block per file, give the complete content (not a diff or an excerpt), and "
+    "keep explanations outside the blocks. Files are written to the project exactly as "
+    "given."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +390,7 @@ def _execute_task(
         f"Priority: {item.get('priority', 'medium')}\n\n"
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
+        f"{FILE_MANIFEST_INSTRUCTIONS}"
     )
 
     if memory_context:
@@ -570,11 +611,13 @@ def _sanitize_deliverable_text(deliverable: str) -> str:
 
 
 def _resolve_workspace_root(company_id: int) -> str | None:
-    """Best-effort lookup of a writable workspace root for artifact generation."""
-    explicit = os.getenv("AGENT_WORKSPACE_ROOT")
-    if explicit:
-        return explicit
+    """
+    Return where this company's artifacts should be written.
 
+    The company's discovered project wins; ``AGENT_WORKSPACE_ROOT`` is only a
+    fallback for companies without one (e.g. self-improvement sprints that
+    work on this repository).
+    """
     with Session(engine) as session:
         discovery = session.exec(
             select(ProjectDiscovery)
@@ -584,7 +627,7 @@ def _resolve_workspace_root(company_id: int) -> str | None:
         if discovery and discovery.project_path:
             return discovery.project_path
 
-    return None
+    return os.getenv("AGENT_WORKSPACE_ROOT") or None
 
 
 def _sanitize_relative_path(path: str) -> str | None:
@@ -643,6 +686,29 @@ def _extract_artifact_targets(
         dedup.append(a)
 
     return dedup
+
+
+def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
+    """
+    Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
+
+    Each block becomes one ``{"path", "content"}`` entry with its own content.
+    Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
+    the same path appears twice the last block wins, keeping the position of
+    the first.  Returns ``[]`` when the answer declares no files.
+    """
+    files: dict[str, str] = {}
+    for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
+        match = _MANIFEST_PATH.search(block.group("info"))
+        if not match:
+            continue
+        rel = _sanitize_relative_path(next(g for g in match.groups() if g))
+        if not rel:
+            continue
+        if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
+            continue
+        files[rel] = block.group("body")
+    return [{"path": path, "content": content} for path, content in files.items()]
 
 
 def _build_review_payload(
@@ -1818,6 +1884,173 @@ def _update_item_status(
 # ---------------------------------------------------------------------------
 
 
+TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
+
+
+def _sha256_text(content: str) -> str:
+    return hashlib.sha256((content or "").encode("utf-8")).hexdigest()
+
+
+def _summarize_deliverable(deliverable: str, limit: int = 500) -> str:
+    """The agent's prose outside the file blocks: its own account of the work."""
+    prose = _MANIFEST_BLOCK.sub("", deliverable or "").strip()
+    return prose[:limit]
+
+
+def _record_task_run(
+    item: dict[str, Any],
+    agent: dict[str, Any],
+    sprint: dict[str, Any],
+    deliverable: str,
+    targets: list[dict[str, str]],
+    evidence: dict[str, Any] | None,
+) -> tuple[int, str] | None:
+    """
+    Ingest the deliverable as an ``AgentRun`` and verify it deterministically.
+
+    The claims are what the agent produced (declared paths, its summary); the
+    evidence is what the daemon observed on disk.  Returns ``(run_id, verdict)``
+    or ``None`` when ingestion fails — recording never breaks the task flow.
+    """
+    payload = AgentRunCreate(
+        company_id=sprint["company_id"],
+        external_ref=f"task-{item['id']}",
+        producer=TASK_WORKER_PRODUCER,
+        model=agent.get("model") or None,
+        agent_role=agent.get("role"),
+        subject={
+            "sprint_id": sprint["id"],
+            "backlog_item_id": item["id"],
+            "title": item.get("title"),
+        },
+        claims={
+            "files": [target["path"] for target in targets],
+            "summary": _summarize_deliverable(deliverable),
+        },
+        artifact=deliverable or "",
+        finished_at=datetime.now(UTC),
+    )
+    try:
+        with Session(engine) as session:
+            run, _created = agent_run_service.ingest_agent_run(session, payload)
+            session.commit()
+            verification = verify_agent_run(session, run, evidence)
+            return run.id, verification.verdict
+    except Exception as e:  # noqa: BLE001 - Evidence recording must not block delivery.
+        logger.warning("AgentRun recording failed for item=%s: %s", item.get("id"), e)
+        return None
+
+
+def _delivery_comment(
+    targets: list[dict[str, str]],
+    evidence: dict[str, Any] | None,
+    recorded: tuple[int, str] | None,
+) -> str:
+    run_note = f" — evidence run #{recorded[0]} ({recorded[1]})" if recorded else ""
+    outcome, observation = evaluate_workspace_writes(
+        [target["path"] for target in targets], evidence
+    )
+    if outcome == "pass":
+        return f"Delivered to {(evidence or {}).get('workspace_root')}: {observation}{run_note}"
+    if outcome == VERDICT_REFUTED:
+        return f"Delivery refuted: {observation}{run_note}"
+    return f"Delivery unconfirmed: {observation}{run_note}"
+
+
+async def _deliver_artifacts(
+    nats_client: NATSClient,
+    item: dict[str, Any],
+    agent: dict[str, Any],
+    sprint: dict[str, Any],
+    deliverable: str,
+) -> str:
+    """
+    Write the agent's files into the company's project and record the outcome.
+
+    Files come from the agent's ``path=`` manifest, or — when it declared none —
+    from file names in the task text.  The daemon is asked with a NATS request
+    and reports, per file, the sha256 of the bytes it read back from disk; the
+    worker compares that with the sha256 of the content it sent.  Returns the
+    payload for QA review.
+    """
+    targets = parse_file_manifest(deliverable)
+    if not targets:
+        targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
+    review_payload = _build_review_payload(deliverable, targets)
+
+    evidence: dict[str, Any] | None = None
+    if targets:
+        workspace_root = await asyncio.to_thread(
+            _resolve_workspace_root, sprint["company_id"]
+        )
+        evidence = {
+            "workspace_root": workspace_root,
+            "expected": {t["path"]: _sha256_text(t["content"]) for t in targets},
+            "workspace_writes": None,
+        }
+        if not workspace_root:
+            evidence["reason"] = "workspace path not configured"
+        else:
+            try:
+                reply = await nats_client.request(
+                    "workspace.generate",
+                    {
+                        "workspace_root": workspace_root,
+                        "files": targets,
+                        "interaction_id": f"task-{item['id']}",
+                        "sprint_id": sprint["id"],
+                    },
+                    timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
+                )
+                writes = reply.get("files") if isinstance(reply, dict) else None
+                evidence["workspace_writes"] = (
+                    writes if isinstance(writes, list) else None
+                )
+                if evidence["workspace_writes"] is None:
+                    evidence["reason"] = "the workspace daemon sent no per-file results"
+            except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
+                evidence["reason"] = (
+                    f"the workspace daemon did not reply ({type(e).__name__})"
+                )
+                logger.warning(
+                    "Workspace write request failed for item=%s: %s", item["id"], e
+                )
+
+    recorded = await asyncio.to_thread(
+        _record_task_run, item, agent, sprint, deliverable, targets, evidence
+    )
+
+    if targets:
+        comment = _delivery_comment(targets, evidence, recorded)
+        await asyncio.to_thread(
+            _update_item_status,
+            item["id"],
+            "in_progress",
+            comment_text=comment,
+            comment_author="System",
+        )
+        await _publish_glassroom(
+            nats_client,
+            sprint["id"],
+            {
+                "type": "status",
+                "semantic_type": "task.artifact_delivery",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "artifact_delivery",
+                "task": item["title"],
+                "agent_run_id": recorded[0] if recorded else None,
+                "verdict": recorded[1] if recorded else None,
+                "message": f"🧱 {comment}",
+            },
+        )
+
+    return review_payload
+
+
 async def process_backlog_tasks(nats_client: NATSClient) -> None:
     """
     Background coroutine that subscribes to ``task.assign`` and processes
@@ -2116,75 +2349,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
-            artifact_targets = await asyncio.to_thread(
-                _extract_artifact_targets, item, deliverable
+            review_payload = await _deliver_artifacts(
+                nats_client, item, agent, sprint, deliverable
             )
-            review_payload = await asyncio.to_thread(
-                _build_review_payload, deliverable, artifact_targets
-            )
-            if artifact_targets:
-                workspace_root = await asyncio.to_thread(
-                    _resolve_workspace_root, sprint["company_id"]
-                )
-                if not workspace_root:
-                    await asyncio.to_thread(
-                        _update_item_status,
-                        item["id"],
-                        "in_progress",
-                        comment_text="Artifact materialization skipped: workspace path not configured",
-                        comment_author="System",
-                    )
-                    logger.warning(
-                        "Artifact materialization skipped for item=%s: missing workspace root",
-                        item["id"],
-                    )
-                else:
-                    try:
-                        await nats_client.publish(
-                            "workspace.generate",
-                            {
-                                "workspace_root": workspace_root,
-                                "files": artifact_targets,
-                                "interaction_id": f"task-{item['id']}",
-                                "sprint_id": sprint["id"],
-                            },
-                        )
-                        await asyncio.to_thread(
-                            _update_item_status,
-                            item["id"],
-                            "in_progress",
-                            comment_text=f"Artifact materialization requested for: {', '.join(a['path'] for a in artifact_targets)}",
-                            comment_author="System",
-                        )
-                        await _publish_glassroom(
-                            nats_client,
-                            sprint["id"],
-                            {
-                                "type": "status",
-                                "semantic_type": "task.artifact_generation",
-                                "source": "task_worker",
-                                "agent": "System",
-                                "role": "System",
-                                "task_id": item["id"],
-                                "task_status": "in_progress",
-                                "phase": "artifact_generation",
-                                "task": item["title"],
-                                "message": f"🧱 Workspace artifact generation requested for: {item['title']}",
-                            },
-                        )
-                    except Exception as e:  # noqa: BLE001 - Record command failure and preserve the task workflow.
-                        await asyncio.to_thread(
-                            _update_item_status,
-                            item["id"],
-                            "in_progress",
-                            comment_text=f"Artifact materialization request failed: {str(e)[:240]}",
-                            comment_author="System",
-                        )
-                        logger.warning(
-                            "Artifact materialization request failed for item=%s: %s",
-                            item["id"],
-                            e,
-                        )
 
             # 4. Save result and mark as in_review.
             # Ensure the deliverable is persisted as a reviewable comment even if

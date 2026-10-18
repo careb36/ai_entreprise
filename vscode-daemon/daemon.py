@@ -93,29 +93,40 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         files:          List of dicts with ``path`` (relative) and ``content`` keys.
 
     Returns:
-        List of ``{"path": <absolute>, "status": "written"}`` dicts.
+        One dict per file: ``path`` (as requested), ``status`` (``written``,
+        ``skipped_protected`` or ``rejected``) and, for written files,
+        ``absolute_path``, ``bytes`` and ``sha256`` of the bytes read back from
+        disk after writing — an observation, not an echo of the request.
     """
     results = []
     workspace_root = Path(workspace_path).resolve()
     for file_info in files:
-        target_path = _resolve_target_path(workspace_path, file_info.get("path", ""))
+        requested = file_info.get("path", "")
+        target_path = _resolve_target_path(workspace_path, requested)
         content = file_info.get("content", "")
         overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
 
-        if not target_path:
-            results.append({"path": file_info.get("path", ""), "status": "rejected"})
-            logger.warning("Rejected unsafe file path: %s", file_info.get("path", ""))
+        if not target_path or target_path == workspace_root:
+            results.append({"path": requested, "status": "rejected"})
+            logger.warning("Rejected unsafe file path: %s", requested)
             continue
 
         if _is_protected_existing_doc(workspace_root, target_path) and not overwrite_existing:
-            results.append({"path": str(target_path), "status": "skipped_protected"})
+            results.append({"path": requested, "status": "skipped_protected", "absolute_path": str(target_path)})
             logger.warning("Skipped protected document overwrite: %s", target_path)
             continue
 
         os.makedirs(target_path.parent, exist_ok=True)
-        with open(target_path, "w") as f:
+        with open(target_path, "w", encoding="utf-8", newline="") as f:
             f.write(content)
-        results.append({"path": str(target_path), "status": "written"})
+        on_disk = target_path.read_bytes()
+        results.append({
+            "path": requested,
+            "status": "written",
+            "absolute_path": str(target_path),
+            "bytes": len(on_disk),
+            "sha256": hashlib.sha256(on_disk).hexdigest(),
+        })
         logger.info(f"File written: {target_path}")
     return results
 
@@ -228,11 +239,34 @@ async def handle_msg(nc, msg):
     if subject == "workspace.generate":
         # Write files
         files = data.get("files", [])
-        write_results = write_files(workspace_path, files)
-
-        response = {"ok": True, "files": len(write_results), "path": workspace_path}
+        try:
+            write_results = write_files(workspace_path, files)
+            response = {
+                "ok": all(r["status"] == "written" for r in write_results),
+                "workspace_root": workspace_path,
+                "files": write_results,
+            }
+        except OSError as e:
+            logger.error("Writing files under %s failed: %s", workspace_path, e)
+            response = {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
         if reply_to:
             await nc.publish(reply_to, json.dumps(response).encode())
+
+        sprint_id = data.get("sprint_id")
+        if sprint_id is not None:
+            written = [r["path"] for r in response["files"] if r["status"] == "written"]
+            others = [f"{r['path']} ({r['status']})" for r in response["files"] if r["status"] != "written"]
+            summary = f"📝 Wrote {len(written)} file(s): {', '.join(written) or '—'}"
+            if others:
+                summary += f"; not written: {', '.join(others)}"
+            if response.get("error"):
+                summary += f"; error: {response['error']}"
+            await nc.publish(f"glassroom.{sprint_id}", json.dumps({
+                "agent": "System",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "content": summary,
+                "type": "status",
+            }).encode())
             
     elif subject == "workspace.execute":
         cmd = data.get("command")

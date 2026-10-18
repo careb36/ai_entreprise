@@ -125,7 +125,9 @@ services:
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
-      PROJECTS_ROOT_CONTAINER: /home/caro
+      # Projects are mounted at the same path as on the host, so a path saved by
+      # project discovery is valid for the backend and the daemon alike.
+      PROJECTS_ROOT_CONTAINER: ${PROJECTS_ROOT:-${HOME}}
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
@@ -138,7 +140,7 @@ services:
       - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:rw
-      - ${PROJECTS_ROOT:-/home/caro}:/home/caro:rw
+      - ${PROJECTS_ROOT:-${HOME}}:${PROJECTS_ROOT:-${HOME}}:rw
     networks:
       - factory-network
     depends_on:
@@ -164,7 +166,7 @@ services:
     command: sh -lc "pip install --no-cache-dir nats-py==2.3.1 && python /app/daemon.py"
     volumes:
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}
-      - ${PROJECTS_ROOT:-/Users/carolinar.pereira/DEV}:/projects
+      - ${PROJECTS_ROOT:-${HOME}}:${PROJECTS_ROOT:-${HOME}}:rw
       - ./vscode-daemon/daemon.py:/app/daemon.py:ro
     networks:
       - factory-network

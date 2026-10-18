@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # LLM Proxy — internal gateway that routes requests to Gemini / DeepSeek
     # ---------------------------------------------------------------------------
     LLM_PROXY_URL: str = "http://localhost:5100"
+    # How long the task worker waits for the workspace daemon to confirm file writes.
+    WORKSPACE_WRITE_TIMEOUT_SECONDS: float = 30.0
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants
