@@ -763,7 +763,7 @@
     "pendingRuns": "Ejecuciones pendientes de decisión humana",
     "noPendingRuns": "No hay ejecuciones pendientes de decisión humana",
     "reviewRun": "Revisar evidencia",
-    "usageHistory": "Historial de uso (últimos 7 días)",
+    "usageHistory": "Historial de uso",
     "exportCsv": "Exportar CSV",
     "lastDays": "{{count}} días",
     "totalTokens": "Total: {{total}} tokens"

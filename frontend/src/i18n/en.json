@@ -763,7 +763,7 @@
     "pendingRuns": "Runs awaiting a human decision",
     "noPendingRuns": "No runs are awaiting a human decision",
     "reviewRun": "Review evidence",
-    "usageHistory": "Usage History (last 7 days)",
+    "usageHistory": "Usage history",
     "exportCsv": "Export CSV",
     "lastDays": "{{count}} days",
     "totalTokens": "Total: {{total}} tokens"

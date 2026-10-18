@@ -12,10 +12,10 @@ export const QuotaPanel: React.FC = () => {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
   const { data: quotaData } = useQuotas(companyId)
-  const { data: historyData } = useQuotaUsageHistory(companyId, 7)
+  const [days, setDays] = useState(7)
+  const { data: historyData } = useQuotaUsageHistory(companyId, days)
   const resetQuotaMutation = useResetQuota()
   const [pendingResets, setPendingResets] = useState<Set<number>>(new Set())
-  const [days, setDays] = useState(7)
 
   const quotas = Array.isArray(quotaData) ? quotaData : []
   const history = historyData?.days ?? []
@@ -104,7 +104,7 @@ export const QuotaPanel: React.FC = () => {
         <section className="mb-6">
           <div className="mb-2 flex items-center gap-2">
             <BarChart3 size={18} className="text-brand-400" />
-            <h2 className="text-sm font-semibold text-gray-200">{t('governance.usageHistory', { defaultValue: 'Usage History (last 7 days)' })}</h2>
+            <h2 className="text-sm font-semibold text-gray-200">{t('governance.usageHistory', { defaultValue: 'Usage history' })}</h2>
             <select value={days} onChange={e => setDays(Number(e.target.value))} className="ml-auto text-xs bg-surface-800 border border-surface-700 rounded px-2 py-1 text-gray-300">
               <option value={7}>{t('governance.lastDays', { count: 7, defaultValue: '{{count}} days' })}</option>
               <option value={14}>{t('governance.lastDays', { count: 14, defaultValue: '{{count}} days' })}</option>
