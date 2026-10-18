@@ -7,11 +7,35 @@ Tables:
 - ``OutboxEvent``  — transactional outbox rows published to NATS by the background worker.
 """
 
+import json
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON
+from sqlalchemy.ext.mutable import MutableList
 from sqlmodel import Column, Field, SQLModel
+
+
+class CommentList(MutableList):
+    """
+    A JSON list whose in-place changes are persisted.
+
+    Workers append to ``item.comments`` and assign the same list back; a plain
+    ``JSON`` column does not see that change, so every comment after the first
+    was silently dropped.  Legacy rows that stored the list as a JSON string
+    are read as a list.
+    """
+
+    @classmethod
+    def coerce(cls, key: str, value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                value = []
+            if not isinstance(value, list):
+                value = []
+        return super().coerce(key, value)
 
 
 class Sprint(SQLModel, table=True):
@@ -48,7 +72,9 @@ class BacklogItem(SQLModel, table=True):
     status: str = "todo"  # "todo" | "in_progress" | "in_review" | "done" | "blocked"
     priority: str = "medium"  # "low" | "medium" | "high" | "critical"
     assignee: str | None = None  # Agent role or human name
-    comments: Any | None = Field(default=None, sa_column=Column(JSON))
+    comments: Any | None = Field(
+        default=None, sa_column=Column(CommentList.as_mutable(JSON))
+    )
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 
