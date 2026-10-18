@@ -33,9 +33,9 @@ export const QUERY_KEYS = {
 export function useCapabilities(enabled = true) {
   return useQuery({
     queryKey: QUERY_KEYS.capabilities(),
-    queryFn: () => api.get<{ agent_graph: boolean; memory: boolean; github: boolean; auth_required: boolean }>('/v1/capabilities'),
+    queryFn: () => api.capabilities(),
     enabled,
-    refetchInterval: 30_000,
+    staleTime: 5 * 60_000,
   })
 }
 

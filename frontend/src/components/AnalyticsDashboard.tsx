@@ -196,7 +196,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
     return (
       <div className="empty-state py-16">
         <p className="text-gray-400 mb-4">{t('workspace.noSprint')}</p>
-        <Link to="/dashboard" className="btn btn-ghost">{t('nav.dashboard')}</Link>
+        <Link to="/dashboard" className="btn btn-ghost">{t('nav.sprints', { defaultValue: 'Sprints' })}</Link>
       </div>
     )
   }

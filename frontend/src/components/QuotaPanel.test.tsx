@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CompanyQuotas } from './CompanyQuotas'
+import { QuotaPanel } from './QuotaPanel'
 import { useQuotas, useResetQuota } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
@@ -23,7 +23,7 @@ describe('Company quotas', () => {
   })
 
   it('retains usage, warning, exceeded and reset controls outside Review', () => {
-    render(<CompanyQuotas />)
+    render(<QuotaPanel />)
     expect(useQuotas).toHaveBeenCalledWith(42)
     expect(screen.getByText('Engineering')).toBeInTheDocument()
     expect(screen.getByText('85%')).toBeInTheDocument()

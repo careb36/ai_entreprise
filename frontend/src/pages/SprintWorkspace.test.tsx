@@ -35,7 +35,7 @@ describe('workspace sprint validation', () => {
     vi.spyOn(api, 'getSprintBoard').mockRejectedValue(new ApiError(404, 'missing'))
     setup('999')
     expect(await screen.findByRole('alert')).toHaveTextContent('Sprint #999 was not found')
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.getByRole('link', { name: 'Sprints' })).toHaveAttribute('href', '/dashboard')
     expect(screen.queryByText(/Stream for sprint/)).not.toBeInTheDocument()
     expect(useAppStore.getState().activeSprintId).toBe(7)
     expect(JSON.parse(localStorage.getItem('fabrique-app-storage')!).state.activeSprintId).toBe(7)

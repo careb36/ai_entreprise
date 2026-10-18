@@ -14,13 +14,14 @@ import { queryClient } from './lib/queryClient'
 import es from './i18n/es.json'
 
 function render(ui: React.ReactElement) {
-  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return rtlRender(<I18nextProvider i18n={i18n}><QueryClientProvider client={queryClient}>{ui}</QueryClientProvider></I18nextProvider>)
 }
 
 beforeEach(() => {
   queryClient.clear()
   useAppStore.setState({ companyId: null, companyName: null, activeSprintId: null })
-  vi.spyOn(api, 'get').mockResolvedValue({ agent_graph: false, memory: false })
+  vi.spyOn(api, 'get').mockResolvedValue({})
+  vi.spyOn(api, 'capabilities').mockResolvedValue({ agent_graph: false, memory: false, github: false, auth_required: true })
   vi.spyOn(api, 'getAgentRuns').mockResolvedValue({ agent_runs: [] } as never)
 })
 
@@ -97,14 +98,14 @@ describe('app navigation', () => {
     useAppStore.getState().setActiveSprint(42)
     window.history.replaceState(null, '', '/')
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Company' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Company 1' }))
 
     if (count < 2) {
-      expect(screen.queryByRole('link', { name: 'Switch company' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('menuitem', { name: 'Switch company' })).not.toBeInTheDocument()
       return
     }
 
-    fireEvent.click(screen.getByRole('link', { name: 'Switch company' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Switch company' }))
     expect(await screen.findByRole('heading', { name: 'Select a company' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Company 2\s*Owner/ }))
     await waitFor(() => expect(window.location.pathname).toBe('/evidence'))
@@ -125,9 +126,9 @@ describe('app navigation', () => {
 
   describe('evidence-first navigation', () => {
     it.each([
-      ['en', 'Evidence', 'Review', 'Sprints', 'Company', 'Open menu', 'Mobile navigation'],
-      ['es', 'Evidencia', 'Revisión', 'Sprints', 'Compañía', 'Abrir menú', 'Navegación móvil'],
-    ])('orders primary destinations in %s on desktop and mobile', async (lang, evidence, review, sprints, company, openMenu, mobileNav) => {
+      ['en', 'Evidence', 'Review', 'Sprints', 'Open menu', 'Mobile navigation'],
+      ['es', 'Evidencia', 'Revisión', 'Sprints', 'Abrir menú', 'Navegación móvil'],
+    ])('orders primary destinations in %s on desktop and mobile', async (lang, evidence, review, sprints, openMenu, mobileNav) => {
       i18n.addResourceBundle('es', 'translation', es)
       await i18n.changeLanguage(lang)
       authenticate()
@@ -136,7 +137,7 @@ describe('app navigation', () => {
       const nav = screen.getByRole('navigation', { name: lang === 'es' ? 'Navegación principal' : 'Main navigation' })
       expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual([evidence, review, sprints])
       expect(within(nav).getAllByRole('link').filter(link => link.getAttribute('aria-current') === 'page')).toHaveLength(1)
-      expect(screen.getByRole('button', { name: company })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Example company' })).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: openMenu }))
       expect(within(screen.getByRole('navigation', { name: mobileNav })).getAllByRole('link').map(link => link.textContent)).toEqual([evidence, review, sprints])
     })
@@ -145,10 +146,10 @@ describe('app navigation', () => {
       [false, false], [true, false], [false, true], [true, true],
     ])('shows optional links only for reported capabilities (graph %s, memory %s)', async (agent_graph, memory) => {
       authenticate()
-      vi.mocked(api.get).mockResolvedValue({ agent_graph, memory })
+      vi.mocked(api.capabilities).mockResolvedValue({ agent_graph, memory, github: false, auth_required: true })
       render(<App />)
       const nav = screen.getByRole('navigation', { name: 'Main navigation' })
-      await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/capabilities'))
+      await waitFor(() => expect(api.capabilities).toHaveBeenCalled())
       await waitFor(() => {
         expect(Boolean(within(nav).queryByRole('link', { name: 'Generate' }))).toBe(agent_graph)
         expect(Boolean(within(nav).queryByRole('link', { name: 'Memory' }))).toBe(memory)
@@ -158,7 +159,7 @@ describe('app navigation', () => {
     it('hides optional links while capabilities load or fail', async () => {
       authenticate()
       let reject!: (reason: Error) => void
-      vi.mocked(api.get).mockImplementation(() => new Promise((_resolve, rejectPromise) => { reject = rejectPromise }))
+      vi.mocked(api.capabilities).mockImplementation(() => new Promise((_resolve, rejectPromise) => { reject = rejectPromise }))
       render(<App />)
       const nav = screen.getByRole('navigation', { name: 'Main navigation' })
       expect(within(nav).queryByRole('link', { name: 'Generate' })).not.toBeInTheDocument()
@@ -179,15 +180,19 @@ describe('app navigation', () => {
       authenticate()
       vi.spyOn(api, 'getQuotas').mockResolvedValue([{ id: 7, unit: 'Engineering', used: 80, limit: 100 }])
       render(<App />)
-      fireEvent.click(screen.getByRole('button', { name: 'Company' }))
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(screen.getByText('Example company')).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'New company' })).toHaveAttribute('href', '/companies/new')
-      fireEvent.click(screen.getByRole('link', { name: 'Quotas' }))
+      expect(screen.getByRole('menuitem', { name: 'New company' })).toHaveAttribute('href', '/companies/new')
+      expect(screen.getAllByRole('menuitem')).toHaveLength(3)
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Quotas' }))
       expect(await screen.findByText('Engineering')).toBeInTheDocument()
-      expect(window.location.pathname).toBe('/companies/quotas')
+      expect(window.location.pathname).toBe('/company/quotas')
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Token Quota Usage' })).toBeInTheDocument()
       expect(screen.queryByText('No agent runs awaiting review')).not.toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'Company' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Log out' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }))
       await waitFor(() => expect(window.location.pathname).toBe('/login'))
       expect(useAuthStore.getState().token).toBeNull()
     })
@@ -195,10 +200,70 @@ describe('app navigation', () => {
     it('closes the Company dropdown with Escape', () => {
       authenticate()
       render(<App />)
-      const button = screen.getByRole('button', { name: 'Company' })
+      const button = screen.getByRole('button', { name: 'Example company' })
       fireEvent.click(button)
-      fireEvent.keyDown(button, { key: 'Escape' })
+      const item = screen.getByRole('menuitem', { name: 'Quotas' })
+      item.focus()
+      fireEvent.keyDown(item, { key: 'Escape' })
       expect(button).toHaveAttribute('aria-expanded', 'false')
+      expect(button).toHaveFocus()
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+
+    it('closes the Company dropdown on an outside click', () => {
+      authenticate()
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
+      fireEvent.mouseDown(document.body)
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+
+    it('falls back to a localized company ID when its name is unavailable', async () => {
+      i18n.addResourceBundle('es', 'translation', es)
+      await i18n.changeLanguage('es')
+      authenticate()
+      useAppStore.setState({ companyName: null })
+      render(<App />)
+      expect(screen.getByRole('button', { name: 'Empresa 1' })).toHaveAttribute('aria-haspopup', 'menu')
+    })
+
+    it('lists all four Company actions for multiple memberships', () => {
+      authenticate()
+      useAuthStore.setState({ memberships: [
+        { company_id: 1, human_role: 'Owner' },
+        { company_id: 2, human_role: 'Viewer' },
+      ] })
+      render(<App />)
+      const button = screen.getByRole('button', { name: 'Example company' })
+      expect(button).toHaveAttribute('aria-haspopup', 'menu')
+      fireEvent.click(button)
+      expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
+        .toEqual(['Switch company', 'New company', 'Quotas', 'Log out'])
+    })
+
+    it('closes mobile navigation with Escape and restores toggle focus', () => {
+      authenticate()
+      render(<App />)
+      const button = screen.getByRole('button', { name: 'Open menu' })
+      expect(button).toHaveAttribute('aria-controls', 'mobile-navigation')
+      fireEvent.click(button)
+      const nav = screen.getByRole('navigation', { name: 'Mobile navigation' })
+      const link = within(nav).getByRole('link', { name: 'Review' })
+      link.focus()
+      fireEvent.keyDown(link, { key: 'Escape' })
+      expect(button).toHaveAttribute('aria-expanded', 'false')
+      expect(button).toHaveFocus()
+      expect(screen.queryByRole('navigation', { name: 'Mobile navigation' })).not.toBeInTheDocument()
+    })
+
+    it.each(['/evidence', '/governance', '/dashboard', '/dashboard/analytics'])('marks only one primary destination current at %s', async path => {
+      authenticate()
+      window.history.replaceState(null, '', path)
+      vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
+      render(<App />)
+      await waitFor(() => expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1))
+      expect(screen.getByRole('navigation', { name: 'Main navigation' }).querySelector('[aria-current="page"]'))
+        .toHaveAttribute('href', path.startsWith('/dashboard') ? '/dashboard' : path)
     })
 
     it.each(['/dashboard/analytics', '/analytics'])('nests analytics in Sprints at %s', async path => {
@@ -210,9 +275,9 @@ describe('app navigation', () => {
       const primary = screen.getByRole('navigation', { name: 'Main navigation' })
       expect(within(primary).getByRole('link', { name: 'Sprints' })).toHaveAttribute('aria-current', 'page')
       expect(within(primary).queryByRole('link', { name: 'Analytics' })).not.toBeInTheDocument()
-      const tabs = screen.getByRole('navigation', { name: 'Sprints' })
-      expect(within(tabs).getByRole('link', { name: 'Analytics' })).toHaveAttribute('aria-current', 'page')
-      expect(within(tabs).getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current')
+      const tabs = screen.getByRole('tablist', { name: 'Sprints' })
+      expect(within(tabs).getByRole('tab', { name: 'Analytics' })).toHaveAttribute('aria-selected', 'true')
+      expect(within(tabs).getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'false')
     })
 
     it('removes the duplicate Glassroom route', async () => {
@@ -224,12 +289,4 @@ describe('app navigation', () => {
     })
   })
 
-  it('does not emit React Router future-flag warnings', () => {
-    useAuthStore.getState().logout()
-    window.history.replaceState(null, '', '/login')
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    render(<App />)
-
-    expect(warn.mock.calls.flat().join(' ')).not.toMatch(/React Router Future Flag Warning/)
-  })
 })

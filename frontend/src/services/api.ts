@@ -369,6 +369,7 @@ export const api = {
 
   // Core & Enterprise
   health: () => api.get<{ status: string; timestamp: string }>('/health'),
+  capabilities: () => api.get<{ agent_graph: boolean; memory: boolean; github: boolean; auth_required: boolean }>('/v1/capabilities'),
   
   initCompany: (data: InitCompanyRequest) =>
     api.post<InitCompanyResponse>('/v1/init_company', data),

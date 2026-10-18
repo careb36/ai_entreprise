@@ -4,7 +4,7 @@ import { AlertTriangle, Loader2, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useQuotas, useResetQuota } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
-export const CompanyQuotas: React.FC = () => {
+export const QuotaPanel: React.FC = () => {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
   const { data: quotaData } = useQuotas(companyId)
