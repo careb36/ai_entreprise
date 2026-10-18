@@ -276,6 +276,14 @@ def resolve_gemini_model(requested: str) -> str:
     if not _available_models:
         _refresh_gemini_models()
     with _model_refresh_lock:
+        # Map deprecated/unavailable models to working equivalents.
+        _MODEL_ALIASES = {
+            "gemini-2.5-flash": "gemini-3.8-flash",
+            "gemini-2.5-pro": "gemini-3.1-pro-preview",
+            "gemini-2.0-flash": "gemini-3.8-flash",
+        }
+        if requested in _MODEL_ALIASES:
+            requested = _MODEL_ALIASES[requested]
         if requested in _available_models:
             return requested
         tier = "fast" if any(k in requested for k in ("flash", "lite")) else "powerful"
@@ -471,6 +479,10 @@ def chat_completions():
             
             resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
             res = resp.json()
+            if "error" in res:
+                raise ValueError(res["error"].get("message", str(res["error"])))
+            if "candidates" not in res or not res["candidates"]:
+                raise ValueError(f"No candidates in Gemini response: {res}")
             text_out = res["candidates"][0]["content"]["parts"][0]["text"]
             tokens = (len(str(messages)) + len(text_out)) // 4
             result = {
