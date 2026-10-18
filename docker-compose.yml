@@ -125,7 +125,7 @@ services:
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
-      PROJECTS_ROOT_CONTAINER: /projects
+      PROJECTS_ROOT_CONTAINER: /home/caro
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
@@ -137,8 +137,8 @@ services:
       - ./backend/memory:/app/memory
       - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
-      - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:ro
-      - ${PROJECTS_ROOT:-/Users/carolinar.pereira/DEV}:/projects:ro
+      - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:rw
+      - ${PROJECTS_ROOT:-/home/caro}:/home/caro:rw
     networks:
       - factory-network
     depends_on:
