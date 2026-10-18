@@ -612,6 +612,14 @@ function SprintBoard() {
               <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
               {backendOnline ? t('dashboard.systemOnline', { defaultValue: 'System online' }) : t('dashboard.systemOffline', { defaultValue: 'System offline' })}
             </div>
+            {activeSprintId && (
+              <Link
+                to={`/sprint-ops/${activeSprintId}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
+              >
+                📋 {t('dashboard.kanban', { defaultValue: 'Kanban Board' })}
+              </Link>
+            )}
             <Link
               to="/companies/new"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
