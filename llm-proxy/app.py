@@ -82,7 +82,7 @@ def _validate_api_keys():
             resp = requests.post(
                 f"{DEEPSEEK_PROXY_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
+                json={"model": "deepseek-flash", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
                 timeout=10,
             )
             if resp.status_code == 401 or resp.status_code == 403:
@@ -180,8 +180,12 @@ _TIER_RULES: list[tuple[list[str], str, str]] = [
 ]
 
 _available_models: set[str] = set()
+_available_deepseek_models: set[str] = set()
+_available_qwen_models: set[str] = set()
 _model_refresh_lock = threading.Lock()
 _last_refresh: float = 0
+_deepseek_last_refresh: float = 0
+_qwen_last_refresh: float = 0
 
 
 def _classify_model(model_id: str) -> tuple[str, str]:
@@ -217,6 +221,53 @@ def _refresh_gemini_models():
         logger.warning(f"Model refresh failed: {e}")
 
 
+
+def _refresh_deepseek_models():
+    global _available_deepseek_models, _deepseek_last_refresh
+    if not DEEPSEEK_API_KEY:
+        return
+    try:
+        resp = requests.get(
+            f"{DEEPSEEK_PROXY_URL}/models",
+            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        ids = {m.get("id") for m in resp.json().get("data", []) if m.get("id")}
+        with _model_refresh_lock:
+            _available_deepseek_models = ids
+            _deepseek_last_refresh = time.time()
+        logger.info(f"DeepSeek models refreshed: {sorted(ids)}")
+    except Exception as e:
+        logger.warning(f"DeepSeek model refresh failed: {e}")
+
+
+def _refresh_qwen_models():
+    global _available_qwen_models, _qwen_last_refresh
+    if not QWEN_API_KEY:
+        return
+    try:
+        resp = requests.get(
+            f"{QWEN_PROXY_URL}/models",
+            headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        # Keep only chat-capable LLMs (exclude image/audio/video/tts/realtime/wan).
+        skip = ("image", "audio", "video", "tts", "realtime", "wan", "embedding")
+        ids = {
+            m.get("id")
+            for m in resp.json().get("data", [])
+            if m.get("id") and not any(k in m.get("id", "").lower() for k in skip)
+        }
+        with _model_refresh_lock:
+            _available_qwen_models = ids
+            _qwen_last_refresh = time.time()
+        logger.info(f"Qwen models refreshed: {sorted(ids)}")
+    except Exception as e:
+        logger.warning(f"Qwen model refresh failed: {e}")
+
+
 def resolve_gemini_model(requested: str) -> str:
     """
     Return the best available Gemini model for the requested name.
@@ -236,7 +287,11 @@ def resolve_gemini_model(requested: str) -> str:
 
 # Refresh models once at startup; background thread refreshes every hour.
 _refresh_gemini_models()
+_refresh_deepseek_models()
+_refresh_qwen_models()
 threading.Thread(target=lambda: (time.sleep(3600), _refresh_gemini_models()), daemon=True).start()
+threading.Thread(target=lambda: (time.sleep(3600), _refresh_deepseek_models()), daemon=True).start()
+threading.Thread(target=lambda: (time.sleep(3600), _refresh_qwen_models()), daemon=True).start()
 
 # --- Governance Middleware ---
 @app.before_request
@@ -332,23 +387,31 @@ def list_models():
 
     # DeepSeek models are available only when the API key is configured.
     if DEEPSEEK_API_KEY:
-        models.extend([
-            {"id": "deepseek-chat", "provider": "deepseek", "tier": "balanced",
-             "description": "DeepSeek Chat — general-purpose reasoning and conversation"},
-            {"id": "deepseek-flash", "provider": "deepseek", "tier": "fast",
-             "description": "DeepSeek Flash — fast, lightweight responses"},
-        ])
+        if not _available_deepseek_models:
+            _refresh_deepseek_models()
+        with _model_refresh_lock:
+            ds_ids = sorted(_available_deepseek_models)
+        for mid in ds_ids:
+            tier = "fast" if "flash" in mid else "balanced"
+            models.append({"id": mid, "provider": "deepseek", "tier": tier,
+                           "description": f"DeepSeek {mid}"})
 
     # Qwen models are available only when the API key is configured.
     if QWEN_API_KEY:
-        models.extend([
-            {"id": "qwen3.7-max",   "provider": "qwen", "tier": "strategic",
-             "description": "Qwen 3.7 Max — highest capability model"},
-            {"id": "qwen3.7-plus", "provider": "qwen", "tier": "strategic",
-             "description": "Qwen 3.7 Plus — strong reasoning, architecture, and stakeholder decisions"},
-            {"id": "qwen3.6-flash", "provider": "qwen", "tier": "balanced",
-             "description": "Qwen 3.6 Flash — fast reasoning and coordination"},
-        ])
+        if not _available_qwen_models:
+            _refresh_qwen_models()
+        with _model_refresh_lock:
+            q_ids = sorted(_available_qwen_models)
+        for mid in q_ids:
+            lower = mid.lower()
+            if "max" in lower:
+                tier = "strategic"
+            elif "flash" in lower:
+                tier = "balanced"
+            else:
+                tier = "balanced"
+            models.append({"id": mid, "provider": "qwen", "tier": tier,
+                           "description": f"Qwen {mid}"})
 
     # Pick the best non-preview balanced/fast model for orchestration tasks
     # (team suggestion, routing decisions) — prefer stability over power.
