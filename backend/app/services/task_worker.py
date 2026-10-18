@@ -40,6 +40,7 @@ from models import (
     ProjectDiscovery,
     Sprint,
 )
+from models.agent_run import AgentRun, Verification
 from nats_client import NATSClient
 from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
@@ -51,7 +52,9 @@ from services.orchestration_metrics import (
     ACTION_QA_REVIEW,
     ARCHITECT_COMMENT_AUTHOR,
     KPI_ROLE_ARCHITECT,
+    RESULT_NEEDS_WORK,
     VERDICT_REFUTED,
+    VERDICT_UNVERIFIABLE,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -392,6 +395,15 @@ def _execute_task(
         "Be thorough and specific to the project context."
         f"{FILE_MANIFEST_INSTRUCTIONS}"
     )
+
+    rework_feedback = _pending_rework_feedback(item.get("comments"))
+    if rework_feedback:
+        user_prompt += (
+            "\n\n## Review feedback to address\n"
+            "Your previous deliverable for this task was sent back. Fix every point "
+            "below and deliver the complete result again.\n\n"
+            + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
+        )
 
     if memory_context:
         user_prompt += (
@@ -754,17 +766,40 @@ def _extract_latest_reviewable_comment(
             continue
         if author == "system":
             continue
+        if text.upper().startswith("NEEDS WORK:"):
+            # A rework request after the latest deliverable makes it stale:
+            # the task must run again before anything is reviewed.
+            return ""
         if author == "qa" and assignee_normalized != "qa":
             continue
-        if text.upper().startswith("APPROVED:") or text.upper().startswith(
-            "NEEDS WORK:"
-        ):
+        if text.upper().startswith("APPROVED:"):
             continue
         if is_architect_consult_comment(comment):
             continue
         return text
 
     return ""
+
+
+def _pending_rework_feedback(comments: Any) -> list[str]:
+    """The ``NEEDS WORK:`` requests made since the task's latest deliverable."""
+    if not isinstance(comments, list):
+        return []
+    feedback: list[str] = []
+    for comment in reversed(comments):
+        text = str(comment.get("text", "")).strip()
+        if text.upper().startswith("NEEDS WORK:"):
+            feedback.append(f"{comment.get('author') or 'Reviewer'}: {text}")
+            continue
+        author = str(comment.get("author", "")).strip().lower()
+        if (
+            text
+            and author != "system"
+            and not text.upper().startswith("APPROVED:")
+            and not is_architect_consult_comment(comment)
+        ):
+            break  # reached the deliverable those requests were about
+    return list(reversed(feedback))
 
 
 def _is_explicit_block_reason(text: str) -> bool:
@@ -1898,6 +1933,43 @@ def _update_item_status(
 
 
 TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
+DELIVERY_GATE_AUTHOR = "Verifier"
+
+
+def _delivery_gate(item_id: int) -> tuple[str, str] | None:
+    """
+    ``(outcome, observation)`` when the task's latest delivery must not reach QA.
+
+    Only the ``files_written`` check gates: a refuted delivery (files missing,
+    rejected or different on disk) or an unconfirmed one (daemon silent).
+    Other checks — e.g. an unevidenced "tests pass" claim — are left to the
+    evidence page, so an honest claim never forces a rework.
+    """
+    with Session(engine) as session:
+        run = session.exec(
+            select(AgentRun)
+            .where(
+                AgentRun.external_ref == f"task-{item_id}",
+                AgentRun.producer == TASK_WORKER_PRODUCER,
+            )
+            .order_by(AgentRun.version.desc())
+        ).first()
+        if run is None:
+            return None
+        verification = session.exec(
+            select(Verification)
+            .where(Verification.agent_run_id == run.id)
+            .order_by(Verification.id.desc())
+        ).first()
+    if verification is None:
+        return None
+    for check in verification.checks or []:
+        if check.get("name") == "files_written" and check.get("outcome") in (
+            VERDICT_REFUTED,
+            VERDICT_UNVERIFIABLE,
+        ):
+            return check["outcome"], check.get("observation", "")
+    return None
 
 
 def _sha256_text(content: str) -> str:
@@ -2619,6 +2691,60 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 continue
 
+            # Evidence before opinion: a delivery the daemon refuted or never
+            # confirmed goes back for rework without asking the QA model.
+            gate = await asyncio.to_thread(_delivery_gate, item.id)
+            if gate is not None:
+                outcome, observation = gate
+                previous_gate_reworks = sum(
+                    1
+                    for c in comments
+                    if c.get("author") == DELIVERY_GATE_AUTHOR
+                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                )
+                rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+                label = "refuted" if outcome == VERDICT_REFUTED else "unconfirmed"
+                comments.append(
+                    {
+                        "author": DELIVERY_GATE_AUTHOR,
+                        "text": (
+                            f"NEEDS WORK: delivery {label} — {observation}. "
+                            "Re-run the task and give every file in full as a "
+                            "path= block."
+                            if rework
+                            else f"Delivery {label} after {previous_gate_reworks} "
+                            f"rework(s) — blocked for manual triage: {observation}"
+                        ),
+                        "created_at": datetime.now(UTC).isoformat(),
+                    }
+                )
+                item.comments = comments
+                item.status = "todo" if rework else "blocked"
+                item.updated_at = datetime.now(UTC)
+                session.add(item)
+                session.commit()
+                if not rework:
+                    quality_gate_blocked_ids.add(item.id)
+                await _publish_glassroom(
+                    nats_client,
+                    sprint.id,
+                    {
+                        "type": "status" if rework else "error",
+                        "semantic_type": "task.rework_scheduled"
+                        if rework
+                        else "task.blocked",
+                        "source": "task_worker",
+                        "agent": DELIVERY_GATE_AUTHOR,
+                        "role": "System",
+                        "task_id": item.id,
+                        "task_status": item.status,
+                        "phase": "delivery_gate",
+                        "task": f"Reviewed: {item.title}",
+                        "message": f"🧱 Delivery {label} for {item.title}: {observation}",
+                    },
+                )
+                continue
+
             # Build review prompt
             review_prompt = (
                 f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
@@ -2658,7 +2784,15 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 )
 
                 normalized_review = (review_result or "").strip()
-                needs_work = normalized_review.upper().startswith("NEEDS WORK:")
+                verdict = classify_review_result(normalized_review)
+                if verdict is None:
+                    # Only an explicit APPROVED: closes a task; anything else
+                    # is a failed review, retried and then blocked below.
+                    raise ValueError(
+                        "reviewer answered without APPROVED:/NEEDS WORK: — "
+                        f"{normalized_review[:120]!r}"
+                    )
+                needs_work = verdict == RESULT_NEEDS_WORK
 
                 # Append review comment
                 comments.append(
