@@ -134,9 +134,9 @@ comparado con el código actual:
 | F3: `eslint-plugin-i18next` | **pendiente** | el front no tiene ESLint configurado (ni dependencia ni config); el workflow corre `npx eslint src \|\| true`. Mientras tanto, `src/i18n/coverage.test.ts` falla si una clave literal falta en en/es |
 | F4: overflow del encabezado a ~1270px | resuelto (#88, #100) | navegación corta + menú de empresa. Re-verificado ahora con Playwright sobre el build de `main`: sin overflow a 1024, 1269, 1366 y 1440 px, en inglés y en español, con los 5 ítems visibles |
 | F4: `/login` y `/register` con sesión | resuelto (#88) | redirigen (`Login.test.tsx`) |
-| F4: cambiar de empresa | resuelto (#88, #100) | "Cambiar de empresa" en el menú de empresa, con 2+ membresías |
+| F4: cambiar de empresa | resuelto (#88, #100) | "Cambiar de empresa" en el menú de empresa, con 2+ membresías. La redirección de `/companies/select` con una sola membresía es intencional (#61) y ahora está documentada en `ProtectedRoute.tsx` |
 | F4: flags v7 de React Router | resuelto (#88) | `App.tsx:371` |
-| F4: `/v1/auth/me` dos veces | era `StrictMode` en desarrollo (anotado en #85) | `meLoaded` no se persiste: una carga por página en producción |
+| F4: `/v1/auth/me` dos veces | era `StrictMode` en desarrollo (anotado en #85) | medido con Playwright sobre `vite build` + `vite preview`: 1 llamada por carga completa de `/evidence`, `/sprints` y `/governance`, y 0 al navegar dentro de la app |
 | F4: el botón del SupportBot tapa contenido | resuelto (#88) | espacio inferior reservado en los contenedores con scroll |
 
 Las cifras del prompt (CompanyNew de 2040 líneas, 547 claves, Home.tsx) son del
