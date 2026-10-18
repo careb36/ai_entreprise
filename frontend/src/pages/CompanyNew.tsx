@@ -455,7 +455,7 @@ export default function CompanyNew() {
             ...a,
             name: a.name ?? '',
             persona: a.persona ?? a.specialty ?? '',
-            token_budget: a.token_budget ?? 500000,
+            token_budget: a.token_budget ?? 1000000,
             model: a.model ?? 'deepseek-coder',
             system_prompt: a.system_prompt ?? '',
           })))
@@ -610,7 +610,7 @@ export default function CompanyNew() {
                   }}
                   className="text-sm text-gray-200 font-mono flex-1 text-left"
                 >
-                  📁 {dir.path}
+                  📁 {dir.name}
                 </button>
                 <button
                   type="button"
