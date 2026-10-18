@@ -476,25 +476,76 @@ def chat_completions():
             system = next((m["content"] for m in messages if m["role"] == "system"), None)
             payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
             if system: payload["system_instruction"] = {"parts": [{"text": system}]}
-            
-            resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
-            res = resp.json()
-            if "error" in res:
-                raise ValueError(res["error"].get("message", str(res["error"])))
-            if "candidates" not in res or not res["candidates"]:
-                raise ValueError(f"No candidates in Gemini response: {res}")
-            text_out = res["candidates"][0]["content"]["parts"][0]["text"]
-            tokens = (len(str(messages)) + len(text_out)) // 4
-            result = {
-                "choices": [{"message": {"role": "assistant", "content": text_out}}],
-                "usage": {"total_tokens": tokens},
-                "model": gemini_model
-            }
+
+            gemini_error = None
+            try:
+                resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
+                res = resp.json()
+                if "error" in res:
+                    raise ValueError(res["error"].get("message", str(res["error"])))
+                if "candidates" not in res or not res["candidates"]:
+                    raise ValueError(f"No candidates in Gemini response: {res}")
+                text_out = res["candidates"][0]["content"]["parts"][0]["text"]
+                tokens = (len(str(messages)) + len(text_out)) // 4
+                result = {
+                    "choices": [{"message": {"role": "assistant", "content": text_out}}],
+                    "usage": {"total_tokens": tokens},
+                    "model": gemini_model
+                }
+            except Exception as exc:
+                gemini_error = exc
+                logger.warning(f"Gemini failed ({exc}); attempting fallback to DeepSeek/Qwen")
+
+            if gemini_error is not None:
+                # Fallback to DeepSeek
+                if DEEPSEEK_API_KEY:
+                    try:
+                        fallback_data = dict(data)
+                        fallback_data["model"] = "deepseek-flash"
+                        resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=fallback_data, timeout=60)
+                        result = resp.json()
+                        if "error" in result:
+                            raise ValueError(result["error"].get("message", str(result["error"])))
+                        tokens = result.get("usage", {}).get("total_tokens", 0)
+                        result.setdefault("model", "deepseek-flash")
+                    except Exception as exc2:
+                        logger.warning(f"DeepSeek fallback failed: {exc2}")
+                        # Fallback to Qwen
+                        if QWEN_API_KEY:
+                            try:
+                                fallback_data = dict(data)
+                                fallback_data["model"] = "qwen3.6-flash"
+                                resp = requests.post(f"{QWEN_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {QWEN_API_KEY}"}, json=fallback_data, timeout=60)
+                                result = resp.json()
+                                if "error" in result:
+                                    raise ValueError(result["error"].get("message", str(result["error"])))
+                                tokens = result.get("usage", {}).get("total_tokens", 0)
+                                result.setdefault("model", "qwen3.6-flash")
+                            except Exception as exc3:
+                                raise ValueError(f"Gemini failed: {gemini_error}; DeepSeek failed: {exc2}; Qwen failed: {exc3}")
+                        else:
+                            raise ValueError(f"Gemini failed: {gemini_error}; DeepSeek failed: {exc2}")
+                elif QWEN_API_KEY:
+                    try:
+                        fallback_data = dict(data)
+                        fallback_data["model"] = "qwen3.6-flash"
+                        resp = requests.post(f"{QWEN_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {QWEN_API_KEY}"}, json=fallback_data, timeout=60)
+                        result = resp.json()
+                        if "error" in result:
+                            raise ValueError(result["error"].get("message", str(result["error"])))
+                        tokens = result.get("usage", {}).get("total_tokens", 0)
+                        result.setdefault("model", "qwen3.6-flash")
+                    except Exception as exc2:
+                        raise ValueError(f"Gemini failed: {gemini_error}; Qwen failed: {exc2}")
+                else:
+                    raise ValueError(f"Gemini failed: {gemini_error}")
         
         track_usage_in_db(bu_id, tokens)
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        msg = str(e)
+        status = 429 if "quota" in msg.lower() or "rate" in msg.lower() else 500
+        return jsonify({"error": msg}), status
 
 
 @app.route("/v1/embeddings", methods=["POST"])
