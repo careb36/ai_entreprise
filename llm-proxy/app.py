@@ -316,10 +316,10 @@ def list_models():
     # DeepSeek models are available only when the API key is configured.
     if DEEPSEEK_API_KEY:
         models.extend([
-            {"id": "deepseek-v4-pro", "provider": "deepseek", "tier": "code",
-             "description": "DeepSeek V4 Pro — state-of-the-art code generation & refactoring"},
-            {"id": "deepseek-v4-flash", "provider": "deepseek", "tier": "balanced",
-             "description": "DeepSeek V4 Flash — fast reasoning and conversation"},
+            {"id": "deepseek-chat", "provider": "deepseek", "tier": "balanced",
+             "description": "DeepSeek Chat — general-purpose reasoning and conversation"},
+            {"id": "deepseek-flash", "provider": "deepseek", "tier": "fast",
+             "description": "DeepSeek Flash — fast, lightweight responses"},
         ])
 
     # Qwen models are available only when the API key is configured.
