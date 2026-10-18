@@ -130,6 +130,8 @@ services:
       # project discovery is valid for the backend and the daemon alike.
       PROJECTS_ROOT_CONTAINER: ${PROJECTS_ROOT:-${HOME}}
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
+      DELIVERY_TESTS_ENABLED: ${DELIVERY_TESTS_ENABLED:-false}
+      DELIVERY_TEST_COMMAND: ${DELIVERY_TEST_COMMAND:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     ports:
       - "8000:8000"

@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     LLM_PROXY_URL: str = "http://localhost:5100"
     # How long the task worker waits for the workspace daemon to confirm file writes.
     WORKSPACE_WRITE_TIMEOUT_SECONDS: float = 30.0
+    # After a verified delivery, run the project's tests through the daemon and
+    # record the exit status as evidence.  Off by default: it executes
+    # agent-written code on the machine running the daemon.
+    DELIVERY_TESTS_ENABLED: bool = False
+    # Test command to run; empty means detect it (npm test / pytest).
+    DELIVERY_TEST_COMMAND: str = ""
+    # The daemon itself stops a command after 120 s; wait slightly longer.
+    DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants

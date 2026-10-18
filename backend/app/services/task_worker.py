@@ -1987,12 +1987,13 @@ DELIVERY_GATE_AUTHOR = "Verifier"
 
 def _delivery_gate(item_id: int) -> tuple[str, str] | None:
     """
-    ``(outcome, observation)`` when the task's latest delivery must not reach QA.
+    ``(problem, observation)`` when the task's latest delivery must not reach QA.
 
-    Only the ``files_written`` check gates: a refuted delivery (files missing,
-    rejected or different on disk) or an unconfirmed one (daemon silent).
-    Other checks — e.g. an unevidenced "tests pass" claim — are left to the
-    evidence page, so an honest claim never forces a rework.
+    Gates on a refuted delivery (files missing, rejected or different on disk),
+    an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
+    test run that failed.  Other checks — an unevidenced "tests pass" claim, a
+    test run that could not happen — are left to the evidence page, so an
+    honest claim never forces a rework.
     """
     with Session(engine) as session:
         run = session.exec(
@@ -2013,11 +2014,13 @@ def _delivery_gate(item_id: int) -> tuple[str, str] | None:
     if verification is None:
         return None
     for check in verification.checks or []:
-        if check.get("name") == "files_written" and check.get("outcome") in (
-            VERDICT_REFUTED,
-            VERDICT_UNVERIFIABLE,
-        ):
-            return check["outcome"], check.get("observation", "")
+        name, outcome = check.get("name"), check.get("outcome")
+        if name == "files_written" and outcome == VERDICT_REFUTED:
+            return "delivery refuted", check.get("observation", "")
+        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
+            return "delivery unconfirmed", check.get("observation", "")
+        if name == "tests_run" and outcome == VERDICT_REFUTED:
+            return "tests failed", check.get("observation", "")
     return None
 
 
@@ -2094,6 +2097,104 @@ def _delivery_comment(
     return f"Delivery unconfirmed: {observation}{run_note}"
 
 
+_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+
+
+def _detect_test_command(workspace_root: str) -> str | None:
+    """
+    The command that runs this project's tests, or ``None``.
+
+    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
+    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
+    folder with ``test_*.py`` files means ``python -m pytest``.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    root = os.path.abspath(workspace_root)
+    package_json = os.path.join(root, "package.json")
+    if os.path.isfile(package_json):
+        try:
+            with open(package_json, encoding="utf-8") as fh:
+                script = (json.load(fh).get("scripts") or {}).get("test")
+        except (OSError, ValueError, AttributeError):
+            script = None
+        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
+            return "npm test --silent"
+    for name, marker in (
+        ("pytest.ini", None),
+        ("pyproject.toml", "[tool.pytest"),
+        ("setup.cfg", "[tool:pytest"),
+    ):
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        if marker is None:
+            return "python -m pytest -q"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if marker in fh.read():
+                    return "python -m pytest -q"
+        except OSError:
+            continue
+    tests_dir = os.path.join(root, "tests")
+    if os.path.isdir(tests_dir) and any(
+        name.startswith("test_") and name.endswith(".py")
+        for _dir, _subdirs, names in os.walk(tests_dir)
+        for name in names
+    ):
+        return "python -m pytest -q"
+    return None
+
+
+async def _run_delivery_tests(
+    nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
+) -> None:
+    """
+    Run the project's tests through the daemon and add the result to *evidence*.
+
+    ``test_run`` keeps the command, exit code and output tail; ``ci`` restates
+    the conclusion in the shape ``check_claimed_tests_evidenced`` reads, so an
+    agent's "tests pass" is judged against this run.  The exit status comes
+    from the daemon, never from the agent.
+    """
+    workspace_root = evidence["workspace_root"]
+    command = await asyncio.to_thread(_detect_test_command, workspace_root)
+    if not command:
+        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        return
+    try:
+        result = await nats_client.request(
+            "workspace.execute",
+            {
+                "command": command,
+                "workspace_root": workspace_root,
+                "sprint_id": sprint["id"],
+            },
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
+        evidence["test_run"] = {
+            "command": command,
+            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
+        }
+        return
+    result = result if isinstance(result, dict) else {}
+    exit_code = result.get("exit_code")
+    output = f"{result.get('stdout') or ''}{result.get('stderr') or ''}"
+    evidence["test_run"] = {
+        "command": command,
+        "exit_code": exit_code,
+        "output_tail": output[-2000:],
+        "reason": result.get("error"),
+    }
+    if isinstance(exit_code, int):
+        evidence["ci"] = {
+            "source": "workspace daemon",
+            "ref": command,
+            "conclusion": "success" if exit_code == 0 else "failure",
+        }
+
+
 async def _deliver_artifacts(
     nats_client: NATSClient,
     item: dict[str, Any],
@@ -2152,6 +2253,10 @@ async def _deliver_artifacts(
                 logger.warning(
                     "Workspace write request failed for item=%s: %s", item["id"], e
                 )
+
+        written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
+        if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+            await _run_delivery_tests(nats_client, sprint, evidence)
 
     recorded = await asyncio.to_thread(
         _record_task_run, item, agent, sprint, deliverable, targets, evidence
@@ -2753,7 +2858,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             # confirmed goes back for rework without asking the QA model.
             gate = await asyncio.to_thread(_delivery_gate, item.id)
             if gate is not None:
-                outcome, observation = gate
+                problem, observation = gate
                 previous_gate_reworks = sum(
                     1
                     for c in comments
@@ -2761,16 +2866,19 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
                 )
                 rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
-                label = "refuted" if outcome == VERDICT_REFUTED else "unconfirmed"
+                instruction = (
+                    "Fix the code so the project's tests pass and deliver every "
+                    "changed file in full as a path= block."
+                    if problem == "tests failed"
+                    else "Re-run the task and give every file in full as a path= block."
+                )
                 comments.append(
                     {
                         "author": DELIVERY_GATE_AUTHOR,
                         "text": (
-                            f"NEEDS WORK: delivery {label} — {observation}. "
-                            "Re-run the task and give every file in full as a "
-                            "path= block."
+                            f"NEEDS WORK: {problem} — {observation}. {instruction}"
                             if rework
-                            else f"Delivery {label} after {previous_gate_reworks} "
+                            else f"{problem.capitalize()} after {previous_gate_reworks} "
                             f"rework(s) — blocked for manual triage: {observation}"
                         ),
                         "created_at": datetime.now(UTC).isoformat(),
@@ -2798,7 +2906,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         "task_status": item.status,
                         "phase": "delivery_gate",
                         "task": f"Reviewed: {item.title}",
-                        "message": f"🧱 Delivery {label} for {item.title}: {observation}",
+                        "message": f"🧱 {problem.capitalize()} for {item.title}: {observation}",
                     },
                 )
                 continue

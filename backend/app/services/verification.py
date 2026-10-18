@@ -227,6 +227,40 @@ def check_files_written(run: AgentRun, evidence: dict | None) -> dict:
     return {"name": "files_written", "outcome": outcome, "observation": observation}
 
 
+def check_tests_run(evidence: dict) -> dict:
+    """
+    The project's tests as run by the workspace daemon after delivery.
+
+    Exit 0 passes, any other exit code refutes, and a run that did not happen
+    (no test command, daemon silent, command error) is unverifiable — the
+    code was not shown to work, which is different from it failing.
+    """
+    run = evidence.get("test_run") or {}
+    command = run.get("command")
+    exit_code = run.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        if exit_code == 0:
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": f"`{command}` passed",
+            }
+        tail = (run.get("output_tail") or "").strip()[-400:]
+        return {
+            "name": "tests_run",
+            "outcome": VERDICT_REFUTED,
+            "observation": f"`{command}` exited {exit_code}"
+            + (f": {tail}" if tail else ""),
+        }
+    reason = run.get("reason") or "no exit status reported"
+    target = f"`{command}`" if command else "tests"
+    return {
+        "name": "tests_run",
+        "outcome": VERDICT_UNVERIFIABLE,
+        "observation": f"{target} not run: {reason}",
+    }
+
+
 def aggregate_verdict(checks: list[dict]) -> str:
     outcomes = {check["outcome"] for check in checks}
     if VERDICT_REFUTED in outcomes:
@@ -246,6 +280,8 @@ def verify_agent_run(
     ]
     if evidence and "workspace_writes" in evidence:
         checks.append(check_files_written(run, evidence))
+    if evidence and "test_run" in evidence:
+        checks.append(check_tests_run(evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(
         company_id=run.company_id,

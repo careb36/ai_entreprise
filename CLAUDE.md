@@ -63,6 +63,13 @@ Copy `.env.example` to `.env` and fill in:
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
+- `PROJECTS_ROOT` — absolute host folder holding your projects; mounted at the same
+  path in the backend and the VS Code daemon (defaults to `$HOME`). Agents write
+  into the project chosen in "New company".
+- `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
+  written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
+  `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
+  sends the task back for rework. It executes agent-written code on the daemon's machine.
 
 ## Architecture Overview
 
