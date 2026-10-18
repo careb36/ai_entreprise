@@ -495,6 +495,79 @@ async def list_project_directories(
     return {"directories": dirs, "root": projects_root}
 
 
+# Directories skipped when browsing the workspace filesystem (noise).
+_BROWSE_SKIP_DIRS = {
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    ".env",
+    ".idea",
+    ".vscode",
+    "dist",
+    "build",
+    "coverage",
+    ".cache",
+    ".next",
+    ".nuxt",
+    "target",
+    ".gradle",
+    ".mvn",
+}
+_BROWSE_MAX_ENTRIES = 200
+
+
+@router.get("/browse_fs", tags=["Enterprise"])
+async def browse_fs(path: str = ""):
+    """List immediate subdirectories of *path* within the workspace root."""
+    import os
+
+    workspace_root = os.getenv("AGENT_WORKSPACE_ROOT", "/workspace")
+    if path:
+        resolved = os.path.realpath(os.path.join(workspace_root, path.lstrip("/")))
+    else:
+        resolved = os.path.realpath(workspace_root)
+
+    real_root = os.path.realpath(workspace_root)
+    if not resolved.startswith(real_root):
+        raise HTTPException(
+            status_code=403, detail="Path is outside the workspace root."
+        )
+
+    if not os.path.isdir(resolved):
+        raise HTTPException(
+            status_code=404, detail="Path does not exist or is not a directory."
+        )
+
+    try:
+        entries = []
+        with os.scandir(resolved) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name in _BROWSE_SKIP_DIRS or entry.name.startswith("."):
+                    continue
+                rel = os.path.relpath(entry.path, real_root)
+                entries.append({"name": entry.name, "path": rel})
+                if len(entries) >= _BROWSE_MAX_ENTRIES:
+                    break
+        entries.sort(key=lambda e: e["name"].lower())
+        parent_rel = os.path.relpath(os.path.dirname(resolved), real_root)
+        return {
+            "current": os.path.relpath(resolved, real_root)
+            if resolved != real_root
+            else ".",
+            "absolute": resolved,
+            "parent": parent_rel
+            if parent_rel != "." and resolved != real_root
+            else None,
+            "entries": entries,
+        }
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+
 # ---------------------------------------------------------------------------
 # Agent management (rescued from develop)
 # ---------------------------------------------------------------------------

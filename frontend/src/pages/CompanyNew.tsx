@@ -398,6 +398,10 @@ export default function CompanyNew() {
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
   const [availableDirs, setAvailableDirs] = useState<{ name: string; path: string }[]>([])
   const [showDirPicker, setShowDirPicker] = useState(false)
+  const [currentBrowsePath, setCurrentBrowsePath] = useState('')
+  const [browseParent, setBrowseParent] = useState<string | null>(null)
+  const [browseCurrent, setBrowseCurrent] = useState<string>('')
+  const [browseAbsolute, setBrowseAbsolute] = useState<string>('')
 
   // Step 1 — Company
   const [companyName, setCompanyName] = useState('')
@@ -547,16 +551,22 @@ export default function CompanyNew() {
         <button type="button" onClick={async () => {
           try {
             const token = useAuthStore.getState().token
-            const res = await fetch('http://localhost:8000/v1/discover/directories', {
+            const url = currentBrowsePath
+              ? `http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(currentBrowsePath)}`
+              : 'http://localhost:8000/v1/browse_fs'
+            const res = await fetch(url, {
               headers: { 'Authorization': `Bearer ${token}` }
             })
             const data = await res.json()
-            if (data.directories && data.directories.length > 0) {
-              // Show a dropdown by setting a state with the directories
-              setAvailableDirs(data.directories)
+            const entries = data.entries || data.directories || []
+            if (entries.length) {
+              setAvailableDirs(entries)
+              setBrowseCurrent(data.current || '')
+              setBrowseParent(data.parent)
+              setBrowseAbsolute(data.absolute || '')
               setShowDirPicker(true)
             } else {
-              alert(t('companyNew.noDirectories', { root: data.root }))
+              alert(t('companyNew.noDirectories', { root: data.root || currentBrowsePath }))
             }
           } catch (err) {
             alert(t('companyNew.directoryError', { message: (err as Error).message || t('companyNew.unknownError') }))
@@ -567,18 +577,68 @@ export default function CompanyNew() {
         </button>
         {showDirPicker && availableDirs.length > 0 && (
           <div className="absolute z-10 mt-1 w-full bg-surface-800 border border-surface-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700 text-xs text-gray-400">
+              <span className="font-mono truncate">{browseCurrent || '.'}</span>
+              {browseParent && (
+                <button type="button" onClick={async () => {
+                  try {
+                    const token = useAuthStore.getState().token
+                    const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseParent)}`, {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                    const data = await res.json()
+                    const entries = data.entries || data.directories || []
+                    if (entries.length) {
+                      setAvailableDirs(entries)
+                      setBrowseCurrent(data.current || '')
+                      setBrowseParent(data.parent)
+                      setCurrentBrowsePath(browseParent || '')
+                      setBrowseAbsolute(data.absolute || '')
+                    }
+                  } catch {}
+                }} className="text-brand-400 hover:text-brand-300">⬆ Subir</button>
+              )}
+            </div>
             {availableDirs.map((dir: { name: string; path: string }) => (
-              <button
-                key={dir.path}
-                type="button"
-                onClick={() => {
-                  setProjectPath(dir.path)
-                  setShowDirPicker(false)
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-surface-700 transition-colors font-mono"
-              >
-                📁 {dir.name}
-              </button>
+              <div key={dir.path} className="flex items-center gap-1 px-3 py-2 hover:bg-surface-700 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // refetch
+                    (async () => {
+                      try {
+                        const token = useAuthStore.getState().token
+                        const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(dir.path)}`, {
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        })
+                        const data = await res.json()
+                        const entries = data.entries || data.directories || []
+                        if (entries.length) {
+                          setAvailableDirs(entries)
+                          setBrowseCurrent(data.current || '')
+                          setBrowseParent(data.parent)
+                          setBrowseAbsolute(data.absolute || '')
+                        }
+                      } catch {}
+                    })()
+                  }}
+                  className="text-sm text-gray-200 font-mono flex-1 text-left"
+                >
+                  📁 {dir.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const abs = browseAbsolute ? `${browseAbsolute}/${dir.name}` : dir.path
+                    setProjectPath(abs)
+                    setShowDirPicker(false)
+                  }}
+                  className="text-xs text-brand-400 hover:text-brand-300 px-2"
+                  title="Seleccionar"
+                >
+                  ✓
+                </button>
+              </div>
             ))}
             <button
               type="button"
