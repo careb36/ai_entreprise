@@ -18,6 +18,7 @@ export const QUERY_KEYS = {
   capabilities: () => ['capabilities'] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
+  quotaHistory: (companyId: number, days: number) => ['enterprise', companyId, 'quota_history', days] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
   orchestrationHealth: (companyId: number, weeks: number) => ['orchestration_health', companyId, weeks] as const,
   tickets: () => ['tickets'] as const,
@@ -320,5 +321,14 @@ export function useGenerateAgentPrompt() {
   return useMutation({
     mutationFn: (data: Parameters<typeof api.generateAgentPrompt>[0]) =>
       api.generateAgentPrompt(data),
+  })
+}
+
+
+export function useQuotaUsageHistory(companyId: number | null, days = 7) {
+  return useQuery({
+    queryKey: QUERY_KEYS.quotaHistory(companyId || 0, days),
+    queryFn: () => api.getQuotaUsageHistory(companyId!, days),
+    enabled: !!companyId,
   })
 }

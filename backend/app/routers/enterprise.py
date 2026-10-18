@@ -24,7 +24,7 @@ from config import settings
 from database import get_neo4j_driver, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logging_config import logger
-from models import BusinessUnit, Sprint, User
+from models import AuditLog, BusinessUnit, Sprint, User
 from schemas import (
     AgentCreateRequest,
     AgentPromptRequest,
@@ -39,7 +39,7 @@ from schemas import (
 from services.company_service import CompanyService
 from services.discovery_service import DiscoveryService
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])
 
@@ -320,6 +320,37 @@ async def get_orchestration_health(
             ),
         ),
     )
+
+
+@router.get("/enterprise/quota_usage_history", tags=["Enterprise"])
+async def quota_usage_history(
+    company_id: int,
+    days: int = Query(7, ge=1, le=90),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Return daily token usage for a company over the last *days* days."""
+    from datetime import timedelta
+
+    from sqlmodel import func
+
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
+    rows = session.exec(
+        select(
+            func.date(AuditLog.created_at).label("day"),
+            func.coalesce(func.sum(AuditLog.cost_tokens), 0),
+        )
+        .where(AuditLog.company_id == company_id)
+        .where(AuditLog.created_at >= cutoff)
+        .group_by(func.date(AuditLog.created_at))
+        .order_by(func.date(AuditLog.created_at))
+    ).all()
+    usage = {str(r[0]): int(r[1] or 0) for r in rows}
+
+    result = []
+    for i in range(days):
+        d = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days - 1 - i)).date()
+        result.append({"date": d.isoformat(), "tokens": usage.get(str(d), 0)})
+    return {"days": result, "total": sum(u["tokens"] for u in result)}
 
 
 @router.get("/capabilities", tags=["Enterprise"])

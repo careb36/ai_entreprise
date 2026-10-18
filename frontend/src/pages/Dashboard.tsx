@@ -574,6 +574,7 @@ function SprintBoard() {
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
   const { data: health } = useHealth()
+  const { data: quotaData } = useQuotas(companyId)
   const { data: capabilities, isError: capabilitiesError } = useCapabilities()
   const connectToSprintStream = useAgentStore(s => s.connect)
   const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
@@ -646,6 +647,15 @@ function SprintBoard() {
             </Link>
           </div>
         </div>
+
+        {/* ── Quota alert ────────────────────────────────────────────── */}
+        {Array.isArray(quotaData) && quotaData.some((q: any) => q.limit > 0 && (q.used / q.limit) >= 0.8) && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-200">
+            <AlertTriangle size={16} />
+            <span>Token quota is above 80% for one or more business units. Consider resetting or increasing limits.</span>
+            <Link to="/company/quotas" className="ml-auto text-yellow-300 underline text-xs">Manage quotas</Link>
+          </div>
+        )}
 
         {/* ── KPI strip ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

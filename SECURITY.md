@@ -1,190 +1,342 @@
 # SECURITY.md
 
-## La Fabrique – AI-Augmented Software Factory
+## 1. Introduction and Scope
 
-**Version:** 1.0 (Draft for review)  
-**Author:** Security Engineer  
-**Date:** 2025-04-08  
-**Status:** Pending Architect and PO approval  
+This document defines the security policy, threat model, and security controls for the **multi-agent execution platform**.
 
----
+The platform consists of:
 
-## 1. Introduction
+- **React frontend** for user and tenant administration.
+- **FastAPI APIs** for edge services, authentication, and control plane operations.
+- **LangGraph workflow runtime** for agent orchestration, tool calling, and human-in-the-loop interrupts.
+- **Neo4j** graph database for agent/workflow state and relationship data.
+- **PostgreSQL** for relational tenant, user, audit, and configuration data.
+- **Kubernetes** as the deployment and runtime environment.
 
-This document establishes the foundational security policies for La Fabrique, covering dependency management, data handling, and access control. It also includes an initial threat model to identify key risks and their mitigation strategies. All teams (Development, QA, Operations) must adhere to these policies. The Security Engineer will maintain this document and update it as the platform evolves.
+This policy applies to all source code, infrastructure, CI/CD pipelines, containers, and operational practices. All team members, contractors, and operators must follow this policy.
 
----
-
-## 2. Dependency Management
-
-### 2.1 Software Bill of Materials (SBOM)
-
-- Every release (including pre-release and demo builds) **must** include a machine-readable SBOM.
-- SBOMs shall be generated automatically using **Syft** for container images and language-level package managers (pip, npm).
-- Supported formats: SPDX 2.3 and CycloneDX 1.4 (both generated and stored alongside build artifacts).
-- SBOMs must be uploaded to a centralized repository (e.g., **GitHub Dependency Graph** or a dedicated S3 bucket) for vulnerability scanning.
-
-### 2.2 Vulnerability Scanning & Patching
-
-- All dependencies (direct and transitive) are scanned **on every commit** using **Trivy** or **Snyk** integrated into the CI pipeline (GitHub Actions).
-- **Critical and High** severity vulnerabilities block the build unless a documented exception is approved by the Security Engineer and Architect.
-- Medium severity vulnerabilities must be addressed within the next two sprints.
-- Automated pull requests (e.g., Dependabot, Renovate) are enabled for all repositories, with priority overrides for security patches.
-
-### 2.3 Dependency Approval Policies
-
-- Only packages from trusted registries (PyPI, npm, official Docker Hub, GitHub Packages) are allowed.
-- New dependencies require a lightweight review in the repository’s `DEPENDENCIES.md` (or issue discussion) covering:
-  - Purpose and necessity
-  - License compatibility (must be OSI-approved, no GPL v3 if used in internal services)
-  - Known vulnerabilities and maintenance status
-- **Prohibited**: Deprecated packages, packages with known malicious intent, unmaintained libraries (no commits in >1 year without justification).
-
-### 2.4 Container Base Images
-
-- Prefer distroless or slim base images (e.g., `python:3.12-slim`, `node:20-alpine`).
-- All base images must be pinned to digest values (not tags like `latest`) to ensure immutability.
-- Regularly scan and rebuild images (at least monthly or after a critical CVE disclosure).
+The security checklist in [Section 7](#7-security-checklist) is the canonical pre-merge and pre-deployment checklist. It must be linked from `CONTRIBUTING.md` and the CI documentation. This document has been reviewed against the current Sprint 0 infrastructure: FastAPI edge, LangGraph runtime, React SPA, Neo4j/PostgreSQL data stores, and Kubernetes deployment paths.
 
 ---
 
-## 3. Data Handling
+## 2. Security Principles
 
-### 3.1 Data Classification
-
-La Fabrique processes the following data categories:
-
-| Category | Examples | Classification | Handling Requirements |
-|----------|----------|----------------|----------------------|
-| **User Input** | Prompts, uploaded files, chat messages | Public (but require privacy) | Encrypted in transit (TLS 1.3+), stored encrypted at rest (AES-256). Retention limited to session + audit window (30 days). |
-| **Generated Code** | AI-produced source code, diffs | Internal | Logged in Neo4j for traceability; access restricted to project members. Code that may contain secrets (e.g., passwords, API keys) is scanned pre-commit. |
-| **Configuration & Secrets** | API keys, model endpoints, database passwords | Confidential | Never stored in source code. Managed via external secret store (HashiCorp Vault or cloud-native). Only containerized services with least‑privilege IAM roles can access secrets. |
-| **System Logs** | Application logs, audit trails | Internal | Retention: 90 days for diagnostics, 1 year for audit. Access limited to Operations and Security teams. |
-
-### 3.2 Encryption Standards
-
-- **In transit**: TLS 1.3 (minimum) for all APIs, database connections (PostgreSQL, Neo4j), and inter-service communication (mutual TLS in service mesh).
-- **At rest**: Encrypt all persistent volumes (EBS/PDB) using platform-managed keys (KMS). Databases (PostgreSQL, Neo4j) must have encryption at rest enabled.
-- **Key management**: Secrets are rotated every 90 days; encryption keys follow the principle of least privilege with automatic key rotation.
-
-### 3.3 Data Minimization & Retention
-
-- Collect only data necessary for the function (e.g., agent logs are pruned after 30 days unless part of an active debugging session).
-- User-provided data (e.g., sample prompts) can be anonymized and aggregated for model improvement only with explicit consent; otherwise deleted after the session.
-- Implement automatic deletion cronjobs for log archives exceeding retention limits.
-
-### 3.4 Data Loss Prevention (DLP)
-
-- Scanner agents must mask or redact any detected secrets (e.g., AWS keys, GitHub tokens) in logs and AI-generated outputs.
-- Use static analysis (e.g., **detect-secrets**, **truffleHog**) on both user input and generated code to prevent accidental exposure.
-- All data egress (outside the cluster or service mesh) is logged and audited.
+1. **Deny by default.** Every request, tool call, workflow node, and network path must explicitly grant access.
+2. **Least privilege.** Services and users receive only the minimum permissions required.
+3. **Defense in depth.** No single control is sufficient. Assume any layer can fail.
+4. **Zero trust.** Authenticate and authorize every request, even inside the cluster.
+5. **Secure defaults.** The easiest path must be the secure path.
+6. **Treat all model input and tool output as untrusted.** Prompt injection and malicious tool responses are expected failure modes.
+7. **Keep secrets out of code, prompts, logs, and artifacts.**
+8. **Audit everything.** Security-relevant events must be logged, monitored, and retained.
 
 ---
 
-## 4. Access Control
+## 3. Platform Security Architecture and Trust Boundaries
 
-### 4.1 Identity and Authentication
+The platform is divided into trust zones:
 
-- All human access to La Fabrique services (API, UI, registry) is authenticated via **OAuth 2.0 / OpenID Connect** with multi-factor authentication (MFA) mandatory.
-- Service-to-service authentication uses **mutual TLS** with short-lived certificates (24h) issued by the internal certificate authority (cert-manager).
-- Machine accounts (CI/CD, automation) use **GitHub Actions OIDC** tokens to assume short-lived roles in AWS/GCP—no long-lived static credentials.
+| Trust Zone | Components | Trust Level |
+|------------|------------|-------------|
+| Public internet / untrusted clients | Browser users, API consumers | Untrusted |
+| Edge / API layer | FastAPI services, Ingress, WAF | Semi-trusted |
+| Application runtime | LangGraph workers, tool execution pods, backend services | Semi-trusted |
+| Data stores | PostgreSQL, Neo4j | Trusted |
+| Kubernetes control plane and nodes | kube-apiserver, etcd, kubelet, container runtime | Trusted |
+| CI/CD pipeline | Git repository, builders, image registry, deployment automation | Trusted |
+| External services | OIDC provider, LLM providers, external tools/APIs | Semi-trusted / untrusted |
 
-### 4.2 Authorization Policy (RBAC)
+Data flows across these boundaries through:
 
-Access is granted based on roles. The following roles and their permissions are defined for the `fastapi-backend` service (enforced via FastAPI middleware and Casbin):
-
-```yaml
-# Example: sample-rbac-policy.yaml
-roles:
-  admin:
-    permissions:
-      - "read:all"
-      - "write:all"
-      - "delete:all"
-      - "manage:users"
-      - "manage:agents"
-  developer:
-    permissions:
-      - "read:agents"
-      - "write:agents"       # Can create/update own agents
-      - "read:sessions"
-      - "write:sessions"     # Can start/stop sessions
-      - "read:logs"          # Own project logs
-  viewer:
-    permissions:
-      - "read:agents"        # Public agents only
-      - "read:sessions"      # Read-only session history
-  automation:
-    permissions:
-      - "write:pipelines"
-      - "read:secrets"       # Only specific secrets via Vault
-```
-
-- All role assignments are managed through the **Identity Provider** (IdP) groups.
-- The API gateway (Kong or Envoy) enforces coarse-grained access; fine-grained checks are performed at the FastAPI application layer.
-- Permission changes are logged and must be approved by the Architect for production environments.
-
-### 4.3 Network Access Control
-
-- All services run inside a **Kubernetes mesh** (Istio) with strict mTLS and authorization policies.
-- External ingress is limited to the FastAPI gateway (443) and optionally the UI (static hosting via CDN).
-- Development environments are isolated from production via separate clusters or namespaces with separate network policies.
-- Database ports (5432 for PostgreSQL, 7687 for Neo4j) are not exposed to the public internet; only mesh sidecars may connect.
-
-### 4.4 Principle of Least Privilege
-
-- Every service container runs with a dedicated Kubernetes `ServiceAccount` that has exactly the permissions needed (e.g., `read-only` for Neo4j if the service only queries).
-- Human developers accessing the cluster (for debugging) must use short-lived kubectl credentials (via `gcloud auth` or `aws eks get-token`) with role `readonly` by default; write access requires separate approval.
+- Browser to FastAPI over TLS 1.2+.
+- FastAPI to LangGraph workers over internal cluster network with service identity.
+- LangGraph workers to Neo4j/PostgreSQL with scoped credentials.
+- LangGraph workers to external LLM/tool providers over TLS.
+- CI/CD to Kubernetes registry and cluster with short-lived credentials.
 
 ---
 
-## 5. Initial Threat Model
+## 4. Threat Model
 
-The following table identifies the most critical threats to La Fabrique’s AI‑augmented platform, their impact, and the mitigation strategies we implement.
+### 4.1 Assets
 
-| # | Threat | Description | Impact | Likelihood | Mitigation Strategies |
-|---|--------|-------------|--------|------------|----------------------|
-| T1 | **Prompt Injection** | Malicious user injects instructions into the AI model to override intended behavior (e.g., leak system prompts, execute arbitrary code). | High (data breach, code injection) | Medium | 1. Input sanitization (strip control characters, limit prompt length). 2. Use model guardrails (e.g., content filter, instruction adherence). 3. Rate limiting per user/session. 4. Separate foundation model calls from user‑written code with strict context scoping. |
-| T2 | **Unsanitized Generated Code** | AI produces code containing vulnerabilities (XSS, SQL injection, command injection) that a user unknowingly executes. | High (supply‑chain attack) | Medium | 1. Static analysis (Semgrep, CodeQL) on generated code before rendering. 2. Sandbox execution of generated code in isolated containers (gVisor). 3. Output scanning for dangerous patterns (e.g., `eval`, `exec`, `os.system`). |
-| T3 | **Data Leakage via Agent Logs** | AI agent internal state or user conversation history is exposed through logs or error messages that are not properly redacted. | Medium (compliance, privacy) | High | 1. Implement structured logging with automatic field redaction for secrets. 2. Log levels restricted to `INFO` in production; `DEBUG` only in isolated sandboxes. 3. RBAC on log storage (see section 4.2). 4. Audit log retention and rotation. |
-| T4 | **Privilege Escalation** | An attacker with limited API access (e.g., viewer) gains permissions to manage agents or secrets by exploiting a misconfigured role or endpoint. | Critical (full system compromise) | Low | 1. Mandatory Casbin policy review before each release. 2. Penetration testing quarterly focusing on authorization bypass. 3. HTTP method / path validation at API gateway. 4. Service‑to‑service tokens have separate scopes (no shared tokens). |
-| T5 | **Dependency Supply‑Chain Attack** | A compromised upstream library (e.g., `requests`, `axios`) is used in production, allowing remote code execution or backdoor. | Critical (full compromise) | Low (but increasing) | 1. SBOM generation and continuous scanning (see section 2). 2. Pin all dependencies with hash verification (`pip hash`, `npm lockfile`). 3. Binary authorization (only signed images from approved registries). 4. Weekly vulnerability scans and automated PRs for patches. |
-| T6 | **Model Poisoning (Training)** | If the factory uses fine‑tuned models, an adversary could inject poisoned data to cause the model to produce harmful outputs. | Medium (reputation) | Rare (at this stage) | 1. Use only trusted, vetted base models (e.g., official OpenAI, Hugging Face base). 2. Sandbox fine‑tuned models in a separate namespace with no access to production secrets. 3. Regular red‑team evaluations of model outputs. |
-| T7 | **Denial of Service (DoS) via AI API** | An attacker sends many large prompts to exhaust the AI model API quota or compute resources. | Medium (availability) | Medium | 1. Rate limiting per IP, per user, per API key. 2. Automatic scaling of backend pods with horizontal pod autoscaler. 3. Quotas on token usage per tenant. 4. Implement circuit breakers for downstream AI model calls. |
+| Asset | Sensitivity | Impact if Compromised |
+|-------|-------------|------------------------|
+| User PII and tenant data | High | Legal, reputational, trust |
+| Prompt and tool outputs | High | Data exfiltration, prompt injection |
+| Workflow and agent definitions | High | Unauthorized actions, data access |
+| API keys, OAuth tokens, service secrets | Critical | Full platform compromise |
+| Model endpoints and provider credentials | High | Cost abuse, data leakage |
+| Source code and CI/CD pipeline | High | Supply chain compromise |
+| Neo4j and PostgreSQL data | High | Data breach, unauthorized access |
+| Kubernetes cluster and workloads | Critical | Full infrastructure compromise |
 
-### 5.1 Ongoing Threat Management
+### 4.2 Threat Actors
 
-- **Monthly review** of the threat model by Security Engineer and Architect.
-- **Severity thresholds**: Threats with Critical/High severity must be addressed before the feature or configuration is promoted to production.
-- **Automated scanning**: Every new endpoint or data flow added to the architecture must be assessed against this threat model; additions are tracked in the security backlog.
+- Anonymous internet users.
+- Authenticated malicious users.
+- Malicious or compromised tenants.
+- Malicious prompt authors or tool providers.
+- Insiders with excessive or misused access.
+- Automated bots and scanners.
+- Supply chain attackers.
 
----
+### 4.3 Top Threats and Controls
 
-## 6. Compliance and Monitoring
-
-- **Audit Logging**: All access to sensitive operations (admin actions, secret retrieval, user creation) are logged to a centralized, immutable audit trail (e.g., AWS CloudTrail, GCP Audit Logs) with retention of 1 year.
-- **Incident Response**: Follow the **La Fabrique Incident Response Plan** (separate document) – security incidents (breaches, successful attacks) are escalated to the Security Engineer and PO within 1 hour of detection.
-- **Compliance Frameworks**: The platform targets SOC 2 Type II and ISO 27001 controls. Evidence collection (e.g., access reviews, vulnerability scans) is automated where possible.
-
----
-
-## 7. Review and Approval
-
-This document requires approval from:
-
-- **Architect** – to confirm alignment with system architecture and feasibility.
-- **Product Owner** – to accept resource commitments for security tooling and processes.
-
-**Review frequency**: Annually, or upon significant architectural changes (e.g., new data store, new AI provider).
-
-### Approval Signatures
-
-| Role | Name | Date | Signature |
-|------|------|------|-----------|
-| Security Engineer | (Author) | 2025-04-08 | (auto-generated) |
-| Architect | ___________ | ___________ | ___________ |
-| Product Owner | ___________ | ___________ | ___________ |
+| # | Threat | Likelihood | Impact | Primary Controls |
+|---|--------|-----------|--------|------------------|
+| T1 | Prompt injection through user content or tool outputs causing unauthorized tool calls or data exfiltration | High | High | Tool allowlists, human-in-the-loop for sensitive tools, input/output validation, instruction hierarchy, canary tokens, tenant/session isolation |
+| T2 | Broken object-level authorization in FastAPI or LangGraph nodes leading to cross-tenant access | High | High | OIDC scopes, resource ownership checks, Postgres RLS, Neo4j tenant filtering, deny-by-default node permissions |
+| T3 | Secret leakage in source code, CI logs, container images, or environment variables | Medium | Critical | Secret manager, pre-commit and CI secret scanning, masked logs, no plaintext secrets in Git, image scanning |
+| T4 | Supply chain compromise via malicious dependencies, base images, or compromised CI/CD | Medium | High | Pinned lockfiles, Dependabot/Renovate, SCA scanning, SBOM, signed images, distroless non-root containers, protected branches |
+| T5 | SSRF via LangGraph tool execution allowing internal network access | Medium | High | Egress network policies, URL allowlists, sandboxed tool pods, SSRF filtering |
+| T6 | Insecure SSE exposure or CORS misconfiguration allowing unauthorized event stream access | Medium | Medium | Authenticated SSE, CORS allowlist, CSRF protection, CSP headers |
+| T7 | Kubernetes misconfiguration, pod escape, or over-permissive RBAC | Low | Critical | Pod Security Standards, least-privilege RBAC, NetworkPolicy, no default ServiceAccount, read-only root FS, runtime monitoring |
+| T8 | Data exfiltration through LLM outputs or unredacted logs | Medium | High | PII minimization, output filtering, DLP review, centralized redaction, audit logs |
+| T9 | Denial of service or cost abuse via uncontrolled agent loops or tool calls | Medium | Medium | Rate limits, max iterations, token/cost caps, per-user quotas |
+| T10 | Model abuse, harmful content, or policy violations | Medium | Medium | Content safety filters, allowed-use policy, monitoring and alerting |
 
 ---
 
-*End of SECURITY.md*
+## 5. Security Controls
+
+### 5.1 Secrets Management
+
+- **No plaintext secrets** in Git, configuration files, environment variables, CI logs, or container images.
+- All production secrets are stored in a secret manager, e.g. HashiCorp Vault, AWS Secrets Manager, or GCP Secret Manager.
+- Kubernetes Secrets are consumed via **External Secrets Operator** or equivalent. Kubernetes Secrets are encrypted at rest using the cloud provider KMS or equivalent.
+- `.env` files are git-ignored. Only `.env.example` with placeholder values is committed.
+- **Pre-commit hooks** run `gitleaks` or equivalent secret scanning.
+- **CI secret scanning** blocks merge requests containing secrets or suspected credentials.
+- Service-to-service authentication uses short-lived service accounts or mTLS. No shared long-lived passwords.
+- Secrets are never passed into LLM prompts, tool inputs, or model context.
+- Secret rotation is required every **90 days** or immediately on suspected compromise.
+- Access to secret managers is restricted to the minimum set of operators and service identities.
+
+### 5.2 Authentication and Authorization
+
+#### Authentication
+
+- Human users authenticate via **OIDC/OAuth2** through a trusted identity provider.
+- SPA uses **Authorization Code with PKCE**; client secrets are never embedded in the React frontend.
+- **MFA is required** for all human user accounts.
+- Access tokens are short-lived, maximum **15 minutes**. Refresh tokens rotate on every use.
+- Session cookies use `HttpOnly`, `Secure`, and `SameSite=Strict`.
+- Machine-to-machine authentication uses scoped API keys or OAuth2 client credentials. API keys are hashed at rest and have expiry and IP/network restrictions where feasible.
+- Backend service identities use Kubernetes ServiceAccounts with bound OIDC tokens. No default ServiceAccount is used.
+
+#### Authorization
+
+- Role-based access control is enforced at every layer:
+  - **FastAPI dependencies** verify authentication, required scopes, tenant membership, and object ownership.
+  - **PostgreSQL** uses row-level security based on `tenant_id` and user context.
+  - **Neo4j** queries always include tenant/project filters. Parameterized Cypher is mandatory.
+  - **LangGraph nodes** inherit the caller’s tenant/user context and execute with only the permissions required for that node.
+- Deny by default at all layers. Permissions are additive only through explicit policy.
+- Tenant isolation is mandatory. No cross-tenant data may appear in any query, tool output, or log.
+- High-privilege operations, e.g. tenant admin changes, require step-up authentication or a fresh MFA challenge.
+
+### 5.3 LLM Prompt and Tool Security
+
+- **All model input and tool output is treated as untrusted.**
+- System prompts follow an instruction hierarchy that makes user content clearly delimited and lower priority than developer/system instructions.
+- Prompt injection defenses include:
+  - Delimited user input: `"""..."""`, XML tags, or similar.
+  - Explicit instructions that tool calls and data access must follow the user’s authenticated tenant context.
+  - Canary tokens in system prompts to detect prompt injection attempts.
+- Tools are registered in a per-node **allowlist**. A node may only call tools explicitly declared for that workflow step.
+- Sensitive tools, e.g. write operations, external sending, code execution, or data deletion, require **human-in-the-loop approval** via LangGraph interrupts.
+- Tools run in isolated, sandboxed pods or containers with no access to cluster secrets or internal services unless explicitly required.
+- Tool outputs are validated, sanitized, and escaped before being returned to the model or UI. Outputs are never trusted as instructions.
+- Arbitrary code execution is prohibited unless it runs in a dedicated, network-isolated sandbox with no access to internal resources.
+- LLM calls never include secrets, passwords, full database records, or other tenants’ data.
+- PII minimization is enforced. Only the minimum necessary data is sent to external LLM providers.
+- Rate limits, maximum step counts, token caps, and cost caps are enforced per user, tenant, and workflow.
+- Content safety filters are applied to both model inputs and outputs where supported by the provider.
+- All prompts, tool calls, and model outputs are logged for audit, with secrets and PII redacted.
+
+### 5.4 Dependency and Container Scanning
+
+- All dependencies are pinned using lockfiles: `requirements.lock`, `poetry.lock`, `package-lock.json`, or equivalent.
+- **Dependabot/Renovate** is enabled for automated dependency update pull requests.
+- CI runs software composition analysis on every merge request:
+  - Python: `pip-audit` or `trivy fs`.
+  - Node: `npm audit --omit=dev` or `trivy fs`.
+  - Containers: `trivy image`, `grype`, or equivalent.
+- **SBOM** is generated for every release using Syft or similar.
+- Container images are signed with **Cosign** or equivalent. Admission policies verify signatures before deployment.
+- Base images are **distroless** or minimal Alpine. Services run as **non-root** users with **read-only root filesystem**.
+- High and critical vulnerabilities block merge and deployment. Remediation SLA:
+  - Critical: 48 hours.
+  - High: 7 days.
+  - Medium: 30 days.
+- Container scanning results are uploaded to the security dashboard and reviewed by the security engineer.
+
+### 5.5 Network and Kubernetes Hardening
+
+- All external traffic uses TLS 1.2+.
+- Ingress enforces HTTPS and security headers: CSP, X-Content-Type-Options, Referrer-Policy, and HSTS.
+- CORS is restricted to known frontend origins. SSE endpoints require authentication and CORS allowlisting.
+- Kubernetes NetworkPolicies default-deny ingress and egress. Only required service-to-service communication is allowed.
+- Pods run with **Pod Security Standards** `restricted` or `baseline` as appropriate.
+- Kubernetes RBAC follows least privilege. No wildcard `*` permissions in Roles or ClusterRoles.
+- Default ServiceAccount is disabled. Each workload uses a dedicated ServiceAccount with minimal permissions.
+- Containers run as non-root, with read-only root filesystem, and no shell where possible.
+- Egress traffic from tool execution pods is restricted to an allowlist of required external endpoints.
+- Runtime security monitoring, e.g. Falco, alerts on suspicious pod behavior, unexpected exec, or anomalous network connections.
+- Admission policies, e.g. OPA/Gatekeeper or Kyverno, enforce security context, image registry allowlist, and network policy requirements.
+
+### 5.6 Data Protection
+
+- Data at rest is encrypted:
+  - PostgreSQL and Neo4j volumes use encrypted storage.
+  - Kubernetes Secrets are encrypted with KMS.
+- Data in transit is encrypted using TLS 1.2+ for all internal and external traffic.
+- Backups are encrypted and access-restricted.
+- Tenant data deletion requests are honored within 30 days.
+- Database users for services have least privilege:
+  - PostgreSQL: table-level and row-level security enforced by `tenant_id`.
+  - Neo4j: dedicated database user with property-level filtering.
+- No production data may be copied to development or staging environments without redaction.
+
+### 5.7 Logging and Monitoring
+
+- Centralized log aggregation with structured logs.
+- Security-relevant events are logged:
+  - Successful and failed authentication.
+  - Authorization denials.
+  - Tool calls and human-in-the-loop approvals.
+  - Secret access attempts.
+  - Kubernetes pod/container anomalies.
+  - CI/CD deployment events.
+- Logs are redacted for secrets, tokens, and PII before storage.
+- Logs are immutable and retained for at least 90 days. Security logs retained for 12 months.
+- Alerting is configured for:
+  - Multiple failed login attempts.
+  - Cross-tenant access attempts.
+  - Prompt injection canary token detection.
+  - Unexpected tool or network behavior.
+  - High/critical vulnerability findings in CI or registry.
+  - Kubernetes runtime security events.
+
+---
+
+## 6. Incident Response
+
+### 6.1 Reporting
+
+Report suspected security incidents or vulnerabilities to:
+
+- **Email:** `security@example.com` or the internal private security channel.
+- **Slack:** `#security-incident`
+- Do **not** post sensitive details in public or team-wide channels.
+
+Include:
+
+- Affected service, endpoint, or asset.
+- Steps to reproduce.
+- Observed impact or potential impact.
+- Relevant logs or screenshots, if safe to include.
+- Whether the issue is active and ongoing.
+
+### 6.2 Severity Classification
+
+| Severity | Definition | Examples |
+|----------|------------|----------|
+| Critical | Active exploitation, full platform compromise, secret leakage, cross-tenant data access | Leaked production secret, remote code execution, cluster admin access |
+| High | Likely compromise, significant data exposure, broken authn/z | Broken object-level authorization, unauthorized tool execution |
+| Medium | Limited impact, requires specific conditions | Misconfigured CORS, missing security header, moderate vulnerability |
+| Low | Hardening gap, theoretical risk | Non-exploitable vulnerability, missing rate limit |
+
+### 6.3 Response Process
+
+1. **Detect and declare.** Any team member can declare an incident. The security engineer owns triage.
+2. **Assign severity** using the table above.
+3. **Contain.** Revoke affected credentials, isolate compromised pods, block malicious actor or source IP, redirect traffic if needed.
+4. **Eradicate.** Remove exploit path, patch vulnerability, rotate secrets, rebuild affected container images.
+5. **Recover.** Restore service from clean backups if necessary, verify no persistence remains, monitor for recurrence.
+6. **Post-incident.** Blameless postmortem within 5 business days. Track action items to completion.
+
+### 6.4 Communication
+
+- Critical/high incidents must be escalated to the Architect and Product Owner immediately.
+- Legal/regulatory notification is determined by the Architect and management.
+- External communication is restricted to authorized personnel only.
+
+---
+
+## 7. Security Checklist
+
+This checklist must be linked from `CONTRIBUTING.md` and the CI documentation. All items must pass or be explicitly reviewed before merge or deployment.
+
+### Code and Configuration
+
+- [ ] No plaintext secrets in code, configuration, environment files, or tests.
+- [ ] All dependencies pinned in lockfiles.
+- [ ] No known high or critical vulnerabilities from SCA scans.
+- [ ] API endpoints enforce authentication and authorization dependencies.
+- [ ] All database queries enforce tenant isolation: Postgres RLS and Neo4j tenant filters.
+- [ ] Parameterized Cypher used for all Neo4j queries. No string concatenation.
+- [ ] CORS, CSP, and security headers correctly configured.
+- [ ] Input validation and output encoding applied to all user and model data.
+
+### LLM and Tool Security
+
+- [ ] LangGraph tool allowlist defined for every node.
+- [ ] Sensitive tool calls require human-in-the-loop approval.
+- [ ] Tool outputs treated as untrusted and validated/escaped.
+- [ ] No secrets or cross-tenant data included in LLM prompts.
+- [ ] Rate limits, max steps, and token/cost caps configured.
+- [ ] Prompt injection canary tokens present in system prompts.
+- [ ] Content safety filters enabled where applicable.
+
+### Container and Kubernetes
+
+- [ ] Container image scanned; no high or critical vulnerabilities.
+- [ ] Image signed with Cosign or equivalent.
+- [ ] Container runs as non-root with read-only root filesystem.
+- [ ] Kubernetes manifest passes Pod Security Standards `restricted` or `baseline`.
+- [ ] NetworkPolicy applied; egress restricted to required endpoints.
+- [ ] No default ServiceAccount used; dedicated least-privilege ServiceAccount in use.
+- [ ] No wildcard RBAC permissions.
+- [ ] Resource limits and requests defined.
+
+### CI/CD and Deployment
+
+- [ ] Secret scanning passes.
+- [ ] SCA, SAST, and container scanning pass.
+- [ ] Security regression tests pass.
+- [ ] Merges require at least one code review.
+- [ ] Protected branches enabled for `main`/`release`.
+- [ ] Deployment uses signed artifacts from trusted registry.
+
+### Operational
+
+- [ ] Security-relevant events logged and redacted.
+- [ ] Alerts configured for suspicious events.
+- [ ] Incident response contacts documented.
+- [ ] Secrets rotation schedule documented and active.
+
+---
+
+## 8. Reporting Vulnerabilities
+
+Do not open public issues for security vulnerabilities. Instead, report via the private security channel or email `security@example.com`.
+
+We follow a coordinated disclosure process:
+
+- Acknowledge report within **2 business days**.
+- Validate and triage within **5 business days**.
+- Provide a fix timeline based on severity.
+- Credit researchers when the issue is resolved, unless anonymity is requested.
+
+---
+
+## 9. References
+
+- `CONTRIBUTING.md` — must link to the security checklist in Section 7.
+- `docs/CI.md` — must link to the security checklist in Section 7.
+- `docs/architecture/adrs/` — architecture decision records for security-sensitive choices.
+- `docs/incident-response/runbooks/` — incident runbooks and contact information.
+- `infra/k8s/` — Kubernetes manifests, NetworkPolicies, and Pod Security Standards configuration.
+- `scripts/security/` — secret scanning, SCA, and container scanning helper scripts.

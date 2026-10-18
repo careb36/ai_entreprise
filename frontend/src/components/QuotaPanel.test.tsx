@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 vi.mock('../hooks/useQueries', () => ({
   useQuotas: vi.fn(),
   useResetQuota: vi.fn(),
+  useQuotaUsageHistory: vi.fn(() => ({ data: { days: [], total: 0 } })),
 }))
 
 describe('Company quotas', () => {

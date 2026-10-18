@@ -1,34 +1,68 @@
-# Changelog
+# Contributing to La Fabrique
 
-All notable changes to the "La Fabrique" project will be documented in this file.
+This file is the **single authoritative source** for how work enters La Fabrique:
+branch naming, pull request flow, review requirements, merge policy, versioning,
+releases, and hotfixes. It applies equally to human contributors and to AI agents
+operating in this repository.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
-### Added
-
-* **Documentation overhaul.** README.md, README.es.md, CONTRIBUTING.md, and CLAUDE.md restructured following industry best practices. Added SECURITY.md, CODE_OF_CONDUCT.md, and GitHub issue/PR templates.
-* **Architect consultation step.** Before a Developer starts a high-priority, design-sensitive, or QA-reworked task, the worker asks the company's Architect agent for a short technical brief, appends it to the card as an `ARCHITECT_CONSULTED:` comment (feeding the *Architect Consult Frequency* KPI), streams it to the Glassroom, and injects it into the Developer prompt. At most one consultation per implementation attempt. Disable with `ARCHITECT_CONSULT_ENABLED=false`.
-* Backend tests for the KPI emitters and their contract with the analytics queries (`backend/tests/test_orchestration_metrics.py`).
-
-### Fixed
-
-* **Orchestration health KPIs were structurally zero.** `GET /v1/analytics/orchestration_health` filtered `audit_log` on `details.role` / `details.company_id` and counted `ARCHITECT_CONSULTED:` comments, but the task pipeline never wrote either. The worker now records every Developer execution and QA review to `audit_log` (canonical role, company scope, `result_type`, proxy-reported token cost) via the new `services/orchestration_metrics.py` module, so *Avg Developer Tokens* and the QA *NEEDS WORK* rate read real data.
+- **Do not restate these rules elsewhere.** Link to them: `CONTRIBUTING.md#<anchor>`.
+- If a tool configuration (`.github/workflows/`, `CODEOWNERS`, `commitlint.config.js`,
+  branch protection) disagrees with this document, **the tool is wrong**. Fix the tool
+  in the same pull request and note it in the PR description.
+- Changes to this document require **two approvals: DevOps and the Product Owner**.
 
 ---
 
-## [0.1.0] - 2023-10-27
+## Quick reference
 
-### Added
+| I want to… | Do this |
+|---|---|
+| Start work | Branch from up-to-date `main`, named per [§2.2](#22-short-lived-branch-naming) |
+| Land work | Open a PR against `main` using the [PR template](.github/PULL_REQUEST_TEMPLATE.md) |
+| Merge | Get approvals per [§4.4](#44-review-requirements), pass all checks, enter the merge queue |
+| Ship a release | Follow [§7](#7-release-process) and the [release checklist](#74-release-checklist) |
+| Fix production | Follow [§8](#8-hotfix-process) |
+| Know if my change is breaking | Check the [public surface table](#62-public-surface) |
+| Contribute as an agent | Read [§5](#5-agent-contributors) first |
 
-* **Project Initialization:** Established the initial project structure, including the core application scaffolding, configuration files, and directory layout for the La Fabrique platform.
-* **Core Agent Service:** Implemented the foundational agent orchestration service. This service is responsible for receiving high-level development tasks, decomposing them into sub-tasks, and managing the execution lifecycle.
-* **Tooling Integration Framework (Alpha):** Created the basic infrastructure for integrating external developer tools. This initial version includes placeholder interfaces for linters, compilers, and version control systems.
-* **Prompt Engineering Library:** Seeded the initial library of system prompts and templates for core tasks like code generation, debugging, and test creation. This provides a baseline for the AI's operational capabilities.
-* **CI/CD Pipeline Foundation:** Set up the initial continuous integration and deployment pipeline using GitHub Actions. The pipeline currently handles automated builds and runs placeholder unit tests on every commit to the `main` branch.
-* **Core Documentation:** Created essential project documentation including `README.md`, `CONTRIBUTING.md`, and this `CHANGELOG.md` to establish development standards and provide a baseline for future contributors.
+---
 
-[unreleased]: https://github.com/careb36/la-fabrique/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/careb36/la-fabrique/releases/tag/v0.1.0
+## 1. Ground rules
+
+1. `main` is **always releasable**. A red `main` is a P1 incident, not a backlog item.
+2. Every change arrives by pull request. There are no direct pushes to protected branches,
+   for anyone, ever — including release managers.
+3. Every PR is traceable to a ticket and to a GlassRoom run (human or agent). Work with
+   no provenance is not reviewable and will be closed.
+4. Prefer the smallest change that delivers the increment. Stack large work into
+   reviewable PRs rather than one 2,000-line diff.
+5. If you cannot explain the rollback in one sentence, the change is too big.
+
+### Service levels
+
+| Event | Target |
+|---|---|
+| First review on a PR | 1 business day |
+| Re-review after changes | 4 business hours |
+| Hotfix acknowledgement (business hours) | 1 hour |
+| Agent-authored PR triaged by a human | 1 business day |
+
+---
+
+## 2. Branching model
+
+La Fabrique uses **trunk-based development**. `main` is the only long-lived development
+branch. There is no `develop` branch and there will not be one: a second integration
+point doubles the merge surface and makes agent work non-deterministic.
+
+### 2.1 Long-lived branches
+
+| Branch | Purpose | Who may merge | Protected |
+|---|---|---|---|
+| `main` | Trunk. Always releasable. All features land here. | Via merge queue only | Yes |
+| `release/<major>.<minor>` | Release stabilization and patch maintenance for a shipped minor line. Cut from `main` at RC. | Release manager only | Yes |
+
+`release/*` branches accept **only** `hotfix/*` and `release/*` PRs. Features never land
+on a release branch; they go to `main` and ship in the next minor.
+
+### 2.2 Short-lived branch naming

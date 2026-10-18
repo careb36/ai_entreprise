@@ -480,6 +480,8 @@ export const api = {
 
   getQuotas: (companyId: number) =>
     api.get<any[]>('/v1/enterprise/quotas', { company_id: companyId }),
+  getQuotaUsageHistory: (companyId: number, days = 7) =>
+    api.get<{ days: { date: string; tokens: number }[]; total: number }>('/v1/enterprise/quota_usage_history', { company_id: companyId, days }),
 
   resetQuota: (buId: number) =>
     api.post<any>(`/v1/enterprise/quotas/${buId}/reset`, {}),
