@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
+import { Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { ApiError, type AgentRunStatus } from '../services/api'
 import {
   useAgentRun,
@@ -90,9 +91,10 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
 
   return (
     <div className="space-y-6">
-      <Link to="/evidence" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white">
-        <ArrowLeft size={15} />{t('evidence.backToRuns')}
-      </Link>
+      <Breadcrumbs items={[
+        { label: t('nav.evidence', { defaultValue: 'Evidence' }), to: '/evidence' },
+        { label: t('evidence.runCrumb', { id: runId, defaultValue: 'Run #{{id}}' }) },
+      ]} />
       <header className="page-header">
         <h1 className="page-title">{t('evidence.detailTitle')}</h1>
         <p className="mt-1 break-all font-mono text-sm text-gray-400">{run.external_ref} · {run.producer}</p>

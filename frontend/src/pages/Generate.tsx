@@ -86,7 +86,7 @@ export default function Generate() {
               <div className="flex items-center gap-2 pt-2 border-t border-surface-700">
                 <span className="text-gray-500 w-32">{t('generate.viewWorkspace', 'View workspace')}</span>
                 <button
-                  onClick={() => navigate(`/workspace/${result.sprint_id}`)}
+                  onClick={() => navigate(`/sprints/${result.sprint_id}/live`)}
                   className="btn btn-primary btn-sm flex items-center gap-1.5"
                 >
                   Sprint #{result.sprint_id} <ArrowRight size={13} />

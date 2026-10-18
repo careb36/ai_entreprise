@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { BacklogItem } from '../services/api'
 import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
 import {
@@ -70,9 +71,10 @@ function metricBadgeClass(value: number, limit: number): string {
 // ── SortableCard ───────────────────────────────────────────────────────────────
 
 function ItemCard({
-  item, onStatusChange, updating, isDragging = false
+  item, sprintId, onStatusChange, updating, isDragging = false
 }: {
   item: BacklogItem
+  sprintId: number
   onStatusChange: (id: number, status: BacklogItem['status']) => void
   updating: boolean
   isDragging?: boolean
@@ -103,7 +105,12 @@ function ItemCard({
         >
           <GripVertical size={14} />
         </button>
-        <p className="text-white text-sm font-medium leading-snug flex-1">{item.title}</p>
+        <Link
+          to={`/sprints/${sprintId}/tasks/${item.id}`}
+          className="text-white text-sm font-medium leading-snug flex-1 min-w-0 break-words hover:text-brand-300 hover:underline"
+        >
+          {item.title}
+        </Link>
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap mt-2 ml-5">
@@ -149,6 +156,7 @@ function ItemCard({
 
 function ColumnDropZone({
   columnId,
+  sprintId,
   items,
   titleKey,
   className,
@@ -159,6 +167,7 @@ function ColumnDropZone({
   activeItemId,
 }: {
   columnId: string
+  sprintId: number
   items: BacklogItem[]
   titleKey: string
   className: string
@@ -198,6 +207,7 @@ function ColumnDropZone({
               <ItemCard
                 key={item.id}
                 item={item}
+                sprintId={sprintId}
                 onStatusChange={onStatusChange}
                 updating={updating.isPending && updating.variables?.itemId === item.id}
                 isDragging={activeItemId === item.id}
@@ -334,6 +344,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
                   <ColumnDropZone
                     key={colId}
                     columnId={colId}
+                    sprintId={idNum}
                     items={items}
                     titleKey={titleKey}
                     className={className}

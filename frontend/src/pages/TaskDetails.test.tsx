@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskDetails from './TaskDetails'
@@ -12,7 +12,7 @@ const boardQuery = vi.mocked(useSprintBoard)
 function setup(path = '/task/12') {
   return render(<MemoryRouter initialEntries={[path]}><Routes>
     <Route path="/task/:taskId" element={<TaskDetails />} />
-    <Route path="/workspace/:sprintId/task/:taskId" element={<TaskDetails />} />
+    <Route path="/sprints/:sprintId/tasks/:taskId" element={<TaskDetails />} />
   </Routes></MemoryRouter>)
 }
 
@@ -36,7 +36,7 @@ describe('task detail errors', () => {
   })
 
   it('rejects a malformed explicit sprint ID without loading a board', () => {
-    setup('/workspace/7x/task/12')
+    setup('/sprints/7x/tasks/12')
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid sprint ID: 7x')
     expect(boardQuery).toHaveBeenCalledWith(null)
   })
@@ -49,12 +49,12 @@ describe('task detail errors', () => {
       <Route path="/task/:taskId" element={<TaskDetails />} />
     </Routes></MemoryRouter>)
     expect(screen.getByRole('alert')).toHaveTextContent('Sprint #7 was not found while looking for task #12')
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/dashboard')
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/sprints')
   })
 
   it('distinguishes a missing sprint from a missing task', () => {
     boardQuery.mockReturnValue({ isError: true, error: new ApiError(404, 'missing') } as never)
-    setup('/workspace/9/task/12')
+    setup('/sprints/9/tasks/12')
     expect(screen.getByRole('alert')).toHaveTextContent('Sprint #9 was not found while looking for task #12')
     expect(boardQuery).toHaveBeenCalledWith(9)
   })
@@ -68,10 +68,37 @@ describe('task detail errors', () => {
     expect(refetch).toHaveBeenCalledOnce()
   })
 
-  it('offers Dashboard recovery when there is no selected sprint', () => {
+  it('offers the sprint list when there is no selected sprint', () => {
     useAppStore.setState({ activeSprintId: null })
     setup()
     expect(screen.getByRole('alert')).toHaveTextContent('Select a sprint to look up task #12')
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/dashboard')
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/sprints')
+  })
+
+  it.each(['/sprints/9/tasks/12', '/task/12'])('shows the Sprints › sprint › task breadcrumb at %s', path => {
+    useAppStore.setState({ activeSprintId: 9 })
+    boardQuery.mockReturnValue({
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening' },
+        columns: { done: [{
+          id: 12, sprint_id: 9, title: 'Encrypt credentials', description: 'Deliverable: crypto.py',
+          status: 'done', priority: 'high', assignee: 'Developer', comments: [],
+          created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+        }] },
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup(path)
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getAllByRole('listitem').map(item => item.textContent))
+      .toEqual(['Sprints', 'Hardening', 'Encrypt credentials'])
+    expect(within(breadcrumb).getByRole('link', { name: 'Sprints' })).toHaveAttribute('href', '/sprints')
+    expect(within(breadcrumb).getByRole('link', { name: 'Hardening' })).toHaveAttribute('href', '/sprints/9/board')
+    expect(within(breadcrumb).queryByRole('link', { name: 'Encrypt credentials' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Encrypt credentials' })).toBeInTheDocument()
+    expect(screen.getByText('Deliverable: crypto.py')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Back' })).not.toBeInTheDocument()
+    expect(boardQuery).toHaveBeenCalledWith(9)
   })
 })

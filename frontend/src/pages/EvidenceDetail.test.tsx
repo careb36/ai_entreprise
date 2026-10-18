@@ -145,6 +145,16 @@ describe('Evidence detail', () => {
     expect(screen.getByText('artifact_nonempty')).toBeInTheDocument()
   })
 
+  it('shows an Evidence › Run breadcrumb instead of a back link', () => {
+    setup()
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Evidence', 'Run #7'])
+    expect(within(breadcrumb).getByRole('link', { name: 'Evidence' })).toHaveAttribute('href', '/evidence')
+    expect(within(breadcrumb).queryByRole('link', { name: 'Run #7' })).not.toBeInTheDocument()
+    expect(document.querySelector('[aria-current]')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Back to evidence' })).not.toBeInTheDocument()
+  })
+
   it('renders unsigned and legacy audit rows without the valid style', () => {
     setup()
     const unsigned = screen.getByTestId('signature-row-unsigned')

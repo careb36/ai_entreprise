@@ -64,7 +64,7 @@ export default function SprintBoard() {
           if (sprintId) {
             setActiveSprint(sprintId)
             toast.success(t('sprintBoard.success'))
-            navigate(`/workspace/${sprintId}`)
+            navigate(`/sprints/${sprintId}/live`)
           }
         },
         onError: (err) => {

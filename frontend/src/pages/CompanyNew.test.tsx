@@ -312,7 +312,7 @@ describe('company creation profile refresh', () => {
           <Routes>
             <Route element={<ProtectedRoute />}>
               <Route path="/companies/new" element={<CompanyNew />} />
-              <Route path="/workspace/5" element={<div>Created workspace</div>} />
+              <Route path="/sprints/5" element={<div>Created workspace</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -332,7 +332,7 @@ describe('company creation profile refresh', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Profile unavailable')
     expect(useAppStore.getState()).toMatchObject({ companyId: 14, companyName: 'New Factory' })
-    expect(screen.getByTestId('current-path')).toHaveTextContent('/workspace/5')
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/sprints/5')
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Created workspace')).toBeInTheDocument()

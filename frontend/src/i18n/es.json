@@ -9,7 +9,6 @@
     "review": "Revisión",
     "sprints": "Sprints",
     "quotas": "Cuotas",
-    "board": "Tablero",
     "online": "En línea",
     "mainNavigation": "Navegación principal",
     "mobileNavigation": "Navegación móvil",
@@ -17,20 +16,19 @@
     "closeMenu": "Cerrar menú",
     "newCompany": "Nueva compañía",
     "evidence": "Evidencia",
-    "analytics": "Analíticas",
     "memory": "Memoria",
     "generate": "Generar",
-    "offline": "Fuera de línea"
+    "offline": "Fuera de línea",
+    "agents": "Agentes",
+    "breadcrumb": "Ruta de navegación"
   },
   "dashboard": {
-    "liveView": "Vista en vivo",
     "title": "La Fabrique",
     "subtitle": "Plataforma de desarrollo autónomo con IA",
     "systemStatus": "Estado del Sistema",
     "online": "En línea",
     "offline": "Fuera de línea",
     "checking": "Verificando...",
-    "newFactory": "Nueva Fábrica",
     "newFactoryDesc": "Crear una nueva fábrica de software IA",
     "activeWorkspace": "Espacio Activo",
     "activeWorkspaceDesc": "Abrir espacio de trabajo del sprint",
@@ -45,8 +43,6 @@
     "companies": "Tus Fábricas",
     "needsSplit": "El sprint necesita dividirse",
     "needsSplitDesc": "Este sprint superó la capacidad de los agentes. Divídelo en alcances más pequeños.",
-    "systemOnline": "Sistema en línea",
-    "systemOffline": "Sistema fuera de línea",
     "commandCenter": "Centro de mando de sprints con IA",
     "review": "Revisar",
     "tasksDone": "{{done}} de {{total}} tareas completadas",
@@ -97,9 +93,7 @@
     "agentCount_other": "{{count}} agentes",
     "noAgents": "Aún no se han visto agentes.",
     "activateAgents": "Inicia un sprint para activar a los agentes.",
-    "viewLiveStream": "Ver transmisión en directo",
     "system": "Sistema",
-    "backendApi": "API del backend",
     "agentStream": "Flujo de agentes",
     "scope": {
       "S": {
@@ -153,7 +147,9 @@
       "high": "Alta",
       "critical": "Crítica"
     },
-    "kanban": "Tablero Kanban"
+    "manageAgents": "Gestionar agentes",
+    "manageQuotas": "Gestionar cuotas",
+    "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites."
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -469,16 +465,10 @@
     "activeContext": "Contexto Activo",
     "aiAgentsActive": "Agentes IA Activos",
     "sprintBoard": "Tablero del Sprint",
-    "glassroomTitle": "Sala de Cristal — Stream en Vivo",
     "collapseSidebar": "Colapsar barra lateral",
     "expandSidebar": "Expandir barra lateral",
     "noSprint": "Sin sprint activo",
     "noSprintDesc": "Inicia un sprint para comenzar a trabajar",
-    "operationsTitle": "Operaciones del Sprint",
-    "operationsSubtitle": "Tablero Kanban y gestión del sprint en vivo",
-    "openLiveRoom": "Abrir Sala en Vivo",
-    "backToDashboard": "Volver al Dashboard",
-    "boardOpsTitle": "Tablero del Sprint",
     "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar",
     "pauseSprint": "Pausar",
     "resumeSprint": "Reanudar"
@@ -828,7 +818,8 @@
     "legacyCompany": "Heredada — empresa no registrada",
     "runAuditId": "Fila de auditoría de la ejecución",
     "latestVerificationAuditId": "Fila de auditoría de la última verificación",
-    "notRecorded": "No registrado"
+    "notRecorded": "No registrado",
+    "runCrumb": "Ejecución #{{id}}"
   },
   "analytics": {
     "title": "Analíticas",
@@ -1100,5 +1091,27 @@
     "na": "N/D",
     "copyId": "Copiar ID",
     "learnMore": "Más información"
+  },
+  "sprint": {
+    "views": "Vistas del sprint",
+    "tabs": {
+      "overview": "Resumen",
+      "board": "Tablero",
+      "live": "En vivo",
+      "analytics": "Analíticas"
+    },
+    "streamConnected": "Flujo conectado",
+    "streamDisconnected": "Flujo desconectado"
+  },
+  "sprints": {
+    "subtitle": "Todos los sprints de esta empresa, primero los activos.",
+    "selectCompany": "Selecciona una empresa para ver sus sprints.",
+    "loadError": "No se pudieron cargar los sprints.",
+    "emptyTitle": "Todavía no hay sprints",
+    "emptyDescription": "Planifica un sprint abajo o crea una empresa nueva con un sprint inicial.",
+    "planSprint": "Planificar un sprint",
+    "progress": "{{done}} / {{total}} completadas",
+    "noStartDate": "Sin iniciar",
+    "lastOpened": "Abierto por última vez"
   }
 }

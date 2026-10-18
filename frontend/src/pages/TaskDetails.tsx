@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, User, Flag, MessageSquare, Clock } from 'lucide-react'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useAppStore } from '../store/useAppStore'
 import { useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
@@ -47,7 +48,8 @@ export default function TaskDetails() {
     ? Object.values(board.columns).flat().find(item => item.id === parsedTaskId)
     : undefined
 
-  const backTo = resolvedSprintId ? `/workspace/${resolvedSprintId}` : '/dashboard'
+  const sprintsLabel = t('nav.sprints', { defaultValue: 'Sprints' })
+  const backTo = resolvedSprintId ? `/sprints/${resolvedSprintId}/board` : '/sprints'
 
   if (isLoading) {
     return (
@@ -76,7 +78,7 @@ export default function TaskDetails() {
         {parsedTaskId !== null && resolvedSprintId !== null && isError && !sprintNotFound && (
           <button onClick={() => refetch()} className="btn btn-ghost text-sm mr-3">{t('common.retry')}</button>
         )}
-        <Link to={sprintNotFound ? '/dashboard' : backTo} className="btn btn-ghost text-sm">
+        <Link to={sprintNotFound ? '/sprints' : backTo} className="btn btn-ghost text-sm">
           <ArrowLeft size={14} className="mr-1" /> {t('common.back')}
         </Link>
       </div>
@@ -85,11 +87,16 @@ export default function TaskDetails() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
-      {/* Back link */}
-      <Link to={backTo} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors mb-6">
-        <ArrowLeft size={14} />
-        {t('common.back')}
-      </Link>
+      <div className="mb-6">
+        <Breadcrumbs items={[
+          { label: sprintsLabel, to: '/sprints' },
+          {
+            label: board?.sprint?.sprint_name || t('workspace.sprintLabel', { id: resolvedSprintId, defaultValue: 'Sprint #{{id}}' }),
+            to: backTo,
+          },
+          { label: task.title },
+        ]} />
+      </div>
 
       {/* Header */}
       <div className="mb-6">

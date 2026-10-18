@@ -515,11 +515,11 @@ export default function CompanyNew() {
         const sprintId = response?.sprint_id ?? companyId
         setCompany(companyId, companyName.trim())
         // Navigate immediately, load profile in background
-        navigate(`/workspace/${sprintId}`)
+        navigate(`/sprints/${sprintId}`)
         // Fallback navigation in case React Router doesn't work
         setTimeout(() => {
-          if (window.location.pathname !== `/workspace/${sprintId}`) {
-            window.location.href = `/workspace/${sprintId}`
+          if (!window.location.pathname.startsWith(`/sprints/${sprintId}`)) {
+            window.location.href = `/sprints/${sprintId}`
           }
         }, 1000)
         useAuthStore.getState().loadMe().catch(() => {})

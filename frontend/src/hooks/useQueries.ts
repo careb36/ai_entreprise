@@ -16,6 +16,7 @@ import {
 
 export const QUERY_KEYS = {
   capabilities: () => ['capabilities'] as const,
+  sprints: (companyId: number) => ['sprints', companyId] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   quotaHistory: (companyId: number, days: number) => ['enterprise', companyId, 'quota_history', days] as const,
@@ -141,6 +142,7 @@ export function useStartSprint() {
     mutationFn: (data: any) => api.post<{ sprint_id: number }>('/v1/start_sprint', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sprint'] })
+      queryClient.invalidateQueries({ queryKey: ['sprints'] })
     },
   })
 }
@@ -154,6 +156,14 @@ export function usePlanSprint() {
 export function usePlanSelfImprovementSprint() {
   return useMutation({
     mutationFn: (data: Parameters<typeof api.planSelfImprovementSprint>[0]) => api.planSelfImprovementSprint(data),
+  })
+}
+
+export function useSprints(companyId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.sprints(companyId ?? 0),
+    queryFn: () => api.listSprints(companyId!),
+    enabled: companyId !== null,
   })
 }
 

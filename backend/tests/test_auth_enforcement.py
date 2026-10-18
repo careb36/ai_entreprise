@@ -292,6 +292,7 @@ def test_flag_off_init_creates_no_membership(
         ("POST", "/v1/sprints/1/dispatch"),
         ("PATCH", "/v1/backlog/1"),
         ("GET", "/v1/sprints/1/board"),
+        ("GET", "/v1/sprints?company_id=1"),
         ("POST", "/v1/generate"),
         ("POST", "/v1/audit"),
         ("POST", "/v1/memory/store?content=test"),

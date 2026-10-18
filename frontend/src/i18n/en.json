@@ -9,7 +9,6 @@
     "review": "Review",
     "sprints": "Sprints",
     "quotas": "Quotas",
-    "board": "Board",
     "online": "Online",
     "mainNavigation": "Main navigation",
     "mobileNavigation": "Mobile navigation",
@@ -17,20 +16,19 @@
     "closeMenu": "Close menu",
     "newCompany": "New company",
     "evidence": "Evidence",
-    "analytics": "Analytics",
     "memory": "Memory",
     "generate": "Generate",
-    "offline": "Offline"
+    "offline": "Offline",
+    "agents": "Agents",
+    "breadcrumb": "Breadcrumb"
   },
   "dashboard": {
-    "liveView": "Live view",
     "title": "La Fabrique",
     "subtitle": "AI-powered autonomous development platform",
     "systemStatus": "System Status",
     "online": "Online",
     "offline": "Offline",
     "checking": "Checking...",
-    "newFactory": "New Factory",
     "newFactoryDesc": "Create a new AI software factory",
     "activeWorkspace": "Active Workspace",
     "activeWorkspaceDesc": "Open sprint workspace",
@@ -45,8 +43,6 @@
     "companies": "Your Factories",
     "needsSplit": "Sprint needs splitting",
     "needsSplitDesc": "This sprint exceeded agent capacity. Split it into smaller scopes.",
-    "systemOnline": "System online",
-    "systemOffline": "System offline",
     "commandCenter": "AI Sprint command center",
     "review": "Review",
     "tasksDone": "{{done}} of {{total}} tasks done",
@@ -97,9 +93,7 @@
     "agentCount_other": "{{count}} agents",
     "noAgents": "No agents seen yet.",
     "activateAgents": "Launch a sprint to activate agents.",
-    "viewLiveStream": "View live stream",
     "system": "System",
-    "backendApi": "Backend API",
     "agentStream": "Agent Stream",
     "scope": {
       "S": {
@@ -153,7 +147,9 @@
       "high": "High",
       "critical": "Critical"
     },
-    "kanban": "Kanban Board"
+    "manageAgents": "Manage agents",
+    "manageQuotas": "Manage quotas",
+    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits."
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -469,16 +465,10 @@
     "activeContext": "Active Context",
     "aiAgentsActive": "AI Agents Active",
     "sprintBoard": "Sprint Board",
-    "glassroomTitle": "Glassroom — Live Agent Stream",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
     "noSprint": "No active sprint",
     "noSprintDesc": "Start a sprint to begin working",
-    "operationsTitle": "Sprint Operations",
-    "operationsSubtitle": "Kanban board and live sprint management",
-    "openLiveRoom": "Open Live Room",
-    "backToDashboard": "Back to Dashboard",
-    "boardOpsTitle": "Sprint Board",
     "boardOpsHint": "Drag tasks to change status or reassign",
     "pauseSprint": "Pause",
     "resumeSprint": "Resume"
@@ -828,7 +818,8 @@
     "legacyCompany": "Legacy — company not recorded",
     "runAuditId": "Run audit row",
     "latestVerificationAuditId": "Latest verification audit row",
-    "notRecorded": "Not recorded"
+    "notRecorded": "Not recorded",
+    "runCrumb": "Run #{{id}}"
   },
   "analytics": {
     "title": "Analytics",
@@ -1100,5 +1091,27 @@
     "na": "N/A",
     "copyId": "Copy ID",
     "learnMore": "Learn more"
+  },
+  "sprint": {
+    "views": "Sprint views",
+    "tabs": {
+      "overview": "Overview",
+      "board": "Board",
+      "live": "Live",
+      "analytics": "Analytics"
+    },
+    "streamConnected": "Stream connected",
+    "streamDisconnected": "Stream disconnected"
+  },
+  "sprints": {
+    "subtitle": "Every sprint of this company, active ones first.",
+    "selectCompany": "Select a company to see its sprints.",
+    "loadError": "Failed to load sprints.",
+    "emptyTitle": "No sprints yet",
+    "emptyDescription": "Plan a sprint below, or create a new company with a foundation sprint.",
+    "planSprint": "Plan a sprint",
+    "progress": "{{done}} / {{total}} done",
+    "noStartDate": "Not started",
+    "lastOpened": "Last opened"
   }
 }

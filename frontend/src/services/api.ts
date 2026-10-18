@@ -154,6 +154,17 @@ export interface SprintBoard {
   total: number
 }
 
+export interface SprintSummary {
+  id: number
+  sprint_name: string
+  status: string
+  goal: string | null
+  start_date: string | null
+  scope_size: string
+  total: number
+  done: number
+}
+
 export interface PlannedSprintTask {
   title: string
   description: string
@@ -499,6 +510,9 @@ export const api = {
     api.get<OrchestrationHealthResponse>('/v1/analytics/orchestration_health', { company_id: companyId, weeks }),
 
   // Sprints & Backlog
+  listSprints: (companyId: number) =>
+    api.get<SprintSummary[]>('/v1/sprints', { company_id: companyId }),
+
   getSprintBoard: (sprintId: number) =>
     api.get<SprintBoard>(`/v1/sprints/${sprintId}/board`),
 
