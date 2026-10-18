@@ -218,13 +218,9 @@
     "edit": "Edit",
     "scanTitle": "Scan your project",
     "scanDescription": "Point La Fabrique at your repository. We'll detect the stack and suggest an optimal AI team. You can skip this and configure manually.",
-    "repositoryPlaceholder": "/projects/la-fabrique  (path inside the Docker container)",
     "browse": "Browse",
-    "close": "Close",
     "scan": "Scan",
     "scanning": "Scanning…",
-    "noDirectories": "No directories found in {{root}}",
-    "directoryError": "Error listing directories: {{message}}",
     "discoveryError": "Project scan failed: {{message}}",
     "initializationError": "Failed to initialize factory: {{message}}",
     "unknownError": "Unknown error",
@@ -1126,5 +1122,60 @@
     "progress": "{{done}} / {{total}} done",
     "noStartDate": "Not started",
     "lastOpened": "Last opened"
+  },
+  "projectFolder": {
+    "label": "Project folder",
+    "placeholderUnix": "~/code/my-app",
+    "placeholderWindows": "C:\\Users\\you\\source\\repos\\my-app",
+    "browseDaemon": "Browse via the workspace daemon",
+    "checking": "Checking folder…",
+    "cardLabel": "Selected project folder",
+    "notFound": "This folder does not exist on {{host}}: {{path}}",
+    "notFolder": "This path is not a folder on {{host}}: {{path}}",
+    "inspectError": "Could not check this folder: {{message}}",
+    "manualHint": "You can still type the folder path and scan it.",
+    "remote": "Remote",
+    "noRemote": "No remote configured",
+    "branch": "Branch",
+    "noBranch": "No branch (detached HEAD)",
+    "notGitHint": "Agents can still write into this folder, but it is not a git clone.",
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "bitbucket": "Bitbucket",
+      "other": "Git",
+      "none": "Not a git repository"
+    }
+  },
+  "folderPicker": {
+    "title": "Choose a project folder",
+    "hostLine": "On {{hostname}} ({{platform}})",
+    "currentFolder": "Current folder",
+    "up": "Up",
+    "upLabel": "Go to the parent folder",
+    "shortcuts": "Shortcuts",
+    "roots": "Drives",
+    "folders": "Folders",
+    "gitBadge": "git repo",
+    "gitBadgeTitle": "This folder is a git repository",
+    "empty": "No subfolders here.",
+    "truncated": "Only the first folders are shown. Type the path if yours is missing.",
+    "loading": "Loading folders…",
+    "useThis": "Use this folder",
+    "error": "Could not open this folder: {{message}}",
+    "home": "Go to the home folder"
+  },
+  "workspaceDaemon": {
+    "connected": "Workspace daemon connected on {{hostname}} ({{platform}})",
+    "notConnected": "The workspace daemon is not connected.",
+    "startHint": "Start it on the computer where your repositories are cloned:",
+    "unixLabel": "macOS / Ubuntu",
+    "windowsLabel": "Windows (PowerShell)",
+    "statusError": "Workspace daemon status unavailable: {{message}}",
+    "platforms": {
+      "darwin": "macOS",
+      "linux": "Ubuntu/Linux",
+      "win32": "Windows"
+    }
   }
 }

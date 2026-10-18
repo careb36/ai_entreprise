@@ -1,19 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
-import type {
-  DetectedStack,
-  DiscoverTeamAgent,
-  DiscoverTeamResponse,
-  InitCompanyResponse,
+import {
+  api,
+  ApiError,
+  errorDetail,
+  type DetectedStack,
+  type DiscoverTeamAgent,
+  type DiscoverTeamResponse,
+  type InitCompanyResponse,
+  type WorkspaceHost,
+  type WorkspaceInspection,
 } from '../services/api'
-import { 
-  useModels, 
-  useDiscoverTeam, 
-  useInitCompany 
+import { FolderPicker } from '../components/FolderPicker'
+import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
+import { clientPlatform } from '../lib/workspace'
+import {
+  useModels,
+  useDiscoverTeam,
+  useInitCompany,
+  useWorkspaceStatus,
 } from '../hooks/useQueries'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -129,7 +138,6 @@ const DEFAULT_PERMISSIONS: Permissions = {
 }
 
 const STEPS = ['Project', 'Company', 'Autonomy', 'Permissions', 'Team', 'Review']
-const DEFAULT_PROJECT_PATH = import.meta.env.VITE_DEFAULT_PROJECT_PATH || ''
 
 const localizedRoles = (t: TFunction) => ROLES.map(role => ({
   ...role,
@@ -180,6 +188,103 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
       ))}
     </div>
   )
+}
+
+const PROVIDER_BADGES: Record<string, string> = {
+  github: 'bg-gray-800 text-gray-100 ring-1 ring-gray-600',
+  gitlab: 'bg-orange-900/50 text-orange-200 ring-1 ring-orange-700/50',
+  bitbucket: 'bg-blue-900/50 text-blue-200 ring-1 ring-blue-700/50',
+  other: 'bg-surface-700 text-gray-200',
+  none: 'bg-yellow-900/40 text-yellow-200',
+}
+
+/** Result of asking the workspace daemon about a folder; `stale` when the field changed meanwhile. */
+type InspectOutcome =
+  | { kind: 'ok'; result: WorkspaceInspection }
+  | { kind: 'error' }
+  | { kind: 'stale' }
+
+const platformName = (t: TFunction, platform: string) =>
+  t(`workspaceDaemon.platforms.${platform}`, { defaultValue: platform })
+
+/** The folder the agents will work in, as the workspace daemon sees it. */
+function ProjectCard({ project }: { project: WorkspaceInspection }) {
+  const { t } = useTranslation()
+  if (!project.exists || !project.is_dir) {
+    return (
+      <div role="alert" className="alert-error text-sm">
+        <span className="break-all">
+          {t(project.exists ? 'projectFolder.notFolder' : 'projectFolder.notFound', {
+            host: project.host.hostname,
+            path: project.path,
+          })}
+        </span>
+      </div>
+    )
+  }
+  const git = project.git
+  const provider = git?.is_repo ? (git.provider ?? 'other') : 'none'
+  const remote = git?.is_repo ? (git.remote_url ?? git.web_url) : null
+  return (
+    <section aria-label={t('projectFolder.cardLabel')} data-testid="project-card"
+      className="rounded-xl border border-surface-700 bg-surface-800/50 p-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span aria-hidden="true">📁</span>
+        <span className="text-sm font-semibold text-white break-all">{project.name}</span>
+        <span className={`badge ${PROVIDER_BADGES[provider] ?? PROVIDER_BADGES.other}`} data-testid="project-provider">
+          {t(`projectFolder.providers.${provider}`, { defaultValue: provider })}
+        </span>
+      </div>
+      <p className="font-mono text-xs text-gray-400 break-all">{project.path}</p>
+      {git?.is_repo ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-gray-500">{t('projectFolder.remote')}</dt>
+          <dd className="min-w-0 break-all font-mono text-gray-200">
+            {git.web_url ? (
+              <a href={git.web_url} target="_blank" rel="noopener noreferrer" className="text-brand-300 hover:underline">
+                {git.web_url}
+              </a>
+            ) : (remote ?? <span className="font-sans text-gray-500">{t('projectFolder.noRemote')}</span>)}
+          </dd>
+          <dt className="text-gray-500">{t('projectFolder.branch')}</dt>
+          <dd className="min-w-0 break-all font-mono text-gray-200">
+            {git.branch ?? <span className="font-sans text-gray-500">{t('projectFolder.noBranch')}</span>}
+          </dd>
+        </dl>
+      ) : (
+        <p className="text-xs text-gray-500">{t('projectFolder.notGitHint')}</p>
+      )}
+    </section>
+  )
+}
+
+/** Whether the native workspace daemon answers, and on which machine. */
+function DaemonStatusLine({ host, connected, isPending, error, fallbackPlatform }: {
+  host: WorkspaceHost | null | undefined
+  connected: boolean | undefined
+  isPending: boolean
+  error: unknown
+  fallbackPlatform: string | undefined
+}) {
+  const { t } = useTranslation()
+  if (isPending) return null
+  if (connected && host) {
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-green-300">
+        <span className="status-dot bg-green-500" aria-hidden="true" />
+        {t('workspaceDaemon.connected', { hostname: host.hostname, platform: platformName(t, host.platform) })}
+      </p>
+    )
+  }
+  if (connected === false) return <WorkspaceDaemonHelp role="status" platform={fallbackPlatform} />
+  if (error) {
+    return (
+      <p role="status" className="text-xs text-gray-500">
+        {t('workspaceDaemon.statusError', { message: errorDetail(error) })}
+      </p>
+    )
+  }
+  return null
 }
 
 function AgentCard({ agent, index, onUpdate, onRemove, canRemove, availableModels }: {
@@ -393,15 +498,21 @@ export default function CompanyNew() {
   // Wizard state
   const [step, setStep] = useState(0)
 
-  // Step 0 — Project
-  const [projectPath, setProjectPath] = useState(DEFAULT_PROJECT_PATH)
+  // Step 0 — Project. Paths are host-native strings from the user's own
+  // computer (macOS, Ubuntu or Windows), so the field starts empty.
+  const [projectPath, setProjectPath] = useState('')
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
-  const [availableDirs, setAvailableDirs] = useState<{ name: string; path: string }[]>([])
-  const [showDirPicker, setShowDirPicker] = useState(false)
-  const [currentBrowsePath, setCurrentBrowsePath] = useState('')
-  const [browseParent, setBrowseParent] = useState<string | null>(null)
-  const [browseCurrent, setBrowseCurrent] = useState<string>('')
-  const [browseAbsolute, setBrowseAbsolute] = useState<string>('')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [inspected, setInspected] = useState<WorkspaceInspection | null>(null)
+  const [inspecting, setInspecting] = useState(false)
+  const [inspectError, setInspectError] = useState<{ status: number; message: string } | null>(null)
+  const inspectRequest = useRef(0)
+  const pendingInspect = useRef<{ path: string; promise: Promise<InspectOutcome> } | null>(null)
+  const browseButtonRef = useRef<HTMLButtonElement>(null)
+  const workspaceStatus = useWorkspaceStatus()
+  const workspaceHost = workspaceStatus.data?.host ?? inspected?.host ?? null
+  const hostPlatform = workspaceHost?.platform ?? clientPlatform()
+  const selectDirectory = typeof window !== 'undefined' ? window.electronAPI?.selectDirectory : undefined
 
   // Step 1 — Company
   const [companyName, setCompanyName] = useState('')
@@ -448,12 +559,98 @@ export default function CompanyNew() {
 
   // ── Discover ──────────────────────────────────────────────────────────────
 
-  const handleDiscover = async () => {
-    if (!projectPath.trim()) return
+  // ── Project folder ────────────────────────────────────────────────────────
+
+  /**
+   * Asks the workspace daemon about `rawPath`. On success the input shows the
+   * canonical path it returns. Errors (503: daemon not connected) are shown but
+   * never block typing a path by hand.
+   */
+  const inspectPath = (rawPath: string): Promise<InspectOutcome> => {
+    const path = rawPath.trim()
+    if (!path) return Promise.resolve({ kind: 'error' })
+    // Blurring the field and then clicking Scan asks about the same path twice.
+    if (pendingInspect.current?.path === path) return pendingInspect.current.promise
+    const request = ++inspectRequest.current
+    setInspecting(true)
+    setInspectError(null)
+    const promise = (async (): Promise<InspectOutcome> => {
+      try {
+        const result = await api.inspectWorkspace(path)
+        if (request !== inspectRequest.current) return { kind: 'stale' }
+        setInspected(result)
+        if (result.exists) setProjectPath(result.path)
+        return { kind: 'ok', result }
+      } catch (err) {
+        if (request !== inspectRequest.current) return { kind: 'stale' }
+        setInspected(null)
+        setInspectError({ status: err instanceof ApiError ? err.status : 0, message: errorDetail(err) })
+        return { kind: 'error' }
+      } finally {
+        if (request === inspectRequest.current) {
+          setInspecting(false)
+          pendingInspect.current = null
+        }
+      }
+    })()
+    pendingInspect.current = { path, promise }
+    return promise
+  }
+
+  const chooseFolder = (path: string) => {
+    setPickerOpen(false)
+    setProjectPath(path)
     setDiscoveryResult(null)
-    
-    discoverTeamMutation.mutate({ companyId: null, projectPath: projectPath.trim() }, {
+    void inspectPath(path)
+  }
+
+  const handleBrowse = async () => {
+    if (!selectDirectory) {
+      setPickerOpen(true)
+      return
+    }
+    const chosen = await selectDirectory()
+    if (chosen) chooseFolder(chosen)
+  }
+
+  const closePicker = () => {
+    setPickerOpen(false)
+    browseButtonRef.current?.focus()
+  }
+
+  const handlePathChange = (value: string) => {
+    inspectRequest.current++
+    pendingInspect.current = null
+    setProjectPath(value)
+    setInspected(null)
+    setInspectError(null)
+    setInspecting(false)
+  }
+
+  const folderMissing = inspected !== null && (!inspected.exists || !inspected.is_dir)
+
+  // ── Discover ──────────────────────────────────────────────────────────────
+
+  const handleDiscover = async () => {
+    let path = projectPath.trim()
+    if (!path || discoverTeamMutation.isPending) return
+    if (inspected?.path !== path) {
+      // An inspection error (e.g. 503, daemon down) does not block scanning a typed path.
+      const outcome = await inspectPath(path)
+      if (outcome.kind === 'stale') return
+      if (outcome.kind === 'ok') {
+        if (!outcome.result.exists || !outcome.result.is_dir) return
+        path = outcome.result.path
+      }
+    } else if (folderMissing) {
+      return
+    }
+    setDiscoveryResult(null)
+
+    discoverTeamMutation.mutate({ companyId: null, projectPath: path }, {
       onSuccess: (response: DiscoverTeamResponse) => {
+        if (response.project_path) setProjectPath(response.project_path)
+        if (response.project) setInspected(response.project)
         setDiscoveryResult(response.detected_stack)
         if (response.detected_stack.name && !companyName) {
           setCompanyName(response.detected_stack.name)
@@ -551,114 +748,67 @@ export default function CompanyNew() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 relative">
-        <input type="text" value={projectPath} onChange={e => setProjectPath(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleDiscover()}
-          placeholder={t('companyNew.repositoryPlaceholder')}
-          className="input flex-1 font-mono text-sm" />
-        <button type="button" onClick={async () => {
-          try {
-            const token = useAuthStore.getState().token
-            const url = currentBrowsePath
-              ? `http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(currentBrowsePath)}&root=projects`
-              : 'http://localhost:8000/v1/browse_fs?root=projects'
-            const res = await fetch(url, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            })
-            const data = await res.json()
-            const entries = data.entries || data.directories || []
-            if (entries.length) {
-              setAvailableDirs(entries)
-              setBrowseCurrent(data.current || '')
-              setBrowseParent(data.parent)
-              setBrowseAbsolute(data.absolute || '')
-              setShowDirPicker(true)
-            } else {
-              alert(t('companyNew.noDirectories', { root: data.root || currentBrowsePath }))
-            }
-          } catch (err) {
-            alert(t('companyNew.directoryError', { message: (err as Error).message || t('companyNew.unknownError') }))
-          }
-        }}
-          className="btn btn-secondary flex-shrink-0">
-          📂 {t('companyNew.browse')}
-        </button>
-        {showDirPicker && availableDirs.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full bg-surface-800 border border-surface-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-surface-700 text-xs text-gray-400">
-              <span className="font-mono truncate">{browseCurrent || '.'}</span>
-              {browseParent && (
-                <button type="button" onClick={async () => {
-                  try {
-                    const token = useAuthStore.getState().token
-                    const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseParent)}&root=projects`, {
-                      headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                    const data = await res.json()
-                    const entries = data.entries || data.directories || []
-                    if (entries.length) {
-                      setAvailableDirs(entries)
-                      setBrowseCurrent(data.current || '')
-                      setBrowseParent(data.parent)
-                      setCurrentBrowsePath(browseParent || '')
-                      setBrowseAbsolute(data.absolute || '')
-                    }
-                  } catch {}
-                }} className="text-brand-400 hover:text-brand-300">⬆ Subir</button>
-              )}
-            </div>
-            {availableDirs.map((dir: { name: string; path: string }) => (
-              <div key={dir.path} className="flex items-center gap-1 px-3 py-2 hover:bg-surface-700 transition-colors">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const abs = browseAbsolute ? `${browseAbsolute}/${dir.name}` : dir.path
-                    setProjectPath(abs)
-                    setShowDirPicker(false)
-                  }}
-                  className="text-sm text-gray-200 font-mono flex-1 text-left"
-                >
-                  📁 {dir.name}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // refetch
-                    (async () => {
-                      try {
-                        const token = useAuthStore.getState().token
-                        const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(dir.path)}&root=projects`, {
-                          headers: { 'Authorization': `Bearer ${token}` }
-                        })
-                        const data = await res.json()
-                        const entries = data.entries || data.directories || []
-                        if (entries.length >= 0) {
-                          setAvailableDirs(entries)
-                          setBrowseCurrent(data.current || '')
-                          setBrowseParent(data.parent)
-                          setBrowseAbsolute(data.absolute || '')
-                        }
-                      } catch {}
-                    })()
-                  }}
-                  className="text-xs text-gray-400 hover:text-gray-200 px-2"
-                  title="Entrar"
-                >
-                  →
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setShowDirPicker(false)}
-              className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-surface-700 transition-colors"
-            >
-              ✕ {t('companyNew.close')}
-            </button>
-          </div>
+      <div className="space-y-2">
+        <label htmlFor="project-path" className="input-label">{t('projectFolder.label')}</label>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input id="project-path" type="text" value={projectPath}
+            onChange={e => handlePathChange(e.target.value)}
+            onBlur={() => {
+              const typed = projectPath.trim()
+              if (typed && inspected?.path !== typed && !discoverTeamMutation.isPending) void inspectPath(typed)
+            }}
+            onKeyDown={e => e.key === 'Enter' && handleDiscover()}
+            placeholder={t(hostPlatform === 'win32' ? 'projectFolder.placeholderWindows' : 'projectFolder.placeholderUnix')}
+            spellCheck={false} autoComplete="off"
+            className="input flex-1 min-w-0 font-mono text-sm" />
+          <button ref={browseButtonRef} type="button" onClick={handleBrowse}
+            className="btn btn-secondary flex-shrink-0">
+            📂 {t('companyNew.browse')}
+          </button>
+        </div>
+        {selectDirectory && (
+          <button type="button" onClick={() => setPickerOpen(true)}
+            className="text-xs text-brand-400 hover:text-brand-300 hover:underline">
+            {t('projectFolder.browseDaemon')}
+          </button>
         )}
+        <DaemonStatusLine
+          host={workspaceStatus.data?.host}
+          connected={workspaceStatus.data?.connected}
+          isPending={workspaceStatus.isPending}
+          error={workspaceStatus.error}
+          fallbackPlatform={hostPlatform} />
+      </div>
+
+      {pickerOpen && (
+        <FolderPicker
+          initialPath={inspected?.exists && inspected.is_dir ? inspected.path : undefined}
+          platform={workspaceHost?.platform}
+          onSelect={chooseFolder}
+          onClose={closePicker} />
+      )}
+
+      {inspecting && (
+        <p role="status" className="flex items-center gap-2 text-xs text-gray-400">
+          <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          {t('projectFolder.checking')}
+        </p>
+      )}
+      {!inspecting && inspected && <ProjectCard project={inspected} />}
+      {!inspecting && inspectError?.status === 503 && (
+        <WorkspaceDaemonHelp platform={hostPlatform} detail={inspectError.message}>
+          <p className="text-yellow-300/80">{t('projectFolder.manualHint')}</p>
+        </WorkspaceDaemonHelp>
+      )}
+      {!inspecting && inspectError && inspectError.status !== 503 && (
+        <div role="alert" className="alert-error text-sm">
+          <span className="break-all">{t('projectFolder.inspectError', { message: inspectError.message })}</span>
+        </div>
+      )}
+
+      <div className="flex justify-end">
         <button type="button" onClick={handleDiscover}
-          disabled={discoverTeamMutation.isPending || !projectPath.trim()}
+          disabled={discoverTeamMutation.isPending || !projectPath.trim() || folderMissing}
           className="btn btn-primary flex-shrink-0 min-w-28">
           {discoverTeamMutation.isPending ? (
             <span className="flex items-center gap-2">

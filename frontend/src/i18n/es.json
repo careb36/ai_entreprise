@@ -218,13 +218,9 @@
     "edit": "Editar",
     "scanTitle": "Analiza tu proyecto",
     "scanDescription": "Indica a La Fabrique dónde está tu repositorio. Detectaremos las tecnologías y sugeriremos un equipo de IA óptimo. Puedes omitir este paso y configurarlo manualmente.",
-    "repositoryPlaceholder": "/projects/la-fabrique  (ruta dentro del contenedor Docker)",
     "browse": "Examinar",
-    "close": "Cerrar",
     "scan": "Analizar",
     "scanning": "Analizando…",
-    "noDirectories": "No se encontraron directorios en {{root}}",
-    "directoryError": "Error al listar directorios: {{message}}",
     "discoveryError": "Error al analizar el proyecto: {{message}}",
     "initializationError": "Error al inicializar la fábrica: {{message}}",
     "unknownError": "Error desconocido",
@@ -1126,5 +1122,60 @@
     "progress": "{{done}} / {{total}} completadas",
     "noStartDate": "Sin iniciar",
     "lastOpened": "Abierto por última vez"
+  },
+  "projectFolder": {
+    "label": "Carpeta del proyecto",
+    "placeholderUnix": "~/code/mi-app",
+    "placeholderWindows": "C:\\Users\\tu-usuario\\source\\repos\\mi-app",
+    "browseDaemon": "Examinar con el daemon del espacio de trabajo",
+    "checking": "Comprobando la carpeta…",
+    "cardLabel": "Carpeta del proyecto seleccionada",
+    "notFound": "Esta carpeta no existe en {{host}}: {{path}}",
+    "notFolder": "Esta ruta no es una carpeta en {{host}}: {{path}}",
+    "inspectError": "No se pudo comprobar esta carpeta: {{message}}",
+    "manualHint": "Aún puedes escribir la ruta de la carpeta y analizarla.",
+    "remote": "Remoto",
+    "noRemote": "Sin remoto configurado",
+    "branch": "Rama",
+    "noBranch": "Sin rama (HEAD separado)",
+    "notGitHint": "Los agentes pueden escribir en esta carpeta, pero no es un clon de git.",
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "bitbucket": "Bitbucket",
+      "other": "Git",
+      "none": "No es un repositorio git"
+    }
+  },
+  "folderPicker": {
+    "title": "Elige la carpeta del proyecto",
+    "hostLine": "En {{hostname}} ({{platform}})",
+    "currentFolder": "Carpeta actual",
+    "up": "Subir",
+    "upLabel": "Ir a la carpeta superior",
+    "shortcuts": "Accesos directos",
+    "roots": "Unidades",
+    "folders": "Carpetas",
+    "gitBadge": "repo git",
+    "gitBadgeTitle": "Esta carpeta es un repositorio git",
+    "empty": "No hay subcarpetas aquí.",
+    "truncated": "Solo se muestran las primeras carpetas. Escribe la ruta si no ves la tuya.",
+    "loading": "Cargando carpetas…",
+    "useThis": "Usar esta carpeta",
+    "error": "No se pudo abrir esta carpeta: {{message}}",
+    "home": "Ir a la carpeta personal"
+  },
+  "workspaceDaemon": {
+    "connected": "Daemon del espacio de trabajo conectado en {{hostname}} ({{platform}})",
+    "notConnected": "El daemon del espacio de trabajo no está conectado.",
+    "startHint": "Inícialo en el equipo donde clonaste tus repositorios:",
+    "unixLabel": "macOS / Ubuntu",
+    "windowsLabel": "Windows (PowerShell)",
+    "statusError": "Estado del daemon del espacio de trabajo no disponible: {{message}}",
+    "platforms": {
+      "darwin": "macOS",
+      "linux": "Ubuntu/Linux",
+      "win32": "Windows"
+    }
   }
 }
