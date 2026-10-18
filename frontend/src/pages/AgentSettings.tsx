@@ -62,8 +62,8 @@ const AUTO_RECOMMENDED_MODEL_IDS = new Set([
   'deepseek-coder',
   'deepseek-chat',
   'deepseek-reasoner',
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
+  'gemini-3.8-flash',
+  'gemini-3.1-pro-preview',
   'gemini-pro-latest',
   'gemini-flash-latest',
   'kimi-k2.6',
@@ -161,8 +161,8 @@ function recommendModelForRole(
 
   const defaults = {
     ids: isJuniorMid
-      ? ['gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6']
-      : ['kimi-k2.6', 'gemini-2.5-flash', 'deepseek-chat'],
+      ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
+      : ['kimi-k2.6', 'gemini-3.8-flash', 'deepseek-chat'],
     reasonKey: 'generalist',
   }
 
@@ -170,88 +170,88 @@ function recommendModelForRole(
     if (['backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder', 'gemini-2.5-pro'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
+          : ['deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder', 'gemini-3.1-pro-preview'],
         reasonKey: 'dev',
       }
     }
     if (['frontenddev', 'frontend dev', 'frontend'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['gemini-2.5-pro', 'deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
+          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder'],
         reasonKey: 'frontend',
       }
     }
     if (['dataengineer', 'data engineer', 'data', 'mlengineer', 'ml engineer', 'ml'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
+          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'data',
       }
     }
     if (['designer', 'uxresearcher', 'ux researcher', 'ux'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'kimi-k2.6', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-2.5-pro', 'kimi-k2.6', 'gemini-2.5-flash', 'deepseek-reasoner'],
+          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-chat', 'gemini-flash-latest']
+          : ['gemini-3.1-pro-preview', 'kimi-k2.6', 'gemini-3.8-flash', 'deepseek-reasoner'],
         reasonKey: 'designer',
       }
     }
     if (normalizedRole === 'qa') {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro', 'deepseek-coder'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
+          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'deepseek-coder'],
         reasonKey: 'qa',
       }
     }
     if (normalizedRole === 'architect') {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro']
-          : ['kimi-k2.6', 'gemini-2.5-pro', 'deepseek-reasoner', 'gemini-pro-latest'],
+          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
+          : ['kimi-k2.6', 'gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
         reasonKey: 'architect',
       }
     }
     if (normalizedRole === 'po' || normalizedRole === 'product owner') {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6', 'gemini-2.5-pro']
-          : ['gemini-2.5-pro', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-pro-latest'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6', 'gemini-3.1-pro-preview']
+          : ['gemini-3.1-pro-preview', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-pro-latest'],
         reasonKey: 'po',
       }
     }
     if (normalizedRole === 'scrummaster' || normalizedRole === 'sm') {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'deepseek-chat', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6', 'deepseek-reasoner']
+          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'scrummaster',
       }
     }
     if (normalizedRole === 'devops') {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
+          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'devops',
       }
     }
     if (normalizedRole === 'security') {
       return {
         ids: isJuniorMid
-          ? ['gemini-2.5-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
+          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'security',
       }
     }
     if (['techwriter', 'tech writer', 'support'].includes(normalizedRole)) {
       return {
         ids: isStaffSenior
-          ? ['kimi-k2.6', 'gemini-2.5-flash', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-2.5-flash', 'deepseek-chat', 'gemini-flash-latest', 'kimi-k2.6'],
+          ? ['kimi-k2.6', 'gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
+          : ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest', 'kimi-k2.6'],
         reasonKey: 'support',
       }
     }
