@@ -247,7 +247,8 @@ class _Nats:
 
 def _task_assign_handler(monkeypatch):
     monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", False)
-    monkeypatch.setattr(task_worker, "_fetch_memory_context", lambda item, agent: "")
+    monkeypatch.setattr(task_worker, "_fetch_memory_context", lambda *args: "")
+    monkeypatch.setattr(task_worker, "_load_recent_lessons", lambda *args: "")
     monkeypatch.setattr(
         task_worker, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
     )

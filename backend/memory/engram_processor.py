@@ -24,6 +24,9 @@ from app.memory_client import MemoryClient
 
 logger = logging.getLogger(__name__)
 
+# agent_id prefix of the engram each completed sprint's retrospective burns.
+RETROSPECTIVE_AGENT_PREFIX = "retrospective_"
+
 
 class EngramType(str, Enum):
     """Types of Engrams in the system."""
@@ -407,8 +410,14 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         params: Dict[str, Any] = {"limit": limit, "company_id": company_id}
         role_condition = "AND e.company_id = $company_id "
         if role_filter:
-            role_condition += "AND e.agent_role = $role_filter "
+            # Sprint retrospectives are lessons for every role, not only the
+            # ScrumMaster who records them.
+            role_condition += (
+                "AND (e.agent_role = $role_filter "
+                "OR e.agent_id STARTS WITH $retrospective_prefix) "
+            )
             params["role_filter"] = role_filter
+            params["retrospective_prefix"] = RETROSPECTIVE_AGENT_PREFIX
 
         if keywords:
             params["keywords"] = keywords
