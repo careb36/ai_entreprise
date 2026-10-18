@@ -10,7 +10,6 @@ Run with:
     cd backend && PYTHONPATH=.:app python3 -m pytest tests/test_console_capabilities.py -q
 """
 
-import asyncio
 import logging
 from unittest.mock import AsyncMock
 
@@ -87,7 +86,7 @@ async def test_empty_capabilities_skip_assistants(caplog):
 
 @pytest.mark.asyncio
 async def test_capabilities_timeout_skips_assistants():
-    nats = _FakeNATSClient(capabilities_error=asyncio.TimeoutError())
+    nats = _FakeNATSClient(capabilities_error=TimeoutError())
     assert await console_capabilities.probe_console_assistants(nats) is None
 
     await _run_task_path(nats)

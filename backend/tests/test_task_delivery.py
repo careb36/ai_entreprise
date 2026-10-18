@@ -418,7 +418,7 @@ def test_end_to_end_daemon_down_is_unverifiable_not_lost(db, tmp_path, monkeypat
     )
 
     assert not (project / "src").exists()
-    run, verification, comments = _latest(db, item["id"])
+    _, verification, comments = _latest(db, item["id"])
     assert verification.verdict == "unverifiable"
     assert comments[-1]["text"].startswith("Delivery unconfirmed:")
     assert "did not reply" in comments[-1]["text"]
