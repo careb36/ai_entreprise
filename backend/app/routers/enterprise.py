@@ -348,7 +348,9 @@ async def quota_usage_history(
 
     result = []
     for i in range(days):
-        d = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days - 1 - i)).date()
+        d = (
+            datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days - 1 - i)
+        ).date()
         result.append({"date": d.isoformat(), "tokens": usage.get(str(d), 0)})
     return {"days": result, "total": sum(u["tokens"] for u in result)}
 
