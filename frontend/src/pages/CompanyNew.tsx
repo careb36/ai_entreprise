@@ -552,8 +552,8 @@ export default function CompanyNew() {
           try {
             const token = useAuthStore.getState().token
             const url = currentBrowsePath
-              ? `http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(currentBrowsePath)}`
-              : 'http://localhost:8000/v1/browse_fs'
+              ? `http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(currentBrowsePath)}&root=projects`
+              : 'http://localhost:8000/v1/browse_fs?root=projects'
             const res = await fetch(url, {
               headers: { 'Authorization': `Bearer ${token}` }
             })
@@ -583,7 +583,7 @@ export default function CompanyNew() {
                 <button type="button" onClick={async () => {
                   try {
                     const token = useAuthStore.getState().token
-                    const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseParent)}`, {
+                    const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(browseParent)}&root=projects`, {
                       headers: { 'Authorization': `Bearer ${token}` }
                     })
                     const data = await res.json()
@@ -608,7 +608,7 @@ export default function CompanyNew() {
                     (async () => {
                       try {
                         const token = useAuthStore.getState().token
-                        const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(dir.path)}`, {
+                        const res = await fetch(`http://localhost:8000/v1/browse_fs?path=${encodeURIComponent(dir.path)}&root=projects`, {
                           headers: { 'Authorization': `Bearer ${token}` }
                         })
                         const data = await res.json()

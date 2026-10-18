@@ -519,21 +519,29 @@ _BROWSE_MAX_ENTRIES = 200
 
 
 @router.get("/browse_fs", tags=["Enterprise"])
-async def browse_fs(path: str = ""):
-    """List immediate subdirectories of *path* within the workspace root."""
+async def browse_fs(path: str = "", root: str = "workspace"):
+    """List immediate subdirectories of *path* within the chosen root."""
     import os
 
-    workspace_root = os.getenv("AGENT_WORKSPACE_ROOT", "/workspace")
-    if path:
-        resolved = os.path.realpath(os.path.join(workspace_root, path.lstrip("/")))
+    if root == "projects":
+        base = os.getenv("PROJECTS_ROOT_CONTAINER", "/projects")
     else:
-        resolved = os.path.realpath(workspace_root)
+        base = os.getenv("AGENT_WORKSPACE_ROOT", "/workspace")
 
-    real_root = os.path.realpath(workspace_root)
-    if not resolved.startswith(real_root):
-        raise HTTPException(
-            status_code=403, detail="Path is outside the workspace root."
-        )
+    real_root = os.path.realpath(base)
+    if not os.path.isdir(real_root):
+        raise HTTPException(status_code=404, detail=f"Root {base} does not exist.")
+
+    if path:
+        if os.path.isabs(path):
+            resolved = os.path.realpath(path)
+        else:
+            resolved = os.path.realpath(os.path.join(real_root, path.lstrip("/")))
+    else:
+        resolved = real_root
+
+    if not (resolved == real_root or resolved.startswith(real_root + os.sep)):
+        raise HTTPException(status_code=403, detail="Path is outside the allowed root.")
 
     if not os.path.isdir(resolved):
         raise HTTPException(
@@ -563,6 +571,7 @@ async def browse_fs(path: str = ""):
             if parent_rel != "." and resolved != real_root
             else None,
             "entries": entries,
+            "root": root,
         }
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied.")
