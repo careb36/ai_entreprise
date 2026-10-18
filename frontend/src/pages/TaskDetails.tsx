@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, User, Flag, MessageSquare, Clock } from 'lucide-react'
+import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck } from 'lucide-react'
+import { Breadcrumbs } from '../components/Breadcrumbs'
+import { Verdict } from '../components/Verdict'
 import { useAppStore } from '../store/useAppStore'
-import { useSprintBoard } from '../hooks/useQueries'
+import { useAgentRuns, useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
+import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 
 const PRIORITY_STYLES: Record<BacklogItem['priority'], string> = {
   critical: 'bg-red-900/40 text-red-300 border-red-700/40',
@@ -31,6 +34,69 @@ function formatDate(iso: string) {
   }
 }
 
+/** The latest recorded delivery of this task: its verdict and what it claims. */
+function TaskEvidence({ companyId, taskId }: { companyId: number; taskId: number }) {
+  const { t } = useTranslation()
+  const { data, isLoading, isError, refetch } = useAgentRuns(companyId, {
+    producer: TASK_WORKER_PRODUCER,
+    external_ref: taskExternalRef(taskId),
+    limit: 1,
+  })
+  const run = data?.agent_runs[0]
+  const files: unknown = run?.claims?.files
+  const claimedFiles = Array.isArray(files)
+    ? files.filter((file): file is string => typeof file === 'string')
+    : []
+
+  return (
+    <section aria-labelledby="task-evidence-title" className="card p-4 mb-4">
+      <h2 id="task-evidence-title" className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1">
+        <ClipboardCheck size={10} aria-hidden="true" /> {t('taskDetails.evidence.title', { defaultValue: 'Evidence' })}
+      </h2>
+      {isLoading ? (
+        <div role="status" aria-label={t('taskDetails.evidence.loading', { defaultValue: 'Loading evidence…' })}>
+          <SkeletonBlock className="h-12" />
+        </div>
+      ) : isError ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p role="alert" className="text-sm text-red-300">
+            {t('taskDetails.evidence.error', { defaultValue: 'Failed to load the evidence for this task.' })}
+          </p>
+          <button onClick={() => refetch()} className="btn btn-ghost btn-sm">{t('common.retry')}</button>
+        </div>
+      ) : !run ? (
+        <p className="text-sm text-gray-400">{t('taskDetails.evidence.empty', { defaultValue: 'No evidence recorded yet.' })}</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Verdict status={run.status} />
+            <span className="text-xs text-gray-400">
+              {t('taskDetails.evidence.version', { version: run.version, defaultValue: 'Version {{version}}' })}
+            </span>
+            <Link to={`/evidence/${run.id}`} className="btn btn-ghost btn-sm ml-auto">
+              {t('taskDetails.evidence.view', { defaultValue: 'View evidence' })}
+            </Link>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-1">
+              {t('taskDetails.evidence.claimedFiles', { defaultValue: 'Files the agent claims to have written' })}
+            </p>
+            {claimedFiles.length > 0 ? (
+              <ul className="space-y-0.5">
+                {claimedFiles.map(file => (
+                  <li key={file} className="font-mono text-xs text-gray-300 break-all">{file}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500">{t('taskDetails.evidence.noFiles', { defaultValue: 'No files claimed.' })}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function TaskDetails() {
   const { t } = useTranslation()
   const { taskId, sprintId: paramSprintId } = useParams<{ taskId: string; sprintId: string }>()
@@ -47,7 +113,8 @@ export default function TaskDetails() {
     ? Object.values(board.columns).flat().find(item => item.id === parsedTaskId)
     : undefined
 
-  const backTo = resolvedSprintId ? `/workspace/${resolvedSprintId}` : '/dashboard'
+  const sprintsLabel = t('nav.sprints', { defaultValue: 'Sprints' })
+  const backTo = resolvedSprintId ? `/sprints/${resolvedSprintId}/board` : '/sprints'
 
   if (isLoading) {
     return (
@@ -76,7 +143,7 @@ export default function TaskDetails() {
         {parsedTaskId !== null && resolvedSprintId !== null && isError && !sprintNotFound && (
           <button onClick={() => refetch()} className="btn btn-ghost text-sm mr-3">{t('common.retry')}</button>
         )}
-        <Link to={sprintNotFound ? '/dashboard' : backTo} className="btn btn-ghost text-sm">
+        <Link to={sprintNotFound ? '/sprints' : backTo} className="btn btn-ghost text-sm">
           <ArrowLeft size={14} className="mr-1" /> {t('common.back')}
         </Link>
       </div>
@@ -85,11 +152,16 @@ export default function TaskDetails() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
-      {/* Back link */}
-      <Link to={backTo} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors mb-6">
-        <ArrowLeft size={14} />
-        {t('common.back')}
-      </Link>
+      <div className="mb-6">
+        <Breadcrumbs items={[
+          { label: sprintsLabel, to: '/sprints' },
+          {
+            label: board?.sprint?.sprint_name || t('workspace.sprintLabel', { id: resolvedSprintId, defaultValue: 'Sprint #{{id}}' }),
+            to: backTo,
+          },
+          { label: task.title },
+        ]} />
+      </div>
 
       {/* Header */}
       <div className="mb-6">
@@ -128,6 +200,8 @@ export default function TaskDetails() {
           <p className="text-sm text-gray-200">{formatDate(task.updated_at)}</p>
         </div>
       </div>
+
+      {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
 
       {/* Comments */}
       {task.comments.length > 0 && (

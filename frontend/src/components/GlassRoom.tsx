@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import i18n from '../i18n'
 import { useAgentStore, AgentMessage, type SprintRetro } from '../store/agentStore'
 import { useSprintBoard, useQuotas } from '../hooks/useQueries'
@@ -18,6 +19,11 @@ import {
   Copy, Eye, GitBranch, Hash, HeartPulse, Layers, Loader2, RotateCcw, Search,
   ShieldAlert, SplitSquareVertical, X, ZapOff,
 } from 'lucide-react'
+
+/** The task page that shows a backlog item and the deliverables agents attached to it. */
+function taskPath(sprintId: string, taskId: number) {
+  return `/sprints/${sprintId}/tasks/${taskId}`
+}
 
 // ── Agent identity ────────────────────────────────────────────────────────────
 
@@ -479,7 +485,7 @@ function AssistantSummaryPanel({ entries }: { entries: AssistantSummaryEntry[] }
   )
 }
 
-function SprintTaskPanel({ tasks }: { tasks: SprintTaskEntry[] }) {
+function SprintTaskPanel({ tasks, sprintId }: { tasks: SprintTaskEntry[]; sprintId: string }) {
   const { t } = useTranslation()
   if (tasks.length === 0) return null
 
@@ -514,7 +520,12 @@ function SprintTaskPanel({ tasks }: { tasks: SprintTaskEntry[] }) {
           <div key={task.id} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-gray-200 leading-tight break-words">{task.title}</p>
+                <Link
+                  to={taskPath(sprintId, task.id)}
+                  className="block text-[11px] font-medium text-gray-200 leading-tight break-words hover:text-brand-300 hover:underline"
+                >
+                  {task.title}
+                </Link>
                 <div className="mt-1 flex items-center gap-2 flex-wrap text-[10px]">
                   <span className={`rounded-full px-1.5 py-0.5 font-medium ${statusTone[task.status]}`}>
                     {t(`glassroom.taskStatus.${task.status}`)}
@@ -744,7 +755,7 @@ function MessageRow({ msg }: { msg: AgentMessage }) {
   )
 }
 
-function SlackMessageGroup({ group }: { group: MessageGroup }) {
+function SlackMessageGroup({ group, sprintId }: { group: MessageGroup; sprintId: string }) {
   const { identity, messages } = group
   const firstMsg = messages[0]
   const isError  = firstMsg?.type === 'error'
@@ -760,7 +771,15 @@ function SlackMessageGroup({ group }: { group: MessageGroup }) {
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
           <span className={`font-bold text-[13px] ${identity.color}`}>{identity.label}</span>
           <TypeBadge type={firstMsg.type} />
-          {firstMsg.task && (
+          {firstMsg.task && firstMsg.taskId !== undefined && sprintId ? (
+            <Link
+              to={taskPath(sprintId, firstMsg.taskId)}
+              className="text-[11px] text-gray-400 truncate max-w-[180px] hover:text-brand-300 hover:underline"
+              title={firstMsg.task}
+            >
+              {firstMsg.task}
+            </Link>
+          ) : firstMsg.task && (
             <span className="text-[11px] text-gray-500 truncate max-w-[180px]" title={firstMsg.task}>
               {firstMsg.task}
             </span>
@@ -897,7 +916,8 @@ function SprintRetroPanel({ retro }: { retro: SprintRetro | null }) {
 
 // ── Right panel: agent detail ─────────────────────────────────────────────────
 
-function RightPanel({ agentStates, messageCount, isConnected, assistantSummary, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
+function RightPanel({ sprintId, agentStates, messageCount, isConnected, assistantSummary, sprintTasks, healthEntries, autonomyTree, quotaTelemetry, lastRetro }: {
+  sprintId: string
   agentStates: Record<string, { role: string; fsmState: string; currentActivity: string; color: string; lastSeen: string; lastTaskTitle?: string; lastTaskId?: number; lastSemanticType?: string }>
   messageCount: number
   isConnected: boolean
@@ -920,7 +940,7 @@ function RightPanel({ agentStates, messageCount, isConnected, assistantSummary, 
       <HealthPanel entries={healthEntries} />
       <SprintRetroPanel retro={lastRetro ?? null} />
       <QuotaTelemetryPanel quota={quotaTelemetry} />
-      <SprintTaskPanel tasks={sprintTasks} />
+      <SprintTaskPanel tasks={sprintTasks} sprintId={sprintId} />
       <TaskAutonomyTree tasks={autonomyTree} />
       <AssistantSummaryPanel entries={assistantSummary} />
 
@@ -1399,7 +1419,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
                     if (g.messages[0]?.type === ('needs_split' as any)) {
                       return <NeedsSplitBanner key={`${di}-${gi}`} message={g.messages[0]} />
                     }
-                    return <SlackMessageGroup key={`${di}-${gi}`} group={g} />
+                    return <SlackMessageGroup key={`${di}-${gi}`} group={g} sprintId={propSprintId} />
                   })}
                 </div>
               ))
@@ -1454,6 +1474,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
 
         {/* Right panel */}
         <RightPanel
+          sprintId={propSprintId}
           agentStates={agentStates}
           messageCount={messages.length}
           isConnected={isConnected}

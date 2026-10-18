@@ -66,7 +66,6 @@ const AUTO_RECOMMENDED_MODEL_IDS = new Set([
   'gemini-3.1-pro-preview',
   'gemini-pro-latest',
   'gemini-flash-latest',
-  'kimi-k2.6',
 ])
 
 // Relative ordering used when grouping agents by role on screen.
@@ -89,7 +88,8 @@ function defaultDraft(): AgentDraft {
     persona: '',
     seniority: 'Senior',
     specialty: '',
-    model: 'deepseek-coder',
+    // Empty means "Default for role": the backend resolves it from model_factory.
+    model: '',
     system_prompt: '',
     token_budget: 500000,
   }
@@ -161,8 +161,8 @@ function recommendModelForRole(
 
   const defaults = {
     ids: isJuniorMid
-      ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
-      : ['kimi-k2.6', 'gemini-3.8-flash', 'deepseek-chat'],
+      ? ['gemini-3.8-flash', 'deepseek-chat']
+      : ['gemini-3.8-flash', 'deepseek-chat'],
     reasonKey: 'generalist',
   }
 
@@ -170,88 +170,88 @@ function recommendModelForRole(
     if (['backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder', 'gemini-3.1-pro-preview'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
+          : ['deepseek-reasoner', 'deepseek-coder', 'gemini-3.1-pro-preview'],
         reasonKey: 'dev',
       }
     }
     if (['frontenddev', 'frontend dev', 'frontend'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'kimi-k2.6', 'deepseek-coder'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
+          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'deepseek-coder'],
         reasonKey: 'frontend',
       }
     }
     if (['dataengineer', 'data engineer', 'data', 'mlengineer', 'ml engineer', 'ml'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-coder', 'deepseek-reasoner']
+          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'data',
       }
     }
     if (['designer', 'uxresearcher', 'ux researcher', 'ux'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-3.1-pro-preview', 'kimi-k2.6', 'gemini-3.8-flash', 'deepseek-reasoner'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
+          : ['gemini-3.1-pro-preview', 'gemini-3.8-flash', 'deepseek-reasoner'],
         reasonKey: 'designer',
       }
     }
     if (normalizedRole === 'qa') {
       return {
         ids: isJuniorMid
-          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'deepseek-coder'],
+          ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
+          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'deepseek-coder'],
         reasonKey: 'qa',
       }
     }
     if (normalizedRole === 'architect') {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
-          : ['kimi-k2.6', 'gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
+          ? ['gemini-3.8-flash', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
+          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
         reasonKey: 'architect',
       }
     }
     if (normalizedRole === 'po' || normalizedRole === 'product owner') {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6', 'gemini-3.1-pro-preview']
-          : ['gemini-3.1-pro-preview', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-pro-latest'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-3.1-pro-preview']
+          : ['gemini-3.1-pro-preview', 'deepseek-reasoner', 'gemini-pro-latest'],
         reasonKey: 'po',
       }
     }
     if (normalizedRole === 'scrummaster' || normalizedRole === 'sm') {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-chat', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'deepseek-reasoner']
+          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'scrummaster',
       }
     }
     if (normalizedRole === 'devops') {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'deepseek-coder', 'kimi-k2.6', 'deepseek-reasoner']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-coder', 'deepseek-reasoner']
+          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'devops',
       }
     }
     if (normalizedRole === 'security') {
       return {
         ids: isJuniorMid
-          ? ['gemini-3.8-flash', 'kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
-          : ['kimi-k2.6', 'deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
+          ? ['gemini-3.8-flash', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
+          : ['deepseek-reasoner', 'gemini-3.1-pro-preview', 'gemini-3.8-flash'],
         reasonKey: 'security',
       }
     }
     if (['techwriter', 'tech writer', 'support'].includes(normalizedRole)) {
       return {
         ids: isStaffSenior
-          ? ['kimi-k2.6', 'gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
-          : ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest', 'kimi-k2.6'],
+          ? ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest']
+          : ['gemini-3.8-flash', 'deepseek-chat', 'gemini-flash-latest'],
         reasonKey: 'support',
       }
     }
@@ -427,10 +427,16 @@ function ModelSelector({
         <label className="input-label">{t('agentsConfig.model')}</label>
         <select
           className="select w-full text-xs"
-          value={modelInfo?.id || ''}
-          onChange={e => setDraft(prev => ({ ...prev, model: e.target.value || prev.model }))}
+          aria-label={t('agentsConfig.model')}
+          value={draft.model}
+          onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))}
         >
-          <option value="">{t('agentsConfig.keepCustomModel')}</option>
+          <option value="">{t('agentsConfig.defaultForRole', { defaultValue: 'Default for role' })}</option>
+          {draft.model && !modelInfo && (
+            <option value={draft.model}>
+              {t('agentsConfig.modelNotInCatalog', { model: draft.model, defaultValue: '{{model}} (not in catalog)' })}
+            </option>
+          )}
           {groupedTiers(models).map(tier => {
             const group = models.filter(model => model.tier === tier)
             if (!group.length) return null
@@ -443,12 +449,6 @@ function ModelSelector({
             )
           })}
         </select>
-        <input
-          className="input w-full mt-2 font-mono text-xs"
-          value={draft.model}
-          onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))}
-          placeholder={t('agentsConfig.customModelPlaceholder')}
-        />
         {modelInfo ? (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className={`rounded-full px-2 py-0.5 text-[10px] ${tierClass(modelInfo.tier)}`}>
@@ -458,7 +458,11 @@ function ModelSelector({
           </div>
         ) : draft.model ? (
           <p className="mt-2 text-[11px] text-amber-300">{t('agentsConfig.customModelHint')}</p>
-        ) : null}
+        ) : (
+          <p className="mt-2 text-[11px] text-gray-500">
+            {t('agentsConfig.defaultForRoleHint', { defaultValue: "Uses the server's default model for this role." })}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -480,7 +484,8 @@ function DraftFields({
   function handleRoleChange(nextRole: string) {
     setDraft(prev => {
       const recommendation = recommendModelForRole(models, nextRole, prev.seniority)
-      const shouldAutoRecommend = !prev.model || AUTO_RECOMMENDED_MODEL_IDS.has(prev.model)
+      // An empty model stays "Default for role"; only an auto-picked one is replaced.
+      const shouldAutoRecommend = AUTO_RECOMMENDED_MODEL_IDS.has(prev.model)
       return {
         ...prev,
         role: nextRole,
@@ -492,7 +497,8 @@ function DraftFields({
   function handleSeniorityChange(nextSeniority: string) {
     setDraft(prev => {
       const recommendation = recommendModelForRole(models, prev.role, nextSeniority)
-      const shouldAutoRecommend = !prev.model || AUTO_RECOMMENDED_MODEL_IDS.has(prev.model)
+      // An empty model stays "Default for role"; only an auto-picked one is replaced.
+      const shouldAutoRecommend = AUTO_RECOMMENDED_MODEL_IDS.has(prev.model)
       return {
         ...prev,
         seniority: nextSeniority,

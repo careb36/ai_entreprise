@@ -3,6 +3,7 @@ Sprint router — Kanban board management and backlog item lifecycle.
 
 Endpoints:
 - ``POST /v1/start_sprint``          — create a sprint with initial backlog items.
+- ``GET  /v1/sprints``               — list a company's sprints with progress counts.
 - ``GET  /v1/sprints/{id}/board``    — retrieve sprint metadata and Kanban columns.
 - ``PATCH /v1/backlog/{item_id}``    — update status, priority, assignee, or add a comment.
 
@@ -41,6 +42,7 @@ from services.sprint_planner import (
 from services.sprint_planner import (
     plan_self_improvement_sprint as build_self_improvement_plan,
 )
+from sqlalchemy import case, func
 from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -282,6 +284,50 @@ async def start_sprint(
         "backlog_item_ids": item_ids,
         "sprint_url": f"/v1/sprints/{sprint.id}/board",
     }
+
+
+@router.get("/sprints")
+async def list_sprints(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """
+    Return the company's sprints, newest first, with backlog progress.
+
+    ``total`` and ``done`` are counted from the sprint's backlog items so the
+    list never needs one board request per sprint.
+    """
+    require_company_role(session, user, company_id, "Viewer")
+    sprints = session.exec(
+        select(Sprint).where(Sprint.company_id == company_id).order_by(Sprint.id.desc())
+    ).all()
+    sprint_ids = [s.id for s in sprints]
+    counts: dict[int, tuple[int, int]] = {}
+    if sprint_ids:
+        rows = session.exec(
+            select(
+                BacklogItem.sprint_id,
+                func.count(BacklogItem.id),
+                func.sum(case((BacklogItem.status == "done", 1), else_=0)),
+            )
+            .where(BacklogItem.sprint_id.in_(sprint_ids))
+            .group_by(BacklogItem.sprint_id)
+        ).all()
+        counts = {sid: (int(total), int(done or 0)) for sid, total, done in rows}
+    return [
+        {
+            "id": s.id,
+            "sprint_name": s.sprint_name,
+            "status": s.status,
+            "goal": s.goal,
+            "start_date": s.start_date,
+            "scope_size": s.scope_size,
+            "total": counts.get(s.id, (0, 0))[0],
+            "done": counts.get(s.id, (0, 0))[1],
+        }
+        for s in sprints
+    ]
 
 
 @router.get("/sprints/{sprint_id}/board")

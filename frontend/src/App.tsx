@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
 import { api, setOnUnauthorized } from './services/api'
 import ProtectedRoute from './components/ProtectedRoute'
-import Dashboard from './pages/Dashboard'
 import AgentSettings from './pages/AgentSettings'
-import SprintOpsCockpit from './pages/SprintOpsCockpit'
+import Sprints from './pages/Sprints'
 import CompanyNew from './pages/CompanyNew'
 import CompanySelect from './pages/CompanySelect'
 import Login from './pages/Login'
 import Register from './pages/Register'
-import { SprintWorkspace } from './pages/SprintWorkspace'
+import { SprintWorkspace, sprintPath, type SprintTab } from './pages/SprintWorkspace'
 import { GovernancePanel } from './components/GovernancePanel'
 import { QuotaPanel } from './components/QuotaPanel'
 import { SupportBot } from './components/SupportBot'
@@ -58,16 +57,52 @@ export function LanguageSwitcher() {
 
 // ── Nav links config ──────────────────────────────────────────────────────────
 
+type Section = 'evidence' | 'governance' | 'sprints' | 'generate' | 'memory' | 'company'
+
+/**
+ * The shell section a path belongs to. Exactly one element per route carries
+ * `aria-current="page"`: the primary link of this section, or the Company menu
+ * button for company-level pages.
+ */
+export function sectionForPath(pathname: string): Section | null {
+  const path = pathname.toLowerCase()
+  const under = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
+  if (under('/evidence')) return 'evidence'
+  if (under('/governance')) return 'governance'
+  if (under('/sprints') || under('/task')) return 'sprints'
+  if (under('/generate')) return 'generate'
+  if (under('/memory')) return 'memory'
+  if (under('/agents') || under('/company') || under('/companies')) return 'company'
+  return null
+}
+
 function useNavLinks() {
   const { t } = useTranslation()
   const { data, isPending, isError } = useCapabilities()
   return [
-    { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence', { defaultValue: 'Evidence' }) },
-    { to: '/governance', icon: ShieldCheck, label: t('nav.review', { defaultValue: 'Review' }) },
-    { to: '/dashboard', icon: LayoutDashboard, label: t('nav.sprints', { defaultValue: 'Sprints' }) },
-    ...(!isPending && !isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
-    ...(!isPending && !isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
+    { to: '/evidence', section: 'evidence' as Section, icon: ClipboardCheck, label: t('nav.evidence', { defaultValue: 'Evidence' }) },
+    { to: '/governance', section: 'governance' as Section, icon: ShieldCheck, label: t('nav.review', { defaultValue: 'Review' }) },
+    { to: '/sprints', section: 'sprints' as Section, icon: LayoutDashboard, label: t('nav.sprints', { defaultValue: 'Sprints' }) },
+    ...(!isPending && !isError && data?.agent_graph === true ? [{ to: '/generate', section: 'generate' as Section, icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
+    ...(!isPending && !isError && data?.memory === true ? [{ to: '/memory', section: 'memory' as Section, icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
   ]
+}
+
+// ── Legacy route redirects ────────────────────────────────────────────────────
+
+function ActiveSprintRedirect({ tab }: { tab?: SprintTab }) {
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  return <Navigate to={activeSprintId ? sprintPath(activeSprintId, tab) : '/sprints'} replace />
+}
+
+function SprintParamRedirect({ tab }: { tab: SprintTab }) {
+  const { id = '' } = useParams()
+  return <Navigate to={sprintPath(encodeURIComponent(id), tab)} replace />
+}
+
+function LegacyTaskRedirect() {
+  const { sprintId = '', taskId = '' } = useParams()
+  return <Navigate to={`/sprints/${encodeURIComponent(sprintId)}/tasks/${encodeURIComponent(taskId)}`} replace />
 }
 
 
@@ -110,6 +145,8 @@ function NavBar() {
   const companyId = useAppStore(state => state.companyId)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
   const links = useNavLinks()
+  const section = sectionForPath(location.pathname)
+  const companyCurrent = section === 'company'
   const companyLabel = companyId !== null
     ? companyName || t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' })
     : user?.full_name || user?.email || t('auth.selectCompany', { defaultValue: 'Select a company' })
@@ -133,7 +170,7 @@ function NavBar() {
     if (companyOpen) companyRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [companyOpen])
 
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
+  const linkClass = (isActive: boolean) =>
     `flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-2 py-2 rounded-lg transition-colors
      ${isActive
        ? 'text-white bg-brand-600/20 border border-brand-600/30'
@@ -161,11 +198,11 @@ function NavBar() {
       {/* Desktop nav */}
       {authenticated && (
         <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-1 ml-4" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
-          {links.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} end={to !== '/dashboard' && to !== '/evidence'} className={linkClass}>
+          {links.map(({ to, section: linkSection, icon: Icon, label }) => (
+            <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
               <Icon size={16} />
               <span>{label}</span>
-            </NavLink>
+            </Link>
           ))}
         </nav>
       )}
@@ -178,8 +215,10 @@ function NavBar() {
             <div ref={companyRef} className="relative" onBlur={event => {
               if (!event.currentTarget.contains(event.relatedTarget)) setCompanyOpen(false)
             }}>
-              <button ref={companyToggleRef} type="button" className="btn-ghost btn-sm max-w-36 xl:max-w-48"
+              <button ref={companyToggleRef} type="button"
+                className={`btn-ghost btn-sm max-w-36 xl:max-w-48 border ${companyCurrent ? 'text-white bg-brand-600/20 border-brand-600/30' : 'border-transparent'}`}
                 aria-haspopup="menu" aria-expanded={companyOpen} title={companyLabel}
+                aria-current={companyCurrent ? 'page' : undefined}
                 onKeyDown={event => {
                   if (event.key === 'ArrowDown') {
                     event.preventDefault()
@@ -207,6 +246,7 @@ function NavBar() {
                   className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
                   {memberships.length > 1 && <Link role="menuitem" to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany', { defaultValue: 'Switch company' })}</Link>}
                   <Link role="menuitem" to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
+                  <Link role="menuitem" to="/agents" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.agents', { defaultValue: 'Agents' })}</Link>
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
                   <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
                     logout()
@@ -245,11 +285,11 @@ function NavBar() {
           onClick={() => setMenuOpen(false)}
         >
           <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation', { defaultValue: 'Mobile navigation' })}>
-            {links.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to !== '/dashboard' && to !== '/evidence'} className={linkClass}>
+            {links.map(({ to, section: linkSection, icon: Icon, label }) => (
+              <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
                 <Icon size={16} />
                 <span>{label}</span>
-              </NavLink>
+              </Link>
             ))}
           </nav>
         </div>
@@ -282,27 +322,29 @@ function AppContent() {
             <Route path="/register" element={<Register />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Navigate to="/evidence" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/analytics" element={<Dashboard />} />
+              <Route path="/sprints" element={<Sprints />} />
+              <Route path="/sprints/:id" element={<SprintWorkspace />} />
+              <Route path="/sprints/:id/:tab" element={<SprintWorkspace />} />
+              <Route path="/sprints/:sprintId/tasks/:taskId" element={<TaskDetails />} />
+              <Route path="/dashboard" element={<ActiveSprintRedirect />} />
+              <Route path="/dashboard/analytics" element={<ActiveSprintRedirect tab="analytics" />} />
+              <Route path="/analytics" element={<ActiveSprintRedirect tab="analytics" />} />
+              <Route path="/workspace/:id" element={<SprintParamRedirect tab="live" />} />
+              <Route path="/workspace/:id/live" element={<SprintParamRedirect tab="live" />} />
+              <Route path="/workspace/:sprintId/task/:taskId" element={<LegacyTaskRedirect />} />
+              <Route path="/sprint-ops/:id" element={<SprintParamRedirect tab="board" />} />
               <Route path="/companies/new" element={<CompanyNew />} />
               <Route path="/companies/select" element={<CompanySelect />} />
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
-              <Route path="/workspace/:id" element={<SprintWorkspace />} />
               <Route path="/agents" element={<AgentSettings />} />
-              <Route path="/sprint-ops/:id" element={<SprintOpsCockpit />} />
               <Route
                 path="/governance"
                 element={<div className="page-container"><GovernancePanel /></div>}
               />
               <Route path="/evidence" element={<Evidence />} />
               <Route path="/evidence/:runId" element={<EvidenceDetail />} />
-              <Route
-                path="/analytics"
-                element={<Navigate to="/dashboard/analytics" replace />}
-              />
               <Route path="/memory" element={<MemorySearch />} />
               <Route path="/generate" element={<Generate />} />
-              <Route path="/workspace/:sprintId/task/:taskId" element={<TaskDetails />} />
               <Route path="/task/:taskId" element={<TaskDetails />} />
               <Route path="*" element={<NotFound />} />
             </Route>

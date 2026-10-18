@@ -249,9 +249,9 @@ flowchart LR
 | `scrum_master` | Scrum Master | Sequences work, surfaces blockers, assigns first execution move to Developer |
 | `developer` | Developer | Claims first actionable item, states implementation plan, flags dependencies |
 | `po_wrap` | Product Owner | Closes kickoff with 3-bullet summary: priority · owner · next action |
-| `burn` | System | Persists engram to Neo4j; publishes `needs_split` or completion event |
+| `burn` | System | Persists engram to Neo4j; publishes the kickoff completion event |
 
-**Error handling:** Any node failure sets `last_error` and short-circuits to `burn`, which marks the sprint `needs_split`. `GraphRecursionError` is caught explicitly at the workflow level and also returns `needs_split: True`.
+**Error handling:** Any node failure sets `last_error` and short-circuits to `burn`. `GraphRecursionError` is caught explicitly at the workflow level. Either way the kickoff has failed, but the sprint stays `active`: the agent worker publishes `Kickoff failed: <reason>; tasks continue` to the Glassroom, and backlog tasks keep running in the task worker. Only an explicit split decision marks a sprint `needs_split`.
 
 **Model routing:** `ModelFactory.ROLE_MODEL_MAP` resolves each role to a specific LLM via the proxy — swap models per role in configuration without code changes.
 

@@ -12,9 +12,27 @@ from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificatio
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.agent_service import AgentService
 from services.verification import verify_agent_run
+from sqlalchemy import String, cast
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/agent_runs", tags=["Agent Runs"])
+
+
+def _subject_sprint_id_equals(sprint_id: int):
+    """
+    SQL condition: ``subject.sprint_id`` is the JSON number ``sprint_id``.
+
+    Filtering in SQL keeps ``limit`` exact (a Python filter after the query
+    would have to over-fetch an unbounded number of rows). Casting the JSON
+    element to a string is portable: SQLAlchemy renders
+    ``CAST(subject -> 'sprint_id' AS VARCHAR)`` on Postgres and
+    ``CAST(JSON_QUOTE(JSON_EXTRACT(subject, '$."sprint_id"')) AS VARCHAR)`` on
+    SQLite, and both yield the element's JSON text — ``7`` for the number,
+    ``"7"`` for a string. Matching the JSON text means a malformed caller-
+    supplied ``subject`` can never make the query fail, as an integer cast
+    would on Postgres, and keeps the comparison type-strict on both engines.
+    """
+    return cast(AgentRun.subject["sprint_id"], String) == str(sprint_id)
 
 
 @router.post("")
@@ -47,6 +65,8 @@ def list_agent_runs(
     status: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    external_ref: str | None = None,
+    sprint_id: int | None = None,
     limit: int = Query(50, ge=1, le=500),
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
@@ -57,6 +77,10 @@ def list_agent_runs(
         statement = statement.where(AgentRun.producer == producer)
     if status is not None:
         statement = statement.where(AgentRun.status == status)
+    if external_ref is not None:
+        statement = statement.where(AgentRun.external_ref == external_ref)
+    if sprint_id is not None:
+        statement = statement.where(_subject_sprint_id_equals(sprint_id))
     if since is not None:
         statement = statement.where(AgentRun.ingested_at >= since)
     if until is not None:

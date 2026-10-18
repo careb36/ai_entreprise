@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
+import { Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { ApiError, type AgentRunStatus } from '../services/api'
 import {
   useAgentRun,
@@ -12,8 +13,9 @@ import {
   useVerifyAgentRun,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
-import { Verdict } from './Evidence'
+import { Verdict } from '../components/Verdict'
 import { parseRouteId } from '../lib/routeId'
+import { taskOfRun } from '../lib/taskEvidence'
 
 function claimValue(value: unknown): string {
   if (typeof value === 'string') return value
@@ -87,15 +89,27 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   }
 
   const verdict: AgentRunStatus = latestVerification?.verdict ?? run.status
+  const task = taskOfRun(run)
 
   return (
     <div className="space-y-6">
-      <Link to="/evidence" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white">
-        <ArrowLeft size={15} />{t('evidence.backToRuns')}
-      </Link>
+      <Breadcrumbs items={[
+        { label: t('nav.evidence', { defaultValue: 'Evidence' }), to: '/evidence' },
+        { label: t('evidence.runCrumb', { id: runId, defaultValue: 'Run #{{id}}' }) },
+      ]} />
       <header className="page-header">
         <h1 className="page-title">{t('evidence.detailTitle')}</h1>
-        <p className="mt-1 break-all font-mono text-sm text-gray-400">{run.external_ref} · {run.producer}</p>
+        <div className="min-w-0 sm:text-right">
+          <p className="mt-1 break-all font-mono text-sm text-gray-400">{run.external_ref} · {run.producer}</p>
+          {task && (
+            <p className="mt-1 text-sm text-gray-400">
+              {t('evidence.taskLabel', { defaultValue: 'Task' })}:{' '}
+              <Link to={task.to} className="break-words font-medium text-brand-300 hover:underline">
+                {task.title ?? t('evidence.taskFallback', { id: task.itemId, defaultValue: 'Task #{{id}}' })}
+              </Link>
+            </p>
+          )}
+        </div>
       </header>
 
       <section aria-labelledby="claim-observation-title">

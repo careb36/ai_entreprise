@@ -9,7 +9,6 @@
     "review": "Revisión",
     "sprints": "Sprints",
     "quotas": "Cuotas",
-    "board": "Tablero",
     "online": "En línea",
     "mainNavigation": "Navegación principal",
     "mobileNavigation": "Navegación móvil",
@@ -17,19 +16,19 @@
     "closeMenu": "Cerrar menú",
     "newCompany": "Nueva compañía",
     "evidence": "Evidencia",
-    "analytics": "Analíticas",
     "memory": "Memoria",
-    "generate": "Generar"
+    "generate": "Generar",
+    "offline": "Fuera de línea",
+    "agents": "Agentes",
+    "breadcrumb": "Ruta de navegación"
   },
   "dashboard": {
-    "liveView": "Vista en vivo",
     "title": "La Fabrique",
     "subtitle": "Plataforma de desarrollo autónomo con IA",
     "systemStatus": "Estado del Sistema",
     "online": "En línea",
     "offline": "Fuera de línea",
     "checking": "Verificando...",
-    "newFactory": "Nueva Fábrica",
     "newFactoryDesc": "Crear una nueva fábrica de software IA",
     "activeWorkspace": "Espacio Activo",
     "activeWorkspaceDesc": "Abrir espacio de trabajo del sprint",
@@ -44,8 +43,6 @@
     "companies": "Tus Fábricas",
     "needsSplit": "El sprint necesita dividirse",
     "needsSplitDesc": "Este sprint superó la capacidad de los agentes. Divídelo en alcances más pequeños.",
-    "systemOnline": "Sistema en línea",
-    "systemOffline": "Sistema fuera de línea",
     "commandCenter": "Centro de mando de sprints con IA",
     "review": "Revisar",
     "tasksDone": "{{done}} de {{total}} tareas completadas",
@@ -96,9 +93,7 @@
     "agentCount_other": "{{count}} agentes",
     "noAgents": "Aún no se han visto agentes.",
     "activateAgents": "Inicia un sprint para activar a los agentes.",
-    "viewLiveStream": "Ver transmisión en directo",
     "system": "Sistema",
-    "backendApi": "API del backend",
     "agentStream": "Flujo de agentes",
     "scope": {
       "S": {
@@ -151,7 +146,10 @@
       "medium": "Media",
       "high": "Alta",
       "critical": "Crítica"
-    }
+    },
+    "manageAgents": "Gestionar agentes",
+    "manageQuotas": "Gestionar cuotas",
+    "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites."
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -467,24 +465,30 @@
     "activeContext": "Contexto Activo",
     "aiAgentsActive": "Agentes IA Activos",
     "sprintBoard": "Tablero del Sprint",
-    "glassroomTitle": "Sala de Cristal — Stream en Vivo",
     "collapseSidebar": "Colapsar barra lateral",
     "expandSidebar": "Expandir barra lateral",
     "noSprint": "Sin sprint activo",
     "noSprintDesc": "Inicia un sprint para comenzar a trabajar",
-    "operationsTitle": "Operaciones del Sprint",
-    "operationsSubtitle": "Tablero Kanban y gestión del sprint en vivo",
-    "openLiveRoom": "Abrir Sala en Vivo",
-    "backToDashboard": "Volver al Dashboard",
-    "boardOpsTitle": "Tablero del Sprint",
-    "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar"
+    "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar",
+    "pauseSprint": "Pausar",
+    "resumeSprint": "Reanudar"
   },
   "taskDetails": {
     "invalidId": "ID de tarea no válido: {{taskId}}.",
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
     "sprintNotFound": "No se encontró el sprint #{{sprintId}} al buscar la tarea #{{taskId}}.",
-    "loadError": "No se pudo cargar el sprint #{{sprintId}} para la tarea #{{taskId}}."
+    "loadError": "No se pudo cargar el sprint #{{sprintId}} para la tarea #{{taskId}}.",
+    "evidence": {
+      "title": "Evidencia",
+      "loading": "Cargando evidencia…",
+      "error": "No se pudo cargar la evidencia de esta tarea.",
+      "empty": "Aún no hay evidencia registrada.",
+      "version": "Versión {{version}}",
+      "claimedFiles": "Archivos que el agente afirma haber escrito",
+      "noFiles": "No afirma ningún archivo.",
+      "view": "Ver evidencia"
+    }
   },
   "controlPanel": {
     "title": "Panel de Control",
@@ -547,7 +551,8 @@
       "in_review": "En Revisión",
       "done": "Terminado",
       "blocked": "Bloqueado"
-    }
+    },
+    "deliveryVerdict": "Entrega: {{verdict}}"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -741,7 +746,8 @@
     "feedbackPlaceholderReject": "Razón del rechazo (obligatorio)...",
     "pendingRuns": "Ejecuciones pendientes de decisión humana",
     "noPendingRuns": "No hay ejecuciones pendientes de decisión humana",
-    "reviewRun": "Revisar evidencia"
+    "reviewRun": "Revisar evidencia",
+    "usageHistory": "Historial de uso (últimos 7 días)"
   },
   "evidence": {
     "title": "Evidencia",
@@ -823,7 +829,10 @@
     "legacyCompany": "Heredada — empresa no registrada",
     "runAuditId": "Fila de auditoría de la ejecución",
     "latestVerificationAuditId": "Fila de auditoría de la última verificación",
-    "notRecorded": "No registrado"
+    "notRecorded": "No registrado",
+    "runCrumb": "Ejecución #{{id}}",
+    "taskLabel": "Tarea",
+    "taskFallback": "Tarea #{{id}}"
   },
   "analytics": {
     "title": "Analíticas",
@@ -887,7 +896,8 @@
     "viewWorkspace": "Ver en Espacio de Trabajo",
     "copy": "Copiar",
     "copied": "¡Copiado!",
-    "error": "Error en la generación"
+    "error": "Error en la generación",
+    "started": "¡Generación iniciada!"
   },
   "support": {
     "title": "Asistente La Fabrique",
@@ -986,6 +996,91 @@
     "loading": "Cargando tu cuenta…",
     "selectCompany": "Selecciona una empresa"
   },
+  "agentsConfig": {
+    "title": "Registro de Agentes",
+    "subtitle": "Actualiza agentes, modelos e instrucciones mientras la fábrica sigue funcionando.",
+    "subtitleWithCompany": "Actualiza agentes, modelos e instrucciones de {{company}} mientras la fábrica sigue funcionando.",
+    "factory": "Fábrica",
+    "orchestrator": "Modelo recomendado para orquestación",
+    "noCompany": "Inicializa primero una fábrica para gestionar sus agentes.",
+    "runtimeNoteTitle": "Comportamiento en ejecución",
+    "runtimeNote": "Cambiar un agente afecta la próxima ejecución o revisión que tome ese rol. El trabajo que ya está en curso conserva el modelo y las instrucciones con los que empezó.",
+    "shardingNote": "Si creas varios agentes con el mismo rol, La Fabrique reparte las tareas entre ellos de forma determinista en lugar de elegir siempre el primero.",
+    "searchPlaceholder": "Buscar por nombre, rol, especialidad o modelo…",
+    "refresh": "Actualizar",
+    "newAgent": "Nuevo agente",
+    "closeCreator": "Cerrar",
+    "filterAll": "Todos",
+    "addAgent": "Añadir agente",
+    "cancel": "Cancelar",
+    "create": "Crear agente",
+    "currentAgents": "Agentes actuales",
+    "loading": "Cargando agentes…",
+    "loadError": "No se pudo cargar el registro de agentes.",
+    "emptyFiltered": "Ningún agente coincide con tu búsqueda o filtro.",
+    "emptyNoAgents": "Esta fábrica todavía no tiene agentes. Usa “Nuevo agente” para añadir el primero.",
+    "unnamedAgent": "Agente sin nombre",
+    "unsaved": "Sin guardar",
+    "duplicate": "Duplicar",
+    "duplicateTooltip": "Abrir el creador con la configuración de este agente",
+    "duplicateSuffix": "(copia)",
+    "delete": "Eliminar",
+    "deleteConfirm": "Haz clic de nuevo para confirmar",
+    "dirtyHint": "Tienes cambios sin guardar. Se aplican a la próxima tarea que tome este rol.",
+    "cleanHint": "No hay cambios sin guardar.",
+    "discard": "Descartar",
+    "save": "Guardar cambios",
+    "saving": "Guardando…",
+    "noActivity": "Sin actividad todavía",
+    "taskSingular": "tarea",
+    "taskPlural": "tareas",
+    "never": "nunca",
+    "timeJustNow": "hace un momento",
+    "timeMinutesAgo": "hace {{n}} min",
+    "timeHoursAgo": "hace {{n}} h",
+    "timeDaysAgo": "hace {{n}} d",
+    "name": "Nombre / Alias",
+    "role": "Rol",
+    "seniority": "Experiencia",
+    "specialty": "Especialidad / Área de enfoque",
+    "persona": "Personalidad / Estilo de trabajo",
+    "systemPrompt": "Instrucciones del sistema",
+    "systemPromptPlaceholder": "Describe el rol y el comportamiento del agente, o usa Generar instrucciones para crearlas a partir del rol y la especialidad.",
+    "generatePrompt": "Generar instrucciones",
+    "generatingPrompt": "Generando…",
+    "generatePromptError": "No se pudieron generar las instrucciones. Verifica que el proxy LLM esté activo.",
+    "tokenBudget": "Presupuesto mensual de tokens",
+    "model": "Modelo LLM",
+    "defaultForRole": "Predeterminado del rol",
+    "defaultForRoleHint": "Usa el modelo predeterminado del servidor para este rol.",
+    "modelNotInCatalog": "{{model}} (fuera del catálogo)",
+    "customModelHint": "Este modelo no está en el catálogo actual, así que el proxy LLM lo rechazará. Elige un modelo de la lista o Predeterminado del rol.",
+    "recommendedModel": "Modelo recomendado para este rol",
+    "applyRecommendation": "Usar recomendación",
+    "recommendationApplied": "En uso",
+    "alternatives": "Alternativas:",
+    "noRecommendation": "Ningún modelo del catálogo actual coincide con este rol. Elige uno manualmente abajo.",
+    "createSuccess": "Agente creado correctamente.",
+    "createError": "No se pudo crear el agente. Inténtalo de nuevo.",
+    "saveSuccess": "Configuración del agente guardada.",
+    "saveError": "No se pudo guardar el agente. Inténtalo de nuevo.",
+    "deleteSuccess": "Agente eliminado.",
+    "deleteError": "No se pudo eliminar el agente. Inténtalo de nuevo.",
+    "recommendationReasons": {
+      "dev": "Prioriza la calidad de generación y refactorización de código, con modelos de razonamiento más fuertes para niveles senior.",
+      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes, con Gemini Pro a la cabeza en niveles senior.",
+      "data": "Prioriza el razonamiento para el diseño de datos, la corrección de pipelines y las decisiones analíticas.",
+      "designer": "Prioriza modelos fuertes en razonamiento de UX, estructura visual y especificaciones claras.",
+      "qa": "Prioriza un razonamiento sólido para revisiones profundas, análisis de riesgos y detección de regresiones.",
+      "architect": "Prioriza el razonamiento profundo y la síntesis de arquitectura.",
+      "po": "Prioriza el razonamiento de producto, la evaluación de alternativas y la calidad de la planificación.",
+      "scrummaster": "Prioriza el razonamiento y la coordinación para la planificación, la descomposición de tareas y las retrospectivas.",
+      "devops": "Prioriza el razonamiento para el diagnóstico de infraestructura y las decisiones operativas con restricciones.",
+      "security": "Prioriza modelos con razonamiento intensivo para el análisis de amenazas, el endurecimiento y las decisiones de políticas.",
+      "support": "Prioriza modelos rápidos y equilibrados para respuestas claras y una clasificación ágil.",
+      "generalist": "Usa un modelo general y equilibrado cuando el rol no requiere claramente un especialista."
+    }
+  },
   "common": {
     "loading": "Cargando...",
     "error": "Ocurrió un error",
@@ -1009,5 +1104,27 @@
     "na": "N/D",
     "copyId": "Copiar ID",
     "learnMore": "Más información"
+  },
+  "sprint": {
+    "views": "Vistas del sprint",
+    "tabs": {
+      "overview": "Resumen",
+      "board": "Tablero",
+      "live": "En vivo",
+      "analytics": "Analíticas"
+    },
+    "streamConnected": "Flujo conectado",
+    "streamDisconnected": "Flujo desconectado"
+  },
+  "sprints": {
+    "subtitle": "Todos los sprints de esta empresa, primero los activos.",
+    "selectCompany": "Selecciona una empresa para ver sus sprints.",
+    "loadError": "No se pudieron cargar los sprints.",
+    "emptyTitle": "Todavía no hay sprints",
+    "emptyDescription": "Planifica un sprint abajo o crea una empresa nueva con un sprint inicial.",
+    "planSprint": "Planificar un sprint",
+    "progress": "{{done}} / {{total}} completadas",
+    "noStartDate": "Sin iniciar",
+    "lastOpened": "Abierto por última vez"
   }
 }

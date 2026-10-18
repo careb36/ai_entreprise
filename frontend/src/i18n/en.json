@@ -9,7 +9,6 @@
     "review": "Review",
     "sprints": "Sprints",
     "quotas": "Quotas",
-    "board": "Board",
     "online": "Online",
     "mainNavigation": "Main navigation",
     "mobileNavigation": "Mobile navigation",
@@ -17,19 +16,19 @@
     "closeMenu": "Close menu",
     "newCompany": "New company",
     "evidence": "Evidence",
-    "analytics": "Analytics",
     "memory": "Memory",
-    "generate": "Generate"
+    "generate": "Generate",
+    "offline": "Offline",
+    "agents": "Agents",
+    "breadcrumb": "Breadcrumb"
   },
   "dashboard": {
-    "liveView": "Live view",
     "title": "La Fabrique",
     "subtitle": "AI-powered autonomous development platform",
     "systemStatus": "System Status",
     "online": "Online",
     "offline": "Offline",
     "checking": "Checking...",
-    "newFactory": "New Factory",
     "newFactoryDesc": "Create a new AI software factory",
     "activeWorkspace": "Active Workspace",
     "activeWorkspaceDesc": "Open sprint workspace",
@@ -44,8 +43,6 @@
     "companies": "Your Factories",
     "needsSplit": "Sprint needs splitting",
     "needsSplitDesc": "This sprint exceeded agent capacity. Split it into smaller scopes.",
-    "systemOnline": "System online",
-    "systemOffline": "System offline",
     "commandCenter": "AI Sprint command center",
     "review": "Review",
     "tasksDone": "{{done}} of {{total}} tasks done",
@@ -96,9 +93,7 @@
     "agentCount_other": "{{count}} agents",
     "noAgents": "No agents seen yet.",
     "activateAgents": "Launch a sprint to activate agents.",
-    "viewLiveStream": "View live stream",
     "system": "System",
-    "backendApi": "Backend API",
     "agentStream": "Agent Stream",
     "scope": {
       "S": {
@@ -151,7 +146,10 @@
       "medium": "Medium",
       "high": "High",
       "critical": "Critical"
-    }
+    },
+    "manageAgents": "Manage agents",
+    "manageQuotas": "Manage quotas",
+    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits."
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -467,24 +465,30 @@
     "activeContext": "Active Context",
     "aiAgentsActive": "AI Agents Active",
     "sprintBoard": "Sprint Board",
-    "glassroomTitle": "Glassroom — Live Agent Stream",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
     "noSprint": "No active sprint",
     "noSprintDesc": "Start a sprint to begin working",
-    "operationsTitle": "Sprint Operations",
-    "operationsSubtitle": "Kanban board and live sprint management",
-    "openLiveRoom": "Open Live Room",
-    "backToDashboard": "Back to Dashboard",
-    "boardOpsTitle": "Sprint Board",
-    "boardOpsHint": "Drag tasks to change status or reassign"
+    "boardOpsHint": "Drag tasks to change status or reassign",
+    "pauseSprint": "Pause",
+    "resumeSprint": "Resume"
   },
   "taskDetails": {
     "invalidId": "Invalid task ID: {{taskId}}.",
     "noSprint": "Select a sprint to look up task #{{taskId}}.",
     "notFound": "Task #{{taskId}} was not found in sprint #{{sprintId}}.",
     "sprintNotFound": "Sprint #{{sprintId}} was not found while looking for task #{{taskId}}.",
-    "loadError": "Failed to load sprint #{{sprintId}} for task #{{taskId}}."
+    "loadError": "Failed to load sprint #{{sprintId}} for task #{{taskId}}.",
+    "evidence": {
+      "title": "Evidence",
+      "loading": "Loading evidence…",
+      "error": "Failed to load the evidence for this task.",
+      "empty": "No evidence recorded yet.",
+      "version": "Version {{version}}",
+      "claimedFiles": "Files the agent claims to have written",
+      "noFiles": "No files claimed.",
+      "view": "View evidence"
+    }
   },
   "controlPanel": {
     "title": "Control Panel",
@@ -547,7 +551,8 @@
       "in_review": "In Review",
       "done": "Done",
       "blocked": "Blocked"
-    }
+    },
+    "deliveryVerdict": "Delivery: {{verdict}}"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -741,7 +746,8 @@
     "feedbackPlaceholderReject": "Reason for rejection (required)...",
     "pendingRuns": "Runs awaiting a human decision",
     "noPendingRuns": "No runs are awaiting a human decision",
-    "reviewRun": "Review evidence"
+    "reviewRun": "Review evidence",
+    "usageHistory": "Usage History (last 7 days)"
   },
   "evidence": {
     "title": "Evidence",
@@ -823,7 +829,10 @@
     "legacyCompany": "Legacy — company not recorded",
     "runAuditId": "Run audit row",
     "latestVerificationAuditId": "Latest verification audit row",
-    "notRecorded": "Not recorded"
+    "notRecorded": "Not recorded",
+    "runCrumb": "Run #{{id}}",
+    "taskLabel": "Task",
+    "taskFallback": "Task #{{id}}"
   },
   "analytics": {
     "title": "Analytics",
@@ -887,7 +896,8 @@
     "viewWorkspace": "View in Workspace",
     "copy": "Copy",
     "copied": "Copied!",
-    "error": "Generation failed"
+    "error": "Generation failed",
+    "started": "Generation started!"
   },
   "support": {
     "title": "La Fabrique Assistant",
@@ -986,6 +996,91 @@
     "loading": "Loading your account…",
     "selectCompany": "Select a company"
   },
+  "agentsConfig": {
+    "title": "Agent Registry",
+    "subtitle": "Update agents, models, and prompts while the factory keeps running.",
+    "subtitleWithCompany": "Update agents, models, and prompts for {{company}} while the factory keeps running.",
+    "factory": "Factory",
+    "orchestrator": "Recommended orchestrator model",
+    "noCompany": "Initialize a factory first to manage its agents.",
+    "runtimeNoteTitle": "Runtime behavior",
+    "runtimeNote": "Changing an agent updates the next task execution or review that claims that role. Work already in progress keeps the model and prompt it started with.",
+    "shardingNote": "If you create multiple agents with the same role, La Fabrique shards tasks deterministically across them instead of always picking the first one.",
+    "searchPlaceholder": "Search by name, role, specialty, or model…",
+    "refresh": "Refresh",
+    "newAgent": "New agent",
+    "closeCreator": "Close",
+    "filterAll": "All",
+    "addAgent": "Add agent",
+    "cancel": "Cancel",
+    "create": "Create agent",
+    "currentAgents": "Current agents",
+    "loading": "Loading agents…",
+    "loadError": "Failed to load agent registry.",
+    "emptyFiltered": "No agents match your search or filter.",
+    "emptyNoAgents": "This factory has no agents yet. Use “New agent” to add the first one.",
+    "unnamedAgent": "Unnamed agent",
+    "unsaved": "Unsaved",
+    "duplicate": "Duplicate",
+    "duplicateTooltip": "Open the creator pre-filled with this agent's settings",
+    "duplicateSuffix": "(copy)",
+    "delete": "Delete",
+    "deleteConfirm": "Click again to confirm",
+    "dirtyHint": "You have unsaved changes. They apply to the next task this role claims.",
+    "cleanHint": "No unsaved changes.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "noActivity": "No activity yet",
+    "taskSingular": "task",
+    "taskPlural": "tasks",
+    "never": "never",
+    "timeJustNow": "just now",
+    "timeMinutesAgo": "{{n}} min ago",
+    "timeHoursAgo": "{{n}} h ago",
+    "timeDaysAgo": "{{n}} d ago",
+    "name": "Name / Alias",
+    "role": "Role",
+    "seniority": "Seniority",
+    "specialty": "Specialty / Focus area",
+    "persona": "Persona / Working style",
+    "systemPrompt": "System prompt",
+    "systemPromptPlaceholder": "Describe the agent's role and behavior, or use Generate prompt to create it from the role and specialty.",
+    "generatePrompt": "Generate prompt",
+    "generatingPrompt": "Generating…",
+    "generatePromptError": "Could not generate the prompt. Check that the LLM proxy is running.",
+    "tokenBudget": "Monthly token budget",
+    "model": "LLM model",
+    "defaultForRole": "Default for role",
+    "defaultForRoleHint": "Uses the server's default model for this role.",
+    "modelNotInCatalog": "{{model}} (not in catalog)",
+    "customModelHint": "This model is not in the live catalog, so the LLM proxy will reject it. Pick a listed model or Default for role.",
+    "recommendedModel": "Recommended model for this role",
+    "applyRecommendation": "Use recommendation",
+    "recommendationApplied": "In use",
+    "alternatives": "Alternatives:",
+    "noRecommendation": "No model in the live catalog matches this role. Choose one manually below.",
+    "createSuccess": "Agent created successfully.",
+    "createError": "Failed to create agent. Please try again.",
+    "saveSuccess": "Agent configuration saved.",
+    "saveError": "Failed to save agent. Please try again.",
+    "deleteSuccess": "Agent deleted.",
+    "deleteError": "Failed to delete agent. Please try again.",
+    "recommendationReasons": {
+      "dev": "Prioritizes code generation and refactoring quality, with stronger reasoning models for senior levels.",
+      "frontend": "Prioritizes UI code quality and component design, with Gemini Pro leading for senior levels.",
+      "data": "Prefers reasoning for data design, pipeline correctness, and analytical decisions.",
+      "designer": "Favors models strong at UX reasoning, visual structure, and clear written specs.",
+      "qa": "Prefers stronger reasoning for review depth, risk analysis, and regression thinking.",
+      "architect": "Favors deep reasoning and architecture synthesis.",
+      "po": "Favors product reasoning, trade-offs, and planning quality.",
+      "scrummaster": "Prefers reasoning and coordination quality for planning, decomposition, and retrospective guidance.",
+      "devops": "Prefers reasoning for infrastructure diagnosis and operational decisions under constraints.",
+      "security": "Prefers reasoning-heavy models for threat analysis, hardening, and policy trade-offs.",
+      "support": "Favors fast, balanced models for clear responses and lightweight triage.",
+      "generalist": "Uses a balanced general-purpose model when the role does not clearly call for a specialist."
+    }
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
@@ -1009,5 +1104,27 @@
     "na": "N/A",
     "copyId": "Copy ID",
     "learnMore": "Learn more"
+  },
+  "sprint": {
+    "views": "Sprint views",
+    "tabs": {
+      "overview": "Overview",
+      "board": "Board",
+      "live": "Live",
+      "analytics": "Analytics"
+    },
+    "streamConnected": "Stream connected",
+    "streamDisconnected": "Stream disconnected"
+  },
+  "sprints": {
+    "subtitle": "Every sprint of this company, active ones first.",
+    "selectCompany": "Select a company to see its sprints.",
+    "loadError": "Failed to load sprints.",
+    "emptyTitle": "No sprints yet",
+    "emptyDescription": "Plan a sprint below, or create a new company with a foundation sprint.",
+    "planSprint": "Plan a sprint",
+    "progress": "{{done}} / {{total}} done",
+    "noStartDate": "Not started",
+    "lastOpened": "Last opened"
   }
 }

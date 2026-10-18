@@ -4,11 +4,13 @@ VS Code Daemon - Enterprise Edition (v2026.4)
 Subscribes to:
 - workspace.generate: Write files and open VS Code
 - workspace.execute: Execute shell commands and return results (OpenHands style)
+- workspace.capabilities: Reply with the console assistant CLIs found on PATH
 """
 
 import os
 import json
 import asyncio
+import shutil
 import subprocess
 import hashlib
 import logging
@@ -28,6 +30,13 @@ logger = logging.getLogger("fabrique-daemon")
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
 PROTECTED_ROOT_DOCS = set()
+# Console assistant commands reported by workspace.capabilities when the
+# request does not name its own list.
+ASSISTANT_COMMANDS_DEFAULT = os.getenv("CONSOLE_ASSISTANT_COMMANDS", "copilot,claude")
+# Off-PATH install locations the backend's command wrapper falls back to.
+ASSISTANT_FALLBACK_PATHS = {
+    "copilot": "~/Library/Application Support/Code/User/globalStorage/github.copilot-chat/copilotCli/copilot",
+}
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -93,29 +102,40 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         files:          List of dicts with ``path`` (relative) and ``content`` keys.
 
     Returns:
-        List of ``{"path": <absolute>, "status": "written"}`` dicts.
+        One dict per file: ``path`` (as requested), ``status`` (``written``,
+        ``skipped_protected`` or ``rejected``) and, for written files,
+        ``absolute_path``, ``bytes`` and ``sha256`` of the bytes read back from
+        disk after writing — an observation, not an echo of the request.
     """
     results = []
     workspace_root = Path(workspace_path).resolve()
     for file_info in files:
-        target_path = _resolve_target_path(workspace_path, file_info.get("path", ""))
+        requested = file_info.get("path", "")
+        target_path = _resolve_target_path(workspace_path, requested)
         content = file_info.get("content", "")
         overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
 
-        if not target_path:
-            results.append({"path": file_info.get("path", ""), "status": "rejected"})
-            logger.warning("Rejected unsafe file path: %s", file_info.get("path", ""))
+        if not target_path or target_path == workspace_root:
+            results.append({"path": requested, "status": "rejected"})
+            logger.warning("Rejected unsafe file path: %s", requested)
             continue
 
         if _is_protected_existing_doc(workspace_root, target_path) and not overwrite_existing:
-            results.append({"path": str(target_path), "status": "skipped_protected"})
+            results.append({"path": requested, "status": "skipped_protected", "absolute_path": str(target_path)})
             logger.warning("Skipped protected document overwrite: %s", target_path)
             continue
 
         os.makedirs(target_path.parent, exist_ok=True)
-        with open(target_path, "w") as f:
+        with open(target_path, "w", encoding="utf-8", newline="") as f:
             f.write(content)
-        results.append({"path": str(target_path), "status": "written"})
+        on_disk = target_path.read_bytes()
+        results.append({
+            "path": requested,
+            "status": "written",
+            "absolute_path": str(target_path),
+            "bytes": len(on_disk),
+            "sha256": hashlib.sha256(on_disk).hexdigest(),
+        })
         logger.info(f"File written: {target_path}")
     return results
 
@@ -228,11 +248,34 @@ async def handle_msg(nc, msg):
     if subject == "workspace.generate":
         # Write files
         files = data.get("files", [])
-        write_results = write_files(workspace_path, files)
-
-        response = {"ok": True, "files": len(write_results), "path": workspace_path}
+        try:
+            write_results = write_files(workspace_path, files)
+            response = {
+                "ok": all(r["status"] == "written" for r in write_results),
+                "workspace_root": workspace_path,
+                "files": write_results,
+            }
+        except OSError as e:
+            logger.error("Writing files under %s failed: %s", workspace_path, e)
+            response = {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
         if reply_to:
             await nc.publish(reply_to, json.dumps(response).encode())
+
+        sprint_id = data.get("sprint_id")
+        if sprint_id is not None:
+            written = [r["path"] for r in response["files"] if r["status"] == "written"]
+            others = [f"{r['path']} ({r['status']})" for r in response["files"] if r["status"] != "written"]
+            summary = f"📝 Wrote {len(written)} file(s): {', '.join(written) or '—'}"
+            if others:
+                summary += f"; not written: {', '.join(others)}"
+            if response.get("error"):
+                summary += f"; error: {response['error']}"
+            await nc.publish(f"glassroom.{sprint_id}", json.dumps({
+                "agent": "System",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "content": summary,
+                "type": "status",
+            }).encode())
             
     elif subject == "workspace.execute":
         cmd = data.get("command")
@@ -250,17 +293,71 @@ async def handle_msg(nc, msg):
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
 
+def _configured_assistant_commands(data: Dict[str, Any]) -> list[str]:
+    """Assistant commands to look for: the request's list, else the env default."""
+    requested = data.get("commands")
+    if isinstance(requested, list) and requested:
+        names = [str(name).strip() for name in requested]
+    else:
+        names = [name.strip() for name in ASSISTANT_COMMANDS_DEFAULT.split(",")]
+    # Only bare command names: a path or shell syntax is not an assistant name.
+    return [name for name in names if name and os.path.basename(name) == name]
+
+
+def _has_fallback_binary(name: str) -> bool:
+    """Match the host fallback paths the backend's command wrapper also tries."""
+    fallback = ASSISTANT_FALLBACK_PATHS.get(name)
+    if not fallback:
+        return False
+    path = os.path.expanduser(fallback)
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def detect_assistants(commands: list[str]) -> list[str]:
+    """Return the assistant commands found on the PATH used for command execution."""
+    search_path = _build_command_env().get("PATH")
+    return [
+        name
+        for name in commands
+        if shutil.which(name, path=search_path) or _has_fallback_binary(name)
+    ]
+
+
+async def handle_capabilities(nc, msg):
+    """
+    Reply to ``workspace.capabilities`` with the console assistants this host has.
+
+    Reply body: ``{"assistants": [<command names found via shutil.which>]}``.
+    The backend asks once when its workers start and skips console assistants
+    entirely when the list is empty.
+    """
+    try:
+        data = json.loads(msg.data.decode() or "{}")
+    except (ValueError, UnicodeDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    response = {"assistants": detect_assistants(_configured_assistant_commands(data))}
+    logger.info(f"Capabilities: {response}")
+    if msg.reply:
+        await nc.publish(msg.reply, json.dumps(response).encode())
+
+
 async def main():
     logger.info(f"Connecting to NATS at {NATS_URL}...")
     nc = await nats.connect(NATS_URL)
-    
+
     # Subscriptions
     async def _callback(msg):
         await handle_msg(nc, msg)
 
+    async def _capabilities_callback(msg):
+        await handle_capabilities(nc, msg)
+
     sub_gen = await nc.subscribe("workspace.generate", cb=_callback)
     sub_exec = await nc.subscribe("workspace.execute", cb=_callback)
-    
+    sub_caps = await nc.subscribe("workspace.capabilities", cb=_capabilities_callback)
+
     logger.info("Daemon is ready for generation and execution tasks.")
     while True:
         await asyncio.sleep(1)

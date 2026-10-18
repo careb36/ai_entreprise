@@ -1,32 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, CheckCircle2, Clock3, FileSearch, HelpCircle, RefreshCw } from 'lucide-react'
+import { FileSearch, RefreshCw } from 'lucide-react'
 import { useAgentRuns } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
-import type { AgentRunListItem, AgentRunStatus } from '../services/api'
-
-const STATUS_PRESENTATION: Record<AgentRunStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
-  verified: { label: 'verified', className: 'text-emerald-300 bg-emerald-950/60 border-emerald-700/50', Icon: CheckCircle2 },
-  refuted: { label: 'refuted', className: 'text-red-300 bg-red-950/60 border-red-700/50', Icon: AlertCircle },
-  unverifiable: { label: 'unverifiable', className: 'text-violet-300 bg-violet-950/60 border-violet-700/50', Icon: HelpCircle },
-  ingested: { label: 'ingested', className: 'text-amber-300 bg-amber-950/60 border-amber-700/50', Icon: Clock3 },
-}
-
-function Verdict({ status }: { status: AgentRunStatus }) {
-  const { t } = useTranslation()
-  const presentation = STATUS_PRESENTATION[status]
-  const { Icon } = presentation
-  return (
-    <span
-      data-testid={`verdict-${status}`}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${presentation.className}`}
-    >
-      <Icon data-testid={`verdict-icon-${status}`} size={14} aria-hidden="true" />
-      {t(`evidence.verdict.${presentation.label}`)}
-    </span>
-  )
-}
+import { Verdict, VERDICT_PRESENTATION } from '../components/Verdict'
+import type { AgentRunListItem } from '../services/api'
 
 function EvidenceRuns({ companyId }: { companyId: number }) {
   const { t } = useTranslation()
@@ -77,7 +56,7 @@ function EvidenceRuns({ companyId }: { companyId: number }) {
           {t('evidence.verdictLabel')}
           <select className="input mt-1 w-full" value={status} onChange={event => setStatus(event.target.value)}>
             <option value="">{t('evidence.allVerdicts')}</option>
-            {Object.keys(STATUS_PRESENTATION).map(value => (
+            {Object.keys(VERDICT_PRESENTATION).map(value => (
               <option key={value} value={value}>{t(`evidence.verdict.${value}`)}</option>
             ))}
           </select>
@@ -144,5 +123,3 @@ export default function Evidence() {
     </div>
   )
 }
-
-export { Verdict }

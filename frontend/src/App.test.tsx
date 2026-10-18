@@ -10,6 +10,7 @@ import { STORAGE_KEY_LANG } from './lib/constants'
 import { api, ApiError, setOnUnauthorized } from './services/api'
 import { useAuthStore } from './store/useAuthStore'
 import { useAppStore } from './store/useAppStore'
+import { useAgentStore } from './store/agentStore'
 import { queryClient } from './lib/queryClient'
 import es from './i18n/es.json'
 
@@ -24,6 +25,7 @@ beforeEach(() => {
   vi.spyOn(api, 'getAgentRuns').mockResolvedValue({ agent_runs: [] } as never)
   vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy', timestamp: '' })
   vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
+  vi.spyOn(api, 'listSprints').mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -205,6 +207,7 @@ describe('app navigation', () => {
       expect(button).toHaveAttribute('aria-expanded', 'true')
       expect(screen.getByText('Example company')).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: 'New company' })).toHaveAttribute('href', '/companies/new')
+      expect(screen.getByRole('menuitem', { name: 'Agents' })).toHaveAttribute('href', '/agents')
       fireEvent.click(screen.getByRole('menuitem', { name: 'Quotas' }))
       expect(await screen.findByText('Engineering')).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'Token Quota Usage' })).toBeInTheDocument()
@@ -257,7 +260,7 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Quotas', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
@@ -337,18 +340,114 @@ describe('app navigation', () => {
       expect(mobileActive[0]).toHaveTextContent(label)
     })
 
-    it.each(['/dashboard/analytics', '/analytics', '/dashboard/analytics/', '/Dashboard/Analytics'])('nests analytics in Sprints at %s', async path => {
+    it.each(['/dashboard/analytics', '/analytics', '/dashboard/analytics/', '/Dashboard/Analytics'])('nests analytics in the active sprint at %s', async path => {
       authenticate()
+      useAppStore.getState().setActiveSprint(7)
       window.history.replaceState(null, '', path)
-      vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
+      vi.spyOn(api, 'getSprintBoard').mockResolvedValue({
+        sprint: { id: 7, company_id: 1, sprint_name: 'Hardening', status: 'active', scope_size: 'M' }, columns: {}, total: 0,
+      } as never)
+      vi.spyOn(api, 'getAnalyticsSummary').mockResolvedValue({} as never)
       render(<App />)
-      await waitFor(() => expect(window.location.pathname).toBe(path === '/analytics' ? '/dashboard/analytics' : path))
+      await waitFor(() => expect(window.location.pathname).toBe('/sprints/7/analytics'))
       const primary = screen.getByRole('navigation', { name: 'Main navigation' })
       expect(within(primary).getByRole('link', { name: 'Sprints' })).toHaveAttribute('aria-current', 'page')
       expect(within(primary).queryByRole('link', { name: 'Analytics' })).not.toBeInTheDocument()
-      const tabs = screen.getByRole('tablist', { name: 'Sprints' })
+      const tabs = await screen.findByRole('tablist', { name: 'Sprint views' })
       expect(within(tabs).getByRole('tab', { name: 'Analytics' })).toHaveAttribute('aria-selected', 'true')
       expect(within(tabs).getByRole('tab', { name: 'Board' })).toHaveAttribute('aria-selected', 'false')
+    })
+
+    describe('sprint routes', () => {
+      const sprintBoard = {
+        sprint: { id: 7, company_id: 1, sprint_name: 'Hardening', status: 'active', scope_size: 'M', goal: '', start_date: '2026-10-01', item_limit: 8 },
+        columns: { todo: [{
+          id: 2, sprint_id: 7, title: 'Encrypt credentials', description: 'Deliverable', status: 'todo', priority: 'high',
+          assignee: 'Developer', comments: [], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+        }] },
+        total: 1,
+      }
+
+      beforeEach(() => {
+        authenticate()
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+        vi.spyOn(api, 'getSprintBoard').mockResolvedValue(sprintBoard as never)
+        vi.spyOn(api, 'getAnalyticsSummary').mockResolvedValue({} as never)
+        vi.spyOn(api, 'getQuotas').mockResolvedValue([])
+        vi.spyOn(api, 'getAgents').mockResolvedValue([] as never)
+        vi.spyOn(useAgentStore.getState(), 'connect').mockImplementation(() => {})
+        vi.spyOn(useAgentStore.getState(), 'disconnect').mockImplementation(() => {})
+      })
+
+      it.each([
+        ['/dashboard', 7, '/sprints/7'],
+        ['/dashboard', null, '/sprints'],
+        ['/dashboard/analytics', 7, '/sprints/7/analytics'],
+        ['/dashboard/analytics', null, '/sprints'],
+        ['/analytics', 7, '/sprints/7/analytics'],
+        ['/analytics', null, '/sprints'],
+        ['/workspace/7', null, '/sprints/7/live'],
+        ['/workspace/7/live', null, '/sprints/7/live'],
+        ['/sprint-ops/7', null, '/sprints/7/board'],
+        ['/workspace/7/task/2', null, '/sprints/7/tasks/2'],
+      ])('redirects %s (active sprint %s) to %s', async (from, active, to) => {
+        useAppStore.getState().setActiveSprint(active)
+        window.history.replaceState(null, '', from)
+        render(<App />)
+        await waitFor(() => expect(window.location.pathname).toBe(to))
+        const primary = screen.getByRole('navigation', { name: 'Main navigation' })
+        expect(within(primary).getByRole('link', { name: 'Sprints' })).toHaveAttribute('aria-current', 'page')
+        expect(screen.queryByText('404')).not.toBeInTheDocument()
+      })
+
+      it('keeps /task/:taskId working for the active sprint, with a breadcrumb', async () => {
+        useAppStore.getState().setActiveSprint(7)
+        window.history.replaceState(null, '', '/task/2')
+        render(<App />)
+        expect(await screen.findByRole('heading', { level: 1, name: 'Encrypt credentials' })).toBeInTheDocument()
+        const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+        expect(within(breadcrumb).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Sprints', 'Hardening', 'Encrypt credentials'])
+      })
+
+      it('links Sprints in the primary navigation to the sprint list', async () => {
+        window.history.replaceState(null, '', '/evidence')
+        render(<App />)
+        const primary = screen.getByRole('navigation', { name: 'Main navigation' })
+        fireEvent.click(within(primary).getByRole('link', { name: 'Sprints' }))
+        await waitFor(() => expect(window.location.pathname).toBe('/sprints'))
+        expect(await screen.findByRole('heading', { level: 1, name: 'Sprints' })).toBeInTheDocument()
+      })
+
+      it.each([
+        ['/sprints', 'Sprints', false],
+        ['/sprints/7/board', 'Sprints', true],
+        ['/sprints/7/tasks/2', 'Sprints', true],
+        ['/evidence/1', 'Evidence', true],
+        ['/agents', null, false],
+        ['/company/quotas', null, false],
+        ['/companies/new', null, false],
+      ])('marks exactly one current element at %s', async (path, primaryLabel, breadcrumb) => {
+        vi.spyOn(api, 'getAgentRun').mockResolvedValue({
+          id: 1, company_id: 1, external_ref: 'run-1', version: 1, producer: 'github', status: 'unverifiable', claims: {},
+        } as never)
+        vi.spyOn(api, 'getAgentRunVerifications').mockResolvedValue({ verifications: [] } as never)
+        vi.spyOn(api, 'getAgentRunApprovals').mockResolvedValue({ approvals: [] } as never)
+        window.history.replaceState(null, '', path)
+        render(<App />)
+        if (breadcrumb) expect(await screen.findByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument()
+        const current = Array.from(document.querySelectorAll('[aria-current="page"]'))
+        expect(current).toHaveLength(1)
+        const primary = screen.getByRole('navigation', { name: 'Main navigation' })
+        const company = screen.getByRole('button', { name: 'Example company' })
+        if (primaryLabel) {
+          expect(within(primary).getByRole('link', { name: primaryLabel })).toBe(current[0])
+          expect(company).not.toHaveAttribute('aria-current')
+        } else {
+          expect(company).toBe(current[0])
+          expect(company.className).toContain('bg-brand-600/20')
+          expect(within(primary).queryAllByRole('link').filter(link => link.hasAttribute('aria-current'))).toHaveLength(0)
+        }
+      })
     })
 
     it('removes the duplicate Glassroom route', async () => {

@@ -25,5 +25,6 @@ beforeAll(async () => {
 
 afterEach(() => {
   cleanup()
-  localStorage.clear()
+  // Node-environment tests (e.g. the Vite config test) have no localStorage.
+  if (typeof localStorage !== 'undefined') localStorage.clear()
 })

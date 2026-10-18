@@ -184,6 +184,83 @@ def check_claimed_tests_evidenced(run: AgentRun, evidence: dict | None) -> dict:
     }
 
 
+def evaluate_workspace_writes(
+    claimed_paths: list[str], evidence: dict | None
+) -> tuple[str, str]:
+    """
+    Compare the files an agent declared with what the workspace daemon observed.
+
+    ``evidence["expected"]`` holds the sha256 the backend computed from the
+    content it sent; ``evidence["workspace_writes"]`` is the daemon's per-file
+    report, with the sha256 of the bytes it read back from disk.  Neither comes
+    from the agent.  Returns ``(outcome, observation)``.
+    """
+    if not claimed_paths:
+        return "pass", "no files declared"
+    evidence = evidence or {}
+    writes = evidence.get("workspace_writes")
+    if writes is None:
+        reason = evidence.get("reason") or "no report from the workspace daemon"
+        return VERDICT_UNVERIFIABLE, f"{', '.join(claimed_paths)}: {reason}"
+
+    expected = evidence.get("expected") or {}
+    by_path = {w.get("path"): w for w in writes if isinstance(w, dict)}
+    problems = []
+    for path in claimed_paths:
+        write = by_path.get(path)
+        if write is None:
+            problems.append(f"{path} not reported")
+        elif write.get("status") != "written":
+            problems.append(f"{path} {write.get('status') or 'not written'}")
+        elif path in expected and write.get("sha256") != expected[path]:
+            problems.append(f"{path} content on disk differs from what was sent")
+    if problems:
+        return VERDICT_REFUTED, "; ".join(problems)
+    return "pass", f"{len(claimed_paths)} file(s) written: {', '.join(claimed_paths)}"
+
+
+def check_files_written(run: AgentRun, evidence: dict | None) -> dict:
+    claimed = (run.claims or {}).get("files") or []
+    outcome, observation = evaluate_workspace_writes(
+        [path for path in claimed if isinstance(path, str)], evidence
+    )
+    return {"name": "files_written", "outcome": outcome, "observation": observation}
+
+
+def check_tests_run(evidence: dict) -> dict:
+    """
+    The project's tests as run by the workspace daemon after delivery.
+
+    Exit 0 passes, any other exit code refutes, and a run that did not happen
+    (no test command, daemon silent, command error) is unverifiable — the
+    code was not shown to work, which is different from it failing.
+    """
+    run = evidence.get("test_run") or {}
+    command = run.get("command")
+    exit_code = run.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        if exit_code == 0:
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": f"`{command}` passed",
+            }
+        tail = (run.get("output_tail") or "").strip()[-400:]
+        return {
+            "name": "tests_run",
+            "outcome": VERDICT_REFUTED,
+            "observation": f"`{command}` exited {exit_code}"
+            + (f": {tail}" if tail else ""),
+        }
+    reason = run.get("reason") or "no exit status reported"
+    target = f"`{command}`" if command else "tests"
+    return {
+        "name": "tests_run",
+        "outcome": VERDICT_UNVERIFIABLE,
+        "observation": f"{target} not run: {reason}",
+    }
+
+
 def aggregate_verdict(checks: list[dict]) -> str:
     outcomes = {check["outcome"] for check in checks}
     if VERDICT_REFUTED in outcomes:
@@ -201,6 +278,10 @@ def verify_agent_run(
         check_claimed_files_present(run),
         check_claimed_tests_evidenced(run, evidence),
     ]
+    if evidence and "workspace_writes" in evidence:
+        checks.append(check_files_written(run, evidence))
+    if evidence and "test_run" in evidence:
+        checks.append(check_tests_run(evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(
         company_id=run.company_id,

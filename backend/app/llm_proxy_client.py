@@ -23,6 +23,15 @@ from opentelemetry import propagate
 logger = logging.getLogger("fabrique-backend")
 
 
+def _json_body(response: Any) -> dict[str, Any] | None:
+    """The proxy's JSON error body (provider, status, message), if it sent one."""
+    try:
+        body = response.json()
+    except Exception:  # noqa: BLE001 - A non-JSON error body is described by its text.
+        return None
+    return body if isinstance(body, dict) else None
+
+
 class LLMProxyClient:
     """
     Synchronous HTTP client for the Fabrique LLM proxy with Governance support.
@@ -104,6 +113,8 @@ class LLMProxyClient:
                 return {
                     "error": f"HTTP {response.status_code}: {body}",
                     "ok": False,
+                    "status_code": response.status_code,
+                    "detail": _json_body(response),
                 }
 
             except requests.RequestException as e:
@@ -179,6 +190,8 @@ class LLMProxyClient:
                 return {
                     "error": f"HTTP {response.status_code}: {body}",
                     "ok": False,
+                    "status_code": response.status_code,
+                    "detail": _json_body(response),
                 }
 
             except httpx.RequestError as e:

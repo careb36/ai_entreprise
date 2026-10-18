@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,14 +17,26 @@ vi.mock('../components/GlassRoom', () => ({
     return <div>Stream for sprint {sprintId}</div>
   },
 }))
+vi.mock('../components/KanbanBoard', () => ({
+  default: ({ sprintId }: { sprintId: string }) => <div>Board for sprint {sprintId}</div>,
+}))
+vi.mock('../components/AnalyticsDashboard', () => ({
+  AnalyticsDashboard: ({ sprintId }: { sprintId: number }) => <div>Analytics for sprint {sprintId}</div>,
+}))
+vi.mock('./Dashboard', () => ({
+  default: ({ sprintId }: { sprintId: number }) => <div>Overview for sprint {sprintId}</div>,
+}))
 
-const board = { sprint: { id: 8, company_id: 1 }, columns: {}, total: 0 } as SprintBoard
+const board = { sprint: { id: 8, company_id: 1, sprint_name: 'Hardening', status: 'active' }, columns: {}, total: 0 } as SprintBoard
 
-function setup(id: string) {
+function setup(id: string, tab = 'live') {
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/workspace/${id}`]}>
-        <Routes><Route path="/workspace/:id" element={<SprintWorkspace />} /></Routes>
+      <MemoryRouter initialEntries={[tab ? `/sprints/${id}/${tab}` : `/sprints/${id}`]}>
+        <Routes>
+          <Route path="/sprints/:id" element={<SprintWorkspace />} />
+          <Route path="/sprints/:id/:tab" element={<SprintWorkspace />} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -48,7 +60,7 @@ describe('workspace sprint validation', () => {
     vi.spyOn(api, 'getSprintBoard').mockRejectedValue(new ApiError(404, 'missing'))
     setup('999')
     expect(await screen.findByRole('alert')).toHaveTextContent('Sprint #999 was not found')
-    expect(screen.getByRole('link', { name: 'Sprints' })).toHaveAttribute('href', '/dashboard')
+    expect(screen.getByRole('link', { name: 'Sprints' })).toHaveAttribute('href', '/sprints')
     expect(screen.queryByText(/Stream for sprint/)).not.toBeInTheDocument()
     expect(useAppStore.getState().activeSprintId).toBe(7)
     expect(JSON.parse(localStorage.getItem('fabrique-app-storage')!).state.activeSprintId).toBe(7)
@@ -64,7 +76,10 @@ describe('workspace sprint validation', () => {
     await act(async () => { resolve(board) })
     await waitFor(() => expect(useAppStore.getState().activeSprintId).toBe(8))
     expect(screen.getByText('Stream for sprint 8')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Sprint Board' })).toHaveAttribute('href', '/dashboard')
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Sprints', 'Hardening'])
+    expect(within(breadcrumb).getByRole('link', { name: 'Sprints' })).toHaveAttribute('href', '/sprints')
+    expect(screen.queryByRole('link', { name: 'Sprint Board' })).not.toBeInTheDocument()
   })
 
   it('clears a forbidden selection and explains lost access without Retry', async () => {
@@ -145,5 +160,51 @@ describe('workspace sprint validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(`Invalid sprint ID: ${id}`)
     expect(fetchBoard).not.toHaveBeenCalled()
     expect(useAppStore.getState().activeSprintId).toBe(7)
+  })
+
+  it.each([
+    ['', 'Overview', 'Overview for sprint 8'],
+    ['board', 'Board', 'Board for sprint 8'],
+    ['live', 'Live', 'Stream for sprint 8'],
+    ['analytics', 'Analytics', 'Analytics for sprint 8'],
+    ['ANALYTICS', 'Analytics', 'Analytics for sprint 8'],
+  ])('selects the %s tab from the URL', async (tab, label, content) => {
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
+    setup('8', tab)
+    expect(await screen.findByText(content)).toBeInTheDocument()
+    const tabs = screen.getByRole('tablist', { name: 'Sprint views' })
+    expect(within(tabs).getAllByRole('tab').map(item => item.textContent)).toEqual(['Overview', 'Board', 'Live', 'Analytics'])
+    const selected = within(tabs).getAllByRole('tab').filter(item => item.getAttribute('aria-selected') === 'true')
+    expect(selected).toHaveLength(1)
+    expect(selected[0]).toHaveTextContent(label)
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', selected[0].id)
+    expect(within(tabs).getByRole('tab', { name: 'Board' })).toHaveAttribute('href', '/sprints/8/board')
+    expect(within(tabs).getByRole('tab', { name: 'Overview' })).toHaveAttribute('href', '/sprints/8')
+  })
+
+  it.each(['bogus', 'overview', 'tasks'])('falls back to Overview for the unknown tab %s', async tab => {
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
+    setup('8', tab)
+    expect(await screen.findByText('Overview for sprint 8')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('offers Pause and Resume on the Board tab only', async () => {
+    const pause = vi.spyOn(api, 'pauseSprint').mockResolvedValue({} as never)
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
+    setup('8', 'board')
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause' }))
+    await waitFor(() => expect(pause).toHaveBeenCalledWith(8))
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(await screen.findByText('Overview for sprint 8')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+  })
+
+  it('offers Resume for a paused sprint', async () => {
+    const resume = vi.spyOn(api, 'resumeSprint').mockResolvedValue({} as never)
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue({ ...board, sprint: { ...board.sprint, status: 'paused' } })
+    setup('8', 'board')
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    await waitFor(() => expect(resume).toHaveBeenCalledWith(8))
   })
 })

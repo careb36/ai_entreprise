@@ -116,8 +116,14 @@ async def probe_llm_proxy() -> dict[str, Any]:
         return _down(f"{type(exc).__name__}: {exc}")
 
 
-async def aggregate(nats_client: Any) -> dict[str, Any]:
-    """Run all probes concurrently and return a structured health document."""
+async def aggregate(nats_client: Any, nats_state: str | None = None) -> dict[str, Any]:
+    """Run all probes concurrently and return a structured health document.
+
+    ``nats_state`` is the backend's NATS connection lifecycle state
+    (``"connecting"`` while the startup connector is still retrying,
+    ``"connected"`` once workers have started); it is reported as the
+    top-level ``nats`` field when given.
+    """
     nats_result, postgres_result, neo4j_result, llm_result = await asyncio.gather(
         probe_nats(nats_client),
         probe_postgres(),
@@ -150,4 +156,7 @@ async def aggregate(nats_client: Any) -> dict[str, Any]:
         severity,
         {k: v.get("status") for k, v in components.items()},
     )
-    return {"status": severity, "components": components}
+    document: dict[str, Any] = {"status": severity, "components": components}
+    if nats_state is not None:
+        document["nats"] = nats_state
+    return document

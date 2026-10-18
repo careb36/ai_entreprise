@@ -63,6 +63,13 @@ Copy `.env.example` to `.env` and fill in:
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
+- `PROJECTS_ROOT` — absolute host folder holding your projects; mounted at the same
+  path in the backend and the VS Code daemon (defaults to `$HOME`). Agents write
+  into the project chosen in "New company".
+- `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
+  written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
+  `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
+  sends the task back for rework. It executes agent-written code on the daemon's machine.
 
 ## Architecture Overview
 
@@ -103,14 +110,33 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Data Flow for a Sprint
 
-1. User creates a sprint via frontend → `POST /v1/start_sprint`
-2. Backend publishes the sprint to NATS via the transactional outbox
-   Steps 3–6 only happen when `AGENT_GRAPH_ENABLED=true`.
-3. LangGraph graph executes agent nodes sequentially, each calling LLM proxy
-4. Architect/PO nodes use Gemini (high reasoning); Developer/QA nodes use DeepSeek (cost-effective)
-5. Agent decisions and code are published back to NATS as `workspace.generate` / `workspace.execute`
-6. VS Code daemon receives NATS messages, writes files and runs shell commands in the workspace
-7. Engram events are written to Neo4j for episodic memory; vector embeddings to pgvector for RAG
+Tasks are executed by the **task worker** (`backend/app/services/task_worker.py`);
+the LangGraph graph is only an optional kickoff conversation.
+
+1. `POST /v1/start_sprint` writes the sprint, one `BacklogItem` per task and one
+   outbox event per task on `task.assign`; the outbox processor publishes them to NATS.
+2. The task worker picks up `task.assign`, loads the item and the assigned agent
+   (empty model → role default from `llm/model_factory.py`) and calls the LLM proxy.
+   The prompt asks for every file as a fenced block with `path=<relative path>`;
+   on rework it also carries the pending `NEEDS WORK:` feedback.
+3. `parse_file_manifest` turns the answer into files. The worker sends them to the
+   VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
+   company's project (`ProjectDiscovery.project_path`, recorded at company creation;
+   `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the
+   sha256 of the bytes it read back from disk.
+4. Optionally (`DELIVERY_TESTS_ENABLED`) the daemon runs the project's tests via
+   `workspace.execute` and returns the exit status.
+5. The deliverable is ingested as an `AgentRun` (`producer: le-fabrique-task-worker`,
+   `external_ref: task-<id>`) and verified deterministically (`files_written`,
+   `tests_run`, …). Claims (declared files, the agent's summary) and observations
+   (daemon reports) are kept apart; the board and Glassroom show the verdict.
+6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
+   for rework without asking an LLM; otherwise QA reviews, and only an explicit
+   `APPROVED:` closes the task.
+7. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
+   the sprint; its transcript is ingested as an `AgentRun` (`le-fabrique-graph`).
+   A failed kickoff never blocks the sprint.
+8. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
 
 ### Memory Architecture
 
@@ -144,6 +170,22 @@ Test files:
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
 | `test_crypto.py` | Fernet credential encryption: round trip, tamper and wrong-key rejection, keyless fallback, legacy rows |
+| `test_llm_routing.py` | Task worker: empty agent model → role default from `model_factory`, LLM failures on the board, `served_model` on the AgentRun |
+| `test_task_delivery.py` | File manifest parsing, delivery to the real daemon against `tmp_path`, sha256 `files_written` check, daemon-down → unverifiable |
+| `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
+| `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
+| `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
+| `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
+| `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
+| `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
+| `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
+| `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
+
+The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
+`unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
+repo root with the proxy's Poetry environment plus
+`llm-proxy/requirements-dev.txt`: `python -m pytest llm-proxy/tests -q`. CI
+runs it after the backend tests.
 
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
@@ -159,6 +201,8 @@ Frontend changes are checked separately by
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run test:run`, and
 `npm run build` from the `frontend/` directory, using
 `frontend/package-lock.json` as the cache key.
+`.github/workflows/frontend-tests.yml` runs the same steps on the same
+triggers, plus eslint and prettier, which report but do not fail the job.
 
 The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 `frontend/` with `npm run test` for watch mode during development, or
@@ -167,6 +211,13 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | File | What it covers |
 |------|----------------|
 | `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
+| `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option |
+| `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
+| `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
+| `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
+| `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
+| `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
+| `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)
 

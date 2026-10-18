@@ -362,3 +362,113 @@ def test_company_external_ref_version_is_unique(sqlite_session):
     with pytest.raises(IntegrityError):
         sqlite_session.commit()
     sqlite_session.rollback()
+
+
+def _listed(test_client, **params):
+    response = test_client.get("/v1/agent_runs", params=params)
+    assert response.status_code == 200
+    return response.json()["agent_runs"]
+
+
+def test_list_filters_by_external_ref_newest_version_first(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session, name="Ref A")
+    other_company = _make_company(sqlite_session, name="Ref B")
+    first = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="task-2", artifact="first attempt"),
+    ).json()
+    _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="task-3", artifact="other task"),
+    )
+    rework = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(company_id, external_ref="task-2", artifact="after rework"),
+    ).json()
+    _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(other_company, external_ref="task-2", artifact="other company"),
+    )
+
+    runs = _listed(test_client, company_id=company_id, external_ref="task-2")
+    latest = _listed(test_client, company_id=company_id, external_ref="task-2", limit=1)
+
+    assert [(run["id"], run["version"]) for run in runs] == [
+        (rework["id"], 2),
+        (first["id"], 1),
+    ]
+    assert [run["id"] for run in latest] == [rework["id"]]
+
+
+def test_list_filters_by_subject_sprint_id_before_limiting(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    company_id = _make_company(sqlite_session, name="Sprint A")
+    other_company = _make_company(sqlite_session, name="Sprint B")
+    in_sprint = _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(
+            company_id,
+            external_ref="task-2",
+            subject={"sprint_id": 7, "backlog_item_id": 2, "title": "Encrypt"},
+        ),
+    ).json()
+    # Newer runs that must not match: another sprint, a prefix-alike id, a
+    # string id, no sprint at all, and the same sprint id in another company.
+    for ref, subject in [
+        ("task-5", {"sprint_id": 8, "backlog_item_id": 5}),
+        ("task-6", {"sprint_id": 70, "backlog_item_id": 6}),
+        ("task-7", {"sprint_id": "7", "backlog_item_id": 7}),
+        ("github:no-subject", None),
+        ("github:empty-subject", {}),
+    ]:
+        _ingest(
+            test_client,
+            monkeypatch,
+            tmp_path,
+            _payload(company_id, external_ref=ref, subject=subject),
+        )
+    _ingest(
+        test_client,
+        monkeypatch,
+        tmp_path,
+        _payload(other_company, external_ref="task-9", subject={"sprint_id": 7}),
+    )
+
+    runs = _listed(test_client, company_id=company_id, sprint_id=7)
+    limited = _listed(test_client, company_id=company_id, sprint_id=7, limit=1)
+    other = _listed(test_client, company_id=other_company, sprint_id=7)
+
+    assert [run["id"] for run in runs] == [in_sprint["id"]]
+    assert runs[0]["subject"]["backlog_item_id"] == 2
+    # The filter applies before LIMIT: five newer non-matching runs exist.
+    assert [run["id"] for run in limited] == [in_sprint["id"]]
+    assert [run["external_ref"] for run in other] == ["task-9"]
+    assert _listed(test_client, company_id=company_id, sprint_id=999) == []
+
+
+def test_sprint_filter_compiles_without_integer_cast_on_postgres():
+    from routers.agent_runs import _subject_sprint_id_equals
+    from sqlalchemy.dialects import postgresql
+
+    sql = str(
+        select(AgentRun.id)
+        .where(_subject_sprint_id_equals(7))
+        .compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "agent_runs.subject -> 'sprint_id'" in sql
+    assert "AS VARCHAR" in sql
+    assert "INTEGER" not in sql

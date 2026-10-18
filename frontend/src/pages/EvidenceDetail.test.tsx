@@ -145,6 +145,16 @@ describe('Evidence detail', () => {
     expect(screen.getByText('artifact_nonempty')).toBeInTheDocument()
   })
 
+  it('shows an Evidence › Run breadcrumb instead of a back link', () => {
+    setup()
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(breadcrumb).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Evidence', 'Run #7'])
+    expect(within(breadcrumb).getByRole('link', { name: 'Evidence' })).toHaveAttribute('href', '/evidence')
+    expect(within(breadcrumb).queryByRole('link', { name: 'Run #7' })).not.toBeInTheDocument()
+    expect(document.querySelector('[aria-current]')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Back to evidence' })).not.toBeInTheDocument()
+  })
+
   it('renders unsigned and legacy audit rows without the valid style', () => {
     setup()
     const unsigned = screen.getByTestId('signature-row-unsigned')
@@ -182,6 +192,36 @@ describe('Evidence detail', () => {
     expect(screen.getByTestId('legacy-company')).toHaveTextContent(i18n.t('evidence.legacyCompany'))
     expect(screen.getByTestId('legacy-company').className).not.toContain('emerald')
     expect(screen.getByTestId('signature-row-valid')).toBeInTheDocument()
+  })
+
+  it('links a task-worker run back to the task it delivered', () => {
+    // The run set up in beforeEach, from the producer 'github'.
+    const base = mockedUseAgentRun(42, 7) as unknown as { data: Record<string, unknown> }
+    mockedUseAgentRun.mockReturnValue({
+      ...base,
+      data: {
+        ...base.data,
+        external_ref: 'task-2',
+        producer: 'le-fabrique-task-worker',
+        subject: { sprint_id: 7, backlog_item_id: 2, title: 'Encrypt credentials' },
+      },
+    } as never)
+    setup()
+    const link = screen.getByRole('link', { name: 'Encrypt credentials' })
+    expect(link).toHaveAttribute('href', '/sprints/7/tasks/2')
+    expect(link.closest('p')).toHaveTextContent('Task: Encrypt credentials')
+  })
+
+  it('offers no task link for a run from another producer, even with a task-shaped subject', () => {
+    // The run set up in beforeEach, from the producer 'github'.
+    const base = mockedUseAgentRun(42, 7) as unknown as { data: Record<string, unknown> }
+    mockedUseAgentRun.mockReturnValue({
+      ...base,
+      data: { ...base.data, subject: { sprint_id: 7, backlog_item_id: 2, title: 'Encrypt credentials' } },
+    } as never)
+    setup()
+    expect(screen.queryByRole('link', { name: 'Encrypt credentials' })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="/sprints/"]')).toBeNull()
   })
 
   it('submits the exact rejection body when feedback is provided', () => {

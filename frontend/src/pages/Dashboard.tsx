@@ -1,25 +1,26 @@
 /**
- * Dashboard — enterprise command center.
+ * Sprint Overview — the default tab of a sprint page (`/sprints/:id`).
  *
  * Layout: KPI strip → alert banner → main grid (sprint card + agent roster) → quick launch.
  * Scope: read-only overview + sprint launch. Heavy state lives in stores/queries.
+ * Navigation (tabs, breadcrumb, shell status) belongs to the sprint page and the
+ * app shell, so nothing here repeats it.
  */
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useMatch, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight,
-  CircleDot, Cpu, Layers, Loader2, Play, Plus, Radio,
+  CircleDot, Cpu, Layers, Loader2, Play, Settings2,
   ShieldAlert, Sparkles, SplitSquareVertical, Target, Zap,
 } from 'lucide-react'
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas } from '../hooks/useQueries'
+import { useSprintBoard, useAnalyticsSummary, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
-import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -142,7 +143,7 @@ function NeedsSplitAlert({ sprintId, sprintName }: { sprintId: number; sprintNam
         </p>
       </div>
       <Link
-        to={`/workspace/${sprintId}`}
+        to={`/sprints/${sprintId}/live`}
         className="shrink-0 flex items-center gap-1 text-xs font-medium text-amber-400 hover:text-amber-300 transition-colors"
       >
         {t('dashboard.review', { defaultValue: 'Review' })} <ChevronRight size={12} />
@@ -195,9 +196,9 @@ function AgentRow({ role, fsmState, activity }: { role: string; fsmState: string
 // ── Sprint Card ───────────────────────────────────────────────────────────────
 
 function SprintCard({
-  sprint, columns, total, sprintId,
+  sprint, columns, total,
 }: {
-  sprint: any; columns: Record<string, any[]>; total: number; sprintId: number
+  sprint: any; columns: Record<string, any[]>; total: number
 }) {
   const { t }   = useTranslation()
   const done    = columns.done?.length ?? 0
@@ -235,23 +236,13 @@ function SprintCard({
           ))}
         </div>
       </div>
-
-      <div className="px-4 pb-3">
-        <Link
-          to={`/workspace/${sprintId}`}
-          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-brand-600/15 border border-brand-600/25 text-brand-400 text-xs font-medium hover:bg-brand-600/25 transition-colors"
-        >
-          <Radio size={12} />
-          {t('dashboard.liveView', { defaultValue: 'Live view' })}
-        </Link>
-      </div>
     </div>
   )
 }
 
 // ── Quick Launch ──────────────────────────────────────────────────────────────
 
-function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
+export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
   const { t } = useTranslation()
   const [goal, setGoal] = useState('')
   const [scope, setScope] = useState<'S' | 'M' | 'L'>('M')
@@ -360,7 +351,7 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
       onSuccess(sprint.sprint_id)
       setGoal('')
       resetPreview()
-      navigate(`/workspace/${sprint.sprint_id}`)
+      navigate(`/sprints/${sprint.sprint_id}/board`)
     } catch {
       return
     }
@@ -513,45 +504,6 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
   )
 }
 
-// ── Main Dashboard ─────────────────────────────────────────────────────────────
-
-export default function Dashboard() {
-  const { t } = useTranslation()
-  const activeSprintId = useAppStore(state => state.activeSprintId)
-  const analyticsSelected = useMatch('/dashboard/analytics') !== null
-
-  return (
-    <div>
-      <div role="tablist" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })} className="flex gap-2 px-4 pt-4 lg:px-6"
-        onKeyDown={event => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-          event.preventDefault()
-          const tabs = event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="tab"]')
-          const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : analyticsSelected ? 0 : 1
-          tabs[next].focus()
-          tabs[next].click()
-        }}>
-        <Link id="sprints-board-tab" role="tab" to="/dashboard" aria-selected={!analyticsSelected}
-          aria-controls="sprints-panel" tabIndex={analyticsSelected ? -1 : 0}
-          className={`btn-ghost btn-sm ${!analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
-          {t('nav.board', { defaultValue: 'Board' })}
-        </Link>
-        <Link id="sprints-analytics-tab" role="tab" to="/dashboard/analytics" aria-selected={analyticsSelected}
-          aria-controls="sprints-panel" tabIndex={analyticsSelected ? 0 : -1}
-          className={`btn-ghost btn-sm ${analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
-          {t('nav.analytics', { defaultValue: 'Analytics' })}
-        </Link>
-      </div>
-      <div id="sprints-panel" role="tabpanel" aria-labelledby={analyticsSelected ? 'sprints-analytics-tab' : 'sprints-board-tab'}>
-        {analyticsSelected
-          ? <div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>
-          : <SprintBoard />}
-      </div>
-    </div>
-  )
-}
-
-
 function QuotaWidget({ companyId }: { companyId: number | null }) {
   const { data } = useQuotas(companyId)
   const quotas = Array.isArray(data) ? data : []
@@ -568,26 +520,26 @@ function QuotaWidget({ companyId }: { companyId: number | null }) {
   )
 }
 
-function SprintBoard() {
+// ── Sprint Overview ───────────────────────────────────────────────────────────
+
+export default function SprintOverview({ sprintId }: { sprintId: number | null }) {
   const { t } = useTranslation()
-  const { activeSprintId, setActiveSprint, companyId, companyName } = useAppStore()
-  const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
-  const { data: analytics } = useAnalyticsSummary(activeSprintId)
-  const { data: health } = useHealth()
+  const { setActiveSprint, companyId, companyName } = useAppStore()
+  const { data: board, isLoading: boardLoading } = useSprintBoard(sprintId)
+  const { data: analytics } = useAnalyticsSummary(sprintId)
   const { data: quotaData } = useQuotas(companyId)
-  const { data: capabilities, isError: capabilitiesError } = useCapabilities()
   const connectToSprintStream = useAgentStore(s => s.connect)
   const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
   const agentStates = useAgentStore(s => s.agentStates)
   const isSSEConnected = useAgentStore(s => s.isConnected)
 
   useEffect(() => {
-    if (!activeSprintId) return
-    connectToSprintStream(String(activeSprintId))
+    if (!sprintId) return
+    connectToSprintStream(String(sprintId))
     return () => {
       disconnectFromSprintStream()
     }
-  }, [activeSprintId, connectToSprintStream, disconnectFromSprintStream])
+  }, [sprintId, connectToSprintStream, disconnectFromSprintStream])
 
   const sprint  = board?.sprint
   const columns = board?.columns ?? {}
@@ -598,22 +550,21 @@ function SprintBoard() {
 
   const healthScore    = analytics?.health_score ?? null
   const needsSplit     = sprint?.status === 'needs_split'
-  const backendOnline  = health?.status === 'healthy'
 
   const activeAgentCount  = Object.values(agentStates).filter(a => a.fsmState === 'active').length
   const visibleAgents     = Object.entries(agentStates)
   const hasAgents         = visibleAgents.length > 0
 
   return (
-    <div className="min-h-full bg-surface-950 p-4 lg:p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
+    <div className="min-w-0">
+      <div className="space-y-5">
 
-        {/* ── Page header ───────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
+        {/* ── Overview header ───────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">
+            <h2 className="text-lg font-bold text-white tracking-tight">
               {companyName ? `${companyName}` : t('dashboard.title', { defaultValue: 'La Fabrique' })}
-            </h1>
+            </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               {t('dashboard.commandCenter', { defaultValue: 'AI Sprint command center' })}
               {sprint && (
@@ -621,39 +572,15 @@ function SprintBoard() {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium transition-colors ${
-              backendOnline
-                ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400'
-                : 'bg-red-500/5 border-red-500/20 text-red-400'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
-              {backendOnline ? t('dashboard.systemOnline', { defaultValue: 'System online' }) : t('dashboard.systemOffline', { defaultValue: 'System offline' })}
-            </div>
-            <QuotaWidget companyId={companyId} />
-            {activeSprintId && (
-              <Link
-                to={`/sprint-ops/${activeSprintId}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
-              >
-                📋 {t('dashboard.kanban', { defaultValue: 'Kanban Board' })}
-              </Link>
-            )}
-            <Link
-              to="/companies/new"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-700 bg-surface-900 text-xs font-medium text-gray-300 hover:text-white hover:border-surface-600 transition-colors"
-            >
-              <Plus size={12} /> {t('dashboard.newFactory', { defaultValue: 'New Factory' })}
-            </Link>
-          </div>
+          <QuotaWidget companyId={companyId} />
         </div>
 
         {/* ── Quota alert ────────────────────────────────────────────── */}
         {Array.isArray(quotaData) && quotaData.some((q: any) => q.limit > 0 && (q.used / q.limit) >= 0.8) && (
           <div className="mb-3 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-sm text-yellow-200">
             <AlertTriangle size={16} />
-            <span>Token quota is above 80% for one or more business units. Consider resetting or increasing limits.</span>
-            <Link to="/company/quotas" className="ml-auto text-yellow-300 underline text-xs">Manage quotas</Link>
+            <span>{t('dashboard.quotaAlert', { defaultValue: 'Token quota is above 80% for one or more business units. Consider resetting or increasing limits.' })}</span>
+            <Link to="/company/quotas" className="ml-auto text-yellow-300 underline text-xs">{t('dashboard.manageQuotas', { defaultValue: 'Manage quotas' })}</Link>
           </div>
         )}
 
@@ -699,8 +626,8 @@ function SprintBoard() {
         </div>
 
         {/* ── Needs Split alert ─────────────────────────────────────── */}
-        {needsSplit && sprint && activeSprintId && (
-          <NeedsSplitAlert sprintId={activeSprintId} sprintName={sprint.sprint_name} />
+        {needsSplit && sprint && sprintId && (
+          <NeedsSplitAlert sprintId={sprintId} sprintName={sprint.sprint_name} />
         )}
 
         {/* ── Main grid ─────────────────────────────────────────────── */}
@@ -710,9 +637,9 @@ function SprintBoard() {
           <div className="lg:col-span-2 space-y-4">
             {boardLoading ? (
               <LoadingSkeleton message={t('dashboard.loadingSprint', { defaultValue: 'Loading sprint data...' })} />
-            ) : sprint && activeSprintId ? (
+            ) : sprint && sprintId ? (
               <>
-                <SprintCard sprint={sprint} columns={columns} total={total} sprintId={activeSprintId} />
+                <SprintCard sprint={sprint} columns={columns} total={total} />
                 <SprintHealthChart
                   total={total}
                   done={done}
@@ -765,17 +692,15 @@ function SprintBoard() {
                 )}
               </div>
 
-              {activeSprintId && (
-                <div className="px-3 pb-2.5 pt-1 border-t border-surface-700/60">
-                  <Link
-                    to={`/workspace/${activeSprintId}`}
-                    className="flex items-center gap-1 text-[11px] text-brand-400 hover:text-brand-300 transition-colors"
-                  >
-                    <Activity size={10} />
-                    {t('dashboard.viewLiveStream', { defaultValue: 'View live stream' })} <ChevronRight size={10} />
-                  </Link>
-                </div>
-              )}
+              <div className="px-3 pb-2.5 pt-1 border-t border-surface-700/60">
+                <Link
+                  to="/agents"
+                  className="flex items-center gap-1 text-[11px] text-brand-400 hover:text-brand-300 transition-colors"
+                >
+                  <Settings2 size={10} />
+                  {t('dashboard.manageAgents', { defaultValue: 'Manage agents' })} <ChevronRight size={10} />
+                </Link>
+              </div>
             </div>
 
             {/* System Status */}
@@ -786,7 +711,6 @@ function SprintBoard() {
               </div>
               <div className="space-y-2">
                 {[
-                  { label: t('dashboard.backendApi', { defaultValue: 'Backend API' }), ok: backendOnline },
                   { label: t('dashboard.agentStream', { defaultValue: 'Agent Stream' }), ok: isSSEConnected },
                 ].map(({ label, ok }) => (
                   <div key={label} className="flex items-center justify-between text-[11px]">
@@ -800,24 +724,6 @@ function SprintBoard() {
               </div>
             </div>
 
-            {/* Quick nav */}
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { to: '/governance', icon: ShieldAlert, label: t('nav.review', { defaultValue: 'Review' }) },
-                { to: '/dashboard/analytics', icon: Activity, label: t('nav.analytics', { defaultValue: 'Analytics' }) },
-                ...(!capabilitiesError && capabilities?.agent_graph === true ? [{ to: '/generate', icon: Sparkles, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
-                ...(!capabilitiesError && capabilities?.memory === true ? [{ to: '/memory', icon: Cpu, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
-              ].map(({ to, icon: Icon, label }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className="flex items-center gap-1.5 p-2.5 rounded-lg border border-surface-700 bg-surface-900 text-[11px] font-medium text-gray-400 hover:text-white hover:border-surface-600 hover:bg-surface-800 transition-colors"
-                >
-                  <Icon size={12} />
-                  {label}
-                </Link>
-              ))}
-            </div>
           </div>
         </div>
       </div>

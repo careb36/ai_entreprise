@@ -18,6 +18,7 @@ Workflow per task:
 
 import asyncio
 import functools
+import hashlib
 import json
 import os
 import re
@@ -39,15 +40,22 @@ from models import (
     ProjectDiscovery,
     Sprint,
 )
+from models.agent_run import AgentRun, Verification
 from nats_client import NATSClient
+from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
+from llm.model_factory import default_model_for_role
+from services import agent_run_service, console_capabilities
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
     ACTION_QA_REVIEW,
     ARCHITECT_COMMENT_AUTHOR,
     KPI_ROLE_ARCHITECT,
+    RESULT_NEEDS_WORK,
+    VERDICT_REFUTED,
+    VERDICT_UNVERIFIABLE,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -59,6 +67,7 @@ from services.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
 )
+from services.verification import evaluate_workspace_writes, verify_agent_run
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -78,7 +87,7 @@ DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
 CONSOLE_ASSISTANTS_ENABLED = settings.CONSOLE_ASSISTANTS_ENABLED
 ARCHITECT_CONSULT_ENABLED = settings.ARCHITECT_CONSULT_ENABLED
-CONSOLE_ASSISTANT_TIMEOUT = float(os.getenv("CONSOLE_ASSISTANT_TIMEOUT", "90"))
+CONSOLE_ASSISTANT_TIMEOUT = float(settings.CONSOLE_ASSISTANT_TIMEOUT_SECONDS)
 COPILOT_CLI_COMMAND_TEMPLATE = settings.COPILOT_CLI_COMMAND_TEMPLATE
 CLAUDE_CLI_COMMAND_TEMPLATE = settings.CLAUDE_CLI_COMMAND_TEMPLATE or ""
 CLAUDE_CLI_ALLOWED_TOOLS = settings.CLAUDE_CLI_ALLOWED_TOOLS
@@ -165,8 +174,43 @@ ALLOWED_ARTIFACT_EXTENSIONS = {
     ".tsx",
     ".jsx",
     ".css",
+    ".scss",
     ".html",
+    ".sql",
+    ".sh",
+    ".go",
+    ".java",
+    ".kt",
+    ".rs",
+    ".rb",
+    ".php",
+    ".cs",
+    ".vue",
+    ".svelte",
+    ".xml",
+    ".ini",
+    ".cfg",
+    ".graphql",
 }
+
+# Fenced block whose info string carries ``path=<relative path>``, e.g.
+# ```python path=src/auth/login.py
+_MANIFEST_BLOCK = re.compile(
+    r"^```(?P<info>[^\n`]*\bpath=[^\n`]*)\n(?P<body>.*?)^```[ \t]*$",
+    flags=re.DOTALL | re.MULTILINE,
+)
+_MANIFEST_PATH = re.compile(r"""\bpath=(?:"([^"]+)"|'([^']+)'|(\S+))""")
+
+FILE_MANIFEST_INSTRUCTIONS = (
+    "\n\n## Output format for files\n"
+    "When your deliverable creates or changes files, write each file in full as its own "
+    "fenced code block whose opening line carries the path relative to the project root, "
+    "for example:\n\n"
+    "```python path=src/example/module.py\n<entire file content>\n```\n\n"
+    "Use one block per file, give the complete content (not a diff or an excerpt), and "
+    "keep explanations outside the blocks. Files are written to the project exactly as "
+    "given."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +356,47 @@ def _format_retrospective_summary(metrics: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+class LLMCallError(RuntimeError):
+    """An LLM call that produced no usable answer; its text goes on the board."""
+
+
+def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
+    """The agent's configured model, or its role's default from model_factory."""
+    configured = (agent.get("model") or "").strip()
+    return configured or default_model_for_role(agent.get("role") or default_role)
+
+
+def _llm_content(result: dict[str, Any]) -> str:
+    choices = result.get("choices") or [{}]
+    message = (choices[0] or {}).get("message") or {}
+    content = message.get("content") or ""
+    return (content if isinstance(content, str) else str(content)).strip()
+
+
+def _llm_failure(result: dict[str, Any], model: str) -> str | None:
+    """
+    Describe why *result* carries no usable answer, or return ``None``.
+
+    The text reads ``LLM call failed: <provider> <status> <message>``.  The
+    proxy reports provider errors as ``{"provider", "status", "message"}``;
+    errors of the proxy itself (unknown model, quota) name ``llm-proxy`` and
+    the HTTP status.  A 2xx answer with empty content is a failure too, so it
+    never reaches the word-count gate as an empty deliverable.
+    """
+    if result.get("error"):
+        detail = result.get("detail")
+        detail = detail if isinstance(detail, dict) else {}
+        provider = detail.get("provider") or "llm-proxy"
+        status = detail.get("status") or result.get("status_code") or "unreachable"
+        message = detail.get("message") or detail.get("error") or result["error"]
+        return f"LLM call failed: {provider} {status} {message}"
+    if not _llm_content(result):
+        provider = result.get("provider") or "llm-proxy"
+        served = result.get("served_model") or model
+        return f"LLM call failed: {provider} 200 empty response from {served}"
+    return None
+
+
 def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -327,7 +412,11 @@ def _execute_task(
     Call the LLM to produce a deliverable for the given backlog item.
 
     Runs synchronously (called via ``asyncio.to_thread``).
-    Returns the LLM response text.
+    Returns the LLM response text.  An empty agent model resolves to the
+    role's default from ``llm.model_factory``.  The model the proxy reports
+    as having answered is stored as ``agent["served_model"]`` (``None`` when
+    not reported) so the AgentRun records it.  Raises ``LLMCallError`` when
+    the call fails or returns no content.
 
     When ``company_id`` is provided the turn is also written to ``audit_log``
     (role, company, token cost) so ``GET /v1/analytics/orchestration_health``
@@ -350,7 +439,17 @@ def _execute_task(
         f"Priority: {item.get('priority', 'medium')}\n\n"
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
+        f"{FILE_MANIFEST_INSTRUCTIONS}"
     )
+
+    rework_feedback = _pending_rework_feedback(item.get("comments"))
+    if rework_feedback:
+        user_prompt += (
+            "\n\n## Review feedback to address\n"
+            "Your previous deliverable for this task was sent back. Fix every point "
+            "below and deliver the complete result again.\n\n"
+            + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
+        )
 
     if memory_context:
         user_prompt += (
@@ -383,7 +482,7 @@ def _execute_task(
             f"{external_advice[:4000]}"
         )
 
-    model = agent.get("model", "deepseek-coder")
+    model = _resolve_agent_model(agent)
     role = agent.get("role", "Dev")
 
     logger.info(
@@ -403,22 +502,24 @@ def _execute_task(
         role=role,
     )
 
-    if result.get("error"):
-        raise RuntimeError(f"LLM error: {result['error']}")
+    failure = _llm_failure(result, model)
+    if failure:
+        raise LLMCallError(failure)
 
-    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = _llm_content(result)
+    agent["served_model"] = result.get("served_model") or None
 
     if company_id is not None:
         record_agent_turn(
             company_id=company_id,
             sprint_id=sprint_id,
             backlog_item_id=item.get("id"),
-            agent=agent,
+            agent={**agent, "model": agent["served_model"] or model},
             action=ACTION_EXECUTE_TASK,
             llm_result=result,
             result_preview=content,
         )
-    return content.strip()
+    return content
 
 
 def _consult_architect(
@@ -454,7 +555,9 @@ def _consult_architect(
     architect = {
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": architect_row.model or "gemini-2.5-flash",
+        "model": _resolve_agent_model(
+            {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
+        ),
         "seniority": architect_row.seniority,
         "specialty": architect_row.specialty,
         "system_prompt": architect_row.system_prompt,
@@ -487,25 +590,22 @@ def _consult_architect(
         )
         return ""
 
-    if result.get("error"):
+    failure = _llm_failure(result, architect["model"])
+    if failure:
         logger.warning(
-            "Architect consultation returned error for item=%s: %s",
+            "Architect consultation returned no advice for item=%s: %s",
             item.get("id"),
-            result["error"],
+            failure,
         )
         return ""
 
-    advice = (
-        result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    ).strip()
-    if not advice:
-        return ""
+    advice = _llm_content(result)
 
     record_agent_turn(
         company_id=sprint["company_id"],
         sprint_id=sprint.get("id"),
         backlog_item_id=item.get("id"),
-        agent=architect,
+        agent={**architect, "model": result.get("served_model") or architect["model"]},
         action=ACTION_ARCHITECT_CONSULT,
         llm_result=result,
         result_preview=advice,
@@ -570,11 +670,13 @@ def _sanitize_deliverable_text(deliverable: str) -> str:
 
 
 def _resolve_workspace_root(company_id: int) -> str | None:
-    """Best-effort lookup of a writable workspace root for artifact generation."""
-    explicit = os.getenv("AGENT_WORKSPACE_ROOT")
-    if explicit:
-        return explicit
+    """
+    Return where this company's artifacts should be written.
 
+    The company's discovered project wins; ``AGENT_WORKSPACE_ROOT`` is only a
+    fallback for companies without one (e.g. self-improvement sprints that
+    work on this repository).
+    """
     with Session(engine) as session:
         discovery = session.exec(
             select(ProjectDiscovery)
@@ -584,7 +686,7 @@ def _resolve_workspace_root(company_id: int) -> str | None:
         if discovery and discovery.project_path:
             return discovery.project_path
 
-    return None
+    return os.getenv("AGENT_WORKSPACE_ROOT") or None
 
 
 def _sanitize_relative_path(path: str) -> str | None:
@@ -645,6 +747,29 @@ def _extract_artifact_targets(
     return dedup
 
 
+def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
+    """
+    Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
+
+    Each block becomes one ``{"path", "content"}`` entry with its own content.
+    Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
+    the same path appears twice the last block wins, keeping the position of
+    the first.  Returns ``[]`` when the answer declares no files.
+    """
+    files: dict[str, str] = {}
+    for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
+        match = _MANIFEST_PATH.search(block.group("info"))
+        if not match:
+            continue
+        rel = _sanitize_relative_path(next(g for g in match.groups() if g))
+        if not rel:
+            continue
+        if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
+            continue
+        files[rel] = block.group("body")
+    return [{"path": path, "content": content} for path, content in files.items()]
+
+
 def _build_review_payload(
     deliverable: str, artifact_targets: list[dict[str, str]]
 ) -> str:
@@ -688,17 +813,40 @@ def _extract_latest_reviewable_comment(
             continue
         if author == "system":
             continue
+        if text.upper().startswith("NEEDS WORK:"):
+            # A rework request after the latest deliverable makes it stale:
+            # the task must run again before anything is reviewed.
+            return ""
         if author == "qa" and assignee_normalized != "qa":
             continue
-        if text.upper().startswith("APPROVED:") or text.upper().startswith(
-            "NEEDS WORK:"
-        ):
+        if text.upper().startswith("APPROVED:"):
             continue
         if is_architect_consult_comment(comment):
             continue
         return text
 
     return ""
+
+
+def _pending_rework_feedback(comments: Any) -> list[str]:
+    """The ``NEEDS WORK:`` requests made since the task's latest deliverable."""
+    if not isinstance(comments, list):
+        return []
+    feedback: list[str] = []
+    for comment in reversed(comments):
+        text = str(comment.get("text", "")).strip()
+        if text.upper().startswith("NEEDS WORK:"):
+            feedback.append(f"{comment.get('author') or 'Reviewer'}: {text}")
+            continue
+        author = str(comment.get("author", "")).strip().lower()
+        if (
+            text
+            and author != "system"
+            and not text.upper().startswith("APPROVED:")
+            and not is_architect_consult_comment(comment)
+        ):
+            break  # reached the deliverable those requests were about
+    return list(reversed(feedback))
 
 
 def _is_explicit_block_reason(text: str) -> bool:
@@ -1402,6 +1550,20 @@ async def _collect_console_assistant_advice(
     if role not in CONSOLE_ASSISTANT_ALLOWED_ROLES:
         return {"combined": "", "sources": []}
 
+    # Only consult assistants the daemon reported it can run; the capability
+    # probe runs once when workers start (see lifecycle).
+    available = set(console_capabilities.available_console_assistants())
+    if not available:
+        console_capabilities.log_skip_once()
+        return {"combined": "", "sources": []}
+    assistants = [
+        assistant
+        for assistant in _select_console_assistants(item, agent)
+        if console_capabilities.command_binary(assistant[1]) in available
+    ]
+    if not assistants:
+        return {"combined": "", "sources": []}
+
     workspace_root = await asyncio.to_thread(
         _resolve_workspace_root, sprint["company_id"]
     )
@@ -1409,7 +1571,6 @@ async def _collect_console_assistant_advice(
         return {"combined": "", "sources": []}
 
     prompt = _build_console_assistant_prompt(item, agent, sprint["name"])
-    assistants = _select_console_assistants(item, agent)
     notes: list[str] = []
     sources: list[dict[str, str]] = []
 
@@ -1723,7 +1884,11 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             )
             return None
         if getattr(sprint, "status", None) == "paused":
-            logger.info("Sprint %s is paused — skipping item %s", item.sprint_id, backlog_item_id)
+            logger.info(
+                "Sprint %s is paused — skipping item %s",
+                item.sprint_id,
+                backlog_item_id,
+            )
             return None
 
         # Find the agent matching this assignee role within the company.
@@ -1739,7 +1904,9 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                "model": agent_row.model,
+                "model": _resolve_agent_model(
+                    {"model": agent_row.model, "role": agent_row.role}
+                ),
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
@@ -1749,7 +1916,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": "deepseek-coder",
+                "model": default_model_for_role(item.assignee or "Dev"),
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -1812,6 +1979,323 @@ def _update_item_status(
 # ---------------------------------------------------------------------------
 # NATS consumer — the main entry point started from main.py
 # ---------------------------------------------------------------------------
+
+
+TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
+DELIVERY_GATE_AUTHOR = "Verifier"
+
+
+def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
+    """
+    ``(problem, observation)`` when the task's latest delivery must not reach QA.
+
+    Gates on a refuted delivery (files missing, rejected or different on disk),
+    an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
+    test run that failed.  Other checks — an unevidenced "tests pass" claim, a
+    test run that could not happen — are left to the evidence page, so an
+    honest claim never forces a rework.
+
+    Scoped to the task's company: ``POST /v1/agent_runs`` lets any company
+    ingest a run with any producer and reference, so a run is only trusted
+    when it belongs to the same company as the task.
+    """
+    with Session(engine) as session:
+        run = session.exec(
+            select(AgentRun)
+            .where(
+                AgentRun.company_id == company_id,
+                AgentRun.external_ref == f"task-{item_id}",
+                AgentRun.producer == TASK_WORKER_PRODUCER,
+            )
+            .order_by(AgentRun.version.desc())
+        ).first()
+        if run is None:
+            return None
+        verification = session.exec(
+            select(Verification)
+            .where(Verification.agent_run_id == run.id)
+            .order_by(Verification.id.desc())
+        ).first()
+    if verification is None:
+        return None
+    for check in verification.checks or []:
+        name, outcome = check.get("name"), check.get("outcome")
+        if name == "files_written" and outcome == VERDICT_REFUTED:
+            return "delivery refuted", check.get("observation", "")
+        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
+            return "delivery unconfirmed", check.get("observation", "")
+        if name == "tests_run" and outcome == VERDICT_REFUTED:
+            return "tests failed", check.get("observation", "")
+    return None
+
+
+def _sha256_text(content: str) -> str:
+    return hashlib.sha256((content or "").encode("utf-8")).hexdigest()
+
+
+def _summarize_deliverable(deliverable: str, limit: int = 500) -> str:
+    """The agent's prose outside the file blocks: its own account of the work."""
+    prose = _MANIFEST_BLOCK.sub("", deliverable or "").strip()
+    return prose[:limit]
+
+
+def _record_task_run(
+    item: dict[str, Any],
+    agent: dict[str, Any],
+    sprint: dict[str, Any],
+    deliverable: str,
+    targets: list[dict[str, str]],
+    evidence: dict[str, Any] | None,
+) -> tuple[int, str] | None:
+    """
+    Ingest the deliverable as an ``AgentRun`` and verify it deterministically.
+
+    The claims are what the agent produced (declared paths, its summary); the
+    evidence is what the daemon observed on disk.  Returns ``(run_id, verdict)``
+    or ``None`` when ingestion fails — recording never breaks the task flow.
+    """
+    payload = AgentRunCreate(
+        company_id=sprint["company_id"],
+        external_ref=f"task-{item['id']}",
+        producer=TASK_WORKER_PRODUCER,
+        # Only the model the proxy reported as having answered: an observation.
+        # When it reported none the field stays empty rather than defaulting
+        # to the model that was requested (POSITIONING rule 7).
+        model=agent.get("served_model") or None,
+        agent_role=agent.get("role"),
+        subject={
+            "sprint_id": sprint["id"],
+            "backlog_item_id": item["id"],
+            "title": item.get("title"),
+        },
+        claims={
+            "files": [target["path"] for target in targets],
+            "summary": _summarize_deliverable(deliverable),
+        },
+        artifact=deliverable or "",
+        finished_at=datetime.now(UTC),
+    )
+    try:
+        with Session(engine) as session:
+            run, _created = agent_run_service.ingest_agent_run(session, payload)
+            session.commit()
+            verification = verify_agent_run(session, run, evidence)
+            return run.id, verification.verdict
+    except Exception as e:  # noqa: BLE001 - Evidence recording must not block delivery.
+        logger.warning("AgentRun recording failed for item=%s: %s", item.get("id"), e)
+        return None
+
+
+def _delivery_comment(
+    targets: list[dict[str, str]],
+    evidence: dict[str, Any] | None,
+    recorded: tuple[int, str] | None,
+) -> str:
+    run_note = f" — evidence run #{recorded[0]} ({recorded[1]})" if recorded else ""
+    outcome, observation = evaluate_workspace_writes(
+        [target["path"] for target in targets], evidence
+    )
+    if outcome == "pass":
+        return f"Delivered to {(evidence or {}).get('workspace_root')}: {observation}{run_note}"
+    if outcome == VERDICT_REFUTED:
+        return f"Delivery refuted: {observation}{run_note}"
+    return f"Delivery unconfirmed: {observation}{run_note}"
+
+
+_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+
+
+def _detect_test_command(workspace_root: str) -> str | None:
+    """
+    The command that runs this project's tests, or ``None``.
+
+    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
+    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
+    folder with ``test_*.py`` files means ``python -m pytest``.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    root = os.path.abspath(workspace_root)
+    package_json = os.path.join(root, "package.json")
+    if os.path.isfile(package_json):
+        try:
+            with open(package_json, encoding="utf-8") as fh:
+                script = (json.load(fh).get("scripts") or {}).get("test")
+        except (OSError, ValueError, AttributeError):
+            script = None
+        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
+            return "npm test --silent"
+    for name, marker in (
+        ("pytest.ini", None),
+        ("pyproject.toml", "[tool.pytest"),
+        ("setup.cfg", "[tool:pytest"),
+    ):
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        if marker is None:
+            return "python -m pytest -q"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if marker in fh.read():
+                    return "python -m pytest -q"
+        except OSError:
+            continue
+    tests_dir = os.path.join(root, "tests")
+    if os.path.isdir(tests_dir) and any(
+        name.startswith("test_") and name.endswith(".py")
+        for _dir, _subdirs, names in os.walk(tests_dir)
+        for name in names
+    ):
+        return "python -m pytest -q"
+    return None
+
+
+async def _run_delivery_tests(
+    nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
+) -> None:
+    """
+    Run the project's tests through the daemon and add the result to *evidence*.
+
+    ``test_run`` keeps the command, exit code and output tail; ``ci`` restates
+    the conclusion in the shape ``check_claimed_tests_evidenced`` reads, so an
+    agent's "tests pass" is judged against this run.  The exit status comes
+    from the daemon, never from the agent.
+    """
+    workspace_root = evidence["workspace_root"]
+    command = await asyncio.to_thread(_detect_test_command, workspace_root)
+    if not command:
+        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        return
+    try:
+        result = await nats_client.request(
+            "workspace.execute",
+            {
+                "command": command,
+                "workspace_root": workspace_root,
+                "sprint_id": sprint["id"],
+            },
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
+        evidence["test_run"] = {
+            "command": command,
+            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
+        }
+        return
+    result = result if isinstance(result, dict) else {}
+    exit_code = result.get("exit_code")
+    output = f"{result.get('stdout') or ''}{result.get('stderr') or ''}"
+    evidence["test_run"] = {
+        "command": command,
+        "exit_code": exit_code,
+        "output_tail": output[-2000:],
+        "reason": result.get("error"),
+    }
+    if isinstance(exit_code, int):
+        evidence["ci"] = {
+            "source": "workspace daemon",
+            "ref": command,
+            "conclusion": "success" if exit_code == 0 else "failure",
+        }
+
+
+async def _deliver_artifacts(
+    nats_client: NATSClient,
+    item: dict[str, Any],
+    agent: dict[str, Any],
+    sprint: dict[str, Any],
+    deliverable: str,
+) -> str:
+    """
+    Write the agent's files into the company's project and record the outcome.
+
+    Files come from the agent's ``path=`` manifest, or — when it declared none —
+    from file names in the task text.  The daemon is asked with a NATS request
+    and reports, per file, the sha256 of the bytes it read back from disk; the
+    worker compares that with the sha256 of the content it sent.  Returns the
+    payload for QA review.
+    """
+    targets = parse_file_manifest(deliverable)
+    if not targets:
+        targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
+    review_payload = _build_review_payload(deliverable, targets)
+
+    evidence: dict[str, Any] | None = None
+    if targets:
+        workspace_root = await asyncio.to_thread(
+            _resolve_workspace_root, sprint["company_id"]
+        )
+        evidence = {
+            "workspace_root": workspace_root,
+            "expected": {t["path"]: _sha256_text(t["content"]) for t in targets},
+            "workspace_writes": None,
+        }
+        if not workspace_root:
+            evidence["reason"] = "workspace path not configured"
+        else:
+            try:
+                reply = await nats_client.request(
+                    "workspace.generate",
+                    {
+                        "workspace_root": workspace_root,
+                        "files": targets,
+                        "interaction_id": f"task-{item['id']}",
+                        "sprint_id": sprint["id"],
+                    },
+                    timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
+                )
+                writes = reply.get("files") if isinstance(reply, dict) else None
+                evidence["workspace_writes"] = (
+                    writes if isinstance(writes, list) else None
+                )
+                if evidence["workspace_writes"] is None:
+                    evidence["reason"] = "the workspace daemon sent no per-file results"
+            except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
+                evidence["reason"] = (
+                    f"the workspace daemon did not reply ({type(e).__name__})"
+                )
+                logger.warning(
+                    "Workspace write request failed for item=%s: %s", item["id"], e
+                )
+
+        written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
+        if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+            await _run_delivery_tests(nats_client, sprint, evidence)
+
+    recorded = await asyncio.to_thread(
+        _record_task_run, item, agent, sprint, deliverable, targets, evidence
+    )
+
+    if targets:
+        comment = _delivery_comment(targets, evidence, recorded)
+        await asyncio.to_thread(
+            _update_item_status,
+            item["id"],
+            "in_progress",
+            comment_text=comment,
+            comment_author="System",
+        )
+        await _publish_glassroom(
+            nats_client,
+            sprint["id"],
+            {
+                "type": "status",
+                "semantic_type": "task.artifact_delivery",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item["id"],
+                "task_status": "in_progress",
+                "phase": "artifact_delivery",
+                "task": item["title"],
+                "agent_run_id": recorded[0] if recorded else None,
+                "verdict": recorded[1] if recorded else None,
+                "message": f"🧱 {comment}",
+            },
+        )
+
+    return review_payload
 
 
 async def process_backlog_tasks(nats_client: NATSClient) -> None:
@@ -2112,75 +2596,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
-            artifact_targets = await asyncio.to_thread(
-                _extract_artifact_targets, item, deliverable
+            review_payload = await _deliver_artifacts(
+                nats_client, item, agent, sprint, deliverable
             )
-            review_payload = await asyncio.to_thread(
-                _build_review_payload, deliverable, artifact_targets
-            )
-            if artifact_targets:
-                workspace_root = await asyncio.to_thread(
-                    _resolve_workspace_root, sprint["company_id"]
-                )
-                if not workspace_root:
-                    await asyncio.to_thread(
-                        _update_item_status,
-                        item["id"],
-                        "in_progress",
-                        comment_text="Artifact materialization skipped: workspace path not configured",
-                        comment_author="System",
-                    )
-                    logger.warning(
-                        "Artifact materialization skipped for item=%s: missing workspace root",
-                        item["id"],
-                    )
-                else:
-                    try:
-                        await nats_client.publish(
-                            "workspace.generate",
-                            {
-                                "workspace_root": workspace_root,
-                                "files": artifact_targets,
-                                "interaction_id": f"task-{item['id']}",
-                                "sprint_id": sprint["id"],
-                            },
-                        )
-                        await asyncio.to_thread(
-                            _update_item_status,
-                            item["id"],
-                            "in_progress",
-                            comment_text=f"Artifact materialization requested for: {', '.join(a['path'] for a in artifact_targets)}",
-                            comment_author="System",
-                        )
-                        await _publish_glassroom(
-                            nats_client,
-                            sprint["id"],
-                            {
-                                "type": "status",
-                                "semantic_type": "task.artifact_generation",
-                                "source": "task_worker",
-                                "agent": "System",
-                                "role": "System",
-                                "task_id": item["id"],
-                                "task_status": "in_progress",
-                                "phase": "artifact_generation",
-                                "task": item["title"],
-                                "message": f"🧱 Workspace artifact generation requested for: {item['title']}",
-                            },
-                        )
-                    except Exception as e:  # noqa: BLE001 - Record command failure and preserve the task workflow.
-                        await asyncio.to_thread(
-                            _update_item_status,
-                            item["id"],
-                            "in_progress",
-                            comment_text=f"Artifact materialization request failed: {str(e)[:240]}",
-                            comment_author="System",
-                        )
-                        logger.warning(
-                            "Artifact materialization request failed for item=%s: %s",
-                            item["id"],
-                            e,
-                        )
 
             # 4. Save result and mark as in_review.
             # Ensure the deliverable is persisted as a reviewable comment even if
@@ -2254,7 +2672,11 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         _update_item_status,
                         data["backlog_item_id"],
                         "blocked",
-                        comment_text=f"Agent error: {str(e)[:500]}",
+                        comment_text=(
+                            str(e)[:500]
+                            if isinstance(e, LLMCallError)
+                            else f"Agent error: {str(e)[:500]}"
+                        ),
                         comment_author="System",
                     )
                 except Exception:  # noqa: BLE001, S110 - Recovery bookkeeping must not mask the task failure.
@@ -2342,7 +2764,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
-                "model": reviewer.model if reviewer else "deepseek-coder",
+                "model": _resolve_agent_model(
+                    {"model": reviewer.model if reviewer else None, "role": "QA"}
+                ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
                 "system_prompt": reviewer.system_prompt if reviewer else None,
             }
@@ -2435,6 +2859,63 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 continue
 
+            # Evidence before opinion: a delivery the daemon refuted or never
+            # confirmed goes back for rework without asking the QA model.
+            gate = await asyncio.to_thread(_delivery_gate, sprint.company_id, item.id)
+            if gate is not None:
+                problem, observation = gate
+                previous_gate_reworks = sum(
+                    1
+                    for c in comments
+                    if c.get("author") == DELIVERY_GATE_AUTHOR
+                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                )
+                rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+                instruction = (
+                    "Fix the code so the project's tests pass and deliver every "
+                    "changed file in full as a path= block."
+                    if problem == "tests failed"
+                    else "Re-run the task and give every file in full as a path= block."
+                )
+                comments.append(
+                    {
+                        "author": DELIVERY_GATE_AUTHOR,
+                        "text": (
+                            f"NEEDS WORK: {problem} — {observation}. {instruction}"
+                            if rework
+                            else f"{problem.capitalize()} after {previous_gate_reworks} "
+                            f"rework(s) — blocked for manual triage: {observation}"
+                        ),
+                        "created_at": datetime.now(UTC).isoformat(),
+                    }
+                )
+                item.comments = comments
+                item.status = "todo" if rework else "blocked"
+                item.updated_at = datetime.now(UTC)
+                session.add(item)
+                session.commit()
+                if not rework:
+                    quality_gate_blocked_ids.add(item.id)
+                await _publish_glassroom(
+                    nats_client,
+                    sprint.id,
+                    {
+                        "type": "status" if rework else "error",
+                        "semantic_type": "task.rework_scheduled"
+                        if rework
+                        else "task.blocked",
+                        "source": "task_worker",
+                        "agent": DELIVERY_GATE_AUTHOR,
+                        "role": "System",
+                        "task_id": item.id,
+                        "task_status": item.status,
+                        "phase": "delivery_gate",
+                        "task": f"Reviewed: {item.title}",
+                        "message": f"🧱 {problem.capitalize()} for {item.title}: {observation}",
+                    },
+                )
+                continue
+
             # Build review prompt
             review_prompt = (
                 f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
@@ -2474,7 +2955,15 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 )
 
                 normalized_review = (review_result or "").strip()
-                needs_work = normalized_review.upper().startswith("NEEDS WORK:")
+                verdict = classify_review_result(normalized_review)
+                if verdict is None:
+                    # Only an explicit APPROVED: closes a task; anything else
+                    # is a failed review, retried and then blocked below.
+                    raise ValueError(
+                        "reviewer answered without APPROVED:/NEEDS WORK: — "
+                        f"{normalized_review[:120]!r}"
+                    )
+                needs_work = verdict == RESULT_NEEDS_WORK
 
                 # Append review comment
                 comments.append(
@@ -2800,25 +3289,25 @@ def _call_llm_for_review(
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
+    model = _resolve_agent_model(agent, default_role="QA")
     result = client.chat(
-        model=agent.get("model", "deepseek-coder"),
+        model=model,
         messages=messages,
         role=agent.get("role", "QA"),
     )
 
-    if result.get("error"):
-        raise RuntimeError(f"LLM error: {result['error']}")
+    failure = _llm_failure(result, model)
+    if failure:
+        raise LLMCallError(failure)
 
-    content = (
-        result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    ).strip()
+    content = _llm_content(result)
 
     if company_id is not None:
         record_agent_turn(
             company_id=company_id,
             sprint_id=sprint_id,
             backlog_item_id=backlog_item_id,
-            agent=agent,
+            agent={**agent, "model": result.get("served_model") or model},
             action=ACTION_QA_REVIEW,
             llm_result=result,
             result_type=classify_review_result(content),
