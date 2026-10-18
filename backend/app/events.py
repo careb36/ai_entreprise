@@ -22,7 +22,7 @@ instead of silently losing the trail.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -69,7 +69,7 @@ def build_event(
         "sprint_id": sprint_id,
         "task_id": task_id,
         "model": model,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if message is not None:
         payload["message"] = message
@@ -113,7 +113,7 @@ def ensure_envelope(
     event.setdefault("event_id", str(uuid4()))
     event.setdefault("source", source)
     event.setdefault("semantic_version", 1)
-    event.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+    event.setdefault("timestamp", datetime.now(UTC).isoformat())
 
     role = event.get("role") or event.get("agent")
     if role:

@@ -123,7 +123,7 @@ class CompanyService:
         sprint = Sprint(
             company_id=company.id,
             sprint_name="Sprint 0 — Foundations",
-            start_date=date.today().isoformat(),  # noqa: DTZ011
+            start_date=date.today().isoformat(),
             scope_size=default_scope_size,
             status="active",
             goal=plan.get("goal", f"Foundation sprint for {company_name}"),

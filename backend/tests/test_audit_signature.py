@@ -74,7 +74,7 @@ def test_canonical_payload_bytes_are_pinned():
         details={"b": 2, "a": "ñ"},
         result=None,
         cost_tokens=3,
-        created_at=datetime(2026, 1, 2, 3, 4, 5),  # noqa: DTZ001
+        created_at=datetime(2026, 1, 2, 3, 4, 5),
     )
 
     assert payload == (
@@ -141,7 +141,7 @@ def test_missing_key_writes_unsigned_rows_and_warns_once(
 
 
 def test_tampered_unsigned_signature_is_invalid(without_key):
-    created_at = datetime(2026, 1, 2, 3, 4, 5)  # noqa: DTZ001
+    created_at = datetime(2026, 1, 2, 3, 4, 5)
     row = SimpleNamespace(
         interaction_id="unsigned-row",
         agent_id="agent-1",
