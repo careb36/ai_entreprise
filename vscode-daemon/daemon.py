@@ -4,11 +4,13 @@ VS Code Daemon - Enterprise Edition (v2026.4)
 Subscribes to:
 - workspace.generate: Write files and open VS Code
 - workspace.execute: Execute shell commands and return results (OpenHands style)
+- workspace.capabilities: Reply with the console assistant CLIs found on PATH
 """
 
 import os
 import json
 import asyncio
+import shutil
 import subprocess
 import hashlib
 import logging
@@ -28,6 +30,13 @@ logger = logging.getLogger("fabrique-daemon")
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
 PROTECTED_ROOT_DOCS = set()
+# Console assistant commands reported by workspace.capabilities when the
+# request does not name its own list.
+ASSISTANT_COMMANDS_DEFAULT = os.getenv("CONSOLE_ASSISTANT_COMMANDS", "copilot,claude")
+# Off-PATH install locations the backend's command wrapper falls back to.
+ASSISTANT_FALLBACK_PATHS = {
+    "copilot": "~/Library/Application Support/Code/User/globalStorage/github.copilot-chat/copilotCli/copilot",
+}
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -284,17 +293,71 @@ async def handle_msg(nc, msg):
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
 
+def _configured_assistant_commands(data: Dict[str, Any]) -> list[str]:
+    """Assistant commands to look for: the request's list, else the env default."""
+    requested = data.get("commands")
+    if isinstance(requested, list) and requested:
+        names = [str(name).strip() for name in requested]
+    else:
+        names = [name.strip() for name in ASSISTANT_COMMANDS_DEFAULT.split(",")]
+    # Only bare command names: a path or shell syntax is not an assistant name.
+    return [name for name in names if name and os.path.basename(name) == name]
+
+
+def _has_fallback_binary(name: str) -> bool:
+    """Match the host fallback paths the backend's command wrapper also tries."""
+    fallback = ASSISTANT_FALLBACK_PATHS.get(name)
+    if not fallback:
+        return False
+    path = os.path.expanduser(fallback)
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def detect_assistants(commands: list[str]) -> list[str]:
+    """Return the assistant commands found on the PATH used for command execution."""
+    search_path = _build_command_env().get("PATH")
+    return [
+        name
+        for name in commands
+        if shutil.which(name, path=search_path) or _has_fallback_binary(name)
+    ]
+
+
+async def handle_capabilities(nc, msg):
+    """
+    Reply to ``workspace.capabilities`` with the console assistants this host has.
+
+    Reply body: ``{"assistants": [<command names found via shutil.which>]}``.
+    The backend asks once when its workers start and skips console assistants
+    entirely when the list is empty.
+    """
+    try:
+        data = json.loads(msg.data.decode() or "{}")
+    except (ValueError, UnicodeDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    response = {"assistants": detect_assistants(_configured_assistant_commands(data))}
+    logger.info(f"Capabilities: {response}")
+    if msg.reply:
+        await nc.publish(msg.reply, json.dumps(response).encode())
+
+
 async def main():
     logger.info(f"Connecting to NATS at {NATS_URL}...")
     nc = await nats.connect(NATS_URL)
-    
+
     # Subscriptions
     async def _callback(msg):
         await handle_msg(nc, msg)
 
+    async def _capabilities_callback(msg):
+        await handle_capabilities(nc, msg)
+
     sub_gen = await nc.subscribe("workspace.generate", cb=_callback)
     sub_exec = await nc.subscribe("workspace.execute", cb=_callback)
-    
+    sub_caps = await nc.subscribe("workspace.capabilities", cb=_capabilities_callback)
+
     logger.info("Daemon is ready for generation and execution tasks.")
     while True:
         await asyncio.sleep(1)

@@ -44,7 +44,7 @@ from nats_client import NATSClient
 from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
-from services import agent_run_service
+from services import agent_run_service, console_capabilities
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
@@ -83,7 +83,7 @@ DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
 CONSOLE_ASSISTANTS_ENABLED = settings.CONSOLE_ASSISTANTS_ENABLED
 ARCHITECT_CONSULT_ENABLED = settings.ARCHITECT_CONSULT_ENABLED
-CONSOLE_ASSISTANT_TIMEOUT = float(os.getenv("CONSOLE_ASSISTANT_TIMEOUT", "90"))
+CONSOLE_ASSISTANT_TIMEOUT = float(settings.CONSOLE_ASSISTANT_TIMEOUT_SECONDS)
 COPILOT_CLI_COMMAND_TEMPLATE = settings.COPILOT_CLI_COMMAND_TEMPLATE
 CLAUDE_CLI_COMMAND_TEMPLATE = settings.CLAUDE_CLI_COMMAND_TEMPLATE or ""
 CLAUDE_CLI_ALLOWED_TOOLS = settings.CLAUDE_CLI_ALLOWED_TOOLS
@@ -1468,6 +1468,20 @@ async def _collect_console_assistant_advice(
     if role not in CONSOLE_ASSISTANT_ALLOWED_ROLES:
         return {"combined": "", "sources": []}
 
+    # Only consult assistants the daemon reported it can run; the capability
+    # probe runs once when workers start (see lifecycle).
+    available = set(console_capabilities.available_console_assistants())
+    if not available:
+        console_capabilities.log_skip_once()
+        return {"combined": "", "sources": []}
+    assistants = [
+        assistant
+        for assistant in _select_console_assistants(item, agent)
+        if console_capabilities.command_binary(assistant[1]) in available
+    ]
+    if not assistants:
+        return {"combined": "", "sources": []}
+
     workspace_root = await asyncio.to_thread(
         _resolve_workspace_root, sprint["company_id"]
     )
@@ -1475,7 +1489,6 @@ async def _collect_console_assistant_advice(
         return {"combined": "", "sources": []}
 
     prompt = _build_console_assistant_prompt(item, agent, sprint["name"])
-    assistants = _select_console_assistants(item, agent)
     notes: list[str] = []
     sources: list[dict[str, str]] = []
 

@@ -249,9 +249,9 @@ flowchart LR
 | `scrum_master` | Scrum Master | Secuencia el trabajo, detecta bloqueos, asigna el primer movimiento al Developer |
 | `developer` | Developer | Toma el primer ítem accionable, detalla el plan de implementación, señala dependencias |
 | `po_wrap` | Product Owner | Cierra el kickoff con resumen de 3 puntos: prioridad · dueño · próxima acción |
-| `burn` | Sistema | Persiste engrama en Neo4j; publica evento `needs_split` o de finalización en NATS |
+| `burn` | Sistema | Persiste engrama en Neo4j; publica el evento de finalización del kickoff en NATS |
 
-**Manejo de errores:** Cualquier fallo en un nodo establece `last_error` y cortocircuita hacia `burn`, que marca el sprint como `needs_split`. El `GraphRecursionError` se captura explícitamente a nivel de workflow y también devuelve `needs_split: True`.
+**Manejo de errores:** Cualquier fallo en un nodo establece `last_error` y cortocircuita hacia `burn`. El `GraphRecursionError` se captura explícitamente a nivel de workflow. En ambos casos el kickoff falló, pero el sprint sigue `active`: el agent worker publica `Kickoff failed: <reason>; tasks continue` en el Glassroom y las tareas del backlog siguen ejecutándose en el task worker. Solo una decisión explícita de división marca un sprint como `needs_split`.
 
 **Enrutamiento de modelos:** `ModelFactory.ROLE_MODEL_MAP` resuelve cada rol hacia un LLM específico vía el proxy — se cambia el modelo por rol en configuración sin tocar el código.
 

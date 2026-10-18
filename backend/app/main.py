@@ -82,15 +82,20 @@ app.add_event_handler("startup", on_startup)
 app.add_event_handler("shutdown", on_shutdown)
 
 
+def _nats_state(request: Request) -> str:
+    return getattr(request.app.state, "nats_state", "connecting")
+
+
 @app.get("/health")
-async def health_check():
+async def health_check(request: Request):
     return {
         "status": "healthy",
         "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+        "nats": _nats_state(request),
     }
 
 
 @app.get("/health/deep")
 async def deep_health_check(request: Request):
     nats_client = getattr(request.app.state, "nats_client", None)
-    return await aggregate(nats_client)
+    return await aggregate(nats_client, nats_state=_nats_state(request))

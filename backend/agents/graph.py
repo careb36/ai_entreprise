@@ -436,7 +436,8 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
             metadata={
                 "interaction_id": state["interaction_id"],
                 "sprint_id": sprint_id,
-                "needs_split": bool(last_error),
+                "needs_split": False,
+                "kickoff_failed": bool(last_error),
             },
         )
         engram_id = result.get("engram_id")
@@ -445,23 +446,11 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
         engram_id = None
 
     if last_error:
-        await _publish(
-            state,
-            {
-                "type": "needs_split",
-                "semantic_type": "kickoff.needs_split",
-                "agent": "System",
-                "role": "System",
-                "task": "Sprint kickoff",
-                "sprint_id": sprint_id,
-                "task_status": "needs_split",
-                "phase": "kickoff",
-                "message": "Sprint scope exceeded agent capacity. Split into smaller sprints.",
-                "error": last_error,
-            },
-        )
+        # A node error is a failed kickoff, not a decision to split the sprint.
+        # The agent worker reports it to the Glassroom and keeps the sprint
+        # active, because backlog tasks run independently of the kickoff.
         logger.warning(
-            "Sprint sprint_id=%s marked needs_split interaction_id=%s error=%s",
+            "Sprint kickoff failed sprint_id=%s interaction_id=%s error=%s",
             sprint_id,
             state["interaction_id"],
             last_error,
@@ -481,7 +470,7 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
             },
         )
 
-    return {"engram_id": engram_id, "needs_split": bool(last_error)}
+    return {"engram_id": engram_id, "needs_split": False}
 
 
 def _route_from(state: AgentState, fallback: str, success: str) -> str:
@@ -690,29 +679,18 @@ async def run_fabrique_workflow(
                 )
         return result
     except GraphRecursionError as exc:
+        # A runaway kickoff conversation is a failed kickoff, not a split
+        # decision; the agent worker reports it and keeps the sprint active.
         logger.error(
-            "Workflow RECURSION LIMIT hit interaction_id=%s sprint_id=%s — sprint needs_split",
+            "Workflow RECURSION LIMIT hit interaction_id=%s sprint_id=%s — kickoff failed",
             interaction_id,
             sprint_id,
         )
-        if nats_client and sprint_id is not None:
-            await nats_client.publish(
-                f"glassroom.{sprint_id}",
-                {
-                    "type": "needs_split",
-                    "agent": "System",
-                    "role": "System",
-                    "task": "Sprint kickoff",
-                    "sprint_id": sprint_id,
-                    "message": "Sprint scope exceeded agent recursion limit. Split into smaller sprints.",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                },
-            )
         return {
             **initial_state,
             "error": f"GraphRecursionError: {exc}",
             "engram_id": None,
-            "needs_split": True,
+            "needs_split": False,
         }
     except Exception as exc:
         logger.error(

@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     AUTO_SELF_IMPROVEMENT_ENABLED: bool = True
     CONSOLE_ASSISTANTS_ENABLED: bool = True
+    # Per-call timeout for a console assistant run requested from the daemon.
+    CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True

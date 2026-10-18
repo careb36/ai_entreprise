@@ -7,18 +7,28 @@ import os
 
 from audit_signing import is_signing_enabled
 from auth_tokens import is_auth_configured
+from config import settings
 from crypto import is_encryption_enabled
 from database import create_db_and_tables, ensure_memory_graph_schema, get_neo4j_driver
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from memory_client import MemoryClient
 from nats_client import NATSClient
+from services import console_capabilities
 from services.agent_worker import process_agent_tasks
 from services.outbox_service import process_outbox
 from services.task_worker import process_backlog_tasks
 
 # Retained task references for graceful cancellation on shutdown.
 _background_tasks: set[asyncio.Task] = set()
+
+# NATS connection state exposed by the health endpoints.
+NATS_STATE_CONNECTING = "connecting"
+NATS_STATE_CONNECTED = "connected"
+
+# Reconnect backoff for the initial NATS connection: 1s, 2s, 4s, ... capped.
+NATS_CONNECT_BACKOFF_BASE_SECONDS = 1.0
+NATS_CONNECT_BACKOFF_MAX_SECONDS = 30.0
 
 
 def _on_task_done(task: asyncio.Task) -> None:
@@ -36,6 +46,65 @@ def _on_task_done(task: asyncio.Task) -> None:
         )
 
 
+async def _connect_nats_and_start_workers(app, client: NATSClient) -> None:
+    """
+    Connect to NATS, retrying forever, then start the background workers once.
+
+    The delay between attempts starts at ``NATS_CONNECT_BACKOFF_BASE_SECONDS``
+    and doubles up to ``NATS_CONNECT_BACKOFF_MAX_SECONDS``.  Cancelling the
+    task (as ``shutdown`` does) interrupts a pending attempt or sleep.
+    """
+    delay = NATS_CONNECT_BACKOFF_BASE_SECONDS
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            await client.connect()
+            break
+        except Exception as exc:  # noqa: BLE001 - Keep retrying; the API stays up in degraded mode.
+            logger.warning(
+                "NATS unavailable (attempt %d: %s). Agent workflow and SSE "
+                "streaming are paused; retrying in %.1fs.",
+                attempt,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, NATS_CONNECT_BACKOFF_MAX_SECONDS)
+
+    app.state.nats_client = client
+    app.state.nats_state = NATS_STATE_CONNECTED
+    await _start_workers(app, client)
+
+
+async def _start_workers(app, client: NATSClient) -> None:
+    """Start the NATS-dependent background workers, at most once per app."""
+    if getattr(app.state, "nats_workers_started", False):
+        return
+    app.state.nats_workers_started = True
+
+    # Ask the daemon once which console assistants it can run, so the task
+    # worker does not wait out a timeout per task for a CLI that is absent.
+    if settings.CONSOLE_ASSISTANTS_ENABLED:
+        await console_capabilities.probe_console_assistants(client)
+
+    worker_coros = {
+        "nats_glassroom_listener": _listen_to_nats(app),
+        "outbox_processor": process_outbox(client),
+        "agent_worker": process_agent_tasks(client),
+        "task_worker": process_backlog_tasks(client),
+    }
+    for name, coro in worker_coros.items():
+        task = asyncio.create_task(coro, name=name)
+        _background_tasks.add(task)
+        task.add_done_callback(_on_task_done)
+
+    logger.info(
+        "NATS connected — background workers started: %s",
+        list(worker_coros.keys()),
+    )
+
+
 async def startup(app):
     """
     Application startup handler.
@@ -48,47 +117,31 @@ async def startup(app):
     that request handlers only see them after startup completes.  Callers must
     guard against ``None`` before using NATS/Neo4j features.
 
-    Background tasks are launched only when NATS is reachable:
+    NATS is connected by a background task that retries with exponential
+    backoff, so a broker that starts after the backend still brings agents up.
+    Once connected, that task starts these workers exactly once:
     - ``_listen_to_nats()`` — subscribes to ``glassroom.>`` for SSE fanout.
     - ``process_outbox()`` — transactional outbox → NATS publisher.
     - ``process_agent_tasks()`` — NATS consumer → LangGraph runner.
+    - ``process_backlog_tasks()`` — NATS consumer → backlog task execution.
     """
     logger.info("Initializing Enterprise Backend Components...")
     create_db_and_tables()
 
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
-    # even when the NATS broker is not yet running.
+    # even when the NATS broker is not yet running.  ``app.state.nats_client``
+    # stays ``None`` until the connection succeeds.
     app.state.nats_client = None
-    try:
-        app.state.nats_client = NATSClient(
-            os.getenv("NATS_URL", "nats://localhost:4222")
-        )
-        await app.state.nats_client.connect()
-
-        # Background tasks only make sense when NATS is connected.
-        worker_coros = {
-            "nats_glassroom_listener": _listen_to_nats(app),
-            "outbox_processor": process_outbox(app.state.nats_client),
-            "agent_worker": process_agent_tasks(app.state.nats_client),
-            "task_worker": process_backlog_tasks(app.state.nats_client),
-        }
-        for name, coro in worker_coros.items():
-            task = asyncio.create_task(coro, name=name)
-            _background_tasks.add(task)
-            task.add_done_callback(_on_task_done)
-
-        logger.info(
-            "NATS connected — background workers started: %s",
-            list(worker_coros.keys()),
-        )
-    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional broker fails.
-        logger.warning(
-            "NATS unavailable at startup (%s). "
-            "Agent workflow and SSE streaming are DISABLED. "
-            "Start NATS (docker compose up nats) and restart the backend to enable agents.",
-            exc,
-        )
+    app.state.nats_state = NATS_STATE_CONNECTING
+    app.state.nats_workers_started = False
+    client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+    connect_task = asyncio.create_task(
+        _connect_nats_and_start_workers(app, client), name="nats_connector"
+    )
+    app.state.nats_connect_task = connect_task
+    _background_tasks.add(connect_task)
+    connect_task.add_done_callback(_on_task_done)
 
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None

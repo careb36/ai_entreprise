@@ -22,7 +22,11 @@ logger = logging.getLogger("fabrique-worker")
 
 
 def _mark_sprint_needs_split(sprint_id: int) -> None:
-    """Update sprint status to needs_split in DB — called after workflow exhausts scope."""
+    """Update sprint status to needs_split in DB.
+
+    Called only for an explicit split decision (a workflow result with
+    ``needs_split`` and no error); a failed kickoff keeps the sprint active.
+    """
     try:
         with Session(engine) as session:
             sprint = session.get(Sprint, sprint_id)
@@ -64,22 +68,24 @@ async def _publish_glassroom_info(
     sprint_id: int | str | None,
     interaction_id: str,
     message: str,
+    event_type: str = "info",
+    semantic_type: str | None = None,
 ) -> None:
     """Emit an informational event to the Glassroom SSE stream for the given sprint."""
     if not sprint_id:
         return
+    event = {
+        "type": event_type,
+        "agent": "System",
+        "role": "System",
+        "task": f"LangGraph workflow ({interaction_id})",
+        "message": message,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    if semantic_type:
+        event["semantic_type"] = semantic_type
     try:
-        await nats_client.publish(
-            f"glassroom.{sprint_id}",
-            {
-                "type": "info",
-                "agent": "System",
-                "role": "System",
-                "task": f"LangGraph workflow ({interaction_id})",
-                "message": message,
-                "timestamp": datetime.now(UTC).isoformat(),
-            },
-        )
+        await nats_client.publish(f"glassroom.{sprint_id}", event)
     except Exception as pub_err:  # noqa: BLE001 - Glassroom notifications are best-effort.
         logger.warning("Failed to publish Glassroom info event: %s", pub_err)
 
@@ -165,22 +171,33 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 po_feedback=po_feedback,
             )
 
-            if result.get("needs_split") and sprint_id:
+            # The kickoff is only a conversation; backlog tasks run on their own
+            # in the task worker.  A failed kickoff (an agent node error, or a
+            # workflow-level error) must not block the sprint, so it stays
+            # ``active`` and only an explicit split decision sets needs_split.
+            kickoff_error = result.get("error") or result.get("last_error")
+            if kickoff_error:
+                logger.error(
+                    "Sprint kickoff failed for interaction_id=%s sprint_id=%s: %s; "
+                    "sprint stays active and tasks continue",
+                    interaction_id,
+                    sprint_id,
+                    kickoff_error,
+                )
+                await _publish_glassroom_info(
+                    nats_client,
+                    sprint_id,
+                    interaction_id,
+                    f"Kickoff failed: {kickoff_error}; tasks continue",
+                    event_type="status",
+                    semantic_type="kickoff.failed",
+                )
+            elif result.get("needs_split") and sprint_id:
                 _mark_sprint_needs_split(sprint_id)
                 logger.warning(
                     "Sprint sprint_id=%s marked needs_split after workflow interaction_id=%s",
                     sprint_id,
                     interaction_id,
-                )
-
-            if result.get("error"):
-                logger.error(
-                    "LangGraph workflow returned error for interaction_id=%s: %s",
-                    interaction_id,
-                    result["error"],
-                )
-                await _publish_glassroom_error(
-                    nats_client, sprint_id, interaction_id, result["error"]
                 )
             else:
                 logger.info(
