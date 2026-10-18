@@ -27,20 +27,7 @@ logger = logging.getLogger("fabrique-daemon")
 
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
-PROTECTED_ROOT_DOCS = {
-    "README.md",
-    "README.es.md",
-    "CONTRIBUTING.md",
-    "ARCHITECTURE.md",
-    "TESTING_STRATEGY.md",
-    "REFACTORING_PLAN.md",
-    "DEPLOYMENT.md",
-    "runbook.md",
-    "runbook.es.md",
-    "USER_GUIDE.md",
-    "USER_GUIDE.es.md",
-    "CHANGELOG.md",
-}
+PROTECTED_ROOT_DOCS = set()
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
