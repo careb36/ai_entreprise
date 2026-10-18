@@ -19,7 +19,8 @@
     "evidence": "Evidencia",
     "analytics": "Analíticas",
     "memory": "Memoria",
-    "generate": "Generar"
+    "generate": "Generar",
+    "offline": "Fuera de línea"
   },
   "dashboard": {
     "liveView": "Vista en vivo",
@@ -151,7 +152,8 @@
       "medium": "Media",
       "high": "Alta",
       "critical": "Crítica"
-    }
+    },
+    "kanban": "Tablero Kanban"
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -477,7 +479,9 @@
     "openLiveRoom": "Abrir Sala en Vivo",
     "backToDashboard": "Volver al Dashboard",
     "boardOpsTitle": "Tablero del Sprint",
-    "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar"
+    "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar",
+    "pauseSprint": "Pausar",
+    "resumeSprint": "Reanudar"
   },
   "taskDetails": {
     "invalidId": "ID de tarea no válido: {{taskId}}.",
@@ -741,7 +745,8 @@
     "feedbackPlaceholderReject": "Razón del rechazo (obligatorio)...",
     "pendingRuns": "Ejecuciones pendientes de decisión humana",
     "noPendingRuns": "No hay ejecuciones pendientes de decisión humana",
-    "reviewRun": "Revisar evidencia"
+    "reviewRun": "Revisar evidencia",
+    "usageHistory": "Historial de uso (últimos 7 días)"
   },
   "evidence": {
     "title": "Evidencia",
@@ -887,7 +892,8 @@
     "viewWorkspace": "Ver en Espacio de Trabajo",
     "copy": "Copiar",
     "copied": "¡Copiado!",
-    "error": "Error en la generación"
+    "error": "Error en la generación",
+    "started": "¡Generación iniciada!"
   },
   "support": {
     "title": "Asistente La Fabrique",
@@ -985,6 +991,90 @@
     "retry": "Intentar de nuevo",
     "loading": "Cargando tu cuenta…",
     "selectCompany": "Selecciona una empresa"
+  },
+  "agentsConfig": {
+    "title": "Registro de Agentes",
+    "subtitle": "Actualiza agentes, modelos e instrucciones mientras la fábrica sigue funcionando.",
+    "subtitleWithCompany": "Actualiza agentes, modelos e instrucciones de {{company}} mientras la fábrica sigue funcionando.",
+    "factory": "Fábrica",
+    "orchestrator": "Modelo recomendado para orquestación",
+    "noCompany": "Inicializa primero una fábrica para gestionar sus agentes.",
+    "runtimeNoteTitle": "Comportamiento en ejecución",
+    "runtimeNote": "Cambiar un agente afecta la próxima ejecución o revisión que tome ese rol. El trabajo que ya está en curso conserva el modelo y las instrucciones con los que empezó.",
+    "shardingNote": "Si creas varios agentes con el mismo rol, La Fabrique reparte las tareas entre ellos de forma determinista en lugar de elegir siempre el primero.",
+    "searchPlaceholder": "Buscar por nombre, rol, especialidad o modelo…",
+    "refresh": "Actualizar",
+    "newAgent": "Nuevo agente",
+    "closeCreator": "Cerrar",
+    "filterAll": "Todos",
+    "addAgent": "Añadir agente",
+    "cancel": "Cancelar",
+    "create": "Crear agente",
+    "currentAgents": "Agentes actuales",
+    "loading": "Cargando agentes…",
+    "loadError": "No se pudo cargar el registro de agentes.",
+    "emptyFiltered": "Ningún agente coincide con tu búsqueda o filtro.",
+    "emptyNoAgents": "Esta fábrica todavía no tiene agentes. Usa “Nuevo agente” para añadir el primero.",
+    "unnamedAgent": "Agente sin nombre",
+    "unsaved": "Sin guardar",
+    "duplicate": "Duplicar",
+    "duplicateTooltip": "Abrir el creador con la configuración de este agente",
+    "duplicateSuffix": "(copia)",
+    "delete": "Eliminar",
+    "deleteConfirm": "Haz clic de nuevo para confirmar",
+    "dirtyHint": "Tienes cambios sin guardar. Se aplican a la próxima tarea que tome este rol.",
+    "cleanHint": "No hay cambios sin guardar.",
+    "discard": "Descartar",
+    "save": "Guardar cambios",
+    "saving": "Guardando…",
+    "noActivity": "Sin actividad todavía",
+    "taskSingular": "tarea",
+    "taskPlural": "tareas",
+    "never": "nunca",
+    "timeJustNow": "hace un momento",
+    "timeMinutesAgo": "hace {{n}} min",
+    "timeHoursAgo": "hace {{n}} h",
+    "timeDaysAgo": "hace {{n}} d",
+    "name": "Nombre / Alias",
+    "role": "Rol",
+    "seniority": "Experiencia",
+    "specialty": "Especialidad / Área de enfoque",
+    "persona": "Personalidad / Estilo de trabajo",
+    "systemPrompt": "Instrucciones del sistema",
+    "systemPromptPlaceholder": "Describe el rol y el comportamiento del agente, o usa Generar instrucciones para crearlas a partir del rol y la especialidad.",
+    "generatePrompt": "Generar instrucciones",
+    "generatingPrompt": "Generando…",
+    "generatePromptError": "No se pudieron generar las instrucciones. Verifica que el proxy LLM esté activo.",
+    "tokenBudget": "Presupuesto mensual de tokens",
+    "model": "Modelo LLM",
+    "keepCustomModel": "Mantener el modelo actual / personalizado",
+    "customModelPlaceholder": "ID de modelo personalizado (p. ej. kimi-k2.6, deepseek-reasoner)",
+    "customModelHint": "Este modelo no está en el catálogo actual. Aun así puedes guardarlo si el proxy LLM lo admite.",
+    "recommendedModel": "Modelo recomendado para este rol",
+    "applyRecommendation": "Usar recomendación",
+    "recommendationApplied": "En uso",
+    "alternatives": "Alternativas:",
+    "noRecommendation": "Ningún modelo del catálogo actual coincide con este rol. Elige uno manualmente abajo.",
+    "createSuccess": "Agente creado correctamente.",
+    "createError": "No se pudo crear el agente. Inténtalo de nuevo.",
+    "saveSuccess": "Configuración del agente guardada.",
+    "saveError": "No se pudo guardar el agente. Inténtalo de nuevo.",
+    "deleteSuccess": "Agente eliminado.",
+    "deleteError": "No se pudo eliminar el agente. Inténtalo de nuevo.",
+    "recommendationReasons": {
+      "dev": "Prioriza la calidad de generación y refactorización de código, con modelos de razonamiento más fuertes para niveles senior.",
+      "frontend": "Prioriza la calidad del código de interfaz y el diseño de componentes, con Gemini Pro a la cabeza en niveles senior.",
+      "data": "Prioriza el razonamiento para el diseño de datos, la corrección de pipelines y las decisiones analíticas.",
+      "designer": "Prioriza modelos fuertes en razonamiento de UX, estructura visual y especificaciones claras.",
+      "qa": "Prioriza un razonamiento sólido para revisiones profundas, análisis de riesgos y detección de regresiones.",
+      "architect": "Prioriza el razonamiento profundo y la síntesis de arquitectura.",
+      "po": "Prioriza el razonamiento de producto, la evaluación de alternativas y la calidad de la planificación.",
+      "scrummaster": "Prioriza el razonamiento y la coordinación para la planificación, la descomposición de tareas y las retrospectivas.",
+      "devops": "Prioriza el razonamiento para el diagnóstico de infraestructura y las decisiones operativas con restricciones.",
+      "security": "Prioriza modelos con razonamiento intensivo para el análisis de amenazas, el endurecimiento y las decisiones de políticas.",
+      "support": "Prioriza modelos rápidos y equilibrados para respuestas claras y una clasificación ágil.",
+      "generalist": "Usa un modelo general y equilibrado cuando el rol no requiere claramente un especialista."
+    }
   },
   "common": {
     "loading": "Cargando...",

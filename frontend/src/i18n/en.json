@@ -19,7 +19,8 @@
     "evidence": "Evidence",
     "analytics": "Analytics",
     "memory": "Memory",
-    "generate": "Generate"
+    "generate": "Generate",
+    "offline": "Offline"
   },
   "dashboard": {
     "liveView": "Live view",
@@ -151,7 +152,8 @@
       "medium": "Medium",
       "high": "High",
       "critical": "Critical"
-    }
+    },
+    "kanban": "Kanban Board"
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -477,7 +479,9 @@
     "openLiveRoom": "Open Live Room",
     "backToDashboard": "Back to Dashboard",
     "boardOpsTitle": "Sprint Board",
-    "boardOpsHint": "Drag tasks to change status or reassign"
+    "boardOpsHint": "Drag tasks to change status or reassign",
+    "pauseSprint": "Pause",
+    "resumeSprint": "Resume"
   },
   "taskDetails": {
     "invalidId": "Invalid task ID: {{taskId}}.",
@@ -741,7 +745,8 @@
     "feedbackPlaceholderReject": "Reason for rejection (required)...",
     "pendingRuns": "Runs awaiting a human decision",
     "noPendingRuns": "No runs are awaiting a human decision",
-    "reviewRun": "Review evidence"
+    "reviewRun": "Review evidence",
+    "usageHistory": "Usage History (last 7 days)"
   },
   "evidence": {
     "title": "Evidence",
@@ -887,7 +892,8 @@
     "viewWorkspace": "View in Workspace",
     "copy": "Copy",
     "copied": "Copied!",
-    "error": "Generation failed"
+    "error": "Generation failed",
+    "started": "Generation started!"
   },
   "support": {
     "title": "La Fabrique Assistant",
@@ -985,6 +991,90 @@
     "retry": "Try again",
     "loading": "Loading your account…",
     "selectCompany": "Select a company"
+  },
+  "agentsConfig": {
+    "title": "Agent Registry",
+    "subtitle": "Update agents, models, and prompts while the factory keeps running.",
+    "subtitleWithCompany": "Update agents, models, and prompts for {{company}} while the factory keeps running.",
+    "factory": "Factory",
+    "orchestrator": "Recommended orchestrator model",
+    "noCompany": "Initialize a factory first to manage its agents.",
+    "runtimeNoteTitle": "Runtime behavior",
+    "runtimeNote": "Changing an agent updates the next task execution or review that claims that role. Work already in progress keeps the model and prompt it started with.",
+    "shardingNote": "If you create multiple agents with the same role, La Fabrique shards tasks deterministically across them instead of always picking the first one.",
+    "searchPlaceholder": "Search by name, role, specialty, or model…",
+    "refresh": "Refresh",
+    "newAgent": "New agent",
+    "closeCreator": "Close",
+    "filterAll": "All",
+    "addAgent": "Add agent",
+    "cancel": "Cancel",
+    "create": "Create agent",
+    "currentAgents": "Current agents",
+    "loading": "Loading agents…",
+    "loadError": "Failed to load agent registry.",
+    "emptyFiltered": "No agents match your search or filter.",
+    "emptyNoAgents": "This factory has no agents yet. Use “New agent” to add the first one.",
+    "unnamedAgent": "Unnamed agent",
+    "unsaved": "Unsaved",
+    "duplicate": "Duplicate",
+    "duplicateTooltip": "Open the creator pre-filled with this agent's settings",
+    "duplicateSuffix": "(copy)",
+    "delete": "Delete",
+    "deleteConfirm": "Click again to confirm",
+    "dirtyHint": "You have unsaved changes. They apply to the next task this role claims.",
+    "cleanHint": "No unsaved changes.",
+    "discard": "Discard",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "noActivity": "No activity yet",
+    "taskSingular": "task",
+    "taskPlural": "tasks",
+    "never": "never",
+    "timeJustNow": "just now",
+    "timeMinutesAgo": "{{n}} min ago",
+    "timeHoursAgo": "{{n}} h ago",
+    "timeDaysAgo": "{{n}} d ago",
+    "name": "Name / Alias",
+    "role": "Role",
+    "seniority": "Seniority",
+    "specialty": "Specialty / Focus area",
+    "persona": "Persona / Working style",
+    "systemPrompt": "System prompt",
+    "systemPromptPlaceholder": "Describe the agent's role and behavior, or use Generate prompt to create it from the role and specialty.",
+    "generatePrompt": "Generate prompt",
+    "generatingPrompt": "Generating…",
+    "generatePromptError": "Could not generate the prompt. Check that the LLM proxy is running.",
+    "tokenBudget": "Monthly token budget",
+    "model": "LLM model",
+    "keepCustomModel": "Keep current / custom model",
+    "customModelPlaceholder": "Custom model ID (e.g. kimi-k2.6, deepseek-reasoner)",
+    "customModelHint": "This model is not in the live catalog. You can still save it if the LLM proxy supports it.",
+    "recommendedModel": "Recommended model for this role",
+    "applyRecommendation": "Use recommendation",
+    "recommendationApplied": "In use",
+    "alternatives": "Alternatives:",
+    "noRecommendation": "No model in the live catalog matches this role. Choose one manually below.",
+    "createSuccess": "Agent created successfully.",
+    "createError": "Failed to create agent. Please try again.",
+    "saveSuccess": "Agent configuration saved.",
+    "saveError": "Failed to save agent. Please try again.",
+    "deleteSuccess": "Agent deleted.",
+    "deleteError": "Failed to delete agent. Please try again.",
+    "recommendationReasons": {
+      "dev": "Prioritizes code generation and refactoring quality, with stronger reasoning models for senior levels.",
+      "frontend": "Prioritizes UI code quality and component design, with Gemini Pro leading for senior levels.",
+      "data": "Prefers reasoning for data design, pipeline correctness, and analytical decisions.",
+      "designer": "Favors models strong at UX reasoning, visual structure, and clear written specs.",
+      "qa": "Prefers stronger reasoning for review depth, risk analysis, and regression thinking.",
+      "architect": "Favors deep reasoning and architecture synthesis.",
+      "po": "Favors product reasoning, trade-offs, and planning quality.",
+      "scrummaster": "Prefers reasoning and coordination quality for planning, decomposition, and retrospective guidance.",
+      "devops": "Prefers reasoning for infrastructure diagnosis and operational decisions under constraints.",
+      "security": "Prefers reasoning-heavy models for threat analysis, hardening, and policy trade-offs.",
+      "support": "Favors fast, balanced models for clear responses and lightweight triage.",
+      "generalist": "Uses a balanced general-purpose model when the role does not clearly call for a specialist."
+    }
   },
   "common": {
     "loading": "Loading...",
