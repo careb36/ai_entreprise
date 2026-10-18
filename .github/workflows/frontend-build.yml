@@ -4,7 +4,7 @@
 # a run.
 #
 # Run the same checks locally with:
-#   cd frontend && npm ci && npx tsc --noEmit && npm run test:run && npm run build
+#   cd frontend && npm ci && npx tsc --noEmit && npm run lint && npm run test:run && npm run build
 
 name: Frontend Build
 
@@ -53,6 +53,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Lint (user-facing text goes through i18n)
+        run: npm run lint
 
       - name: Test
         run: npm run test:run

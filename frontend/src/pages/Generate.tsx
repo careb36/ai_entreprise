@@ -89,7 +89,7 @@ export default function Generate() {
                   onClick={() => navigate(`/sprints/${result.sprint_id}/live`)}
                   className="btn btn-primary btn-sm flex items-center gap-1.5"
                 >
-                  Sprint #{result.sprint_id} <ArrowRight size={13} />
+                  {t('generate.sprintLink', { id: result.sprint_id, defaultValue: 'Sprint #{{id}}' })} <ArrowRight size={13} />
                 </button>
               </div>
             )}
@@ -120,7 +120,7 @@ export default function Generate() {
 
         {/* Constraints */}
         <div>
-          <label className="input-label">{t('generate.constraints', 'Constraints')} <span className="text-gray-600">(optional)</span></label>
+          <label className="input-label">{t('generate.constraints', 'Constraints')} <span className="text-gray-600">{t('common.optional', { defaultValue: '(optional)' })}</span></label>
           <textarea
             value={constraints}
             onChange={e => setConstraints(e.target.value)}

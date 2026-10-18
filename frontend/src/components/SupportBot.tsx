@@ -20,6 +20,8 @@ const STATUS_CONFIG: Record<string, { label_key: string; color: string; icon: Re
   closed:      { label_key: 'support.status.closed',      color: 'bg-gray-100 text-gray-500',    icon: <CheckCircle2 size={12} className="text-gray-400" /> },
 }
 
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
+
 const SEVERITY_COLOR: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
   high:     'bg-orange-100 text-orange-700',
@@ -334,7 +336,7 @@ export const SupportBot: React.FC = () => {
                     <span className="text-xs font-semibold text-gray-600">{t('support.severity')}</span>
                     <select value={severity} onChange={e => setSeverity(e.target.value as any)}
                       className="mt-1 w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
-                      {['critical','high','medium','low'].map(s => (
+                      {SEVERITIES.map(s => (
                         <option key={s} value={s}>{t(`support.${s}`)}</option>
                       ))}
                     </select>
@@ -344,7 +346,7 @@ export const SupportBot: React.FC = () => {
                 <label className="block">
                   <span className="text-xs font-semibold text-gray-600">{t('support.emailToTrack')}</span>
                   <input type="email" value={reporterEmail} onChange={e => setReporterEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={t('support.emailPlaceholder', { defaultValue: 'you@company.com' })}
                     className="mt-1 w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
                   <p className="text-[10px] text-gray-400 mt-0.5">{t('support.emailHint')}</p>
                 </label>

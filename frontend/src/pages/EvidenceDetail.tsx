@@ -243,7 +243,7 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
               {t('evidence.rejectionCategory')}
               <select className="input mt-1 w-full" value={category} onChange={event => setCategory(event.target.value)}>
                 <option value="">{t('evidence.noCategory')}</option>
-                {(['scope', 'quality', 'security', 'other'] as const).map(value => (
+                {REJECTION_CATEGORIES.map(value => (
                   <option key={value} value={value}>{t(`evidence.categoryValues.${value}`)}</option>
                 ))}
               </select>
@@ -269,7 +269,7 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
           ) : audit ? (
             <>
               <div className="mb-4 flex flex-wrap gap-2">
-                {(['valid', 'invalid', 'unsigned', 'legacy'] as const).map(status => {
+                {SIGNATURE_STATUSES.map(status => {
                   const Icon = status === 'valid' ? ShieldCheck : status === 'invalid' ? ShieldAlert : ShieldQuestion
                   return (
                     <span key={status} data-testid={`signature-${status}`} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${SIGNATURE_STYLES[status]}`}>
@@ -308,6 +308,10 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
     </div>
   )
 }
+
+
+const REJECTION_CATEGORIES = ['scope', 'quality', 'security', 'other'] as const
+const SIGNATURE_STATUSES = ['valid', 'invalid', 'unsigned', 'legacy'] as const
 
 export default function EvidenceDetail() {
   const { t } = useTranslation()

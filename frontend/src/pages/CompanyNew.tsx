@@ -52,6 +52,27 @@ interface ModelInfo {
 
 // Static display metadata keyed by tier — used when model ID is not in the
 // live catalogue (e.g. while loading or for legacy agents).
+const TIMEZONES = [
+  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris',
+  'Europe/Berlin', 'Asia/Tokyo', 'Asia/Singapore', 'Australia/Sydney',
+]
+
+const approvalToggles = (t: TFunction) => [
+  { key: 'require_approval_deploy', label: t('companyNew.approvalDeploy'), icon: '🚀' },
+  { key: 'require_approval_db_write', label: t('companyNew.approvalDbWrite'), icon: '🗄️' },
+]
+
+const resourceSummary = (t: TFunction) => [
+  { label: t('companyNew.resources.git.short'), key: 'git_access', icon: '🔀' },
+  { label: t('companyNew.resources.cloud.short'), key: 'cloud_access', icon: '☁️' },
+  { label: t('companyNew.resources.db.short'), key: 'db_access', icon: '🗄️' },
+  { label: t('companyNew.resources.ci.short'), key: 'ci_access', icon: '🔧' },
+  { label: t('companyNew.resources.secrets.short'), key: 'secrets_access', icon: '🔑' },
+]
+
+const DEFAULT_TIER = 'balanced'
+
 const TIER_META: Record<string, { color: string; icon: string; label: string }> = {
   strategic: { color: 'text-blue-300 bg-blue-900/30',   icon: '🔵', label: 'Strategic' },
   balanced:  { color: 'text-cyan-300 bg-cyan-900/30',   icon: '⚡', label: 'Balanced'  },
@@ -910,9 +931,7 @@ export default function CompanyNew() {
         <div>
           <label className="input-label">{t('companyNew.timezone')}</label>
           <select value={timezone} onChange={e => setTimezone(e.target.value)} className="select w-full">
-            {['UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles',
-              'America/Sao_Paulo','America/Argentina/Buenos_Aires','Europe/London','Europe/Paris',
-              'Europe/Berlin','Asia/Tokyo','Asia/Singapore','Australia/Sydney'].map(tz => (
+            {TIMEZONES.map(tz => (
               <option key={tz} value={tz}>{t(`companyNew.timezones.${tz}`, { defaultValue: tz })}</option>
             ))}
           </select>
@@ -997,10 +1016,7 @@ export default function CompanyNew() {
 
         <div className="card p-4 space-y-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t('companyNew.governance')}</p>
-          {[
-            { key: 'require_approval_deploy', label: t('companyNew.approvalDeploy'), icon: '🚀' },
-            { key: 'require_approval_db_write', label: t('companyNew.approvalDbWrite'), icon: '🗄️' },
-          ].map(({ key, label, icon }) => (
+          {approvalToggles(t).map(({ key, label, icon }) => (
             <label key={key} className="flex items-center gap-3 cursor-pointer group">
               <input type="checkbox"
                 checked={permissions[key as keyof Permissions] as boolean}
@@ -1107,13 +1123,7 @@ export default function CompanyNew() {
               <button type="button" onClick={() => setStep(3)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
             </div>
             <div className="grid grid-cols-5 gap-2">
-              {[
-                { label: t('companyNew.resources.git.short'), key: 'git_access', icon: '🔀' },
-                { label: t('companyNew.resources.cloud.short'), key: 'cloud_access', icon: '☁️' },
-                { label: t('companyNew.resources.db.short'), key: 'db_access', icon: '🗄️' },
-                { label: t('companyNew.resources.ci.short'), key: 'ci_access', icon: '🔧' },
-                { label: t('companyNew.resources.secrets.short'), key: 'secrets_access', icon: '🔑' },
-              ].map(({ label, key, icon }) => {
+              {resourceSummary(t).map(({ label, key, icon }) => {
                 const val = permissions[key as keyof Permissions] as string
                 const perm = PERM_LEVELS[val as keyof typeof PERM_LEVELS]
                 return (
@@ -1145,7 +1155,7 @@ export default function CompanyNew() {
                     <span className={`text-xs ${SENIORITIES.find(s => s.value === a.seniority)?.color ?? 'text-gray-400'}`}>{t(`companyNew.seniorities.${a.seniority}.label`, { defaultValue: a.seniority })}</span>
                     {a.model && (() => {
                       const mi = availableModels.find(m => m.id === a.model)
-                      const tm = TIER_META[mi?.tier ?? 'balanced']
+                      const tm = TIER_META[mi?.tier ?? DEFAULT_TIER]
                       return (
                         <span className={`badge text-[10px] font-mono ${tm.color}`}>
                           {tm.icon} {a.model}

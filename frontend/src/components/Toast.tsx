@@ -1,4 +1,5 @@
 import { CheckCircle2, AlertTriangle, Info, XCircle, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useToastStore, type Toast, type ToastVariant } from '../store/toastStore'
 
 const VARIANT_STYLES: Record<ToastVariant, { bar: string; icon: string; bg: string; border: string }> = {
@@ -16,6 +17,7 @@ const VARIANT_ICONS: Record<ToastVariant, React.ElementType> = {
 }
 
 function ToastItem({ toast }: { toast: Toast }) {
+  const { t } = useTranslation()
   const dismiss = useToastStore(s => s.dismiss)
   const styles  = VARIANT_STYLES[toast.variant]
   const Icon    = VARIANT_ICONS[toast.variant]
@@ -39,7 +41,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       <button
         onClick={() => dismiss(toast.id)}
         className="shrink-0 text-gray-500 hover:text-gray-300 transition-colors"
-        aria-label="Dismiss"
+        aria-label={t('common.dismiss', { defaultValue: 'Dismiss' })}
       >
         <X size={14} />
       </button>

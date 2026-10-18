@@ -11,6 +11,7 @@ interface MemoryResult {
 }
 
 function MetadataView({ metadata }: { metadata: unknown }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   if (!metadata) return null
 
@@ -28,7 +29,7 @@ function MetadataView({ metadata }: { metadata: unknown }) {
         className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
       >
         {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        metadata
+        {t('memorySearch.metadata', { defaultValue: 'metadata' })}
       </button>
       {open && (
         <pre className="mt-1 text-xs text-gray-400 bg-surface-900 border border-surface-700 p-2 rounded overflow-auto max-h-40 font-mono">

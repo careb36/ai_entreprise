@@ -4,6 +4,10 @@ import { AlertTriangle, BarChart3, Download, Loader2, RotateCcw, ShieldCheck } f
 import { useQuotas, useQuotaUsageHistory, useResetQuota } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
+
+// No limit configured for a business unit.
+const UNLIMITED = '∞'
+
 export const QuotaPanel: React.FC = () => {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
@@ -37,7 +41,7 @@ export const QuotaPanel: React.FC = () => {
           <ShieldCheck className="text-brand-400" size={22} />
           <h1 className="text-xl font-bold text-white">{t('governance.quotaTitle', { defaultValue: 'Token Quota Usage' })}</h1>
         </div>
-        <button onClick={exportCsv} className="btn-ghost btn-sm flex items-center gap-1.5" title="Export CSV">
+        <button onClick={exportCsv} className="btn-ghost btn-sm flex items-center gap-1.5" title={t('governance.exportCsv', { defaultValue: 'Export CSV' })}>
           <Download size={14} /> CSV
         </button>
       </div>
@@ -59,7 +63,7 @@ export const QuotaPanel: React.FC = () => {
                       {isExceeded && <span className="badge bg-red-900/60 text-red-300">{t('governance.quotaExceeded')}</span>}
                       {isWarning && !isExceeded && <span className="badge bg-yellow-900/60 text-yellow-300"><AlertTriangle size={10} />{t('governance.quotaWarning')}</span>}
                       <span className="text-xs text-gray-500">
-                        {unit.used.toLocaleString()} / {unit.limit > 0 ? unit.limit.toLocaleString() : '∞'} {t('governance.tokens')}
+                        {unit.used.toLocaleString()} / {unit.limit > 0 ? unit.limit.toLocaleString() : UNLIMITED} {t('governance.tokens')}
                       </span>
                       {unit.id && (
                         <button
@@ -102,9 +106,9 @@ export const QuotaPanel: React.FC = () => {
             <BarChart3 size={18} className="text-brand-400" />
             <h2 className="text-sm font-semibold text-gray-200">{t('governance.usageHistory', { defaultValue: 'Usage History (last 7 days)' })}</h2>
             <select value={days} onChange={e => setDays(Number(e.target.value))} className="ml-auto text-xs bg-surface-800 border border-surface-700 rounded px-2 py-1 text-gray-300">
-              <option value={7}>7 days</option>
-              <option value={14}>14 days</option>
-              <option value={30}>30 days</option>
+              <option value={7}>{t('governance.lastDays', { count: 7, defaultValue: '{{count}} days' })}</option>
+              <option value={14}>{t('governance.lastDays', { count: 14, defaultValue: '{{count}} days' })}</option>
+              <option value={30}>{t('governance.lastDays', { count: 30, defaultValue: '{{count}} days' })}</option>
             </select>
           </div>
           <div className="card p-3">
@@ -120,7 +124,7 @@ export const QuotaPanel: React.FC = () => {
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-xs text-gray-500 text-right">Total: {historyData?.total?.toLocaleString() ?? 0} tokens</p>
+            <p className="mt-4 text-xs text-gray-500 text-right">{t('governance.totalTokens', { total: historyData?.total?.toLocaleString() ?? 0, defaultValue: 'Total: {{total}} tokens' })}</p>
           </div>
         </section>
       )}

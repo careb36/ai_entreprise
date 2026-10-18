@@ -149,7 +149,8 @@
     },
     "manageAgents": "Manage agents",
     "manageQuotas": "Manage quotas",
-    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits."
+    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits.",
+    "tokenUsage": "{{used}} / {{limit}} tokens"
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -548,7 +549,11 @@
       "done": "Done",
       "blocked": "Blocked"
     },
-    "deliveryVerdict": "Delivery: {{verdict}}"
+    "deliveryVerdict": "Delivery: {{verdict}}",
+    "qaReworksTitle": "QA reworks: {{count}}/{{limit}}",
+    "qaReworks": "QA rework {{count}}/{{limit}}",
+    "qaFailuresTitle": "QA failures: {{count}}/{{limit}}",
+    "qaFailures": "QA fail {{count}}/{{limit}}"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -694,7 +699,17 @@
       "quota_cooldown": "quota exhausted",
       "unavailable": "unavailable",
       "failed": "failed"
-    }
+    },
+    "viewDeliverable": "View deliverable",
+    "assistantRequested": "requested {{count}}",
+    "assistantUnavailable": "unavailable {{count}}",
+    "assistantCooldown": "cooldown until {{time}}",
+    "scopeExceeded": "Sprint scope exceeded",
+    "sprintLabel": "Sprint #{{id}}",
+    "searchPlaceholder": "Search…",
+    "clearFilters": "Clear filters",
+    "newMessages": "New messages",
+    "agentsWorkingCount": "{{count}} working"
   },
   "governance": {
     "title": "Governance",
@@ -743,7 +758,10 @@
     "pendingRuns": "Runs awaiting a human decision",
     "noPendingRuns": "No runs are awaiting a human decision",
     "reviewRun": "Review evidence",
-    "usageHistory": "Usage History (last 7 days)"
+    "usageHistory": "Usage History (last 7 days)",
+    "exportCsv": "Export CSV",
+    "lastDays": "{{count}} days",
+    "totalTokens": "Total: {{total}} tokens"
   },
   "evidence": {
     "title": "Evidence",
@@ -871,7 +889,8 @@
     "results": "Results",
     "noResults": "No results found",
     "similarity": "Similarity",
-    "error": "Search failed"
+    "error": "Search failed",
+    "metadata": "metadata"
   },
   "generate": {
     "title": "Code Generator",
@@ -893,7 +912,8 @@
     "copy": "Copy",
     "copied": "Copied!",
     "error": "Generation failed",
-    "started": "Generation started!"
+    "started": "Generation started!",
+    "sprintLink": "Sprint #{{id}}"
   },
   "support": {
     "title": "La Fabrique Assistant",
@@ -940,7 +960,8 @@
       "waiting": "Waiting on you",
       "resolved": "Resolved",
       "closed": "Closed"
-    }
+    },
+    "emailPlaceholder": "you@company.com"
   },
   "sprintCalendar": {
     "title": "Sprint Calendar",
@@ -1099,7 +1120,9 @@
     "no": "No",
     "na": "N/A",
     "copyId": "Copy ID",
-    "learnMore": "Learn more"
+    "learnMore": "Learn more",
+    "dismiss": "Dismiss",
+    "optional": "(optional)"
   },
   "sprint": {
     "views": "Sprint views",
@@ -1177,5 +1200,9 @@
       "linux": "Ubuntu/Linux",
       "win32": "Windows"
     }
+  },
+  "errorState": {
+    "title": "Something went wrong",
+    "retry": "Try again"
   }
 }

@@ -149,7 +149,8 @@
     },
     "manageAgents": "Gestionar agentes",
     "manageQuotas": "Gestionar cuotas",
-    "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites."
+    "quotaAlert": "La cuota de tokens supera el 80 % en una o más unidades de negocio. Considera restablecer o ampliar los límites.",
+    "tokenUsage": "{{used}} / {{limit}} tokens"
   },
   "companyNew": {
     "title": "Inicializar Fábrica",
@@ -548,7 +549,11 @@
       "done": "Terminado",
       "blocked": "Bloqueado"
     },
-    "deliveryVerdict": "Entrega: {{verdict}}"
+    "deliveryVerdict": "Entrega: {{verdict}}",
+    "qaReworksTitle": "Retrabajos de QA: {{count}}/{{limit}}",
+    "qaReworks": "Retrabajo QA {{count}}/{{limit}}",
+    "qaFailuresTitle": "Fallos de QA: {{count}}/{{limit}}",
+    "qaFailures": "Fallo QA {{count}}/{{limit}}"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -694,7 +699,17 @@
       "quota_cooldown": "cuota agotada",
       "unavailable": "no disponible",
       "failed": "falló"
-    }
+    },
+    "viewDeliverable": "Ver entregable",
+    "assistantRequested": "solicitado {{count}}",
+    "assistantUnavailable": "no disponible {{count}}",
+    "assistantCooldown": "en pausa hasta {{time}}",
+    "scopeExceeded": "Se excedió el alcance del sprint",
+    "sprintLabel": "Sprint #{{id}}",
+    "searchPlaceholder": "Buscar…",
+    "clearFilters": "Quitar filtros",
+    "newMessages": "Mensajes nuevos",
+    "agentsWorkingCount": "{{count}} trabajando"
   },
   "governance": {
     "title": "Gobernanza",
@@ -743,7 +758,10 @@
     "pendingRuns": "Ejecuciones pendientes de decisión humana",
     "noPendingRuns": "No hay ejecuciones pendientes de decisión humana",
     "reviewRun": "Revisar evidencia",
-    "usageHistory": "Historial de uso (últimos 7 días)"
+    "usageHistory": "Historial de uso (últimos 7 días)",
+    "exportCsv": "Exportar CSV",
+    "lastDays": "{{count}} días",
+    "totalTokens": "Total: {{total}} tokens"
   },
   "evidence": {
     "title": "Evidencia",
@@ -871,7 +889,8 @@
     "results": "Resultados",
     "noResults": "Sin resultados",
     "similarity": "Similitud",
-    "error": "Búsqueda fallida"
+    "error": "Búsqueda fallida",
+    "metadata": "metadatos"
   },
   "generate": {
     "title": "Generador de Código",
@@ -893,7 +912,8 @@
     "copy": "Copiar",
     "copied": "¡Copiado!",
     "error": "Error en la generación",
-    "started": "¡Generación iniciada!"
+    "started": "¡Generación iniciada!",
+    "sprintLink": "Sprint #{{id}}"
   },
   "support": {
     "title": "Asistente La Fabrique",
@@ -940,7 +960,8 @@
       "waiting": "Esperando tu respuesta",
       "resolved": "Resuelto",
       "closed": "Cerrado"
-    }
+    },
+    "emailPlaceholder": "tu@empresa.com"
   },
   "sprintCalendar": {
     "title": "Calendario del Sprint",
@@ -1099,7 +1120,9 @@
     "no": "No",
     "na": "N/D",
     "copyId": "Copiar ID",
-    "learnMore": "Más información"
+    "learnMore": "Más información",
+    "dismiss": "Cerrar",
+    "optional": "(opcional)"
   },
   "sprint": {
     "views": "Vistas del sprint",
@@ -1177,5 +1200,9 @@
       "linux": "Ubuntu/Linux",
       "win32": "Windows"
     }
+  },
+  "errorState": {
+    "title": "Algo salió mal",
+    "retry": "Reintentar"
   }
 }
