@@ -1149,7 +1149,8 @@
       "overview": "Resumen",
       "board": "Tablero",
       "live": "En vivo",
-      "analytics": "Analíticas"
+      "analytics": "Analíticas",
+      "conversation": "Conversación"
     },
     "streamConnected": "Flujo conectado",
     "streamDisconnected": "Flujo desconectado"
@@ -1357,6 +1358,29 @@
       "nats": "Mensajería (NATS)",
       "llm_proxy": "Proxy de LLM",
       "neo4j": "Grafo de conocimiento (Neo4j)"
+    }
+  },
+  "conversation": {
+    "title": "Conversación",
+    "claimsNote": "Lo que los roles se dijeron entre sí. La evidencia muestra lo que se verificó.",
+    "kindFilter": "Mostrar",
+    "allKinds": "Todos los mensajes",
+    "loading": "Cargando la conversación…",
+    "error": "No se pudo cargar la conversación.",
+    "emptyKind": "Todavía no hay mensajes de este tipo.",
+    "empty": "Todavía no hay mensajes. Aparecen a medida que los roles se pasan el trabajo.",
+    "team": "el equipo",
+    "to": "a",
+    "showMore": "Ver más",
+    "showLess": "Ver menos",
+    "kinds": {
+      "question": "Pregunta",
+      "answer": "Respuesta",
+      "handoff": "Entrega",
+      "request": "Pedido de rework",
+      "decision": "Decisión",
+      "escalation": "Escalamiento",
+      "retrospective": "Retrospectiva"
     }
   }
 }

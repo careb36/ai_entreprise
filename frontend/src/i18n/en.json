@@ -1149,7 +1149,8 @@
       "overview": "Overview",
       "board": "Board",
       "live": "Live",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "conversation": "Conversation"
     },
     "streamConnected": "Stream connected",
     "streamDisconnected": "Stream disconnected"
@@ -1357,6 +1358,29 @@
       "nats": "Messaging (NATS)",
       "llm_proxy": "LLM proxy",
       "neo4j": "Knowledge graph (Neo4j)"
+    }
+  },
+  "conversation": {
+    "title": "Conversation",
+    "claimsNote": "What the roles said to each other. The evidence shows what was verified.",
+    "kindFilter": "Show",
+    "allKinds": "All messages",
+    "loading": "Loading the conversation…",
+    "error": "Could not load the conversation.",
+    "emptyKind": "No messages of this kind yet.",
+    "empty": "No messages yet. They appear as the roles hand work to each other.",
+    "team": "the team",
+    "to": "to",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "kinds": {
+      "question": "Question",
+      "answer": "Answer",
+      "handoff": "Handoff",
+      "request": "Rework request",
+      "decision": "Decision",
+      "escalation": "Escalation",
+      "retrospective": "Retrospective"
     }
   }
 }

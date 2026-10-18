@@ -23,6 +23,11 @@ vi.mock('../components/KanbanBoard', () => ({
 vi.mock('../components/AnalyticsDashboard', () => ({
   AnalyticsDashboard: ({ sprintId }: { sprintId: number }) => <div>Analytics for sprint {sprintId}</div>,
 }))
+vi.mock('../components/Conversation', () => ({
+  Conversation: ({ companyId, sprintId, live }: { companyId: number; sprintId: number; live: boolean }) => (
+    <div>Conversation of company {companyId} for sprint {sprintId}{live ? ' (live)' : ''}</div>
+  ),
+}))
 vi.mock('./Dashboard', () => ({
   default: ({ sprintId }: { sprintId: number }) => <div>Overview for sprint {sprintId}</div>,
 }))
@@ -166,14 +171,15 @@ describe('workspace sprint validation', () => {
     ['', 'Overview', 'Overview for sprint 8'],
     ['board', 'Board', 'Board for sprint 8'],
     ['live', 'Live', 'Stream for sprint 8'],
+    ['conversation', 'Conversation', /Conversation of company \d+ for sprint 8/],
     ['analytics', 'Analytics', 'Analytics for sprint 8'],
     ['ANALYTICS', 'Analytics', 'Analytics for sprint 8'],
-  ])('selects the %s tab from the URL', async (tab, label, content) => {
+  ] as [string, string, string | RegExp][])('selects the %s tab from the URL', async (tab, label, content) => {
     vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
     setup('8', tab)
     expect(await screen.findByText(content)).toBeInTheDocument()
     const tabs = screen.getByRole('tablist', { name: 'Sprint views' })
-    expect(within(tabs).getAllByRole('tab').map(item => item.textContent)).toEqual(['Overview', 'Board', 'Live', 'Analytics'])
+    expect(within(tabs).getAllByRole('tab').map(item => item.textContent)).toEqual(['Overview', 'Board', 'Live', 'Conversation', 'Analytics'])
     const selected = within(tabs).getAllByRole('tab').filter(item => item.getAttribute('aria-selected') === 'true')
     expect(selected).toHaveLength(1)
     expect(selected[0]).toHaveTextContent(label)

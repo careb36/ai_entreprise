@@ -8,6 +8,7 @@ imported, so this ``__init__`` must be imported before
 ``database.create_db_and_tables()`` is called.
 """
 
+from .agent_message import AgentMessage
 from .agent_run import AgentRun, AgentRunApproval, Verification
 from .audit import AuditLog
 from .company import (
@@ -26,6 +27,7 @@ from .support import BugReport
 
 __all__ = [
     "Agent",
+    "AgentMessage",
     "AgentRun",
     "AgentRunApproval",
     "AssistantRuntimeState",

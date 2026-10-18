@@ -13,6 +13,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from models.agent_message import AgentMessage
 from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
@@ -328,3 +329,42 @@ def test_served_model_is_recorded_on_the_agent_run(llm, db, tmp_path, monkeypatc
         select(AgentRun).where(AgentRun.external_ref == f"task-{item.id}")
     ).first()
     assert run.model == "qwen3.6-flash"
+
+
+# ---------------------------------------------------------------------------
+# The conversation: the developer asks the Architect, then hands over to QA
+# ---------------------------------------------------------------------------
+
+
+def test_task_execution_records_the_conversation(llm, db, monkeypatch):
+    llm.response = {
+        "choices": [{"message": {"content": "A thorough written analysis. " * 40}}],
+    }
+    company, sprint, item = _board(db, role="Developer", agent_model="")
+    db.add(Agent(company_id=company.id, name="Ada", role="Architect", model=""))
+    db.commit()
+    nats = _task_assign_handler(monkeypatch)
+    monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", True)
+    monkeypatch.setattr(task_worker, "should_consult_architect", lambda *a, **k: True)
+
+    asyncio.run(
+        nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})
+    )
+
+    db.expire_all()
+    messages = db.exec(
+        select(AgentMessage)
+        .where(AgentMessage.backlog_item_id == item.id)
+        .order_by(AgentMessage.id)
+    ).all()
+    assert [(m.from_role, m.to_role, m.kind) for m in messages] == [
+        ("Developer", "Architect", "question"),
+        ("Architect", "Developer", "answer"),
+        ("Developer", "QA", "handoff"),
+    ]
+    assert 'Before I implement "Implement login"' in messages[0].body
+    assert (
+        messages[2].body
+        == 'Delivered "Implement login" for review (no files declared).'
+    )
+    assert {m.sprint_id for m in messages} == {sprint.id}
