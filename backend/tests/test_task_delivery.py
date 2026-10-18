@@ -451,3 +451,35 @@ def test_unreported_served_model_is_left_empty_not_defaulted(db, tmp_path, monke
 
     run, _verification, _comments = _latest(db, item["id"])
     assert run.model is None
+
+
+def test_new_company_records_its_project_so_agents_write_there(
+    db, monkeypatch, tmp_path
+):
+    from services.company_service import CompanyService
+
+    monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
+    result = CompanyService(db).init_company(
+        company_name="Project Corp",
+        agents=[{"name": "Dev Ana", "role": "Developer"}],
+        project_path=f"  {tmp_path}  ",
+        detected_stack={"language": "Python"},
+    )
+    db.commit()
+
+    company_id = result["company_id"]
+    assert task_worker._resolve_workspace_root(company_id) == str(tmp_path)
+    discovery = db.exec(
+        select(ProjectDiscovery).where(ProjectDiscovery.company_id == company_id)
+    ).one()
+    assert json.loads(discovery.detected_stack) == {"language": "Python"}
+
+
+def test_company_without_a_project_uses_the_fallback_root(db, monkeypatch):
+    from services.company_service import CompanyService
+
+    monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
+    result = CompanyService(db).init_company(company_name="No project Corp", agents=[])
+    db.commit()
+
+    assert task_worker._resolve_workspace_root(result["company_id"]) == "/workspace"

@@ -7,6 +7,7 @@ Responsibilities:
 - Bridge Postgres multi-tenant data to the Neo4j Temporal Knowledge Graph.
 """
 
+import json
 from datetime import date
 from typing import Any
 from uuid import uuid4
@@ -23,6 +24,7 @@ from models import (
     CompanyMember,
     OutboxEvent,
     ProjectCredential,
+    ProjectDiscovery,
     Sprint,
 )
 from sqlmodel import Session, func, select
@@ -72,6 +74,21 @@ class CompanyService:
             self.session.add(
                 CompanyMember(
                     company_id=company.id, user_id=owner_user_id, human_role="Owner"
+                )
+            )
+
+        # The project chosen in "New company" is where this company's agents
+        # write their files.  Discovery runs before the company exists, so it
+        # cannot record it; without this row agent files fell back to
+        # AGENT_WORKSPACE_ROOT (this repository).
+        if project_path and project_path.strip():
+            self.session.add(
+                ProjectDiscovery(
+                    company_id=company.id,
+                    project_path=project_path.strip(),
+                    detected_stack=json.dumps(detected_stack)
+                    if detected_stack
+                    else None,
                 )
             )
 
