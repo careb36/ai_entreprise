@@ -11,7 +11,7 @@ describe('memory search cache', () => {
   })
 
   it('fetches the same query separately for different companies', async () => {
-    const searchMemory = vi.spyOn(api, 'searchMemory').mockResolvedValue([])
+    const searchMemory = vi.spyOn(api, 'searchMemory').mockResolvedValue({ results: [] })
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     })
@@ -27,8 +27,8 @@ describe('memory search cache', () => {
     act(() => rerender({ companyId: 2 }))
     await waitFor(() => expect(searchMemory).toHaveBeenCalledTimes(2))
 
-    expect(searchMemory).toHaveBeenNthCalledWith(1, 'auth', 1)
-    expect(searchMemory).toHaveBeenNthCalledWith(2, 'auth', 2)
+    expect(searchMemory).toHaveBeenNthCalledWith(1, 'auth', { companyId: 1, limit: 10 })
+    expect(searchMemory).toHaveBeenNthCalledWith(2, 'auth', { companyId: 2, limit: 10 })
     queryClient.clear()
   })
 })

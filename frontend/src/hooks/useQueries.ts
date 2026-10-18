@@ -262,11 +262,18 @@ export function useGenerate() {
   })
 }
 
-export function useSearchMemory(query: string, companyId?: number) {
+export function useSearchMemory(query: string, companyId: number | null, limit = 10) {
   return useQuery({
-    queryKey: QUERY_KEYS.memory(companyId ?? null, query),
-    queryFn: () => api.searchMemory(query, companyId),
-    enabled: query.length > 2,
+    queryKey: [...QUERY_KEYS.memory(companyId, query), limit],
+    queryFn: () => api.searchMemory(query, { companyId, limit }),
+    enabled: query.trim().length > 0,
+  })
+}
+
+export function useStoreMemory() {
+  return useMutation({
+    mutationFn: ({ content, companyId, metadata }: { content: string; companyId: number | null; metadata?: Record<string, unknown> }) =>
+      api.storeMemory(content, { companyId, metadata }),
   })
 }
 
@@ -332,6 +339,16 @@ export function useQuotaUsageHistory(companyId: number | null, days = 7) {
   })
 }
 
+
+export function useDispatchSprint() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: number) => api.dispatchSprint(sprintId),
+    onSuccess: (_data, sprintId) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
+    },
+  })
+}
 
 export function usePauseSprint() {
   const queryClient = useQueryClient()

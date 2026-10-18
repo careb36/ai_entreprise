@@ -140,6 +140,12 @@ export interface DiscoverTeamResponse {
   project?: WorkspaceInspection | null
 }
 
+export interface MemoryResult {
+  content: string
+  metadata: unknown
+  similarity: number
+}
+
 // ── Help desk ───────────────────────────────────────────────────────────────
 
 export interface SupportChatMessage {
@@ -596,6 +602,10 @@ export const api = {
   resumeSprint: (sprintId: number) =>
     api.post<{ status: string }>(`/v1/sprints/${sprintId}/resume`, {}),
 
+  /** Re-queues the sprint's todo items for the agents (Manager). 409 while paused. */
+  dispatchSprint: (sprintId: number) =>
+    api.post<{ dispatched: number; sprint_id?: number; message?: string }>(`/v1/sprints/${sprintId}/dispatch`, {}),
+
   login: (email: string, password: string) =>
     fetchApi<LoginResponse>('/v1/auth/login', {
       method: 'POST',
@@ -711,8 +721,29 @@ export const api = {
   generate: (data: { company_id: number; story: string; constraints?: string; interaction_id?: string }) =>
     api.post<any>('/v1/generate', data),
 
-  searchMemory: (query: string, companyId?: number) =>
-    api.get<any[]>('/v1/memory/search', { q: query, ...(companyId && { company_id: companyId }) }),
+  // Memory (pgvector + Neo4j). A 503 means the memory service is not connected.
+  searchMemory: (query: string, options: { limit?: number; companyId?: number | null } = {}) =>
+    fetchApi<{ results: MemoryResult[] }>('/v1/memory/search', {
+      method: 'GET',
+      params: {
+        query,
+        ...(options.limit ? { limit: options.limit } : {}),
+        ...(options.companyId != null ? { company_id: options.companyId } : {}),
+      },
+      retryServerErrors: false,
+    }),
+
+  /** Stores *content* with its embedding (Manager). The API takes the text as a query parameter. */
+  storeMemory: (content: string, options: { companyId?: number | null; metadata?: Record<string, unknown> } = {}) =>
+    fetchApi<{ status: string }>('/v1/memory/store', {
+      method: 'POST',
+      params: {
+        content,
+        ...(options.companyId != null ? { company_id: options.companyId } : {}),
+      },
+      body: JSON.stringify(options.metadata ?? {}),
+      retryServerErrors: false,
+    }),
 
   // Support
   // Help desk (`/v1/support/*`).

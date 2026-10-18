@@ -468,7 +468,12 @@
     "noSprintDesc": "Inicia un sprint para comenzar a trabajar",
     "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar",
     "pauseSprint": "Pausar",
-    "resumeSprint": "Reanudar"
+    "resumeSprint": "Reanudar",
+    "dispatchSprint": "Despachar pendientes",
+    "dispatchPausedHint": "Reanudá el sprint para despachar tareas",
+    "dispatched": "{{count}} tarea(s) enviadas a los agentes",
+    "nothingToDispatch": "No hay tareas pendientes para despachar",
+    "sprintActionFailed": "No se pudo completar la acción: {{message}}"
   },
   "taskDetails": {
     "invalidId": "ID de tarea no válido: {{taskId}}.",
@@ -890,7 +895,17 @@
     "noResults": "Sin resultados",
     "similarity": "Similitud",
     "error": "Búsqueda fallida",
-    "metadata": "metadatos"
+    "metadata": "metadatos",
+    "errorDetail": "Falló la búsqueda: {{message}}",
+    "resultCount": "{{count}} resultados",
+    "storeTitle": "Agregar a la memoria",
+    "storeHint": "Los agentes recuperan estas notas como contexto para las tareas de la empresa.",
+    "storeLabel": "Nota para recordar",
+    "storePlaceholder": "Una decisión, una convención o un dato que los agentes deberían conocer",
+    "store": "Guardar en memoria",
+    "storing": "Guardando…",
+    "stored": "Guardado en memoria",
+    "storeError": "No se pudo guardar: {{message}}"
   },
   "generate": {
     "title": "Generador de Código",

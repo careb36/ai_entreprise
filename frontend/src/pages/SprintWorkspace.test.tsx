@@ -200,6 +200,34 @@ describe('workspace sprint validation', () => {
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
   })
 
+  it('dispatches the pending tasks and reports how many went out', async () => {
+    const dispatch = vi.spyOn(api, 'dispatchSprint').mockResolvedValue({ dispatched: 3, sprint_id: 8 })
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
+    setup('8', 'board')
+    fireEvent.click(await screen.findByRole('button', { name: 'Dispatch pending' }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith(8))
+  })
+
+  it('shows a failed sprint action with its reason and retries it', async () => {
+    const dispatch = vi.spyOn(api, 'dispatchSprint')
+      .mockRejectedValueOnce(new ApiError(403, 'Forbidden', 'Requires Manager role'))
+      .mockResolvedValueOnce({ dispatched: 0, message: 'No todo items to dispatch' })
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue(board)
+    setup('8', 'board')
+    fireEvent.click(await screen.findByRole('button', { name: 'Dispatch pending' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Requires Manager role')
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('does not dispatch a paused sprint', async () => {
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValue({ ...board, sprint: { ...board.sprint, status: 'paused' } })
+    setup('8', 'board')
+    expect(await screen.findByRole('button', { name: 'Dispatch pending' })).toBeDisabled()
+  })
+
   it('offers Resume for a paused sprint', async () => {
     const resume = vi.spyOn(api, 'resumeSprint').mockResolvedValue({} as never)
     vi.spyOn(api, 'getSprintBoard').mockResolvedValue({ ...board, sprint: { ...board.sprint, status: 'paused' } })

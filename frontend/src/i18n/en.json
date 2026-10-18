@@ -468,7 +468,12 @@
     "noSprintDesc": "Start a sprint to begin working",
     "boardOpsHint": "Drag tasks to change status or reassign",
     "pauseSprint": "Pause",
-    "resumeSprint": "Resume"
+    "resumeSprint": "Resume",
+    "dispatchSprint": "Dispatch pending",
+    "dispatchPausedHint": "Resume the sprint to dispatch tasks",
+    "dispatched": "{{count}} task(s) sent to the agents",
+    "nothingToDispatch": "No pending tasks to dispatch",
+    "sprintActionFailed": "Could not complete the action: {{message}}"
   },
   "taskDetails": {
     "invalidId": "Invalid task ID: {{taskId}}.",
@@ -890,7 +895,17 @@
     "noResults": "No results found",
     "similarity": "Similarity",
     "error": "Search failed",
-    "metadata": "metadata"
+    "metadata": "metadata",
+    "errorDetail": "Search failed: {{message}}",
+    "resultCount": "{{count}} results",
+    "storeTitle": "Add to memory",
+    "storeHint": "Agents retrieve these notes as context for the company's tasks.",
+    "storeLabel": "Note to remember",
+    "storePlaceholder": "A decision, a convention or a fact the agents should know",
+    "store": "Save to memory",
+    "storing": "Saving…",
+    "stored": "Saved to memory",
+    "storeError": "Could not save: {{message}}"
   },
   "generate": {
     "title": "Code Generator",
