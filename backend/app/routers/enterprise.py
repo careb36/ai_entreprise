@@ -26,6 +26,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logging_config import logger
 from models import BusinessUnit, Sprint, User
 from schemas import (
+    AgentCreateRequest,
+    AgentPromptRequest,
+    AgentUpdateRequest,
     CompanyInitRequest,
     DiscoveryRequest,
     OrchestrationHealthResponse,
@@ -490,3 +493,78 @@ async def list_project_directories(
         if entry.is_dir() and not entry.name.startswith("."):
             dirs.append({"name": entry.name, "path": str(entry)})
     return {"directories": dirs, "root": projects_root}
+
+
+# ---------------------------------------------------------------------------
+# Agent management (rescued from develop)
+# ---------------------------------------------------------------------------
+
+_ROLE_RESPONSIBILITIES: dict[str, str] = {
+    "PO": "Define and prioritize the product backlog.",
+    "Architect": "Design the overall system architecture.",
+    "ScrumMaster": "Facilitate sprint ceremonies and remove impediments.",
+    "Dev": "Implement features according to acceptance criteria.",
+    "BackendDev": "Design and implement server-side logic, APIs, and databases.",
+    "FrontendDev": "Build responsive, accessible user interfaces.",
+    "FullstackDev": "Deliver features end-to-end across frontend and backend.",
+    "QA": "Design and execute test strategies.",
+    "DevOps": "Own CI/CD pipelines and infrastructure.",
+}
+
+
+def _build_template_prompt(role: str, seniority: str, specialty: str, persona: str) -> str:
+    responsibilities = _ROLE_RESPONSIBILITIES.get(role, f"Deliver high-quality work for the {role} discipline.")
+    return (
+        f"You are a {seniority} {role}. {responsibilities} "
+        f"Communication style: {persona or 'professional, precise, collaborative'}."
+    ).strip()
+
+
+@router.get("/agents", tags=["Enterprise"])
+async def list_agents(company_id: int, session: Session = Depends(get_session)):
+    """List all agents for a company."""
+    service = CompanyService(session)
+    try:
+        return {"agents": service.list_agents(company_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/agents", tags=["Enterprise"])
+async def create_agent(req: AgentCreateRequest, session: Session = Depends(get_session)):
+    """Create a new agent configuration."""
+    service = CompanyService(session)
+    try:
+        return service.create_agent(req.company_id, req.model_dump(exclude={"company_id"}))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.post("/agents/generate_prompt", tags=["Enterprise"])
+async def generate_agent_prompt(req: AgentPromptRequest):
+    """Auto-generate a system prompt for an agent."""
+    return {
+        "system_prompt": _build_template_prompt(req.role, req.seniority, req.specialty, req.persona),
+        "source": "template",
+    }
+
+
+@router.patch("/agents/{agent_id}", tags=["Enterprise"])
+async def update_agent(agent_id: int, req: AgentUpdateRequest, session: Session = Depends(get_session)):
+    """Update an existing agent configuration."""
+    service = CompanyService(session)
+    try:
+        return service.update_agent(agent_id, req.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        status = 404 if "not found" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+
+
+@router.delete("/agents/{agent_id}", tags=["Enterprise"])
+async def delete_agent(agent_id: int, session: Session = Depends(get_session)):
+    """Delete an existing agent configuration."""
+    service = CompanyService(session)
+    try:
+        return service.delete_agent(agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))

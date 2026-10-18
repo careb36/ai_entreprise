@@ -14,7 +14,9 @@ Naming convention:
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Request schemas (Pydantic — not persisted directly, used for API validation)
@@ -247,3 +249,36 @@ class OrchestrationHealthResponse(BaseModel):
     anchor_date: str  # ISO-8601 date of the Batch-1 anchor
     weeks: list[OrchestrationHealthWeek]
     summary: OrchestrationHealthSummaries
+
+
+class AgentCreateRequest(BaseModel):
+    """Payload for POST /v1/agents — create an agent for a company."""
+    company_id: int
+    name: str = ""
+    role: str
+    persona: Optional[str] = None
+    seniority: str = "Senior"
+    specialty: str = ""
+    model: str = ""
+    system_prompt: Optional[str] = None
+    token_budget: int = Field(default=500000, ge=0)
+
+
+class AgentUpdateRequest(BaseModel):
+    """Payload for PATCH /v1/agents/{id} — partial agent update."""
+    name: Optional[str] = None
+    role: Optional[str] = None
+    persona: Optional[str] = None
+    seniority: Optional[str] = None
+    specialty: Optional[str] = None
+    model: Optional[str] = None
+    system_prompt: Optional[str] = None
+    token_budget: Optional[int] = Field(default=None, ge=0)
+
+
+class AgentPromptRequest(BaseModel):
+    """Payload for POST /v1/agents/generate_prompt — auto-generate a system prompt."""
+    role: str
+    seniority: str = "Senior"
+    specialty: str = ""
+    persona: str = ""

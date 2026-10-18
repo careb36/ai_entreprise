@@ -258,3 +258,168 @@ class CompanyService:
             "tasks_status": status_counts,
             "ai_executive_summary": ai_summary,
         }
+
+
+    def list_agents(self, company_id: int) -> list[dict[str, Any]]:
+        """Return all configured agents for a company, with activity stats inlined."""
+        company = self.session.get(Company, company_id)
+        if not company:
+            raise ValueError(f"Company {company_id} not found")
+
+        agents = self.session.exec(
+            select(Agent)
+            .where(Agent.company_id == company_id)
+            .order_by(Agent.role, Agent.name, Agent.id)
+        ).all()
+
+        activity = self._load_agent_activity(company_id)
+        return [self._serialize_agent(agent, activity=activity) for agent in agents]
+
+    def _load_agent_activity(self, company_id: int) -> dict[str, dict[str, Any]]:
+        """Aggregate audit_log into per-agent activity stats for the company."""
+        sprint_ids = [
+            sid for (sid,) in self.session.exec(
+                select(Sprint.id).where(Sprint.company_id == company_id)
+            ).all()
+        ]
+        if not sprint_ids:
+            return {}
+
+        rows = self.session.exec(
+            select(
+                AuditLog.agent_id,
+                func.count(AuditLog.id),
+                func.max(AuditLog.created_at),
+                func.coalesce(func.sum(AuditLog.cost_usd), 0.0),
+                func.coalesce(func.sum(AuditLog.cost_tokens), 0),
+            )
+            .where(AuditLog.sprint_id.in_(sprint_ids))
+            .where(AuditLog.action == "task.execute")
+            .group_by(AuditLog.agent_id)
+        ).all()
+
+        activity: dict[str, dict[str, Any]] = {}
+        for agent_id, total, last_at, cost_usd, total_tokens in rows:
+            if agent_id is None:
+                continue
+            total_int = int(total or 0)
+            tokens_int = int(total_tokens or 0)
+            avg = int(tokens_int / total_int) if total_int else 0
+            activity[str(agent_id)] = {
+                "total_tasks": total_int,
+                "last_run_at": last_at.isoformat() if last_at else None,
+                "total_cost_usd": float(cost_usd) if cost_usd is not None else 0.0,
+                "total_tokens": tokens_int,
+                "avg_tokens": avg,
+                "last_model": None,
+            }
+
+        recent_rows = self.session.exec(
+            select(AuditLog.agent_id, AuditLog.model)
+            .where(AuditLog.sprint_id.in_(sprint_ids))
+            .where(AuditLog.action == "task.execute")
+            .order_by(AuditLog.created_at.desc())
+            .limit(500)
+        ).all()
+        seen: set[str] = set()
+        for agent_id, model in recent_rows:
+            if agent_id is None:
+                continue
+            key = str(agent_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            if key in activity:
+                activity[key]["last_model"] = model
+
+        return activity
+
+    def create_agent(self, company_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create a new agent under a company."""
+        company = self.session.get(Company, company_id)
+        if not company:
+            raise ValueError(f"Company {company_id} not found")
+
+        role = str(payload.get("role") or "").strip()
+        if not role:
+            raise ValueError("role is required")
+
+        agent = Agent(
+            company_id=company_id,
+            name=str(payload.get("name") or "").strip(),
+            role=role,
+            persona=payload.get("persona"),
+            seniority=str(payload.get("seniority") or "Senior").strip() or "Senior",
+            specialty=str(payload.get("specialty") or "").strip(),
+            model=str(payload.get("model") or "").strip(),
+            system_prompt=payload.get("system_prompt"),
+            token_budget=int(payload.get("token_budget") or 500000),
+        )
+        self.session.add(agent)
+        self.session.commit()
+        self.session.refresh(agent)
+        return self._serialize_agent(agent)
+
+    def update_agent(self, agent_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        """Update an existing agent configuration."""
+        agent = self.session.get(Agent, agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+
+        for field in ("name", "role", "persona", "seniority", "specialty", "model", "system_prompt", "token_budget"):
+            if field not in payload:
+                continue
+            value = payload[field]
+            if field == "token_budget" and value is not None:
+                setattr(agent, field, int(value))
+            elif field in {"name", "role", "seniority", "specialty", "model"} and value is not None:
+                setattr(agent, field, str(value).strip())
+            else:
+                setattr(agent, field, value)
+
+        if not (agent.role or "").strip():
+            raise ValueError("role cannot be empty")
+
+        self.session.add(agent)
+        self.session.commit()
+        self.session.refresh(agent)
+        return self._serialize_agent(agent)
+
+    def delete_agent(self, agent_id: int) -> dict[str, Any]:
+        """Delete an agent configuration."""
+        agent = self.session.get(Agent, agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+        deleted = self._serialize_agent(agent)
+        self.session.delete(agent)
+        self.session.commit()
+        return {"status": "deleted", "agent": deleted}
+
+    @staticmethod
+    def _serialize_agent(
+        agent: Agent,
+        activity: dict[str, dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        stats = None
+        if activity:
+            stats = activity.get(agent.name) or activity.get(agent.role or "")
+        return {
+            "id": agent.id,
+            "company_id": agent.company_id,
+            "name": agent.name,
+            "role": agent.role,
+            "persona": agent.persona,
+            "seniority": agent.seniority,
+            "specialty": agent.specialty,
+            "model": agent.model,
+            "system_prompt": agent.system_prompt,
+            "token_budget": agent.token_budget,
+            "activity": stats or {
+                "total_tasks": 0,
+                "last_run_at": None,
+                "total_cost_usd": 0.0,
+                "total_tokens": 0,
+                "avg_tokens": 0,
+                "last_model": None,
+            },
+        }
