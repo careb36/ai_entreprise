@@ -303,6 +303,7 @@ async def get_sprint_board(
     require_company_role(session, user, sprint.company_id, "Viewer")
     sprint_data = {
         "id": sprint.id,
+        "company_id": sprint.company_id,
         "sprint_name": sprint.sprint_name,
         "start_date": sprint.start_date,
         "scope_size": sprint.scope_size,
