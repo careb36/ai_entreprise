@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -436,6 +436,14 @@ export default function CompanyNew() {
 
   // Global
   const loading = initCompanyMutation.isPending
+  useEffect(() => {
+    if (!loading) return
+    const timer = setTimeout(() => {
+      console.warn('Init company timeout - resetting')
+      initCompanyMutation.reset()
+    }, 30000)
+    return () => clearTimeout(timer)
+  }, [loading])
   const mutationError = (discoverTeamMutation.error as any)?.message || (initCompanyMutation.error as any)?.message || null
 
   // ── Discover ──────────────────────────────────────────────────────────────
