@@ -10,7 +10,7 @@
 import React, { useEffect } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { MonitorPlay, Pause, Play, Radio } from 'lucide-react'
+import { Loader2, MonitorPlay, Pause, Play, Radio, Send } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
 import GlassRoom from '../components/GlassRoom'
@@ -18,8 +18,9 @@ import KanbanBoard from '../components/KanbanBoard'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import SprintOverview from './Dashboard'
-import { usePauseSprint, useResumeSprint, useSprintBoard } from '../hooks/useQueries'
-import { ApiError } from '../services/api'
+import { useDispatchSprint, usePauseSprint, useResumeSprint, useSprintBoard } from '../hooks/useQueries'
+import { useToast } from '../store/toastStore'
+import { ApiError, errorDetail } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
 
 export const SPRINT_TABS = ['overview', 'board', 'live', 'analytics'] as const
@@ -118,21 +119,68 @@ function BoardPanel({ sprintId }: { sprintId: number }) {
   )
 }
 
-function PauseResume({ sprintId, status }: { sprintId: number; status: string }) {
+type SprintAction = 'dispatch' | 'pause' | 'resume'
+
+/** Board-tab controls: dispatch pending tasks, pause and resume the sprint. */
+function SprintControls({ sprintId, status }: { sprintId: number; status: string }) {
   const { t } = useTranslation()
+  const toast = useToast()
+  const dispatchMutation = useDispatchSprint()
   const pauseMutation = usePauseSprint()
   const resumeMutation = useResumeSprint()
-  const busy = pauseMutation.isPending || resumeMutation.isPending
-  return status === 'paused' ? (
-    <button type="button" disabled={busy} onClick={() => resumeMutation.mutate(sprintId)}
-      className="btn-ghost btn-sm flex items-center gap-1.5 text-emerald-400">
-      <Play size={13} /> {t('workspace.resumeSprint', { defaultValue: 'Resume' })}
-    </button>
-  ) : (
-    <button type="button" disabled={busy} onClick={() => pauseMutation.mutate(sprintId)}
-      className="btn-ghost btn-sm flex items-center gap-1.5 text-yellow-400">
-      <Pause size={13} /> {t('workspace.pauseSprint', { defaultValue: 'Pause' })}
-    </button>
+  const [failed, setFailed] = React.useState<{ action: SprintAction; message: string } | null>(null)
+  const busy = dispatchMutation.isPending || pauseMutation.isPending || resumeMutation.isPending
+  const paused = status === 'paused'
+
+  const run = (action: SprintAction) => {
+    setFailed(null)
+    const onError = (error: unknown) => setFailed({ action, message: errorDetail(error) })
+    if (action === 'dispatch') {
+      dispatchMutation.mutate(sprintId, {
+        onSuccess: result => toast.success(result.dispatched > 0
+          ? t('workspace.dispatched', { count: result.dispatched, defaultValue: '{{count}} task(s) sent to the agents' })
+          : t('workspace.nothingToDispatch', { defaultValue: 'No pending tasks to dispatch' })),
+        onError,
+      })
+    } else if (action === 'pause') {
+      pauseMutation.mutate(sprintId, { onError })
+    } else {
+      resumeMutation.mutate(sprintId, { onError })
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-1">
+        <button type="button" disabled={busy || paused} onClick={() => run('dispatch')}
+          title={paused ? t('workspace.dispatchPausedHint', { defaultValue: 'Resume the sprint to dispatch tasks' }) : undefined}
+          className="btn-ghost btn-sm flex items-center gap-1.5 text-brand-300">
+          {dispatchMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+          {t('workspace.dispatchSprint', { defaultValue: 'Dispatch pending' })}
+        </button>
+        {paused ? (
+          <button type="button" disabled={busy} onClick={() => run('resume')}
+            className="btn-ghost btn-sm flex items-center gap-1.5 text-emerald-400">
+            {resumeMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+            {t('workspace.resumeSprint', { defaultValue: 'Resume' })}
+          </button>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => run('pause')}
+            className="btn-ghost btn-sm flex items-center gap-1.5 text-yellow-400">
+            {pauseMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Pause size={13} />}
+            {t('workspace.pauseSprint', { defaultValue: 'Pause' })}
+          </button>
+        )}
+      </div>
+      {failed && (
+        <div role="alert" className="flex items-center gap-2 text-xs text-red-300">
+          <span>{t('workspace.sprintActionFailed', { message: failed.message, defaultValue: 'Could not complete the action: {{message}}' })}</span>
+          <button type="button" onClick={() => run(failed.action)} className="underline">
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -218,7 +266,7 @@ export const SprintWorkspace: React.FC = () => {
           <SprintTabs sprintId={sprintId} selected={tab} />
           {tab === 'board' && board && (
             <div className="ml-auto pb-1">
-              <PauseResume sprintId={sprintId} status={board.sprint.status} />
+              <SprintControls sprintId={sprintId} status={board.sprint.status} />
             </div>
           )}
         </div>

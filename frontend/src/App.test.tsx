@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import i18n from 'i18next'
 import { createInstance } from 'i18next'
 import { I18nextProvider, initReactI18next } from 'react-i18next'
-import App, { LanguageSwitcher } from './App'
+import App, { LanguageSwitcher, sectionForPath } from './App'
 import en from './i18n/en.json'
 import { STORAGE_KEY_LANG } from './lib/constants'
 import { api, ApiError, setOnUnauthorized } from './services/api'
@@ -294,9 +294,25 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Members', 'GitHub', 'Help desk', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['Owner', ['Members', 'GitHub', 'Help desk']],
+      ['Manager', ['GitHub', 'Help desk']],
+      ['Viewer', []],
+    ] as const)('offers the company admin pages a %s can use', (role, expected) => {
+      authenticate()
+      useAuthStore.setState({ memberships: [{ company_id: 1, human_role: role }] })
+      render(<App />)
+      fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
+      const admin = within(screen.getByRole('menu')).getAllByRole('menuitem')
+        .filter(item => ['Members', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
+      expect(admin.map(item => [item.textContent, item.getAttribute('href')])).toEqual(
+        expected.map(name => [name, { Members: '/company/members', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
+      )
     })
 
     it('uses the company placeholder when its name is unavailable', () => {
@@ -493,4 +509,16 @@ describe('app navigation', () => {
     })
   })
 
+})
+
+describe('sectionForPath', () => {
+  it.each([
+    ['/lineage', 'evidence'],
+    ['/company/members', 'company'],
+    ['/company/github', 'company'],
+    ['/support', 'company'],
+    ['/supported', null],
+  ])('puts %s under %s', (path, section) => {
+    expect(sectionForPath(path)).toBe(section)
+  })
 })

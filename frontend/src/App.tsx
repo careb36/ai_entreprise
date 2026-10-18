@@ -22,6 +22,10 @@ import EvidenceDetail from './pages/EvidenceDetail'
 import Generate from './pages/Generate'
 import NotFound from './pages/NotFound'
 import TaskDetails from './pages/TaskDetails'
+import CompanyMembers from './pages/CompanyMembers'
+import GitHubIntegration from './pages/GitHubIntegration'
+import HelpDesk from './pages/HelpDesk'
+import Lineage from './pages/Lineage'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
@@ -29,7 +33,7 @@ import {
   Globe, Database, Code2, Menu, X, Building2, ChevronDown
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
-import { useCapabilities } from './hooks/useQueries'
+import { useCapabilities, useCurrentRole } from './hooks/useQueries'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -67,12 +71,12 @@ type Section = 'evidence' | 'governance' | 'sprints' | 'generate' | 'memory' | '
 export function sectionForPath(pathname: string): Section | null {
   const path = pathname.toLowerCase()
   const under = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
-  if (under('/evidence')) return 'evidence'
+  if (under('/evidence') || under('/lineage')) return 'evidence'
   if (under('/governance')) return 'governance'
   if (under('/sprints') || under('/task')) return 'sprints'
   if (under('/generate')) return 'generate'
   if (under('/memory')) return 'memory'
-  if (under('/agents') || under('/company') || under('/companies')) return 'company'
+  if (under('/agents') || under('/company') || under('/companies') || under('/support')) return 'company'
   return null
 }
 
@@ -141,6 +145,8 @@ function NavBar() {
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
   const companyName = useAppStore(state => state.companyName)
   const companyId = useAppStore(state => state.companyId)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
@@ -248,6 +254,9 @@ function NavBar() {
                   <Link role="menuitem" to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
                   <Link role="menuitem" to="/agents" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.agents', { defaultValue: 'Agents' })}</Link>
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
+                  {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
+                  {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
+                  {canManage && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
                   <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
                     logout()
                     navigate('/login', { replace: true })
@@ -345,6 +354,9 @@ function AppContent() {
               <Route path="/companies/new" element={<CompanyNew />} />
               <Route path="/companies/select" element={<CompanySelect />} />
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
+              <Route path="/company/members" element={<CompanyMembers />} />
+              <Route path="/company/github" element={<GitHubIntegration />} />
+              <Route path="/support" element={<HelpDesk />} />
               <Route path="/agents" element={<AgentSettings />} />
               <Route
                 path="/governance"
@@ -352,6 +364,7 @@ function AppContent() {
               />
               <Route path="/evidence" element={<Evidence />} />
               <Route path="/evidence/:runId" element={<EvidenceDetail />} />
+              <Route path="/lineage" element={<Lineage />} />
               <Route path="/memory" element={<MemorySearch />} />
               <Route path="/generate" element={<Generate />} />
               <Route path="/task/:taskId" element={<TaskDetails />} />

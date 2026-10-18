@@ -64,6 +64,9 @@ export default function ProtectedRoute() {
     return <Navigate to="/companies/new" replace />
   }
 
+  // Intentional (#61): with a single membership there is nothing to choose,
+  // so the selector sends the user home. The "Switch company" entry in the
+  // company menu only appears with two or more memberships.
   if (memberships.length === 1 && location.pathname === '/companies/select') {
     return <Navigate to="/" replace />
   }

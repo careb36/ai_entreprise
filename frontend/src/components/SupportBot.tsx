@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api } from '../services/api'
+import { api, type SupportTicket } from '../services/api'
 import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -8,14 +8,7 @@ import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircl
 type Message  = { id: number; role: 'bot' | 'user'; text: string }
 type View     = 'chat' | 'bug-form' | 'my-tickets' | 'ticket-detail'
 
-type TicketSummary = {
-  ticket_num: string
-  title: string
-  severity: string
-  status: string
-  created_at: string
-  updated_at: string
-}
+type TicketSummary = SupportTicket
 
 // ── Status config (Linear-style) ──────────────────────────────────────────────
 
@@ -26,6 +19,8 @@ const STATUS_CONFIG: Record<string, { label_key: string; color: string; icon: Re
   resolved:    { label_key: 'support.status.resolved',    color: 'bg-green-100 text-green-700',  icon: <CheckCircle2 size={12} className="text-green-500" /> },
   closed:      { label_key: 'support.status.closed',      color: 'bg-gray-100 text-gray-500',    icon: <CheckCircle2 size={12} className="text-gray-400" /> },
 }
+
+const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const
 
 const SEVERITY_COLOR: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -116,13 +111,14 @@ export const SupportBot: React.FC = () => {
     addMsg('user', text)
     setIsSending(true)
     try {
-      const res = await api.post<any>('/v1/support/chat', {
-        message: text,
-        history: messages.slice(-10).map(m => ({
-          role: m.role === 'bot' ? 'assistant' : 'user',
+      // The backend reads the whole conversation, oldest first, as `messages`.
+      const res = await api.supportChat([
+        ...messages.slice(-10).map(m => ({
+          role: m.role === 'bot' ? 'assistant' as const : 'user' as const,
           content: m.text,
         })),
-      })
+        { role: 'user', content: text },
+      ])
       addMsg('bot', res?.reply || t('support.noResponse'))
     } catch {
       addMsg('bot', t('support.chatUnavailable'))
@@ -145,7 +141,8 @@ export const SupportBot: React.FC = () => {
 
   // Relative date formatter
   const { i18n } = useTranslation()
-  function relativeDate(iso: string): string {
+  function relativeDate(iso: string | null): string {
+    if (!iso) return ''
     try {
       const diff = Date.now() - new Date(iso).getTime()
       const mins = Math.floor(diff / 60000)
@@ -163,7 +160,7 @@ export const SupportBot: React.FC = () => {
     if (!title.trim() || !description.trim()) return
     setSubmitting(true)
     try {
-      const res = await api.post<any>('/v1/support/report_bug', {
+      const res = await api.reportBug({
         title: title.trim(),
         description: description.trim(),
         severity,
@@ -202,7 +199,7 @@ export const SupportBot: React.FC = () => {
     if (!q) return
     setLoadingTickets(true)
     try {
-      const res = await api.get<any>('/v1/support/tickets', { reporter_email: q })
+      const res = await api.listTickets({ reporter_email: q })
       setTickets(res.tickets || [])
     } catch {
       setTickets([])
@@ -213,7 +210,7 @@ export const SupportBot: React.FC = () => {
 
   const loadTicketDetail = async (num: string) => {
     try {
-      const res = await api.get<any>(`/v1/support/tickets/${num}`)
+      const res = await api.getTicket(num)
       setSelectedTicket(res)
       setView('ticket-detail')
     } catch { /* ignore */ }
@@ -339,7 +336,7 @@ export const SupportBot: React.FC = () => {
                     <span className="text-xs font-semibold text-gray-600">{t('support.severity')}</span>
                     <select value={severity} onChange={e => setSeverity(e.target.value as any)}
                       className="mt-1 w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
-                      {['critical','high','medium','low'].map(s => (
+                      {SEVERITIES.map(s => (
                         <option key={s} value={s}>{t(`support.${s}`)}</option>
                       ))}
                     </select>
@@ -349,7 +346,7 @@ export const SupportBot: React.FC = () => {
                 <label className="block">
                   <span className="text-xs font-semibold text-gray-600">{t('support.emailToTrack')}</span>
                   <input type="email" value={reporterEmail} onChange={e => setReporterEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={t('support.emailPlaceholder', { defaultValue: 'you@company.com' })}
                     className="mt-1 w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none" />
                   <p className="text-[10px] text-gray-400 mt-0.5">{t('support.emailHint')}</p>
                 </label>

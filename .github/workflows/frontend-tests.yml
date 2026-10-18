@@ -29,7 +29,7 @@ jobs:
 
       - name: Lint with eslint
         working-directory: ./frontend
-        run: npx eslint src --ext .ts,.tsx || true
+        run: npm run lint
 
       - name: Format check with prettier
         working-directory: ./frontend

@@ -219,11 +219,18 @@ the `poetry check --lock` step.
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
 `frontend/` or the workflow itself, and on pushes to `main` and `develop`.
-That job runs `npm ci`, `npx tsc --noEmit`, `npm run test:run`, and
-`npm run build` from the `frontend/` directory, using
+That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
+and `npm run build` from the `frontend/` directory, using
 `frontend/package-lock.json` as the cache key.
 `.github/workflows/frontend-tests.yml` runs the same steps on the same
-triggers, plus eslint and prettier, which report but do not fail the job.
+triggers, plus prettier, which reports but does not fail the job.
+
+`npm run lint` (`frontend/eslint.config.mjs`) enforces the i18n rule below with
+`eslint-plugin-i18next`: any literal text in JSX, or in a `title`, `alt`,
+`placeholder`, `aria-label` or `label` attribute, fails the build. Numbers,
+punctuation, emoji, ALL_CAPS codes, hex colours, Tailwind class lists and the
+brand name are allowed; keep value lists (enums, time zones) in module
+constants rather than inline in JSX.
 
 The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 `frontend/` with `npm run test` for watch mode during development, or

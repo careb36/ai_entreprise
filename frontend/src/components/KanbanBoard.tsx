@@ -142,17 +142,17 @@ function ItemCard({
         {qaMetrics.reworks > 0 && (
           <span
             className={`badge border ${metricBadgeClass(qaMetrics.reworks, QA_REWORK_LIMIT)}`}
-            title={`QA reworks: ${qaMetrics.reworks}/${QA_REWORK_LIMIT}`}
+            title={t('kanban.qaReworksTitle', { count: qaMetrics.reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA reworks: {{count}}/{{limit}}' })}
           >
-            QA rework {qaMetrics.reworks}/{QA_REWORK_LIMIT}
+            {t('kanban.qaReworks', { count: qaMetrics.reworks, limit: QA_REWORK_LIMIT, defaultValue: 'QA rework {{count}}/{{limit}}' })}
           </span>
         )}
         {qaMetrics.failures > 0 && (
           <span
             className={`badge border ${metricBadgeClass(qaMetrics.failures, QA_FAILURE_LIMIT)}`}
-            title={`QA failures: ${qaMetrics.failures}/${QA_FAILURE_LIMIT}`}
+            title={t('kanban.qaFailuresTitle', { count: qaMetrics.failures, limit: QA_FAILURE_LIMIT, defaultValue: 'QA failures: {{count}}/{{limit}}' })}
           >
-            QA fail {qaMetrics.failures}/{QA_FAILURE_LIMIT}
+            {t('kanban.qaFailures', { count: qaMetrics.failures, limit: QA_FAILURE_LIMIT, defaultValue: 'QA fail {{count}}/{{limit}}' })}
           </span>
         )}
         {item.comments?.length > 0 && (

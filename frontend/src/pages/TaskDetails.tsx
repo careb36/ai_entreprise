@@ -5,11 +5,12 @@ import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck } from 'luc
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Verdict } from '../components/Verdict'
 import { useAppStore } from '../store/useAppStore'
-import { useAgentRuns, useSprintBoard } from '../hooks/useQueries'
+import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueries'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
+import { lineagePath } from './Lineage'
 
 const PRIORITY_STYLES: Record<BacklogItem['priority'], string> = {
   critical: 'bg-red-900/40 text-red-300 border-red-700/40',
@@ -42,6 +43,7 @@ function TaskEvidence({ companyId, taskId }: { companyId: number; taskId: number
     external_ref: taskExternalRef(taskId),
     limit: 1,
   })
+  const { data: capabilities } = useCapabilities()
   const run = data?.agent_runs[0]
   const files: unknown = run?.claims?.files
   const claimedFiles = Array.isArray(files)
@@ -84,7 +86,12 @@ function TaskEvidence({ companyId, taskId }: { companyId: number; taskId: number
             {claimedFiles.length > 0 ? (
               <ul className="space-y-0.5">
                 {claimedFiles.map(file => (
-                  <li key={file} className="font-mono text-xs text-gray-300 break-all">{file}</li>
+                  <li key={file} className="font-mono text-xs text-gray-300 break-all">
+                    {capabilities?.memory
+                      ? <Link to={lineagePath(file)} className="hover:text-brand-300 hover:underline"
+                          title={t('lineage.open', { defaultValue: 'See the decisions recorded on this file' })}>{file}</Link>
+                      : file}
+                  </li>
                 ))}
               </ul>
             ) : (

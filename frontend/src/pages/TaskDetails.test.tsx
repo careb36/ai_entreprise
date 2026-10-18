@@ -2,13 +2,14 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskDetails from './TaskDetails'
-import { useAgentRuns, useSprintBoard } from '../hooks/useQueries'
+import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 
-vi.mock('../hooks/useQueries', () => ({ useSprintBoard: vi.fn(), useAgentRuns: vi.fn() }))
+vi.mock('../hooks/useQueries', () => ({ useSprintBoard: vi.fn(), useAgentRuns: vi.fn(), useCapabilities: vi.fn() }))
 const boardQuery = vi.mocked(useSprintBoard)
 const runsQuery = vi.mocked(useAgentRuns)
+const capabilitiesQuery = vi.mocked(useCapabilities)
 
 function setup(path = '/task/12') {
   return render(<MemoryRouter initialEntries={[path]}><Routes>
@@ -21,6 +22,7 @@ describe('task detail errors', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useAppStore.setState({ activeSprintId: 7 })
+    capabilitiesQuery.mockReturnValue({ data: undefined } as never)
     boardQuery.mockReturnValue({ data: { columns: {} }, isLoading: false, isError: false } as never)
     runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
   })
@@ -123,6 +125,20 @@ describe('task delivery evidence', () => {
     vi.clearAllMocks()
     useAppStore.setState({ companyId: 42, activeSprintId: 9 })
     boardQuery.mockReturnValue(boardWithTask as never)
+    capabilitiesQuery.mockReturnValue({ data: { memory: false } } as never)
+  })
+
+  it('links each claimed file to its lineage when the knowledge graph is connected', () => {
+    capabilitiesQuery.mockReturnValue({ data: { memory: true } } as never)
+    runsQuery.mockReturnValue({
+      data: { agent_runs: [{ id: 31, version: 1, status: 'verified', claims: { files: ['src/a b.py'] } }] },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup('/sprints/9/tasks/12')
+
+    expect(within(evidenceSection()).getByRole('link', { name: 'src/a b.py' }))
+      .toHaveAttribute('href', '/lineage?file=src%2Fa+b.py')
   })
 
   function evidenceSection() {
@@ -152,6 +168,7 @@ describe('task delivery evidence', () => {
     expect(within(section).getByTestId('verdict-verified')).toHaveTextContent('Verified')
     expect(within(section).getByText('Version 3')).toBeInTheDocument()
     expect(within(section).getByText('backend/app/crypto.py')).toBeInTheDocument()
+    expect(within(section).queryByRole('link', { name: 'backend/app/crypto.py' })).not.toBeInTheDocument()
     expect(within(section).getByText('backend/tests/test_crypto.py')).toBeInTheDocument()
     expect(within(section).getByRole('link', { name: 'View evidence' })).toHaveAttribute('href', '/evidence/31')
     expect(within(section).queryByText('No evidence recorded yet.')).not.toBeInTheDocument()

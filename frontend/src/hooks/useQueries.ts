@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { useAuthStore } from '../store/useAuthStore'
 import {
   api,
   ApiError,
@@ -8,8 +9,11 @@ import {
   type AgentRunApprovalRequest,
   type AgentRunFilters,
   type BacklogItem,
+  type CompanyRole,
   type InitCompanyRequest,
   type ManagedAgent,
+  type TicketFilters,
+  type TicketUpdateRequest,
 } from '../services/api'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
@@ -23,7 +27,9 @@ export const QUERY_KEYS = {
   quotaHistory: (companyId: number, days: number) => ['enterprise', companyId, 'quota_history', days] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
   orchestrationHealth: (companyId: number, weeks: number) => ['orchestration_health', companyId, weeks] as const,
-  tickets: () => ['tickets'] as const,
+  tickets: (filters: TicketFilters) => ['tickets', filters] as const,
+  ticket: (num: string) => ['ticket', num] as const,
+  lineage: (companyId: number | null, file: string) => ['lineage', companyId, file] as const,
   memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
   agents: (companyId: number) => ['agents', companyId] as const,
@@ -154,7 +160,7 @@ export function useInitCompany() {
 export function useStartSprint() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => api.post<{ sprint_id: number }>('/v1/start_sprint', data),
+    mutationFn: api.startSprint,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sprint'] })
       queryClient.invalidateQueries({ queryKey: ['sprints'] })
@@ -262,41 +268,22 @@ export function useGenerate() {
   })
 }
 
-export function useSearchMemory(query: string, companyId?: number) {
+export function useSearchMemory(query: string, companyId: number | null, limit = 10) {
   return useQuery({
-    queryKey: QUERY_KEYS.memory(companyId ?? null, query),
-    queryFn: () => api.searchMemory(query, companyId),
-    enabled: query.length > 2,
+    queryKey: [...QUERY_KEYS.memory(companyId, query), limit],
+    queryFn: () => api.searchMemory(query, { companyId, limit }),
+    enabled: query.trim().length > 0,
+  })
+}
+
+export function useStoreMemory() {
+  return useMutation({
+    mutationFn: ({ content, companyId, metadata }: { content: string; companyId: number | null; metadata?: Record<string, unknown> }) =>
+      api.storeMemory(content, { companyId, metadata }),
   })
 }
 
 // ── Support ──────────────────────────────────────────────────────────────────
-
-export function useHealth() {
-  return useQuery({
-    queryKey: ['health'],
-    queryFn: api.health,
-    refetchInterval: query => isClientError(query.state.error) ? false : 30_000,
-  })
-}
-
-export function useTickets() {
-  return useQuery({
-    queryKey: QUERY_KEYS.tickets(),
-    queryFn: api.getTickets,
-  })
-}
-
-export function useReportBug() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: api.reportBug,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tickets() })
-    },
-  })
-}
-
 
 export function useAgents(companyId: number | null) {
   return useQuery({
@@ -359,6 +346,16 @@ export function useQuotaUsageHistory(companyId: number | null, days = 7) {
 }
 
 
+export function useDispatchSprint() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: number) => api.dispatchSprint(sprintId),
+    onSuccess: (_data, sprintId) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
+    },
+  })
+}
+
 export function usePauseSprint() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -377,4 +374,62 @@ export function useResumeSprint() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
     },
   })
+}
+
+// ── Help desk ───────────────────────────────────────────────────────────────
+
+export function useTickets(filters: TicketFilters) {
+  return useQuery({
+    queryKey: QUERY_KEYS.tickets(filters),
+    queryFn: () => api.listTickets(filters),
+  })
+}
+
+export function useTicket(ticketNum: string | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.ticket(ticketNum ?? ''),
+    queryFn: () => api.getTicket(ticketNum!),
+    enabled: !!ticketNum,
+  })
+}
+
+export function useUpdateTicket() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ticketNum, data }: { ticketNum: string; data: TicketUpdateRequest }) =>
+      api.updateTicket(ticketNum, data),
+    onSuccess: (_result, { ticketNum }) => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ticket(ticketNum) })
+    },
+  })
+}
+
+// ── Members, integrations, lineage ──────────────────────────────────────────
+
+export function useInviteMember() {
+  return useMutation({ mutationFn: api.inviteMember })
+}
+
+export function useCreateGitHubBinding() {
+  return useMutation({ mutationFn: api.createGitHubBinding })
+}
+
+export function useBackfillGitHub() {
+  return useMutation({ mutationFn: api.backfillGitHub })
+}
+
+export function useLineage(filePath: string, companyId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.lineage(companyId, filePath),
+    queryFn: () => api.getLineage(filePath, companyId),
+    enabled: filePath.trim().length > 0,
+  })
+}
+
+/** The signed-in user's role in the selected company, or null. */
+export function useCurrentRole(): CompanyRole | null {
+  const companyId = useAppStore(state => state.companyId)
+  const memberships = useAuthStore(state => state.memberships)
+  return memberships.find(m => m.company_id === companyId)?.human_role ?? null
 }

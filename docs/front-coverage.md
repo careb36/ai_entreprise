@@ -1,4 +1,4 @@
-# Cobertura del front sobre la API (fase 1)
+# Cobertura del front sobre la API
 
 Relevamiento hecho el 2026-10-18 sobre `main` en `93c24f5`. La especificación se
 generó con `app.openapi()` desde el código del backend de ese commit: **57
@@ -7,6 +7,11 @@ Support, GitHub y Workspace, más `/health`, `/health/deep` y `/metrics` sin
 etiqueta. El lado del front se relevó en `frontend/src` (sin tests): llamadas en
 `services/api.ts`, hooks en `hooks/useQueries.ts`, y qué pantalla montada en
 `App.tsx` usa cada hook.
+
+La tabla está actualizada al final del trabajo de alineación (PR #113): cada
+fila que cambió dice con qué pantalla quedó cubierta. El resto del documento
+conserva el relevamiento de la fase 1; el [resumen final](#resumen-final) está
+al pie.
 
 Estados:
 - **cubierto**: hay una pantalla montada que dispara la llamada;
@@ -18,13 +23,13 @@ Estados:
 
 | Método y path | `api.ts` | Hook | Pantalla (ruta) | Estado |
 |---|---|---|---|---|
-| GET `/health` | `health` | `useQuery` en `App.tsx` (`useHealth` solo en el `ControlPanel` sin montar) | `App.tsx`: indicador "Online" del encabezado | cubierto |
+| GET `/health` | `health` | `useQuery` en `App.tsx` | `App.tsx`: indicador "Online" del encabezado | cubierto |
 | GET `/health/deep` | — | — | — | sin cliente |
 | GET `/metrics` | — | — | — | n/a (Prometheus) |
 | POST `/v1/auth/login` | `login` | `useAuthStore.login` | `Login` (`/login`) | cubierto |
 | GET `/v1/auth/me` | `me` | `useAuthStore.loadMe` | `ProtectedRoute` (todas las rutas protegidas) | cubierto |
 | POST `/v1/auth/register` | `register` | — | `Register` (`/register`) | cubierto |
-| POST `/v1/company/invite` | — | — | — | sin cliente |
+| POST `/v1/company/invite` | `inviteMember` | `useInviteMember` | `CompanyMembers` (`/company/members`, Owner) | cubierto (nuevo) |
 | GET `/v1/agents` | `getAgents` | `useAgents` | `AgentSettings` (`/agents`) | cubierto |
 | POST `/v1/agents` | `createAgent` | `useCreateAgent` | `AgentSettings`: "Nuevo agente" | cubierto |
 | POST `/v1/agents/generate_prompt` | `generateAgentPrompt` | `useGenerateAgentPrompt` | `AgentSettings`: generar prompt | cubierto |
@@ -35,7 +40,7 @@ Estados:
 | POST `/v1/approve_task` | — | — | — | sin cliente; **el backend lo devuelve como 410 Gone** (ver punto 4 abajo) |
 | GET `/v1/capabilities` | `capabilities` | `useCapabilities` | `App.tsx`: muestra u oculta Generar y Memoria | cubierto |
 | POST `/v1/discover_team` | `discoverTeam` | `useDiscoverTeam` | `CompanyNew` (`/companies/new`) | cubierto |
-| GET `/v1/enterprise/lineage` | — | — | — | sin cliente |
+| GET `/v1/enterprise/lineage` | `getLineage` | `useLineage` | `Lineage` (`/lineage?file=`), enlazado desde los archivos declarados en `TaskDetails` cuando hay Neo4j | cubierto (nuevo) |
 | GET `/v1/enterprise/quota_usage_history` | `getQuotaUsageHistory` | `useQuotaUsageHistory` | `QuotaPanel` (`/company/quotas`) | cubierto |
 | GET `/v1/enterprise/quotas` | `getQuotas` | `useQuotas` | `QuotaPanel`; `GlassRoom`; resumen del sprint | cubierto |
 | POST `/v1/enterprise/quotas/{bu_id}/reset` | `resetQuota` | `useResetQuota` | `QuotaPanel`: botón reiniciar por unidad | cubierto |
@@ -46,7 +51,7 @@ Estados:
 | POST `/v1/plan_sprint` | `planSprint` | `usePlanSprint` | resumen del sprint | cubierto |
 | GET `/v1/sprints` | `listSprints` | `useSprints` | `Sprints` (`/sprints`) | cubierto |
 | GET `/v1/sprints/{sprint_id}/board` | `getSprintBoard` | `useSprintBoard` | `SprintWorkspace` y sus pestañas, `TaskDetails` | cubierto |
-| POST `/v1/sprints/{sprint_id}/dispatch` | — | — | — | sin cliente |
+| POST `/v1/sprints/{sprint_id}/dispatch` | `dispatchSprint` | `useDispatchSprint` | `SprintWorkspace`, pestaña Tablero: "Despachar pendientes" | cubierto (nuevo) |
 | POST `/v1/sprints/{sprint_id}/pause` | `pauseSprint` | `usePauseSprint` | `SprintWorkspace`, pestaña Tablero: "Pausar" | cubierto |
 | POST `/v1/sprints/{sprint_id}/resume` | `resumeSprint` | `useResumeSprint` | `SprintWorkspace`, pestaña Tablero: "Reanudar" | cubierto |
 | POST `/v1/start_sprint` | `startSprint` (sin uso) + inline en el hook | `useStartSprint` | resumen del sprint | cubierto |
@@ -54,8 +59,8 @@ Estados:
 | GET `/v1/audit/verify` | `getAuditVerification` | `useAuditVerification` | `EvidenceDetail` (`/evidence/:runId`) | cubierto |
 | POST `/v1/generate` | `generate` | `useGenerate` | `Generate` (`/generate`, solo con `agent_graph`) | cubierto |
 | GET `/v1/glassroom/stream` | (EventSource en `store/agentStore.ts`) | — | `GlassRoom` (`/sprints/:id/live`) | cubierto |
-| GET `/v1/memory/search` | `searchMemory` | `useSearchMemory` (sin uso) | `MemorySearch` (`/memory`) llama `api.get` directo | cubierto (el hook queda sin uso) |
-| POST `/v1/memory/store` | — | — | — | sin cliente |
+| GET `/v1/memory/search` | `searchMemory` | `useSearchMemory` | `MemorySearch` (`/memory`) | cubierto (ahora con los parámetros de la API) |
+| POST `/v1/memory/store` | `storeMemory` | `useStoreMemory` | `MemorySearch`: "Agregar a la memoria" | cubierto (nuevo) |
 | POST `/v1/agent_runs` | — | — | — | n/a (lo usan productores externos para registrar corridas) |
 | GET `/v1/agent_runs` | `getAgentRuns` | `useAgentRuns` | `Evidence` (`/evidence`), `GovernancePanel` (`/governance`), insignias del `KanbanBoard`, `TaskDetails` | cubierto |
 | GET `/v1/agent_runs/{run_id}` | `getAgentRun` | `useAgentRun` | `EvidenceDetail` | cubierto |
@@ -64,23 +69,27 @@ Estados:
 | GET `/v1/agent_runs/{run_id}/verifications` | `getAgentRunVerifications` | `useAgentRunVerifications` | `EvidenceDetail` | cubierto |
 | POST `/v1/agent_runs/{run_id}/verify` | `verifyAgentRun` | `useVerifyAgentRun` | `EvidenceDetail`: botón Verificar | cubierto |
 | POST `/v1/integrations/github/webhook` | — | — | — | n/a (lo llama GitHub) |
-| POST `/v1/integrations/github/bindings` | — | — | — | sin cliente |
-| POST `/v1/integrations/github/backfill` | — | — | — | sin cliente |
-| POST `/v1/support/chat` | (inline `api.post`) | — | `SupportBot` (botón flotante, todas las rutas) | cubierto |
-| GET `/v1/support/logs` | — | — | — | sin cliente |
-| POST `/v1/support/report_bug` | (inline `api.post`) | — | `SupportBot`: reportar error | cubierto |
-| GET `/v1/support/tickets` | (inline `api.get`) | — | `SupportBot`: buscar tickets por email | cubierto |
-| GET `/v1/support/tickets/{ticket_num}` | (inline `api.get`) | — | `SupportBot`: consultar un ticket | cubierto |
-| PATCH `/v1/support/tickets/{ticket_num}` | — | — | — | sin cliente |
+| POST `/v1/integrations/github/bindings` | `createGitHubBinding` | `useCreateGitHubBinding` | `GitHubIntegration` (`/company/github`, Manager) | cubierto (nuevo) |
+| POST `/v1/integrations/github/backfill` | `backfillGitHub` | `useBackfillGitHub` | `GitHubIntegration`: "Importar pull requests anteriores" | cubierto (nuevo) |
+| POST `/v1/support/chat` | `supportChat` | — | `SupportBot` (botón flotante, todas las rutas) | cubierto (el cuerpo se corrigió: antes daba 422) |
+| GET `/v1/support/logs` | `downloadSupportLogs` | — | `HelpDesk` (`/support`): "Descargar logs" | cubierto (nuevo) |
+| POST `/v1/support/report_bug` | `reportBug` | — | `SupportBot`: reportar error | cubierto |
+| GET `/v1/support/tickets` | `listTickets` | `useTickets` | `SupportBot` (por email); `HelpDesk` (filtros de estado, impacto y email) | cubierto |
+| GET `/v1/support/tickets/{ticket_num}` | `getTicket` | `useTicket` | `SupportBot`; `HelpDesk`: detalle | cubierto |
+| PATCH `/v1/support/tickets/{ticket_num}` | `updateTicket` | `useUpdateTicket` | `HelpDesk`: estado, asignación y resolución | cubierto (nuevo) |
 | GET `/v1/workspace/status` | `workspaceStatus` | `useWorkspaceStatus` | `CompanyNew`: estado del daemon | cubierto |
-| GET `/v1/workspace/browse` | `browseWorkspace` | — | `FolderPicker` dentro de `CompanyNew` | cubierto, pero ver hallazgo A |
+| GET `/v1/workspace/browse` | `browseWorkspace` | — | `FolderPicker` dentro de `CompanyNew` | cubierto (hallazgo A resuelto en #112) |
 | GET `/v1/workspace/inspect` | `inspectWorkspace` | — | `CompanyNew`: tarjeta del proyecto | cubierto |
 
-Totales: 43 cubiertos, 10 sin cliente (incluido `approve_task`, retirado) y 4 n/a.
-Ningún endpoint queda solamente como "cliente sin UI": los clientes sin uso que
-hay apuntan a paths que no existen (ver punto 3).
+Totales al cierre: **51 cubiertos**, 2 sin cliente (`/health/deep` y
+`approve_task`, retirado) y 4 n/a. En la fase 1 eran 43 cubiertos y 10 sin
+cliente. Ningún endpoint queda como "cliente sin UI".
 
 ## Llamadas del front a paths que el backend no tiene
+
+Las tres quedaron resueltas: `browse_fs` se revirtió en #112, y los clientes de
+soporte se corrigieron y se usan desde `SupportBot` (commit de limpieza de este
+PR). Tabla de la fase 1:
 
 | Llamada | Dónde | Efecto |
 |---|---|---|
@@ -134,9 +143,9 @@ comparado con el código actual:
 | F3: `eslint-plugin-i18next` | **pendiente** | el front no tiene ESLint configurado (ni dependencia ni config); el workflow corre `npx eslint src \|\| true`. Mientras tanto, `src/i18n/coverage.test.ts` falla si una clave literal falta en en/es |
 | F4: overflow del encabezado a ~1270px | resuelto (#88, #100) | navegación corta + menú de empresa. Re-verificado ahora con Playwright sobre el build de `main`: sin overflow a 1024, 1269, 1366 y 1440 px, en inglés y en español, con los 5 ítems visibles |
 | F4: `/login` y `/register` con sesión | resuelto (#88) | redirigen (`Login.test.tsx`) |
-| F4: cambiar de empresa | resuelto (#88, #100) | "Cambiar de empresa" en el menú de empresa, con 2+ membresías |
+| F4: cambiar de empresa | resuelto (#88, #100) | "Cambiar de empresa" en el menú de empresa, con 2+ membresías. La redirección de `/companies/select` con una sola membresía es intencional (#61) y ahora está documentada en `ProtectedRoute.tsx` |
 | F4: flags v7 de React Router | resuelto (#88) | `App.tsx:371` |
-| F4: `/v1/auth/me` dos veces | era `StrictMode` en desarrollo (anotado en #85) | `meLoaded` no se persiste: una carga por página en producción |
+| F4: `/v1/auth/me` dos veces | era `StrictMode` en desarrollo (anotado en #85) | medido con Playwright sobre `vite build` + `vite preview`: 1 llamada por carga completa de `/evidence`, `/sprints` y `/governance`, y 0 al navegar dentro de la app |
 | F4: el botón del SupportBot tapa contenido | resuelto (#88) | espacio inferior reservado en los contenedores con scroll |
 
 Las cifras del prompt (CompanyNew de 2040 líneas, 547 claves, Home.tsx) son del
@@ -175,23 +184,104 @@ corridas.
 
 ## Brechas priorizadas
 
-| # | Brecha | Alcance | Propuesta |
-|---|---|---|---|
-| 1 | `main` en rojo por `browse_fs` (hallazgo A) | chico | decisión pendiente (pregunta 1) |
-| 2 | `POST /v1/sprints/{id}/dispatch` sin control | chico | botón "Despachar tareas pendientes" junto a Pausar/Reanudar en la pestaña Tablero (fase 5) |
-| 3 | `POST /v1/memory/store` sin control | chico | "Guardar en memoria" en `MemorySearch` (fase 5) |
-| 4 | Clientes de soporte con paths inexistentes | chico | corregir y usarlos desde `SupportBot`, o borrarlos (fase 5) |
-| 5 | Código muerto (hallazgo B) | chico | borrar `ControlPanel`, `SprintBoard` y los hooks sin uso |
-| 6 | Aprobar desde el board | chico | con el endpoint de corridas, no con `approve_task` (hallazgo C) |
-| 7 | `eslint-plugin-i18next` | medio | requiere introducir ESLint en el front: no hay configuración |
-| 8 | `POST /v1/company/invite` sin UI | medio-grande | invitaciones desde el menú de empresa (Owner); **espera confirmación** |
-| 9 | Integraciones GitHub (`bindings`, `backfill`) sin UI | grande | página de integraciones por empresa; **espera confirmación** |
-| 10 | `GET /v1/enterprise/lineage` sin UI | medio | linaje por archivo desde `EvidenceDetail` o la tarea; **espera confirmación** |
-| 11 | `GET /v1/support/logs` y `PATCH /v1/support/tickets/{n}` sin UI | medio | vista de mesa de ayuda para administradores; **espera confirmación** |
-| 12 | `GET /health/deep` sin UI | chico | detalle por servicio al pasar el mouse sobre el indicador "Online" |
+| # | Brecha | Alcance | Propuesta | Estado |
+|---|---|---|---|---|
+| 1 | `main` en rojo por `browse_fs` (hallazgo A) | chico | decisión pendiente (pregunta 1) | resuelto: se restauró el selector del daemon (#112) |
+| 2 | `POST /v1/sprints/{id}/dispatch` sin control | chico | botón "Despachar tareas pendientes" junto a Pausar/Reanudar en la pestaña Tablero (fase 5) | hecho |
+| 3 | `POST /v1/memory/store` sin control | chico | "Guardar en memoria" en `MemorySearch` (fase 5) | hecho |
+| 4 | Clientes de soporte con paths inexistentes | chico | corregir y usarlos desde `SupportBot`, o borrarlos (fase 5) | hecho, y el chat dejó de dar 422 |
+| 5 | Código muerto (hallazgo B) | chico | borrar `ControlPanel`, `SprintBoard` y los hooks sin uso | hecho (también `SprintCalendar`) |
+| 6 | Aprobar desde el board | chico | con el endpoint de corridas, no con `approve_task` (hallazgo C) | elegiste el enlace: la insignia de veredicto ya lleva a `/evidence/:runId` |
+| 7 | `eslint-plugin-i18next` | medio | requiere introducir ESLint en el front: no hay configuración | hecho; `npm run lint` bloquea en CI |
+| 8 | `POST /v1/company/invite` sin UI | medio-grande | invitaciones desde el menú de empresa (Owner) | hecho: `/company/members` |
+| 9 | Integraciones GitHub (`bindings`, `backfill`) sin UI | grande | página de integraciones por empresa | hecho: `/company/github` |
+| 10 | `GET /v1/enterprise/lineage` sin UI | medio | linaje por archivo desde `EvidenceDetail` o la tarea | hecho: `/lineage`, enlazado desde la tarea |
+| 11 | `GET /v1/support/logs` y `PATCH /v1/support/tickets/{n}` sin UI | medio | vista de mesa de ayuda para administradores | hecho: `/support` |
+| 12 | `GET /health/deep` sin UI | chico | detalle por servicio al pasar el mouse sobre el indicador "Online" | no se hizo (no estaba entre las elegidas) |
 
-## Cambios de API que propondría (sin tocarlos)
+## Resumen final
 
-- Un endpoint de una sola tarea (`GET /v1/backlog/{item_id}`), para que `/task/:taskId`
-  no tenga que resolver la tarea a través del board del sprint activo.
-- Listar las membresías invitadas y pendientes, si se construye la UI de invitaciones.
+### Qué quedó cubierto
+
+Commits de este PR (#113), uno por fase o tema:
+
+| Commit | Qué cubre |
+|---|---|
+| limpieza | chat de soporte con el cuerpo `{messages}` (antes 422); clientes de soporte tipados; borrado de `ControlPanel`, `SprintBoard` y los hooks muertos |
+| fase 3 | ESLint con `eslint-plugin-i18next` en CI; 72 textos fijos pasados a claves |
+| fase 4 | `/companies/select` documentado; `/v1/auth/me` medido en producción (1 llamada por carga) |
+| fase 5 | despachar pendientes; guardar en memoria; búsqueda de memoria con los parámetros reales |
+| arreglo | `AgentSettings` sin temporizadores vivos al desmontarse (fallaba en CI) |
+| brechas grandes | las cuatro páginas que elegiste, en un commit porque comparten `api.ts`, los hooks, el menú y las traducciones: |
+| · invitaciones | `/company/members`: el Owner invita por email con rol; 404 explica que la persona tiene que registrarse antes |
+| · GitHub | `/company/github` (Manager): conectar un repositorio con un secreto generado en el navegador, instrucciones del webhook con la URL y el secreto (se muestra una sola vez), e importación de pull requests anteriores con el resultado por PR |
+| · linaje | `/lineage?file=`: decisiones registradas sobre un archivo; aviso cuando no hay Neo4j; los archivos declarados de una tarea enlazan ahí si hay Neo4j |
+| · mesa de ayuda | `/support` (Manager u Owner): tickets con filtros, detalle, cambio de estado con resolución obligatoria para resolver o cerrar, y descarga de logs |
+| cuotas | el selector de días del historial de uso ahora vuelve a pedir el historial (antes pedía siempre 7) |
+
+El menú de empresa muestra Miembros solo al Owner, y GitHub y Mesa de ayuda al
+Manager o al Owner. Todo está en `en.json` y `es.json`. Hay tests de cada página
+nueva y del menú por rol.
+
+Verificado contra el backend real (Postgres, NATS con JetStream, auth activada,
+sin Neo4j) con Playwright sobre el build de producción. Pasaron 21 de 21
+chequeos:
+- el menú por rol;
+- invitar a alguien sin cuenta (404) y a alguien con cuenta, confirmando la membresía en `/v1/auth/me`;
+- conectar un repositorio y el 409 al repetirlo;
+- importar desde un repositorio sin conectar (404);
+- listar y filtrar tickets, y resolver uno, confirmando en la API que quedó `resolved` con su resolución y `resolved_at`;
+- logs con 404 y luego la descarga con contenido;
+- linaje sin Neo4j, con error y Reintentar;
+- la mesa de ayuda en español;
+- un Viewer no ve las páginas de administración;
+- ningún error de consola inesperado.
+
+### Qué requiere decisión tuya
+
+1. **Quién es "administrador" de la mesa de ayuda.** La API solo pide estar
+   autenticado: cualquier usuario con sesión, de cualquier empresa, puede listar
+   todos los tickets (con el email de quien reporta) y cambiarlos. El front
+   limita la página a Manager u Owner de la empresa seleccionada, pero eso no
+   protege nada: los tickets no pertenecen a ninguna empresa. Hace falta definir
+   un rol de plataforma (soporte) y aplicarlo en el backend.
+2. **URL pública para el webhook de GitHub.** La página arma la Payload URL con
+   `VITE_API_URL`. Con el backend en `localhost`, GitHub no puede alcanzarla, y la
+   página lo advierte. ¿Agregamos una URL pública configurable (por ejemplo
+   `PUBLIC_API_URL`, expuesta en `/v1/capabilities`) o se documenta el uso de un
+   túnel?
+3. **`GET /health/deep`** sigue sin UI (brecha 12). ¿Vale la pena el detalle por
+   servicio en el indicador "Online"?
+4. **`VITE_DEFAULT_PROJECT_PATH`** sigue en `docker-compose.yml`, pero el front
+   ya no lo lee: la carpeta sale del selector del daemon. Es configuración
+   muerta. ¿La quito? Está fuera de `frontend/`, por eso no la toqué.
+
+### Cambios de API que propondría (sin tocarlos)
+
+- **Invitar a alguien que ya es miembro devuelve 500.** El insert choca con
+  `company_members_company_id_user_id_key`. Propuesta: devolver 409, o
+  actualizar el rol. Además, `GET /v1/company/{id}/members` para listar los
+  miembros, y `PATCH`/`DELETE` para cambiar o quitar un rol. Hoy no hay forma de
+  ver quién está en la empresa ni de cambiar un rol.
+- **Las respuestas 500 no llevan cabeceras CORS.** El manejador global de
+  excepciones responde fuera de `CORSMiddleware`, así que el navegador ve un
+  error de red (status 0) en lugar del 500 y su detalle. El front lo compensa en
+  la invitación, pero afecta a cualquier 500. Propuesta: capturar las
+  excepciones dentro de CORS, o convertir los errores esperables
+  (`IntegrityError` → 409) antes de que lleguen al manejador global.
+- **Bindings de GitHub:** `GET /v1/integrations/github/bindings?company_id=` para
+  listarlos, `DELETE` para desconectar uno y un endpoint para rotar el secreto.
+  Hoy la página solo puede crear.
+- **Tickets de soporte:** el rol de plataforma del punto 1. Además,
+  `Access-Control-Expose-Headers: Content-Disposition`, para que el navegador
+  lea el nombre del archivo de logs (hoy el front lo reconstruye con el mismo
+  formato).
+- **Linaje:** responder 503 cuando Neo4j no está conectado, como la memoria, en
+  lugar de 500.
+- **Memoria:** recibir `content` en el cuerpo de `POST /v1/memory/store`. Hoy va
+  en la query, y el front lo limita a 2000 caracteres.
+- **Membresías con el nombre de la empresa** en `/v1/auth/me`. El menú muestra
+  "Empresa N" cuando no tiene el nombre guardado localmente.
+- **Un endpoint de una sola tarea** (`GET /v1/backlog/{item_id}`), para que
+  `/task/:taskId` no tenga que resolver la tarea a través del board del sprint
+  activo.

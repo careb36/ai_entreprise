@@ -355,6 +355,7 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 function CopyBtn({ text }: { text: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     await navigator.clipboard.writeText(text).catch(() => {})
@@ -365,7 +366,7 @@ function CopyBtn({ text }: { text: string }) {
     <button
       onClick={copy}
       className="opacity-0 group-hover/msg:opacity-100 transition-opacity p-1 rounded hover:bg-white/10"
-      title="Copy"
+      title={t('glassroom.copy')}
     >
       {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-gray-500" />}
     </button>
@@ -373,6 +374,7 @@ function CopyBtn({ text }: { text: string }) {
 }
 
 function PreviewCard({ preview, task }: { preview: string; task?: string }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   if (!preview) return null
   return (
@@ -383,7 +385,7 @@ function PreviewCard({ preview, task }: { preview: string; task?: string }) {
       >
         {open ? <ChevronDown size={11} className="text-gray-500" /> : <ChevronRight size={11} className="text-gray-500" />}
         <Eye size={11} className="text-brand-400" />
-        <span className="text-[11px] text-gray-400 font-medium truncate flex-1">{task || 'View deliverable'}</span>
+        <span className="text-[11px] text-gray-400 font-medium truncate flex-1">{task || t('glassroom.viewDeliverable', { defaultValue: 'View deliverable' })}</span>
       </button>
       {open && (
         <div className="px-3 pb-2.5 pt-1 border-t border-surface-700/50">
@@ -473,9 +475,9 @@ function AssistantSummaryPanel({ entries }: { entries: AssistantSummaryEntry[] }
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
-                <span>requested {entry.requested}</span>
-                <span>unavailable {entry.unavailableSkips}</span>
-                {entry.cooldownUntil && <span>cooldown {formatTime(entry.cooldownUntil)}</span>}
+                <span>{t('glassroom.assistantRequested', { count: entry.requested, defaultValue: 'requested {{count}}' })}</span>
+                <span>{t('glassroom.assistantUnavailable', { count: entry.unavailableSkips, defaultValue: 'unavailable {{count}}' })}</span>
+                {entry.cooldownUntil && <span>{t('glassroom.assistantCooldown', { time: formatTime(entry.cooldownUntil), defaultValue: 'cooldown until {{time}}' })}</span>}
               </div>
             </div>
           )
@@ -637,7 +639,7 @@ function TaskAutonomyTree({ tasks }: { tasks: TaskAutonomyEntry[] }) {
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium text-gray-200 break-words">{task.title}</p>
                 <p className="mt-1 text-[10px] text-gray-500">
-                  {phaseLabel(t, task.currentPhase)} · {t('glassroom.reworksCount', { defaultValue: '{{n}} reworks' }).replace('{{n}}', String(task.reworkCount))} · {t('glassroom.qaReviewsCount', { defaultValue: '{{n}} QA reviews' }).replace('{{n}}', String(task.reviewCount))}
+                  {phaseLabel(t, task.currentPhase)} · {t('glassroom.reworksCount', { n: task.reworkCount, defaultValue: '{{n}} reworks' })} · {t('glassroom.qaReviewsCount', { n: task.reviewCount, defaultValue: '{{n}} QA reviews' })}
                 </p>
               </div>
               <span className="text-[10px] text-gray-500">#{task.id}</span>
@@ -719,11 +721,12 @@ function TypingIndicator({ identity, elapsedMs }: { identity: AgentIdentity; ela
 
 /** NeedsSplit inline banner — shown in the feed when that event arrives. */
 function NeedsSplitBanner({ message }: { message: AgentMessage }) {
+  const { t } = useTranslation()
   return (
     <div className="mx-4 my-2 flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-950/20 animate-fade-in">
       <SplitSquareVertical size={15} className="text-amber-400 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-amber-300">Sprint scope exceeded</p>
+        <p className="text-xs font-semibold text-amber-300">{t('glassroom.scopeExceeded', { defaultValue: 'Sprint scope exceeded' })}</p>
         <p className="text-[11px] text-amber-200/60 mt-0.5 break-words">{message.content}</p>
         <p className="text-[10px] text-amber-200/40 mt-0.5">{formatTime(message.timestamp)}</p>
       </div>
@@ -824,7 +827,7 @@ function LeftSidebar({
       <div className="p-3 border-b border-surface-700/60">
         <div className="flex items-center gap-2 mb-1">
           <Hash size={12} className="text-gray-500" />
-          <span className="text-xs font-semibold text-gray-300 truncate">sprint-{sprintId}</span>
+          <span className="text-xs font-semibold text-gray-300 truncate">{t('glassroom.sprintLabel', { id: sprintId, defaultValue: 'Sprint #{{id}}' })}</span>
         </div>
         <div className="flex items-center gap-2">
           {scope && (
@@ -1268,7 +1271,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
       {/* ── Top bar ───────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-4 py-2 min-h-11 border-b border-surface-700/60 bg-surface-900 shrink-0 flex-wrap overflow-x-auto">
         <Hash size={13} className="text-gray-600" />
-        <span className="text-sm font-semibold text-gray-200">sprint-{propSprintId}</span>
+        <span className="text-sm font-semibold text-gray-200">{t('glassroom.sprintLabel', { id: propSprintId, defaultValue: 'Sprint #{{id}}' })}</span>
         {sprint?.scope_size && (
           <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${
             sprint.scope_size === 'S' ? 'text-emerald-400' :
@@ -1286,7 +1289,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
             <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600" />
             <input
               type="text"
-              placeholder="Search…"
+              placeholder={t('glassroom.searchPlaceholder', { defaultValue: 'Search…' })}
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
               className="pl-6 pr-5 py-1 text-[11px] bg-surface-800 border border-surface-700 rounded-md text-gray-300 placeholder-gray-600 focus:outline-none focus:border-brand-500 w-32 transition-colors"
@@ -1323,7 +1326,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
             <button
               onClick={() => { setFilterAgent(''); setFilterType(''); setSearchText('') }}
               className="p-1 hover:bg-surface-700 rounded text-gray-500 hover:text-gray-300 transition-colors"
-              title="Clear filters"
+              title={t('glassroom.clearFilters', { defaultValue: 'Clear filters' })}
             >
               <RotateCcw size={11} />
             </button>
@@ -1436,7 +1439,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
                 onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-brand-600/90 text-white text-[11px] font-medium shadow-lg hover:bg-brand-500 transition-colors"
               >
-                <ChevronDown size={11} /> New messages
+                <ChevronDown size={11} /> {t('glassroom.newMessages', { defaultValue: 'New messages' })}
               </button>
             </div>
           )}
@@ -1456,7 +1459,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
                 <span className="text-[10px] text-gray-700">·</span>
                 <span className="text-[10px] text-emerald-400 flex items-center gap-1">
                   <Loader2 size={9} className="animate-spin" />
-                  {activeAgents.length} working
+                  {t('glassroom.agentsWorkingCount', { count: activeAgents.length, defaultValue: '{{count}} working' })}
                 </span>
               </>
             )}
@@ -1465,7 +1468,7 @@ export default function GlassRoom({ sprintId: propSprintId }: { sprintId: string
                 <span className="text-[10px] text-gray-700">·</span>
                 <span className="flex items-center gap-1 text-[10px] text-amber-400 font-medium">
                   <SplitSquareVertical size={9} />
-                  Needs split
+                  {t('glassroom.needsSplit')}
                 </span>
               </>
             )}

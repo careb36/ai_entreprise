@@ -776,6 +776,13 @@ export default function AgentSettings() {
 
   const [newAgent, setNewAgent] = useState<AgentDraft>(defaultDraft())
   const [creatorOpen, setCreatorOpen] = useState(false)
+  // Bumped to bring the creator into view once it has rendered; an effect
+  // instead of a timer, so nothing runs after the page unmounts.
+  const [creatorScrollRequest, setCreatorScrollRequest] = useState(0)
+  useEffect(() => {
+    if (creatorScrollRequest === 0) return
+    document.getElementById('agent-creator')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [creatorScrollRequest])
   const [searchQuery, setSearchQuery] = useState('')
   const [activeRoleFilter, setActiveRoleFilter] = useState<string | null>(null)
   const [expandedAgents, setExpandedAgents] = useState<Set<number>>(() => new Set())
@@ -920,10 +927,7 @@ export default function AgentSettings() {
       name: agent.name ? `${agent.name} ${t('agentsConfig.duplicateSuffix')}` : '',
     })
     setCreatorOpen(true)
-    // Scroll into view next paint.
-    setTimeout(() => {
-      document.getElementById('agent-creator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 50)
+    setCreatorScrollRequest(n => n + 1)
   }
 
   const filterChips = useMemo(() => sortRoles([...roleCounts.keys()]), [roleCounts])
@@ -1006,11 +1010,7 @@ export default function AgentSettings() {
                   onClick={() => {
                     setNewAgent(defaultDraft())
                     setCreatorOpen(o => !o)
-                    if (!creatorOpen) {
-                      setTimeout(() => {
-                        document.getElementById('agent-creator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      }, 50)
-                    }
+                    if (!creatorOpen) setCreatorScrollRequest(n => n + 1)
                   }}
                   className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-500"
                 >

@@ -20,7 +20,10 @@
     "generate": "Generate",
     "offline": "Offline",
     "agents": "Agents",
-    "breadcrumb": "Breadcrumb"
+    "breadcrumb": "Breadcrumb",
+    "members": "Members",
+    "github": "GitHub",
+    "helpDesk": "Help desk"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -149,7 +152,8 @@
     },
     "manageAgents": "Manage agents",
     "manageQuotas": "Manage quotas",
-    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits."
+    "quotaAlert": "Token quota is above 80% for one or more business units. Consider resetting or increasing limits.",
+    "tokenUsage": "{{used}} / {{limit}} tokens"
   },
   "companyNew": {
     "title": "Initialize Factory",
@@ -467,7 +471,12 @@
     "noSprintDesc": "Start a sprint to begin working",
     "boardOpsHint": "Drag tasks to change status or reassign",
     "pauseSprint": "Pause",
-    "resumeSprint": "Resume"
+    "resumeSprint": "Resume",
+    "dispatchSprint": "Dispatch pending",
+    "dispatchPausedHint": "Resume the sprint to dispatch tasks",
+    "dispatched": "{{count}} task(s) sent to the agents",
+    "nothingToDispatch": "No pending tasks to dispatch",
+    "sprintActionFailed": "Could not complete the action: {{message}}"
   },
   "taskDetails": {
     "invalidId": "Invalid task ID: {{taskId}}.",
@@ -548,7 +557,11 @@
       "done": "Done",
       "blocked": "Blocked"
     },
-    "deliveryVerdict": "Delivery: {{verdict}}"
+    "deliveryVerdict": "Delivery: {{verdict}}",
+    "qaReworksTitle": "QA reworks: {{count}}/{{limit}}",
+    "qaReworks": "QA rework {{count}}/{{limit}}",
+    "qaFailuresTitle": "QA failures: {{count}}/{{limit}}",
+    "qaFailures": "QA fail {{count}}/{{limit}}"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -694,7 +707,17 @@
       "quota_cooldown": "quota exhausted",
       "unavailable": "unavailable",
       "failed": "failed"
-    }
+    },
+    "viewDeliverable": "View deliverable",
+    "assistantRequested": "requested {{count}}",
+    "assistantUnavailable": "unavailable {{count}}",
+    "assistantCooldown": "cooldown until {{time}}",
+    "scopeExceeded": "Sprint scope exceeded",
+    "sprintLabel": "Sprint #{{id}}",
+    "searchPlaceholder": "Search…",
+    "clearFilters": "Clear filters",
+    "newMessages": "New messages",
+    "agentsWorkingCount": "{{count}} working"
   },
   "governance": {
     "title": "Governance",
@@ -743,7 +766,10 @@
     "pendingRuns": "Runs awaiting a human decision",
     "noPendingRuns": "No runs are awaiting a human decision",
     "reviewRun": "Review evidence",
-    "usageHistory": "Usage History (last 7 days)"
+    "usageHistory": "Usage history",
+    "exportCsv": "Export CSV",
+    "lastDays": "{{count}} days",
+    "totalTokens": "Total: {{total}} tokens"
   },
   "evidence": {
     "title": "Evidence",
@@ -871,7 +897,18 @@
     "results": "Results",
     "noResults": "No results found",
     "similarity": "Similarity",
-    "error": "Search failed"
+    "error": "Search failed",
+    "metadata": "metadata",
+    "errorDetail": "Search failed: {{message}}",
+    "resultCount": "{{count}} results",
+    "storeTitle": "Add to memory",
+    "storeHint": "Agents retrieve these notes as context for the company's tasks.",
+    "storeLabel": "Note to remember",
+    "storePlaceholder": "A decision, a convention or a fact the agents should know",
+    "store": "Save to memory",
+    "storing": "Saving…",
+    "stored": "Saved to memory",
+    "storeError": "Could not save: {{message}}"
   },
   "generate": {
     "title": "Code Generator",
@@ -893,7 +930,8 @@
     "copy": "Copy",
     "copied": "Copied!",
     "error": "Generation failed",
-    "started": "Generation started!"
+    "started": "Generation started!",
+    "sprintLink": "Sprint #{{id}}"
   },
   "support": {
     "title": "La Fabrique Assistant",
@@ -940,7 +978,8 @@
       "waiting": "Waiting on you",
       "resolved": "Resolved",
       "closed": "Closed"
-    }
+    },
+    "emailPlaceholder": "you@company.com"
   },
   "sprintCalendar": {
     "title": "Sprint Calendar",
@@ -1099,7 +1138,9 @@
     "no": "No",
     "na": "N/A",
     "copyId": "Copy ID",
-    "learnMore": "Learn more"
+    "learnMore": "Learn more",
+    "dismiss": "Dismiss",
+    "optional": "(optional)"
   },
   "sprint": {
     "views": "Sprint views",
@@ -1177,5 +1218,126 @@
       "linux": "Ubuntu/Linux",
       "win32": "Windows"
     }
+  },
+  "errorState": {
+    "title": "Something went wrong",
+    "retry": "Try again"
+  },
+  "members": {
+    "title": "Members",
+    "subtitle": "People who can work in {{company}}.",
+    "ownerOnly": "Only owners can invite members. Your role here is {{role}}.",
+    "inviteTitle": "Invite a member",
+    "email": "Email of their account",
+    "emailPlaceholder": "name@company.com",
+    "role": "Role",
+    "roles": {
+      "Viewer": "Viewer",
+      "Manager": "Manager",
+      "Owner": "Owner"
+    },
+    "roleHints": {
+      "Viewer": "Sees sprints, evidence and memory; cannot change anything.",
+      "Manager": "Also runs sprints, reviews evidence, manages agents and integrations.",
+      "Owner": "Also invites members."
+    },
+    "invite": "Invite",
+    "inviting": "Inviting…",
+    "invited": "{{email}} can now work here as {{role}}.",
+    "noAccount": "There is no account with that email. Ask them to register first, then invite them.",
+    "inviteError": "Could not invite: {{message}}",
+    "maybeMember": "Could not invite ({{message}}). If they are already a member, their role cannot be changed from here yet."
+  },
+  "github": {
+    "title": "GitHub integration",
+    "subtitle": "Record each pull request of a repository as an agent run, verified like any other evidence.",
+    "managerOnly": "Connecting repositories requires the Manager or Owner role. Your role here is {{role}}.",
+    "bindTitle": "Connect a repository",
+    "secret": "Webhook secret",
+    "newSecret": "Generate another secret",
+    "rule": "Pull requests to record",
+    "rules": {
+      "all": "All pull requests",
+      "bots_only": "Only pull requests opened by bots",
+      "non_bots": "Only pull requests opened by people"
+    },
+    "bind": "Connect",
+    "binding": "Connecting…",
+    "alreadyBound": "That repository is already connected.",
+    "bindError": "Could not connect the repository: {{message}}",
+    "bound": "{{repo}} is connected. Now add the webhook in GitHub:",
+    "stepOpen": "Open the repository webhook settings",
+    "stepUrl": "Payload URL:",
+    "stepType": "Content type: application/json",
+    "stepSecret": "Secret (shown only now):",
+    "stepEvents": "Events: \"Pull requests\".",
+    "publicUrlHint": "GitHub must be able to reach this URL; a backend on localhost needs a public tunnel.",
+    "backfillTitle": "Import past pull requests",
+    "noToken": "The backend has no GITHUB_TOKEN: only public repositories can be imported, with a low rate limit.",
+    "since": "Updated since (optional)",
+    "import": "Import",
+    "importing": "Importing…",
+    "notBound": "Connect that repository first.",
+    "backfillError": "The import failed: {{message}}",
+    "imported": "{{ingested}} recorded, {{skipped}} already recorded or excluded.",
+    "importErrorItem": "#{{number}}: {{error}}",
+    "owner": "Owner (user or organization)",
+    "ownerPlaceholder": "my-org",
+    "repo": "Repository",
+    "repoPlaceholder": "my-app"
+  },
+  "lineage": {
+    "title": "File lineage",
+    "subtitle": "The agent decisions recorded on a file, newest first (up to 10).",
+    "unavailable": "Lineage needs the knowledge graph (Neo4j), which is not connected.",
+    "file": "File path",
+    "filePlaceholder": "src/app/main.py",
+    "search": "Show",
+    "loading": "Loading decisions…",
+    "error": "Could not load the lineage: {{message}}",
+    "empty": "No decisions recorded for {{file}}.",
+    "listLabel": "Decisions on {{file}}",
+    "unknownRole": "unknown role",
+    "legacy": "no company",
+    "legacyHint": "Recorded before decisions carried a company.",
+    "noSummary": "No summary recorded.",
+    "open": "See the decisions recorded on this file"
+  },
+  "helpDesk": {
+    "title": "Help desk",
+    "subtitle": "Problems reported through the support assistant.",
+    "managerOnly": "The help desk is for Managers and Owners. Your role here is {{role}}.",
+    "pick": "Pick a ticket to see its details.",
+    "tickets": "Tickets",
+    "status": "Status",
+    "any": "Any",
+    "severity": "Impact",
+    "severities": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "reporter": "Reporter email",
+    "loading": "Loading tickets…",
+    "loadError": "Could not load the tickets: {{message}}",
+    "empty": "No tickets match these filters.",
+    "loadingTicket": "Loading the ticket…",
+    "ticketError": "Could not load the ticket: {{message}}",
+    "description": "What happened",
+    "steps": "Steps",
+    "expected": "Expected",
+    "actual": "Actual",
+    "meta": "Reported by {{reporter}} on {{created}} · assigned to {{assignee}}",
+    "newStatus": "Status",
+    "assignee": "Assigned to",
+    "resolutionRequired": "Write the resolution before resolving or closing the ticket.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Ticket updated",
+    "saveError": "Could not update the ticket: {{message}}",
+    "downloadLogs": "Download logs",
+    "noLogs": "No logs have been written yet.",
+    "logsError": "Could not download the logs: {{message}}"
   }
 }

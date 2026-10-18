@@ -505,6 +505,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
 }
 
 function QuotaWidget({ companyId }: { companyId: number | null }) {
+  const { t } = useTranslation()
   const { data } = useQuotas(companyId)
   const quotas = Array.isArray(data) ? data : []
   const totalUsed = quotas.reduce((s: number, q: any) => s + (q.token_quota_used || 0), 0)
@@ -514,7 +515,7 @@ function QuotaWidget({ companyId }: { companyId: number | null }) {
   const color = pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-yellow-400' : 'text-emerald-400'
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-900 text-[11px] font-medium text-gray-300">
-      <span className={color}>⚡ {totalUsed.toLocaleString()} / {totalLimit.toLocaleString()} tokens</span>
+      <span className={color}>⚡ {t('dashboard.tokenUsage', { used: totalUsed.toLocaleString(), limit: totalLimit.toLocaleString(), defaultValue: '{{used}} / {{limit}} tokens' })}</span>
       <span className="text-gray-500">({pct}%)</span>
     </div>
   )
