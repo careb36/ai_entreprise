@@ -22,6 +22,7 @@ vi.mock('../hooks/useQueries', () => ({
   usePlanSprint: vi.fn(),
   useSprintBoard: vi.fn(),
   useStartSprint: vi.fn(),
+  useQuotas: vi.fn(() => ({ data: [] })),
 }))
 
 const plan: SprintPlanResponse = {

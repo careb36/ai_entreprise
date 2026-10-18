@@ -16,7 +16,7 @@ import {
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
+import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
@@ -551,9 +551,26 @@ export default function Dashboard() {
   )
 }
 
+
+function QuotaWidget({ companyId }: { companyId: number | null }) {
+  const { data } = useQuotas(companyId)
+  const quotas = Array.isArray(data) ? data : []
+  const totalUsed = quotas.reduce((s: number, q: any) => s + (q.token_quota_used || 0), 0)
+  const totalLimit = quotas.reduce((s: number, q: any) => s + (q.token_quota_limit || 0), 0)
+  if (!totalLimit) return null
+  const pct = Math.min(100, Math.round((totalUsed / totalLimit) * 100))
+  const color = pct >= 90 ? 'text-red-400' : pct >= 70 ? 'text-yellow-400' : 'text-emerald-400'
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-surface-700 bg-surface-900 text-[11px] font-medium text-gray-300">
+      <span className={color}>⚡ {totalUsed.toLocaleString()} / {totalLimit.toLocaleString()} tokens</span>
+      <span className="text-gray-500">({pct}%)</span>
+    </div>
+  )
+}
+
 function SprintBoard() {
   const { t } = useTranslation()
-  const { activeSprintId, setActiveSprint, companyName } = useAppStore()
+  const { activeSprintId, setActiveSprint, companyId, companyName } = useAppStore()
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
   const { data: health } = useHealth()
@@ -612,6 +629,7 @@ function SprintBoard() {
               <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
               {backendOnline ? t('dashboard.systemOnline', { defaultValue: 'System online' }) : t('dashboard.systemOffline', { defaultValue: 'System offline' })}
             </div>
+            <QuotaWidget companyId={companyId} />
             {activeSprintId && (
               <Link
                 to={`/sprint-ops/${activeSprintId}`}
