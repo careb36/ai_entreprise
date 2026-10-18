@@ -218,18 +218,112 @@ FILE_MANIFEST_INSTRUCTIONS = (
 # ---------------------------------------------------------------------------
 
 
-def _fetch_memory_context(item: dict[str, Any], agent: dict[str, Any]) -> str:
-    """Query engram RAG for past decisions relevant to this task and agent role."""
+def _fetch_memory_context(
+    item: dict[str, Any], agent: dict[str, Any], company_id: int | None
+) -> str:
+    """Query engram RAG for this company's past decisions relevant to the task.
+
+    Without a company there is nothing to scope the search to, so nothing is
+    returned rather than another tenant's decisions.
+    """
+    if company_id is None:
+        return ""
     task_text = f"{item.get('title', '')} {item.get('description', '')}".strip()
     role = agent.get("role") or None
     try:
         from memory.engram_processor import get_engram_processor
 
         processor = get_engram_processor()
-        return processor.query_relevant_engrams(task_text, limit=3, role_filter=role)
+        return processor.query_relevant_engrams(
+            task_text, limit=3, role_filter=role, company_id=company_id
+        )
     except Exception as exc:  # noqa: BLE001 - Optional memory context must not block task execution.
         logger.debug("Memory context fetch failed for item=%s: %s", item.get("id"), exc)
         return ""
+
+
+LESSON_SPRINTS = 2
+LESSON_FEEDBACK_LIMIT = 6
+LESSON_FEEDBACK_CHARS = 300
+
+
+def _is_lesson(comment: dict[str, Any]) -> bool:
+    """Review feedback worth carrying to later tasks.
+
+    Reviewers' ``NEEDS WORK:`` requests, and the verifier's failed test runs.
+    The verifier's other requests (a delivery the daemon did not confirm) are
+    about infrastructure, not about how the work was done.
+    """
+    text = str(comment.get("text", "")).strip()
+    if not text.upper().startswith("NEEDS WORK:"):
+        return False
+    if comment.get("author") == DELIVERY_GATE_AUTHOR:
+        return text[len("NEEDS WORK:") :].strip().lower().startswith("tests failed")
+    return True
+
+
+def _load_recent_lessons(company_id: int | None, current_sprint_id: int) -> str:
+    """What this company's latest completed sprints taught, read from the board.
+
+    The retrospective counts and the review feedback come from Postgres, so
+    the lessons reach the agents with or without the knowledge graph. Review
+    feedback is what reviewers said, not a verified fact; the prompt says so.
+    """
+    if company_id is None:
+        return ""
+    try:
+        with Session(engine) as session:
+            sprint_ids = session.exec(
+                select(Sprint.id)
+                .where(
+                    Sprint.company_id == company_id,
+                    Sprint.status == "completed",
+                    Sprint.id != current_sprint_id,
+                )
+                .order_by(Sprint.id.desc())
+                .limit(LESSON_SPRINTS)
+            ).all()
+            if not sprint_ids:
+                return ""
+            items = session.exec(
+                select(BacklogItem).where(BacklogItem.sprint_id.in_(sprint_ids))
+            ).all()
+            feedback: list[tuple[str, str]] = []
+            for item in items:
+                comments = item.comments or []
+                if isinstance(comments, str):
+                    try:
+                        comments = json.loads(comments)
+                    except Exception:  # noqa: BLE001 - Malformed legacy comments carry no lessons.
+                        comments = []
+                for comment in comments:
+                    if isinstance(comment, dict) and _is_lesson(comment):
+                        text = str(comment.get("text", "")).strip()
+                        author = comment.get("author") or "Reviewer"
+                        line = f"{item.title[:60]} ({author}): {text[:LESSON_FEEDBACK_CHARS]}"
+                        feedback.append((str(comment.get("created_at") or ""), line))
+    except Exception as exc:  # noqa: BLE001 - Lessons are best-effort context.
+        logger.debug("Lessons fetch failed for company=%s: %s", company_id, exc)
+        return ""
+
+    sections = [
+        _format_retrospective_summary(metrics)
+        for metrics in (_build_sprint_retrospective(sid) for sid in sprint_ids)
+        if metrics
+    ]
+    seen: set[str] = set()
+    requests: list[str] = []
+    for _created_at, line in sorted(feedback, reverse=True):
+        if line not in seen:
+            seen.add(line)
+            requests.append(f"- {line}")
+        if len(requests) >= LESSON_FEEDBACK_LIMIT:
+            break
+    if requests:
+        sections.append(
+            "Work sent back for rework (most recent first):\n" + "\n".join(requests)
+        )
+    return "\n\n".join(sections)
 
 
 def _load_sprint_completed_tasks(
@@ -407,6 +501,7 @@ def _execute_task(
     architect_advice: str | None = None,
     company_id: int | None = None,
     sprint_id: int | None = None,
+    lessons_context: str | None = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -457,6 +552,15 @@ def _execute_task(
             "These are decisions and deliverables from previous sprints in this factory. "
             "Use them to maintain consistency and avoid repeating past mistakes.\n\n"
             f"{memory_context[:3000]}"
+        )
+
+    if lessons_context:
+        user_prompt += (
+            "\n\n## Lessons from Recent Sprints\n"
+            "How this company's last sprints went and what reviewers sent back. "
+            "The review requests are reviewers' opinions, not verified facts; use "
+            "them to avoid repeating the same mistakes.\n\n"
+            f"{lessons_context[:3000]}"
         )
 
     if completed_tasks_context:
@@ -1779,12 +1883,15 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     # Burn retrospective engram to memory so future sprints can learn from it.
     if retro_metrics:
         try:
-            from memory.engram_processor import get_engram_processor
+            from memory.engram_processor import (
+                RETROSPECTIVE_AGENT_PREFIX,
+                get_engram_processor,
+            )
 
             processor = get_engram_processor()
             processor.burn_engram(
                 company_id=retro_metrics.get("company_id"),
-                agent_id=f"retrospective_{sprint_id}",
+                agent_id=f"{RETROSPECTIVE_AGENT_PREFIX}{sprint_id}",
                 role="ScrumMaster",
                 decision_summary=_format_retrospective_summary(retro_metrics),
                 metadata={
@@ -2616,8 +2723,18 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             )
 
             # Fetch memory context and cross-task context concurrently (non-blocking).
-            memory_ctx, completed_ctx, assistant_context = await asyncio.gather(
-                asyncio.to_thread(_fetch_memory_context, item, agent),
+            (
+                memory_ctx,
+                lessons_ctx,
+                completed_ctx,
+                assistant_context,
+            ) = await asyncio.gather(
+                asyncio.to_thread(
+                    _fetch_memory_context, item, agent, sprint["company_id"]
+                ),
+                asyncio.to_thread(
+                    _load_recent_lessons, sprint["company_id"], sprint["id"]
+                ),
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
@@ -2628,7 +2745,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 assistant_context.get("sources", [])
             )
 
-            if memory_ctx:
+            if memory_ctx or lessons_ctx:
                 await _publish_glassroom(
                     nats_client,
                     sprint["id"],
@@ -2746,6 +2863,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 architect_advice or None,
                 sprint["company_id"],
                 sprint["id"],
+                lessons_ctx or None,
             )
             deliverable = await asyncio.to_thread(
                 _sanitize_deliverable_text, deliverable

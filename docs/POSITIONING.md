@@ -1,9 +1,12 @@
 # Positioning: what le-fabrique is for
 
-> **Status: adopted, 2026-09-19.** This is the project's direction, confirmed by
-> the repository owner. It is the written form of the argument in issue #38. The
-> code findings cited here are verified and reproducible; the market reading is
-> a judgment, and remains open to revision if the market moves.
+> **Status: adopted, 2026-09-19; amended 2026-10-18.** This is the project's
+> direction, confirmed by the repository owner. It is the written form of the
+> argument in issue #38. The code findings cited here are verified and
+> reproducible; the market reading is a judgment, and remains open to revision
+> if the market moves. The [amendment](#amendment-2026-10-18-a-self-managed-company-of-agents)
+> at the end adds the owner's direction that the factory runs itself as a
+> company of agents; it keeps every design rule below.
 
 ## The one-line version
 
@@ -140,3 +143,80 @@ answers it today.
 
 Issue #38 is the epic. Child issues cover the evidentiary foundation, removal of
 dead paths, and the product surface.
+
+## Amendment (2026-10-18): a self-managed company of agents
+
+The owner set this direction on 2026-10-18:
+
+> La Fabrique has to manage itself; AI agents are configured for everything.
+> They should communicate as in a real company: people follow rules and
+> procedures, but they talk to each other, and that is how they learn and
+> improve.
+
+### How it fits the rules above
+
+A real company is the model, including its audits. In a company that works,
+people talk, propose, review and argue. A colleague saying "looks good" is
+still not proof the work was done, and records settle disputes: the
+accounts, the test report, the signed delivery note.
+
+The owner chose the same arbiter here: **the evidence has the last word.**
+Agents converse, propose and review, but a task is done only when an
+observation shows it (tests, CI, files read back from disk). So the
+amendment adds an organisation on top of the verification layer and
+replaces none of it.
+
+- A message between agents is a **claim**. It never becomes an observation
+  (rules 1 and 2), however many agents agree with it.
+- A reviewer's `APPROVED:` closes a task only after the deterministic
+  delivery gate has passed. The review loop already enforces this.
+- Agents may **propose** changes to how they work. Whether a change helped is
+  decided by deterministic metrics: refutation rate, rework cycles, blocked
+  tasks. A model's judgement does not decide it (rule 5).
+
+### The design
+
+1. **Procedures as data.** Rules and procedures become versioned records per
+   role, for example how to deliver a task, how to review one, how to handle
+   a ticket. Today they are free-text `system_prompt`s. Each agent's prompt is
+   built from its role and the procedures in force.
+2. **Communication that is kept.** Threads per task, sprint and ticket, and
+   messages addressed between roles: ask, propose, escalate, inform. They are
+   persisted and shown in the UI. This generalises what exists today: the
+   comment thread on each task and the Architect consultation.
+3. **Learning through retrospectives.** When a sprint closes, the agents read
+   what happened (verdicts, refutations, why work was sent back) and propose
+   procedure changes.
+   - The company's `autonomy_level` decides whether a change is adopted
+     directly or needs a human's approval.
+   - The metrics of the following sprints decide whether it is kept. A change
+     that makes them worse is reverted.
+4. **Self-management.** Operating the platform is also done by agent roles.
+   For example, a Support agent works the help desk with its own identity.
+   Humans set rules, autonomy and budgets; the agents do the work.
+
+### Order of work
+
+1. **Memory that reaches the agents** (done with this amendment). The task
+   worker searched past decisions without a `company_id`, so the search
+   always came back empty. The Neo4j search was also limited to the agent's
+   own role, so the ScrumMaster's retrospectives never reached the others.
+   Both are fixed. Each task prompt now also carries **Lessons from Recent
+   Sprints**: the retrospective counts and the review requests from the
+   company's last two completed sprints, read from the board in Postgres, so
+   they work without Neo4j. The prompt labels review requests as reviewers'
+   opinions, not facts. It leaves out the verifier's infrastructure messages
+   and keeps its failed test runs, which are observations.
+2. Threads and messages between roles, persisted and visible.
+3. Versioned procedures, and the retrospective that proposes and measures
+   changes to them.
+4. Operational agents (support, and the other tasks people do today).
+
+### What this changes in the tables above
+
+The 7-role persona graph stays a producer behind a flag. The company
+described here lives in the task worker's loop, which is already the path
+work takes. Roles return as an **organisation**: who does what, under which
+procedure, talking to whom. They do not return as a claim that personas add
+capability. Whether that organisation helps is measurable in the same table
+and under the same verification as everything else.

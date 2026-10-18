@@ -16,6 +16,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > claim and an observation must never share a field, that an agent's report of
 > its own test run is a claim rather than an observation, and that hashes and
 > signatures are never accepted from the party being recorded.
+>
+> **Amendment (2026-10-18).** The factory manages itself as a company of AI
+> agents that follow procedures, talk to each other and learn from
+> retrospectives. The evidence keeps the last word: messages between agents are
+> claims, and procedure changes are kept or reverted by deterministic metrics.
+> See the amendment at the end of `docs/POSITIONING.md` for the design and the
+> order of work.
 
 ## Running the System
 
@@ -140,7 +147,11 @@ the LangGraph graph is only an optional kickoff conversation.
    loads the item and the assigned agent
    (empty model → role default from `llm/model_factory.py`) and calls the LLM proxy.
    The prompt asks for every file as a fenced block with `path=<relative path>`;
-   on rework it also carries the pending `NEEDS WORK:` feedback.
+   on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
+   the company's past decisions from memory (scoped by `company_id`), and
+   **Lessons from Recent Sprints**: the retrospective counts and the review
+   requests from the company's last two completed sprints, read from the board
+   (`_load_recent_lessons`).
 3. `parse_file_manifest` turns the answer into files. The worker sends them to the
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
@@ -207,6 +218,7 @@ Test files:
 | `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
+| `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 
