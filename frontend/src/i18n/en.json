@@ -23,7 +23,8 @@
     "breadcrumb": "Breadcrumb",
     "members": "Members",
     "github": "GitHub",
-    "helpDesk": "Help desk"
+    "helpDesk": "Help desk",
+    "procedures": "Procedures"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1380,7 +1381,51 @@
       "request": "Rework request",
       "decision": "Decision",
       "escalation": "Escalation",
-      "retrospective": "Retrospective"
+      "retrospective": "Retrospective",
+      "proposal": "Procedure"
     }
+  },
+  "procedures": {
+    "title": "Procedures",
+    "subtitle": "The rules each role follows. The ScrumMaster proposes them after a sprint with rework; the board's numbers keep or revert them.",
+    "loading": "Loading procedures…",
+    "loadError": "Could not load the procedures: {{message}}",
+    "proposed": "Waiting for a decision",
+    "noProposed": "No proposals waiting.",
+    "active": "In force",
+    "noActive": "No procedures in force yet.",
+    "history": "History",
+    "noHistory": "Nothing retired or rejected yet.",
+    "everyRole": "Every role",
+    "version": "v{{version}}",
+    "why": "Why: {{why}}",
+    "proposedBy": "Proposed by {{who}}",
+    "decidedBy": "decided by {{who}}",
+    "results": {
+      "kept": "Kept",
+      "reverted": "Reverted",
+      "unmeasured": "Unmeasured",
+      "superseded": "Replaced",
+      "restored": "Restored",
+      "retired": "Retired"
+    },
+    "actions": {
+      "adopt": "Adopt",
+      "reject": "Reject",
+      "retire": "Retire"
+    },
+    "changed": "Someone already decided this one. Reload to see it.",
+    "decideError": "Could not save the decision: {{message}}",
+    "before": "Before: {{rework}} rework requests per task, {{blocked}} blocked ({{sprints}} sprints).",
+    "after": "After: {{rework}} per task, {{blocked}} blocked ({{sprints}} sprints).",
+    "measuring": "Measured after the next two completed sprints.",
+    "newTitle": "Write a procedure",
+    "newHint": "It is in force at once, and measured like the ones the ScrumMaster proposes.",
+    "role": "Role",
+    "titleLabel": "Title",
+    "body": "The rule",
+    "create": "Put in force",
+    "duplicate": "That procedure is already in force or proposed.",
+    "createError": "Could not save it: {{message}}"
   }
 }

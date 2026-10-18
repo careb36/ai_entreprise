@@ -14,6 +14,7 @@ const KIND_STYLES: Record<MessageKind, string> = {
   decision: 'border-emerald-700/60 text-emerald-300',
   escalation: 'border-red-700/60 text-red-300',
   retrospective: 'border-brand-700/60 text-brand-300',
+  proposal: 'border-violet-700/60 text-violet-300',
 }
 const LONG_BODY = 400
 // While work is moving, new messages appear without a reload.

@@ -23,6 +23,7 @@ MESSAGE_KINDS = (
     "decision",  # accepts the work
     "escalation",  # raises a blocked task to the ScrumMaster
     "retrospective",  # what a finished sprint showed
+    "proposal",  # proposes, adopts or reverts a procedure
 )
 
 

@@ -112,6 +112,30 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_company ON agent_messages(company_
 CREATE INDEX IF NOT EXISTS idx_agent_messages_sprint ON agent_messages(sprint_id);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_item ON agent_messages(backlog_item_id);
 
+-- The rules each role follows, versioned; kept or reverted by the board's numbers
+CREATE TABLE IF NOT EXISTS procedures (
+    id SERIAL PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    role VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'proposed',
+    version INTEGER NOT NULL DEFAULT 1,
+    supersedes_id INTEGER REFERENCES procedures(id),
+    proposed_by VARCHAR(255) NOT NULL,
+    rationale TEXT,
+    source_sprint_id INTEGER REFERENCES sprints(id) ON DELETE SET NULL,
+    baseline JSONB,
+    outcome JSONB,
+    adopted_after_sprint_id INTEGER,
+    decided_by VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    decided_at TIMESTAMP,
+    retired_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_procedures_company ON procedures(company_id, status);
+
 -- 4. LangGraph & Orchestration
 CREATE TABLE IF NOT EXISTS outbox_events (
     id SERIAL PRIMARY KEY,

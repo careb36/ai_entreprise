@@ -212,8 +212,16 @@ replaces none of it.
    handoff, request, decision, escalation, retrospective). The sprint's
    Conversation tab and the task page show them. Messages sit beside the
    evidence and never replace it.
-3. Versioned procedures, and the retrospective that proposes and measures
-   changes to them.
+3. **Versioned procedures, proposed at retrospectives and measured** (done).
+   - A `Procedure` belongs to a role (or to every role) and is part of that
+     role's prompts while active.
+   - After a sprint with rework or blocked tasks, the ScrumMaster proposes up
+     to two, in a fixed format a parser checks. Autonomy level 3 adopts them
+     at once; below that, a Manager decides.
+   - Two completed sprints after adoption, the board's numbers (rework per
+     task, share of blocked tasks) keep the procedure or revert it to the
+     version it replaced. A procedure with no sprints to compare with is
+     marked unmeasured, not kept.
 4. Operational agents (support, and the other tasks people do today).
 
 ### What this changes in the tables above

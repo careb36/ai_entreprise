@@ -38,6 +38,7 @@ export const QUERY_KEYS = {
     ['agent-runs', companyId, filters.producer ?? '', filters.status ?? '', filters.limit ?? 50,
       filters.external_ref ?? '', filters.sprint_id ?? ''] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
+  procedures: (companyId: number) => ['procedures', companyId] as const,
   messages: (companyId: number, filters: MessageFilters = {}) =>
     ['messages', companyId, filters.sprint_id ?? '', filters.backlog_item_id ?? '', filters.kind ?? '', filters.limit ?? ''] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
@@ -77,6 +78,35 @@ export function useAgentRuns(
     queryKey: QUERY_KEYS.agentRuns(companyId ?? 0, filters),
     queryFn: () => api.getAgentRuns(companyId!, filters),
     enabled: companyId !== null,
+  })
+}
+
+export function useProcedures(companyId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.procedures(companyId ?? 0),
+    queryFn: () => api.getProcedures(companyId!),
+    enabled: companyId !== null,
+  })
+}
+
+export function useCreateProcedure() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.createProcedure,
+    onSuccess: (_result, { company_id }) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.procedures(company_id) })
+    },
+  })
+}
+
+export function useDecideProcedure(companyId: number | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, decision }: { id: number; decision: 'adopt' | 'reject' | 'retire' }) =>
+      api.decideProcedure(id, decision),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.procedures(companyId ?? 0) })
+    },
   })
 }
 
