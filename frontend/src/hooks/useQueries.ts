@@ -19,14 +19,15 @@ export const QUERY_KEYS = {
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
   orchestrationHealth: (companyId: number, weeks: number) => ['orchestration_health', companyId, weeks] as const,
   tickets: () => ['tickets'] as const,
-  memory: (query: string) => ['memory', query] as const,
+  memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
   agentRuns: (companyId: number, producer?: string, status?: AgentRunStatus, limit?: number) =>
     ['agent-runs', companyId, producer ?? '', status ?? '', limit ?? 50] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
   approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
-  auditVerification: (externalRef: string) => ['audit-verification', externalRef] as const,
+  auditVerification: (companyId: number | null, externalRef: string) =>
+    ['audit-verification', companyId, externalRef] as const,
 }
 
 // ── Enterprise & Company ─────────────────────────────────────────────────────
@@ -66,11 +67,11 @@ export function useAgentRunApprovals(companyId: number | null, runId: number | n
   })
 }
 
-export function useAuditVerification(externalRef: string | null) {
+export function useAuditVerification(externalRef: string | null, companyId: number | null) {
   return useQuery({
-    queryKey: QUERY_KEYS.auditVerification(externalRef ?? ''),
-    queryFn: () => api.getAuditVerification(externalRef!),
-    enabled: externalRef !== null,
+    queryKey: QUERY_KEYS.auditVerification(companyId, externalRef ?? ''),
+    queryFn: () => api.getAuditVerification(externalRef!, companyId!),
+    enabled: externalRef !== null && companyId !== null,
   })
 }
 
@@ -226,7 +227,7 @@ export function useGenerate() {
 
 export function useSearchMemory(query: string, companyId?: number) {
   return useQuery({
-    queryKey: QUERY_KEYS.memory(query),
+    queryKey: QUERY_KEYS.memory(companyId ?? null, query),
     queryFn: () => api.searchMemory(query, companyId),
     enabled: query.length > 2,
   })
