@@ -1,8 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { BacklogItem } from '../services/api'
-import { useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
+import { BacklogItem, type AgentRunListItem } from '../services/api'
+import { useAgentRuns, useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAppStore } from '../store/useAppStore'
+import { Verdict } from './Verdict'
+import { TASK_WORKER_PRODUCER, latestRunsByTask } from '../lib/taskEvidence'
 import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent,
   PointerSensor, useDroppable, useSensor, useSensors,
@@ -68,16 +71,33 @@ function metricBadgeClass(value: number, limit: number): string {
   return 'bg-surface-800 text-gray-300 border-surface-700'
 }
 
+/** A verdict on the card once the task's latest delivery has been checked. */
+function DeliveryBadge({ run }: { run: AgentRunListItem }) {
+  const { t } = useTranslation()
+  if (run.status === 'ingested') return null
+  // The accessible name contains the visible verdict word ("Delivery: Verified").
+  const label = t('kanban.deliveryVerdict', {
+    verdict: t(`evidence.verdict.${run.status}`),
+    defaultValue: 'Delivery: {{verdict}}',
+  })
+  return (
+    <Link to={`/evidence/${run.id}`} aria-label={label} title={label} className="inline-flex rounded-full hover:brightness-125">
+      <Verdict status={run.status} compact />
+    </Link>
+  )
+}
+
 // ── SortableCard ───────────────────────────────────────────────────────────────
 
 function ItemCard({
-  item, sprintId, onStatusChange, updating, isDragging = false
+  item, sprintId, onStatusChange, updating, isDragging = false, evidenceRun
 }: {
   item: BacklogItem
   sprintId: number
   onStatusChange: (id: number, status: BacklogItem['status']) => void
   updating: boolean
   isDragging?: boolean
+  evidenceRun?: AgentRunListItem
 }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id })
@@ -115,6 +135,7 @@ function ItemCard({
 
       <div className="flex items-center gap-1.5 flex-wrap mt-2 ml-5">
         <span className={`badge badge-priority-${item.priority}`}>{item.priority}</span>
+        {evidenceRun && <DeliveryBadge run={evidenceRun} />}
         {item.assignee && (
           <span className="badge bg-brand-900/50 text-brand-300 border-brand-700/40">{item.assignee}</span>
         )}
@@ -165,6 +186,7 @@ function ColumnDropZone({
   onStatusChange,
   updating,
   activeItemId,
+  evidenceRuns,
 }: {
   columnId: string
   sprintId: number
@@ -176,6 +198,7 @@ function ColumnDropZone({
   onStatusChange: (id: number, status: BacklogItem['status']) => void
   updating: ReturnType<typeof useUpdateBacklogItem>
   activeItemId: number | null
+  evidenceRuns: Map<number, AgentRunListItem>
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId })
 
@@ -211,6 +234,7 @@ function ColumnDropZone({
                 onStatusChange={onStatusChange}
                 updating={updating.isPending && updating.variables?.itemId === item.id}
                 isDragging={activeItemId === item.id}
+                evidenceRun={evidenceRuns.get(item.id)}
               />
             ))
           )}
@@ -228,6 +252,14 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   
   const { data: board, isLoading, isError, refetch } = useSprintBoard(idNum)
   const updateMutation = useUpdateBacklogItem()
+  const companyId = useAppStore(state => state.companyId)
+  // One request per board, not one per card: every task-worker run in this sprint.
+  const { data: sprintRuns } = useAgentRuns(idNum ? companyId : null, {
+    producer: TASK_WORKER_PRODUCER,
+    sprint_id: idNum ?? undefined,
+    limit: 500,
+  })
+  const evidenceRuns = useMemo(() => latestRunsByTask(sprintRuns?.agent_runs ?? []), [sprintRuns])
 
   const [activeItem, setActiveItem] = useState<BacklogItem | null>(null)
 
@@ -353,6 +385,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
                     onStatusChange={handleStatusChange}
                     updating={updateMutation}
                     activeItemId={activeItem?.id ?? null}
+                    evidenceRuns={evidenceRuns}
                   />
                 )
               })}

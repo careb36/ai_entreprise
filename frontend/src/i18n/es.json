@@ -478,7 +478,17 @@
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
     "sprintNotFound": "No se encontró el sprint #{{sprintId}} al buscar la tarea #{{taskId}}.",
-    "loadError": "No se pudo cargar el sprint #{{sprintId}} para la tarea #{{taskId}}."
+    "loadError": "No se pudo cargar el sprint #{{sprintId}} para la tarea #{{taskId}}.",
+    "evidence": {
+      "title": "Evidencia",
+      "loading": "Cargando evidencia…",
+      "error": "No se pudo cargar la evidencia de esta tarea.",
+      "empty": "Aún no hay evidencia registrada.",
+      "version": "Versión {{version}}",
+      "claimedFiles": "Archivos que el agente afirma haber escrito",
+      "noFiles": "No afirma ningún archivo.",
+      "view": "Ver evidencia"
+    }
   },
   "controlPanel": {
     "title": "Panel de Control",
@@ -541,7 +551,8 @@
       "in_review": "En Revisión",
       "done": "Terminado",
       "blocked": "Bloqueado"
-    }
+    },
+    "deliveryVerdict": "Entrega: {{verdict}}"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -819,7 +830,9 @@
     "runAuditId": "Fila de auditoría de la ejecución",
     "latestVerificationAuditId": "Fila de auditoría de la última verificación",
     "notRecorded": "No registrado",
-    "runCrumb": "Ejecución #{{id}}"
+    "runCrumb": "Ejecución #{{id}}",
+    "taskLabel": "Tarea",
+    "taskFallback": "Tarea #{{id}}"
   },
   "analytics": {
     "title": "Analíticas",

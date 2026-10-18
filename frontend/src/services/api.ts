@@ -239,6 +239,16 @@ export interface AgentRunListItem {
   latest_approval: Pick<AgentRunApproval, 'decision' | 'feedback' | 'approver_name' | 'decided_at'> | null
 }
 
+export interface AgentRunFilters {
+  producer?: string
+  status?: AgentRunStatus
+  limit?: number
+  /** Exact match: every version of one piece of work, newest first. */
+  external_ref?: string
+  /** Runs whose `subject.sprint_id` is this sprint. */
+  sprint_id?: number
+}
+
 export interface AgentRun extends Omit<AgentRunListItem, 'latest_approval'> {
   artifact_text: string | null
 }
@@ -471,8 +481,14 @@ export const api = {
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
 
-  getAgentRuns: (companyId: number, filters: { producer?: string; status?: AgentRunStatus; limit?: number } = {}) =>
-    api.get<{ agent_runs: AgentRunListItem[] }>('/v1/agent_runs', { company_id: companyId, ...filters }),
+  getAgentRuns: (companyId: number, filters: AgentRunFilters = {}) => {
+    // Omit unset filters rather than sending them as the string "undefined".
+    const params: Record<string, string | number> = { company_id: companyId }
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined) params[key] = value
+    }
+    return api.get<{ agent_runs: AgentRunListItem[] }>('/v1/agent_runs', params)
+  },
 
   getAgentRun: (runId: number, companyId: number) =>
     api.get<AgentRun>(`/v1/agent_runs/${runId}`, { company_id: companyId }),

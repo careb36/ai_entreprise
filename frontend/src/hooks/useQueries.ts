@@ -6,7 +6,7 @@ import {
   ApiError,
   isClientError,
   type AgentRunApprovalRequest,
-  type AgentRunStatus,
+  type AgentRunFilters,
   type BacklogItem,
   type InitCompanyRequest,
   type ManagedAgent,
@@ -26,8 +26,9 @@ export const QUERY_KEYS = {
   memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
   agents: (companyId: number) => ['agents', companyId] as const,
-  agentRuns: (companyId: number, producer?: string, status?: AgentRunStatus, limit?: number) =>
-    ['agent-runs', companyId, producer ?? '', status ?? '', limit ?? 50] as const,
+  agentRuns: (companyId: number, filters: AgentRunFilters = {}) =>
+    ['agent-runs', companyId, filters.producer ?? '', filters.status ?? '', filters.limit ?? 50,
+      filters.external_ref ?? '', filters.sprint_id ?? ''] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
   approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
@@ -47,10 +48,10 @@ export function useCapabilities() {
 
 export function useAgentRuns(
   companyId: number | null,
-  filters: { producer?: string; status?: AgentRunStatus; limit?: number } = {},
+  filters: AgentRunFilters = {},
 ) {
   return useQuery({
-    queryKey: QUERY_KEYS.agentRuns(companyId ?? 0, filters.producer, filters.status, filters.limit),
+    queryKey: QUERY_KEYS.agentRuns(companyId ?? 0, filters),
     queryFn: () => api.getAgentRuns(companyId!, filters),
     enabled: companyId !== null,
   })

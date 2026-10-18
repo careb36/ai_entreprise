@@ -478,7 +478,17 @@
     "noSprint": "Select a sprint to look up task #{{taskId}}.",
     "notFound": "Task #{{taskId}} was not found in sprint #{{sprintId}}.",
     "sprintNotFound": "Sprint #{{sprintId}} was not found while looking for task #{{taskId}}.",
-    "loadError": "Failed to load sprint #{{sprintId}} for task #{{taskId}}."
+    "loadError": "Failed to load sprint #{{sprintId}} for task #{{taskId}}.",
+    "evidence": {
+      "title": "Evidence",
+      "loading": "Loading evidence…",
+      "error": "Failed to load the evidence for this task.",
+      "empty": "No evidence recorded yet.",
+      "version": "Version {{version}}",
+      "claimedFiles": "Files the agent claims to have written",
+      "noFiles": "No files claimed.",
+      "view": "View evidence"
+    }
   },
   "controlPanel": {
     "title": "Control Panel",
@@ -541,7 +551,8 @@
       "in_review": "In Review",
       "done": "Done",
       "blocked": "Blocked"
-    }
+    },
+    "deliveryVerdict": "Delivery: {{verdict}}"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -819,7 +830,9 @@
     "runAuditId": "Run audit row",
     "latestVerificationAuditId": "Latest verification audit row",
     "notRecorded": "Not recorded",
-    "runCrumb": "Run #{{id}}"
+    "runCrumb": "Run #{{id}}",
+    "taskLabel": "Task",
+    "taskFallback": "Task #{{id}}"
   },
   "analytics": {
     "title": "Analytics",

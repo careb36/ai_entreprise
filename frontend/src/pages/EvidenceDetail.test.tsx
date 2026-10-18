@@ -194,6 +194,36 @@ describe('Evidence detail', () => {
     expect(screen.getByTestId('signature-row-valid')).toBeInTheDocument()
   })
 
+  it('links a task-worker run back to the task it delivered', () => {
+    // The run set up in beforeEach, from the producer 'github'.
+    const base = mockedUseAgentRun(42, 7) as unknown as { data: Record<string, unknown> }
+    mockedUseAgentRun.mockReturnValue({
+      ...base,
+      data: {
+        ...base.data,
+        external_ref: 'task-2',
+        producer: 'le-fabrique-task-worker',
+        subject: { sprint_id: 7, backlog_item_id: 2, title: 'Encrypt credentials' },
+      },
+    } as never)
+    setup()
+    const link = screen.getByRole('link', { name: 'Encrypt credentials' })
+    expect(link).toHaveAttribute('href', '/sprints/7/tasks/2')
+    expect(link.closest('p')).toHaveTextContent('Task: Encrypt credentials')
+  })
+
+  it('offers no task link for a run from another producer, even with a task-shaped subject', () => {
+    // The run set up in beforeEach, from the producer 'github'.
+    const base = mockedUseAgentRun(42, 7) as unknown as { data: Record<string, unknown> }
+    mockedUseAgentRun.mockReturnValue({
+      ...base,
+      data: { ...base.data, subject: { sprint_id: 7, backlog_item_id: 2, title: 'Encrypt credentials' } },
+    } as never)
+    setup()
+    expect(screen.queryByRole('link', { name: 'Encrypt credentials' })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="/sprints/"]')).toBeNull()
+  })
+
   it('submits the exact rejection body when feedback is provided', () => {
     setup()
     fireEvent.change(screen.getByLabelText(i18n.t('evidence.approverName')), { target: { value: ' Reviewer ' } })

@@ -2,12 +2,13 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskDetails from './TaskDetails'
-import { useSprintBoard } from '../hooks/useQueries'
+import { useAgentRuns, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 
-vi.mock('../hooks/useQueries', () => ({ useSprintBoard: vi.fn() }))
+vi.mock('../hooks/useQueries', () => ({ useSprintBoard: vi.fn(), useAgentRuns: vi.fn() }))
 const boardQuery = vi.mocked(useSprintBoard)
+const runsQuery = vi.mocked(useAgentRuns)
 
 function setup(path = '/task/12') {
   return render(<MemoryRouter initialEntries={[path]}><Routes>
@@ -21,6 +22,7 @@ describe('task detail errors', () => {
     vi.clearAllMocks()
     useAppStore.setState({ activeSprintId: 7 })
     boardQuery.mockReturnValue({ data: { columns: {} }, isLoading: false, isError: false } as never)
+    runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
   })
 
   it.each(['bad', '12x', '0', '-1', '1.5'])('rejects malformed task ID %s without loading a board', id => {
@@ -100,5 +102,79 @@ describe('task detail errors', () => {
     expect(screen.getByText('Deliverable: crypto.py')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back' })).not.toBeInTheDocument()
     expect(boardQuery).toHaveBeenCalledWith(9)
+  })
+})
+
+describe('task delivery evidence', () => {
+  const boardWithTask = {
+    data: {
+      sprint: { id: 9, sprint_name: 'Hardening' },
+      columns: { in_review: [{
+        id: 12, sprint_id: 9, title: 'Encrypt credentials', description: '',
+        status: 'in_review', priority: 'high', assignee: 'Developer', comments: [],
+        created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+      }] },
+    },
+    isLoading: false,
+    isError: false,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ companyId: 42, activeSprintId: 9 })
+    boardQuery.mockReturnValue(boardWithTask as never)
+  })
+
+  function evidenceSection() {
+    return screen.getByRole('region', { name: 'Evidence' })
+  }
+
+  it("shows the latest run's verdict, version, claimed files and a link to its evidence", () => {
+    runsQuery.mockReturnValue({
+      data: { agent_runs: [{
+        id: 31, company_id: 42, external_ref: 'task-12', version: 3, producer: 'le-fabrique-task-worker',
+        model: null, agent_role: 'Developer', subject: { sprint_id: 9, backlog_item_id: 12 },
+        claims: { files: ['backend/app/crypto.py', 'backend/tests/test_crypto.py'], summary: 'done' },
+        artifact_digest: 'd', artifact_size: 10, status: 'verified', started_at: null, finished_at: null,
+        ingested_at: '2026-10-02T00:00:00Z', audit_log_id: null, latest_approval: null,
+      }] },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup('/sprints/9/tasks/12')
+
+    expect(runsQuery).toHaveBeenCalledWith(42, {
+      producer: 'le-fabrique-task-worker',
+      external_ref: 'task-12',
+      limit: 1,
+    })
+    const section = evidenceSection()
+    expect(within(section).getByTestId('verdict-verified')).toHaveTextContent('Verified')
+    expect(within(section).getByText('Version 3')).toBeInTheDocument()
+    expect(within(section).getByText('backend/app/crypto.py')).toBeInTheDocument()
+    expect(within(section).getByText('backend/tests/test_crypto.py')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: 'View evidence' })).toHaveAttribute('href', '/evidence/31')
+    expect(within(section).queryByText('No evidence recorded yet.')).not.toBeInTheDocument()
+  })
+
+  it('says so when no run has been recorded for the task', () => {
+    runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
+    setup('/sprints/9/tasks/12')
+
+    const section = evidenceSection()
+    expect(within(section).getByText('No evidence recorded yet.')).toBeInTheDocument()
+    expect(within(section).queryByRole('link', { name: 'View evidence' })).not.toBeInTheDocument()
+    expect(within(section).queryByTestId(/^verdict-/)).not.toBeInTheDocument()
+  })
+
+  it('reports a failed evidence lookup and retries it', () => {
+    const refetch = vi.fn()
+    runsQuery.mockReturnValue({ isLoading: false, isError: true, refetch } as never)
+    setup('/sprints/9/tasks/12')
+
+    const section = evidenceSection()
+    expect(within(section).getByRole('alert')).toHaveTextContent('Failed to load the evidence for this task.')
+    fireEvent.click(within(section).getByRole('button', { name: 'Retry' }))
+    expect(refetch).toHaveBeenCalledOnce()
   })
 })
