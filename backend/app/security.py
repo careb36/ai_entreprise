@@ -45,8 +45,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "max-age=31536000; includeSubDomains"
         )
 
-        # Content security policy (allow unsafe-eval for Vite/React dev mode)
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
+        # Content security policy
+        if request.url.path in {"/docs", "/redoc", "/openapi.json"}:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
+                "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "
+                "https://fonts.googleapis.com 'unsafe-inline'; "
+                "font-src https://fonts.gstatic.com; "
+                "img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = "default-src 'self'"
 
         # Referrer policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
