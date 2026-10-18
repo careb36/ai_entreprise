@@ -538,7 +538,7 @@ def _ai_suggest_team(
         catalogue_data = client.get_available_models()
         models = catalogue_data.get("models", [])
         # Orchestrator: fastest stable non-preview model for meta-tasks
-        orchestrator_model = catalogue_data.get("orchestrator", "gemini-2.5-flash")
+        orchestrator_model = catalogue_data.get("orchestrator", "gemini-3.8-flash")
 
         if not models:
             log.warning("Empty model catalogue from proxy — falling back to rules")

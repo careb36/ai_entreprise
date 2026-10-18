@@ -387,9 +387,14 @@ def list_models():
     if not _available_models:
         _refresh_gemini_models()
 
+    # Models that are no longer available to new users (Google deprecation).
+    _GEMINI_DEPRECATED = {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"}
+
     models = []
     with _model_refresh_lock:
         for model_id in sorted(_available_models):
+            if model_id in _GEMINI_DEPRECATED:
+                continue
             tier, desc = _classify_model(model_id)
             models.append({"id": model_id, "provider": "gemini", "tier": tier, "description": desc})
 
