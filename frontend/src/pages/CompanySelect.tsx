@@ -1,5 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
@@ -12,6 +13,7 @@ export default function CompanySelect() {
   const setCompany = useAppStore(state => state.setCompany)
 
   function selectCompany(companyId: number) {
+    queryClient.removeQueries()
     setCompany(
       companyId,
       t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' }),

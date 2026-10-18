@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import CompanySelect from './CompanySelect'
 import ProtectedRoute from '../components/ProtectedRoute'
+import { queryClient } from '../lib/queryClient'
 import { useAuthStore } from '../store/useAuthStore'
 
 function CurrentPath() {
@@ -27,6 +28,7 @@ function renderRoutes(path: string) {
 
 describe('company selection return destination', () => {
   beforeEach(() => {
+    queryClient.clear()
     useAuthStore.getState().logout()
     useAuthStore.setState({
       token: 'valid-token',
@@ -65,4 +67,13 @@ describe('company selection return destination', () => {
       expect(screen.getByTestId('current-path').textContent).toBe('/')
     },
   )
+
+  it('removes cached queries when switching companies', async () => {
+    queryClient.setQueryData(['memory', 14, 'auth'], ['company 14 result'])
+    renderRoutes('/companies/select')
+
+    fireEvent.click(await screen.findByRole('button', { name: /Company 28.*Viewer/ }))
+
+    expect(queryClient.getQueryData(['memory', 14, 'auth'])).toBeUndefined()
+  })
 })

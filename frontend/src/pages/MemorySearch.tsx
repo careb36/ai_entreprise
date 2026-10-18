@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../services/api'
 import { Search, Loader2, Database, ChevronDown, ChevronUp } from 'lucide-react'
+import { useAppStore } from '../store/useAppStore'
 
 interface MemoryResult {
   content: string
@@ -40,6 +41,7 @@ function MetadataView({ metadata }: { metadata: unknown }) {
 
 export default function MemorySearch() {
   const { t } = useTranslation()
+  const companyId = useAppStore(state => state.companyId)
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(10)
   const [results, setResults] = useState<MemoryResult[]>([])
@@ -55,7 +57,8 @@ export default function MemorySearch() {
     try {
       const res = await api.get<{ results: MemoryResult[] }>('/v1/memory/search', {
         query: query.trim(),
-        limit: String(limit)
+        limit: String(limit),
+        ...(companyId !== null ? { company_id: companyId } : {}),
       })
       setResults(res.results || [])
       setSearched(true)

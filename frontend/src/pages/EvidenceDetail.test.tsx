@@ -138,6 +138,7 @@ describe('Evidence detail', () => {
 
   it('shows a claim beside the concrete observation', () => {
     setup()
+    expect(mockedUseAuditVerification).toHaveBeenCalledWith('issue-27-run', 42)
     expect(screen.getByText('Adds backend/app/crypto.py with Fernet encryption')).toBeInTheDocument()
     const observedPanel = screen.getByText(i18n.t('evidence.observed')).closest('.card') as HTMLElement
     expect(within(observedPanel).getByText('claims present but artifact is empty (0 bytes)')).toBeInTheDocument()
