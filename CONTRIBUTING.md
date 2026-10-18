@@ -1,148 +1,44 @@
 # Contributing to La Fabrique
 
-Thank you for your interest in contributing to La Fabrique. This document outlines the standards and workflows for contributing to this project.
+La Fabrique is a proprietary multi-agent orchestration platform: a React web
+app, a FastAPI control plane, and LangGraph-based sprint orchestration with
+first-class observability.
+
+This document is the single source of truth for **proposing, reviewing, and
+merging changes** — for humans and for AI agents. If you are an agent, read
+§10 before you open a PR.
+
+- Normative: `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, accepted ADRs.
+- Precedence: `SECURITY.md` > accepted ADR > `CONTRIBUTING.md` > tooling default.
+- Questions: open a `question` issue or ask in `#fabrique-eng`.
 
 ---
 
-## Table of Contents
+## 1. Who does what
 
-- [Branch Strategy](#branch-strategy)
-- [Commit Conventions](#commit-conventions)
-- [Development Setup](#development-setup)
-- [Code Standards](#code-standards)
-- [Testing Requirements](#testing-requirements)
-- [Pull Request Process](#pull-request-process)
-- [AI Assistant Workflow](#ai-assistant-workflow)
-
----
-
-## Branch Strategy
-
-We follow the **GitFlow** model for software lifecycle management.
-
-### Main Branches
-- `main`: Stable, production-ready code
-- `develop`: Integration branch for ongoing development
-
-### Working Branches
-| Type | Prefix | Source | Target | Example |
-|:-----|:-------|:-------|:-------|:--------|
-| Feature | `feature/` | `develop` | `develop` | `feature/auth-sqlmodel` |
-| Bugfix | `bugfix/` | `develop` | `develop` | `bugfix/nats-retry-logic` |
-| Release | `release/` | `develop` | `main` & `develop` | `release/v2.1.0` |
-| Hotfix | `hotfix/` | `main` | `main` & `develop` | `hotfix/critical-db-fix` |
+| Role | Responsibility | Merge authority |
+|------|----------------|-----------------|
+| Product Owner | Sprint scope, acceptance criteria, prioritization | No |
+| Architect | System design, contracts, ADRs, cross-cutting review | Yes (design areas) |
+| Scrum Master | Sprint flow, status hygiene, unblocking, escalation | No |
+| Security | Threat model, secrets, dependency & data-handling review | Yes (security-sensitive) |
+| Developers | Implementation, tests, observability | Yes (own area, after review) |
+| QA | Verification against acceptance criteria | No |
+| AI agents | Draft specs, implement, review, verify — per §10 | **Never** (see §10.2) |
+| Human Owner | Final authority on `main` | Yes |
 
 ---
 
-## Commit Conventions
+## 2. Non-negotiables
 
-All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) format: `<type>(<scope>): <description>`
-
-### Allowed Types
-- `feat`: New functionality
-- `fix`: Bug fix
-- `docs`: Documentation-only changes
-- `style`: Formatting changes (spaces, commas) that do not affect logic
-- `refactor`: Code change that neither fixes a bug nor adds a feature
-- `perf`: Performance improvement
-- `test`: Add or fix tests
-- `chore`: Changes to build process or auxiliary tools
-- `ci`: Changes to CI configuration files and scripts
-
-### Examples
-- `feat(auth): implement user registration with SQLModel`
-- `fix(nats): correct exponential reconnection in client`
-- `refactor(backend): modularize sprint endpoints into independent routers`
+1. **No secrets in the repo.** Ever. Use the secret manager; `gitleaks` runs in CI.
+2. **Proprietary IP.** Do not paste code, prompts, or designs from La Fabrique into
+   third-party tools without Security sign-off. No new dependency without §7.4.
+3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
+4. **Every change traces to an issue.** PRs without a linked issue are closed.
+5. **Agents do not merge to `main`.** A human merges every PR (§10.2).
+6. **Tests and observability ship with the change**, not after it (§12).
 
 ---
 
-## Development Setup
-
-### Prerequisites
-- Docker 24.0+ with Docker Compose v2
-- Python 3.12+
-- Node.js 20+
-
-### Initial Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/careb36/la-fabrique.git
-cd la-fabrique
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys and passwords
-
-# Start the full stack
-./reset_infra.sh
-```
-
-### Running Tests
-
-```bash
-# Backend tests
-cd backend && PYTHONPATH=.:app python3 -m pytest tests -q
-
-# Frontend tests
-cd frontend && npm run test:run
-```
-
----
-
-## Code Standards
-
-### Backend (Python)
-- Use `typing` for all function signatures
-- Follow PEP 8 style guide
-- Use Pydantic v2 for request/response validation
-- No coupling between database logic and FastAPI controllers
-- Inject dependencies whenever possible
-
-### Frontend (TypeScript)
-- Use strict TypeScript types
-- All user-facing strings must be added to both `frontend/src/locales/en.json` and `frontend/src/locales/es.json`
-- Use the `useTranslation` hook from i18next; never hardcode English strings in JSX
-- Use Zustand for state management
-- Use TanStack Query for API operations
-
----
-
-## Testing Requirements
-
-- All new features must include corresponding tests
-- Backend tests use pytest with in-memory SQLite (no external services required)
-- Frontend tests use Vitest with Testing Library and jsdom
-- CI runs automatically on every pull request
-
----
-
-## Pull Request Process
-
-1. **Create a branch** from `develop` following the naming convention
-2. **Implement** your changes following code standards
-3. **Test** locally — ensure all tests pass
-4. **Commit** using conventional commit format
-5. **Push** your branch to the repository
-6. **Open a Pull Request** with a clear description of changes
-7. **Address review feedback** promptly
-8. **Merge** once approved and CI passes
-
----
-
-## AI Assistant Workflow
-
-When working with AI assistants (Copilot, Claude, etc.):
-
-1. **Investigate:** Read `REFACTORING_PLAN.md` to understand the current objective
-2. **Branch:** Create a `feature/` or `bugfix/` branch from `develop`
-3. **Implement:** Write code following design patterns (Screaming Architecture)
-4. **Validate:** Ensure code compiles and passes linters
-5. **Commit:** Make atomic, descriptive commits following the convention
-6. **PR:** Describe changes made in the Pull Request
-
----
-
-## Questions?
-
-If you have questions about contributing, please open a [GitHub Discussion](https://github.com/careb36/la-fabrique/discussions) or contact the maintainer.
+## 3. Local setup
