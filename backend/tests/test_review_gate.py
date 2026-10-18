@@ -241,3 +241,41 @@ def test_rework_prompt_carries_the_review_feedback(monkeypatch):
     assert "## Review feedback to address" in captured["prompt"]
     assert "QA: NEEDS WORK: add input validation" in captured["prompt"]
     assert "first attempt" not in captured["prompt"]
+
+
+def test_another_companys_run_cannot_gate_this_task(db, monkeypatch):
+    item_id = _item_in_review(db, None)
+    intruder = Company(company_name="Intruder", autonomy_level=1)
+    db.add(intruder)
+    db.commit()
+    db.refresh(intruder)
+    # POST /v1/agent_runs accepts any producer and reference from any company.
+    run = AgentRun(
+        company_id=intruder.id,
+        external_ref=f"task-{item_id}",
+        producer=task_worker.TASK_WORKER_PRODUCER,
+        claims={"files": ["src/a.py"]},
+        artifact_digest="d",
+        artifact_size=1,
+        version=99,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    db.add(
+        Verification(
+            company_id=intruder.id,
+            agent_run_id=run.id,
+            verdict="refuted",
+            checks=[
+                {"name": "files_written", "outcome": "refuted", "observation": "x"}
+            ],
+        )
+    )
+    db.commit()
+
+    calls = _run_cycle(monkeypatch, "APPROVED: complete", db, item_id)
+
+    status, _comments = _state(db, item_id)
+    assert len(calls) == 1
+    assert status == "done"

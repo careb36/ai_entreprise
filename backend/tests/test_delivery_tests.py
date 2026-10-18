@@ -183,10 +183,13 @@ def project(monkeypatch, sqlite_session, tmp_path):
     )
 
 
-def _verification(session, item_id):
+def _verification(session, company_id, item_id):
     session.expire_all()
     run = session.exec(
-        select(AgentRun).where(AgentRun.external_ref == f"task-{item_id}")
+        select(AgentRun).where(
+            AgentRun.company_id == company_id,
+            AgentRun.external_ref == f"task-{item_id}",
+        )
     ).first()
     verification = session.exec(
         select(Verification).where(Verification.agent_run_id == run.id)
@@ -204,12 +207,12 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
         )
     )
 
-    verification, checks = _verification(session, item["id"])
+    verification, checks = _verification(session, sprint["company_id"], item["id"])
     assert nats.subjects == ["workspace.generate", "workspace.execute"]
     assert checks["tests_run"]["outcome"] == "pass"
     assert checks["claimed_tests_evidenced"]["outcome"] == "pass"
     assert verification.verdict == "verified"
-    assert task_worker._delivery_gate(item["id"]) is None
+    assert task_worker._delivery_gate(sprint["company_id"], item["id"]) is None
 
 
 def test_failing_suite_refutes_and_sends_the_task_back(project):
@@ -220,12 +223,12 @@ def test_failing_suite_refutes_and_sends_the_task_back(project):
         task_worker._deliver_artifacts(nats, item, agent, sprint, _answer("Hi, Ana!"))
     )
 
-    verification, checks = _verification(session, item["id"])
+    verification, checks = _verification(session, sprint["company_id"], item["id"])
     assert checks["tests_run"]["outcome"] == "refuted"
     assert "exited 1" in checks["tests_run"]["observation"]
     assert checks["claimed_tests_evidenced"]["outcome"] == "refuted"
     assert verification.verdict == "refuted"
-    problem, observation = task_worker._delivery_gate(item["id"])
+    problem, observation = task_worker._delivery_gate(sprint["company_id"], item["id"])
     assert problem == "tests failed"
     assert "exited 1" in observation
 
@@ -239,6 +242,6 @@ def test_disabled_by_default(project, monkeypatch):
         task_worker._deliver_artifacts(nats, item, agent, sprint, _answer("Hi, Ana!"))
     )
 
-    _verification_row, checks = _verification(session, item["id"])
+    _verification_row, checks = _verification(session, sprint["company_id"], item["id"])
     assert nats.subjects == ["workspace.generate"]
     assert "tests_run" not in checks

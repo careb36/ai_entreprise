@@ -1985,7 +1985,7 @@ TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
 DELIVERY_GATE_AUTHOR = "Verifier"
 
 
-def _delivery_gate(item_id: int) -> tuple[str, str] | None:
+def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
     """
     ``(problem, observation)`` when the task's latest delivery must not reach QA.
 
@@ -1994,11 +1994,16 @@ def _delivery_gate(item_id: int) -> tuple[str, str] | None:
     test run that failed.  Other checks — an unevidenced "tests pass" claim, a
     test run that could not happen — are left to the evidence page, so an
     honest claim never forces a rework.
+
+    Scoped to the task's company: ``POST /v1/agent_runs`` lets any company
+    ingest a run with any producer and reference, so a run is only trusted
+    when it belongs to the same company as the task.
     """
     with Session(engine) as session:
         run = session.exec(
             select(AgentRun)
             .where(
+                AgentRun.company_id == company_id,
                 AgentRun.external_ref == f"task-{item_id}",
                 AgentRun.producer == TASK_WORKER_PRODUCER,
             )
@@ -2856,7 +2861,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
             # Evidence before opinion: a delivery the daemon refuted or never
             # confirmed goes back for rework without asking the QA model.
-            gate = await asyncio.to_thread(_delivery_gate, item.id)
+            gate = await asyncio.to_thread(_delivery_gate, sprint.company_id, item.id)
             if gate is not None:
                 problem, observation = gate
                 previous_gate_reworks = sum(

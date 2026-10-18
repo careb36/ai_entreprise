@@ -353,9 +353,13 @@ def _task_fixture(db, project_path: str):
 
 def _latest(db, item_id: int):
     db.expire_all()
+    company_id = db.get(Sprint, db.get(BacklogItem, item_id).sprint_id).company_id
     run = db.exec(
         select(AgentRun)
-        .where(AgentRun.external_ref == f"task-{item_id}")
+        .where(
+            AgentRun.company_id == company_id,
+            AgentRun.external_ref == f"task-{item_id}",
+        )
         .order_by(AgentRun.version.desc())
     ).first()
     verification = db.exec(
