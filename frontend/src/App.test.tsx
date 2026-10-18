@@ -337,12 +337,12 @@ describe('app navigation', () => {
       expect(mobileActive[0]).toHaveTextContent(label)
     })
 
-    it.each(['/dashboard/analytics', '/analytics'])('nests analytics in Sprints at %s', async path => {
+    it.each(['/dashboard/analytics', '/analytics', '/dashboard/analytics/', '/Dashboard/Analytics'])('nests analytics in Sprints at %s', async path => {
       authenticate()
       window.history.replaceState(null, '', path)
       vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
       render(<App />)
-      await waitFor(() => expect(window.location.pathname).toBe('/dashboard/analytics'))
+      await waitFor(() => expect(window.location.pathname).toBe(path === '/analytics' ? '/dashboard/analytics' : path))
       const primary = screen.getByRole('navigation', { name: 'Main navigation' })
       expect(within(primary).getByRole('link', { name: 'Sprints' })).toHaveAttribute('aria-current', 'page')
       expect(within(primary).queryByRole('link', { name: 'Analytics' })).not.toBeInTheDocument()

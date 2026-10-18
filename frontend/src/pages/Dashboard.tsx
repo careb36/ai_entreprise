@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useMatch, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight,
   CircleDot, Cpu, Layers, Loader2, Play, Plus, Radio,
@@ -517,9 +517,8 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const location = useLocation()
   const activeSprintId = useAppStore(state => state.activeSprintId)
-  const analyticsSelected = location.pathname === '/dashboard/analytics'
+  const analyticsSelected = useMatch('/dashboard/analytics') !== null
 
   return (
     <div>
