@@ -171,6 +171,15 @@ Test files:
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
 | `test_crypto.py` | Fernet credential encryption: round trip, tamper and wrong-key rejection, keyless fallback, legacy rows |
 | `test_llm_routing.py` | Task worker: empty agent model → role default from `model_factory`, LLM failures on the board, `served_model` on the AgentRun |
+| `test_task_delivery.py` | File manifest parsing, delivery to the real daemon against `tmp_path`, sha256 `files_written` check, daemon-down → unverifiable |
+| `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
+| `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
+| `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
+| `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
+| `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
+| `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
+| `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
+| `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
@@ -192,6 +201,8 @@ Frontend changes are checked separately by
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run test:run`, and
 `npm run build` from the `frontend/` directory, using
 `frontend/package-lock.json` as the cache key.
+`.github/workflows/frontend-tests.yml` runs the same steps on the same
+triggers, plus eslint and prettier, which report but do not fail the job.
 
 The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 `frontend/` with `npm run test` for watch mode during development, or
@@ -201,6 +212,12 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 |------|----------------|
 | `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
 | `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option |
+| `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
+| `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
+| `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
+| `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
+| `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
+| `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)
 
