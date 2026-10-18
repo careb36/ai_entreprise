@@ -604,6 +604,17 @@ export default function CompanyNew() {
                 <button
                   type="button"
                   onClick={() => {
+                    const abs = browseAbsolute ? `${browseAbsolute}/${dir.name}` : dir.path
+                    setProjectPath(abs)
+                    setShowDirPicker(false)
+                  }}
+                  className="text-sm text-gray-200 font-mono flex-1 text-left"
+                >
+                  📁 {dir.name}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     // refetch
                     (async () => {
                       try {
@@ -613,7 +624,7 @@ export default function CompanyNew() {
                         })
                         const data = await res.json()
                         const entries = data.entries || data.directories || []
-                        if (entries.length) {
+                        if (entries.length >= 0) {
                           setAvailableDirs(entries)
                           setBrowseCurrent(data.current || '')
                           setBrowseParent(data.parent)
@@ -622,21 +633,10 @@ export default function CompanyNew() {
                       } catch {}
                     })()
                   }}
-                  className="text-sm text-gray-200 font-mono flex-1 text-left"
+                  className="text-xs text-gray-400 hover:text-gray-200 px-2"
+                  title="Entrar"
                 >
-                  📁 {dir.name}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const abs = browseAbsolute ? `${browseAbsolute}/${dir.name}` : dir.path
-                    setProjectPath(abs)
-                    setShowDirPicker(false)
-                  }}
-                  className="text-xs text-brand-400 hover:text-brand-300 px-2"
-                  title="Seleccionar"
-                >
-                  ✓
+                  →
                 </button>
               </div>
             ))}
