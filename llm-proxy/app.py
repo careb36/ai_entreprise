@@ -94,6 +94,23 @@ def _validate_api_keys():
     else:
         logger.warning("DEEPSEEK_API_KEY is not set")
 
+
+    if GEMINI_API_KEY:
+        try:
+            resp = requests.get(
+                f"{GEMINI_PROXY_URL}/models",
+                headers={"x-goog-api-key": GEMINI_API_KEY},
+                timeout=10,
+            )
+            if resp.status_code in (401, 403):
+                errors.append("GEMINI_API_KEY is invalid")
+            else:
+                logger.info("Gemini API key validated successfully")
+        except Exception as e:
+            logger.warning(f"Could not validate Gemini API key: {e}")
+    else:
+        logger.warning("GEMINI_API_KEY is not set")
+
     if QWEN_API_KEY:
         try:
             resp = requests.post(
@@ -144,10 +161,10 @@ engine = create_engine(_build_database_url(), pool_pre_ping=True)
 # Preference order for fallback resolution (most preferred first).
 # Only used when the exact requested model is not in the live catalogue.
 _PREFERENCE_TIERS = {
-    "fast":     ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
-                 "gemini-2.0-flash-lite", "gemini-2.0-flash"],
-    "powerful": ["gemini-2.5-pro",   "gemini-3-pro-preview", "gemini-pro-latest",
-                 "gemini-2.5-flash"],
+    "fast":     ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
+                 "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
+    "powerful": ["gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-pro-latest",
+                 "gemini-2.5-pro"],
 }
 
 # Tier classification rules applied in order — first match wins.
@@ -346,8 +363,8 @@ def _pick_orchestrator(models: list[dict]) -> str:
     Preference: balanced > fast > strategic, never preview.
     """
     preferred_ids = [
-        "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite",
-        "gemini-2.0-flash", "gemini-2.5-pro",
+        "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
+        "gemini-2.5-flash", "gemini-2.5-pro",
     ]
     available_ids = {m["id"] for m in models if m["tier"] != "preview"}
     for candidate in preferred_ids:
