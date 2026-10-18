@@ -101,9 +101,18 @@
     "backendApi": "API del backend",
     "agentStream": "Flujo de agentes",
     "scope": {
-      "S": { "label": "Pequeño", "short": "P" },
-      "M": { "label": "Mediano", "short": "M" },
-      "L": { "label": "Grande", "short": "G" }
+      "S": {
+        "label": "Pequeño",
+        "short": "P"
+      },
+      "M": {
+        "label": "Mediano",
+        "short": "M"
+      },
+      "L": {
+        "label": "Grande",
+        "short": "G"
+      }
     },
     "status": {
       "active": "Activo",
@@ -112,12 +121,30 @@
       "cancelled": "Cancelado"
     },
     "roles": {
-      "PO": { "label": "Responsable de producto", "initials": "RP" },
-      "ScrumMaster": { "label": "Facilitador Scrum", "initials": "FS" },
-      "Developer": { "label": "Desarrollador", "initials": "DE" },
-      "QA": { "label": "Ingeniero de calidad", "initials": "CC" },
-      "DevOps": { "label": "Desarrollo y operaciones", "initials": "DO" },
-      "Architect": { "label": "Arquitecto", "initials": "AR" }
+      "PO": {
+        "label": "Responsable de producto",
+        "initials": "RP"
+      },
+      "ScrumMaster": {
+        "label": "Facilitador Scrum",
+        "initials": "FS"
+      },
+      "Developer": {
+        "label": "Desarrollador",
+        "initials": "DE"
+      },
+      "QA": {
+        "label": "Ingeniero de calidad",
+        "initials": "CC"
+      },
+      "DevOps": {
+        "label": "Desarrollo y operaciones",
+        "initials": "DO"
+      },
+      "Architect": {
+        "label": "Arquitecto",
+        "initials": "AR"
+      }
     },
     "priorities": {
       "low": "Baja",
@@ -180,7 +207,14 @@
     "detectionError": "La detección automática falló. Por favor configura los agentes manualmente.",
     "newFactory": "Nueva Fábrica",
     "wizardDescription": "Configura tu fábrica de software con IA en 6 pasos.",
-    "steps": { "Project": "Proyecto", "Company": "Empresa", "Autonomy": "Autonomía", "Permissions": "Permisos", "Team": "Equipo", "Review": "Revisión" },
+    "steps": {
+      "Project": "Proyecto",
+      "Company": "Empresa",
+      "Autonomy": "Autonomía",
+      "Permissions": "Permisos",
+      "Team": "Equipo",
+      "Review": "Revisión"
+    },
     "back": "Atrás",
     "next": "Siguiente",
     "edit": "Editar",
@@ -206,7 +240,11 @@
     "aiSuggestion": "Equipo sugerido por IA",
     "rulesSuggestion": "Sugerencia basada en reglas",
     "complexity": "Complejidad {{level}}",
-    "complexityLevels": { "High": "alta", "Medium": "media", "Low": "baja" },
+    "complexityLevels": {
+      "High": "alta",
+      "Medium": "media",
+      "Low": "baja"
+    },
     "noProject": "Aún no se ha analizado ningún proyecto.",
     "manualTeamHint": "También puedes configurar el equipo manualmente en el paso 5.",
     "companyDetails": "Detalles de la empresa",
@@ -216,8 +254,16 @@
     "description": "Descripción",
     "optional": "(opcional)",
     "descriptionPlaceholder": "Una breve descripción de lo que construye esta fábrica…",
-    "scopes": { "S": "Pequeño — hasta 4 tareas, un solo objetivo", "M": "Mediano — hasta 8 tareas, una funcionalidad completa", "L": "Grande — hasta 12 tareas, requiere revisión" },
-    "scopeHints": { "S": "Alcance reducido — ideal para ciclos de IA enfocados", "M": "Valor recomendado — equilibra el alcance y el enfoque de la IA", "L": "Alcance amplio — el sistema puede sugerir dividirlo antes de la ejecución" },
+    "scopes": {
+      "S": "Pequeño — hasta 4 tareas, un solo objetivo",
+      "M": "Mediano — hasta 8 tareas, una funcionalidad completa",
+      "L": "Grande — hasta 12 tareas, requiere revisión"
+    },
+    "scopeHints": {
+      "S": "Alcance reducido — ideal para ciclos de IA enfocados",
+      "M": "Valor recomendado — equilibra el alcance y el enfoque de la IA",
+      "L": "Alcance amplio — el sistema puede sugerir dividirlo antes de la ejecución"
+    },
     "timezone": "Zona horaria",
     "timezones": {
       "UTC": "UTC",
@@ -237,18 +283,61 @@
     "autonomyDescription": "¿Qué autoridad tiene la IA para actuar sin aprobación humana?",
     "selected": "Seleccionado",
     "autonomy": {
-      "1": { "label": "Nivel 1 — Copiloto", "description": "Cada acción de la IA requiere aprobación humana explícita. Seguro para entornos regulados.", "feature1": "Supervisión humana completa", "feature2": "Aprobar o rechazar manualmente cada tarea", "feature3": "Registro de auditoría de todas las acciones" },
-      "2": { "label": "Nivel 2 — Gestor de excepciones", "description": "La IA ejecuta tareas rutinarias de forma autónoma. Marca las acciones riesgosas para revisión humana.", "feature1": "Aprobación automática de tareas de bajo riesgo", "feature2": "Revisión humana de despliegues y escrituras en bases de datos", "feature3": "Umbrales de riesgo configurables" },
-      "3": { "label": "Nivel 3 — Completamente autónomo", "description": "La IA opera sin intervención. Recomendado solo tras pruebas exhaustivas.", "feature1": "Sin intervención humana", "feature2": "Autorrecuperación y reversión automática", "feature3": "Decisiones basadas en acuerdos de nivel de servicio" }
+      "1": {
+        "label": "Nivel 1 — Copiloto",
+        "description": "Cada acción de la IA requiere aprobación humana explícita. Seguro para entornos regulados.",
+        "feature1": "Supervisión humana completa",
+        "feature2": "Aprobar o rechazar manualmente cada tarea",
+        "feature3": "Registro de auditoría de todas las acciones"
+      },
+      "2": {
+        "label": "Nivel 2 — Gestor de excepciones",
+        "description": "La IA ejecuta tareas rutinarias de forma autónoma. Marca las acciones riesgosas para revisión humana.",
+        "feature1": "Aprobación automática de tareas de bajo riesgo",
+        "feature2": "Revisión humana de despliegues y escrituras en bases de datos",
+        "feature3": "Umbrales de riesgo configurables"
+      },
+      "3": {
+        "label": "Nivel 3 — Completamente autónomo",
+        "description": "La IA opera sin intervención. Recomendado solo tras pruebas exhaustivas.",
+        "feature1": "Sin intervención humana",
+        "feature2": "Autorrecuperación y reversión automática",
+        "feature3": "Decisiones basadas en acuerdos de nivel de servicio"
+      }
     },
     "permissionsDescription": "Define a qué pueden acceder los agentes de IA. Las opciones disponibles dependen del nivel de autonomía.",
-    "permissionLevels": { "none": "Ninguno", "read_only": "Solo lectura", "write": "Escritura", "admin": "Administrador" },
+    "permissionLevels": {
+      "none": "Ninguno",
+      "read_only": "Solo lectura",
+      "write": "Escritura",
+      "admin": "Administrador"
+    },
     "resources": {
-      "git": { "label": "Git / Control de versiones", "short": "Git", "description": "Clonar repositorios, subir ramas, crear solicitudes de cambios, fusionar y etiquetar versiones" },
-      "cloud": { "label": "Infraestructura en la nube", "short": "Nube", "description": "Listar, desplegar, escalar o destruir recursos en la nube (AWS / GCP / Azure)" },
-      "db": { "label": "Base de datos", "short": "BD", "description": "Consultas SELECT, INSERT/UPDATE u operaciones DROP/TRUNCATE" },
-      "ci": { "label": "Flujo de CI/CD", "short": "CI/CD", "description": "Iniciar compilaciones, leer registros y cancelar o reintentar ejecuciones" },
-      "secrets": { "label": "Secretos y credenciales", "short": "Secretos", "description": "Leer claves de API, rotar secretos y gestionar entradas del almacén seguro" }
+      "git": {
+        "label": "Git / Control de versiones",
+        "short": "Git",
+        "description": "Clonar repositorios, subir ramas, crear solicitudes de cambios, fusionar y etiquetar versiones"
+      },
+      "cloud": {
+        "label": "Infraestructura en la nube",
+        "short": "Nube",
+        "description": "Listar, desplegar, escalar o destruir recursos en la nube (AWS / GCP / Azure)"
+      },
+      "db": {
+        "label": "Base de datos",
+        "short": "BD",
+        "description": "Consultas SELECT, INSERT/UPDATE u operaciones DROP/TRUNCATE"
+      },
+      "ci": {
+        "label": "Flujo de CI/CD",
+        "short": "CI/CD",
+        "description": "Iniciar compilaciones, leer registros y cancelar o reintentar ejecuciones"
+      },
+      "secrets": {
+        "label": "Secretos y credenciales",
+        "short": "Secretos",
+        "description": "Leer claves de API, rotar secretos y gestionar entradas del almacén seguro"
+      }
     },
     "governance": "Controles de gobernanza",
     "approvalDeploy": "Requerir aprobación humana antes de cualquier despliegue",
@@ -279,26 +368,76 @@
     "loadingModels": "Cargando modelos…",
     "unresolvedModel": "{{model}} (sin resolver)",
     "specialty": "Especialidad / Área de enfoque",
-    "specialtyPlaceholders": { "Dev": "p. ej. React, TypeScript, API REST", "DevOps": "p. ej. Docker, Kubernetes, Terraform", "QA": "p. ej. Playwright, Cypress, pruebas de carga", "other": "p. ej. tu área de enfoque" },
+    "specialtyPlaceholders": {
+      "Dev": "p. ej. React, TypeScript, API REST",
+      "DevOps": "p. ej. Docker, Kubernetes, Terraform",
+      "QA": "p. ej. Playwright, Cypress, pruebas de carga",
+      "other": "p. ej. tu área de enfoque"
+    },
     "systemPrompt": "Instrucciones del sistema",
     "monthlyBudget": "Presupuesto mensual de tokens",
-    "defaults": { "productSpecialty": "Gestión de producto y trabajo pendiente", "qaSpecialty": "Pruebas automatizadas" },
-    "tiers": { "strategic": "Estratégico", "balanced": "Equilibrado", "code": "Código", "fast": "Rápido", "preview": "Vista previa" },
+    "defaults": {
+      "productSpecialty": "Gestión de producto y trabajo pendiente",
+      "qaSpecialty": "Pruebas automatizadas"
+    },
+    "tiers": {
+      "strategic": "Estratégico",
+      "balanced": "Equilibrado",
+      "code": "Código",
+      "fast": "Rápido",
+      "preview": "Vista previa"
+    },
     "roles": {
-      "PO": { "label": "Responsable de producto", "description": "Define funcionalidades y prioridades" },
-      "SM": { "label": "Facilitador ágil", "description": "Facilita la entrega ágil" },
-      "Architect": { "label": "Arquitecto de soluciones", "description": "Diseña la estructura del sistema" },
-      "Dev": { "label": "Desarrollador", "description": "Escribe y revisa código" },
-      "QA": { "label": "Ingeniero de calidad", "description": "Prueba y valida la calidad" },
-      "DevOps": { "label": "Ingeniero de DevOps", "description": "CI/CD e infraestructura" },
-      "Security": { "label": "Ingeniero de seguridad", "description": "Vulnerabilidades y cumplimiento normativo" },
-      "Data": { "label": "Ingeniero de datos", "description": "Canalizaciones y análisis" }
+      "PO": {
+        "label": "Responsable de producto",
+        "description": "Define funcionalidades y prioridades"
+      },
+      "SM": {
+        "label": "Facilitador ágil",
+        "description": "Facilita la entrega ágil"
+      },
+      "Architect": {
+        "label": "Arquitecto de soluciones",
+        "description": "Diseña la estructura del sistema"
+      },
+      "Dev": {
+        "label": "Desarrollador",
+        "description": "Escribe y revisa código"
+      },
+      "QA": {
+        "label": "Ingeniero de calidad",
+        "description": "Prueba y valida la calidad"
+      },
+      "DevOps": {
+        "label": "Ingeniero de DevOps",
+        "description": "CI/CD e infraestructura"
+      },
+      "Security": {
+        "label": "Ingeniero de seguridad",
+        "description": "Vulnerabilidades y cumplimiento normativo"
+      },
+      "Data": {
+        "label": "Ingeniero de datos",
+        "description": "Canalizaciones y análisis"
+      }
     },
     "seniorities": {
-      "Junior": { "label": "Inicial", "experience": "0–2 años" },
-      "Mid": { "label": "Intermedio", "experience": "2–5 años" },
-      "Senior": { "label": "Avanzado", "experience": "5–10 años" },
-      "Staff": { "label": "Experto", "experience": "Más de 10 años" }
+      "Junior": {
+        "label": "Inicial",
+        "experience": "0–2 años"
+      },
+      "Mid": {
+        "label": "Intermedio",
+        "experience": "2–5 años"
+      },
+      "Senior": {
+        "label": "Avanzado",
+        "experience": "5–10 años"
+      },
+      "Staff": {
+        "label": "Experto",
+        "experience": "Más de 10 años"
+      }
     }
   },
   "sprintBoard": {
@@ -332,7 +471,13 @@
     "collapseSidebar": "Colapsar barra lateral",
     "expandSidebar": "Expandir barra lateral",
     "noSprint": "Sin sprint activo",
-    "noSprintDesc": "Inicia un sprint para comenzar a trabajar"
+    "noSprintDesc": "Inicia un sprint para comenzar a trabajar",
+    "operationsTitle": "Operaciones del Sprint",
+    "operationsSubtitle": "Tablero Kanban y gestión del sprint en vivo",
+    "openLiveRoom": "Abrir Sala en Vivo",
+    "backToDashboard": "Volver al Dashboard",
+    "boardOpsTitle": "Tablero del Sprint",
+    "boardOpsHint": "Arrastra tareas para cambiar estado o reasignar"
   },
   "taskDetails": {
     "invalidId": "ID de tarea no válido: {{taskId}}.",

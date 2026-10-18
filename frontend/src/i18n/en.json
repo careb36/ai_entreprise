@@ -101,9 +101,18 @@
     "backendApi": "Backend API",
     "agentStream": "Agent Stream",
     "scope": {
-      "S": { "label": "Small", "short": "S" },
-      "M": { "label": "Medium", "short": "M" },
-      "L": { "label": "Large", "short": "L" }
+      "S": {
+        "label": "Small",
+        "short": "S"
+      },
+      "M": {
+        "label": "Medium",
+        "short": "M"
+      },
+      "L": {
+        "label": "Large",
+        "short": "L"
+      }
     },
     "status": {
       "active": "Active",
@@ -112,12 +121,30 @@
       "cancelled": "Cancelled"
     },
     "roles": {
-      "PO": { "label": "Product Owner", "initials": "PO" },
-      "ScrumMaster": { "label": "Scrum Master", "initials": "SM" },
-      "Developer": { "label": "Developer", "initials": "DV" },
-      "QA": { "label": "QA Engineer", "initials": "QA" },
-      "DevOps": { "label": "DevOps", "initials": "DO" },
-      "Architect": { "label": "Architect", "initials": "AR" }
+      "PO": {
+        "label": "Product Owner",
+        "initials": "PO"
+      },
+      "ScrumMaster": {
+        "label": "Scrum Master",
+        "initials": "SM"
+      },
+      "Developer": {
+        "label": "Developer",
+        "initials": "DV"
+      },
+      "QA": {
+        "label": "QA Engineer",
+        "initials": "QA"
+      },
+      "DevOps": {
+        "label": "DevOps",
+        "initials": "DO"
+      },
+      "Architect": {
+        "label": "Architect",
+        "initials": "AR"
+      }
     },
     "priorities": {
       "low": "Low",
@@ -180,7 +207,14 @@
     "detectionError": "Auto-detection failed. Please configure agents manually.",
     "newFactory": "New Factory",
     "wizardDescription": "Set up your AI-powered software factory in 6 steps.",
-    "steps": { "Project": "Project", "Company": "Company", "Autonomy": "Autonomy", "Permissions": "Permissions", "Team": "Team", "Review": "Review" },
+    "steps": {
+      "Project": "Project",
+      "Company": "Company",
+      "Autonomy": "Autonomy",
+      "Permissions": "Permissions",
+      "Team": "Team",
+      "Review": "Review"
+    },
     "back": "Back",
     "next": "Next",
     "edit": "Edit",
@@ -206,7 +240,11 @@
     "aiSuggestion": "AI team suggestion",
     "rulesSuggestion": "Rule-based suggestion",
     "complexity": "{{level}} complexity",
-    "complexityLevels": { "High": "High", "Medium": "Medium", "Low": "Low" },
+    "complexityLevels": {
+      "High": "High",
+      "Medium": "Medium",
+      "Low": "Low"
+    },
     "noProject": "No project scanned yet.",
     "manualTeamHint": "You can also configure the team manually in Step 5.",
     "companyDetails": "Company details",
@@ -216,8 +254,16 @@
     "description": "Description",
     "optional": "(optional)",
     "descriptionPlaceholder": "A brief description of what this factory builds…",
-    "scopes": { "S": "Small — up to 4 tasks, single concern", "M": "Medium — up to 8 tasks, one full feature", "L": "Large — up to 12 tasks, requires review" },
-    "scopeHints": { "S": "Tight scope — ideal for focused AI passes", "M": "Recommended default — balances scope and AI focus", "L": "Wide scope — the system may suggest splitting before execution" },
+    "scopes": {
+      "S": "Small — up to 4 tasks, single concern",
+      "M": "Medium — up to 8 tasks, one full feature",
+      "L": "Large — up to 12 tasks, requires review"
+    },
+    "scopeHints": {
+      "S": "Tight scope — ideal for focused AI passes",
+      "M": "Recommended default — balances scope and AI focus",
+      "L": "Wide scope — the system may suggest splitting before execution"
+    },
     "timezone": "Timezone",
     "timezones": {
       "UTC": "UTC",
@@ -237,18 +283,61 @@
     "autonomyDescription": "How much authority does the AI have to act without human approval?",
     "selected": "Selected",
     "autonomy": {
-      "1": { "label": "Level 1 — Copilot", "description": "Every AI action requires explicit human approval. Safe for regulated environments.", "feature1": "Full human oversight", "feature2": "Manual approve/reject each task", "feature3": "Audit log for all actions" },
-      "2": { "label": "Level 2 — Exception Manager", "description": "AI runs routine tasks autonomously. Flags risky actions for human review.", "feature1": "Auto-approve low-risk tasks", "feature2": "Human review for deployments & DB writes", "feature3": "Configurable risk thresholds" },
-      "3": { "label": "Level 3 — Full Autonomous", "description": "AI operates without intervention. Recommended only after extensive testing.", "feature1": "Zero human intervention", "feature2": "Self-healing and auto-rollback", "feature3": "SLA-driven decisions" }
+      "1": {
+        "label": "Level 1 — Copilot",
+        "description": "Every AI action requires explicit human approval. Safe for regulated environments.",
+        "feature1": "Full human oversight",
+        "feature2": "Manual approve/reject each task",
+        "feature3": "Audit log for all actions"
+      },
+      "2": {
+        "label": "Level 2 — Exception Manager",
+        "description": "AI runs routine tasks autonomously. Flags risky actions for human review.",
+        "feature1": "Auto-approve low-risk tasks",
+        "feature2": "Human review for deployments & DB writes",
+        "feature3": "Configurable risk thresholds"
+      },
+      "3": {
+        "label": "Level 3 — Full Autonomous",
+        "description": "AI operates without intervention. Recommended only after extensive testing.",
+        "feature1": "Zero human intervention",
+        "feature2": "Self-healing and auto-rollback",
+        "feature3": "SLA-driven decisions"
+      }
     },
     "permissionsDescription": "Define what the AI agents are allowed to access. Available options scale with the autonomy level.",
-    "permissionLevels": { "none": "None", "read_only": "Read Only", "write": "Write", "admin": "Admin" },
+    "permissionLevels": {
+      "none": "None",
+      "read_only": "Read Only",
+      "write": "Write",
+      "admin": "Admin"
+    },
     "resources": {
-      "git": { "label": "Git / Version Control", "short": "Git", "description": "Clone repos, push branches, create PRs, merge, tag releases" },
-      "cloud": { "label": "Cloud Infrastructure", "short": "Cloud", "description": "List, deploy, scale, or destroy cloud resources (AWS / GCP / Azure)" },
-      "db": { "label": "Database", "short": "DB", "description": "SELECT queries, INSERT/UPDATE, or DROP/TRUNCATE operations" },
-      "ci": { "label": "CI/CD Pipeline", "short": "CI/CD", "description": "Trigger builds, read pipeline logs, cancel/retry runs" },
-      "secrets": { "label": "Secrets & Credentials", "short": "Secrets", "description": "Read API keys, rotate secrets, manage vault entries" }
+      "git": {
+        "label": "Git / Version Control",
+        "short": "Git",
+        "description": "Clone repos, push branches, create PRs, merge, tag releases"
+      },
+      "cloud": {
+        "label": "Cloud Infrastructure",
+        "short": "Cloud",
+        "description": "List, deploy, scale, or destroy cloud resources (AWS / GCP / Azure)"
+      },
+      "db": {
+        "label": "Database",
+        "short": "DB",
+        "description": "SELECT queries, INSERT/UPDATE, or DROP/TRUNCATE operations"
+      },
+      "ci": {
+        "label": "CI/CD Pipeline",
+        "short": "CI/CD",
+        "description": "Trigger builds, read pipeline logs, cancel/retry runs"
+      },
+      "secrets": {
+        "label": "Secrets & Credentials",
+        "short": "Secrets",
+        "description": "Read API keys, rotate secrets, manage vault entries"
+      }
     },
     "governance": "Governance gates",
     "approvalDeploy": "Require human approval before any deployment",
@@ -279,26 +368,76 @@
     "loadingModels": "Loading models…",
     "unresolvedModel": "{{model}} (unresolved)",
     "specialty": "Specialty / Focus area",
-    "specialtyPlaceholders": { "Dev": "e.g. React, TypeScript, REST APIs", "DevOps": "e.g. Docker, Kubernetes, Terraform", "QA": "e.g. Playwright, Cypress, Load Testing", "other": "e.g. your focus area" },
+    "specialtyPlaceholders": {
+      "Dev": "e.g. React, TypeScript, REST APIs",
+      "DevOps": "e.g. Docker, Kubernetes, Terraform",
+      "QA": "e.g. Playwright, Cypress, Load Testing",
+      "other": "e.g. your focus area"
+    },
     "systemPrompt": "System prompt",
     "monthlyBudget": "Monthly token budget",
-    "defaults": { "productSpecialty": "Product Management & Backlog", "qaSpecialty": "Automated Testing" },
-    "tiers": { "strategic": "Strategic", "balanced": "Balanced", "code": "Code", "fast": "Fast", "preview": "Preview" },
+    "defaults": {
+      "productSpecialty": "Product Management & Backlog",
+      "qaSpecialty": "Automated Testing"
+    },
+    "tiers": {
+      "strategic": "Strategic",
+      "balanced": "Balanced",
+      "code": "Code",
+      "fast": "Fast",
+      "preview": "Preview"
+    },
     "roles": {
-      "PO": { "label": "Product Owner", "description": "Defines features and priorities" },
-      "SM": { "label": "Scrum Master", "description": "Facilitates agile delivery" },
-      "Architect": { "label": "Solution Architect", "description": "Designs system structure" },
-      "Dev": { "label": "Developer", "description": "Writes and reviews code" },
-      "QA": { "label": "QA Engineer", "description": "Tests and validates quality" },
-      "DevOps": { "label": "DevOps Engineer", "description": "CI/CD and infrastructure" },
-      "Security": { "label": "Security Engineer", "description": "Vulnerability and compliance" },
-      "Data": { "label": "Data Engineer", "description": "Pipelines and analytics" }
+      "PO": {
+        "label": "Product Owner",
+        "description": "Defines features and priorities"
+      },
+      "SM": {
+        "label": "Scrum Master",
+        "description": "Facilitates agile delivery"
+      },
+      "Architect": {
+        "label": "Solution Architect",
+        "description": "Designs system structure"
+      },
+      "Dev": {
+        "label": "Developer",
+        "description": "Writes and reviews code"
+      },
+      "QA": {
+        "label": "QA Engineer",
+        "description": "Tests and validates quality"
+      },
+      "DevOps": {
+        "label": "DevOps Engineer",
+        "description": "CI/CD and infrastructure"
+      },
+      "Security": {
+        "label": "Security Engineer",
+        "description": "Vulnerability and compliance"
+      },
+      "Data": {
+        "label": "Data Engineer",
+        "description": "Pipelines and analytics"
+      }
     },
     "seniorities": {
-      "Junior": { "label": "Junior", "experience": "0–2 yrs" },
-      "Mid": { "label": "Mid", "experience": "2–5 yrs" },
-      "Senior": { "label": "Senior", "experience": "5–10 yrs" },
-      "Staff": { "label": "Staff", "experience": "10+ yrs" }
+      "Junior": {
+        "label": "Junior",
+        "experience": "0–2 yrs"
+      },
+      "Mid": {
+        "label": "Mid",
+        "experience": "2–5 yrs"
+      },
+      "Senior": {
+        "label": "Senior",
+        "experience": "5–10 yrs"
+      },
+      "Staff": {
+        "label": "Staff",
+        "experience": "10+ yrs"
+      }
     }
   },
   "sprintBoard": {
@@ -332,7 +471,13 @@
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
     "noSprint": "No active sprint",
-    "noSprintDesc": "Start a sprint to begin working"
+    "noSprintDesc": "Start a sprint to begin working",
+    "operationsTitle": "Sprint Operations",
+    "operationsSubtitle": "Kanban board and live sprint management",
+    "openLiveRoom": "Open Live Room",
+    "backToDashboard": "Back to Dashboard",
+    "boardOpsTitle": "Sprint Board",
+    "boardOpsHint": "Drag tasks to change status or reassign"
   },
   "taskDetails": {
     "invalidId": "Invalid task ID: {{taskId}}.",
