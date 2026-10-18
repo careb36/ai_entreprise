@@ -295,11 +295,15 @@ describe('app navigation', () => {
 
     it.each([
       ['/evidence', 'Evidence'],
+      ['/evidence/1', 'Evidence'],
       ['/governance', 'Review'],
       ['/dashboard', 'Sprints'],
       ['/dashboard/analytics', 'Sprints'],
     ])('has exactly one active primary destination at %s', (path, label) => {
       authenticate()
+      vi.spyOn(api, 'getAgentRun').mockRejectedValue(new ApiError(404, 'not available'))
+      vi.spyOn(api, 'getAgentRunVerifications').mockResolvedValue({ verifications: [] } as never)
+      vi.spyOn(api, 'getAgentRunApprovals').mockResolvedValue({ approvals: [] } as never)
       window.history.replaceState(null, '', path)
       render(<App />)
       const primary = screen.getByRole('navigation', { name: 'Main navigation' })
@@ -307,6 +311,11 @@ describe('app navigation', () => {
       expect(active).toHaveLength(1)
       expect(active[0]).toHaveTextContent(label)
       expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+      const mobile = screen.getByRole('navigation', { name: 'Mobile navigation' })
+      const mobileActive = within(mobile).getAllByRole('link').filter(link => link.getAttribute('aria-current') === 'page')
+      expect(mobileActive).toHaveLength(1)
+      expect(mobileActive[0]).toHaveTextContent(label)
     })
 
     it.each(['/dashboard/analytics', '/analytics'])('nests analytics in Sprints at %s', async path => {

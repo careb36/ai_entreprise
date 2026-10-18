@@ -140,7 +140,7 @@ function NavBar() {
       {authenticated && (
         <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-1 ml-4" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
           {links.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
+            <NavLink key={to} to={to} end={to !== '/dashboard' && to !== '/evidence'} className={linkClass}>
               <Icon size={16} />
               <span>{label}</span>
             </NavLink>
@@ -227,7 +227,7 @@ function NavBar() {
         >
           <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation', { defaultValue: 'Mobile navigation' })}>
             {links.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
+              <NavLink key={to} to={to} end={to !== '/dashboard' && to !== '/evidence'} className={linkClass}>
                 <Icon size={16} />
                 <span>{label}</span>
               </NavLink>
