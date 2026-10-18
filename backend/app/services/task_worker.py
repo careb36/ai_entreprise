@@ -2050,8 +2050,10 @@ def _record_task_run(
         company_id=sprint["company_id"],
         external_ref=f"task-{item['id']}",
         producer=TASK_WORKER_PRODUCER,
-        # The model the proxy says answered, when it says so.
-        model=agent.get("served_model") or agent.get("model") or None,
+        # Only the model the proxy reported as having answered: an observation.
+        # When it reported none the field stays empty rather than defaulting
+        # to the model that was requested (POSITIONING rule 7).
+        model=agent.get("served_model") or None,
         agent_role=agent.get("role"),
         subject={
             "sprint_id": sprint["id"],

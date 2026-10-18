@@ -341,7 +341,12 @@ def _task_fixture(db, project_path: str):
     db.refresh(item)
     return (
         {"id": item.id, "title": item.title, "description": item.description},
-        {"role": "Developer", "name": "Dev Ana", "model": "deepseek-chat"},
+        {
+            "role": "Developer",
+            "name": "Dev Ana",
+            "model": "deepseek-v4-pro",
+            "served_model": "deepseek-chat",
+        },
         {"id": sprint.id, "company_id": company.id, "name": sprint.sprint_name},
     )
 
@@ -431,3 +436,18 @@ def test_answer_without_files_is_still_recorded(db, tmp_path, monkeypatch):
     run, verification, _comments = _latest(db, item["id"])
     assert run.claims["files"] == []
     assert verification is not None
+
+
+def test_unreported_served_model_is_left_empty_not_defaulted(db, tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
+    item, agent, sprint = _task_fixture(db, str(tmp_path))
+    agent = {**agent, "served_model": None}
+
+    asyncio.run(
+        task_worker._deliver_artifacts(
+            _DaemonOverNATS(_load_daemon()), item, agent, sprint, "Analysis only."
+        )
+    )
+
+    run, _verification, _comments = _latest(db, item["id"])
+    assert run.model is None
