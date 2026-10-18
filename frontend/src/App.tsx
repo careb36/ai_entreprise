@@ -312,6 +312,15 @@ function AppContent() {
     return () => setOnUnauthorized(null)
   }, [navigate])
 
+  // Desktop app: the native "Factory" menu asks the renderer to navigate.
+  useEffect(() => {
+    const onNavigate = window.electronAPI?.onNavigate
+    if (!onNavigate) return
+    return onNavigate(path => {
+      if (path.startsWith('/')) navigate(path)
+    })
+  }, [navigate])
+
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col relative">
       <NavBar />
