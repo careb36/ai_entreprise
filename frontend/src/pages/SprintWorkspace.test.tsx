@@ -98,6 +98,21 @@ describe('workspace sprint validation', () => {
     },
   )
 
+  it.each([
+    { status: 403, message: 'You no longer have access to sprint #8.' },
+    { status: 404, message: 'Sprint #8 was not found.' },
+  ])('does not offer Retry for a cached board returning HTTP $status', async ({ status, message }) => {
+    vi.spyOn(api, 'getSprintBoard').mockResolvedValueOnce(board).mockRejectedValue(new ApiError(status, 'inaccessible'))
+    setup('8')
+    await screen.findByText('Stream for sprint 8')
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: QUERY_KEYS.sprintBoard(8) })
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    expect(useAppStore.getState().activeSprintId).toBeNull()
+  })
+
   it('offers Retry when the initial load fails without cached data', async () => {
     queryClient.setDefaultOptions({ queries: { ...defaultOptions.queries, retry: false } })
     vi.spyOn(api, 'getSprintBoard').mockRejectedValueOnce(new ApiError(503, 'unavailable')).mockResolvedValue(board)

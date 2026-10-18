@@ -16,6 +16,13 @@ export const SprintWorkspace: React.FC = () => {
   const setActiveSprint = useAppStore(state => state.setActiveSprint)
   const sprintId = parseRouteId(id)
   const boardQuery = useSprintBoard(sprintId)
+  const notFound = boardQuery.error instanceof ApiError && boardQuery.error.status === 404
+  const noAccess = boardQuery.error instanceof ApiError && boardQuery.error.status === 403
+  const terminalMessage = noAccess
+    ? t('workspace.noAccess', { id, defaultValue: 'You no longer have access to sprint #{{id}}.' })
+    : notFound
+      ? t('workspace.notFound', { id, defaultValue: 'Sprint #{{id}} was not found.' })
+      : null
 
   const isSSEConnected = useAgentStore(s => s.isConnected)
   const messageCount = useAgentStore(s => s.messages.length)
@@ -27,15 +34,9 @@ export const SprintWorkspace: React.FC = () => {
   }, [sprintId, boardQuery.data, boardQuery.isError, companyId, setActiveSprint])
 
   if (sprintId === null || (boardQuery.isError && !boardQuery.data)) {
-    const notFound = boardQuery.error instanceof ApiError && boardQuery.error.status === 404
-    const noAccess = boardQuery.error instanceof ApiError && boardQuery.error.status === 403
     const message = sprintId === null
       ? t('workspace.invalidId', { id, defaultValue: 'Invalid sprint ID: {{id}}.' })
-      : noAccess
-        ? t('workspace.noAccess', { id, defaultValue: 'You no longer have access to sprint #{{id}}.' })
-        : notFound
-          ? t('workspace.notFound', { id, defaultValue: 'Sprint #{{id}} was not found.' })
-          : t('workspace.loadError', { id, defaultValue: 'Failed to load sprint #{{id}}.' })
+      : terminalMessage ?? t('workspace.loadError', { id, defaultValue: 'Failed to load sprint #{{id}}.' })
     return (
       <div className="page-container">
         <div role="alert" className="alert-error mb-4">
@@ -67,8 +68,10 @@ export const SprintWorkspace: React.FC = () => {
         )}
         {boardQuery.isError && (
           <div role="alert" className="alert-error p-3">
-            {t('workspace.refreshFailed', { defaultValue: 'Failed to refresh this sprint. Showing the last loaded view.' })}
-            <button className="btn btn-ghost ml-3" onClick={() => boardQuery.refetch()}>{t('common.retry', { defaultValue: 'Retry' })}</button>
+            {terminalMessage ?? t('workspace.refreshFailed', { defaultValue: 'Failed to refresh this sprint. Showing the last loaded view.' })}
+            {!noAccess && !notFound && (
+              <button className="btn btn-ghost ml-3" onClick={() => boardQuery.refetch()}>{t('common.retry', { defaultValue: 'Retry' })}</button>
+            )}
           </div>
         )}
         <div className="min-h-11 border-b border-surface-700 bg-surface-900 px-4 py-2 flex items-center gap-3 flex-wrap">
