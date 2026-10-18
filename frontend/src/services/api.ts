@@ -7,10 +7,20 @@ const MAX_RETRIES = 2
 // ── Error types ───────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** The server's own `detail` message, when the error body carried one. */
+  public detail?: string
+
+  constructor(public status: number, message: string, detail?: string) {
     super(message)
     this.name = 'ApiError'
+    this.detail = detail
   }
+}
+
+/** The server's `detail` when present, else the generic message. */
+export function errorDetail(error: unknown): string {
+  if (error instanceof ApiError) return error.detail || error.message
+  return error instanceof Error ? error.message : String(error)
 }
 
 export function isClientError(error: unknown): error is ApiError {
@@ -124,6 +134,69 @@ export interface DiscoverTeamResponse {
   discovery_id: number | null
   suggested_team: DiscoverTeamAgent[]
   detected_stack: DetectedStack
+  /** Canonical host path of the scanned folder; send this to init_company. */
+  project_path?: string
+  /** Same shape as GET /v1/workspace/inspect; null when scanned on the server. */
+  project?: WorkspaceInspection | null
+}
+
+// ── Workspace daemon (host-native project folders) ───────────────────────────
+// Paths are host-native absolute strings (`/Users/ana/code`, `C:\Users\ana`).
+// Treat them as opaque: never join or normalise them, always reuse the `path`
+// the API returned.
+
+/** `darwin`, `linux`, `win32`, or another Node platform string. */
+export type WorkspacePlatform = 'darwin' | 'linux' | 'win32' | (string & {})
+
+export interface WorkspaceHost {
+  hostname: string
+  platform: WorkspacePlatform
+  home: string
+  sep: string
+}
+
+export interface WorkspaceStatus {
+  connected: boolean
+  host: WorkspaceHost | null
+  jetstream?: boolean
+}
+
+export interface WorkspaceLocation {
+  name: string
+  path: string
+}
+
+export interface WorkspaceEntry extends WorkspaceLocation {
+  is_git: boolean
+}
+
+export interface WorkspaceBrowseResponse {
+  host: WorkspaceHost
+  path: string
+  parent: string | null
+  entries: WorkspaceEntry[]
+  shortcuts: WorkspaceLocation[]
+  roots: WorkspaceLocation[]
+  truncated: boolean
+}
+
+export type GitProvider = 'github' | 'gitlab' | 'bitbucket' | 'other'
+
+export interface WorkspaceGitInfo {
+  is_repo: boolean
+  branch: string | null
+  remote_url: string | null
+  provider: GitProvider | null
+  web_url: string | null
+}
+
+export interface WorkspaceInspection {
+  host: WorkspaceHost
+  path: string
+  name: string
+  exists: boolean
+  is_dir: boolean
+  git: WorkspaceGitInfo | null
 }
 
 export interface BacklogItem {
@@ -287,6 +360,8 @@ export interface AgentRunApprovalRequest {
 interface FetchOptions extends RequestInit {
   auth?: boolean
   params?: Record<string, string | number>
+  /** Retry 5xx responses (default true). A 503 that means "not connected" should not. */
+  retryServerErrors?: boolean
   _attempt?: number
 }
 
@@ -297,7 +372,7 @@ export function setOnUnauthorized(handler: (() => void) | null) {
 }
 
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, _attempt = 0, auth = true, ...fetchOptions } = options
+  const { params, _attempt = 0, auth = true, retryServerErrors = true, ...fetchOptions } = options
 
   let url = `${API_BASE}${endpoint}`
   if (params) {
@@ -334,11 +409,11 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
         useAuthStore.getState().logout()
         onUnauthorized?.()
       }
-      if (response.status >= 500 && _attempt < MAX_RETRIES) {
+      if (response.status >= 500 && retryServerErrors && _attempt < MAX_RETRIES) {
         await delay(600 * (_attempt + 1))
         return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
       }
-      throw new ApiError(response.status, friendlyMessage(response.status))
+      throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
     }
 
     if (response.status === 204) return undefined as unknown as T
@@ -356,6 +431,15 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
       return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
     }
     throw new ApiError(0, 'Network error. Please check your connection.')
+  }
+}
+
+async function readDetail(response: Response): Promise<string | undefined> {
+  try {
+    const body = await response.json()
+    return typeof body?.detail === 'string' && body.detail ? body.detail : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -480,6 +564,24 @@ export const api = {
 
   discoverTeam: (companyId: number | null, projectPath: string) =>
     api.post<DiscoverTeamResponse>('/v1/discover_team', { company_id: companyId, project_path: projectPath }),
+
+  // Workspace daemon. A 503 means "daemon not connected": do not retry it.
+  workspaceStatus: () =>
+    fetchApi<WorkspaceStatus>('/v1/workspace/status', { method: 'GET', retryServerErrors: false }),
+
+  browseWorkspace: (path?: string) =>
+    fetchApi<WorkspaceBrowseResponse>('/v1/workspace/browse', {
+      method: 'GET',
+      params: path ? { path } : undefined,
+      retryServerErrors: false,
+    }),
+
+  inspectWorkspace: (path: string) =>
+    fetchApi<WorkspaceInspection>('/v1/workspace/inspect', {
+      method: 'GET',
+      params: { path },
+      retryServerErrors: false,
+    }),
 
   getAgentRuns: (companyId: number, filters: AgentRunFilters = {}) => {
     // Omit unset filters rather than sending them as the string "undefined".

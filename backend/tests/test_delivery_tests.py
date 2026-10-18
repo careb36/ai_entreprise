@@ -127,6 +127,8 @@ def test_greet():
 
 
 class _DaemonOverNATS:
+    jetstream_enabled = False
+
     def __init__(self, daemon):
         self.daemon = daemon
         self.subjects = []
@@ -140,9 +142,11 @@ class _DaemonOverNATS:
             return self.daemon.execute_shell_command(
                 payload["command"], payload["workspace_root"]
             )
+        if subject == "workspace.inspect":
+            return self.daemon.inspect_project(payload["path"], payload["snapshot"])
         raise AssertionError(subject)
 
-    async def publish(self, subject, payload):
+    async def publish(self, subject, payload, msg_id=None):
         pass
 
 

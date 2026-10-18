@@ -28,10 +28,16 @@ docker compose up backend -d
 docker compose up frontend -d
 docker compose up llm-proxy -d
 
-# VS Code daemon (runs locally, not in Docker)
-pip install nats-py
-python vscode-daemon/daemon.py
+# Workspace daemon: runs natively on the computer that holds your projects
+./scripts/start-daemon.sh        # macOS / Linux
+.\scripts\start-daemon.ps1       # Windows (PowerShell)
 ```
+
+The daemon is the only component that touches the user's files, so the folder
+chosen in "New company" is a path on that computer (`/Users/ana/code/app`,
+`/home/ana/src/app`, `C:\Users\ana\source\repos\app`). The backend never needs
+to see the user's disk; `docker compose --profile docker-daemon up` is an
+opt-in Linux-only alternative that mounts `PROJECTS_ROOT` instead.
 
 - Backend API: `http://localhost:8000` — OpenAPI docs at `/docs`
 - Frontend: `http://localhost:5173` (Vite dev) or `http://localhost:3000` (production)
@@ -63,9 +69,11 @@ Copy `.env.example` to `.env` and fill in:
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
-- `PROJECTS_ROOT` — absolute host folder holding your projects; mounted at the same
-  path in the backend and the VS Code daemon (defaults to `$HOME`). Agents write
-  into the project chosen in "New company".
+- `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
+  the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
+  other machines, which can then ask the daemon to run commands.
+- `PROJECTS_ROOT` — only for the optional Linux daemon container (`--profile
+  docker-daemon`): the host folder holding your projects, mounted at the same path.
 - `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
   `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
@@ -98,7 +106,11 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly.
 
-**`vscode-daemon/daemon.py`** — Long-running Python process that subscribes to NATS subjects `workspace.generate` and `workspace.execute`, then performs actual file writes and shell commands inside the user's VS Code workspace. Must run locally (not in Docker) so it has direct filesystem access.
+**`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
+
+**`backend/app/routers/workspace.py`** / **`services/workspace_daemon.py`** — `GET /v1/workspace/{status,browse,inspect}` relay the picker and project check to the daemon (503 with start instructions when none is connected). `POST /v1/discover_team` inspects the folder through the daemon and runs stack detection on its file snapshot (`materialized_snapshot`), recording the host path.
+
+**`backend/app/nats_client.py`** — `enable_jetstream()` declares the work-queue streams in `DURABLE_STREAMS` (`task.assign`, `workspace.deliver`, `workspace.delivered`); `publish()` stores durable subjects with a `Nats-Msg-Id`, `consume()` is a durable pull consumer with explicit acks. Without JetStream both fall back to core NATS with a warning; `/health` reports `jetstream`.
 
 **`frontend/src/`** — React 18 app. Key views:
 - `KanbanBoard` — sprint task tracking with drag-and-drop (`@dnd-kit`)
@@ -114,8 +126,11 @@ Tasks are executed by the **task worker** (`backend/app/services/task_worker.py`
 the LangGraph graph is only an optional kickoff conversation.
 
 1. `POST /v1/start_sprint` writes the sprint, one `BacklogItem` per task and one
-   outbox event per task on `task.assign`; the outbox processor publishes them to NATS.
-2. The task worker picks up `task.assign`, loads the item and the assigned agent
+   outbox event per task on `task.assign`; the outbox processor stores them in the
+   JetStream stream `FABRIQUE_TASKS` (an outbox row completes only once stored).
+2. The task worker consumes `task.assign` as the durable consumer `task-worker`,
+   so assignments published while it was down are processed when it starts. It
+   loads the item and the assigned agent
    (empty model → role default from `llm/model_factory.py`) and calls the LLM proxy.
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback.
@@ -123,7 +138,11 @@ the LangGraph graph is only an optional kickoff conversation.
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
    `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the
-   sha256 of the bytes it read back from disk.
+   sha256 of the bytes it read back from disk. If no daemon answers, the files are
+   queued on `workspace.deliver` (JetStream), the run is recorded as waiting for
+   that job and the review loop holds the task; when a daemon connects it writes
+   them and reports on `workspace.delivered`, and the run is re-verified against
+   the hashes the backend recorded (`_on_delivery_result`).
 4. Optionally (`DELIVERY_TESTS_ENABLED`) the daemon runs the project's tests via
    `workspace.execute` and returns the exit status.
 5. The deliverable is ingested as an `AgentRun` (`producer: le-fabrique-task-worker`,
@@ -180,6 +199,8 @@ Test files:
 | `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
 | `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
+| `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
+| `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the

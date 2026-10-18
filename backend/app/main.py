@@ -24,6 +24,7 @@ from routers import (
     github_router,
     sprint_router,
     support_router,
+    workspace_router,
 )
 from security import get_cors_origins, setup_security
 from services.healthcheck import aggregate
@@ -40,6 +41,10 @@ app = FastAPI(
         {"name": "Support", "description": "System health, logs, and bug reporting"},
         {"name": "Agents", "description": "LangGraph orchestration and Glassroom SSE"},
         {"name": "Auth", "description": "User registration and company membership"},
+        {
+            "name": "Workspace",
+            "description": "The developer's machine via the workspace daemon",
+        },
     ],
 )
 
@@ -64,6 +69,7 @@ app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(support_router)
 app.include_router(github_router)
+app.include_router(workspace_router)
 
 # Register exception handlers
 register_exception_handlers(app)
@@ -92,6 +98,7 @@ async def health_check(request: Request):
         "status": "healthy",
         "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         "nats": _nats_state(request),
+        "jetstream": bool(getattr(request.app.state, "jetstream", False)),
     }
 
 

@@ -680,7 +680,13 @@ class DiscoveryService:
             "LLM_PROXY_URL", "http://localhost:5100"
         )
 
-    def discover_project_team(self, company_id: int | None, project_path: str):
+    def discover_project_team(
+        self,
+        company_id: int | None,
+        project_path: str,
+        stored_path: str | None = None,
+        project_name: str | None = None,
+    ):
         """
         Scan a project path and recommend an AI engineering team.
 
@@ -698,6 +704,10 @@ class DiscoveryService:
         Args:
             company_id:   Pass ``None`` for pre-creation discovery (no DB write).
             project_path: Filesystem path to the project root to analyse.
+            stored_path:  The project's path on the user's machine when
+                          *project_path* is a local mirror of it (a daemon
+                          snapshot); recorded instead of *project_path*.
+            project_name: The project's folder name, for the same case.
 
         Returns:
             Tuple of ``(discovery_orm_row_or_none, detected_stack_dict, suggested_team_list)``.
@@ -709,7 +719,7 @@ class DiscoveryService:
                 f"Project path does not exist or is not a directory: {root}"
             )
 
-        folder_name = root.name or "New Project"
+        folder_name = project_name or root.name or "New Project"
 
         # ── Phase 1: deterministic filesystem scan ────────────────────────────
         files = _walk_files(root)
@@ -745,7 +755,7 @@ class DiscoveryService:
         if company_id:
             discovery = ProjectDiscovery(
                 company_id=company_id,
-                project_path=str(root),
+                project_path=stored_path or str(root),
                 detected_stack=json.dumps(detected_stack),
                 suggested_team=json.dumps(suggested_team),
                 status="completed",

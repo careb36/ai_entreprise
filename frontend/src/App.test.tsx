@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy', timestamp: '' })
   vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
   vi.spyOn(api, 'listSprints').mockResolvedValue([])
+  vi.spyOn(api, 'workspaceStatus').mockResolvedValue({ connected: false, host: null })
 })
 
 afterEach(() => {
@@ -125,6 +126,39 @@ describe('app navigation', () => {
     })
     useAppStore.getState().setCompany(1, 'Example company')
   }
+
+  describe('desktop app menu', () => {
+    afterEach(() => { delete window.electronAPI })
+
+    it('navigates when the native Factory menu asks to, and unsubscribes on unmount', async () => {
+      authenticate()
+      let menuNavigate: ((path: string) => void) | null = null
+      const unsubscribe = vi.fn()
+      window.electronAPI = {
+        platform: 'linux',
+        versions: { node: '', chrome: '', electron: '' },
+        selectDirectory: async () => null,
+        onNavigate: callback => {
+          menuNavigate = callback
+          return unsubscribe
+        },
+        getBackendUrl: async () => '',
+        getAppVersion: async () => '',
+        openExternal: async () => {},
+      }
+      window.history.replaceState(null, '', '/evidence')
+      const { unmount } = render(<App />)
+      expect(menuNavigate).not.toBeNull()
+
+      act(() => menuNavigate!('/sprints'))
+      await waitFor(() => expect(window.location.pathname).toBe('/sprints'))
+      act(() => menuNavigate!('https://example.com/elsewhere'))
+      expect(window.location.pathname).toBe('/sprints')
+
+      unmount()
+      expect(unsubscribe).toHaveBeenCalled()
+    })
+  })
 
   describe('evidence-first navigation', () => {
     it.each([

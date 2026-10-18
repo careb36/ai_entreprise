@@ -2,7 +2,12 @@
   "name": "fabrique-frontend",
   "version": "1.0.0",
   "description": "Fabrique - Electron+React desktop frontend for Multi-Agent System",
-  "main": "electron/main.ts",
+  "homepage": "https://github.com/careb36/la-fabrique",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/careb36/la-fabrique.git"
+  },
+  "main": "dist-electron-main/main.js",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -12,8 +17,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "preview": "vite preview",
-    "electron:dev": "ELECTRON=1 concurrently \"vite\" \"electron .\"",
-    "electron:build": "ELECTRON=1 npm run build && electron-builder"
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && concurrently -k \"vite\" \"electron . --dev\"",
+    "electron:build": "npm run electron:compile && npm run build -- --mode electron && electron-builder"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -57,16 +63,31 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "dist-electron-main/**/*",
+      "package.json"
     ],
     "mac": {
-      "icon": "public/fabrique-icon.svg"
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
     },
     "win": {
-      "icon": "public/fabrique-icon.svg"
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
-      "icon": "public/fabrique-icon.svg"
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "maintainer": "careb36 <58278841+careb36@users.noreply.github.com>"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

@@ -3,6 +3,9 @@ Transactional Outbox processor for reliable NATS message delivery.
 
 Background worker that continuously polls the ``outbox_events`` table for
 pending rows and publishes them to NATS, ensuring at-least-once delivery.
+For durable subjects (``task.assign``) a row is marked completed only after
+JetStream has stored the message, so it reaches the task worker even if the
+worker is down at that moment.
 
 Why the outbox pattern?
 -----------------------
@@ -87,7 +90,12 @@ async def process_outbox(nats_client) -> None:
                                 message.get("backlog_item_id"),
                             )
                             # Publish the inner message to the specified NATS subject.
-                            await nats_client.publish(subject, message)
+                            # Durable subjects return only once JetStream has
+                            # stored the message; the id makes a retry after a
+                            # lost acknowledgement a no-op.
+                            await nats_client.publish(
+                                subject, message, msg_id=f"outbox-{event_id}"
+                            )
 
                         # Mark the event as successfully delivered.
                         session.exec(

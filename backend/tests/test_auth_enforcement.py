@@ -311,6 +311,9 @@ def test_flag_off_init_creates_no_membership(
         ("GET", "/v1/enterprise/lineage?file_path=test"),
         ("POST", "/v1/discover_team"),
         ("POST", "/v1/company/invite"),
+        ("GET", "/v1/workspace/status"),
+        ("GET", "/v1/workspace/browse"),
+        ("GET", "/v1/workspace/inspect?path=/tmp"),
     ],
 )
 def test_protected_route_requires_token(test_client, method, path):

@@ -127,6 +127,16 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 "po_feedback"
             )  # present when re-dispatched after PO rejection
 
+            if files and not story:
+                # The task worker's file deliveries share this subject; they
+                # are for the workspace daemon, not the agent graph.
+                logger.debug(
+                    "Ignoring workspace.generate file materialization payload: interaction_id=%s files=%s",
+                    interaction_id,
+                    len(files),
+                )
+                return
+
             if not settings.AGENT_GRAPH_ENABLED:
                 message = "AGENT_GRAPH_ENABLED is false; the internal agent graph is disabled."
                 logger.info(
@@ -145,14 +155,6 @@ async def process_agent_tasks(nats_client: NATSClient) -> None:
                 sprint_id,
                 story,
             )
-
-            if files and not story:
-                logger.debug(
-                    "Ignoring workspace.generate file materialization payload: interaction_id=%s files=%s",
-                    interaction_id,
-                    len(files),
-                )
-                return
 
             if not story:
                 logger.warning(

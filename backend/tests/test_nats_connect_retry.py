@@ -34,6 +34,9 @@ class _FlakyNATSClient:
             raise ConnectionRefusedError("nats not up yet")
         self.nc = object()
 
+    async def enable_jetstream(self):
+        return False
+
     async def request(self, subject, payload, timeout=5.0):
         return {"assistants": []}
 

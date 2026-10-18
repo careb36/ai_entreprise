@@ -98,10 +98,16 @@ class _FakeNATSClient:
     async def drain(self):
         pass
 
-    async def publish(self, subject, payload):
+    async def enable_jetstream(self):
+        return False
+
+    async def publish(self, subject, payload, msg_id=None):
         pass
 
     async def subscribe(self, subject, callback):
+        pass
+
+    async def consume(self, subject, durable, callback, **kwargs):
         pass
 
     @property

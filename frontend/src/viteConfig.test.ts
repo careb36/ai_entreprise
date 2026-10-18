@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-async function loadBase(electron: string | undefined) {
+async function loadBase(electron: string | undefined, mode = 'production') {
   vi.resetModules()
   if (electron === undefined) vi.stubEnv('ELECTRON', '')
   else vi.stubEnv('ELECTRON', electron)
@@ -9,7 +9,8 @@ async function loadBase(electron: string | undefined) {
   // tsconfig.node.json) into the app project; Vitest still resolves it at runtime.
   const specifier = '../vite.config.ts'
   const { default: config } = await import(/* @vite-ignore */ specifier)
-  return (config as { base?: string }).base
+  const resolved = typeof config === 'function' ? await config({ command: 'build', mode }) : config
+  return (resolved as { base?: string }).base
 }
 
 describe('vite base path', () => {
@@ -22,5 +23,7 @@ describe('vite base path', () => {
     expect(await loadBase(undefined)).toBe('/')
     // Electron loads dist/index.html from file:// and needs relative URLs.
     expect(await loadBase('1')).toBe('./')
+    // `npm run electron:build` selects the Electron base with `--mode electron`.
+    expect(await loadBase(undefined, 'electron')).toBe('./')
   })
 })

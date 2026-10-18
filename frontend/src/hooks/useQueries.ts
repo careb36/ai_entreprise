@@ -16,6 +16,7 @@ import {
 
 export const QUERY_KEYS = {
   capabilities: () => ['capabilities'] as const,
+  workspaceStatus: () => ['workspace', 'status'] as const,
   sprints: (companyId: number) => ['sprints', companyId] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
@@ -41,6 +42,19 @@ export function useCapabilities() {
     queryKey: QUERY_KEYS.capabilities(),
     queryFn: api.capabilities,
     staleTime: 1000 * 60 * 5,
+  })
+}
+
+/**
+ * Whether the native workspace daemon answers. Polls every 10 s while it is
+ * not connected; stops once it is (or when the endpoint rejects the client).
+ */
+export function useWorkspaceStatus() {
+  return useQuery({
+    queryKey: QUERY_KEYS.workspaceStatus(),
+    queryFn: api.workspaceStatus,
+    refetchInterval: query =>
+      query.state.data?.connected === true || isClientError(query.state.error) ? false : 10_000,
   })
 }
 
