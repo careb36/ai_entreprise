@@ -15,6 +15,7 @@ import os
 from collections.abc import Generator
 
 import neo4j
+from logging_config import logger
 from sqlmodel import Session, SQLModel, create_engine
 
 # ---------------------------------------------------------------------------
@@ -73,13 +74,17 @@ def _ensure_runtime_schema() -> None:
         "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_assistant_key ON assistant_runtime_state (assistant_key)",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
-        "ALTER TABLE vector_memory ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
-        "CREATE INDEX IF NOT EXISTS ix_vector_memory_company_id ON vector_memory (company_id)",
         """
         UPDATE audit_log AS a SET company_id = c.id
         FROM companies AS c
         WHERE a.company_id IS NULL AND a.details->>'company_id' = c.id::text
         """,
+    )
+    # vector_memory is created by db/init-db/init.sql (it needs pgvector), not
+    # by SQLModel, so a database set up without that script has no such table.
+    vector_memory_statements = (
+        "ALTER TABLE vector_memory ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
+        "CREATE INDEX IF NOT EXISTS ix_vector_memory_company_id ON vector_memory (company_id)",
         """
         UPDATE vector_memory AS m SET company_id = c.id
         FROM companies AS c
@@ -90,6 +95,17 @@ def _ensure_runtime_schema() -> None:
     with engine.begin() as connection:
         for statement in statements:
             connection.exec_driver_sql(statement)
+        has_vector_memory = connection.exec_driver_sql(
+            "SELECT to_regclass('vector_memory') IS NOT NULL"
+        ).scalar()
+        if has_vector_memory:
+            for statement in vector_memory_statements:
+                connection.exec_driver_sql(statement)
+        else:
+            logger.warning(
+                "Table vector_memory is missing: memory search and RAG are "
+                "unavailable until db/init-db/init.sql is applied to this database."
+            )
 
 
 def create_db_and_tables() -> None:
