@@ -18,8 +18,13 @@ services:
   nats:
     image: nats:latest
     container_name: factory-nats
+    # JetStream keeps task assignments and queued deliveries on disk, so they
+    # survive a backend or daemon that is down when they are published.
+    command: ["-js", "-sd", "/data"]
     ports:
-      - "4222:4222"
+      # The workspace daemon on this computer connects here. Only this machine
+      # by default: anything that reaches NATS can ask the daemon to run commands.
+      - "${NATS_BIND:-127.0.0.1}:4222:4222"
     volumes:
       - nats-data:/data
     networks:
@@ -126,9 +131,6 @@ services:
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
-      # Projects are mounted at the same path as on the host, so a path saved by
-      # project discovery is valid for the backend and the daemon alike.
-      PROJECTS_ROOT_CONTAINER: ${PROJECTS_ROOT:-${HOME}}
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
       DELIVERY_TESTS_ENABLED: ${DELIVERY_TESTS_ENABLED:-false}
       DELIVERY_TEST_COMMAND: ${DELIVERY_TEST_COMMAND:-}
@@ -143,7 +145,6 @@ services:
       - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:rw
-      - ${PROJECTS_ROOT:-${HOME}}:${PROJECTS_ROOT:-${HOME}}:rw
     networks:
       - factory-network
     depends_on:
@@ -158,19 +159,28 @@ services:
       jaeger:
         condition: service_healthy
 
+  # The workspace daemon normally runs natively on your computer
+  # (scripts/start-daemon.sh or scripts/start-daemon.ps1), where it sees your
+  # projects at their real paths on macOS, Linux and Windows. This container
+  # is an opt-in alternative for Linux hosts only:
+  #   docker compose --profile docker-daemon up -d
+  # It mounts PROJECTS_ROOT at the same path, so host paths stay valid. Run
+  # one daemon, not both.
   vscode-daemon:
     image: python:3.11-slim
     container_name: factory-vscode-daemon
+    profiles: ["docker-daemon"]
     environment:
       NATS_URL: nats://nats:4222
       WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     working_dir: /app
-    command: sh -lc "pip install --no-cache-dir nats-py==2.3.1 && python /app/daemon.py"
+    command: sh -lc "pip install --no-cache-dir -r /app/requirements.txt && python /app/daemon.py"
     volumes:
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}
-      - ${PROJECTS_ROOT:-${HOME}}:${PROJECTS_ROOT:-${HOME}}:rw
+      - ${PROJECTS_ROOT:-${HOME:-/tmp}}:${PROJECTS_ROOT:-${HOME:-/tmp}}:rw
       - ./vscode-daemon/daemon.py:/app/daemon.py:ro
+      - ./vscode-daemon/requirements.txt:/app/requirements.txt:ro
     networks:
       - factory-network
     depends_on:
@@ -202,7 +212,6 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_DEFAULT_PROJECT_PATH: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public

@@ -302,6 +302,8 @@ def test_daemon_replies_with_per_file_results(tmp_path):
 class _DaemonOverNATS:
     """Fake NATS client: ``request`` runs the real daemon; publishes are kept."""
 
+    jetstream_enabled = False
+
     def __init__(self, daemon, fail: bool = False):
         self.daemon = daemon
         self.fail = fail
@@ -315,7 +317,7 @@ class _DaemonOverNATS:
         files = self.daemon.write_files(payload["workspace_root"], payload["files"])
         return {"ok": True, "workspace_root": payload["workspace_root"], "files": files}
 
-    async def publish(self, subject, payload):
+    async def publish(self, subject, payload, msg_id=None):
         self.published.append((subject, payload))
 
 

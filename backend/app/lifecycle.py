@@ -72,6 +72,8 @@ async def _connect_nats_and_start_workers(app, client: NATSClient) -> None:
             await asyncio.sleep(delay)
             delay = min(delay * 2, NATS_CONNECT_BACKOFF_MAX_SECONDS)
 
+    # Streams must exist before the outbox publishes and the workers consume.
+    app.state.jetstream = await client.enable_jetstream()
     app.state.nats_client = client
     app.state.nats_state = NATS_STATE_CONNECTED
     await _start_workers(app, client)
@@ -135,6 +137,7 @@ async def startup(app):
     app.state.nats_client = None
     app.state.nats_state = NATS_STATE_CONNECTING
     app.state.nats_workers_started = False
+    app.state.jetstream = False
     client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
     connect_task = asyncio.create_task(
         _connect_nats_and_start_workers(app, client), name="nats_connector"

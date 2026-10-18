@@ -13,6 +13,7 @@ Endpoints:
 
 import asyncio
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from auth_policy import (
     current_user_if_required,
@@ -38,6 +39,14 @@ from schemas import (
 )
 from services.company_service import CompanyService
 from services.discovery_service import DiscoveryService
+from services.workspace_daemon import (
+    DAEMON_UNAVAILABLE_DETAIL,
+    DaemonError,
+    DaemonUnavailable,
+    inspect_project,
+    materialized_snapshot,
+    without_snapshot,
+)
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -432,20 +441,68 @@ async def discover_team(
     if llm_client:
         llm_proxy_url = llm_client.base_url
     service = DiscoveryService(session, llm_proxy_url=llm_proxy_url)
+
+    # The project is on the user's machine: the workspace daemon there checks
+    # the folder and sends a snapshot of its files, which is scanned here.
+    project = None
+    daemon_missing = False
     try:
-        # Run the synchronous filesystem scan + LLM call in a thread pool so
-        # the async event loop stays free while the work runs.
-        discovery, detected_stack, suggested_team = await asyncio.to_thread(
-            service.discover_project_team,
-            company_id=req.company_id,
-            project_path=req.project_path,
+        project = await inspect_project(
+            getattr(request.app.state, "nats_client", None),
+            req.project_path,
+            snapshot=True,
         )
+    except DaemonUnavailable:
+        daemon_missing = True
+    except DaemonError as exc:
+        raise HTTPException(
+            status_code=422 if exc.status in {400, 404} else exc.status,
+            detail=exc.message,
+        )
+
+    if project is not None and not project.get("is_dir"):
+        host = (project.get("host") or {}).get("hostname") or "the workspace machine"
+        raise HTTPException(
+            status_code=422,
+            detail=f"Folder not found on {host}: {project.get('path')}",
+        )
+
+    def _scan_snapshot():
+        with materialized_snapshot(project.get("snapshot") or {}) as mirror:
+            return service.discover_project_team(
+                company_id=req.company_id,
+                project_path=mirror,
+                stored_path=project["path"],
+                project_name=project.get("name"),
+            )
+
+    try:
+        # Run the synchronous scan + LLM call in a thread pool so the async
+        # event loop stays free while the work runs.
+        if project is not None:
+            discovery, detected_stack, suggested_team = await asyncio.to_thread(
+                _scan_snapshot
+            )
+            project_path = project["path"]
+        else:
+            # No daemon: a folder this server can see (e.g. a Linux host
+            # mounted at the same path) is scanned directly.
+            discovery, detected_stack, suggested_team = await asyncio.to_thread(
+                service.discover_project_team,
+                company_id=req.company_id,
+                project_path=req.project_path,
+            )
+            project_path = str(Path(req.project_path).expanduser().resolve())
     except ValueError as exc:
+        if daemon_missing:
+            raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL)
         raise HTTPException(status_code=422, detail=str(exc))
     return {
         "discovery_id": discovery.id if discovery else None,
         "detected_stack": detected_stack,
         "suggested_team": suggested_team,
+        "project_path": project_path,
+        "project": without_snapshot(project) if project is not None else None,
     }
 
 
@@ -502,112 +559,6 @@ async def get_code_lineage(
     except Exception as e:  # noqa: BLE001 - Translate graph failures to a sanitized API error.
         logger.error(f"Lineage query failed: {e}")
         raise HTTPException(status_code=500, detail="Neo4j Time Travel query failed.")
-
-
-@router.get("/discover/directories", tags=["Enterprise"])
-async def list_project_directories(
-    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
-):
-    """
-    List available project directories inside the container's /projects mount.
-    Used by the frontend "Examinar" (Browse) button.
-    """
-    require_authenticated(user)
-    import os
-    from pathlib import Path
-
-    projects_root = os.getenv("PROJECTS_ROOT_CONTAINER", "/projects")
-    root = Path(projects_root)
-    if not root.exists() or not root.is_dir():
-        return {"directories": [], "root": projects_root}
-
-    dirs = []
-    for entry in sorted(root.iterdir()):
-        if entry.is_dir() and not entry.name.startswith("."):
-            dirs.append({"name": entry.name, "path": str(entry)})
-    return {"directories": dirs, "root": projects_root}
-
-
-# Directories skipped when browsing the workspace filesystem (noise).
-_BROWSE_SKIP_DIRS = {
-    ".git",
-    "__pycache__",
-    "node_modules",
-    ".venv",
-    "venv",
-    ".env",
-    ".idea",
-    ".vscode",
-    "dist",
-    "build",
-    "coverage",
-    ".cache",
-    ".next",
-    ".nuxt",
-    "target",
-    ".gradle",
-    ".mvn",
-}
-_BROWSE_MAX_ENTRIES = 200
-
-
-@router.get("/browse_fs", tags=["Enterprise"])
-async def browse_fs(path: str = "", root: str = "workspace"):
-    """List immediate subdirectories of *path* within the chosen root."""
-    import os
-
-    if root == "projects":
-        base = os.getenv("PROJECTS_ROOT_CONTAINER", "/projects")
-    else:
-        base = os.getenv("AGENT_WORKSPACE_ROOT", "/workspace")
-
-    real_root = os.path.realpath(base)
-    if not os.path.isdir(real_root):
-        raise HTTPException(status_code=404, detail=f"Root {base} does not exist.")
-
-    if path:
-        if os.path.isabs(path):
-            resolved = os.path.realpath(path)
-        else:
-            resolved = os.path.realpath(os.path.join(real_root, path.lstrip("/")))
-    else:
-        resolved = real_root
-
-    if not (resolved == real_root or resolved.startswith(real_root + os.sep)):
-        raise HTTPException(status_code=403, detail="Path is outside the allowed root.")
-
-    if not os.path.isdir(resolved):
-        raise HTTPException(
-            status_code=404, detail="Path does not exist or is not a directory."
-        )
-
-    try:
-        entries = []
-        with os.scandir(resolved) as it:
-            for entry in it:
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-                if entry.name in _BROWSE_SKIP_DIRS or entry.name.startswith("."):
-                    continue
-                rel = os.path.relpath(entry.path, real_root)
-                entries.append({"name": entry.name, "path": rel})
-                if len(entries) >= _BROWSE_MAX_ENTRIES:
-                    break
-        entries.sort(key=lambda e: e["name"].lower())
-        parent_rel = os.path.relpath(os.path.dirname(resolved), real_root)
-        return {
-            "current": os.path.relpath(resolved, real_root)
-            if resolved != real_root
-            else ".",
-            "absolute": resolved,
-            "parent": parent_rel
-            if parent_rel != "." and resolved != real_root
-            else None,
-            "entries": entries,
-            "root": root,
-        }
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied.")
 
 
 # ---------------------------------------------------------------------------

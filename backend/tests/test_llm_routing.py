@@ -228,15 +228,17 @@ class _StopAfterSubscribe(Exception):
 
 
 class _Nats:
+    jetstream_enabled = False
+
     def __init__(self):
         self.handler = None
         self.published = []
 
-    async def subscribe(self, subject, callback):
+    async def consume(self, subject, durable, callback, **kwargs):
         self.handler = callback
         raise _StopAfterSubscribe
 
-    async def publish(self, subject, payload):
+    async def publish(self, subject, payload, msg_id=None):
         self.published.append((subject, payload))
 
     async def request(self, subject, payload, timeout=5.0):

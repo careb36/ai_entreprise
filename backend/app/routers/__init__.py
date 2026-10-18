@@ -13,6 +13,7 @@ from routers.enterprise import router as enterprise_router
 from routers.github import router as github_router
 from routers.sprint import router as sprint_router
 from routers.support import router as support_router
+from routers.workspace import router as workspace_router
 
 __all__ = [
     "agent_runs_router",
@@ -22,4 +23,5 @@ __all__ = [
     "github_router",
     "sprint_router",
     "support_router",
+    "workspace_router",
 ]

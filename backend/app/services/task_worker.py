@@ -46,7 +46,7 @@ from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
 from llm.model_factory import default_model_for_role
-from services import agent_run_service, console_capabilities
+from services import agent_run_service, console_capabilities, workspace_daemon
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
@@ -1941,6 +1941,25 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
         }
 
 
+def _append_item_comment(item_id: int, text: str, author: str) -> None:
+    """Add a comment to a backlog item without changing its status."""
+    with Session(engine) as session:
+        item = session.get(BacklogItem, item_id)
+        if not item:
+            return
+        item.comments = [
+            *(item.comments or []),
+            {
+                "author": author,
+                "text": text[:4000],
+                "created_at": datetime.now(UTC).isoformat(),
+            },
+        ]
+        item.updated_at = datetime.now(UTC)
+        session.add(item)
+        session.commit()
+
+
 def _update_item_status(
     item_id: int,
     status: str,
@@ -1983,6 +2002,13 @@ def _update_item_status(
 
 TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
 DELIVERY_GATE_AUTHOR = "Verifier"
+DELIVERY_QUEUED = "delivery queued"
+TASK_ASSIGN_CONSUMER = "task-worker"
+DELIVERY_RESULTS_CONSUMER = "delivery-results"
+# A task can take several LLM calls, console assistants and a test run; the
+# consumer keeps the message claimed while the handler runs, so this only
+# bounds how long a crashed worker holds an assignment.
+TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
 
 
 def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
@@ -1991,7 +2017,9 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
 
     Gates on a refuted delivery (files missing, rejected or different on disk),
     an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
-    test run that failed.  Other checks — an unevidenced "tests pass" claim, a
+    test run that failed.  A delivery queued for an offline daemon returns
+    ``DELIVERY_QUEUED``: the task waits, neither reviewed nor reworked, until
+    the daemon reports what it wrote.  Other checks — an unevidenced "tests pass" claim, a
     test run that could not happen — are left to the evidence page, so an
     honest claim never forces a rework.
 
@@ -2018,6 +2046,8 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
         ).first()
     if verification is None:
         return None
+    if (verification.evidence or {}).get("delivery_queued"):
+        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
     for check in verification.checks or []:
         name, outcome = check.get("name"), check.get("outcome")
         if name == "files_written" and outcome == VERDICT_REFUTED:
@@ -2099,6 +2129,8 @@ def _delivery_comment(
         return f"Delivered to {(evidence or {}).get('workspace_root')}: {observation}{run_note}"
     if outcome == VERDICT_REFUTED:
         return f"Delivery refuted: {observation}{run_note}"
+    if (evidence or {}).get("delivery_queued"):
+        return f"Delivery queued: {observation}{run_note}"
     return f"Delivery unconfirmed: {observation}{run_note}"
 
 
@@ -2151,6 +2183,35 @@ def _detect_test_command(workspace_root: str) -> str | None:
     return None
 
 
+async def _detect_project_test_command(
+    nats_client: NATSClient, workspace_root: str
+) -> str | None:
+    """
+    ``_detect_test_command`` on the project's machine.
+
+    The project lives where the daemon runs, so detection reads the daemon's
+    snapshot of it; a folder this server can see itself is the fallback.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    try:
+        project = await workspace_daemon.inspect_project(
+            nats_client, workspace_root, snapshot=True
+        )
+    except (workspace_daemon.DaemonUnavailable, workspace_daemon.DaemonError):
+        project = None
+    if project and project.get("is_dir"):
+
+        def _detect_in_snapshot() -> str | None:
+            with workspace_daemon.materialized_snapshot(
+                project.get("snapshot") or {}
+            ) as mirror:
+                return _detect_test_command(mirror)
+
+        return await asyncio.to_thread(_detect_in_snapshot)
+    return await asyncio.to_thread(_detect_test_command, workspace_root)
+
+
 async def _run_delivery_tests(
     nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
 ) -> None:
@@ -2163,7 +2224,7 @@ async def _run_delivery_tests(
     from the daemon, never from the agent.
     """
     workspace_root = evidence["workspace_root"]
-    command = await asyncio.to_thread(_detect_test_command, workspace_root)
+    command = await _detect_project_test_command(nats_client, workspace_root)
     if not command:
         evidence["test_run"] = {"command": None, "reason": "no test command found"}
         return
@@ -2200,6 +2261,164 @@ async def _run_delivery_tests(
         }
 
 
+def _plan_queued_delivery(
+    item: dict[str, Any],
+    sprint: dict[str, Any],
+    workspace_root: str,
+    targets: list[dict[str, str]],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    The ``workspace.deliver`` job that keeps the files for an offline daemon.
+
+    Marks *evidence* as waiting for the job, so the recorded verification makes
+    the delivery gate hold the task.  The job is published only after that
+    record exists: a daemon that is just connecting can report back within
+    milliseconds, and its report must find the run waiting for it.
+    """
+    job_id = str(uuid4())
+    evidence["delivery_queued"] = {"job_id": job_id}
+    evidence["reason"] = (
+        f"{evidence.get('reason') or 'the workspace daemon did not reply'}; "
+        "delivery queued until the daemon connects"
+    )
+    return {
+        "job_id": job_id,
+        "workspace_root": workspace_root,
+        "files": targets,
+        "interaction_id": f"task-{item['id']}",
+        "company_id": sprint["company_id"],
+        "sprint_id": sprint["id"],
+        "item_id": item["id"],
+    }
+
+
+async def _publish_queued_delivery(
+    nats_client: NATSClient, job: dict[str, Any], evidence: dict[str, Any]
+) -> bool:
+    """
+    Store *job* on ``workspace.deliver``; the daemon writes it when it connects
+    and reports on ``workspace.delivered`` (``_on_delivery_result``).
+
+    When it cannot be stored, *evidence* stops claiming the task waits for it.
+    """
+    try:
+        await nats_client.publish(
+            "workspace.deliver", job, msg_id=f"deliver-{job['job_id']}"
+        )
+        return True
+    except Exception as e:  # noqa: BLE001 - Unqueued, the delivery stays unconfirmed.
+        logger.warning("Could not queue delivery for item=%s: %s", job["item_id"], e)
+        evidence.pop("delivery_queued", None)
+        evidence["reason"] = evidence["reason"].replace(
+            "delivery queued until the daemon connects",
+            f"queueing the delivery failed ({type(e).__name__})",
+        )
+        return False
+
+
+def _queued_delivery_evidence(
+    company_id: int, item_id: int, job_id: str
+) -> tuple[int, dict[str, Any], list[str]] | None:
+    """The run whose latest verification is waiting for *job_id*, if any."""
+    with Session(engine) as session:
+        run = session.exec(
+            select(AgentRun)
+            .where(
+                AgentRun.company_id == company_id,
+                AgentRun.external_ref == f"task-{item_id}",
+                AgentRun.producer == TASK_WORKER_PRODUCER,
+            )
+            .order_by(AgentRun.version.desc())
+        ).first()
+        if run is None:
+            return None
+        verification = session.exec(
+            select(Verification)
+            .where(Verification.agent_run_id == run.id)
+            .order_by(Verification.id.desc())
+        ).first()
+        evidence = dict((verification.evidence or {}) if verification else {})
+        if (evidence.get("delivery_queued") or {}).get("job_id") != job_id:
+            return None
+        files = [p for p in (run.claims or {}).get("files") or [] if isinstance(p, str)]
+        return run.id, evidence, files
+
+
+def _reverify_run(run_id: int, evidence: dict[str, Any]) -> tuple[int, str] | None:
+    try:
+        with Session(engine) as session:
+            run = session.get(AgentRun, run_id)
+            verification = verify_agent_run(session, run, evidence)
+            return run.id, verification.verdict
+    except Exception as e:  # noqa: BLE001 - Evidence recording must not stop the consumer.
+        logger.warning("Re-verification failed for run=%s: %s", run_id, e)
+        return None
+
+
+async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> None:
+    """
+    Record what the daemon wrote for a delivery that had been queued.
+
+    The expected hashes come from the backend's own record of what it sent;
+    the result supplies only the daemon's per-file observation.  A result for
+    a job the task no longer waits for (a newer delivery superseded it) is
+    ignored.
+    """
+    job_id = data.get("job_id")
+    company_id, item_id, sprint_id = (
+        data.get("company_id"),
+        data.get("item_id"),
+        data.get("sprint_id"),
+    )
+    if not job_id or company_id is None or item_id is None:
+        logger.warning("Ignoring malformed workspace.delivered message: %s", data)
+        return
+    pending = await asyncio.to_thread(
+        _queued_delivery_evidence, company_id, item_id, job_id
+    )
+    if pending is None:
+        logger.info("No task waits for delivery job=%s; ignoring", job_id)
+        return
+    run_id, evidence, files = pending
+    evidence.pop("delivery_queued", None)
+    evidence.pop("reason", None)
+    writes = data.get("files")
+    evidence["workspace_writes"] = writes if isinstance(writes, list) else None
+    if evidence["workspace_writes"] is None:
+        evidence["reason"] = data.get("error") or (
+            "the workspace daemon sent no per-file results"
+        )
+    evidence["delivered_after_queue"] = True
+
+    written, _ = evaluate_workspace_writes(files, evidence)
+    if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
+
+    recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
+    comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
+    await asyncio.to_thread(
+        _append_item_comment, item_id, f"Queued delivery: {comment}", "System"
+    )
+    if sprint_id is not None:
+        await _publish_glassroom(
+            nats_client,
+            sprint_id,
+            {
+                "type": "status",
+                "semantic_type": "task.artifact_delivery",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item_id,
+                "phase": "artifact_delivery",
+                "agent_run_id": recorded[0] if recorded else None,
+                "verdict": recorded[1] if recorded else None,
+                "message": f"🧱 Queued delivery: {comment}",
+            },
+        )
+
+
 async def _deliver_artifacts(
     nats_client: NATSClient,
     item: dict[str, Any],
@@ -2222,6 +2441,7 @@ async def _deliver_artifacts(
     review_payload = _build_review_payload(deliverable, targets)
 
     evidence: dict[str, Any] | None = None
+    queued_job: dict[str, Any] | None = None
     if targets:
         workspace_root = await asyncio.to_thread(
             _resolve_workspace_root, sprint["company_id"]
@@ -2258,6 +2478,10 @@ async def _deliver_artifacts(
                 logger.warning(
                     "Workspace write request failed for item=%s: %s", item["id"], e
                 )
+                if nats_client.jetstream_enabled:
+                    queued_job = _plan_queued_delivery(
+                        item, sprint, workspace_root, targets, evidence
+                    )
 
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
@@ -2266,6 +2490,12 @@ async def _deliver_artifacts(
     recorded = await asyncio.to_thread(
         _record_task_run, item, agent, sprint, deliverable, targets, evidence
     )
+    queue_failed = queued_job is not None and not await _publish_queued_delivery(
+        nats_client, queued_job, evidence
+    )
+    if queue_failed and recorded:
+        # The run was recorded as waiting for a job that does not exist.
+        recorded = await asyncio.to_thread(_reverify_run, recorded[0], evidence)
 
     if targets:
         comment = _delivery_comment(targets, evidence, recorded)
@@ -2696,11 +2926,25 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     },
                 )
 
-        finally:
-            pass  # msg.ack() is handled by NATSClient._listen()
+    # Durable: assignments published while this worker was down are processed
+    # when it starts.  The handler records its own failures on the board, so a
+    # message is acknowledged once the handler returns.
+    await nats_client.consume(
+        "task.assign",
+        TASK_ASSIGN_CONSUMER,
+        _on_task_assign,
+        ack_wait_seconds=TASK_ASSIGN_ACK_WAIT_SECONDS,
+    )
+    logger.info("Task Worker consuming task.assign")
 
-    logger.info("Task Worker subscribed to task.assign")
-    await nats_client.subscribe("task.assign", _on_task_assign)
+    async def _on_delivered(msg, data):
+        await _on_delivery_result(nats_client, data)
+
+    # Without JetStream nothing is ever queued, so there are no results either.
+    if nats_client.jetstream_enabled:
+        await nats_client.consume(
+            "workspace.delivered", DELIVERY_RESULTS_CONSUMER, _on_delivered
+        )
 
     recovered_items = await asyncio.to_thread(_recover_inflight_items_for_restart)
     for recovered in recovered_items:
@@ -2862,6 +3106,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             # Evidence before opinion: a delivery the daemon refuted or never
             # confirmed goes back for rework without asking the QA model.
             gate = await asyncio.to_thread(_delivery_gate, sprint.company_id, item.id)
+            if gate is not None and gate[0] == DELIVERY_QUEUED:
+                # Files are written when the daemon connects; review then.
+                continue
             if gate is not None:
                 problem, observation = gate
                 previous_gate_reworks = sum(
@@ -3381,6 +3628,9 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
 
             from uuid import uuid4
 
+            # Durable: one stored assignment per todo state of the item, even
+            # though this runs every review cycle while the worker is busy.
+            updated = _normalize_utc(item.updated_at)
             await nats_client.publish(
                 "task.assign",
                 {
@@ -3389,6 +3639,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "interaction_id": str(uuid4()),
                     "backlog_item_id": item.id,
                 },
+                msg_id=f"assign-{item.id}-{updated.isoformat() if updated else '-'}",
             )
             _mark_queued(item.id, dispatch_time)
             await _publish_glassroom(

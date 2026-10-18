@@ -174,12 +174,17 @@ docker compose up -d --build backend
 docker compose up -d --build frontend
 ```
 
-**Local VS Code daemon** (optional — for actual file writes to your IDE):
+**Workspace daemon** (on the computer where you cloned your projects — the agents
+write there, like an IDE would; works on macOS, Ubuntu/Linux and Windows):
 
 ```bash
-pip install nats-py
-python vscode-daemon/daemon.py
+./scripts/start-daemon.sh        # macOS / Linux
+.\scripts\start-daemon.ps1       # Windows (PowerShell)
 ```
+
+It creates a virtualenv in `vscode-daemon/.venv`, connects to `nats://localhost:4222`
+(override with `NATS_URL`) and keeps retrying until the stack is up. Files the
+agents deliver while it is not running are queued and written when it connects.
 
 [⬆ Back to Top](#la-fabrique)
 

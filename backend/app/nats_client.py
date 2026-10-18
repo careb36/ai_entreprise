@@ -13,18 +13,68 @@ NATS subjects in use:
 - ``glassroom.<sprint_id>``— real-time event feed consumed by the SSE endpoint.
 - ``audit.write``          — append an entry to the audit log.
 - ``system.maintenance.*`` — internal ops events (e.g. error ticket creation).
+- ``workspace.deliver``    — files queued for the daemon while it was offline.
+- ``workspace.delivered``  — the daemon's per-file result for a queued delivery.
+
+Durability
+----------
+Work that must survive a consumer being down — task assignments and queued
+deliveries — goes through JetStream streams (see ``DURABLE_STREAMS``) when the
+server has JetStream enabled: a publish returns only once the server has
+stored the message, and a durable consumer receives it whenever it next runs.
+Without JetStream the client falls back to core publish/subscribe, which
+drops messages nobody is listening for.
 """
 
 import asyncio
+import contextlib
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 import nats
 from logging_config import setup_logger
+from nats.errors import TimeoutError as NATSTimeoutError
+from nats.js import api as js_api
+from nats.js.errors import BadRequestError
 
 logger = setup_logger("fabrique-nats")
+
+
+@dataclass(frozen=True)
+class DurableStream:
+    name: str
+    subjects: tuple[str, ...]
+    # How long an unconsumed message is kept before the server discards it.
+    max_age_seconds: float = 7 * 24 * 3600
+    # Publishes repeating a ``Nats-Msg-Id`` inside this window are stored once.
+    duplicate_window_seconds: float = 15 * 60
+
+
+# Work-queue streams: a message is removed once its consumer acknowledges it.
+# The workspace daemon declares the two workspace streams with the same
+# settings, so whichever process starts first creates them.
+DURABLE_STREAMS: tuple[DurableStream, ...] = (
+    DurableStream("FABRIQUE_TASKS", ("task.assign",)),
+    DurableStream("FABRIQUE_DELIVERIES", ("workspace.deliver",)),
+    DurableStream("FABRIQUE_DELIVERY_RESULTS", ("workspace.delivered",)),
+)
+DURABLE_SUBJECTS = frozenset(
+    subject for stream in DURABLE_STREAMS for subject in stream.subjects
+)
+
+
+def _stream_config(stream: DurableStream) -> js_api.StreamConfig:
+    return js_api.StreamConfig(
+        name=stream.name,
+        subjects=list(stream.subjects),
+        retention=js_api.RetentionPolicy.WORK_QUEUE,
+        storage=js_api.StorageType.FILE,
+        max_age=stream.max_age_seconds,
+        duplicate_window=stream.duplicate_window_seconds,
+    )
 
 
 class NATSClient:
@@ -47,6 +97,8 @@ class NATSClient:
         self.nc: nats.NATS | None = None
         # Tracks running listener tasks so they can be cancelled on shutdown.
         self.subscriptions: dict[str, asyncio.Task] = {}
+        # Set by ``enable_jetstream`` once the durable streams exist.
+        self.js = None
 
     async def connect(self):
         """
@@ -63,13 +115,60 @@ class NATSClient:
             logger.error(f"Failed to connect to NATS: {e}")
             raise
 
-    async def publish(self, subject: str, payload: dict[str, Any]):
+    @property
+    def jetstream_enabled(self) -> bool:
+        return self.js is not None
+
+    async def enable_jetstream(self) -> bool:
+        """
+        Create (or update) the durable streams and switch durable subjects to them.
+
+        Returns ``False`` — and leaves the client on core NATS — when the server
+        has no JetStream (``nats-server`` started without ``-js``).
+        """
+        if not self.nc:
+            raise RuntimeError("NATS not connected")
+        js = self.nc.jetstream()
+        try:
+            for stream in DURABLE_STREAMS:
+                config = _stream_config(stream)
+                try:
+                    await js.add_stream(config)
+                except BadRequestError:
+                    # The stream exists with other settings (an older release).
+                    await js.update_stream(config)
+        except Exception as e:  # noqa: BLE001 - Any JetStream failure means core NATS only.
+            logger.warning(
+                "JetStream unavailable (%s: %s). Task assignments and queued "
+                "deliveries use core NATS and are lost if no consumer is "
+                "listening. Start nats-server with -js to make them durable.",
+                type(e).__name__,
+                e,
+            )
+            self.js = None
+            return False
+        self.js = js
+        logger.info(
+            "JetStream enabled: durable streams %s",
+            ", ".join(stream.name for stream in DURABLE_STREAMS),
+        )
+        return True
+
+    async def publish(
+        self, subject: str, payload: dict[str, Any], *, msg_id: str | None = None
+    ):
         """
         Publish a JSON-serialisable payload to a NATS subject.
+
+        Durable subjects go to their JetStream stream when JetStream is enabled;
+        the call returns once the server has stored the message and raises if
+        it could not.  *msg_id* (``Nats-Msg-Id``) makes a repeated publish
+        within the stream's duplicate window a no-op.
 
         Args:
             subject: NATS subject string (e.g. ``"task.assign"``).
             payload: Dictionary that will be JSON-encoded before sending.
+            msg_id:  Optional de-duplication id for durable subjects.
 
         Raises:
             RuntimeError: If called before ``connect()``.
@@ -78,8 +177,118 @@ class NATSClient:
             raise RuntimeError("NATS not connected")
 
         data = json.dumps(payload).encode()
+        if self.js is not None and subject in DURABLE_SUBJECTS:
+            headers = {"Nats-Msg-Id": msg_id} if msg_id else None
+            ack = await self.js.publish(subject, data, headers=headers)
+            # Durable payloads can carry whole files; log the receipt only.
+            logger.info(
+                "Stored %s in %s (seq=%s%s)",
+                subject,
+                ack.stream,
+                ack.seq,
+                ", duplicate" if ack.duplicate else "",
+            )
+            return
         await self.nc.publish(subject, data)
         logger.info(f"Published to {subject}: {payload}")
+
+    async def consume(
+        self,
+        subject: str,
+        durable: str,
+        callback: Callable[[Any, dict[str, Any]], Awaitable[None]],
+        *,
+        ack_wait_seconds: float = 600.0,
+        max_deliver: int = 5,
+    ):
+        """
+        Process every message on a durable *subject*, including ones published
+        while this process was down.
+
+        With JetStream this is a durable pull consumer named *durable*: replicas
+        sharing the name split the work, a message is acknowledged after
+        *callback* returns, and one whose callback raises is redelivered (up to
+        *max_deliver* times).  While *callback* runs the message is kept
+        claimed, so slow work is not redelivered to another replica.  Without
+        JetStream it is a core subscription in queue group *durable*.
+        """
+        if not self.nc:
+            raise RuntimeError("NATS not connected")
+        stream = next((s.name for s in DURABLE_STREAMS if subject in s.subjects), None)
+        if self.js is None or stream is None:
+            await self.subscribe(subject, callback, queue=durable)
+            return
+
+        config = js_api.ConsumerConfig(
+            durable_name=durable,
+            deliver_policy=js_api.DeliverPolicy.ALL,
+            ack_policy=js_api.AckPolicy.EXPLICIT,
+            ack_wait=ack_wait_seconds,
+            max_deliver=max_deliver,
+            filter_subject=subject,
+        )
+        psub = await self.js.pull_subscribe(
+            subject, durable=durable, stream=stream, config=config
+        )
+        task = asyncio.create_task(
+            self._consume(psub, callback, ack_wait_seconds, max_deliver)
+        )
+        self.subscriptions[f"{subject}#{durable}"] = task
+        logger.info("Consuming %s from %s as %s", subject, stream, durable)
+
+    async def _consume(self, psub, callback, ack_wait_seconds, max_deliver):
+        while True:
+            try:
+                msgs = await psub.fetch(1, timeout=5)
+            except (NATSTimeoutError, TimeoutError):
+                continue
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 - Keep consuming across reconnects.
+                logger.warning("Durable fetch failed (%s); retrying", e)
+                await asyncio.sleep(2)
+                continue
+            for msg in msgs:
+                await self._handle_durable(msg, callback, ack_wait_seconds, max_deliver)
+
+    async def _handle_durable(self, msg, callback, ack_wait_seconds, max_deliver):
+        try:
+            data = json.loads(msg.data.decode())
+        except (ValueError, UnicodeDecodeError):
+            logger.error("Discarding malformed message on %s", msg.subject)
+            await msg.term()
+            return
+
+        async def _keep_claimed():
+            while True:
+                await asyncio.sleep(max(ack_wait_seconds / 3, 1))
+                with contextlib.suppress(Exception):
+                    await msg.in_progress()
+
+        keepalive = asyncio.create_task(_keep_claimed())
+        try:
+            await callback(msg, data)
+        except asyncio.CancelledError:
+            # Left unacknowledged: redelivered after ack_wait.
+            raise
+        except Exception as e:
+            delivered = msg.metadata.num_delivered
+            logger.exception(
+                "Error processing %s (delivery %d/%d): %s",
+                msg.subject,
+                delivered,
+                max_deliver,
+                e,  # noqa: TRY401 - Keep the message as well as the traceback.
+            )
+            with contextlib.suppress(Exception):
+                if delivered >= max_deliver:
+                    await msg.term()
+                else:
+                    await msg.nak(delay=min(30 * delivered, 300))
+            return
+        finally:
+            keepalive.cancel()
+        await msg.ack()
 
     async def subscribe(
         self, subject: str, callback: Callable, queue: str | None = None

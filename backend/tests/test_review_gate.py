@@ -21,10 +21,12 @@ DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120
 
 
 class _FakeNATS:
+    jetstream_enabled = False
+
     def __init__(self):
         self.published = []
 
-    async def publish(self, subject, payload):
+    async def publish(self, subject, payload, msg_id=None):
         self.published.append((subject, payload))
 
     async def request(self, subject, payload, timeout=5.0):
