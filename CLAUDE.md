@@ -110,14 +110,33 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Data Flow for a Sprint
 
-1. User creates a sprint via frontend → `POST /v1/start_sprint`
-2. Backend publishes the sprint to NATS via the transactional outbox
-   Steps 3–6 only happen when `AGENT_GRAPH_ENABLED=true`.
-3. LangGraph graph executes agent nodes sequentially, each calling LLM proxy
-4. Architect/PO nodes use Gemini (high reasoning); Developer/QA nodes use DeepSeek (cost-effective)
-5. Agent decisions and code are published back to NATS as `workspace.generate` / `workspace.execute`
-6. VS Code daemon receives NATS messages, writes files and runs shell commands in the workspace
-7. Engram events are written to Neo4j for episodic memory; vector embeddings to pgvector for RAG
+Tasks are executed by the **task worker** (`backend/app/services/task_worker.py`);
+the LangGraph graph is only an optional kickoff conversation.
+
+1. `POST /v1/start_sprint` writes the sprint, one `BacklogItem` per task and one
+   outbox event per task on `task.assign`; the outbox processor publishes them to NATS.
+2. The task worker picks up `task.assign`, loads the item and the assigned agent
+   (empty model → role default from `llm/model_factory.py`) and calls the LLM proxy.
+   The prompt asks for every file as a fenced block with `path=<relative path>`;
+   on rework it also carries the pending `NEEDS WORK:` feedback.
+3. `parse_file_manifest` turns the answer into files. The worker sends them to the
+   VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
+   company's project (`ProjectDiscovery.project_path`, recorded at company creation;
+   `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the
+   sha256 of the bytes it read back from disk.
+4. Optionally (`DELIVERY_TESTS_ENABLED`) the daemon runs the project's tests via
+   `workspace.execute` and returns the exit status.
+5. The deliverable is ingested as an `AgentRun` (`producer: le-fabrique-task-worker`,
+   `external_ref: task-<id>`) and verified deterministically (`files_written`,
+   `tests_run`, …). Claims (declared files, the agent's summary) and observations
+   (daemon reports) are kept apart; the board and Glassroom show the verdict.
+6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
+   for rework without asking an LLM; otherwise QA reviews, and only an explicit
+   `APPROVED:` closes the task.
+7. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
+   the sprint; its transcript is ingested as an `AgentRun` (`le-fabrique-graph`).
+   A failed kickoff never blocks the sprint.
+8. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
 
 ### Memory Architecture
 
