@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import CompanySelect from './CompanySelect'
 import ProtectedRoute from '../components/ProtectedRoute'
+import { queryClient } from '../lib/queryClient'
 import { useAuthStore } from '../store/useAuthStore'
 
 function CurrentPath() {
@@ -11,25 +11,24 @@ function CurrentPath() {
   return <output data-testid="current-path">{location.pathname}{location.search}{location.hash}</output>
 }
 
-function renderRoutes(path: string, queryClient = new QueryClient()) {
+function renderRoutes(path: string) {
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <CurrentPath />
-        <Routes>
-          <Route element={<ProtectedRoute />}>
-            <Route path="/companies/select" element={<CompanySelect />} />
-            <Route path="/evidence/5" element={<div>Evidence detail</div>} />
-            <Route path="/" element={<div>Home</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <CurrentPath />
+      <Routes>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/companies/select" element={<CompanySelect />} />
+          <Route path="/evidence/5" element={<div>Evidence detail</div>} />
+          <Route path="/" element={<div>Home</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
   )
 }
 
 describe('company selection return destination', () => {
   beforeEach(() => {
+    queryClient.clear()
     useAuthStore.getState().logout()
     useAuthStore.setState({
       token: 'valid-token',
@@ -70,9 +69,8 @@ describe('company selection return destination', () => {
   )
 
   it('removes cached queries when switching companies', async () => {
-    const queryClient = new QueryClient()
     queryClient.setQueryData(['memory', 14, 'auth'], ['company 14 result'])
-    renderRoutes('/companies/select', queryClient)
+    renderRoutes('/companies/select')
 
     fireEvent.click(await screen.findByRole('button', { name: /Company 28.*Viewer/ }))
 

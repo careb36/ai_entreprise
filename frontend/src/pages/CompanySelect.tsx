@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
+import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
@@ -9,7 +9,6 @@ export default function CompanySelect() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const queryClient = useQueryClient()
   const memberships = useAuthStore(state => state.memberships)
   const setCompany = useAppStore(state => state.setCompany)
 
