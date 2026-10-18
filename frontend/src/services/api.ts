@@ -135,6 +135,7 @@ export interface BacklogItem {
 export interface SprintBoard {
   sprint: {
     id: number
+    company_id: number
     sprint_name: string
     status: string
     goal?: string

@@ -155,7 +155,7 @@ export function useSprintBoard(sprintId: number | null) {
   })
 
   useEffect(() => {
-    if (query.error instanceof ApiError && query.error.status === 404) {
+    if (query.error instanceof ApiError && [403, 404].includes(query.error.status)) {
       const state = useAppStore.getState()
       if (sprintId !== null && state.activeSprintId === sprintId) {
         state.setActiveSprint(null)
