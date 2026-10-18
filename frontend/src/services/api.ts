@@ -42,6 +42,13 @@ export interface CompanyInfo {
   token_used: number
 }
 
+export interface Capabilities {
+  agent_graph: boolean
+  memory: boolean
+  github: boolean
+  auth_required: boolean
+}
+
 export interface InitCompanyRequest {
   company_name: string
   description?: string
@@ -256,6 +263,7 @@ export interface AgentRunApprovalRequest {
 // ── Core fetch ───────────────────────────────────────────────────────────────
 
 interface FetchOptions extends RequestInit {
+  auth?: boolean
   params?: Record<string, string | number>
   _attempt?: number
 }
@@ -267,7 +275,7 @@ export function setOnUnauthorized(handler: (() => void) | null) {
 }
 
 async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, _attempt = 0, ...fetchOptions } = options
+  const { params, _attempt = 0, auth = true, ...fetchOptions } = options
 
   let url = `${API_BASE}${endpoint}`
   if (params) {
@@ -281,7 +289,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
   try {
-    const token = useAuthStore.getState().getValidToken()
+    const token = auth ? useAuthStore.getState().getValidToken() : null
     const headers = new Headers(fetchOptions.headers)
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     if (token) headers.set('Authorization', ['Bearer', token].join(' '))
@@ -369,6 +377,7 @@ export const api = {
 
   // Core & Enterprise
   health: () => api.get<{ status: string; timestamp: string }>('/health'),
+  capabilities: () => fetchApi<Capabilities>('/v1/capabilities', { method: 'GET', auth: false }),
   
   initCompany: (data: InitCompanyRequest) =>
     api.post<InitCompanyResponse>('/v1/init_company', data),

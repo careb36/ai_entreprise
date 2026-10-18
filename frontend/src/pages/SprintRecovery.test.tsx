@@ -21,7 +21,7 @@ describe('stale persisted sprint recovery', () => {
     vi.spyOn(api, 'getSprintBoard').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'getAnalyticsSummary').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy' } as never)
-    vi.spyOn(api, 'get').mockResolvedValue({ agent_graph: false, memory: false })
+    vi.spyOn(api, 'capabilities').mockResolvedValue({ agent_graph: false, memory: false, github: false, auth_required: true })
     vi.spyOn(useAgentStore.getState(), 'connect').mockImplementation(() => {})
     vi.spyOn(useAgentStore.getState(), 'disconnect').mockImplementation(() => {})
   })
@@ -56,9 +56,9 @@ describe('stale persisted sprint recovery', () => {
     [false, false], [true, false], [false, true], [true, true],
   ])('gates dashboard shortcuts by capabilities (graph %s, memory %s)', async (agent_graph, memory) => {
     useAppStore.setState({ activeSprintId: null })
-    vi.mocked(api.get).mockResolvedValue({ agent_graph, memory })
+    vi.mocked(api.capabilities).mockResolvedValue({ agent_graph, memory, github: false, auth_required: true })
     render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/capabilities'))
+    await waitFor(() => expect(api.capabilities).toHaveBeenCalled())
     await waitFor(() => {
       expect(Boolean(screen.queryByRole('link', { name: 'Generate' }))).toBe(agent_graph)
       expect(Boolean(screen.queryByRole('link', { name: 'Memory' }))).toBe(memory)

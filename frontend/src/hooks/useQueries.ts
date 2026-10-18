@@ -30,12 +30,11 @@ export const QUERY_KEYS = {
   auditVerification: (externalRef: string) => ['audit-verification', externalRef] as const,
 }
 
-export function useCapabilities(enabled = true) {
+export function useCapabilities() {
   return useQuery({
     queryKey: QUERY_KEYS.capabilities(),
-    queryFn: () => api.get<{ agent_graph: boolean; memory: boolean; github: boolean; auth_required: boolean }>('/v1/capabilities'),
-    enabled,
-    refetchInterval: 30_000,
+    queryFn: api.capabilities,
+    staleTime: 1000 * 60 * 5,
   })
 }
 

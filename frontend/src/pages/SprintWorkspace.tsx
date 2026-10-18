@@ -35,7 +35,7 @@ export const SprintWorkspace: React.FC = () => {
         {sprintId !== null && !notFound && (
           <button className="btn btn-ghost mr-3" onClick={() => boardQuery.refetch()}>{t('common.retry')}</button>
         )}
-        <Link to="/dashboard" className="btn btn-ghost">{t('nav.dashboard')}</Link>
+        <Link to="/dashboard" className="btn btn-ghost">{t('nav.sprints', { defaultValue: 'Sprints' })}</Link>
       </div>
     )
   }

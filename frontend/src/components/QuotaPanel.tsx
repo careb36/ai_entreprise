@@ -4,7 +4,7 @@ import { AlertTriangle, Loader2, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useQuotas, useResetQuota } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
-export const CompanyQuotas: React.FC = () => {
+export const QuotaPanel: React.FC = () => {
   const { t } = useTranslation()
   const companyId = useAppStore(state => state.companyId)
   const { data: quotaData } = useQuotas(companyId)
@@ -15,7 +15,7 @@ export const CompanyQuotas: React.FC = () => {
     <div>
       <div className="mb-6 flex items-center gap-2">
         <ShieldCheck className="text-brand-400" size={22} />
-        <h1 className="text-xl font-bold text-white">{t('governance.quotaTitle')}</h1>
+        <h1 className="text-xl font-bold text-white">{t('governance.quotaTitle', { defaultValue: 'Token Quota Usage' })}</h1>
       </div>
 
       {Array.isArray(quotaData) && quotaData.length > 0 && (

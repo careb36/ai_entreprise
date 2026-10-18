@@ -56,7 +56,7 @@ export const GovernancePanel: React.FC = () => {
     <div>
       <div className="mb-6 flex items-center gap-2">
         <ShieldCheck className="text-brand-400" size={22} />
-        <h1 className="text-xl font-bold text-white">{t('nav.review')}</h1>
+        <h1 className="text-xl font-bold text-white">{t('nav.review', { defaultValue: 'Review' })}</h1>
       </div>
       {companyId === null
         ? <div className="empty-state py-12"><AlertTriangle size={32} className="mx-auto mb-3 text-gray-500" /><p className="text-gray-400">{t('evidence.selectCompany')}</p></div>

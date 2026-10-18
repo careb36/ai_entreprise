@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
@@ -12,8 +12,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import { SprintWorkspace } from './pages/SprintWorkspace'
 import { GovernancePanel } from './components/GovernancePanel'
-import { CompanyQuotas } from './components/CompanyQuotas'
-import { AnalyticsDashboard } from './components/AnalyticsDashboard'
+import { QuotaPanel } from './components/QuotaPanel'
 import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Evidence from './pages/Evidence'
@@ -56,15 +55,15 @@ export function LanguageSwitcher() {
 
 // ── Nav links config ──────────────────────────────────────────────────────────
 
-function useNavLinks(authenticated: boolean) {
+function useNavLinks() {
   const { t } = useTranslation()
-  const { data, isError } = useCapabilities(authenticated)
+  const { data, isPending, isError } = useCapabilities()
   return [
-    { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence') },
-    { to: '/governance', icon: ShieldCheck, label: t('nav.review') },
-    { to: '/dashboard', icon: LayoutDashboard, label: t('nav.sprints') },
-    ...(!isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate') }] : []),
-    ...(!isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory') }] : []),
+    { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence', { defaultValue: 'Evidence' }) },
+    { to: '/governance', icon: ShieldCheck, label: t('nav.review', { defaultValue: 'Review' }) },
+    { to: '/dashboard', icon: LayoutDashboard, label: t('nav.sprints', { defaultValue: 'Sprints' }) },
+    ...(!isPending && !isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
+    ...(!isPending && !isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
   ]
 }
 
@@ -73,6 +72,10 @@ function useNavLinks(authenticated: boolean) {
 function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [companyOpen, setCompanyOpen] = useState(false)
+  const companyRef = useRef<HTMLDivElement>(null)
+  const companyToggleRef = useRef<HTMLButtonElement>(null)
+  const mobileToggleRef = useRef<HTMLButtonElement>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
@@ -82,33 +85,62 @@ function NavBar() {
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
   const companyName = useAppStore(state => state.companyName)
+  const companyId = useAppStore(state => state.companyId)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
-  const links = useNavLinks(authenticated)
+  const links = useNavLinks()
+  const companyLabel = companyId !== null
+    ? companyName || t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' })
+    : user?.full_name || user?.email || t('auth.selectCompany', { defaultValue: 'Select a company' })
 
   useEffect(() => {
     setMenuOpen(false)
     setCompanyOpen(false)
   }, [location])
 
+  useEffect(() => {
+    function closeOutside(event: PointerEvent) {
+      const target = event.target as Node
+      if (!companyRef.current?.contains(target)) setCompanyOpen(false)
+      if (!mobileMenuRef.current?.contains(target) && !mobileToggleRef.current?.contains(target)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [])
+
+  useEffect(() => {
+    if (companyOpen) companyRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+  }, [companyOpen])
+
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-lg transition-colors
+    `flex items-center gap-1.5 whitespace-nowrap text-sm font-medium px-2 py-2 rounded-lg transition-colors
      ${isActive
        ? 'text-white bg-brand-600/20 border border-brand-600/30'
        : 'text-gray-400 hover:text-white hover:bg-surface-800'}`
 
   return (
-    <header className="relative min-h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0">
+    <header className="relative h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0"
+      onKeyDown={event => {
+        if (event.key !== 'Escape') return
+        if (companyOpen) {
+          setCompanyOpen(false)
+          companyToggleRef.current?.focus()
+        }
+        if (menuOpen) {
+          setMenuOpen(false)
+          mobileToggleRef.current?.focus()
+        }
+      }}>
       {/* Logo */}
-      <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
+      <Link to="/evidence" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
         <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
-        <span className="text-lg font-black tracking-tight hidden xs:block">La Fabrique</span>
+        <span className="text-lg font-black tracking-tight hidden xl:block">La Fabrique</span>
       </Link>
 
       {/* Desktop nav */}
       {authenticated && (
-        <nav className="hidden xl:flex flex-1 min-w-0 flex-wrap items-center gap-1 ml-4" aria-label={t('nav.mainNavigation')}>
+        <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-1 ml-4" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
           {links.map(({ to, icon: Icon, label }) => (
-            <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
+            <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
               <Icon size={16} />
               <span>{label}</span>
             </NavLink>
@@ -121,28 +153,40 @@ function NavBar() {
         <LanguageSwitcher />
         {authenticated && (
           <>
-            <div className="relative" onKeyDown={event => {
-              if (event.key === 'Escape') setCompanyOpen(false)
-            }} onBlur={event => {
+            <div ref={companyRef} className="relative" onBlur={event => {
               if (!event.currentTarget.contains(event.relatedTarget)) setCompanyOpen(false)
             }}>
-              <button type="button" className="btn-ghost btn-sm" aria-expanded={companyOpen}
+              <button ref={companyToggleRef} type="button" className="btn-ghost btn-sm max-w-36 xl:max-w-48"
+                aria-haspopup="menu" aria-expanded={companyOpen} title={companyLabel}
+                onKeyDown={event => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setCompanyOpen(true)
+                  }
+                }}
                 aria-controls="company-menu" onClick={() => {
                   setCompanyOpen(open => !open)
                   setMenuOpen(false)
                 }}>
-                <Building2 size={14} />{t('nav.company')}<ChevronDown size={14} />
+                <Building2 size={14} className="shrink-0" /><span className="truncate">{companyLabel}</span><ChevronDown size={14} className="shrink-0" />
               </button>
               {companyOpen && (
-                <div id="company-menu" className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
-                  <p className="truncate px-3 py-2 text-sm font-semibold" title={companyName ?? undefined}>
-                    {companyName ?? t('auth.selectCompany')}
-                  </p>
-                  <p className="truncate px-3 pb-2 text-xs text-gray-400" title={user?.full_name || user?.email}>{user?.full_name || user?.email}</p>
-                  {memberships.length > 1 && <Link to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany')}</Link>}
-                  <Link to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany')}</Link>
-                  <Link to="/companies/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas')}</Link>
-                  <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
+                <div id="company-menu" role="menu" aria-label={companyLabel}
+                  onClick={() => setCompanyOpen(false)}
+                  onKeyDown={event => {
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+                    event.preventDefault()
+                    const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                    const current = items.indexOf(document.activeElement as HTMLElement)
+                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                      : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
+                    items[next]?.focus()
+                  }}
+                  className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
+                  {memberships.length > 1 && <Link role="menuitem" to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany', { defaultValue: 'Switch company' })}</Link>}
+                  <Link role="menuitem" to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
+                  <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
+                  <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
                     logout()
                     navigate('/login', { replace: true })
                   }}>{t('auth.logout', { defaultValue: 'Log out' })}</button>
@@ -155,18 +199,20 @@ function NavBar() {
         {/* Status pill — desktop only */}
         <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
           <span className="status-dot-pulse" />
-          {t('dashboard.online')}
+          {t('nav.online', { defaultValue: 'Online' })}
         </div>
 
         {/* Hamburger — mobile/tablet */}
         {authenticated && <button
-          aria-label={t(menuOpen ? 'nav.closeMenu' : 'nav.openMenu')}
+          ref={mobileToggleRef}
+          aria-label={menuOpen ? t('nav.closeMenu', { defaultValue: 'Close menu' }) : t('nav.openMenu', { defaultValue: 'Open menu' })}
+          aria-controls="mobile-menu"
           aria-expanded={menuOpen}
           onClick={() => {
             setMenuOpen(v => !v)
             setCompanyOpen(false)
           }}
-          className="btn-ghost btn-icon xl:hidden"
+          className="btn-ghost btn-icon lg:hidden"
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>}
@@ -175,12 +221,13 @@ function NavBar() {
       {/* Mobile dropdown */}
       {authenticated && menuOpen && (
         <div
-          className="absolute top-full left-0 right-0 bg-surface-900 border-b border-surface-700 xl:hidden z-30 animate-fade-in"
+          ref={mobileMenuRef} id="mobile-menu"
+          className="absolute top-full left-0 right-0 bg-surface-900 border-b border-surface-700 lg:hidden z-30 animate-fade-in"
           onClick={() => setMenuOpen(false)}
         >
-          <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation')}>
+          <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation', { defaultValue: 'Mobile navigation' })}>
             {links.map(({ to, icon: Icon, label }) => (
-              <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
+              <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
                 <Icon size={16} />
                 <span>{label}</span>
               </NavLink>
@@ -192,21 +239,9 @@ function NavBar() {
   )
 }
 
-function SprintPages() {
-  const { t } = useTranslation()
-  return <div>
-    <nav className="flex gap-2 px-4 pt-4 lg:px-6" aria-label={t('nav.sprints')}>
-      <NavLink to="/dashboard" end className={({ isActive }) => `btn-ghost btn-sm ${isActive ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.overview')}</NavLink>
-      <NavLink to="/dashboard/analytics" className={({ isActive }) => `btn-ghost btn-sm ${isActive ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.analytics')}</NavLink>
-    </nav>
-    <Outlet />
-  </div>
-}
-
 // ── App shell ─────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const activeSprintId = useAppStore(state => state.activeSprintId)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -228,13 +263,11 @@ function AppContent() {
             <Route path="/register" element={<Register />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Navigate to="/evidence" replace />} />
-              <Route path="/dashboard" element={<SprintPages />}>
-                <Route index element={<Dashboard />} />
-                <Route path="analytics" element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>} />
-              </Route>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/analytics" element={<Dashboard />} />
               <Route path="/companies/new" element={<CompanyNew />} />
               <Route path="/companies/select" element={<CompanySelect />} />
-              <Route path="/companies/quotas" element={<div className="page-container"><CompanyQuotas /></div>} />
+              <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
               <Route path="/workspace/:id" element={<SprintWorkspace />} />
               <Route
                 path="/governance"

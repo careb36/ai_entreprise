@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import {
-  useAnalyticsSummary, useHealth, useInitCompany, usePlanSelfImprovementSprint,
+  useAnalyticsSummary, useCapabilities, useHealth, useInitCompany, usePlanSelfImprovementSprint,
   usePlanSprint, useSprintBoard, useStartSprint,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
@@ -15,6 +15,7 @@ import es from '../i18n/es.json'
 
 vi.mock('../hooks/useQueries', () => ({
   useAnalyticsSummary: vi.fn(),
+  useCapabilities: vi.fn(),
   useHealth: vi.fn(),
   useInitCompany: vi.fn(),
   usePlanSelfImprovementSprint: vi.fn(),
@@ -70,6 +71,7 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(useSprintBoard).mockReturnValue({ data: undefined, isLoading: false } as never)
     vi.mocked(useAnalyticsSummary).mockReturnValue({ data: undefined } as never)
     vi.mocked(useHealth).mockReturnValue({ data: { status: 'healthy' } } as never)
+    vi.mocked(useCapabilities).mockReturnValue({ data: { agent_graph: true, memory: true }, isError: false, isPending: false } as never)
     vi.mocked(useInitCompany).mockReturnValue(mutation() as never)
     vi.mocked(usePlanSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(plan) }) as never)
     vi.mocked(usePlanSelfImprovementSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(plan) }) as never)
