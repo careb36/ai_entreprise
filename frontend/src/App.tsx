@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
@@ -13,7 +13,6 @@ import Register from './pages/Register'
 import { SprintWorkspace } from './pages/SprintWorkspace'
 import { GovernancePanel } from './components/GovernancePanel'
 import { QuotaPanel } from './components/QuotaPanel'
-import { AnalyticsDashboard } from './components/AnalyticsDashboard'
 import { SupportBot } from './components/SupportBot'
 import MemorySearch from './pages/MemorySearch'
 import Evidence from './pages/Evidence'
@@ -56,15 +55,15 @@ export function LanguageSwitcher() {
 
 // ── Nav links config ──────────────────────────────────────────────────────────
 
-function useNavLinks(authenticated: boolean) {
+function useNavLinks() {
   const { t } = useTranslation()
-  const { data, isError } = useCapabilities(authenticated)
+  const { data, isPending, isError } = useCapabilities()
   return [
     { to: '/evidence', icon: ClipboardCheck, label: t('nav.evidence', { defaultValue: 'Evidence' }) },
     { to: '/governance', icon: ShieldCheck, label: t('nav.review', { defaultValue: 'Review' }) },
     { to: '/dashboard', icon: LayoutDashboard, label: t('nav.sprints', { defaultValue: 'Sprints' }) },
-    ...(!isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
-    ...(!isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
+    ...(!isPending && !isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
+    ...(!isPending && !isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
   ]
 }
 
@@ -73,9 +72,10 @@ function useNavLinks(authenticated: boolean) {
 function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [companyOpen, setCompanyOpen] = useState(false)
-  const companyMenu = useRef<HTMLDivElement>(null)
-  const companyToggle = useRef<HTMLButtonElement>(null)
-  const mobileToggle = useRef<HTMLButtonElement>(null)
+  const companyRef = useRef<HTMLDivElement>(null)
+  const companyToggleRef = useRef<HTMLButtonElement>(null)
+  const mobileToggleRef = useRef<HTMLButtonElement>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
@@ -87,7 +87,10 @@ function NavBar() {
   const companyName = useAppStore(state => state.companyName)
   const companyId = useAppStore(state => state.companyId)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
-  const links = useNavLinks(authenticated)
+  const links = useNavLinks()
+  const companyLabel = companyId !== null
+    ? companyName || t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' })
+    : user?.full_name || user?.email || t('auth.selectCompany', { defaultValue: 'Select a company' })
 
   useEffect(() => {
     setMenuOpen(false)
@@ -95,12 +98,17 @@ function NavBar() {
   }, [location])
 
   useEffect(() => {
-    if (!companyOpen) return
-    function closeOutside(event: MouseEvent) {
-      if (!companyMenu.current?.contains(event.target as Node)) setCompanyOpen(false)
+    function closeOutside(event: PointerEvent) {
+      const target = event.target as Node
+      if (!companyRef.current?.contains(target)) setCompanyOpen(false)
+      if (!mobileMenuRef.current?.contains(target) && !mobileToggleRef.current?.contains(target)) setMenuOpen(false)
     }
-    document.addEventListener('mousedown', closeOutside)
-    return () => document.removeEventListener('mousedown', closeOutside)
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [])
+
+  useEffect(() => {
+    if (companyOpen) companyRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
   }, [companyOpen])
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -110,12 +118,18 @@ function NavBar() {
        : 'text-gray-400 hover:text-white hover:bg-surface-800'}`
 
   return (
-    <header className="relative h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0" onKeyDown={event => {
-      if (event.key === 'Escape' && menuOpen) {
-        setMenuOpen(false)
-        mobileToggle.current?.focus()
-      }
-    }}>
+    <header className="relative h-14 bg-surface-900 border-b border-surface-700 text-white flex items-center gap-2 px-4 lg:px-6 z-20 flex-shrink-0"
+      onKeyDown={event => {
+        if (event.key !== 'Escape') return
+        if (companyOpen) {
+          setCompanyOpen(false)
+          companyToggleRef.current?.focus()
+        }
+        if (menuOpen) {
+          setMenuOpen(false)
+          mobileToggleRef.current?.focus()
+        }
+      }}>
       {/* Logo */}
       <Link to="/evidence" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity flex-shrink-0">
         <img src="/fabrique-icon.svg" alt="La Fabrique" width={30} height={30} className="rounded-md" />
@@ -126,7 +140,7 @@ function NavBar() {
       {authenticated && (
         <nav className="hidden lg:flex flex-1 min-w-0 items-center gap-1 ml-4" aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}>
           {links.map(({ to, icon: Icon, label }) => (
-            <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
+            <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
               <Icon size={16} />
               <span>{label}</span>
             </NavLink>
@@ -139,27 +153,36 @@ function NavBar() {
         <LanguageSwitcher />
         {authenticated && (
           <>
-            <div ref={companyMenu} className="relative" onKeyDown={event => {
-              if (event.key === 'Escape') {
-                setCompanyOpen(false)
-                companyToggle.current?.focus()
-              }
-            }} onBlur={event => {
+            <div ref={companyRef} className="relative" onBlur={event => {
               if (!event.currentTarget.contains(event.relatedTarget)) setCompanyOpen(false)
             }}>
-              <button ref={companyToggle} type="button" className="btn-ghost btn-sm" aria-haspopup="menu" aria-expanded={companyOpen}
+              <button ref={companyToggleRef} type="button" className="btn-ghost btn-sm max-w-36 xl:max-w-48"
+                aria-haspopup="menu" aria-expanded={companyOpen} title={companyLabel}
+                onKeyDown={event => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    setCompanyOpen(true)
+                  }
+                }}
                 aria-controls="company-menu" onClick={() => {
                   setCompanyOpen(open => !open)
                   setMenuOpen(false)
                 }}>
-                <Building2 size={14} className="shrink-0" />
-                <span className="max-w-36 truncate">{companyId !== null
-                  ? companyName || t('auth.companyPlaceholder', { id: companyId, defaultValue: 'Company {{id}}' })
-                  : user?.full_name || user?.email}</span>
-                <ChevronDown size={14} className="shrink-0" />
+                <Building2 size={14} className="shrink-0" /><span className="truncate">{companyLabel}</span><ChevronDown size={14} className="shrink-0" />
               </button>
               {companyOpen && (
-                <div id="company-menu" role="menu" onClick={() => setCompanyOpen(false)} className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
+                <div id="company-menu" role="menu" aria-label={companyLabel}
+                  onClick={() => setCompanyOpen(false)}
+                  onKeyDown={event => {
+                    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+                    event.preventDefault()
+                    const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                    const current = items.indexOf(document.activeElement as HTMLElement)
+                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                      : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length
+                    items[next]?.focus()
+                  }}
+                  className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-700 bg-surface-900 p-2 shadow-lg">
                   {memberships.length > 1 && <Link role="menuitem" to="/companies/select" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('auth.switchCompany', { defaultValue: 'Switch company' })}</Link>}
                   <Link role="menuitem" to="/companies/new" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.newCompany', { defaultValue: 'New company' })}</Link>
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
@@ -181,10 +204,10 @@ function NavBar() {
 
         {/* Hamburger — mobile/tablet */}
         {authenticated && <button
-          ref={mobileToggle}
+          ref={mobileToggleRef}
           aria-label={menuOpen ? t('nav.closeMenu', { defaultValue: 'Close menu' }) : t('nav.openMenu', { defaultValue: 'Open menu' })}
+          aria-controls="mobile-menu"
           aria-expanded={menuOpen}
-          aria-controls="mobile-navigation"
           onClick={() => {
             setMenuOpen(v => !v)
             setCompanyOpen(false)
@@ -198,13 +221,13 @@ function NavBar() {
       {/* Mobile dropdown */}
       {authenticated && menuOpen && (
         <div
-          id="mobile-navigation"
+          ref={mobileMenuRef} id="mobile-menu"
           className="absolute top-full left-0 right-0 bg-surface-900 border-b border-surface-700 lg:hidden z-30 animate-fade-in"
           onClick={() => setMenuOpen(false)}
         >
           <nav className="flex flex-col p-3 gap-1" aria-label={t('nav.mobileNavigation', { defaultValue: 'Mobile navigation' })}>
             {links.map(({ to, icon: Icon, label }) => (
-              <NavLink key={`${to}-${label}`} to={to} end={to === '/'} className={linkClass}>
+              <NavLink key={to} to={to} end={to !== '/dashboard'} className={linkClass}>
                 <Icon size={16} />
                 <span>{label}</span>
               </NavLink>
@@ -216,22 +239,9 @@ function NavBar() {
   )
 }
 
-function SprintPages() {
-  const { t } = useTranslation()
-  const { pathname } = useLocation()
-  return <div>
-    <div role="tablist" className="flex gap-2 px-4 pt-4 lg:px-6" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })}>
-      <Link role="tab" aria-selected={pathname === '/dashboard'} to="/dashboard" className={`btn-ghost btn-sm ${pathname === '/dashboard' ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.board', { defaultValue: 'Board' })}</Link>
-      <Link role="tab" aria-selected={pathname === '/dashboard/analytics'} to="/dashboard/analytics" className={`btn-ghost btn-sm ${pathname === '/dashboard/analytics' ? 'text-brand-400 bg-surface-800' : ''}`}>{t('nav.analytics', { defaultValue: 'Analytics' })}</Link>
-    </div>
-    <Outlet />
-  </div>
-}
-
 // ── App shell ─────────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const activeSprintId = useAppStore(state => state.activeSprintId)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -253,10 +263,8 @@ function AppContent() {
             <Route path="/register" element={<Register />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/" element={<Navigate to="/evidence" replace />} />
-              <Route path="/dashboard" element={<SprintPages />}>
-                <Route index element={<Dashboard />} />
-                <Route path="analytics" element={<div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>} />
-              </Route>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/analytics" element={<Dashboard />} />
               <Route path="/companies/new" element={<CompanyNew />} />
               <Route path="/companies/select" element={<CompanySelect />} />
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />

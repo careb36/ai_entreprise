@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight,
   CircleDot, Cpu, Layers, Loader2, Play, Plus, Radio,
@@ -19,6 +19,7 @@ import { useAgentStore } from '../store/agentStore'
 import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -515,6 +516,43 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
 // ── Main Dashboard ─────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { t } = useTranslation()
+  const location = useLocation()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  const analyticsSelected = location.pathname === '/dashboard/analytics'
+
+  return (
+    <div>
+      <div role="tablist" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })} className="flex gap-2 px-4 pt-4 lg:px-6"
+        onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          event.preventDefault()
+          const tabs = event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="tab"]')
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : analyticsSelected ? 0 : 1
+          tabs[next].focus()
+          tabs[next].click()
+        }}>
+        <Link id="sprints-board-tab" role="tab" to="/dashboard" aria-selected={!analyticsSelected}
+          aria-controls="sprints-panel" tabIndex={analyticsSelected ? -1 : 0}
+          className={`btn-ghost btn-sm ${!analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
+          {t('nav.board', { defaultValue: 'Board' })}
+        </Link>
+        <Link id="sprints-analytics-tab" role="tab" to="/dashboard/analytics" aria-selected={analyticsSelected}
+          aria-controls="sprints-panel" tabIndex={analyticsSelected ? 0 : -1}
+          className={`btn-ghost btn-sm ${analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
+          {t('nav.analytics', { defaultValue: 'Analytics' })}
+        </Link>
+      </div>
+      <div id="sprints-panel" role="tabpanel" aria-labelledby={analyticsSelected ? 'sprints-analytics-tab' : 'sprints-board-tab'}>
+        {analyticsSelected
+          ? <div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>
+          : <SprintBoard />}
+      </div>
+    </div>
+  )
+}
+
+function SprintBoard() {
   const { t } = useTranslation()
   const { activeSprintId, setActiveSprint, companyName } = useAppStore()
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)

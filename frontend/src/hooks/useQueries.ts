@@ -30,12 +30,11 @@ export const QUERY_KEYS = {
   auditVerification: (externalRef: string) => ['audit-verification', externalRef] as const,
 }
 
-export function useCapabilities(enabled = true) {
+export function useCapabilities() {
   return useQuery({
     queryKey: QUERY_KEYS.capabilities(),
-    queryFn: () => api.capabilities(),
-    enabled,
-    staleTime: 5 * 60_000,
+    queryFn: api.capabilities,
+    staleTime: 1000 * 60 * 5,
   })
 }
 
