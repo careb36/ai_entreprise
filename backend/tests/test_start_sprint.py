@@ -119,6 +119,16 @@ def test_start_sprint_sprint_url_in_response(sqlite_session, test_client):
     assert body["sprint_url"] == f"/v1/sprints/{body['sprint_id']}/board"
 
 
+def test_sprint_board_includes_owning_company(sqlite_session, test_client):
+    company_id = _make_company(sqlite_session)
+    created = test_client.post("/v1/start_sprint", json=_sprint_payload(company_id))
+    assert created.status_code == 200
+
+    response = test_client.get(created.json()["sprint_url"])
+    assert response.status_code == 200
+    assert response.json()["sprint"]["company_id"] == company_id
+
+
 # ---------------------------------------------------------------------------
 # Scope validation
 # ---------------------------------------------------------------------------
