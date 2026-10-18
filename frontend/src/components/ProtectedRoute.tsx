@@ -10,6 +10,7 @@ export default function ProtectedRoute() {
   const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const memberships = useAuthStore(state => state.memberships)
+  const supportAdmin = useAuthStore(state => Boolean(state.user?.support_admin))
   const meLoaded = useAuthStore(state => state.meLoaded)
   const loadingMe = useAuthStore(state => state.loadingMe)
   const profileError = useAuthStore(state => state.profileError)
@@ -57,6 +58,12 @@ export default function ProtectedRoute() {
 
   if (!meLoaded || loadingMe) {
     return <div role="status" className="page-container">{t('auth.loading', { defaultValue: 'Loading your account…' })}</div>
+  }
+
+  // Support tickets are not company data: a support admin reaches the help
+  // desk without belonging to, or having selected, a company.
+  if (supportAdmin && location.pathname === '/support') {
+    return <Outlet />
   }
 
   const isCompanyRoute = location.pathname === '/companies/new'

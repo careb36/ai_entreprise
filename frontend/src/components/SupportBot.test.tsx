@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SupportBot } from './SupportBot'
 import { useAuthStore } from '../store/useAuthStore'
@@ -56,5 +56,33 @@ describe('SupportBot', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled())
     const { url } = requestTo(fetch, '/v1/support/tickets')
     expect(url.searchParams.get('reporter_email')).toBe('ana@example.com')
+  })
+
+  it('fills in the account email once the profile loads', async () => {
+    vi.stubGlobal('fetch', vi.fn())
+    render(<SupportBot />)
+    fireEvent.click(screen.getByTitle('Open Support'))
+    fireEvent.click(screen.getByTitle('My Tickets'))
+    expect(screen.getByPlaceholderText(/email/i)).toHaveValue('')
+
+    act(() => useAuthStore.setState({ user: { user_id: 3, email: 'late@example.com', full_name: 'Late' } }))
+    expect(screen.getByPlaceholderText(/email/i)).toHaveValue('late@example.com')
+  })
+
+  it("starts from the account email and explains a refusal for someone else's", async () => {
+    useAuthStore.setState({ user: { user_id: 3, email: 'me@example.com', full_name: 'Me' } })
+    const fetch = vi.fn().mockResolvedValue(response(403, { detail: 'You can only see your own tickets' }))
+    vi.stubGlobal('fetch', fetch)
+    render(<SupportBot />)
+
+    fireEvent.click(screen.getByTitle('Open Support'))
+    fireEvent.click(screen.getByTitle('My Tickets'))
+    const email = screen.getByPlaceholderText(/email/i)
+    expect(email).toHaveValue('me@example.com')
+    fireEvent.change(email, { target: { value: 'boss@example.com' } })
+    fireEvent.keyDown(email, { key: 'Enter' })
+
+    expect(await screen.findByText('You can only see the tickets reported with your account email (me@example.com).'))
+      .toBeInTheDocument()
   })
 })

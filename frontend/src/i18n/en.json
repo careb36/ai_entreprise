@@ -979,7 +979,8 @@
       "resolved": "Resolved",
       "closed": "Closed"
     },
-    "emailPlaceholder": "you@company.com"
+    "emailPlaceholder": "you@company.com",
+    "ownTicketsOnly": "You can only see the tickets reported with your account email ({{email}})."
   },
   "sprintCalendar": {
     "title": "Sprint Calendar",
@@ -1246,7 +1247,7 @@
     "invited": "{{email}} can now work here as {{role}}.",
     "noAccount": "There is no account with that email. Ask them to register first, then invite them.",
     "inviteError": "Could not invite: {{message}}",
-    "maybeMember": "Could not invite ({{message}}). If they are already a member, their role cannot be changed from here yet."
+    "alreadyMember": "They are already a member of this company. Roles cannot be changed from here yet."
   },
   "github": {
     "title": "GitHub integration",
@@ -1271,7 +1272,7 @@
     "stepType": "Content type: application/json",
     "stepSecret": "Secret (shown only now):",
     "stepEvents": "Events: \"Pull requests\".",
-    "publicUrlHint": "GitHub must be able to reach this URL; a backend on localhost needs a public tunnel.",
+    "publicUrlHint": "GitHub must be able to reach this URL. Set PUBLIC_API_URL in the backend to the public address (or a tunnel) and it will be used here.",
     "backfillTitle": "Import past pull requests",
     "noToken": "The backend has no GITHUB_TOKEN: only public repositories can be imported, with a low rate limit.",
     "since": "Updated since (optional)",
@@ -1306,7 +1307,6 @@
   "helpDesk": {
     "title": "Help desk",
     "subtitle": "Problems reported through the support assistant.",
-    "managerOnly": "The help desk is for Managers and Owners. Your role here is {{role}}.",
     "pick": "Pick a ticket to see its details.",
     "tickets": "Tickets",
     "status": "Status",
@@ -1338,6 +1338,25 @@
     "saveError": "Could not update the ticket: {{message}}",
     "downloadLogs": "Download logs",
     "noLogs": "No logs have been written yet.",
-    "logsError": "Could not download the logs: {{message}}"
+    "logsError": "Could not download the logs: {{message}}",
+    "adminOnly": "The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend."
+  },
+  "health": {
+    "title": "Service status",
+    "checking": "Checking services…",
+    "error": "Could not check the services.",
+    "up": "up",
+    "down": "down",
+    "overall": {
+      "healthy": "All services are up.",
+      "degraded": "Degraded: an optional service is down.",
+      "down": "Down: a required service is not responding."
+    },
+    "components": {
+      "postgres": "Database (Postgres)",
+      "nats": "Messaging (NATS)",
+      "llm_proxy": "LLM proxy",
+      "neo4j": "Knowledge graph (Neo4j)"
+    }
   }
 }

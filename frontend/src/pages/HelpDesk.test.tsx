@@ -31,8 +31,14 @@ function stubApi(overrides: Record<string, (init: RequestInit) => Response> = {}
   return fetch
 }
 
-function renderAs(role: 'Owner' | 'Manager' | 'Viewer') {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
+function renderAs(supportAdmin: boolean) {
+  useAuthStore.setState({
+    token: 'valid-token',
+    expiresAt: Date.now() + 60_000,
+    user: { user_id: 1, email: 'admin@acme.test', full_name: 'Admin', support_admin: supportAdmin },
+    // Company roles do not matter: an Owner who is not a support admin is turned away.
+    memberships: [{ company_id: 4, human_role: 'Owner' }],
+  })
   return render(
     <QueryClientProvider client={queryClient}>
       <HelpDesk />
@@ -52,16 +58,16 @@ describe('HelpDesk', () => {
     queryClient.clear()
   })
 
-  it('is offered to managers and owners only', () => {
+  it('is offered to support admins only', () => {
     const fetch = stubApi()
-    renderAs('Viewer')
-    expect(screen.getByRole('status')).toHaveTextContent('for Managers and Owners. Your role here is Viewer.')
+    renderAs(false)
+    expect(screen.getByRole('status')).toHaveTextContent('The help desk is for support admins.')
     expect(fetch).not.toHaveBeenCalled()
   })
 
   it('filters the ticket list with the parameters the API reads', async () => {
     const fetch = stubApi()
-    renderAs('Manager')
+    renderAs(true)
     expect(await screen.findByText('Board does not load')).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
@@ -83,7 +89,7 @@ describe('HelpDesk', () => {
       return response(200, { ticket_num: 'BUG-0001', status: 'resolved', updated_at: '2026-10-02T00:00:00' })
     })
     stubApi({ 'PATCH /v1/support/tickets/BUG-0001': patch })
-    renderAs('Owner')
+    renderAs(true)
     fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
 
     const detail = await screen.findByRole('region', { name: 'Board does not load' })
@@ -115,7 +121,7 @@ describe('HelpDesk', () => {
     onTestFinished(() => { Object.assign(URL, original) })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     onTestFinished(() => click.mockRestore())
-    renderAs('Manager')
+    renderAs(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Download logs' }))
     expect(await screen.findByText('No logs have been written yet.')).toBeInTheDocument()

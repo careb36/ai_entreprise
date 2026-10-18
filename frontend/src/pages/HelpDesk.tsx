@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Download, LifeBuoy, Loader2, Save } from 'lucide-react'
-import { useCurrentRole, useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
+import { useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
+import { useAuthStore } from '../store/useAuthStore'
 import {
   api,
   ApiError,
@@ -17,7 +18,7 @@ const SEVERITIES: TicketSeverity[] = ['critical', 'high', 'medium', 'low']
 // Statuses that close a ticket; the API documents a resolution as mandatory for them.
 const TERMINAL: TicketStatus[] = ['resolved', 'closed']
 
-/** The backend's own file name; its Content-Disposition is not readable cross-origin. */
+/** The backend's own file name, used when its Content-Disposition is not readable. */
 function logFilename(): string {
   return `fabrique_support_logs_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.jsonl`
 }
@@ -27,13 +28,12 @@ function formatDate(value: string | null): string {
 }
 
 /**
- * Help desk: triage the tickets reported through the support bot. The API only
- * requires a signed-in user; the page is offered to Owners and Managers.
+ * Help desk: triage the tickets reported through the support bot. Only support
+ * admins (the backend's SUPPORT_ADMIN_EMAILS) see every ticket and change them.
  */
 export default function HelpDesk() {
   const { t } = useTranslation()
-  const role = useCurrentRole()
-  const canTriage = role === 'Owner' || role === 'Manager'
+  const canTriage = useAuthStore(state => Boolean(state.user?.support_admin))
   const [filters, setFilters] = useState<TicketFilters>({})
   const [selected, setSelected] = useState<string | null>(null)
 
@@ -53,7 +53,7 @@ export default function HelpDesk() {
       </div>
       {!canTriage ? (
         <div role="status" className="card p-4 text-sm text-gray-300">
-          {t('helpDesk.managerOnly', { role: role ?? '—', defaultValue: 'The help desk is for Managers and Owners. Your role here is {{role}}.' })}
+          {t('helpDesk.adminOnly', { defaultValue: 'The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend.' })}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">

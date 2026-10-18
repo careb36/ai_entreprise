@@ -62,3 +62,25 @@ def viewer_company_ids(session: Session, user: User) -> list[int]:
             )
         ).all()
     )
+
+
+def is_support_admin(user: User | None) -> bool:
+    """Whether *user* is listed in ``SUPPORT_ADMIN_EMAILS``.
+
+    With authentication disabled and no token, every caller acts as an admin,
+    as on the other routes of a local demo.
+    """
+    if user is None:
+        return not settings.AUTH_REQUIRED
+    admins = {
+        email.strip().lower()
+        for email in settings.SUPPORT_ADMIN_EMAILS.split(",")
+        if email.strip()
+    }
+    return (user.email or "").lower() in admins
+
+
+def require_support_admin(user: User | None) -> None:
+    require_authenticated(user)
+    if not is_support_admin(user):
+        raise HTTPException(status_code=403, detail="Requires support admin")

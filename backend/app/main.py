@@ -54,6 +54,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The support logs download names its file in this header.
+    expose_headers=["Content-Disposition"],
 )
 
 # Setup security (rate limiting + security headers)

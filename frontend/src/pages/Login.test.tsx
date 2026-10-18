@@ -111,6 +111,7 @@ describe('login and registration', () => {
       user_id: 8,
       email: 'a@example.com',
       full_name: 'Ada Lovelace',
+      support_admin: false,
     })
     expect(mockApi.me).toHaveBeenCalledOnce()
   })

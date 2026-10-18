@@ -979,7 +979,8 @@
       "resolved": "Resuelto",
       "closed": "Cerrado"
     },
-    "emailPlaceholder": "tu@empresa.com"
+    "emailPlaceholder": "tu@empresa.com",
+    "ownTicketsOnly": "Solo puedes ver los tickets reportados con el email de tu cuenta ({{email}})."
   },
   "sprintCalendar": {
     "title": "Calendario del Sprint",
@@ -1246,7 +1247,7 @@
     "invited": "{{email}} ya puede trabajar aquí como {{role}}.",
     "noAccount": "No hay ninguna cuenta con ese email. Pídele que se registre primero y después invítala.",
     "inviteError": "No se pudo invitar: {{message}}",
-    "maybeMember": "No se pudo invitar ({{message}}). Si ya es miembro, todavía no se puede cambiar su rol desde aquí."
+    "alreadyMember": "Ya es miembro de esta empresa. Todavía no se pueden cambiar roles desde aquí."
   },
   "github": {
     "title": "Integración con GitHub",
@@ -1271,7 +1272,7 @@
     "stepType": "Content type: application/json",
     "stepSecret": "Secreto (se muestra solo ahora):",
     "stepEvents": "Eventos: \"Pull requests\".",
-    "publicUrlHint": "GitHub tiene que poder alcanzar esta URL; un backend en localhost necesita un túnel público.",
+    "publicUrlHint": "GitHub tiene que poder alcanzar esta URL. Configura PUBLIC_API_URL en el backend con la dirección pública (o un túnel) y se usará aquí.",
     "backfillTitle": "Importar pull requests anteriores",
     "noToken": "El backend no tiene GITHUB_TOKEN: solo se pueden importar repositorios públicos, con un límite de consultas bajo.",
     "since": "Actualizados desde (opcional)",
@@ -1306,7 +1307,6 @@
   "helpDesk": {
     "title": "Mesa de ayuda",
     "subtitle": "Problemas reportados a través del asistente de soporte.",
-    "managerOnly": "La mesa de ayuda es para Gestores y Propietarios. Tu rol aquí es {{role}}.",
     "pick": "Elige un ticket para ver su detalle.",
     "tickets": "Tickets",
     "status": "Estado",
@@ -1338,6 +1338,25 @@
     "saveError": "No se pudo actualizar el ticket: {{message}}",
     "downloadLogs": "Descargar logs",
     "noLogs": "Todavía no se escribió ningún log.",
-    "logsError": "No se pudieron descargar los logs: {{message}}"
+    "logsError": "No se pudieron descargar los logs: {{message}}",
+    "adminOnly": "La mesa de ayuda es para administradores de soporte. Un administrador puede agregar tu email a SUPPORT_ADMIN_EMAILS en el backend."
+  },
+  "health": {
+    "title": "Estado de los servicios",
+    "checking": "Comprobando servicios…",
+    "error": "No se pudieron comprobar los servicios.",
+    "up": "activo",
+    "down": "caído",
+    "overall": {
+      "healthy": "Todos los servicios están activos.",
+      "degraded": "Degradado: un servicio opcional está caído.",
+      "down": "Caído: un servicio necesario no responde."
+    },
+    "components": {
+      "postgres": "Base de datos (Postgres)",
+      "nats": "Mensajería (NATS)",
+      "llm_proxy": "Proxy de LLM",
+      "neo4j": "Grafo de conocimiento (Neo4j)"
+    }
   }
 }

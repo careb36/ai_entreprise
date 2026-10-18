@@ -132,7 +132,11 @@ function BindingForm({ companyId }: { companyId: number }) {
 
 function WebhookInstructions({ binding, secret }: { binding: GitHubBinding; secret: string }) {
   const { t } = useTranslation()
-  const payloadUrl = `${API_BASE}${WEBHOOK_PATH}`
+  const { data: capabilities } = useCapabilities()
+  // PUBLIC_API_URL is where GitHub reaches the backend; without it, the
+  // address this browser uses, which GitHub may not be able to reach.
+  const publicUrl = capabilities?.public_api_url
+  const payloadUrl = `${publicUrl || API_BASE}${WEBHOOK_PATH}`
   const settingsUrl = `https://github.com/${encodeURIComponent(binding.owner)}/${encodeURIComponent(binding.repo)}/settings/hooks/new`
   return (
     <div role="status" className="rounded-lg border border-emerald-700/50 bg-emerald-950/30 p-4 text-sm space-y-2">
@@ -150,9 +154,11 @@ function WebhookInstructions({ binding, secret }: { binding: GitHubBinding; secr
         <li>{t('github.stepSecret', { defaultValue: 'Secret (shown only now):' })} <CopyValue value={secret} /></li>
         <li>{t('github.stepEvents', { defaultValue: 'Events: "Pull requests".' })}</li>
       </ol>
-      <p className="text-xs text-gray-500">
-        {t('github.publicUrlHint', { defaultValue: 'GitHub must be able to reach this URL; a backend on localhost needs a public tunnel.' })}
-      </p>
+      {!publicUrl && (
+        <p className="text-xs text-gray-500">
+          {t('github.publicUrlHint', { defaultValue: 'GitHub must be able to reach this URL. Set PUBLIC_API_URL in the backend to the public address (or a tunnel) and it will be used here.' })}
+        </p>
+      )}
     </div>
   )
 }

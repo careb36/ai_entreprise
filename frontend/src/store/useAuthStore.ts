@@ -47,9 +47,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           const profile: AuthProfile = await api.me()
           if (get().token !== token) return
-          const { user_id, email, full_name, memberships } = profile
+          const { user_id, email, full_name, support_admin, memberships } = profile
           set({
-            user: { user_id, email, full_name },
+            user: { user_id, email, full_name, support_admin: Boolean(support_admin) },
             memberships,
             meLoaded: true,
           })

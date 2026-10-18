@@ -21,6 +21,7 @@ function renderRoutes(path: string) {
           <Route path="/" element={<CurrentPath />} />
           <Route path="/dashboard" element={<CurrentPath />} />
           <Route path="/companies/new" element={<CurrentPath />} />
+          <Route path="/support" element={<CurrentPath />} />
           <Route path="/companies/select" element={<CompanySelect />} />
         </Route>
       </Routes>
@@ -90,6 +91,23 @@ describe('ProtectedRoute company access', () => {
     renderRoutes('/dashboard')
 
     expect(await screen.findByTestId('current-path')).toHaveTextContent('/companies/new')
+  })
+
+  it.each([
+    ['without a company', []],
+    ['with companies but none selected', [{ company_id: 1, human_role: 'Viewer' as const }, { company_id: 2, human_role: 'Owner' as const }]],
+  ])('lets a support admin open the help desk %s', async (_case, memberships) => {
+    authenticate(memberships)
+    useAuthStore.setState(state => ({ user: { ...state.user!, support_admin: true } }))
+    useAppStore.setState({ companyId: null })
+    renderRoutes('/support')
+    expect(await screen.findByTestId('current-path')).toHaveTextContent('/support')
+  })
+
+  it('still sends a member without a company to company creation from /support', async () => {
+    authenticate([])
+    renderRoutes('/support')
+    await waitFor(() => expect(screen.getByTestId('current-path')).toHaveTextContent('/companies/new'))
   })
 
   it('logout clears both auth and company stores', () => {

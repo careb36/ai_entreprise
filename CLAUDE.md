@@ -67,6 +67,13 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- `SUPPORT_ADMIN_EMAILS` — optional, comma-separated account emails. Those users
+  see and triage every support ticket and download the support logs (`/support`
+  in the frontend, flagged by `support_admin` in `/v1/auth/me`); everyone else
+  sees only the tickets reported with their account email.
+- `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
+  (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
+  the GitHub page shows it as the webhook Payload URL.
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
@@ -166,8 +173,8 @@ the LangGraph graph is only an optional kickoff conversation.
 
 - Company-scoped: all data (agents, sprints, memory, budgets) is namespaced by `company_id`
 - RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
-- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. Authentication enforcement is on by default; set `AUTH_REQUIRED=false` only for a local demo without a login. Configure `JWT_SECRET_KEY`, then register and log in through the frontend. Protected routes require a JWT and company roles follow Owner > Manager > Viewer. Company initialization creates the caller's Owner membership; invitations require Owner.
-- Always public: `/health`, registration/login, the HMAC-signed GitHub webhook, support bug reporting/chat, `/v1/models`, `/v1/capabilities` (feature flags only, no company data), Glassroom SSE (EventSource cannot send headers), and the retired `/v1/approve_task` (410). `/v1/auth/me` always requires a JWT. Audit writes and memory stores resolve company ownership from authorized membership and existing interactions, never payload metadata; callers with multiple memberships should select a `company_id` query parameter. Audit verification, memory search, and lineage use column-backed Viewer scoping. Legacy NULL-company evidence is flagged and included only without a company filter (authenticated when `AUTH_REQUIRED=true`). Startup backfills historical company metadata into the audit/vector columns and Neo4j properties. Help-desk tickets/logs require authentication, not company membership.
+- Passwords hashed with passlib/bcrypt. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. Authentication enforcement is on by default; set `AUTH_REQUIRED=false` only for a local demo without a login. Configure `JWT_SECRET_KEY`, then register and log in through the frontend. Protected routes require a JWT and company roles follow Owner > Manager > Viewer. Company initialization creates the caller's Owner membership; invitations require Owner, and inviting an existing member is a 409.
+- Always public: `/health`, registration/login, the HMAC-signed GitHub webhook, support bug reporting/chat, `/v1/models`, `/v1/capabilities` (feature flags only, no company data), Glassroom SSE (EventSource cannot send headers), and the retired `/v1/approve_task` (410). `/v1/auth/me` always requires a JWT. Audit writes and memory stores resolve company ownership from authorized membership and existing interactions, never payload metadata; callers with multiple memberships should select a `company_id` query parameter. Audit verification, memory search, and lineage use column-backed Viewer scoping. Legacy NULL-company evidence is flagged and included only without a company filter (authenticated when `AUTH_REQUIRED=true`). Startup backfills historical company metadata into the audit/vector columns and Neo4j properties. Help-desk tickets are not company data: support admins (`SUPPORT_ADMIN_EMAILS`) see and update all of them and download the logs; other authenticated users see only their own (matched by account email, 403 for another reporter, 404 for another's ticket). With `AUTH_REQUIRED=false` and no token, the desk stays open as in a local demo.
 
 ## Test Suite
 
@@ -200,6 +207,7 @@ Test files:
 | `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
+| `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
