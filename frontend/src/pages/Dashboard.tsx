@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useMatch, useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight,
   CircleDot, Cpu, Layers, Loader2, Play, Plus, Radio,
@@ -16,9 +16,10 @@ import {
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
+import { useCapabilities, useSprintBoard, useAnalyticsSummary, useHealth, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ function SprintCard({
           className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-brand-600/15 border border-brand-600/25 text-brand-400 text-xs font-medium hover:bg-brand-600/25 transition-colors"
         >
           <Radio size={12} />
-          {t('dashboard.openAgentsRoom', { defaultValue: 'Open Agents Room' })}
+          {t('dashboard.liveView', { defaultValue: 'Live view' })}
         </Link>
       </div>
     </div>
@@ -516,10 +517,47 @@ function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) {
 
 export default function Dashboard() {
   const { t } = useTranslation()
+  const activeSprintId = useAppStore(state => state.activeSprintId)
+  const analyticsSelected = useMatch('/dashboard/analytics') !== null
+
+  return (
+    <div>
+      <div role="tablist" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })} className="flex gap-2 px-4 pt-4 lg:px-6"
+        onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          event.preventDefault()
+          const tabs = event.currentTarget.querySelectorAll<HTMLAnchorElement>('[role="tab"]')
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : analyticsSelected ? 0 : 1
+          tabs[next].focus()
+          tabs[next].click()
+        }}>
+        <Link id="sprints-board-tab" role="tab" to="/dashboard" aria-selected={!analyticsSelected}
+          aria-controls="sprints-panel" tabIndex={analyticsSelected ? -1 : 0}
+          className={`btn-ghost btn-sm ${!analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
+          {t('nav.board', { defaultValue: 'Board' })}
+        </Link>
+        <Link id="sprints-analytics-tab" role="tab" to="/dashboard/analytics" aria-selected={analyticsSelected}
+          aria-controls="sprints-panel" tabIndex={analyticsSelected ? 0 : -1}
+          className={`btn-ghost btn-sm ${analyticsSelected ? 'text-brand-400 bg-surface-800' : ''}`}>
+          {t('nav.analytics', { defaultValue: 'Analytics' })}
+        </Link>
+      </div>
+      <div id="sprints-panel" role="tabpanel" aria-labelledby={analyticsSelected ? 'sprints-analytics-tab' : 'sprints-board-tab'}>
+        {analyticsSelected
+          ? <div className="page-container"><AnalyticsDashboard sprintId={activeSprintId ?? 0} /></div>
+          : <SprintBoard />}
+      </div>
+    </div>
+  )
+}
+
+function SprintBoard() {
+  const { t } = useTranslation()
   const { activeSprintId, setActiveSprint, companyName } = useAppStore()
   const { data: board, isLoading: boardLoading } = useSprintBoard(activeSprintId)
   const { data: analytics } = useAnalyticsSummary(activeSprintId)
   const { data: health } = useHealth()
+  const { data: capabilities, isError: capabilitiesError } = useCapabilities()
   const connectToSprintStream = useAgentStore(s => s.connect)
   const disconnectFromSprintStream = useAgentStore(s => s.disconnect)
   const agentStates = useAgentStore(s => s.agentStates)
@@ -729,10 +767,10 @@ export default function Dashboard() {
             {/* Quick nav */}
             <div className="grid grid-cols-2 gap-2">
               {[
-                { to: '/governance', icon: ShieldAlert, label: t('dashboard.governance', { defaultValue: 'Governance' }) },
-                { to: '/analytics',  icon: Activity, label: t('dashboard.analytics', { defaultValue: 'Analytics' }) },
-                { to: '/memory',     icon: Cpu, label: t('dashboard.memory', { defaultValue: 'Memory' }) },
-                { to: '/generate',   icon: Sparkles, label: t('dashboard.generateLink', { defaultValue: 'Generate' }) },
+                { to: '/governance', icon: ShieldAlert, label: t('nav.review', { defaultValue: 'Review' }) },
+                { to: '/dashboard/analytics', icon: Activity, label: t('nav.analytics', { defaultValue: 'Analytics' }) },
+                ...(!capabilitiesError && capabilities?.agent_graph === true ? [{ to: '/generate', icon: Sparkles, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
+                ...(!capabilitiesError && capabilities?.memory === true ? [{ to: '/memory', icon: Cpu, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
               ].map(({ to, icon: Icon, label }) => (
                 <Link
                   key={to}

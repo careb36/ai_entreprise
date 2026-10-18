@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import {
-  useAnalyticsSummary, useHealth, useInitCompany, usePlanSelfImprovementSprint,
+  useAnalyticsSummary, useCapabilities, useHealth, useInitCompany, usePlanSelfImprovementSprint,
   usePlanSprint, useSprintBoard, useStartSprint,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
@@ -15,6 +15,7 @@ import es from '../i18n/es.json'
 
 vi.mock('../hooks/useQueries', () => ({
   useAnalyticsSummary: vi.fn(),
+  useCapabilities: vi.fn(),
   useHealth: vi.fn(),
   useInitCompany: vi.fn(),
   usePlanSelfImprovementSprint: vi.fn(),
@@ -70,6 +71,7 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(useSprintBoard).mockReturnValue({ data: undefined, isLoading: false } as never)
     vi.mocked(useAnalyticsSummary).mockReturnValue({ data: undefined } as never)
     vi.mocked(useHealth).mockReturnValue({ data: { status: 'healthy' } } as never)
+    vi.mocked(useCapabilities).mockReturnValue({ data: { agent_graph: true, memory: true }, isError: false, isPending: false } as never)
     vi.mocked(useInitCompany).mockReturnValue(mutation() as never)
     vi.mocked(usePlanSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(plan) }) as never)
     vi.mocked(usePlanSelfImprovementSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(plan) }) as never)
@@ -96,6 +98,20 @@ describe('Dashboard Spanish localization', () => {
     expect(screen.getByText('Flujo de agentes')).toBeInTheDocument()
     expect(screen.queryByText('Launch Sprint')).not.toBeInTheDocument()
     expect(screen.queryByText(/dashboard\./)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { data: undefined, isError: false },
+    { data: undefined, isError: true },
+    { data: { agent_graph: true, memory: true }, isError: true },
+    { data: { agent_graph: false, memory: false }, isError: false },
+  ])('hides unavailable optional shortcuts (%j)', capabilities => {
+    vi.mocked(useCapabilities).mockReturnValue(capabilities as never)
+    renderDashboard()
+    expect(screen.queryByRole('link', { name: 'Memoria' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Generar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Vista en vivo' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Analíticas' })).toHaveAttribute('href', '/dashboard/analytics')
   })
 
   it('localizes populated summaries, split status and roles while preserving external data', () => {
@@ -139,7 +155,7 @@ describe('Dashboard Spanish localization', () => {
     expect(screen.getByText('custom-agent')).toBeInTheDocument()
     expect(screen.getByText('External activity')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Revisar' })).toHaveAttribute('href', '/workspace/9')
-    expect(screen.getByRole('link', { name: 'Ver transmisión en directo' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Vista en vivo' })).toHaveAttribute('href', '/workspace/9')
   })
 
   it.each([

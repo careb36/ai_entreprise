@@ -21,6 +21,7 @@ describe('stale persisted sprint recovery', () => {
     vi.spyOn(api, 'getSprintBoard').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'getAnalyticsSummary').mockRejectedValue(new ApiError(404, 'missing'))
     vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy' } as never)
+    vi.spyOn(api, 'capabilities').mockResolvedValue({ agent_graph: false, memory: false, github: false, auth_required: true })
     vi.spyOn(useAgentStore.getState(), 'connect').mockImplementation(() => {})
     vi.spyOn(useAgentStore.getState(), 'disconnect').mockImplementation(() => {})
   })
@@ -40,5 +41,29 @@ describe('stale persisted sprint recovery', () => {
     expect(screen.queryByText('Failed to load analytics')).not.toBeInTheDocument()
     expect(api.getSprintBoard).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('link', { name: 'View live stream' })).not.toBeInTheDocument()
+  })
+
+  it('links an existing sprint to its Live view', async () => {
+    vi.mocked(api.getSprintBoard).mockResolvedValue({
+      sprint: { sprint_name: 'Sprint 999', status: 'active', scope_size: 'M' },
+      columns: {}, total: 0,
+    } as never)
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
+    expect(await screen.findByRole('link', { name: 'Live view' })).toHaveAttribute('href', '/workspace/999')
+  })
+
+  it.each([
+    [false, false], [true, false], [false, true], [true, true],
+  ])('gates dashboard shortcuts by capabilities (graph %s, memory %s)', async (agent_graph, memory) => {
+    useAppStore.setState({ activeSprintId: null })
+    vi.mocked(api.capabilities).mockResolvedValue({ agent_graph, memory, github: false, auth_required: true })
+    render(<QueryClientProvider client={queryClient}><MemoryRouter><Dashboard /></MemoryRouter></QueryClientProvider>)
+    await waitFor(() => expect(api.capabilities).toHaveBeenCalled())
+    await waitFor(() => {
+      expect(Boolean(screen.queryByRole('link', { name: 'Generate' }))).toBe(agent_graph)
+      expect(Boolean(screen.queryByRole('link', { name: 'Memory' }))).toBe(memory)
+    })
+    expect(screen.getByRole('link', { name: 'Analytics' })).toHaveAttribute('href', '/dashboard/analytics')
+    expect(screen.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/governance')
   })
 })

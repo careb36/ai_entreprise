@@ -40,5 +40,8 @@ describe('GovernancePanel', () => {
     expect(screen.getByText('needs-review')).toBeInTheDocument()
     expect(screen.queryByText('already-reviewed')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Review evidence/ })).toHaveAttribute('href', '/evidence/1')
+    expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+    expect(mockedUseQuotas).not.toHaveBeenCalled()
+    expect(mockedUseResetQuota).not.toHaveBeenCalled()
   })
 })

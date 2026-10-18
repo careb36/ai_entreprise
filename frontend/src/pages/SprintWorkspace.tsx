@@ -45,7 +45,7 @@ export const SprintWorkspace: React.FC = () => {
         {sprintId !== null && !notFound && !noAccess && (
           <button className="btn btn-ghost mr-3" onClick={() => boardQuery.refetch()}>{t('common.retry', { defaultValue: 'Retry' })}</button>
         )}
-        <Link to="/dashboard" className="btn btn-ghost">{t('nav.dashboard', { defaultValue: 'Dashboard' })}</Link>
+        <Link to="/dashboard" className="btn btn-ghost">{t('nav.sprints', { defaultValue: 'Sprints' })}</Link>
       </div>
     )
   }
@@ -90,7 +90,7 @@ export const SprintWorkspace: React.FC = () => {
             <Radio size={11} /> {t('workspace.aiAgentsActive', { defaultValue: 'AI Agents Active' })}
           </span>
 
-          <Link to="/" className="btn-ghost btn-sm flex items-center gap-1.5">
+          <Link to="/dashboard" className="btn-ghost btn-sm flex items-center gap-1.5">
             <ArrowLeft size={13} />
             <span>{t('workspace.sprintBoard', { defaultValue: 'Sprint Board' })}</span>
           </Link>

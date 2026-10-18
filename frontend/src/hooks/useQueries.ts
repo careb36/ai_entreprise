@@ -14,6 +14,7 @@ import {
 // ── Keys ─────────────────────────────────────────────────────────────────────
 
 export const QUERY_KEYS = {
+  capabilities: () => ['capabilities'] as const,
   sprintBoard: (id: number) => ['sprint', id, 'board'] as const,
   quotas: (companyId: number) => ['enterprise', companyId, 'quotas'] as const,
   analytics: (sprintId: number) => ['analytics', sprintId] as const,
@@ -28,6 +29,14 @@ export const QUERY_KEYS = {
   approvals: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'approvals'] as const,
   auditVerification: (companyId: number | null, externalRef: string) =>
     ['audit-verification', companyId, externalRef] as const,
+}
+
+export function useCapabilities() {
+  return useQuery({
+    queryKey: QUERY_KEYS.capabilities(),
+    queryFn: api.capabilities,
+    staleTime: 1000 * 60 * 5,
+  })
 }
 
 // ── Enterprise & Company ─────────────────────────────────────────────────────
