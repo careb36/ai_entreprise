@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from config import Settings
 from exception_handlers import register_exception_handlers
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from lifecycle import shutdown, startup
 from metrics import setup_metrics
@@ -26,6 +26,7 @@ from routers import (
     support_router,
 )
 from security import get_cors_origins, setup_security
+from services.healthcheck import aggregate
 
 settings = Settings()
 
@@ -87,3 +88,9 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
+
+
+@app.get("/health/deep")
+async def deep_health_check(request: Request):
+    nats_client = getattr(request.app.state, "nats_client", None)
+    return await aggregate(nats_client)

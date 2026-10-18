@@ -257,6 +257,6 @@ async def download_support_logs():
     if log_path.exists():
         return FileResponse(
             path=log_path,
-            filename=f"fabrique_support_logs_{datetime.now().strftime('%Y%m%d')}.jsonl",
+            filename=f"fabrique_support_logs_{datetime.now(UTC).strftime('%Y%m%d')}.jsonl",
         )
     raise HTTPException(status_code=404, detail="Log file not found.")

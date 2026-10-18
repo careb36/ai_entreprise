@@ -6,6 +6,8 @@ import { useAuthStore } from './store/useAuthStore'
 import { setOnUnauthorized } from './services/api'
 import ProtectedRoute from './components/ProtectedRoute'
 import Dashboard from './pages/Dashboard'
+import AgentSettings from './pages/AgentSettings'
+import SprintOpsCockpit from './pages/SprintOpsCockpit'
 import CompanyNew from './pages/CompanyNew'
 import CompanySelect from './pages/CompanySelect'
 import Login from './pages/Login'
@@ -269,6 +271,8 @@ function AppContent() {
               <Route path="/companies/select" element={<CompanySelect />} />
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
               <Route path="/workspace/:id" element={<SprintWorkspace />} />
+              <Route path="/agents" element={<AgentSettings />} />
+              <Route path="/sprint-ops/:id" element={<SprintOpsCockpit />} />
               <Route
                 path="/governance"
                 element={<div className="page-container"><GovernancePanel /></div>}
