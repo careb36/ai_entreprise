@@ -24,7 +24,7 @@ Estados:
 | Método y path | `api.ts` | Hook | Pantalla (ruta) | Estado |
 |---|---|---|---|---|
 | GET `/health` | `health` | `useQuery` en `App.tsx` | `App.tsx`: indicador "Online" del encabezado | cubierto |
-| GET `/health/deep` | — | — | — | sin cliente |
+| GET `/health/deep` | `deepHealth` | `useQuery` en `App.tsx`, solo con el panel abierto | `App.tsx`: "Estado de los servicios" al abrir el indicador "Online" | cubierto (nuevo, decisión 3) |
 | GET `/metrics` | — | — | — | n/a (Prometheus) |
 | POST `/v1/auth/login` | `login` | `useAuthStore.login` | `Login` (`/login`) | cubierto |
 | GET `/v1/auth/me` | `me` | `useAuthStore.loadMe` | `ProtectedRoute` (todas las rutas protegidas) | cubierto |
@@ -81,8 +81,8 @@ Estados:
 | GET `/v1/workspace/browse` | `browseWorkspace` | — | `FolderPicker` dentro de `CompanyNew` | cubierto (hallazgo A resuelto en #112) |
 | GET `/v1/workspace/inspect` | `inspectWorkspace` | — | `CompanyNew`: tarjeta del proyecto | cubierto |
 
-Totales al cierre: **51 cubiertos**, 2 sin cliente (`/health/deep` y
-`approve_task`, retirado) y 4 n/a. En la fase 1 eran 43 cubiertos y 10 sin
+Totales al cierre: **52 cubiertos**, 1 sin cliente (`approve_task`, retirado)
+y 4 n/a. En la fase 1 eran 43 cubiertos y 10 sin
 cliente. Ningún endpoint queda como "cliente sin UI".
 
 ## Llamadas del front a paths que el backend no tiene
@@ -197,7 +197,7 @@ corridas.
 | 9 | Integraciones GitHub (`bindings`, `backfill`) sin UI | grande | página de integraciones por empresa | hecho: `/company/github` |
 | 10 | `GET /v1/enterprise/lineage` sin UI | medio | linaje por archivo desde `EvidenceDetail` o la tarea | hecho: `/lineage`, enlazado desde la tarea |
 | 11 | `GET /v1/support/logs` y `PATCH /v1/support/tickets/{n}` sin UI | medio | vista de mesa de ayuda para administradores | hecho: `/support` |
-| 12 | `GET /health/deep` sin UI | chico | detalle por servicio al pasar el mouse sobre el indicador "Online" | no se hizo (no estaba entre las elegidas) |
+| 12 | `GET /health/deep` sin UI | chico | detalle por servicio al pasar el mouse sobre el indicador "Online" | hecho: panel al abrir el indicador (decisión 3) |
 
 ## Resumen final
 
@@ -216,11 +216,11 @@ Commits de este PR (#113), uno por fase o tema:
 | · invitaciones | `/company/members`: el Owner invita por email con rol; 404 explica que la persona tiene que registrarse antes |
 | · GitHub | `/company/github` (Manager): conectar un repositorio con un secreto generado en el navegador, instrucciones del webhook con la URL y el secreto (se muestra una sola vez), e importación de pull requests anteriores con el resultado por PR |
 | · linaje | `/lineage?file=`: decisiones registradas sobre un archivo; aviso cuando no hay Neo4j; los archivos declarados de una tarea enlazan ahí si hay Neo4j |
-| · mesa de ayuda | `/support` (Manager u Owner): tickets con filtros, detalle, cambio de estado con resolución obligatoria para resolver o cerrar, y descarga de logs |
+| · mesa de ayuda | `/support` (administradores de soporte, ver decisión 1): tickets con filtros, detalle, cambio de estado con resolución obligatoria para resolver o cerrar, y descarga de logs |
 | cuotas | el selector de días del historial de uso ahora vuelve a pedir el historial (antes pedía siempre 7) |
 
-El menú de empresa muestra Miembros solo al Owner, y GitHub y Mesa de ayuda al
-Manager o al Owner. Todo está en `en.json` y `es.json`. Hay tests de cada página
+El menú de empresa muestra Miembros solo al Owner, GitHub al Manager o al Owner,
+y Mesa de ayuda a los administradores de soporte. Todo está en `en.json` y `es.json`. Hay tests de cada página
 nueva y del menú por rol.
 
 Verificado contra el backend real (Postgres, NATS con JetStream, auth activada,
@@ -237,45 +237,52 @@ chequeos:
 - un Viewer no ve las páginas de administración;
 - ningún error de consola inesperado.
 
-### Qué requiere decisión tuya
+### Decisiones tomadas
 
-1. **Quién es "administrador" de la mesa de ayuda.** La API solo pide estar
-   autenticado: cualquier usuario con sesión, de cualquier empresa, puede listar
-   todos los tickets (con el email de quien reporta) y cambiarlos. El front
-   limita la página a Manager u Owner de la empresa seleccionada, pero eso no
-   protege nada: los tickets no pertenecen a ninguna empresa. Hace falta definir
-   un rol de plataforma (soporte) y aplicarlo en el backend.
-2. **URL pública para el webhook de GitHub.** La página arma la Payload URL con
-   `VITE_API_URL`. Con el backend en `localhost`, GitHub no puede alcanzarla, y la
-   página lo advierte. ¿Agregamos una URL pública configurable (por ejemplo
-   `PUBLIC_API_URL`, expuesta en `/v1/capabilities`) o se documenta el uso de un
-   túnel?
-3. **`GET /health/deep`** sigue sin UI (brecha 12). ¿Vale la pena el detalle por
-   servicio en el indicador "Online"?
-4. **`VITE_DEFAULT_PROJECT_PATH`** sigue en `docker-compose.yml`, pero el front
-   ya no lo lee: la carpeta sale del selector del daemon. Es configuración
-   muerta. ¿La quito? Está fuera de `frontend/`, por eso no la toqué.
+La dueña delegó estas decisiones. Lo que se decidió y cómo quedó:
 
-### Cambios de API que propondría (sin tocarlos)
+1. **Administrador de la mesa de ayuda: un rol de plataforma por
+   configuración.** `SUPPORT_ADMIN_EMAILS` (emails separados por coma) define
+   quién ve y cambia todos los tickets y descarga los logs. El backend lo
+   aplica, y `/v1/auth/me` lo informa como `support_admin`. El resto de los
+   usuarios ve solo los tickets reportados con el email de su cuenta: pedir los
+   de otro da 403 y el detalle de un ticket ajeno da 404. La página y la
+   entrada del menú dependen de ese rol, no del rol en la empresa, porque los
+   tickets no pertenecen a ninguna empresa. Con `AUTH_REQUIRED=false` y sin
+   token, la mesa sigue abierta, como el resto de una demo local.
+   Elegí configuración y no una columna en la base porque no requiere
+   migración y alcanza para pocos administradores. Si hace falta gestionarlos
+   desde la UI, el siguiente paso es un flag en `users`.
+2. **URL del webhook: `PUBLIC_API_URL`.** `/v1/capabilities` la informa como
+   `public_api_url`, y la página de GitHub la usa como Payload URL. Sin ella, la
+   página usa la URL del navegador y explica cómo configurarla.
+3. **`/health/deep`: sí, a demanda.** Al hacer clic en el indicador "Online" se
+   abre "Estado de los servicios", con cada servicio y el motivo si está caído.
+   La consulta corre solo con el panel abierto, porque las sondas tardan hasta 3
+   segundos cuando un servicio no responde.
+4. **`VITE_DEFAULT_PROJECT_PATH`: eliminada** de `docker-compose.yml`. Además,
+   `docker-compose.yml` no pasaba al backend variables que `.env.example`
+   documenta (`FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY`, `GITHUB_TOKEN`). Ahora
+   las pasa, junto con las dos nuevas; vacías se tratan como no configuradas.
 
-- **Invitar a alguien que ya es miembro devuelve 500.** El insert choca con
-  `company_members_company_id_user_id_key`. Propuesta: devolver 409, o
-  actualizar el rol. Además, `GET /v1/company/{id}/members` para listar los
-  miembros, y `PATCH`/`DELETE` para cambiar o quitar un rol. Hoy no hay forma de
-  ver quién está en la empresa ni de cambiar un rol.
+### Cambios de API
+
+Hechos junto con las decisiones:
+- Invitar a alguien que ya es miembro devuelve **409** con su rol actual, en
+  lugar de 500.
+- `Access-Control-Expose-Headers: Content-Disposition`, para que el navegador
+  lea el nombre del archivo de logs.
+
+Siguen propuestos:
+- **Gestión de miembros:** `GET /v1/company/{id}/members` para listarlos, y
+  `PATCH`/`DELETE` para cambiar o quitar un rol, sin dejar a la empresa sin
+  Owner. Hoy no hay forma de ver quién está en la empresa ni de cambiar un rol.
 - **Las respuestas 500 no llevan cabeceras CORS.** El manejador global de
   excepciones responde fuera de `CORSMiddleware`, así que el navegador ve un
-  error de red (status 0) en lugar del 500 y su detalle. El front lo compensa en
-  la invitación, pero afecta a cualquier 500. Propuesta: capturar las
-  excepciones dentro de CORS, o convertir los errores esperables
-  (`IntegrityError` → 409) antes de que lleguen al manejador global.
+  error de red en lugar del 500 y su detalle. Propuesta: capturar las
+  excepciones dentro de CORS.
 - **Bindings de GitHub:** `GET /v1/integrations/github/bindings?company_id=` para
   listarlos, `DELETE` para desconectar uno y un endpoint para rotar el secreto.
-  Hoy la página solo puede crear.
-- **Tickets de soporte:** el rol de plataforma del punto 1. Además,
-  `Access-Control-Expose-Headers: Content-Disposition`, para que el navegador
-  lea el nombre del archivo de logs (hoy el front lo reconstruye con el mismo
-  formato).
 - **Linaje:** responder 503 cuando Neo4j no está conectado, como la memoria, en
   lugar de 500.
 - **Memoria:** recibir `content` en el cuerpo de `POST /v1/memory/store`. Hoy va
@@ -285,3 +292,6 @@ chequeos:
 - **Un endpoint de una sola tarea** (`GET /v1/backlog/{item_id}`), para que
   `/task/:taskId` no tenga que resolver la tarea a través del board del sprint
   activo.
+- **`/health/deep` es público y devuelve el texto de las excepciones** (por
+  ejemplo, direcciones internas). Conviene recortar el motivo, o exigir sesión
+  para el detalle.

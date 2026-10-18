@@ -294,18 +294,24 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Members', 'GitHub', 'Help desk', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Members', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
 
+    // Members and GitHub follow the company role; the help desk follows the
+    // platform's support admin flag, whatever the role.
     it.each([
-      ['Owner', ['Members', 'GitHub', 'Help desk']],
-      ['Manager', ['GitHub', 'Help desk']],
-      ['Viewer', []],
-    ] as const)('offers the company admin pages a %s can use', (role, expected) => {
+      ['Owner', false, ['Members', 'GitHub']],
+      ['Manager', false, ['GitHub']],
+      ['Viewer', false, []],
+      ['Viewer', true, ['Help desk']],
+    ] as const)('offers the admin pages a %s (support admin: %s) can use', (role, supportAdmin, expected) => {
       authenticate()
-      useAuthStore.setState({ memberships: [{ company_id: 1, human_role: role }] })
+      useAuthStore.setState({
+        memberships: [{ company_id: 1, human_role: role }],
+        user: { user_id: 1, email: 'person@example.invalid', full_name: 'Person', support_admin: supportAdmin },
+      })
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       const admin = within(screen.getByRole('menu')).getAllByRole('menuitem')
@@ -520,5 +526,47 @@ describe('sectionForPath', () => {
     ['/supported', null],
   ])('puts %s under %s', (path, section) => {
     expect(sectionForPath(path)).toBe(section)
+  })
+})
+
+describe('service status', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    queryClient.clear()
+  })
+
+  it('checks each service only when the status pill is opened', async () => {
+    useAuthStore.setState({
+      token: 'signed-token', expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
+      memberships: [{ company_id: 1, human_role: 'Owner' }],
+    })
+    useAppStore.getState().setCompany(1, 'Example company')
+    vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy', timestamp: '' })
+    const deep = vi.spyOn(api, 'deepHealth').mockResolvedValue({
+      status: 'degraded',
+      components: {
+        postgres: { status: 'up' },
+        nats: { status: 'up' },
+        llm_proxy: { status: 'up' },
+        neo4j: { status: 'down', reason: 'ServiceUnavailable: no route' },
+      },
+    })
+    window.history.replaceState(null, '', '/evidence')
+    render(<App />)
+
+    const pill = await screen.findByRole('button', { name: 'Online' })
+    expect(deep).not.toHaveBeenCalled()
+    fireEvent.click(pill)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Service status' })
+    expect(await within(dialog).findByText('Degraded: an optional service is down.')).toBeInTheDocument()
+    const neo4j = within(dialog).getByText('Knowledge graph (Neo4j)').closest('li')!
+    expect(neo4j).toHaveTextContent('down')
+    expect(neo4j).toHaveTextContent('ServiceUnavailable: no route')
+    expect(within(dialog).getByText('Database (Postgres)').closest('li')).toHaveTextContent('up')
+    expect(deep).toHaveBeenCalledTimes(1)
+
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('dialog', { name: 'Service status' })).not.toBeInTheDocument()
   })
 })

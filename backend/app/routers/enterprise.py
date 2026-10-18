@@ -365,7 +365,7 @@ async def quota_usage_history(
 
 
 @router.get("/capabilities", tags=["Enterprise"])
-async def get_capabilities(request: Request) -> dict[str, bool]:
+async def get_capabilities(request: Request) -> dict[str, bool | str | None]:
     """
     Report which optional backend features are available.
 
@@ -377,6 +377,8 @@ async def get_capabilities(request: Request) -> dict[str, bool]:
         "memory": getattr(request.app.state, "memory_client", None) is not None,
         "github": bool(settings.GITHUB_TOKEN),
         "auth_required": bool(settings.AUTH_REQUIRED),
+        # Where GitHub can reach this backend; null when not configured.
+        "public_api_url": (settings.PUBLIC_API_URL or "").rstrip("/") or None,
     }
 
 

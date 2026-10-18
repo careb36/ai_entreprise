@@ -12,10 +12,12 @@ function response(status: number, body: unknown = {}) {
 
 type Handler = (init: RequestInit) => Response
 
-function stubApi(handlers: Record<string, Handler[]>, github = true) {
+function stubApi(handlers: Record<string, Handler[]>, github = true, publicApiUrl: string | null = null) {
   const fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
     const { pathname } = new URL(url)
-    if (pathname === '/v1/capabilities') return response(200, { agent_graph: false, memory: false, github, auth_required: true })
+    if (pathname === '/v1/capabilities') {
+      return response(200, { agent_graph: false, memory: false, github, auth_required: true, public_api_url: publicApiUrl })
+    }
     const queue = handlers[pathname]
     if (!queue?.length) return response(404)
     return queue.length > 1 ? queue.shift()!(init) : queue[0](init)
@@ -96,6 +98,20 @@ describe('GitHubIntegration', () => {
     })
     // A fresh secret is ready for the next repository.
     expect(within(section).getByRole('textbox', { name: 'Webhook secret' })).not.toHaveValue(secret)
+  })
+
+  it("uses the backend's public URL for the webhook when it has one", async () => {
+    stubApi({
+      '/v1/integrations/github/bindings': [() => response(200, { id: 1, company_id: 4, owner: 'acme', repo: 'app', inclusion_rule: 'all' })],
+    }, true, 'https://fabrique.example.com')
+    renderAs('Owner')
+    const section = screen.getByRole('region', { name: 'Connect a repository' })
+    fillRepo(section)
+    fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+
+    const done = await within(section).findByRole('status')
+    await vi.waitFor(() => expect(done).toHaveTextContent('https://fabrique.example.com/v1/integrations/github/webhook'))
+    expect(done).not.toHaveTextContent('Set PUBLIC_API_URL')
   })
 
   it('imports past pull requests and lists the ones that failed', async () => {

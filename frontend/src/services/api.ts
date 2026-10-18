@@ -57,6 +57,16 @@ export interface Capabilities {
   memory: boolean
   github: boolean
   auth_required: boolean
+  /** Where GitHub can reach the backend (PUBLIC_API_URL); null when unset. */
+  public_api_url?: string | null
+}
+
+export type ComponentStatus = { status: 'up' | 'down'; reason?: string; detail?: string }
+
+export interface DeepHealth {
+  status: 'healthy' | 'degraded' | 'down'
+  components: Record<string, ComponentStatus>
+  nats?: string
 }
 
 export interface InitCompanyRequest {
@@ -84,6 +94,8 @@ export interface AuthUser {
   user_id: number
   email: string
   full_name: string
+  /** Listed in the backend's SUPPORT_ADMIN_EMAILS: triages every ticket. */
+  support_admin?: boolean
 }
 
 export interface CompanyMembership {
@@ -689,6 +701,8 @@ export const api = {
 
   // Core & Enterprise
   health: () => api.get<{ status: string; timestamp: string }>('/health'),
+  // Probes each backing service; slow when one is down, so only on demand.
+  deepHealth: () => fetchApi<DeepHealth>('/health/deep', { method: 'GET', auth: false, retryServerErrors: false }),
   capabilities: () => fetchApi<Capabilities>('/v1/capabilities', { method: 'GET', auth: false }),
   
   initCompany: (data: InitCompanyRequest) =>
@@ -839,14 +853,9 @@ export const api = {
   downloadSupportLogs: () => fetchBlob('/v1/support/logs'),
 
   // Company members. Owners invite users who already have an account.
-  // Inviting someone who is already a member answers 500 (unique constraint);
-  // the API has no way to change a member's role.
+  // 404 when the email has no account, 409 when it is already a member.
   inviteMember: (data: { company_id: number; email: string; human_role: CompanyRole }) =>
-    fetchApi<{ status: string; message: string }>('/v1/company/invite', {
-      method: 'POST',
-      body: JSON.stringify(data),
-      retryServerErrors: false,
-    }),
+    api.post<{ status: string; message: string }>('/v1/company/invite', data),
 
   // GitHub integration (Manager). There is no endpoint that lists bindings.
   createGitHubBinding: (data: GitHubBindingRequest) =>

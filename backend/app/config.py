@@ -111,6 +111,16 @@ class Settings(BaseSettings):
     # GitHub integration — optional token for API rate-limit headroom
     # ---------------------------------------------------------------------------
     GITHUB_TOKEN: str | None = None
+    # Address GitHub uses to reach this backend (webhook Payload URL), e.g. a
+    # tunnel or the public host. Reported by /v1/capabilities for the frontend.
+    PUBLIC_API_URL: str | None = None
+
+    # ---------------------------------------------------------------------------
+    # Support desk — accounts (comma-separated emails) that triage every ticket
+    # and download the support logs. Other users see only the tickets they
+    # reported with their account email.
+    # ---------------------------------------------------------------------------
+    SUPPORT_ADMIN_EMAILS: str = ""
 
     # ---------------------------------------------------------------------------
     # LLM API Keys

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type SupportTicket } from '../services/api'
+import { api, ApiError, type SupportTicket } from '../services/api'
+import { useAuthStore } from '../store/useAuthStore'
 import { Bot, Bug, Send, X, Loader2, Ticket, ChevronRight, RefreshCw, CheckCircle2, Clock, AlertCircle, Circle } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -82,10 +83,17 @@ export const SupportBot: React.FC = () => {
   )
   const [submitting, setSubmitting]   = useState(false)
 
-  // Tickets
+  // Tickets. A signed-in user sees the tickets reported with their account
+  // email (support admins see any); the API answers 403 for another email.
+  const accountEmail = useAuthStore(state => state.user?.email)
   const [email, setEmail] = useState(
-    () => localStorage.getItem('fabrique-support-email') || ''
+    () => accountEmail || localStorage.getItem('fabrique-support-email') || ''
   )
+  const [ticketsForbidden, setTicketsForbidden] = useState(false)
+  // The profile can load after the bot mounts (login, first page load).
+  useEffect(() => {
+    if (accountEmail) setEmail(current => current || accountEmail)
+  }, [accountEmail])
   const [tickets, setTickets]         = useState<TicketSummary[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
   const [selectedTicket, setSelectedTicket] = useState<any>(null)
@@ -198,10 +206,12 @@ export const SupportBot: React.FC = () => {
     const q = (emailOverride || email).trim()
     if (!q) return
     setLoadingTickets(true)
+    setTicketsForbidden(false)
     try {
       const res = await api.listTickets({ reporter_email: q })
       setTickets(res.tickets || [])
-    } catch {
+    } catch (error) {
+      setTicketsForbidden(error instanceof ApiError && error.status === 403)
       setTickets([])
     } finally {
       setLoadingTickets(false)
@@ -381,7 +391,11 @@ export const SupportBot: React.FC = () => {
 
               <div className="flex-1 overflow-y-auto divide-y">
                 {!loadingTickets && tickets.length === 0 && (
-                  <p className="text-xs text-gray-400 text-center mt-10">{t('support.noTickets')}</p>
+                  <p className="text-xs text-gray-400 text-center mt-10 px-4">
+                    {ticketsForbidden
+                      ? t('support.ownTicketsOnly', { email: accountEmail ?? '', defaultValue: 'You can only see the tickets reported with your account email ({{email}}).' })
+                      : t('support.noTickets')}
+                  </p>
                 )}
                 {tickets.map(tk => (
                   <button key={tk.ticket_num} onClick={() => loadTicketDetail(tk.ticket_num)}

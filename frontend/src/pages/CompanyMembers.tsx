@@ -34,10 +34,8 @@ export default function CompanyMembers() {
   const status = invite.error instanceof ApiError ? invite.error.status : null
   const errorMessage = status === 404
     ? t('members.noAccount', { defaultValue: 'There is no account with that email. Ask them to register first, then invite them.' })
-    // Re-inviting a member fails with an unhandled 500, which the browser sees
-    // as a network error (status 0) because that response has no CORS headers.
-    : status === 500 || status === 0
-      ? t('members.maybeMember', { message: errorDetail(invite.error), defaultValue: 'Could not invite ({{message}}). If they are already a member, their role cannot be changed from here yet.' })
+    : status === 409
+      ? t('members.alreadyMember', { defaultValue: 'They are already a member of this company. Roles cannot be changed from here yet.' })
       : t('members.inviteError', { message: errorDetail(invite.error), defaultValue: 'Could not invite: {{message}}' })
 
   return (

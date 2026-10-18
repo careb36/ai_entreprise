@@ -13,6 +13,7 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "AGENT_GRAPH_ENABLED", False)
     monkeypatch.setattr(settings, "GITHUB_TOKEN", None)
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", None)
     monkeypatch.setattr(app.state, "memory_client", None, raising=False)
 
 
@@ -25,6 +26,7 @@ def test_default_capabilities(test_client, default_settings):
         "memory": False,
         "github": False,
         "auth_required": True,
+        "public_api_url": None,
     }
 
 
@@ -62,3 +64,13 @@ def test_public_when_auth_required(test_client, default_settings):
 
     assert response.status_code == 200
     assert response.json()["auth_required"] is True
+
+
+def test_public_api_url_is_reported_without_trailing_slash(
+    test_client, default_settings, monkeypatch
+):
+    monkeypatch.setattr(settings, "PUBLIC_API_URL", "https://fabrique.example.com/")
+
+    assert test_client.get("/v1/capabilities").json()["public_api_url"] == (
+        "https://fabrique.example.com"
+    )

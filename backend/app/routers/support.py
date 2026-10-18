@@ -20,14 +20,19 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from auth_policy import current_user_if_required
+from auth_policy import (
+    current_user_if_required,
+    is_support_admin,
+    require_authenticated,
+    require_support_admin,
+)
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from logging_config import logger
-from models import BugReport
+from models import BugReport, User
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
-from sqlmodel import Session, select, text
+from sqlmodel import Session, func, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
 
@@ -79,23 +84,43 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
     }
 
 
-@router.get("/tickets", dependencies=[Depends(current_user_if_required)])
+def _own_email(user: User | None) -> str | None:
+    """The reporter email a non-admin is limited to, or None for admins."""
+    if is_support_admin(user):
+        return None
+    return (user.email or "").lower() if user is not None else ""
+
+
+@router.get("/tickets")
 async def list_tickets(
     reporter_email: str | None = Query(None),
     status: str | None = Query(None),
     severity: str | None = Query(None),
     limit: int = Query(50, le=200),
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     List support tickets with optional filters.
 
     All filters are additive (AND logic).  Results are ordered by
     ``created_at`` descending (newest first) and capped at *limit* rows.
+    Support admins see every ticket; other users only the tickets reported
+    with their account email, and asking for another reporter is a 403.
     """
+    require_authenticated(user)
+    own = _own_email(user)
+    if own is not None:
+        if reporter_email and reporter_email.strip().lower() != own:
+            raise HTTPException(
+                status_code=403, detail="You can only see your own tickets"
+            )
+        reporter_email = own
     query = select(BugReport)
     if reporter_email:
-        query = query.where(BugReport.reporter_email == reporter_email)
+        query = query.where(
+            func.lower(BugReport.reporter_email) == reporter_email.lower()
+        )
     if status:
         query = query.where(BugReport.status == status)
     if severity:
@@ -122,16 +147,25 @@ async def list_tickets(
     return {"tickets": tickets, "count": len(tickets)}
 
 
-@router.get("/tickets/{ticket_num}", dependencies=[Depends(current_user_if_required)])
-async def get_ticket(ticket_num: str, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
+@router.get("/tickets/{ticket_num}")
+async def get_ticket(
+    ticket_num: str,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Return the full detail of a single ticket by its ``FAB-XXXXX`` identifier.
 
     Ticket numbers are normalised to upper-case before the database lookup.
+    A non-admin gets 404 for a ticket someone else reported.
     """
+    require_authenticated(user)
     report = session.exec(
         select(BugReport).where(BugReport.ticket_num == ticket_num.upper())
     ).first()
+    own = _own_email(user)
+    if report and own is not None and (report.reporter_email or "").lower() != own:
+        report = None
     if not report:
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_num} not found")
     return {
@@ -155,18 +189,21 @@ async def get_ticket(ticket_num: str, session: Session = Depends(get_session)): 
     }
 
 
-@router.patch("/tickets/{ticket_num}", dependencies=[Depends(current_user_if_required)])
+@router.patch("/tickets/{ticket_num}")
 async def update_ticket_status(
     ticket_num: str,
     req: BugStatusUpdateRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Update the status (and optionally resolution / assignee) of a ticket.
 
     When the status transitions to ``"resolved"`` or ``"closed"``,
     ``resolved_at`` is automatically set to the current UTC timestamp.
+    Requires a support admin.
     """
+    require_support_admin(user)
     valid_statuses = {"open", "in_progress", "waiting", "resolved", "closed"}
     if req.status not in valid_statuses:
         raise HTTPException(
@@ -245,14 +282,17 @@ async def support_chat(req: SupportChatRequest):
         raise HTTPException(status_code=503, detail="LLM service unavailable")
 
 
-@router.get("/logs", dependencies=[Depends(current_user_if_required)])
-async def download_support_logs():
+@router.get("/logs")
+async def download_support_logs(
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
     """
-    Download the latest structured audit log as a JSONL file.
+    Download the latest structured audit log as a JSONL file (support admins).
 
     Returns the file at ``AUDIT_LOG_PATH/audit.jsonl`` as an attachment.
     Raises HTTP 404 if no log file exists yet (e.g. no workflow has run).
     """
+    require_support_admin(user)
     log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs")) / "audit.jsonl"
     if log_path.exists():
         return FileResponse(

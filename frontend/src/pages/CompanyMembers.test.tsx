@@ -62,19 +62,15 @@ describe('CompanyMembers', () => {
     expect(screen.getByRole('textbox', { name: 'Email of their account' })).toHaveValue('')
   })
 
-  it.each([
-    // A 500 is not retried; a network error (how the browser sees that 500) is.
-    ['a 500', () => Promise.resolve(response(500, { detail: 'Internal server error' })), 1],
-    ['a CORS-blocked 500', () => Promise.reject(new TypeError('Failed to fetch')), 3],
-  ] as const)('names the likely cause when an invite fails with %s', async (_case, answer, calls) => {
-    const fetch = vi.fn(answer)
+  it('says when the person is already a member', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(409, { detail: 'ana@acme.test is already a member as Viewer' }))
     vi.stubGlobal('fetch', fetch)
     renderAs('Owner')
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Email of their account' }), { target: { value: 'ana@acme.test' } })
     fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
 
-    expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toHaveTextContent('If they are already a member')
-    expect(fetch).toHaveBeenCalledTimes(calls)
+    expect(await screen.findByRole('alert')).toHaveTextContent('They are already a member of this company.')
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

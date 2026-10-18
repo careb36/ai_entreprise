@@ -127,6 +127,11 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
+      FERNET_SECRET_KEY: ${FERNET_SECRET_KEY:-}
+      AUDIT_SIGNING_KEY: ${AUDIT_SIGNING_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-}
+      SUPPORT_ADMIN_EMAILS: ${SUPPORT_ADMIN_EMAILS:-}
       NATS_URL: nats://nats:4222
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
@@ -211,8 +216,6 @@ services:
     container_name: factory-frontend
     ports:
       - "5173:5173"
-    environment:
-      VITE_DEFAULT_PROJECT_PATH: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
