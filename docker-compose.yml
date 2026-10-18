@@ -212,6 +212,7 @@ services:
     ports:
       - "5173:5173"
     environment:
+      VITE_DEFAULT_PROJECT_PATH: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
