@@ -1,6 +1,6 @@
 import { useAuthStore } from '../store/useAuthStore'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TIMEOUT_MS = 90_000
 const MAX_RETRIES = 2
 
@@ -192,6 +192,53 @@ export interface SupportTicket {
   created_at: string | null
   updated_at: string | null
   resolved_at: string | null
+}
+
+export interface TicketUpdateRequest {
+  status: TicketStatus
+  resolution?: string
+  assigned_to?: string
+}
+
+export type CompanyRole = 'Owner' | 'Manager' | 'Viewer'
+
+export type GitHubInclusionRule = 'all' | 'bots_only' | 'non_bots'
+
+export interface GitHubBindingRequest {
+  company_id: number
+  owner: string
+  repo: string
+  webhook_secret: string
+  inclusion_rule: GitHubInclusionRule
+}
+
+export interface GitHubBinding {
+  id: number
+  company_id: number
+  owner: string
+  repo: string
+  inclusion_rule: GitHubInclusionRule
+}
+
+export interface GitHubBackfillResult {
+  ingested: number
+  skipped: number
+  errors: { number: number | null; error: string }[]
+}
+
+export interface LineageEntry {
+  engram_id: string
+  role: string | null
+  decision: string | null
+  timestamp: string | null
+  company_id: number | null
+  legacy: boolean
+}
+
+export interface LineageResponse {
+  file: string
+  status: string
+  lineage: LineageEntry[]
 }
 
 export interface SupportTicketDetail extends SupportTicket {
@@ -497,10 +544,28 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   }
 }
 
+/** GET a file with the user's token; the caller saves it. */
+async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filename: string | null }> {
+  const token = useAuthStore.getState().getValidToken()
+  const headers = new Headers()
+  if (token) headers.set('Authorization', ['Bearer', token].join(' '))
+  const response = await fetch(`${API_BASE}${endpoint}`, { headers })
+  if (!response.ok) {
+    throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="?([^";]+)"?/.exec(disposition)
+  return { blob: await response.blob(), filename: match ? match[1] : null }
+}
+
 async function readDetail(response: Response): Promise<string | undefined> {
   try {
     const body = await response.json()
-    return typeof body?.detail === 'string' && body.detail ? body.detail : undefined
+    const detail = body?.detail
+    if (typeof detail === 'string' && detail) return detail
+    // Some endpoints answer with {message, ...} (e.g. GitHub rate limits).
+    if (detail && typeof detail === 'object' && typeof detail.message === 'string') return detail.message
+    return undefined
   } catch {
     return undefined
   }
@@ -763,4 +828,45 @@ export const api = {
 
   getTicket: (ticketNum: string) =>
     api.get<SupportTicketDetail>(`/v1/support/tickets/${encodeURIComponent(ticketNum)}`),
+
+  updateTicket: (ticketNum: string, data: TicketUpdateRequest) =>
+    api.patch<{ ticket_num: string; status: TicketStatus; updated_at: string }>(
+      `/v1/support/tickets/${encodeURIComponent(ticketNum)}`,
+      data,
+    ),
+
+  /** The audit log as a JSONL file; 404 until a workflow has written one. */
+  downloadSupportLogs: () => fetchBlob('/v1/support/logs'),
+
+  // Company members. Owners invite users who already have an account.
+  // Inviting someone who is already a member answers 500 (unique constraint);
+  // the API has no way to change a member's role.
+  inviteMember: (data: { company_id: number; email: string; human_role: CompanyRole }) =>
+    fetchApi<{ status: string; message: string }>('/v1/company/invite', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      retryServerErrors: false,
+    }),
+
+  // GitHub integration (Manager). There is no endpoint that lists bindings.
+  createGitHubBinding: (data: GitHubBindingRequest) =>
+    api.post<GitHubBinding>('/v1/integrations/github/bindings', data),
+
+  backfillGitHub: (data: { company_id: number; owner: string; repo: string; since?: string }) =>
+    fetchApi<GitHubBackfillResult>('/v1/integrations/github/backfill', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      retryServerErrors: false,
+    }),
+
+  // Decisions recorded for a file. Needs Neo4j; the API answers 500 without it.
+  getLineage: (filePath: string, companyId?: number | null) =>
+    fetchApi<LineageResponse>('/v1/enterprise/lineage', {
+      method: 'GET',
+      params: {
+        file_path: filePath,
+        ...(companyId != null ? { company_id: companyId } : {}),
+      },
+      retryServerErrors: false,
+    }),
 }
