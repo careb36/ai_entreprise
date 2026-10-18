@@ -417,10 +417,10 @@ export default function CompanyNew() {
 
   // Step 4 — Team
   const [agentDrafts, setAgents] = useState<AgentDraft[]>([
-    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'productSpecialty', token_budget: 500000 },
-    { name: '', role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 1000000 },
-    { name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000 },
-    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'qaSpecialty', token_budget: 300000 },
+    { name: '', role: 'PO', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'productSpecialty', token_budget: 1000000 },
+    { name: '', role: 'Architect', persona: '', seniority: 'Senior', specialty: '', token_budget: 2000000 },
+    { name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 1000000 },
+    { name: '', role: 'QA', persona: '', seniority: 'Senior', specialty: '', defaultSpecialtyKey: 'qaSpecialty', token_budget: 500000 },
   ])
   const agents: Agent[] = agentDrafts.map(({ defaultSpecialtyKey, ...agent }) => ({
     ...agent,
@@ -467,7 +467,7 @@ export default function CompanyNew() {
   // ── Agent helpers ─────────────────────────────────────────────────────────
 
   const addAgent = () => setAgents(prev => [...prev, {
-    name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 500000,
+    name: '', role: 'Dev', persona: '', seniority: 'Mid', specialty: '', token_budget: 1000000,
   }])
 
   const removeAgent = (i: number) => setAgents(prev => prev.filter((_, idx) => idx !== i))
