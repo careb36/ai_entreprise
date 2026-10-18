@@ -111,6 +111,53 @@ class ModelFactory:
         return model
 
 
+# Role names stored on Agent rows that are not AgentRole values, keyed by their
+# normalised form (lowercase, no spaces, dashes or underscores).
+_ROLE_ALIASES: Dict[str, AgentRole] = {
+    "dev": AgentRole.DEVELOPER,
+    "backenddev": AgentRole.DEVELOPER,
+    "frontenddev": AgentRole.DEVELOPER,
+    "fullstackdev": AgentRole.DEVELOPER,
+    "mobiledev": AgentRole.DEVELOPER,
+    "dataengineer": AgentRole.DEVELOPER,
+    "mlengineer": AgentRole.DEVELOPER,
+    "devops": AgentRole.DEVELOPER,
+    "productowner": AgentRole.PO,
+    "sm": AgentRole.SCRUM_MASTER,
+    "security": AgentRole.SECOPS,
+    "support": AgentRole.TECH_WRITER,
+}
+
+
+def _normalise_role(role: str) -> str:
+    return "".join(ch for ch in (role or "").lower() if ch not in " -_")
+
+
+def role_for_name(role: str) -> AgentRole:
+    """
+    Map a stored role string to an ``AgentRole``.
+
+    Matches ``AgentRole`` values case-insensitively, then the aliases above;
+    anything else is treated as ``AgentRole.DEVELOPER``, as
+    ``get_llm_for_role`` does.
+    """
+    key = _normalise_role(role)
+    for candidate in AgentRole:
+        if _normalise_role(candidate.value) == key:
+            return candidate
+    return _ROLE_ALIASES.get(key, AgentRole.DEVELOPER)
+
+
+def default_model_for_role(role: str) -> str:
+    """
+    The model id an agent of *role* uses when its own ``model`` is empty.
+
+    This is the single source of role defaults: the LangGraph producer and
+    the task worker both read ``ModelFactory.ROLE_MODEL_MAP``.
+    """
+    return ModelFactory.ROLE_MODEL_MAP[role_for_name(role)].model_name
+
+
 def get_llm_for_role(role: str) -> ChatOpenAI:
     """
     Convenience wrapper that converts a role *string* to an ``AgentRole`` enum.

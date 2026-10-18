@@ -144,6 +144,13 @@ Test files:
 | `test_needs_split.py` | `_mark_sprint_needs_split` and `_complete_sprint_and_plan_follow_up` |
 | `test_model_factory.py` | Role-to-model map and business-unit header propagation |
 | `test_crypto.py` | Fernet credential encryption: round trip, tamper and wrong-key rejection, keyless fallback, legacy rows |
+| `test_llm_routing.py` | Task worker: empty agent model → role default from `model_factory`, LLM failures on the board, `served_model` on the AgentRun |
+
+The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
+`unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
+repo root with the proxy's Poetry environment plus
+`llm-proxy/requirements-dev.txt`: `python -m pytest llm-proxy/tests -q`. CI
+runs it after the backend tests.
 
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
@@ -167,6 +174,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | File | What it covers |
 |------|----------------|
 | `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
+| `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option |
 
 ### Manual validation (no test deps needed)
 

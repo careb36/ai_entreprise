@@ -45,6 +45,7 @@ from nats_client import NATSClient
 from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
+from llm.model_factory import default_model_for_role
 from services import agent_run_service, console_capabilities
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -355,6 +356,47 @@ def _format_retrospective_summary(metrics: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+class LLMCallError(RuntimeError):
+    """An LLM call that produced no usable answer; its text goes on the board."""
+
+
+def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
+    """The agent's configured model, or its role's default from model_factory."""
+    configured = (agent.get("model") or "").strip()
+    return configured or default_model_for_role(agent.get("role") or default_role)
+
+
+def _llm_content(result: dict[str, Any]) -> str:
+    choices = result.get("choices") or [{}]
+    message = (choices[0] or {}).get("message") or {}
+    content = message.get("content") or ""
+    return (content if isinstance(content, str) else str(content)).strip()
+
+
+def _llm_failure(result: dict[str, Any], model: str) -> str | None:
+    """
+    Describe why *result* carries no usable answer, or return ``None``.
+
+    The text reads ``LLM call failed: <provider> <status> <message>``.  The
+    proxy reports provider errors as ``{"provider", "status", "message"}``;
+    errors of the proxy itself (unknown model, quota) name ``llm-proxy`` and
+    the HTTP status.  A 2xx answer with empty content is a failure too, so it
+    never reaches the word-count gate as an empty deliverable.
+    """
+    if result.get("error"):
+        detail = result.get("detail")
+        detail = detail if isinstance(detail, dict) else {}
+        provider = detail.get("provider") or "llm-proxy"
+        status = detail.get("status") or result.get("status_code") or "unreachable"
+        message = detail.get("message") or detail.get("error") or result["error"]
+        return f"LLM call failed: {provider} {status} {message}"
+    if not _llm_content(result):
+        provider = result.get("provider") or "llm-proxy"
+        served = result.get("served_model") or model
+        return f"LLM call failed: {provider} 200 empty response from {served}"
+    return None
+
+
 def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -370,7 +412,11 @@ def _execute_task(
     Call the LLM to produce a deliverable for the given backlog item.
 
     Runs synchronously (called via ``asyncio.to_thread``).
-    Returns the LLM response text.
+    Returns the LLM response text.  An empty agent model resolves to the
+    role's default from ``llm.model_factory``.  The model the proxy reports
+    as having answered is stored as ``agent["served_model"]`` (``None`` when
+    not reported) so the AgentRun records it.  Raises ``LLMCallError`` when
+    the call fails or returns no content.
 
     When ``company_id`` is provided the turn is also written to ``audit_log``
     (role, company, token cost) so ``GET /v1/analytics/orchestration_health``
@@ -436,7 +482,7 @@ def _execute_task(
             f"{external_advice[:4000]}"
         )
 
-    model = agent.get("model", "deepseek-coder")
+    model = _resolve_agent_model(agent)
     role = agent.get("role", "Dev")
 
     logger.info(
@@ -456,22 +502,24 @@ def _execute_task(
         role=role,
     )
 
-    if result.get("error"):
-        raise RuntimeError(f"LLM error: {result['error']}")
+    failure = _llm_failure(result, model)
+    if failure:
+        raise LLMCallError(failure)
 
-    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = _llm_content(result)
+    agent["served_model"] = result.get("served_model") or None
 
     if company_id is not None:
         record_agent_turn(
             company_id=company_id,
             sprint_id=sprint_id,
             backlog_item_id=item.get("id"),
-            agent=agent,
+            agent={**agent, "model": agent["served_model"] or model},
             action=ACTION_EXECUTE_TASK,
             llm_result=result,
             result_preview=content,
         )
-    return content.strip()
+    return content
 
 
 def _consult_architect(
@@ -507,7 +555,9 @@ def _consult_architect(
     architect = {
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": architect_row.model or "gemini-2.5-flash",
+        "model": _resolve_agent_model(
+            {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
+        ),
         "seniority": architect_row.seniority,
         "specialty": architect_row.specialty,
         "system_prompt": architect_row.system_prompt,
@@ -540,25 +590,22 @@ def _consult_architect(
         )
         return ""
 
-    if result.get("error"):
+    failure = _llm_failure(result, architect["model"])
+    if failure:
         logger.warning(
-            "Architect consultation returned error for item=%s: %s",
+            "Architect consultation returned no advice for item=%s: %s",
             item.get("id"),
-            result["error"],
+            failure,
         )
         return ""
 
-    advice = (
-        result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    ).strip()
-    if not advice:
-        return ""
+    advice = _llm_content(result)
 
     record_agent_turn(
         company_id=sprint["company_id"],
         sprint_id=sprint.get("id"),
         backlog_item_id=item.get("id"),
-        agent=architect,
+        agent={**architect, "model": result.get("served_model") or architect["model"]},
         action=ACTION_ARCHITECT_CONSULT,
         llm_result=result,
         result_preview=advice,
@@ -1857,7 +1904,9 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                "model": agent_row.model,
+                "model": _resolve_agent_model(
+                    {"model": agent_row.model, "role": agent_row.role}
+                ),
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
@@ -1867,7 +1916,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": "deepseek-coder",
+                "model": default_model_for_role(item.assignee or "Dev"),
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -2001,7 +2050,8 @@ def _record_task_run(
         company_id=sprint["company_id"],
         external_ref=f"task-{item['id']}",
         producer=TASK_WORKER_PRODUCER,
-        model=agent.get("model") or None,
+        # The model the proxy says answered, when it says so.
+        model=agent.get("served_model") or agent.get("model") or None,
         agent_role=agent.get("role"),
         subject={
             "sprint_id": sprint["id"],
@@ -2510,7 +2560,11 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         _update_item_status,
                         data["backlog_item_id"],
                         "blocked",
-                        comment_text=f"Agent error: {str(e)[:500]}",
+                        comment_text=(
+                            str(e)[:500]
+                            if isinstance(e, LLMCallError)
+                            else f"Agent error: {str(e)[:500]}"
+                        ),
                         comment_author="System",
                     )
                 except Exception:  # noqa: BLE001, S110 - Recovery bookkeeping must not mask the task failure.
@@ -2598,7 +2652,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
-                "model": reviewer.model if reviewer else "deepseek-coder",
+                "model": _resolve_agent_model(
+                    {"model": reviewer.model if reviewer else None, "role": "QA"}
+                ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
                 "system_prompt": reviewer.system_prompt if reviewer else None,
             }
@@ -3118,25 +3174,25 @@ def _call_llm_for_review(
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
+    model = _resolve_agent_model(agent, default_role="QA")
     result = client.chat(
-        model=agent.get("model", "deepseek-coder"),
+        model=model,
         messages=messages,
         role=agent.get("role", "QA"),
     )
 
-    if result.get("error"):
-        raise RuntimeError(f"LLM error: {result['error']}")
+    failure = _llm_failure(result, model)
+    if failure:
+        raise LLMCallError(failure)
 
-    content = (
-        result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    ).strip()
+    content = _llm_content(result)
 
     if company_id is not None:
         record_agent_turn(
             company_id=company_id,
             sprint_id=sprint_id,
             backlog_item_id=backlog_item_id,
-            agent=agent,
+            agent={**agent, "model": result.get("served_model") or model},
             action=ACTION_QA_REVIEW,
             llm_result=result,
             result_type=classify_review_result(content),

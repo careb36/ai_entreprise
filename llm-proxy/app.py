@@ -1,9 +1,11 @@
 """
 LLM Proxy - Enterprise Multi-Model Gateway v2.0 (Phase 4)
 
-Governance-ready proxy that routes requests to Gemini or DeepSeek with:
+Governance-ready proxy that routes requests to Gemini, DeepSeek or Qwen with:
 - **Distributed Tracing**: OpenTelemetry instrumentation.
-- **Dynamic Model Resolution**: Hourly refresh of available Gemini models.
+- **Explicit Model Routing**: a model id picks its provider by prefix and must
+  be in that provider's catalogue (refreshed hourly); anything else is a 400
+  ``unknown_model``.  Responses carry ``served_model``.
 - **Quota Enforcement**: Persistent token tracking per Business Unit via PostgreSQL.
 """
 
@@ -62,6 +64,10 @@ QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
 GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
+# Upper bound for one chat request's provider calls, fallbacks included.  It
+# stays below the backend task client's 120 s timeout so the proxy answers
+# (with an error if need be) before the caller gives up on it.
+LLM_UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110"))
 
 # --- API Key Validation (deferred to after logger is defined) ---
 
@@ -268,29 +274,106 @@ def _refresh_qwen_models():
         logger.warning(f"Qwen model refresh failed: {e}")
 
 
-def resolve_gemini_model(requested: str) -> str:
-    """
-    Return the best available Gemini model for the requested name.
-    Falls back to the same capability tier if the exact model is unavailable.
-    """
-    if not _available_models:
-        _refresh_gemini_models()
+# Deprecated Gemini ids mapped to their working equivalents.
+_GEMINI_ALIASES = {
+    "gemini-2.5-flash": "gemini-3.8-flash",
+    "gemini-2.5-pro": "gemini-3.1-pro-preview",
+    "gemini-2.0-flash": "gemini-3.8-flash",
+}
+
+# Models that are no longer available to new users (Google deprecation).
+_GEMINI_DEPRECATED = {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"}
+
+# A model id names its provider by prefix.  The id must also be in that
+# provider's fetched catalogue before a request is sent anywhere.
+_PROVIDER_PREFIXES: dict[str, tuple[str, ...]] = {
+    "gemini": ("gemini-", "gemma-"),
+    "deepseek": ("deepseek-",),
+    "qwen": ("qwen", "qwq-", "qvq-"),
+}
+
+# Where a request goes when its provider answers 429 or 5xx, in order.  Each
+# candidate is used only if it is in that provider's catalogue.
+_FALLBACK_CANDIDATES: list[tuple[str, list[str]]] = [
+    ("deepseek", ["deepseek-flash"]),
+    ("qwen", ["qwen3.6-flash"]),
+    ("gemini", _PREFERENCE_TIERS["fast"]),
+]
+
+
+def provider_for_model(model_id: str) -> str | None:
+    """The provider whose prefix *model_id* carries, or ``None``."""
+    lower = (model_id or "").strip().lower()
+    for provider, prefixes in _PROVIDER_PREFIXES.items():
+        if lower.startswith(prefixes):
+            return provider
+    return None
+
+
+def _provider_key(provider: str) -> str:
+    return {"gemini": GEMINI_API_KEY, "deepseek": DEEPSEEK_API_KEY, "qwen": QWEN_API_KEY}.get(provider, "")
+
+
+def _provider_catalogue(provider: str) -> set[str]:
+    """The provider's fetched model ids that route to it, refreshing once if empty."""
+    sources = {
+        "gemini": (_refresh_gemini_models, lambda: _available_models),
+        "deepseek": (_refresh_deepseek_models, lambda: _available_deepseek_models),
+        "qwen": (_refresh_qwen_models, lambda: _available_qwen_models),
+    }
+    if provider not in sources:
+        return set()
+    refresh, current = sources[provider]
+    if not current() and _provider_key(provider):
+        refresh()
     with _model_refresh_lock:
-        # Map deprecated/unavailable models to working equivalents.
-        _MODEL_ALIASES = {
-            "gemini-2.5-flash": "gemini-3.8-flash",
-            "gemini-2.5-pro": "gemini-3.1-pro-preview",
-            "gemini-2.0-flash": "gemini-3.8-flash",
-        }
-        if requested in _MODEL_ALIASES:
-            requested = _MODEL_ALIASES[requested]
-        if requested in _available_models:
-            return requested
-        tier = "fast" if any(k in requested for k in ("flash", "lite")) else "powerful"
-        for candidate in _PREFERENCE_TIERS[tier]:
-            if candidate in _available_models:
-                return candidate
-    return requested
+        ids = set(current())
+    return {mid for mid in ids if provider_for_model(mid) == provider}
+
+
+def available_model_ids() -> list[str]:
+    """Every model id the chat endpoint routes, as ``/v1/models`` lists them."""
+    ids: set[str] = set()
+    for provider in _PROVIDER_PREFIXES:
+        catalogue = _provider_catalogue(provider)
+        if provider == "gemini":
+            catalogue -= _GEMINI_DEPRECATED
+        ids |= catalogue
+    return sorted(ids)
+
+
+def resolve_model(requested: str) -> tuple[str, str] | None:
+    """
+    Return ``(provider, model_id)`` for *requested*, or ``None`` when no
+    provider serves it.  A deprecated Gemini id is aliased to its replacement
+    when the replacement is in the catalogue.  Nothing else is substituted:
+    an id that is not in its provider's catalogue is unknown.
+    """
+    provider = provider_for_model(requested)
+    if provider is None:
+        return None
+    catalogue = _provider_catalogue(provider)
+    if provider == "gemini":
+        alias = _GEMINI_ALIASES.get(requested)
+        if alias and alias in catalogue:
+            return provider, alias
+    if requested in catalogue:
+        return provider, requested
+    return None
+
+
+def _fallback_targets(failed_provider: str) -> list[tuple[str, str]]:
+    """Catalogue models to try, one per other provider, after a 429/5xx."""
+    targets = []
+    for provider, candidates in _FALLBACK_CANDIDATES:
+        if provider == failed_provider:
+            continue
+        catalogue = _provider_catalogue(provider)
+        for candidate in candidates:
+            if candidate in catalogue:
+                targets.append((provider, candidate))
+                break
+    return targets
 
 
 # Refresh models once at startup; background thread refreshes every hour.
@@ -374,7 +457,7 @@ def list_models():
         "models": [
           {
             "id":          "gemini-2.5-pro",
-            "provider":    "gemini" | "deepseek",
+            "provider":    "gemini" | "deepseek" | "qwen",
             "tier":        "strategic" | "balanced" | "code" | "fast" | "preview",
             "description": "..."
           },
@@ -384,26 +467,15 @@ def list_models():
         "refreshed_at": 1712345678.0
       }
     """
-    if not _available_models:
-        _refresh_gemini_models()
-
-    # Models that are no longer available to new users (Google deprecation).
-    _GEMINI_DEPRECATED = {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"}
-
+    # Only ids the chat endpoint routes are listed.
     models = []
-    with _model_refresh_lock:
-        for model_id in sorted(_available_models):
-            if model_id in _GEMINI_DEPRECATED:
-                continue
-            tier, desc = _classify_model(model_id)
-            models.append({"id": model_id, "provider": "gemini", "tier": tier, "description": desc})
+    for model_id in sorted(_provider_catalogue("gemini") - _GEMINI_DEPRECATED):
+        tier, desc = _classify_model(model_id)
+        models.append({"id": model_id, "provider": "gemini", "tier": tier, "description": desc})
 
     # DeepSeek models are available only when the API key is configured.
     if DEEPSEEK_API_KEY:
-        if not _available_deepseek_models:
-            _refresh_deepseek_models()
-        with _model_refresh_lock:
-            ds_ids = sorted(_available_deepseek_models)
+        ds_ids = sorted(_provider_catalogue("deepseek"))
         for mid in ds_ids:
             tier = "fast" if "flash" in mid else "balanced"
             models.append({"id": mid, "provider": "deepseek", "tier": tier,
@@ -411,10 +483,7 @@ def list_models():
 
     # Qwen models are available only when the API key is configured.
     if QWEN_API_KEY:
-        if not _available_qwen_models:
-            _refresh_qwen_models()
-        with _model_refresh_lock:
-            q_ids = sorted(_available_qwen_models)
+        q_ids = sorted(_provider_catalogue("qwen"))
         for mid in q_ids:
             lower = mid.lower()
             if "max" in lower:
@@ -453,104 +522,203 @@ def _pick_orchestrator(models: list[dict]) -> str:
     return models[0]["id"] if models else "gemini-flash-latest"
 
 
+class UpstreamError(Exception):
+    """A provider call that produced no usable answer."""
+
+    def __init__(
+        self,
+        provider: str,
+        model: str,
+        status: int | None,
+        message: str,
+        retriable: bool | None = None,
+    ):
+        super().__init__(f"{provider} {status} {message}")
+        self.provider = provider
+        self.model = model
+        self.status = status
+        self.message = message
+        self.attempts: list[dict] = []
+        # 429 and 5xx may succeed elsewhere; so may a refused connection.
+        if retriable is None:
+            retriable = status is None or status == 429 or status >= 500
+        self.retriable = retriable
+
+    def as_dict(self) -> dict:
+        return {"provider": self.provider, "model": self.model, "status": self.status, "message": self.message}
+
+
+def _upstream_message(resp) -> str:
+    """The provider's own error text, or the start of the body."""
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])
+        if isinstance(err, str) and err:
+            return err
+        if body.get("message"):
+            return str(body["message"])
+    text_body = (getattr(resp, "text", "") or "").strip()
+    return text_body[:300] or f"HTTP {resp.status_code}"
+
+
+def _post_upstream(provider: str, model: str, url: str, headers: dict, payload: dict, timeout: float):
+    """POST to a provider; any non-2xx or unreadable body becomes an ``UpstreamError``."""
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+    except requests.Timeout:
+        # Not retried elsewhere: the time budget is already spent.
+        raise UpstreamError(provider, model, None, f"timed out after {timeout:.0f}s", retriable=False)
+    except requests.RequestException as exc:
+        raise UpstreamError(provider, model, None, f"request failed: {exc}")
+    if not 200 <= resp.status_code < 300:
+        raise UpstreamError(provider, model, resp.status_code, _upstream_message(resp))
+    try:
+        body = resp.json()
+    except ValueError:
+        raise UpstreamError(provider, model, resp.status_code, "response body is not JSON", retriable=False)
+    if not isinstance(body, dict):
+        raise UpstreamError(provider, model, resp.status_code, "response body is not a JSON object", retriable=False)
+    if body.get("error"):
+        raise UpstreamError(provider, model, resp.status_code, _upstream_message(resp), retriable=False)
+    return resp.status_code, body
+
+
+def _call_openai_compatible(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
+    base_url = DEEPSEEK_PROXY_URL if provider == "deepseek" else QWEN_PROXY_URL
+    status, result = _post_upstream(
+        provider,
+        model,
+        f"{base_url}/chat/completions",
+        {"Authorization": f"Bearer {_provider_key(provider)}"},
+        {**data, "model": model},
+        timeout,
+    )
+    if not result.get("choices"):
+        raise UpstreamError(provider, model, status, "response contained no choices", retriable=False)
+    tokens = (result.get("usage") or {}).get("total_tokens", 0)
+    return result, tokens
+
+
+def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
+    messages = data.get("messages", [])
+    contents = [
+        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+        for m in messages
+        if m["role"] != "system"
+    ]
+    system = next((m["content"] for m in messages if m["role"] == "system"), None)
+    payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
+    if system:
+        payload["system_instruction"] = {"parts": [{"text": system}]}
+    status, res = _post_upstream(
+        "gemini",
+        model,
+        f"{GEMINI_PROXY_URL}/models/{model}:generateContent",
+        {"x-goog-api-key": GEMINI_API_KEY},
+        payload,
+        timeout,
+    )
+    try:
+        text_out = res["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        reason = (res.get("promptFeedback") or {}).get("blockReason") or "no candidates"
+        raise UpstreamError("gemini", model, status, f"response had no text ({reason})", retriable=False)
+    tokens = (len(str(messages)) + len(text_out)) // 4
+    result = {
+        "choices": [{"message": {"role": "assistant", "content": text_out}}],
+        "usage": {"total_tokens": tokens},
+        "model": model,
+    }
+    return result, tokens
+
+
+def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
+    if provider == "gemini":
+        return _call_gemini(model, data, timeout)
+    return _call_openai_compatible(provider, model, data, timeout)
+
+
+def _complete_with_fallback(provider: str, model: str, data: dict) -> tuple[dict, int, str, str, dict | None]:
+    """
+    Call the resolved model; on 429/5xx try one catalogue model per other
+    provider within the same time budget.  Returns
+    ``(result, tokens, served_provider, served_model, fallback_from)`` or
+    raises the primary ``UpstreamError`` with every attempt attached.
+    """
+    deadline = time.monotonic() + LLM_UPSTREAM_TIMEOUT_SECONDS
+    try:
+        result, tokens = _call_provider(provider, model, data, LLM_UPSTREAM_TIMEOUT_SECONDS)
+        return result, tokens, provider, model, None
+    except UpstreamError as primary:
+        if not primary.retriable:
+            raise
+        logger.warning("%s; trying fallback models from the catalogue", primary)
+        primary.attempts = [primary.as_dict()]
+        for fb_provider, fb_model in _fallback_targets(provider):
+            remaining = deadline - time.monotonic()
+            if remaining < 5:
+                break
+            try:
+                result, tokens = _call_provider(fb_provider, fb_model, data, remaining)
+            except UpstreamError as exc:
+                logger.warning("Fallback failed: %s", exc)
+                primary.attempts.append(exc.as_dict())
+                if not exc.retriable:
+                    break
+                continue
+            return result, tokens, fb_provider, fb_model, primary.as_dict()
+        raise primary
+
+
 @app.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
-    data = request.json
-    model = data.get("model", "gemini-flash-latest")
-    messages = data.get("messages", [])
+    data = request.get_json(silent=True) or {}
+    requested = str(data.get("model") or "").strip()
     bu_id = request.headers.get("X-Business-Unit-ID")
-    agent_role = request.headers.get("X-Agent-Role", "Developer")
 
+    if not requested:
+        return jsonify({
+            "error": "model_required",
+            "model": "",
+            "message": "request named no model",
+            "available": available_model_ids(),
+        }), 400
+
+    resolved = resolve_model(requested)
+    if resolved is None:
+        available = available_model_ids()
+        return jsonify({
+            "error": "unknown_model",
+            "model": requested,
+            "provider": provider_for_model(requested),
+            "message": f"unknown model '{requested}'; available: {', '.join(available) or 'none'}",
+            "available": available,
+        }), 400
+
+    provider, model = resolved
     try:
-        if "qwen" in model.lower():
-            resp = requests.post(
-                f"{QWEN_PROXY_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
-                json=data,
-                timeout=60,
-            )
-            result = resp.json()
-            tokens = result.get("usage", {}).get("total_tokens", 0)
-        elif "deepseek" in model.lower():
-            resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=data, timeout=60)
-            result = resp.json()
-            tokens = result.get("usage", {}).get("total_tokens", 0)
-        else:
-            gemini_model = resolve_gemini_model(model)
-            contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages if m["role"] != "system"]
-            system = next((m["content"] for m in messages if m["role"] == "system"), None)
-            payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
-            if system: payload["system_instruction"] = {"parts": [{"text": system}]}
+        result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
+    except UpstreamError as exc:
+        body = {"error": "upstream_error", **exc.as_dict(), "requested_model": requested}
+        if len(exc.attempts) > 1:
+            body["attempts"] = exc.attempts
+        return jsonify(body), 429 if exc.status == 429 else 502
+    except Exception as exc:  # noqa: BLE001 - surface proxy bugs as JSON, not an HTML page
+        logger.exception("chat_completions failed")
+        return jsonify({"error": "proxy_error", "message": str(exc)}), 500
 
-            gemini_error = None
-            try:
-                resp = requests.post(f"{GEMINI_PROXY_URL}/models/{gemini_model}:generateContent", headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload, timeout=60)
-                res = resp.json()
-                if "error" in res:
-                    raise ValueError(res["error"].get("message", str(res["error"])))
-                if "candidates" not in res or not res["candidates"]:
-                    raise ValueError(f"No candidates in Gemini response: {res}")
-                text_out = res["candidates"][0]["content"]["parts"][0]["text"]
-                tokens = (len(str(messages)) + len(text_out)) // 4
-                result = {
-                    "choices": [{"message": {"role": "assistant", "content": text_out}}],
-                    "usage": {"total_tokens": tokens},
-                    "model": gemini_model
-                }
-            except Exception as exc:
-                gemini_error = exc
-                logger.warning(f"Gemini failed ({exc}); attempting fallback to DeepSeek/Qwen")
-
-            if gemini_error is not None:
-                # Fallback to DeepSeek
-                if DEEPSEEK_API_KEY:
-                    try:
-                        fallback_data = dict(data)
-                        fallback_data["model"] = "deepseek-flash"
-                        resp = requests.post(f"{DEEPSEEK_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"}, json=fallback_data, timeout=60)
-                        result = resp.json()
-                        if "error" in result:
-                            raise ValueError(result["error"].get("message", str(result["error"])))
-                        tokens = result.get("usage", {}).get("total_tokens", 0)
-                        result.setdefault("model", "deepseek-flash")
-                    except Exception as exc2:
-                        logger.warning(f"DeepSeek fallback failed: {exc2}")
-                        # Fallback to Qwen
-                        if QWEN_API_KEY:
-                            try:
-                                fallback_data = dict(data)
-                                fallback_data["model"] = "qwen3.6-flash"
-                                resp = requests.post(f"{QWEN_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {QWEN_API_KEY}"}, json=fallback_data, timeout=60)
-                                result = resp.json()
-                                if "error" in result:
-                                    raise ValueError(result["error"].get("message", str(result["error"])))
-                                tokens = result.get("usage", {}).get("total_tokens", 0)
-                                result.setdefault("model", "qwen3.6-flash")
-                            except Exception as exc3:
-                                raise ValueError(f"Gemini failed: {gemini_error}; DeepSeek failed: {exc2}; Qwen failed: {exc3}")
-                        else:
-                            raise ValueError(f"Gemini failed: {gemini_error}; DeepSeek failed: {exc2}")
-                elif QWEN_API_KEY:
-                    try:
-                        fallback_data = dict(data)
-                        fallback_data["model"] = "qwen3.6-flash"
-                        resp = requests.post(f"{QWEN_PROXY_URL}/chat/completions", headers={"Authorization": f"Bearer {QWEN_API_KEY}"}, json=fallback_data, timeout=60)
-                        result = resp.json()
-                        if "error" in result:
-                            raise ValueError(result["error"].get("message", str(result["error"])))
-                        tokens = result.get("usage", {}).get("total_tokens", 0)
-                        result.setdefault("model", "qwen3.6-flash")
-                    except Exception as exc2:
-                        raise ValueError(f"Gemini failed: {gemini_error}; Qwen failed: {exc2}")
-                else:
-                    raise ValueError(f"Gemini failed: {gemini_error}")
-        
-        track_usage_in_db(bu_id, tokens)
-        return jsonify(result)
-    except Exception as e:
-        msg = str(e)
-        status = 429 if "quota" in msg.lower() or "rate" in msg.lower() else 500
-        return jsonify({"error": msg}), status
+    result["served_model"] = served_model
+    result["provider"] = served_provider
+    result["requested_model"] = requested
+    if fallback_from is not None:
+        result["fallback_from"] = fallback_from
+    track_usage_in_db(bu_id, tokens)
+    return jsonify(result)
 
 
 @app.route("/v1/embeddings", methods=["POST"])

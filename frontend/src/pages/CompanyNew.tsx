@@ -464,7 +464,7 @@ export default function CompanyNew() {
             name: a.name ?? '',
             persona: a.persona ?? a.specialty ?? '',
             token_budget: a.token_budget ?? 1000000,
-            model: a.model ?? 'deepseek-coder',
+            model: a.model ?? '',
             system_prompt: a.system_prompt ?? '',
           })))
         }
