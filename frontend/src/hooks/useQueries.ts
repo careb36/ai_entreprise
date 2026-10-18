@@ -9,6 +9,7 @@ import {
   type AgentRunStatus,
   type BacklogItem,
   type InitCompanyRequest,
+  type ManagedAgent,
 } from '../services/api'
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ export const QUERY_KEYS = {
   tickets: () => ['tickets'] as const,
   memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
+  agents: (companyId: number) => ['agents', companyId] as const,
   agentRuns: (companyId: number, producer?: string, status?: AgentRunStatus, limit?: number) =>
     ['agent-runs', companyId, producer ?? '', status ?? '', limit ?? 50] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
@@ -266,5 +268,57 @@ export function useReportBug() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tickets() })
     },
+  })
+}
+
+
+export function useAgents(companyId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.agents(companyId || 0),
+    queryFn: () => api.getAgents(companyId!),
+    enabled: !!companyId,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useCreateAgent(companyId: number | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.createAgent>[0]) => api.createAgent(data),
+    onSuccess: () => {
+      if (companyId) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agents(companyId) })
+      }
+    },
+  })
+}
+
+export function useUpdateAgentConfig(companyId: number | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ agentId, data }: { agentId: number; data: Parameters<typeof api.updateAgent>[1] }) =>
+      api.updateAgent(agentId, data),
+    onSuccess: (updatedAgent: ManagedAgent) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agents(updatedAgent.company_id || companyId || 0) })
+    },
+  })
+}
+
+export function useDeleteAgent(companyId: number | null) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (agentId: number) => api.deleteAgent(agentId),
+    onSuccess: () => {
+      if (companyId) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agents(companyId) })
+      }
+    },
+  })
+}
+
+export function useGenerateAgentPrompt() {
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.generateAgentPrompt>[0]) =>
+      api.generateAgentPrompt(data),
   })
 }

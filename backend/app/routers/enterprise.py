@@ -536,8 +536,9 @@ async def list_agents(company_id: int, session: Session = Depends(get_session)):
 
 @router.post("/agents", tags=["Enterprise"])
 async def create_agent(
-    req: AgentCreateRequest, session: Session = Depends(get_session)
-):  # noqa: B008
+    req: AgentCreateRequest,
+    session: Session = Depends(get_session),  # noqa: B008
+):
     """Create a new agent configuration."""
     service = CompanyService(session)
     try:
@@ -561,8 +562,10 @@ async def generate_agent_prompt(req: AgentPromptRequest):
 
 @router.patch("/agents/{agent_id}", tags=["Enterprise"])
 async def update_agent(
-    agent_id: int, req: AgentUpdateRequest, session: Session = Depends(get_session)
-):  # noqa: B008
+    agent_id: int,
+    req: AgentUpdateRequest,
+    session: Session = Depends(get_session),  # noqa: B008
+):
     """Update an existing agent configuration."""
     service = CompanyService(session)
     try:
