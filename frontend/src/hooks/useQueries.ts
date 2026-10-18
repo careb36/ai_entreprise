@@ -154,7 +154,7 @@ export function useInitCompany() {
 export function useStartSprint() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => api.post<{ sprint_id: number }>('/v1/start_sprint', data),
+    mutationFn: api.startSprint,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sprint'] })
       queryClient.invalidateQueries({ queryKey: ['sprints'] })
@@ -271,32 +271,6 @@ export function useSearchMemory(query: string, companyId?: number) {
 }
 
 // ── Support ──────────────────────────────────────────────────────────────────
-
-export function useHealth() {
-  return useQuery({
-    queryKey: ['health'],
-    queryFn: api.health,
-    refetchInterval: query => isClientError(query.state.error) ? false : 30_000,
-  })
-}
-
-export function useTickets() {
-  return useQuery({
-    queryKey: QUERY_KEYS.tickets(),
-    queryFn: api.getTickets,
-  })
-}
-
-export function useReportBug() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: api.reportBug,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tickets() })
-    },
-  })
-}
-
 
 export function useAgents(companyId: number | null) {
   return useQuery({

@@ -140,6 +140,63 @@ export interface DiscoverTeamResponse {
   project?: WorkspaceInspection | null
 }
 
+// ── Help desk ───────────────────────────────────────────────────────────────
+
+export interface SupportChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type TicketSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type TicketStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
+
+export interface BugReportRequest {
+  title: string
+  description: string
+  steps?: string
+  expected?: string
+  actual?: string
+  severity?: TicketSeverity
+  reporter_email?: string
+  browser_info?: Record<string, unknown>
+}
+
+export interface BugReportResponse {
+  ticket_num: string
+  status: string
+  [key: string]: unknown
+}
+
+export interface TicketFilters {
+  reporter_email?: string
+  status?: TicketStatus
+  severity?: TicketSeverity
+  limit?: number
+}
+
+export interface SupportTicket {
+  id: number
+  ticket_num: string
+  title: string
+  severity: string
+  category: string | null
+  status: string
+  reporter_email: string | null
+  assigned_to: string | null
+  created_at: string | null
+  updated_at: string | null
+  resolved_at: string | null
+}
+
+export interface SupportTicketDetail extends SupportTicket {
+  description: string
+  steps: string | null
+  expected: string | null
+  actual: string | null
+  resolution: string | null
+  [key: string]: unknown
+}
+
 // ── Workspace daemon (host-native project folders) ───────────────────────────
 // Paths are host-native absolute strings (`/Users/ana/code`, `C:\Users\ana`).
 // Treat them as opaque: never join or normalise them, always reuse the `path`
@@ -642,7 +699,7 @@ export const api = {
   }) => api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
   startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[] }) =>
-    api.post<any>('/v1/start_sprint', data),
+    api.post<{ sprint_id: number; backlog_item_ids?: number[]; sprint_url?: string }>('/v1/start_sprint', data),
 
   planSprint: (data: { company_id: number; prompt: string; scope_size: 'S' | 'M' | 'L' }) =>
     api.post<SprintPlanResponse>('/v1/plan_sprint', data),
@@ -658,6 +715,21 @@ export const api = {
     api.get<any[]>('/v1/memory/search', { q: query, ...(companyId && { company_id: companyId }) }),
 
   // Support
-  getTickets: () => api.get<any[]>('/v1/tickets'),
-  reportBug: (data: any) => api.post<any>('/v1/report_bug', data),
+  // Help desk (`/v1/support/*`).
+  supportChat: (messages: SupportChatMessage[]) =>
+    api.post<{ reply?: string }>('/v1/support/chat', { messages }),
+
+  reportBug: (data: BugReportRequest) =>
+    api.post<BugReportResponse>('/v1/support/report_bug', data),
+
+  listTickets: (filters: TicketFilters = {}) => {
+    const params: Record<string, string | number> = {}
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== '') params[key] = value
+    }
+    return api.get<{ tickets: SupportTicket[]; count: number }>('/v1/support/tickets', params)
+  },
+
+  getTicket: (ticketNum: string) =>
+    api.get<SupportTicketDetail>(`/v1/support/tickets/${encodeURIComponent(ticketNum)}`),
 }
