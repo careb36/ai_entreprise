@@ -5,10 +5,12 @@ import {
   ArrowLeft,
   LayoutDashboard,
   MonitorPlay,
+  Pause,
+  Play,
 } from 'lucide-react'
 import KanbanBoard from '../components/KanbanBoard'
 import { useAppStore } from '../store/useAppStore'
-import { useSprintBoard } from '../hooks/useQueries'
+import { usePauseSprint, useResumeSprint, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 
 export default function SprintOpsCockpit() {
@@ -18,7 +20,10 @@ export default function SprintOpsCockpit() {
   const setActiveSprint = useAppStore(state => state.setActiveSprint)
 
   const idNum = id ? parseInt(id, 10) : null
-  const { isError, error } = useSprintBoard(idNum)
+  const { data: board, isError, error } = useSprintBoard(idNum)
+  const pauseMutation = usePauseSprint()
+  const resumeMutation = useResumeSprint()
+  const isPaused = board?.sprint?.status === 'paused'
 
   useEffect(() => {
     if (id && parseInt(id, 10) !== activeSprintId) {
@@ -47,6 +52,15 @@ export default function SprintOpsCockpit() {
             Sprint #{currentId}
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {isPaused ? (
+              <button onClick={() => resumeMutation.mutate(idNum!)} className="btn-ghost btn-sm flex items-center gap-1.5 text-emerald-400">
+                <Play size={13} /> {t('workspace.resumeSprint', { defaultValue: 'Resume' })}
+              </button>
+            ) : (
+              <button onClick={() => pauseMutation.mutate(idNum!)} className="btn-ghost btn-sm flex items-center gap-1.5 text-yellow-400">
+                <Pause size={13} /> {t('workspace.pauseSprint', { defaultValue: 'Pause' })}
+              </button>
+            )}
             <Link to={`/workspace/${currentId}/live`} className="btn-ghost btn-sm flex items-center gap-1.5">
               <MonitorPlay size={13} />
               <span>{t('workspace.openLiveRoom')}</span>

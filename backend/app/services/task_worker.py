@@ -1722,6 +1722,9 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 "Sprint %s not found for item %s", item.sprint_id, backlog_item_id
             )
             return None
+        if getattr(sprint, "status", None) == "paused":
+            logger.info("Sprint %s is paused — skipping item %s", item.sprint_id, backlog_item_id)
+            return None
 
         # Find the agent matching this assignee role within the company.
         agent_row = session.exec(

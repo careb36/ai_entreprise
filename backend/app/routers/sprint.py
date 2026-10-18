@@ -423,6 +423,8 @@ async def dispatch_sprint_tasks(
         raise HTTPException(status_code=404, detail="Sprint not found")
 
     require_company_role(session, user, sprint.company_id, "Manager")
+    if sprint.status == "paused":
+        raise HTTPException(status_code=409, detail="Sprint is paused")
     items = session.exec(
         select(BacklogItem).where(
             BacklogItem.sprint_id == sprint_id,
@@ -457,3 +459,39 @@ async def dispatch_sprint_tasks(
     session.commit()
     logger.info("Dispatched %d tasks for sprint %d", dispatched, sprint_id)
     return {"dispatched": dispatched, "sprint_id": sprint_id}
+
+
+@router.post("/sprints/{sprint_id}/pause")
+async def pause_sprint(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    sprint = session.get(Sprint, sprint_id)
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    require_company_role(session, user, sprint.company_id, "Manager")
+    if sprint.status == "paused":
+        return {"status": "already_paused"}
+    sprint.status = "paused"
+    session.add(sprint)
+    session.commit()
+    return {"status": "paused"}
+
+
+@router.post("/sprints/{sprint_id}/resume")
+async def resume_sprint(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    sprint = session.get(Sprint, sprint_id)
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    require_company_role(session, user, sprint.company_id, "Manager")
+    if sprint.status != "paused":
+        return {"status": sprint.status}
+    sprint.status = "active"
+    session.add(sprint)
+    session.commit()
+    return {"status": "active"}

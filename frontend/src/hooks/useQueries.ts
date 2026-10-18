@@ -332,3 +332,24 @@ export function useQuotaUsageHistory(companyId: number | null, days = 7) {
     enabled: !!companyId,
   })
 }
+
+
+export function usePauseSprint() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: number) => api.pauseSprint(sprintId),
+    onSuccess: (_data, sprintId) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
+    },
+  })
+}
+
+export function useResumeSprint() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (sprintId: number) => api.resumeSprint(sprintId),
+    onSuccess: (_data, sprintId) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(sprintId) })
+    },
+  })
+}

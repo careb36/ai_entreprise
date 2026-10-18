@@ -428,6 +428,12 @@ export const api = {
   deleteAgent: (agentId: number) =>
     api.delete<{ status: string; agent: ManagedAgent }>(`/v1/agents/${agentId}`),
 
+  pauseSprint: (sprintId: number) =>
+    api.post<{ status: string }>(`/v1/sprints/${sprintId}/pause`, {}),
+
+  resumeSprint: (sprintId: number) =>
+    api.post<{ status: string }>(`/v1/sprints/${sprintId}/resume`, {}),
+
   login: (email: string, password: string) =>
     fetchApi<LoginResponse>('/v1/auth/login', {
       method: 'POST',
