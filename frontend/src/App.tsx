@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from './store/useAppStore'
 import { useAuthStore } from './store/useAuthStore'
-import { setOnUnauthorized } from './services/api'
+import { api, setOnUnauthorized } from './services/api'
 import ProtectedRoute from './components/ProtectedRoute'
 import Dashboard from './pages/Dashboard'
 import AgentSettings from './pages/AgentSettings'
@@ -67,6 +68,25 @@ function useNavLinks() {
     ...(!isPending && !isError && data?.agent_graph === true ? [{ to: '/generate', icon: Code2, label: t('nav.generate', { defaultValue: 'Generate' }) }] : []),
     ...(!isPending && !isError && data?.memory === true ? [{ to: '/memory', icon: Database, label: t('nav.memory', { defaultValue: 'Memory' }) }] : []),
   ]
+}
+
+
+
+// ── Status pill (live backend health) ────────────────────────────────────────
+function StatusPill({ t }: { t: (k: string, o?: any) => string }) {
+  const { isError } = useQuery({
+    queryKey: ['health'],
+    queryFn: () => api.health(),
+    refetchInterval: 15000,
+    retry: 1,
+  })
+  const online = !isError
+  return (
+    <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
+      <span className={online ? 'status-dot-pulse' : 'w-2 h-2 rounded-full bg-red-500'} />
+      {online ? t('nav.online', { defaultValue: 'Online' }) : t('nav.offline', { defaultValue: 'Offline' })}
+    </div>
+  )
 }
 
 // ── NavBar ────────────────────────────────────────────────────────────────────
@@ -199,10 +219,7 @@ function NavBar() {
         )}
 
         {/* Status pill — desktop only */}
-        <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-surface-800 rounded-full border border-surface-700 text-xs text-gray-400">
-          <span className="status-dot-pulse" />
-          {t('nav.online', { defaultValue: 'Online' })}
-        </div>
+        <StatusPill t={t} />
 
         {/* Hamburger — mobile/tablet */}
         {authenticated && <button
