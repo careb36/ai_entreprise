@@ -8,7 +8,7 @@ Responsibilities:
 """
 
 import json
-from datetime import date
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -140,7 +140,7 @@ class CompanyService:
         sprint = Sprint(
             company_id=company.id,
             sprint_name="Sprint 0 — Foundations",
-            start_date=date.today().isoformat(),
+            start_date=datetime.now(UTC).date().isoformat(),
             scope_size=default_scope_size,
             status="active",
             goal=plan.get("goal", f"Foundation sprint for {company_name}"),

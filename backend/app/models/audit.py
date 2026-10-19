@@ -7,7 +7,7 @@ They are written by ``AgentService.audit_interaction()`` to both the
 filesystem (JSONL) and this table for queryable history.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import JSON
@@ -48,4 +48,4 @@ class AuditLog(SQLModel, table=True):
     # Number of LLM tokens consumed; used for quota accounting per business unit.
     cost_tokens: int = 0
 
-    created_at: datetime | None = Field(default_factory=datetime.utcnow)
+    created_at: datetime | None = Field(default_factory=lambda: datetime.now(UTC))

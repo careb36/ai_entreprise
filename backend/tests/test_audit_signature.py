@@ -74,6 +74,8 @@ def test_canonical_payload_bytes_are_pinned():
         details={"b": 2, "a": "ñ"},
         result=None,
         cost_tokens=3,
+        # Naive on purpose: the row is signed after a refresh, with the value a
+        # `timestamp` column hands back, and verified the same way.
         created_at=datetime(2026, 1, 2, 3, 4, 5),
     )
 
@@ -141,7 +143,7 @@ def test_missing_key_writes_unsigned_rows_and_warns_once(
 
 
 def test_tampered_unsigned_signature_is_invalid(without_key):
-    created_at = datetime(2026, 1, 2, 3, 4, 5)
+    created_at = datetime(2026, 1, 2, 3, 4, 5)  # naive, as read back from the column
     row = SimpleNamespace(
         interaction_id="unsigned-row",
         agent_id="agent-1",
