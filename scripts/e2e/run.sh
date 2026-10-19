@@ -101,6 +101,18 @@ wait_sprint() {  # wait_sprint <sprint id>
   done
   return 1
 }
+wait_value() {  # wait_value <seconds> <expected> <command...>: true once the command prints <expected>
+  local deadline=$((SECONDS + $1)) expected=$2; shift 2
+  while (( SECONDS < deadline )); do [ "$("$@")" = "$expected" ] && return 0; sleep 2; done
+  [ "$("$@")" = "$expected" ]
+}
+# A sprint reads "completed" moments before the close writes the rest (the
+# retrospective, the procedures' outcomes and proposals), so those checks wait.
+messages_of_kind() { api "$API/v1/messages?company_id=$CID&kind=$1" | json "len(d['messages'])"; }
+retry_decisions() { api "$API/v1/messages?company_id=$CID&kind=decision" | json "sum(1 for m in d['messages'] if m['body'].startswith('Triage decision: another attempt'))"; }
+active_procedures() { api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')"; }
+procedure_result() { api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == '$1'), '')"; }
+prompt_seen() { if [ "$(grep -c "$1" "$PROMPTS")" -ge 1 ]; then echo yes; else echo no; fi; }
 
 echo "1. init_company → foundation sprint"
 COMPANY=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d "{
@@ -113,9 +125,9 @@ check "the foundation sprint closes" wait_sprint "$S0"
 echo "     board: $(board "$S0")"
 check "its task is blocked for a person" test "$(board "$S0")" = "Create testing strategy document=blocked"
 check "the quality gate asked for rework twice" test "$(api "$API/v1/messages?company_id=$CID&kind=request" | json "len(d['messages'])")" = 2
-check "the ScrumMaster posted the retrospective" test "$(api "$API/v1/messages?company_id=$CID&kind=retrospective" | json "len(d['messages'])")" = 1
-check "the ScrumMaster answered the escalation" test "$(api "$API/v1/messages?company_id=$CID&kind=decision" | json "sum(1 for m in d['messages'] if m['body'].startswith('Triage decision: another attempt'))")" = 1
-check "a procedure was proposed and adopted (autonomy 3)" test "$(api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')")" = 1
+check "the ScrumMaster posted the retrospective" wait_value 60 1 messages_of_kind retrospective
+check "the ScrumMaster answered the escalation" wait_value 60 1 retry_decisions
+check "a procedure was proposed and adopted (autonomy 3)" wait_value 60 1 active_procedures
 
 echo "2. the inbox"
 BLOCKED_ID=$(api "$API/v1/inbox?company_id=$CID" | json "d['blocked_tasks'][0]['id'] if d['blocked_tasks'] else ''")
@@ -155,8 +167,8 @@ echo "     board: $(board "$S2")"
 check "the new task is done and the carried one blocked a third time" test "$(board "$S2")" = "Add formatter=done Create testing strategy document=blocked"
 check "its triage was told how earlier second attempts went" test "$(grep -c 'How second attempts went in this company' "$PROMPTS")" -ge 1
 check "with the numbers counted from the boards" test "$(grep -c '0 of 1 tasks carried into another sprint got done. With a brief from you: 0 of 1; without one: 0 of 0.' "$PROMPTS")" -ge 1
-check "the procedure adopted after the foundation sprint was measured and kept" test "$(api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == 'Cover edge cases'), '')")" = "kept"
-check "the proposal prompt listed what earlier procedures did" test "$(grep -c '"Cover edge cases" (Developer, v1): kept, rework per task' "$PROMPTS")" -ge 1
+check "the procedure adopted after the foundation sprint was measured and kept" wait_value 60 kept procedure_result "Cover edge cases"
+check "the proposal prompt listed what earlier procedures did" wait_value 60 yes prompt_seen '"Cover edge cases" (Developer, v1): kept, rework per task'
 check "the sprint list counts the briefed third attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S2)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the inbox lists only the latest attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['sprint_id'] for t in d['blocked_tasks']]")" = "[$S2]"
 
