@@ -37,11 +37,26 @@ def _build_database_url() -> str:
 # - pool_size=5  : permanent connections kept alive.
 # - max_overflow=10: temporary connections allowed beyond the pool.
 # - pool_pre_ping=True: validates connections before use to catch stale sockets.
+def _connect_args(url: str) -> dict[str, str]:
+    """Pin a Postgres session to UTC.
+
+    The models write aware UTC datetimes into ``timestamp`` columns and the
+    board's comments carry naive UTC text. Postgres converts an aware value
+    to the session's zone before dropping it, so a server set to another
+    zone would keep the two in different clocks, and every comparison
+    between them (a triage against a person's send-back, for one) would be
+    off by the offset.
+    """
+    return {"options": "-c timezone=utc"} if url.startswith("postgresql") else {}
+
+
+_DATABASE_URL = _build_database_url()
 engine = create_engine(
-    _build_database_url(),
+    _DATABASE_URL,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    connect_args=_connect_args(_DATABASE_URL),
 )
 
 

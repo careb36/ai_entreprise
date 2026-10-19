@@ -495,6 +495,66 @@ def test_a_wrapped_line_starting_with_end_does_not_end_the_answer():
     }
 
 
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "DECISION: retry\nBRIEF: Finish the document.\nWHY: cut short\nEND.",
+        "DECISION: retry\r\nBRIEF: Finish the document.\r\nWHY: cut short\r\nEND\r\n",
+    ],
+    ids=["end-with-a-period", "windows-line-endings"],
+)
+def test_end_with_a_period_or_windows_line_endings_still_closes_the_answer(answer):
+    assert scrum_master.parse_answer(answer) == {
+        "decision": "retry",
+        "brief": "Finish the document.",
+        "why": "cut short",
+    }
+
+
+def test_a_send_back_during_the_triage_makes_the_answer_stale(
+    sqlite_session, company, monkeypatch
+):
+    """On the Verifier and QA paths the task is blocked before the ScrumMaster
+    answers. A person who sends it back in that window acted on the old block,
+    so the answer, recorded after the send-back, does not govern the next one."""
+    from datetime import UTC, datetime, timedelta
+
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Sent back mid-triage")
+    escalated_at = datetime.now(UTC) - timedelta(seconds=30)
+    sqlite_session.add(
+        AgentMessage(
+            company_id=company.id,
+            sprint_id=sprint.id,
+            backlog_item_id=item.id,
+            from_name="Verifier",
+            from_role="Verifier",
+            to_role="ScrumMaster",
+            kind="escalation",
+            body=TRIAGE,
+            created_at=escalated_at,
+        )
+    )
+    sent_back_at = escalated_at + timedelta(seconds=10)
+    item.comments = [
+        *item.comments,
+        {
+            "author": "user",
+            "text": "Sent back to work by a person.",
+            "created_at": str(sent_back_at.replace(tzinfo=None)),
+        },
+        {"author": "System", "text": "Agent error: proxy 503"},
+    ]
+    sqlite_session.add(item)
+    sqlite_session.commit()
+
+    # The answer lands now, after the send-back.
+    _decide(monkeypatch, sqlite_session, company, sprint, item, "DECISION: person\nEND")
+
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+    assert not carry_over.left_for_a_person(sqlite_session, item)
+
+
 def test_a_send_back_after_the_decision_makes_it_stale(
     sqlite_session, company, monkeypatch
 ):

@@ -58,7 +58,7 @@ TRIAGE_TIMEOUT_SECONDS = 45
 
 _ANSWER = re.compile(
     r"DECISION:[\s*`\"']*(?P<decision>retry|person)\b"
-    r"(?P<rest>.*?)(?:^|\n)[ \t*`]*END[ \t*`]*(?:\n|$)",
+    r"(?P<rest>.*?)(?:^|\n)[ \t*`]*END[ \t*`.]*(?:\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _FIELD_START = re.compile(
@@ -155,9 +155,10 @@ def parse_answer(text: str) -> dict[str, str] | None:
     """The decision in the expected form, or ``None`` when the answer is unusable.
 
     Markdown around the labels and values (bold, backticks, quotes) is ignored,
-    and a field the model wraps over several lines is joined into one.
+    a field the model wraps over several lines is joined into one, and the
+    closing END may carry a period or Windows line endings.
     """
-    match = _ANSWER.search(text or "")
+    match = _ANSWER.search((text or "").replace("\r\n", "\n").replace("\r", "\n"))
     if not match:
         return None
     decision = match["decision"].lower()
@@ -386,9 +387,11 @@ def decisions_for(
         .order_by(AgentMessage.id)
     ).all()
     decisions: dict[int, dict[str, Any]] = {}
+    escalated: dict[int, datetime | None] = {}
     for item_id, _message_id, kind, from_role, body, created_at in rows:
         if kind == "escalation":
             decisions.pop(item_id, None)
+            escalated[item_id] = _naive_utc(created_at)
             continue
         if from_role != SCRUM_MASTER_ROLE:
             continue
@@ -396,8 +399,18 @@ def decisions_for(
         if decision is None:
             continue
         cutoff = sent_back.get(item_id)
-        if cutoff is not None and (_naive_utc(created_at) or cutoff) <= cutoff:
-            continue
+        if cutoff is not None:
+            # Stale when the person sent the task back after the escalation
+            # this decision answers, even if the answer itself came later: the
+            # worker posts the escalation, then waits up to
+            # TRIAGE_TIMEOUT_SECONDS for the answer, and on the Verifier and
+            # QA paths the task is already blocked, so a person can act in
+            # that window.
+            answered = escalated.get(item_id)
+            if (_naive_utc(created_at) or cutoff) <= cutoff or (
+                answered is not None and answered <= cutoff
+            ):
+                continue
         decisions[item_id] = decision
     return decisions
 
