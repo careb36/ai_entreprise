@@ -117,8 +117,8 @@ sequenceDiagram
     TW->>DB: AgentRun + Verification (claims kept apart from observations)
     TW->>LLM: QA review (only APPROVED: closes the task)
     TW->>DB: done / rework / blocked for a person; AgentMessages at each hand-over
-    TW->>LLM: ScrumMaster triage of a blocked task (another attempt with a brief, or a person)
-    TW->>DB: sprint closes when every task is settled → retrospective, procedures measured and proposed
+    TW->>LLM: ScrumMaster triage of a blocked task, shown how earlier second attempts went (another attempt with a brief, or a person)
+    TW->>DB: sprint closes when every task is settled → retrospective, procedures measured and proposed knowing what earlier ones did
     BE-->>U: GET /v1/inbox: what needs a person
 ```
 
@@ -378,7 +378,7 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `GET` · `POST` · `PATCH` · `DELETE` | `/v1/agents` | The company's agents and their models |
 | `POST` | `/v1/plan_sprint` · `/v1/plan_self_improvement_sprint` | Turn a goal, or the repository, into a backlog |
 | `POST` | `/v1/start_sprint` | Start a sprint; validates the scope; `carry_over_ids` retries blocked tasks |
-| `GET`  | `/v1/sprints` | The company's sprints with done, blocked and rework counts |
+| `GET`  | `/v1/sprints` | The company's sprints with done, blocked and rework counts, and their second attempts: tasks carried over, how many got done, with and without the ScrumMaster's brief |
 | `GET`  | `/v1/sprints/{id}/board` | The Kanban board of a sprint |
 | `POST` | `/v1/sprints/{id}/pause` · `/resume` · `/dispatch` | Hold, resume or re-queue a sprint's tasks |
 | `PATCH` | `/v1/backlog/{id}` | Change a task's status, priority or assignee, or add a note (Manager) |
