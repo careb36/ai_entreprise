@@ -24,15 +24,18 @@ from typing import Any
 
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
-from models import Agent, AgentMessage, BacklogItem
+from models import Agent, AgentMessage, BacklogItem, Sprint
 from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
 from services import procedures
 from services.board import (
+    BRIEF_PREFIX,
     SCRUM_MASTER_ROLE,
+    count_second_attempt,
     is_rework_request,
     last_send_back_at,
+    no_second_attempts,
     since_send_back,
 )
 
@@ -44,7 +47,6 @@ TRIAGE_PREFIX = "Triage decision: "
 RETRY_LINE = TRIAGE_PREFIX + "another attempt in the next sprint."
 PERSON_LINE = TRIAGE_PREFIX + "leave it for a person."
 WHY_PREFIX = "Why: "
-BRIEF_PREFIX = "Brief for the next attempt: "
 BRIEF_LIMIT = 600
 WHY_LIMIT = 300
 FEEDBACK_SHOWN = 3
@@ -90,7 +92,43 @@ def answer_format() -> str:
     )
 
 
-def triage_prompt(item: BacklogItem, reason: str, procedures_context: str = "") -> str:
+def track_record(session: Session, company_id: int) -> dict[str, int]:
+    """How the company's second attempts went, over its completed sprints.
+
+    The same tally the sprint list shows: tasks carried into another sprint,
+    how many got done, and the same for those that came with a brief. Only
+    closed sprints count, so every attempt has its outcome.
+    """
+    tally = no_second_attempts()
+    for status, comments in session.exec(
+        select(BacklogItem.status, BacklogItem.comments)
+        .join(Sprint, Sprint.id == BacklogItem.sprint_id)
+        .where(Sprint.company_id == company_id, Sprint.status == "completed")
+    ).all():
+        count_second_attempt(tally, status, comments)
+    return tally
+
+
+def track_record_context(tally: dict[str, int]) -> str:
+    """The prompt section with the outcomes of earlier second attempts, or ''."""
+    if not tally["total"]:
+        return ""
+    unbriefed = tally["total"] - tally["briefed"]
+    return (
+        "\n\n## How second attempts went in this company\n"
+        f"{tally['done']} of {tally['total']} tasks carried into another sprint got done. "
+        f"With a brief from you: {tally['briefed_done']} of {tally['briefed']}; "
+        f"without one: {tally['done'] - tally['briefed_done']} of {unbriefed}. "
+        "These are counted from the boards, not reported by anyone."
+    )
+
+
+def triage_prompt(
+    item: BacklogItem,
+    reason: str,
+    procedures_context: str = "",
+    record_context: str = "",
+) -> str:
     """What the ScrumMaster is told about a blocked task."""
     feedback = [
         f"{c.get('author') or 'Reviewer'}: {str(c.get('text', '')).strip()[:FEEDBACK_CHARS]}"
@@ -108,7 +146,7 @@ def triage_prompt(item: BacklogItem, reason: str, procedures_context: str = "") 
         f"## What blocked it\n{reason.strip() or '(no reason recorded)'}\n\n"
         "## Rework the reviewers asked for\n"
         + ("\n".join(f"- {line}" for line in feedback) if feedback else "(none)")
-        + f"{procedures_context}\n\n"
+        + f"{procedures_context}{record_context}\n\n"
         + answer_format()
     )
 
@@ -240,8 +278,9 @@ def prepare_triage(
     context = procedures.procedures_prompt(
         procedures.active_procedures(session, company_id, item.assignee)
     )
+    record = track_record_context(track_record(session, company_id))
     model, system_prompt = profile(session, company_id)
-    return triage_prompt(item, reason, context), model, system_prompt
+    return triage_prompt(item, reason, context, record), model, system_prompt
 
 
 def ask_triage(model: str, system_prompt: str | None, prompt: str) -> str:

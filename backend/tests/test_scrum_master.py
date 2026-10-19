@@ -16,6 +16,7 @@ import secrets
 import pytest
 from models import Agent, AgentMessage, BacklogItem, Company, Sprint
 from services import carry_over, scrum_master
+from services.board import CARRIED_FROM_PREFIX
 from sqlmodel import select
 
 TRIAGE = (
@@ -51,7 +52,7 @@ def _blocked(session, sprint, comments=None, **fields):
         description="Define the testing pyramid.",
         priority="high",
         assignee="QA",
-        status="blocked",
+        status=fields.pop("status", "blocked"),
         comments=comments
         or [
             {"author": "QA Quinn", "text": "NEEDS WORK: cover integration tests too"},
@@ -546,3 +547,52 @@ def test_the_triage_asks_once_with_a_short_timeout(monkeypatch):
         (scrum_master.TRIAGE_TIMEOUT_SECONDS, 0),
         (scrum_master.TIMEOUT_SECONDS, 2),
     ]
+
+
+def test_the_triage_prompt_carries_how_second_attempts_went(sqlite_session, company):
+    company_row, sprint = company
+    closed = Sprint(
+        company_id=company_row.id, sprint_name="Sprint 1", status="completed"
+    )
+    sqlite_session.add(closed)
+    sqlite_session.commit()
+    sqlite_session.refresh(closed)
+    note = f'{CARRIED_FROM_PREFIX} task 1 ("Sprint 0"), which was blocked: too short'
+    briefed = f"{note}\n{scrum_master.BRIEF_PREFIX}Write it in full."
+    for status, text in (("done", briefed), ("blocked", briefed), ("blocked", note)):
+        _blocked(
+            sqlite_session,
+            closed,
+            comments=[{"author": "System", "text": text}],
+            status=status,
+        )
+    # Still open, so its outcome is unknown and it does not count.
+    _blocked(sqlite_session, sprint, comments=[{"author": "System", "text": briefed}])
+    item = _blocked(sqlite_session, sprint)
+
+    assert scrum_master.track_record(sqlite_session, company_row.id) == {
+        "total": 3,
+        "done": 1,
+        "briefed": 2,
+        "briefed_done": 1,
+    }
+    prompt, _model, _system = scrum_master.prepare_triage(
+        sqlite_session, company_row.id, item, TRIAGE
+    )
+    assert "## How second attempts went in this company" in prompt
+    assert "1 of 3 tasks carried into another sprint got done." in prompt
+    assert "With a brief from you: 1 of 2; without one: 0 of 1." in prompt
+    assert prompt.index("How second attempts went") < prompt.index("DECISION:")
+
+
+def test_without_second_attempts_the_prompt_has_no_track_record(
+    sqlite_session, company
+):
+    company_row, sprint = company
+    item = _blocked(sqlite_session, sprint)
+
+    prompt, _model, _system = scrum_master.prepare_triage(
+        sqlite_session, company_row.id, item, TRIAGE
+    )
+
+    assert "How second attempts went" not in prompt

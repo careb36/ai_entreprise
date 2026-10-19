@@ -37,8 +37,12 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services.board import rework_request_count
-from services.carry_over import CarryOverError, carry_over, second_attempt_briefed
+from services.board import (
+    count_second_attempt,
+    no_second_attempts,
+    rework_request_count,
+)
+from services.carry_over import CarryOverError, carry_over
 from services.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -360,16 +364,9 @@ async def list_sprints(
             ).where(BacklogItem.sprint_id.in_(sprint_ids))
         ).all():
             rework[sid] = rework.get(sid, 0) + rework_request_count(comments)
-            briefed = second_attempt_briefed(comments)
-            if briefed is None:
-                continue
-            tally = attempts.setdefault(sid, _no_second_attempts())
-            done = status == "done"
-            tally["total"] += 1
-            tally["done"] += done
-            if briefed:
-                tally["briefed"] += 1
-                tally["briefed_done"] += done
+            count_second_attempt(
+                attempts.setdefault(sid, no_second_attempts()), status, comments
+            )
     return [
         {
             "id": s.id,
@@ -382,14 +379,10 @@ async def list_sprints(
             "done": counts.get(s.id, (0, 0, 0))[1],
             "blocked": counts.get(s.id, (0, 0, 0))[2],
             "rework": rework.get(s.id, 0),
-            "second_attempts": attempts.get(s.id, _no_second_attempts()),
+            "second_attempts": attempts.get(s.id, no_second_attempts()),
         }
         for s in sprints
     ]
-
-
-def _no_second_attempts() -> dict[str, int]:
-    return {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0}
 
 
 @router.get("/sprints/{sprint_id}/board")
