@@ -1187,7 +1187,10 @@
     "blockedShare": "Share of blocked tasks",
     "vsPrevious": "vs previous sprint",
     "trendTable": "Closed sprints, oldest first",
-    "sprintColumn": "Sprint"
+    "sprintColumn": "Sprint",
+    "secondAttempts": "Second attempts that got done",
+    "ofTotal": "{{done}} of {{total}}",
+    "secondAttemptsSplit": "With the ScrumMaster's brief: {{briefedDone}} of {{briefed}} · without: {{unbriefedDone}} of {{unbriefed}}"
   },
   "projectFolder": {
     "label": "Project folder",

@@ -8,9 +8,9 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 
 const sprints: SprintSummary[] = [
-  { id: 12, sprint_name: 'Docs polish', status: 'completed', goal: null, start_date: '2026-10-10', scope_size: 'S', total: 4, done: 4, blocked: 0, rework: 0 },
-  { id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close audit gaps', start_date: '2026-10-01', scope_size: 'M', total: 8, done: 3, blocked: 1, rework: 2 },
-  { id: 4, sprint_name: 'Foundation', status: 'needs_split', goal: null, start_date: null, scope_size: 'L', total: 0, done: 0, blocked: 0, rework: 0 },
+  { id: 12, sprint_name: 'Docs polish', status: 'completed', goal: null, start_date: '2026-10-10', scope_size: 'S', total: 4, done: 4, blocked: 0, rework: 0, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 } },
+  { id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close audit gaps', start_date: '2026-10-01', scope_size: 'M', total: 8, done: 3, blocked: 1, rework: 2, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 } },
+  { id: 4, sprint_name: 'Foundation', status: 'needs_split', goal: null, start_date: null, scope_size: 'L', total: 0, done: 0, blocked: 0, rework: 0, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 } },
 ]
 
 function renderPage() {

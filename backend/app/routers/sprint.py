@@ -38,7 +38,7 @@ from schemas import (
     SprintStartRequest,
 )
 from services.board import rework_request_count
-from services.carry_over import CarryOverError, carry_over
+from services.carry_over import CarryOverError, carry_over, second_attempt_briefed
 from services.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -322,7 +322,11 @@ async def list_sprints(
     Return the company's sprints, newest first, with backlog progress.
 
     ``total`` and ``done`` are counted from the sprint's backlog items so the
-    list never needs one board request per sprint.
+    list never needs one board request per sprint. ``second_attempts`` counts
+    the tasks carried over from an earlier sprint: how many there are, how
+    many got done, and the same two numbers for those that came with the
+    ScrumMaster's brief, so a person sees whether another attempt, and the
+    brief, pay off.
     """
     require_company_role(session, user, company_id, "Viewer")
     sprints = session.exec(
@@ -331,6 +335,7 @@ async def list_sprints(
     sprint_ids = [s.id for s in sprints]
     counts: dict[int, tuple[int, int, int]] = {}
     rework: dict[int, int] = {}
+    attempts: dict[int, dict[str, int]] = {}
     if sprint_ids:
         rows = session.exec(
             select(
@@ -349,12 +354,22 @@ async def list_sprints(
         # Rework requests live in the comments, so they are counted in Python;
         # together with the blocked share they are the numbers the procedures
         # are judged by, shown per sprint so a person sees the trend.
-        for sid, comments in session.exec(
-            select(BacklogItem.sprint_id, BacklogItem.comments).where(
-                BacklogItem.sprint_id.in_(sprint_ids)
-            )
+        for sid, status, comments in session.exec(
+            select(
+                BacklogItem.sprint_id, BacklogItem.status, BacklogItem.comments
+            ).where(BacklogItem.sprint_id.in_(sprint_ids))
         ).all():
             rework[sid] = rework.get(sid, 0) + rework_request_count(comments)
+            briefed = second_attempt_briefed(comments)
+            if briefed is None:
+                continue
+            tally = attempts.setdefault(sid, _no_second_attempts())
+            done = status == "done"
+            tally["total"] += 1
+            tally["done"] += done
+            if briefed:
+                tally["briefed"] += 1
+                tally["briefed_done"] += done
     return [
         {
             "id": s.id,
@@ -367,9 +382,14 @@ async def list_sprints(
             "done": counts.get(s.id, (0, 0, 0))[1],
             "blocked": counts.get(s.id, (0, 0, 0))[2],
             "rework": rework.get(s.id, 0),
+            "second_attempts": attempts.get(s.id, _no_second_attempts()),
         }
         for s in sprints
     ]
+
+
+def _no_second_attempts() -> dict[str, int]:
+    return {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0}
 
 
 @router.get("/sprints/{sprint_id}/board")

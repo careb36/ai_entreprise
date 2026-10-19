@@ -7,7 +7,7 @@
  * anything. Only completed sprints with at least one task count: an active
  * sprint's numbers are still moving and an empty one measures nothing.
  */
-import type { SprintSummary } from '../services/api'
+import type { SecondAttempts, SprintSummary } from '../services/api'
 
 export interface SprintPoint {
   id: number
@@ -16,10 +16,12 @@ export interface SprintPoint {
   blockedShare: number
 }
 
+const closed = (sprint: SprintSummary) => sprint.status === 'completed' && sprint.total > 0
+
 /** Closed sprints with tasks, oldest first. Empty when nothing closed yet. */
 export function learningTrend(sprints: SprintSummary[]): SprintPoint[] {
   return sprints
-    .filter(sprint => sprint.status === 'completed' && sprint.total > 0)
+    .filter(closed)
     .sort((a, b) => a.id - b.id)
     .map(sprint => ({
       id: sprint.id,
@@ -27,6 +29,24 @@ export function learningTrend(sprints: SprintSummary[]): SprintPoint[] {
       reworkPerTask: sprint.rework / sprint.total,
       blockedShare: sprint.blocked / sprint.total,
     }))
+}
+
+/**
+ * Second attempts across the closed sprints: whether carrying a blocked task
+ * over pays off, and whether the ScrumMaster's brief helps. Only closed
+ * sprints count, so every attempt here has its outcome.
+ */
+export function secondAttempts(sprints: SprintSummary[]): SecondAttempts {
+  const sum: SecondAttempts = { total: 0, done: 0, briefed: 0, briefed_done: 0 }
+  for (const sprint of sprints.filter(closed)) {
+    const tally = sprint.second_attempts
+    if (!tally) continue
+    sum.total += tally.total
+    sum.done += tally.done
+    sum.briefed += tally.briefed
+    sum.briefed_done += tally.briefed_done
+  }
+  return sum
 }
 
 export const formatRework = (value: number) => value.toFixed(2)
