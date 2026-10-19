@@ -305,9 +305,14 @@ the ScrumMaster's triage of it, the retrospective and an adopted procedure;
 the inbox lists the task;
 `start_sprint` with `carry_over_ids` retries it beside a new task whose
 files are written and verified; the inbox then lists only the new attempt.
-Run it with the backend's interpreter (`E2E_PYTHON="poetry run python"` from
-`backend/`, or the venv's `python`); it exits 0 only when every check passed
-and leaves the logs in `E2E_WORKDIR`. Not run by CI.
+Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
+`python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
+only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
+too (`.github/workflows/e2e.yml`) on every pull request that touches
+`backend/`, `vscode-daemon/`, `scripts/e2e/` or the workflow itself, and on
+pushes to `main` and `develop`, against a `pgvector/pgvector:pg15` service and
+a NATS container started with JetStream; the logs are kept as the `e2e-logs`
+artifact.
 
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the

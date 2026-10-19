@@ -1,0 +1,84 @@
+name: End to end
+
+# The whole loop against a real Postgres and NATS: scripts/e2e/run.sh starts
+# the backend, the workspace daemon and a fake LLM proxy, drives one company
+# from its foundation sprint through a blocked task, the ScrumMaster's triage,
+# the retrospective, a carry-over and a verified delivery, and checks each
+# step through the API. Neo4j is not part of it.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'vscode-daemon/**'
+      - 'scripts/e2e/**'
+      - '.github/workflows/e2e.yml'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: factory
+          POSTGRES_PASSWORD: factorypw
+          POSTGRES_DB: factory
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U factory"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # A service container cannot be given arguments, and the stock NATS
+      # image starts without JetStream; the backend needs it for the durable
+      # task queue the loop relies on.
+      - name: Start NATS with JetStream
+        run: |
+          docker run -d --name nats -p 4222:4222 nats:2.10 -js
+          for _ in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/4222) 2>/dev/null && break
+            sleep 1
+          done
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install the backend
+        working-directory: ./backend
+        run: |
+          pip install --upgrade pip
+          pip install poetry
+          poetry install --no-interaction
+
+      - name: Run the loop end to end
+        env:
+          E2E_POSTGRES_HOST: 127.0.0.1
+          E2E_POSTGRES_PORT: '5432'
+          E2E_POSTGRES_USER: factory
+          E2E_POSTGRES_PASSWORD: factorypw
+          E2E_NATS_URL: nats://127.0.0.1:4222
+          E2E_WORKDIR: ${{ runner.temp }}/e2e
+        run: |
+          E2E_PYTHON="$(cd backend && poetry env info --path)/bin/python" bash scripts/e2e/run.sh
+
+      - name: Keep the logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-logs
+          path: ${{ runner.temp }}/e2e/*.log
+          if-no-files-found: ignore
