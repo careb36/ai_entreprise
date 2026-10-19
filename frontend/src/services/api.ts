@@ -369,6 +369,15 @@ export interface SprintSummary {
   /** Tasks blocked on the board, and rework requests over the sprint: the numbers procedures are judged by. */
   blocked: number
   rework: number
+  /** Tasks carried over from an earlier sprint, how many got done, and the same for those the ScrumMaster briefed. */
+  second_attempts: SecondAttempts
+}
+
+export interface SecondAttempts {
+  total: number
+  done: number
+  briefed: number
+  briefed_done: number
 }
 
 export interface PlannedSprintTask {

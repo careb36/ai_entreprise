@@ -1,12 +1,13 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { LearningTrend } from './LearningTrend'
-import { learningTrend } from '../lib/learningTrend'
+import { learningTrend, secondAttempts } from '../lib/learningTrend'
 import type { SprintSummary } from '../services/api'
 
 const sprint = (overrides: Partial<SprintSummary>): SprintSummary => ({
   id: 1, sprint_name: 'S', status: 'completed', goal: null, start_date: null, scope_size: 'S',
-  total: 4, done: 4, blocked: 0, rework: 0, ...overrides,
+  total: 4, done: 4, blocked: 0, rework: 0,
+  second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, ...overrides,
 })
 
 const SPRINTS: SprintSummary[] = [
@@ -54,6 +55,27 @@ describe('LearningTrend', () => {
     expect(rows.map(row => within(row).getByRole('rowheader').textContent)).toEqual(['Sprint 1', 'Sprint 2'])
     expect(rows[1]).toHaveTextContent('0.40')
     expect(rows[1]).toHaveTextContent('20%')
+  })
+
+  it('tallies second attempts over closed sprints, with and without the brief', () => {
+    const sprints = [
+      // Still open: its attempts have no outcome yet.
+      sprint({ id: 9, status: 'active', second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 } }),
+      sprint({ id: 7, sprint_name: 'Sprint 2', second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 } }),
+      sprint({ id: 4, sprint_name: 'Sprint 1', second_attempts: { total: 1, done: 0, briefed: 0, briefed_done: 0 } }),
+    ]
+    expect(secondAttempts(sprints)).toEqual({ total: 4, done: 2, briefed: 2, briefed_done: 2 })
+
+    render(<LearningTrend sprints={sprints} />)
+    const section = screen.getByRole('region', { name: 'Is the company learning?' })
+    expect(within(section).getByText('Second attempts that got done')).toBeInTheDocument()
+    expect(within(section).getByText('2 of 4')).toBeInTheDocument()
+    expect(within(section).getByText("With the ScrumMaster's brief: 2 of 2 · without: 0 of 2")).toBeInTheDocument()
+  })
+
+  it('leaves out the second attempts before any task was carried over', () => {
+    render(<LearningTrend sprints={SPRINTS} />)
+    expect(screen.queryByText('Second attempts that got done')).not.toBeInTheDocument()
   })
 
   it('shows one closed sprint without a comparison, and nothing when none closed', () => {

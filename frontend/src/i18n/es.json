@@ -1187,7 +1187,10 @@
     "blockedShare": "Proporción de tareas bloqueadas",
     "vsPrevious": "respecto del sprint anterior",
     "trendTable": "Sprints cerrados, del más viejo al más nuevo",
-    "sprintColumn": "Sprint"
+    "sprintColumn": "Sprint",
+    "secondAttempts": "Segundos intentos que se completaron",
+    "ofTotal": "{{done}} de {{total}}",
+    "secondAttemptsSplit": "Con la consigna del ScrumMaster: {{briefedDone}} de {{briefed}} · sin ella: {{unbriefedDone}} de {{unbriefed}}"
   },
   "projectFolder": {
     "label": "Carpeta del proyecto",

@@ -6,6 +6,8 @@ import auth_tokens
 import pytest
 from config import settings
 from models import BacklogItem, Company, CompanyMember, Sprint, User
+from services import scrum_master
+from services.board import CARRIED_FROM_PREFIX
 from sqlmodel import select
 
 
@@ -100,6 +102,7 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "done": 0,
             "blocked": 0,
             "rework": 0,
+            "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
         },
         {
             "id": older.id,
@@ -112,8 +115,48 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "done": 1,
             "blocked": 1,
             "rework": 2,
+            "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
         },
     ]
+
+
+def test_counts_second_attempts_and_those_briefed_by_the_scrum_master(
+    test_client, sqlite_session
+):
+    company = _company(sqlite_session, "Sprint list second attempts")
+    sprint = _sprint(
+        sqlite_session,
+        company.id,
+        "Retry",
+        statuses=("done", "blocked", "done", "todo"),
+        status="completed",
+    )
+    items = sqlite_session.exec(
+        select(BacklogItem)
+        .where(BacklogItem.sprint_id == sprint.id)
+        .order_by(BacklogItem.id)
+    ).all()
+    carried = (
+        f'{CARRIED_FROM_PREFIX} task 1 ("Foundation"), which was blocked: no tests'
+    )
+    briefed = f"{carried}\n{scrum_master.BRIEF_PREFIX}Write the test first."
+    # Done with a brief, blocked again with one, done without; the last is new work.
+    for item, text in zip(items, (briefed, briefed, carried), strict=False):
+        item.comments = [{"author": "System", "text": text}]
+        sqlite_session.add(item)
+    sqlite_session.commit()
+
+    response = test_client.get("/v1/sprints", params={"company_id": company.id})
+
+    assert response.status_code == 200
+    [row] = response.json()
+    assert row["total"] == 4
+    assert row["second_attempts"] == {
+        "total": 3,
+        "done": 2,
+        "briefed": 2,
+        "briefed_done": 1,
+    }
 
 
 def test_nonmember_gets_403_when_auth_required(
