@@ -11,8 +11,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
+from services.board import block_reason, blocked_item_next_step
 from services.carry_over import carried_over
-from services.task_worker import _block_reason, _blocked_item_next_step
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -39,7 +39,7 @@ async def inbox(
     ).all()
     blocked_tasks = []
     for item, sprint in rows:
-        next_step = _blocked_item_next_step(item.comments, item.assignee)
+        next_step = blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own
         if carried_over(item):
@@ -52,7 +52,7 @@ async def inbox(
                 "sprint_id": sprint.id,
                 "sprint_name": sprint.sprint_name,
                 "sprint_status": sprint.status,
-                "reason": _block_reason(item.comments)[:REASON_LIMIT],
+                "reason": block_reason(item.comments)[:REASON_LIMIT],
                 "frozen": next_step == "frozen",
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }

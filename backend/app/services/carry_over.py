@@ -18,11 +18,11 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
-from services.task_worker import (
+from services.board import (
     SCRUM_MASTER_ROLE,
-    _block_reason,
-    _blocked_item_next_step,
-    _comment_list,
+    block_reason,
+    blocked_item_next_step,
+    comment_list,
 )
 
 CARRIED_TO_PREFIX = "Carried over to sprint"
@@ -41,7 +41,7 @@ class CarryOverError(ValueError):
 
 def waits_for_a_person(item: BacklogItem) -> bool:
     """Blocked, and nothing the worker does on its own will move it."""
-    return item.status == "blocked" and _blocked_item_next_step(
+    return item.status == "blocked" and blocked_item_next_step(
         item.comments, item.assignee
     ) in (None, "frozen")
 
@@ -50,7 +50,7 @@ def carried_over(item: BacklogItem) -> bool:
     """Already given to another sprint: it no longer waits for a person."""
     return any(
         str(c.get("text", "")).startswith(CARRIED_TO_PREFIX)
-        for c in _comment_list(item.comments)
+        for c in comment_list(item.comments)
     )
 
 
@@ -58,7 +58,7 @@ def is_carry_over(item: BacklogItem) -> bool:
     """This task is itself a second attempt at an earlier one."""
     return any(
         str(c.get("text", "")).startswith(CARRIED_FROM_PREFIX)
-        for c in _comment_list(item.comments)
+        for c in comment_list(item.comments)
     )
 
 
@@ -97,7 +97,7 @@ def carry_over(
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
     for item, sprint in originals:
-        reason = _block_reason(item.comments)[:REASON_LIMIT]
+        reason = block_reason(item.comments)[:REASON_LIMIT]
         clone = BacklogItem(
             sprint_id=new_sprint.id,
             title=item.title,
@@ -121,7 +121,7 @@ def carry_over(
         created.append(clone)
 
         item.comments = [
-            *_comment_list(item.comments),
+            *comment_list(item.comments),
             {
                 "author": "System",
                 "text": f'{CARRIED_TO_PREFIX} {new_sprint.id} ("{new_sprint.sprint_name}") as task {clone.id} by {by}.',
@@ -168,7 +168,7 @@ def carry_over(
 def previous_attempt_context(item: dict[str, Any] | BacklogItem) -> str:
     """The prompt section telling an agent what blocked the earlier attempt, or ''."""
     comments = item.get("comments") if isinstance(item, dict) else item.comments
-    for comment in _comment_list(comments):
+    for comment in comment_list(comments):
         text = str(comment.get("text", ""))
         if text.startswith(CARRIED_FROM_PREFIX):
             return (

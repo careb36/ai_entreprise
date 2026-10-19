@@ -19,7 +19,7 @@ import pytest
 from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services import board, task_worker
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
@@ -253,9 +253,9 @@ def test_a_rejected_deliverable_goes_back_with_the_reason(llm, db, monkeypatch):
     assert author == "Quality gate"
     assert text.startswith("NEEDS WORK: Too short (")
     assert "minimum 180" in text
-    assert task_worker._pending_rework_feedback(
-        db.get(BacklogItem, item.id).comments
-    ) == [f"Quality gate: {text}"]
+    assert board.pending_rework_feedback(db.get(BacklogItem, item.id).comments) == [
+        f"Quality gate: {text}"
+    ]
     message = db.exec(
         select(AgentMessage).where(AgentMessage.backlog_item_id == item.id)
     ).one()
@@ -333,4 +333,4 @@ def test_a_person_can_send_a_gate_blocked_task_back_to_work(db):
     db.expire_all()
     assert db.get(BacklogItem, item.id).status == "todo"
     assert [s for s, _ in nats.published if s == "task.assign"] == ["task.assign"]
-    assert task_worker._block_reason(db.get(BacklogItem, item.id).comments) == TRIAGE
+    assert board.block_reason(db.get(BacklogItem, item.id).comments) == TRIAGE

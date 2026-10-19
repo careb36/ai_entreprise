@@ -53,6 +53,19 @@ from services import (
     procedures,
     workspace_daemon,
 )
+from services.board import (
+    DELIVERY_GATE_AUTHOR,
+    QUALITY_GATE_AUTHOR,
+    SCRUM_MASTER_ROLE,
+    block_reason,
+    blocked_item_next_step,
+    comment_list,
+    extract_latest_reviewable_comment,
+    has_manual_freeze_marker,
+    item_is_settled,
+    pending_rework_feedback,
+)
+from services.carry_over import carry_over_on_the_companys_own, previous_attempt_context
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
@@ -65,7 +78,6 @@ from services.orchestration_metrics import (
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
-    is_architect_consult_comment,
     record_agent_turn,
     should_consult_architect,
 )
@@ -81,11 +93,6 @@ MAX_QA_REVIEW_FAILURES = 3
 MAX_QA_REWORK_CYCLES = 2
 MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
-# Who signs the text checks a deliverable passes before anyone reviews it, and
-# who signs the delivery evidence check; neither ever writes a deliverable.
-QUALITY_GATE_AUTHOR = "Quality gate"
-DELIVERY_GATE_AUTHOR = "Verifier"
-GATE_AUTHORS_LOWER = {QUALITY_GATE_AUTHOR.lower(), DELIVERY_GATE_AUTHOR.lower()}
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
     "AUTOPILOT_QA_REWORK_ENABLED", "true"
 ).lower() in {"1", "true", "yes", "on"}
@@ -362,7 +369,7 @@ def _load_sprint_completed_tasks(
                         comments = json.loads(comments)
                     except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                         comments = []
-                deliverable_excerpt = _extract_latest_reviewable_comment(
+                deliverable_excerpt = extract_latest_reviewable_comment(
                     comments, assignee_role=it.assignee
                 )
                 excerpt = (
@@ -419,8 +426,8 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                     ):
                         qa_fail_count += 1
                 if item.status == "blocked":
-                    reason = _block_reason(comments) or (
-                        _extract_latest_reviewable_comment(
+                    reason = block_reason(comments) or (
+                        extract_latest_reviewable_comment(
                             comments, assignee_role=item.assignee
                         )
                     )
@@ -552,7 +559,7 @@ def _execute_task(
         f"{procedures_context or ''}"
     )
 
-    rework_feedback = _pending_rework_feedback(item.get("comments"))
+    rework_feedback = pending_rework_feedback(item.get("comments"))
     if rework_feedback:
         user_prompt += (
             "\n\n## Review feedback to address\n"
@@ -562,8 +569,6 @@ def _execute_task(
         )
 
     # A task carried over from an earlier sprint says what blocked it there.
-    from services.carry_over import previous_attempt_context
-
     user_prompt += previous_attempt_context(item)
 
     if memory_context:
@@ -910,225 +915,6 @@ def _build_review_payload(
     return "\n\n".join(section for section in sections if section.strip())
 
 
-def _extract_latest_reviewable_comment(
-    comments: Any, assignee_role: str | None = None
-) -> str:
-    """Return the latest non-system, non-QA deliverable comment for review."""
-    if isinstance(comments, str):
-        try:
-            comments = json.loads(comments)
-        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-            comments = []
-
-    if not isinstance(comments, list):
-        return ""
-
-    assignee_normalized = (assignee_role or "").strip().lower()
-
-    for comment in reversed(comments):
-        author = str(comment.get("author", "")).strip().lower()
-        text = str(comment.get("text", "")).strip()
-        if not text:
-            continue
-        if (
-            text.lower().startswith("freeze after")
-            or "sleep-induced churn" in text.lower()
-        ):
-            continue
-        if author == "system":
-            continue
-        if text.upper().startswith("NEEDS WORK:"):
-            # A rework request after the latest deliverable makes it stale:
-            # the task must run again before anything is reviewed.
-            return ""
-        if author in GATE_AUTHORS_LOWER or author == "user":
-            # The gates write verdicts and a person on the board writes notes;
-            # neither is a deliverable.
-            continue
-        if author == "qa" and assignee_normalized != "qa":
-            continue
-        if text.upper().startswith("APPROVED:"):
-            continue
-        if is_architect_consult_comment(comment):
-            continue
-        return text
-
-    return ""
-
-
-def _pending_rework_feedback(comments: Any) -> list[str]:
-    """The ``NEEDS WORK:`` requests made since the task's latest deliverable."""
-    if not isinstance(comments, list):
-        return []
-    feedback: list[str] = []
-    for comment in reversed(comments):
-        text = str(comment.get("text", "")).strip()
-        if text.upper().startswith("NEEDS WORK:"):
-            feedback.append(f"{comment.get('author') or 'Reviewer'}: {text}")
-            continue
-        author = str(comment.get("author", "")).strip().lower()
-        if (
-            text
-            and author != "system"
-            and not text.upper().startswith("APPROVED:")
-            and not is_architect_consult_comment(comment)
-        ):
-            break  # reached the deliverable those requests were about
-    return list(reversed(feedback))
-
-
-def _is_explicit_block_reason(text: str) -> bool:
-    """Return True when a comment clearly indicates the task must remain blocked."""
-    normalized = (text or "").strip().lower()
-    return any(
-        token in normalized
-        for token in (
-            "manual triage",
-            "pre-review quality gate failed",
-            "qa quality gate failed",
-            "qa review failed",
-            "agent error:",
-            "missing deliverable",
-            "freeze after",
-            "sleep-induced churn",
-        )
-    )
-
-
-def _can_resume_blocked_item_from_deliverable(
-    comments: Any, assignee_role: str | None = None
-) -> bool:
-    """Detect blocked items that already have a deliverable and no explicit block reason."""
-    if isinstance(comments, str):
-        try:
-            comments = json.loads(comments)
-        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-            comments = []
-
-    if not isinstance(comments, list) or not comments:
-        return False
-
-    if _has_manual_freeze_marker(comments):
-        return False
-
-    if any(
-        _is_explicit_block_reason(str(comment.get("text", ""))) for comment in comments
-    ):
-        return False
-
-    return bool(
-        _extract_latest_reviewable_comment(comments, assignee_role=assignee_role)
-    )
-
-
-def _comment_list(comments: Any) -> list[dict[str, Any]]:
-    """A backlog item's comments as a list, whatever the column holds."""
-    if isinstance(comments, str):
-        try:
-            comments = json.loads(comments)
-        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-            comments = []
-    if not isinstance(comments, list):
-        return []
-    return [c for c in comments if isinstance(c, dict)]
-
-
-def _blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | None:
-    """What the worker still does on its own with a blocked item.
-
-    ``"frozen"``: an operator froze it, so only a person moves it. ``"review"``:
-    a deliverable exists and nothing says it must stay blocked, so it goes back
-    to review. ``"retry"``: a transient failure not retried yet. ``None``: it
-    stays blocked until a person acts, which is the only case a sprint may
-    close around (see ``_item_is_settled``).
-    """
-    comments = _comment_list(comments)
-    if _has_manual_freeze_marker(comments):
-        return "frozen"
-    if _can_resume_blocked_item_from_deliverable(comments, assignee_role=assignee_role):
-        return "review"
-
-    # QA quality-gate blocks require manual triage; do not auto-retry.
-    qa_quality_gate_block = any(
-        (
-            c.get("author") == "System"
-            and "manual triage" in str(c.get("text", "")).lower()
-        )
-        or (
-            c.get("author") == "System"
-            and "qa quality gate failed" in str(c.get("text", "")).lower()
-        )
-        or str(c.get("text", "")).upper().startswith("NEEDS WORK:")
-        for c in comments
-    )
-    if qa_quality_gate_block:
-        return None
-
-    # Only retry blocked items that failed for transient/system reasons.
-    retryable_system_block = any(
-        c.get("author") == "System"
-        and (
-            "qa review failed" in str(c.get("text", "")).lower()
-            or "agent error:" in str(c.get("text", "")).lower()
-            or "no deliverable found" in str(c.get("text", "")).lower()
-            or "unfinished in-progress task returned to todo for redispatch"
-            in str(c.get("text", "")).lower()
-        )
-        for c in comments
-    )
-    if not retryable_system_block:
-        return None
-
-    # Only retry once — check if there's already a retry comment
-    retry_count = sum(
-        1
-        for c in comments
-        if c.get("author") == "System" and "retry" in str(c.get("text", "")).lower()
-    )
-    return None if retry_count >= 1 else "retry"
-
-
-def _block_reason(comments: Any) -> str:
-    """The latest verdict on a blocked item: what a gate, the system or a reviewer said."""
-    for comment in reversed(_comment_list(comments)):
-        text = str(comment.get("text", "")).strip()
-        author = str(comment.get("author", "")).strip().lower()
-        if text and (
-            author == "system"
-            or author in GATE_AUTHORS_LOWER
-            or text.upper().startswith("NEEDS WORK:")
-        ):
-            return text
-    return ""
-
-
-def _item_is_settled(item: BacklogItem) -> bool:
-    """Done, or blocked until a person acts: nothing the worker does moves it."""
-    if item.status == "done":
-        return True
-    if item.status != "blocked":
-        return False
-    return _blocked_item_next_step(item.comments, item.assignee) is None
-
-
-def _has_manual_freeze_marker(comments: Any) -> bool:
-    """Detect operator comments that intentionally freeze a task out of automation."""
-    if isinstance(comments, str):
-        try:
-            comments = json.loads(comments)
-        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-            comments = []
-
-    if not isinstance(comments, list):
-        return False
-
-    return any(
-        "sleep-induced churn" in str(comment.get("text", "")).lower()
-        or str(comment.get("text", "")).strip().lower().startswith("freeze after")
-        for comment in comments
-    )
-
-
 def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
     """Load the latest mutable state so stale in-flight work can be discarded."""
     with Session(engine) as session:
@@ -1146,7 +932,7 @@ def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
         return {
             "status": item.status,
             "comments": comments,
-            "manually_frozen": _has_manual_freeze_marker(comments),
+            "manually_frozen": has_manual_freeze_marker(comments),
         }
 
 
@@ -1164,7 +950,7 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
             except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                 comments = []
 
-        if not _has_manual_freeze_marker(comments):
+        if not has_manual_freeze_marker(comments):
             return False
 
         changed = item.status != "blocked"
@@ -1193,7 +979,7 @@ def _recover_inflight_items_for_restart() -> list[dict[str, Any]]:
                 except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
-            if _has_manual_freeze_marker(comments):
+            if has_manual_freeze_marker(comments):
                 item.status = "blocked"
                 item.updated_at = recovery_time
                 session.add(item)
@@ -1276,7 +1062,7 @@ def _complete_sprint_and_plan_follow_up(
         items = session.exec(
             select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
         ).all()
-        if not items or not all(_item_is_settled(item) for item in items):
+        if not items or not all(item_is_settled(item) for item in items):
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
         sprint.status = "completed"
@@ -1410,8 +1196,6 @@ def _complete_sprint_and_plan_follow_up(
 
         # The tasks the agents gave up on get one more attempt, with what
         # blocked them; a second failure stays for a person.
-        from services.carry_over import carry_over_on_the_companys_own
-
         try:
             carried = carry_over_on_the_companys_own(
                 session,
@@ -2283,7 +2067,6 @@ def _update_item_status(
 # what to whom. The board and the AgentRun evidence decide what happened.
 # ---------------------------------------------------------------------------
 
-SCRUM_MASTER_ROLE = "ScrumMaster"
 MESSAGE_BODY_LIMIT = 4000
 
 
@@ -3014,7 +2797,7 @@ async def _send_back_from_quality_gate(
     """
     previous_reworks = sum(
         1
-        for c in _comment_list(item.get("comments"))
+        for c in comment_list(item.get("comments"))
         if c.get("author") == QUALITY_GATE_AUTHOR
         and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
     )
@@ -3108,7 +2891,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             sprint = ctx["sprint"]
             _clear_queue_marker(item["id"])
 
-            if _has_manual_freeze_marker(item.get("comments") or []):
+            if has_manual_freeze_marker(item.get("comments") or []):
                 await asyncio.to_thread(_sync_manual_freeze_state, item["id"])
                 logger.info(
                     "Skipping manually frozen assignment for item=%s", item["id"]
@@ -3596,7 +3379,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
-            if _has_manual_freeze_marker(comments):
+            if has_manual_freeze_marker(comments):
                 item.status = "blocked"
                 item.updated_at = datetime.now(UTC)
                 session.add(item)
@@ -3604,7 +3387,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 logger.info("Skipping QA review for manually frozen item=%s", item.id)
                 continue
 
-            deliverable = _extract_latest_reviewable_comment(
+            deliverable = extract_latest_reviewable_comment(
                 comments, assignee_role=item.assignee
             )
 
@@ -4004,8 +3787,8 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 settled_sprint_ids.add(item.sprint_id)
                 continue
 
-            comments = _comment_list(item.comments)
-            next_step = _blocked_item_next_step(comments, item.assignee)
+            comments = comment_list(item.comments)
+            next_step = blocked_item_next_step(comments, item.assignee)
             if next_step is None:
                 settled_sprint_ids.add(item.sprint_id)
                 continue
@@ -4166,7 +3949,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
                     comments = []
 
-            if _has_manual_freeze_marker(comments):
+            if has_manual_freeze_marker(comments):
                 item.status = "blocked"
                 item.updated_at = datetime.now(UTC)
                 session.add(item)
@@ -4176,7 +3959,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            existing_deliverable = _extract_latest_reviewable_comment(
+            existing_deliverable = extract_latest_reviewable_comment(
                 comments,
                 assignee_role=item.assignee,
             )
