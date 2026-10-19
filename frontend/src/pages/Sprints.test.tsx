@@ -8,9 +8,9 @@ import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 
 const sprints: SprintSummary[] = [
-  { id: 12, sprint_name: 'Docs polish', status: 'completed', goal: null, start_date: '2026-10-10', scope_size: 'S', total: 4, done: 4 },
-  { id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close audit gaps', start_date: '2026-10-01', scope_size: 'M', total: 8, done: 3 },
-  { id: 4, sprint_name: 'Foundation', status: 'needs_split', goal: null, start_date: null, scope_size: 'L', total: 0, done: 0 },
+  { id: 12, sprint_name: 'Docs polish', status: 'completed', goal: null, start_date: '2026-10-10', scope_size: 'S', total: 4, done: 4, blocked: 0, rework: 0 },
+  { id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close audit gaps', start_date: '2026-10-01', scope_size: 'M', total: 8, done: 3, blocked: 1, rework: 2 },
+  { id: 4, sprint_name: 'Foundation', status: 'needs_split', goal: null, start_date: null, scope_size: 'L', total: 0, done: 0, blocked: 0, rework: 0 },
 ]
 
 function renderPage() {
@@ -43,6 +43,8 @@ describe('Sprints list', () => {
     expect(rows[0]).toHaveTextContent('Active')
     expect(rows[0]).toHaveTextContent('3 / 8 done')
     expect(rows[0]).toHaveTextContent('38%')
+    expect(rows[0]).toHaveTextContent('1 blocked · 2 rework requests')
+    expect(rows[1]).not.toHaveTextContent('blocked')
     expect(rows[0]).toHaveTextContent('2026-10-01')
     expect(rows[0]).toHaveTextContent('Last opened')
     expect(rows[1]).toHaveTextContent('Completed')

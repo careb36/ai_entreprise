@@ -1170,7 +1170,11 @@
     "planSprint": "Plan a sprint",
     "progress": "{{done}} / {{total}} done",
     "noStartDate": "Not started",
-    "lastOpened": "Last opened"
+    "lastOpened": "Last opened",
+    "blockedCount_one": "{{count}} blocked",
+    "blockedCount_other": "{{count}} blocked",
+    "reworkCount_one": "{{count}} rework request",
+    "reworkCount_other": "{{count}} rework requests"
   },
   "projectFolder": {
     "label": "Project folder",

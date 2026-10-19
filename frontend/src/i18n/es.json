@@ -1170,7 +1170,11 @@
     "planSprint": "Planificar un sprint",
     "progress": "{{done}} / {{total}} completadas",
     "noStartDate": "Sin iniciar",
-    "lastOpened": "Abierto por última vez"
+    "lastOpened": "Abierto por última vez",
+    "blockedCount_one": "{{count}} bloqueada",
+    "blockedCount_other": "{{count}} bloqueadas",
+    "reworkCount_one": "{{count}} pedido de retrabajo",
+    "reworkCount_other": "{{count}} pedidos de retrabajo"
   },
   "projectFolder": {
     "label": "Carpeta del proyecto",

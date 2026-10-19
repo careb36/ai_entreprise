@@ -49,6 +49,14 @@ function SprintRow({ sprint, current }: { sprint: SprintSummary; current: boolea
         <div className="h-1.5 overflow-hidden rounded-full bg-surface-700" aria-hidden="true">
           <div className="h-full rounded-full bg-brand-500" style={{ width: `${pct}%` }} />
         </div>
+        {(sprint.blocked > 0 || sprint.rework > 0) && (
+          <p className="mt-1 text-[11px] text-gray-500">
+            {[
+              sprint.blocked > 0 && t('sprints.blockedCount', { count: sprint.blocked, defaultValue: '{{count}} blocked' }),
+              sprint.rework > 0 && t('sprints.reworkCount', { count: sprint.rework, defaultValue: '{{count}} rework requests' }),
+            ].filter(Boolean).join(' · ')}
+          </p>
+        )}
       </div>
       <p className="flex items-center gap-1 text-xs text-gray-400">
         <CalendarDays size={12} className="shrink-0" />
