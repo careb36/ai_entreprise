@@ -134,3 +134,37 @@ describe('HelpDesk', () => {
     expect(screen.queryByText('No logs have been written yet.')).not.toBeInTheDocument()
   })
 })
+
+describe('HelpDesk triage by the Support agent', () => {
+  beforeEach(() => {
+    queryClient.clear()
+    useAppStore.setState({ companyId: 4 })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    useAuthStore.getState().logout()
+    queryClient.clear()
+  })
+
+  it("shows the agent's suggestions beside the reporter's choice, and its reply", async () => {
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, {
+        ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+        severity: 'low', triaged_by: 'Support agent', suggested_severity: 'high', suggested_category: 'bug',
+        agent_reply: 'Thanks, we are looking into it.',
+      }),
+    })
+    useAuthStore.setState({
+      token: 'valid-token', expiresAt: Date.now() + 60_000,
+      user: { user_id: 1, email: 'admin@acme.test', full_name: 'Admin', support_admin: true }, memberships: [],
+    })
+    render(<QueryClientProvider client={queryClient}><HelpDesk /></QueryClientProvider>)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+
+    const triage = await screen.findByLabelText('Triage')
+    expect(triage).toHaveTextContent('Triage by Support agent')
+    expect(triage).toHaveTextContent('Suggested impact: High (reported: Low) · category: bug')
+    expect(triage).toHaveTextContent('Thanks, we are looking into it.')
+  })
+})

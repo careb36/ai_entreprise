@@ -72,6 +72,12 @@ def _ensure_runtime_schema() -> None:
         """,
         "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_company_id ON assistant_runtime_state (company_id)",
         "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_assistant_key ON assistant_runtime_state (assistant_key)",
+        # bug_reports — the Support agent's triage beside the reporter's choice
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS agent_reply TEXT",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS suggested_severity VARCHAR(20)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS suggested_category VARCHAR(50)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_by VARCHAR(100)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_at TIMESTAMP",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         """

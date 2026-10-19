@@ -14,6 +14,7 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "GITHUB_TOKEN", None)
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
     monkeypatch.setattr(settings, "PUBLIC_API_URL", None)
+    monkeypatch.setattr(settings, "SUPPORT_AGENT_ENABLED", False)
     monkeypatch.setattr(app.state, "memory_client", None, raising=False)
 
 
@@ -26,6 +27,7 @@ def test_default_capabilities(test_client, default_settings):
         "memory": False,
         "github": False,
         "auth_required": True,
+        "support_agent": False,
         "public_api_url": None,
     }
 

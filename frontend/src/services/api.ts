@@ -57,6 +57,8 @@ export interface Capabilities {
   memory: boolean
   github: boolean
   auth_required: boolean
+  /** The Support agent triages new tickets (SUPPORT_AGENT_ENABLED). */
+  support_agent?: boolean
   /** Where GitHub can reach the backend (PUBLIC_API_URL); null when unset. */
   public_api_url?: string | null
 }
@@ -259,6 +261,12 @@ export interface SupportTicketDetail extends SupportTicket {
   expected: string | null
   actual: string | null
   resolution: string | null
+  /** The Support agent's triage: suggestions beside the reporter's choice. */
+  agent_reply?: string | null
+  suggested_severity?: string | null
+  suggested_category?: string | null
+  triaged_by?: string | null
+  triaged_at?: string | null
   [key: string]: unknown
 }
 

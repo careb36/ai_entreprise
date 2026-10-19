@@ -36,6 +36,13 @@ class BugReport(SQLModel, table=True):
     reporter_email: str | None = None
     assigned_to: str | None = None
     resolution: str | None = None  # Free-text explanation of how the issue was resolved
+    # The Support agent's triage. Its suggestions sit beside what the reporter
+    # chose and never overwrite it; a support admin decides.
+    agent_reply: str | None = None  # first reply to the reporter
+    suggested_severity: str | None = None
+    suggested_category: str | None = None
+    triaged_by: str | None = None
+    triaged_at: datetime | None = None
     browser_info: Any | None = Field(
         default=None, sa_column=Column(JSON)
     )  # User-agent, viewport, etc.

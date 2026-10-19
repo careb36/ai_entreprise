@@ -377,6 +377,7 @@ async def get_capabilities(request: Request) -> dict[str, bool | str | None]:
         "memory": getattr(request.app.state, "memory_client", None) is not None,
         "github": bool(settings.GITHUB_TOKEN),
         "auth_required": bool(settings.AUTH_REQUIRED),
+        "support_agent": bool(settings.SUPPORT_AGENT_ENABLED),
         # Where GitHub can reach this backend; null when not configured.
         "public_api_url": (settings.PUBLIC_API_URL or "").rstrip("/") or None,
     }

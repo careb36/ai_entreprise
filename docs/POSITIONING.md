@@ -222,7 +222,16 @@ replaces none of it.
      task, share of blocked tasks) keep the procedure or revert it to the
      version it replaced. A procedure with no sprints to compare with is
      marked unmeasured, not kept.
-4. Operational agents (support, and the other tasks people do today).
+4. **Operational agents**: the first one is done. The **Support agent** triages
+   new help-desk tickets with its own identity (`Support agent`).
+   - It suggests a severity and a category and writes the reporter a first
+     reply, all in a fixed format a parser checks.
+   - Its suggestions sit beside what the reporter chose and never overwrite it,
+     and a support admin decides.
+   - The ticket text comes from a public form, so the prompt treats it as data
+     and the agent has no tools.
+   - It is enabled with `SUPPORT_AGENT_ENABLED`. Next candidates: agents for
+     the other tasks people still do by hand.
 
 ### What this changes in the tables above
 

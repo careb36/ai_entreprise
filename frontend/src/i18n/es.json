@@ -981,7 +981,8 @@
       "closed": "Cerrado"
     },
     "emailPlaceholder": "tu@empresa.com",
-    "ownTicketsOnly": "Solo puedes ver los tickets reportados con el email de tu cuenta ({{email}})."
+    "ownTicketsOnly": "Solo puedes ver los tickets reportados con el email de tu cuenta ({{email}}).",
+    "agentReply": "Respuesta del agente de Soporte"
   },
   "sprintCalendar": {
     "title": "Calendario del Sprint",
@@ -1341,7 +1342,12 @@
     "downloadLogs": "Descargar logs",
     "noLogs": "Todavía no se escribió ningún log.",
     "logsError": "No se pudieron descargar los logs: {{message}}",
-    "adminOnly": "La mesa de ayuda es para administradores de soporte. Un administrador puede agregar tu email a SUPPORT_ADMIN_EMAILS en el backend."
+    "adminOnly": "La mesa de ayuda es para administradores de soporte. Un administrador puede agregar tu email a SUPPORT_ADMIN_EMAILS en el backend.",
+    "triage": "Triage",
+    "triagedBy": "Triage de {{who}} (sugerencias; la severidad la eligió quien reportó)",
+    "suggested": "Impacto sugerido: {{severity}} (reportado: {{reported}}) · categoría: {{category}}",
+    "agentReply": "Primera respuesta enviada a quien reportó",
+    "untriaged": "El agente no pudo hacer el triage de este ticket; queda para las personas."
   },
   "health": {
     "title": "Estado de los servicios",

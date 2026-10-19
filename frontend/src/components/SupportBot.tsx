@@ -447,6 +447,13 @@ export const SupportBot: React.FC = () => {
 
                 <p className="text-xs text-gray-600 leading-relaxed">{selectedTicket.description}</p>
 
+                {selectedTicket.agent_reply && (
+                  <div className="p-3 bg-indigo-50 rounded-lg">
+                    <p className="text-[10px] font-semibold text-indigo-700 uppercase">{t('support.agentReply', { defaultValue: 'Reply from the Support agent' })}</p>
+                    <p className="text-xs text-indigo-900 mt-0.5 whitespace-pre-wrap">{selectedTicket.agent_reply}</p>
+                  </div>
+                )}
+
                 {/* Timeline */}
                 <div className="border-t pt-3 space-y-2">
                   <p className="text-[10px] font-semibold text-gray-400 uppercase">{t('support.timeline')}</p>
