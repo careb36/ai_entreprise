@@ -39,6 +39,7 @@ export const QUERY_KEYS = {
       filters.external_ref ?? '', filters.sprint_id ?? ''] as const,
   agentRun: (companyId: number, runId: number) => ['agent-run', companyId, runId] as const,
   procedures: (companyId: number) => ['procedures', companyId] as const,
+  inbox: (companyId: number) => ['inbox', companyId] as const,
   messages: (companyId: number, filters: MessageFilters = {}) =>
     ['messages', companyId, filters.sprint_id ?? '', filters.backlog_item_id ?? '', filters.kind ?? '', filters.limit ?? ''] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
@@ -81,6 +82,19 @@ export function useAgentRuns(
   })
 }
 
+/**
+ * What the company needs a person for: blocked tasks, proposals, undecided
+ * runs. Polled, so the navigation badge follows the agents' work.
+ */
+export function useInbox(companyId: number | null, refreshMs: number | false = 30_000) {
+  return useQuery({
+    queryKey: QUERY_KEYS.inbox(companyId ?? 0),
+    queryFn: () => api.getInbox(companyId!),
+    enabled: companyId !== null,
+    refetchInterval: refreshMs,
+  })
+}
+
 export function useProcedures(companyId: number | null) {
   return useQuery({
     queryKey: QUERY_KEYS.procedures(companyId ?? 0),
@@ -106,6 +120,7 @@ export function useDecideProcedure(companyId: number | null) {
       api.decideProcedure(id, decision),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.procedures(companyId ?? 0) })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inbox(companyId ?? 0) })
     },
   })
 }
@@ -262,6 +277,7 @@ export function useUpdateBacklogItem() {
       if (updatedItem.sprint_id) {
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sprintBoard(updatedItem.sprint_id) })
       }
+      queryClient.invalidateQueries({ queryKey: ['inbox'] })
     },
   })
 }

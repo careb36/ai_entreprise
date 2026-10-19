@@ -1433,5 +1433,23 @@
     "create": "Poner en vigor",
     "duplicate": "Ese procedimiento ya está vigente o propuesto.",
     "createError": "No se pudo guardar: {{message}}"
+  },
+  "inbox": {
+    "subtitle": "Lo que la empresa necesita de vos. El resto lo hacen los agentes.",
+    "blockedTitle": "Tareas bloqueadas hasta que alguien actúe",
+    "blockedHint": "Los agentes las dejaron después del límite de retrabajos. Mandá una de vuelta al trabajo, o cerrala en su tablero.",
+    "noBlocked": "Ninguna tarea espera a una persona.",
+    "frozen": "congelada por un operador",
+    "sendBack": "Mandar de vuelta al trabajo",
+    "sentBackComment": "Devuelta al trabajo por una persona.",
+    "sendBackError": "No se pudo mandar de vuelta: {{message}}",
+    "proposalsTitle": "Propuestas de procedimiento a la espera de una decisión",
+    "proposalsHint": "El ScrumMaster las propuso después de un sprint con retrabajo o tareas bloqueadas; los números del tablero las juzgarán.",
+    "proposalMeta": "{{role}} · propuesto por {{who}}",
+    "noProposals": "Ninguna propuesta espera.",
+    "decide": "Decidir",
+    "runsTitle": "Ejecuciones a la espera de una decisión",
+    "loadError": "No se pudo cargar lo que te necesita: {{message}}",
+    "navCount": "{{count}} esperan por vos"
   }
 }

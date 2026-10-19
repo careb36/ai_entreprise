@@ -34,7 +34,7 @@ import {
   Globe, Database, Code2, Menu, X, Building2, ChevronDown, Loader2
 } from 'lucide-react'
 import { STORAGE_KEY_LANG } from './lib/constants'
-import { useCapabilities, useCurrentRole } from './hooks/useQueries'
+import { useCapabilities, useCurrentRole, useInbox } from './hooks/useQueries'
 
 // ── Language Switcher ─────────────────────────────────────────────────────────
 
@@ -213,6 +213,9 @@ function NavBar() {
   const companyId = useAppStore(state => state.companyId)
   const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
   const links = useNavLinks()
+  // What the company needs a person for, shown on the Review link.
+  const inbox = useInbox(authenticated ? companyId : null)
+  const waiting = inbox.data?.total ?? 0
   const section = sectionForPath(location.pathname)
   const companyCurrent = section === 'company'
   const companyLabel = companyId !== null
@@ -270,6 +273,12 @@ function NavBar() {
             <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
               <Icon size={16} />
               <span>{label}</span>
+              {to === '/governance' && waiting > 0 && (
+                <span className="badge">
+                  <span aria-hidden="true">{waiting}</span>
+                  <span className="sr-only">{t('inbox.navCount', { count: waiting, defaultValue: '{{count}} waiting for you' })}</span>
+                </span>
+              )}
             </Link>
           ))}
         </nav>
@@ -361,6 +370,12 @@ function NavBar() {
               <Link key={to} to={to} aria-current={section === linkSection ? 'page' : undefined} className={linkClass(section === linkSection)}>
                 <Icon size={16} />
                 <span>{label}</span>
+                {to === '/governance' && waiting > 0 && (
+                  <span className="badge">
+                    <span aria-hidden="true">{waiting}</span>
+                    <span className="sr-only">{t('inbox.navCount', { count: waiting, defaultValue: '{{count}} waiting for you' })}</span>
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

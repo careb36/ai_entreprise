@@ -23,6 +23,7 @@ beforeEach(() => {
   useAppStore.setState({ companyId: null, companyName: null, activeSprintId: null })
   vi.spyOn(api, 'capabilities').mockResolvedValue({ agent_graph: false, memory: false, github: false, auth_required: true })
   vi.spyOn(api, 'getAgentRuns').mockResolvedValue({ agent_runs: [] } as never)
+  vi.spyOn(api, 'getInbox').mockResolvedValue({ blocked_tasks: [], proposals: [], pending_runs: 0, total: 0 })
   vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy', timestamp: '' })
   vi.spyOn(api, 'getOrchestrationHealth').mockResolvedValue({} as never)
   vi.spyOn(api, 'listSprints').mockResolvedValue([])
@@ -358,6 +359,17 @@ describe('app navigation', () => {
       expect(toggle).toHaveAccessibleName('Abrir menú')
       expect(toggle).toHaveFocus()
       expect(screen.queryByRole('navigation', { name: 'Navegación móvil' })).not.toBeInTheDocument()
+    })
+
+    it('shows on Review how many things wait for a person', async () => {
+      vi.mocked(api.getInbox).mockResolvedValue({ blocked_tasks: [], proposals: [], pending_runs: 2, total: 3 })
+      authenticate()
+      useAppStore.setState({ companyId: 42, companyName: 'Example' })
+      window.history.replaceState(null, '', '/evidence')
+      render(<App />)
+      const main = screen.getByRole('navigation', { name: 'Main navigation' })
+      await waitFor(() => expect(within(main).getByRole('link', { name: /Review.*3 waiting for you/ })).toBeInTheDocument())
+      expect(api.getInbox).toHaveBeenCalledWith(42)
     })
 
     it('closes the mobile menu after selecting a destination', async () => {

@@ -1433,5 +1433,23 @@
     "create": "Put in force",
     "duplicate": "That procedure is already in force or proposed.",
     "createError": "Could not save it: {{message}}"
+  },
+  "inbox": {
+    "subtitle": "What the company needs you for. The agents do the rest.",
+    "blockedTitle": "Tasks blocked until someone acts",
+    "blockedHint": "The agents gave up on these after the rework limit. Send one back to work, or close it on its board.",
+    "noBlocked": "No task is waiting for a person.",
+    "frozen": "frozen by an operator",
+    "sendBack": "Send back to work",
+    "sentBackComment": "Sent back to work by a person.",
+    "sendBackError": "Could not send it back: {{message}}",
+    "proposalsTitle": "Procedure proposals waiting for a decision",
+    "proposalsHint": "The ScrumMaster proposed these after a sprint with rework or blocked tasks; the board's numbers will judge them.",
+    "proposalMeta": "{{role}} · proposed by {{who}}",
+    "noProposals": "No proposal is waiting.",
+    "decide": "Decide",
+    "runsTitle": "Runs awaiting a decision",
+    "loadError": "Could not load what needs you: {{message}}",
+    "navCount": "{{count}} waiting for you"
   }
 }

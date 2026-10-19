@@ -482,6 +482,36 @@ export interface Procedure {
   retired_at: string | null
 }
 
+/** A task blocked until a person acts: the worker will not move it on its own. */
+export interface InboxBlockedTask {
+  id: number
+  title: string
+  assignee: string | null
+  sprint_id: number
+  sprint_name: string
+  sprint_status: string
+  reason: string
+  frozen: boolean
+  updated_at: string | null
+}
+
+export interface InboxProposal {
+  id: number
+  role: string
+  title: string
+  proposed_by: string
+  source_sprint_id: number | null
+  created_at: string | null
+}
+
+/** Everything the company needs a person for. */
+export interface Inbox {
+  blocked_tasks: InboxBlockedTask[]
+  proposals: InboxProposal[]
+  pending_runs: number
+  total: number
+}
+
 export interface AgentRunListItem {
   id: number
   company_id: number
@@ -804,6 +834,9 @@ export const api = {
     }
     return api.get<{ messages: AgentMessage[] }>('/v1/messages', params)
   },
+
+  getInbox: (companyId: number) =>
+    api.get<Inbox>('/v1/inbox', { company_id: companyId }),
 
   getProcedures: (companyId: number) =>
     api.get<{ procedures: Procedure[] }>('/v1/procedures', { company_id: companyId }),
