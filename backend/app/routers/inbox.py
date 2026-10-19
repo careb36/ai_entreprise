@@ -41,6 +41,8 @@ async def inbox(
     ).all()
     blocked_tasks = []
     blocked_total = 0
+    # The ScrumMaster's answers to the escalations, one query for the page.
+    triages = scrum_master.decisions_for(session, [item.id for item, _ in rows])
     for item, sprint in rows:
         next_step = blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):
@@ -61,7 +63,7 @@ async def inbox(
                 "reason": block_reason(item.comments)[:REASON_LIMIT],
                 # The ScrumMaster's answer to the escalation, a claim for the
                 # person to weigh: another attempt (with a brief) or a person.
-                "triage": scrum_master.decision_for(session, item.id),
+                "triage": triages.get(item.id),
                 "frozen": next_step == "frozen",
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }

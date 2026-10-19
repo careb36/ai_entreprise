@@ -312,20 +312,16 @@ def test_other_scrum_master_messages_are_not_a_triage(sqlite_session, company):
 # ---------------------------------------------------------------------------
 
 
-def _decide(session, company, sprint, item, answer):
-    original_ask = scrum_master.ask
-    scrum_master.ask = lambda *a: answer
-    try:
-        scrum_master.triage(session, company.id, sprint.id, item, TRIAGE)
-    finally:
-        scrum_master.ask = original_ask
+def _decide(monkeypatch, session, company, sprint, item, answer):
+    monkeypatch.setattr(scrum_master, "ask", lambda *a: answer)
+    scrum_master.triage(session, company.id, sprint.id, item, TRIAGE)
     session.commit()
 
 
 def test_the_brief_travels_with_the_next_attempt(sqlite_session, company, monkeypatch):
     company, sprint = company
     item = _blocked(sqlite_session, sprint)
-    _decide(sqlite_session, company, sprint, item, RETRY_ANSWER)
+    _decide(monkeypatch, sqlite_session, company, sprint, item, RETRY_ANSWER)
     next_sprint = Sprint(company_id=company.id, sprint_name="Sprint 1", status="active")
     sqlite_session.add(next_sprint)
     sqlite_session.commit()
@@ -352,15 +348,20 @@ def test_the_brief_travels_with_the_next_attempt(sqlite_session, company, monkey
 
 
 def test_a_task_left_for_a_person_is_not_carried_on_the_companys_own(
-    sqlite_session, company
+    sqlite_session, company, monkeypatch
 ):
     company, sprint = company
     kept = _blocked(sqlite_session, sprint, title="Needs a budget")
     _decide(
-        sqlite_session, company, sprint, kept, "DECISION: person\nWHY: budget.\nEND"
+        monkeypatch,
+        sqlite_session,
+        company,
+        sprint,
+        kept,
+        "DECISION: person\nWHY: budget.\nEND",
     )
     retried = _blocked(sqlite_session, sprint, title="Just too short")
-    _decide(sqlite_session, company, sprint, retried, RETRY_ANSWER)
+    _decide(monkeypatch, sqlite_session, company, sprint, retried, RETRY_ANSWER)
     undecided = _blocked(sqlite_session, sprint, title="No answer")
     next_sprint = Sprint(company_id=company.id, sprint_name="Sprint 1", status="active")
     sqlite_session.add(next_sprint)
@@ -379,3 +380,94 @@ def test_a_task_left_for_a_person_is_not_carried_on_the_companys_own(
         sqlite_session, company.id, [kept.id], next_sprint, "ana", "Manager"
     )
     assert by_hand.title == "Needs a budget"
+
+
+# ---------------------------------------------------------------------------
+# What the review of this module asked for
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (
+            "**DECISION:** `retry`\n**BRIEF:** Write the full document\n(at least 180 words) as a path= block.\n**WHY:** cut short.\n**END**",
+            {
+                "decision": "retry",
+                "brief": "Write the full document (at least 180 words) as a path= block.",
+                "why": "cut short.",
+            },
+        ),
+        (
+            'DECISION: "person"\nWHY: needs a budget decision\nthe team cannot make.\nEND',
+            {
+                "decision": "person",
+                "brief": "",
+                "why": "needs a budget decision the team cannot make.",
+            },
+        ),
+    ],
+    ids=["markdown-and-wrapped-brief", "quoted-and-wrapped-why"],
+)
+def test_markdown_and_wrapped_fields_are_still_a_decision(answer, expected):
+    assert scrum_master.parse_answer(answer) == expected
+
+
+def test_the_prompt_shows_only_the_rework_since_the_last_send_back(
+    sqlite_session, company
+):
+    _company, sprint = company
+    item = _blocked(
+        sqlite_session,
+        sprint,
+        comments=[
+            {"author": "QA Quinn", "text": "NEEDS WORK: the old attempt's problem"},
+            {"author": "Quality gate", "text": TRIAGE},
+            {"author": "user", "text": "Sent back to work by a person."},
+            {"author": "Quality gate", "text": "NEEDS WORK: Too short (30 words)."},
+        ],
+    )
+
+    prompt = scrum_master.triage_prompt(item, TRIAGE)
+
+    assert "- Quality gate: NEEDS WORK: Too short (30 words)." in prompt
+    assert "the old attempt's problem" not in prompt
+
+
+def test_a_decision_answers_one_escalation_only(sqlite_session, company, monkeypatch):
+    """Sent back by a person and blocked again, the task is escalated again; the
+    earlier triage no longer counts, so an unanswered new block keeps the default."""
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Needs a budget")
+
+    def _escalate():
+        sqlite_session.add(
+            AgentMessage(
+                company_id=company.id,
+                sprint_id=sprint.id,
+                backlog_item_id=item.id,
+                from_name="Quality gate",
+                from_role="Quality gate",
+                to_role="ScrumMaster",
+                kind="escalation",
+                body=TRIAGE,
+            )
+        )
+        sqlite_session.commit()
+
+    _escalate()
+    _decide(monkeypatch, sqlite_session, company, sprint, item, "DECISION: person\nEND")
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "person"
+    assert carry_over.left_for_a_person(sqlite_session, item)
+
+    _escalate()  # blocked again after a send-back; this time no usable answer
+
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+    assert not carry_over.left_for_a_person(sqlite_session, item)
+
+    _decide(monkeypatch, sqlite_session, company, sprint, item, RETRY_ANSWER)
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "retry"
+    assert scrum_master.decisions_for(sqlite_session, [item.id, 999_999]) == {
+        item.id: scrum_master.decision_for(sqlite_session, item.id)
+    }
+    assert scrum_master.decisions_for(sqlite_session, []) == {}

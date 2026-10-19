@@ -68,7 +68,10 @@ def is_carry_over(item: BacklogItem) -> bool:
 
 def left_for_a_person(session: Session, item: BacklogItem) -> bool:
     """The ScrumMaster's triage said a person must decide, not another attempt."""
-    triage = scrum_master.decision_for(session, item.id)
+    return _left_for_a_person(scrum_master.decision_for(session, item.id))
+
+
+def _left_for_a_person(triage: dict[str, Any] | None) -> bool:
     return bool(triage) and triage["decision"] == scrum_master.DECISION_PERSON
 
 
@@ -106,10 +109,10 @@ def carry_over(
 
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
+    triages = scrum_master.decisions_for(session, [item.id for item, _ in originals])
     for item, sprint in originals:
         reason = block_reason(item.comments)[:REASON_LIMIT]
-        triage = scrum_master.decision_for(session, item.id) or {}
-        brief = triage.get("brief") or ""
+        brief = (triages.get(item.id) or {}).get("brief") or ""
         clone = BacklogItem(
             sprint_id=new_sprint.id,
             title=item.title,
@@ -215,13 +218,14 @@ def carry_over_on_the_companys_own(
         )
         .order_by(BacklogItem.id)
     ).all()
+    triages = scrum_master.decisions_for(session, [item.id for item in candidates])
     ids = [
         item.id
         for item in candidates
         if waits_for_a_person(item)
         and not carried_over(item)
         and not is_carry_over(item)
-        and not left_for_a_person(session, item)
+        and not _left_for_a_person(triages.get(item.id))
     ][:room]
     if not ids:
         return []

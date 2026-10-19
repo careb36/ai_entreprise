@@ -28,7 +28,7 @@ from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
 from services import procedures
-from services.board import SCRUM_MASTER_ROLE, comment_list, is_rework_request
+from services.board import SCRUM_MASTER_ROLE, is_rework_request, since_send_back
 
 logger = setup_logger("fabrique-scrum-master")
 
@@ -46,11 +46,14 @@ FEEDBACK_CHARS = 400
 TIMEOUT_SECONDS = 90
 
 _ANSWER = re.compile(
-    r"DECISION:\s*(?P<decision>retry|person)\b"
-    r"(?P<rest>.*?)(?:^|\n)\s*END\b",
+    r"DECISION:[\s*`\"']*(?P<decision>retry|person)\b"
+    r"(?P<rest>.*?)(?:^|\n)[\s*`]*END\b",
     re.IGNORECASE | re.DOTALL,
 )
-_FIELD = re.compile(r"^(?P<key>BRIEF|WHY):\s*(?P<value>.*?)\s*$", re.MULTILINE)
+_FIELD_START = re.compile(
+    r"^[\s*`]*(?P<key>BRIEF|WHY)[\s*`]*:\s*(?P<value>.*)$", re.IGNORECASE
+)
+_DECORATION = "*`\"' \t"
 
 
 class ScrumMasterError(RuntimeError):
@@ -82,7 +85,7 @@ def triage_prompt(item: BacklogItem, reason: str, procedures_context: str = "") 
     """What the ScrumMaster is told about a blocked task."""
     feedback = [
         f"{c.get('author') or 'Reviewer'}: {str(c.get('text', '')).strip()[:FEEDBACK_CHARS]}"
-        for c in comment_list(item.comments)
+        for c in since_send_back(item.comments)
         if is_rework_request(c)
     ][-FEEDBACK_SHOWN:]
     return (
@@ -102,19 +105,33 @@ def triage_prompt(item: BacklogItem, reason: str, procedures_context: str = "") 
 
 
 def parse_answer(text: str) -> dict[str, str] | None:
-    """The decision in the expected form, or ``None`` when the answer is unusable."""
+    """The decision in the expected form, or ``None`` when the answer is unusable.
+
+    Markdown around the labels and values (bold, backticks, quotes) is ignored,
+    and a field the model wraps over several lines is joined into one.
+    """
     match = _ANSWER.search(text or "")
     if not match:
         return None
     decision = match["decision"].lower()
-    fields = {
-        m["key"].upper(): m["value"].strip() for m in _FIELD.finditer(match["rest"])
+    fields: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in match["rest"].split("\n"):
+        start = _FIELD_START.match(line)
+        if start:
+            current = start["key"].upper()
+            fields[current] = [start["value"]]
+        elif current and line.strip():
+            fields[current].append(line)
+    cleaned = {
+        key: " ".join(part.strip(_DECORATION) for part in parts).strip()
+        for key, parts in fields.items()
     }
-    brief = fields.get("BRIEF", "")[:BRIEF_LIMIT] if decision == DECISION_RETRY else ""
+    brief = cleaned.get("BRIEF", "")[:BRIEF_LIMIT] if decision == DECISION_RETRY else ""
     return {
         "decision": decision,
         "brief": brief,
-        "why": fields.get("WHY", "")[:WHY_LIMIT],
+        "why": cleaned.get("WHY", "")[:WHY_LIMIT],
     }
 
 
@@ -134,6 +151,9 @@ def ask(session: Session, company_id: int, prompt: str) -> str:
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout = TIMEOUT_SECONDS
+    # One attempt: the triage is advice and the caller waits for it; a proxy
+    # outage must not hold the review loop for the client's full retry budget.
+    client.max_retries = 0
     result = client.chat(messages=messages, model=model, role=SCRUM_MASTER_ROLE)
     if not isinstance(result, dict) or result.get("error"):
         raise ScrumMasterError(f"LLM call failed: {result!r}"[:500])
@@ -214,19 +234,45 @@ def triage(
     return message
 
 
-def decision_for(session: Session, item_id: int) -> dict[str, Any] | None:
-    """The ScrumMaster's latest triage of *item_id*, or ``None``."""
+def decisions_for(session: Session, item_ids: list[int]) -> dict[int, dict[str, Any]]:
+    """The ScrumMaster's current triage of each of *item_ids*, by item id.
+
+    A triage answers one escalation: a decision recorded before the item's
+    latest escalation is stale (the task was sent back and blocked again) and
+    is left out, so an unanswered new block keeps the deterministic default.
+    """
+    ids = list(dict.fromkeys(i for i in item_ids if i is not None))
+    if not ids:
+        return {}
     rows = session.exec(
-        select(AgentMessage.body)
-        .where(
-            AgentMessage.backlog_item_id == item_id,
-            AgentMessage.from_role == SCRUM_MASTER_ROLE,
-            AgentMessage.kind == "decision",
+        select(
+            AgentMessage.backlog_item_id,
+            AgentMessage.id,
+            AgentMessage.kind,
+            AgentMessage.from_role,
+            AgentMessage.body,
         )
-        .order_by(AgentMessage.id.desc())
+        .where(
+            AgentMessage.backlog_item_id.in_(ids),
+            AgentMessage.kind.in_(("decision", "escalation")),
+        )
+        .order_by(AgentMessage.id)
     ).all()
-    for body in rows:
+    latest_escalation: dict[int, int] = {}
+    decisions: dict[int, dict[str, Any]] = {}
+    for item_id, message_id, kind, from_role, body in rows:
+        if kind == "escalation":
+            latest_escalation[item_id] = message_id
+            decisions.pop(item_id, None)
+            continue
+        if from_role != SCRUM_MASTER_ROLE:
+            continue
         decision = parse_decision_body(body)
-        if decision:
-            return decision
-    return None
+        if decision and message_id > latest_escalation.get(item_id, 0):
+            decisions[item_id] = decision
+    return decisions
+
+
+def decision_for(session: Session, item_id: int) -> dict[str, Any] | None:
+    """The ScrumMaster's current triage of *item_id*, or ``None``."""
+    return decisions_for(session, [item_id]).get(item_id)

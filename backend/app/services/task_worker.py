@@ -2260,10 +2260,6 @@ async def _send_back_from_quality_gate(
         kind="request" if rework else "escalation",
         body=text,
     )
-    if not rework:
-        await asyncio.to_thread(
-            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
-        )
     await publish_glassroom(
         nats_client,
         sprint["id"],
@@ -2285,6 +2281,10 @@ async def _send_back_from_quality_gate(
             "preview": deliverable[:200] if deliverable else "",
         },
     )
+    if not rework:
+        await asyncio.to_thread(
+            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
+        )
     logger.warning(
         "Pre-review gate %s item=%s by %s: %s",
         "sent back" if rework else "blocked",
