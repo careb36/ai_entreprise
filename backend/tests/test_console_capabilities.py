@@ -15,13 +15,17 @@ from unittest.mock import AsyncMock
 
 import config
 import pytest
-from services import console_capabilities, task_worker
+from services import console_assistants, console_capabilities
 
 ITEM = {"id": 11, "title": "Design the storage layer", "description": "Pick a schema."}
 # Architect is a "high value" role, so the default strategy selects both
 # GitHub Copilot CLI and Claude CLI before the capability filter applies.
 AGENT = {"role": "Architect", "name": "Ada"}
 SPRINT = {"id": 5, "company_id": 3, "name": "Sprint 5"}
+
+
+def _workspace_root(company_id):
+    return "/tmp/workspace"
 
 
 class _FakeNATSClient:
@@ -46,23 +50,18 @@ class _FakeNATSClient:
 @pytest.fixture(autouse=True)
 def _isolated_task_path(monkeypatch):
     console_capabilities.reset()
-    monkeypatch.setattr(task_worker, "CONSOLE_ASSISTANTS_ENABLED", True)
+    monkeypatch.setattr(console_assistants, "CONSOLE_ASSISTANTS_ENABLED", True)
     monkeypatch.setattr(
-        task_worker, "_resolve_workspace_root", lambda company_id: "/tmp/workspace"
+        console_assistants, "cooldown_until", lambda company_id, assistant_key: None
     )
-    monkeypatch.setattr(
-        task_worker,
-        "_get_assistant_cooldown_until",
-        lambda company_id, assistant_key: None,
-    )
-    monkeypatch.setattr(task_worker, "_publish_console_assistant_event", AsyncMock())
+    monkeypatch.setattr(console_assistants, "publish_event", AsyncMock())
     yield
     console_capabilities.reset()
 
 
 async def _run_task_path(nats):
-    return await task_worker._collect_console_assistant_advice(
-        nats, ITEM, AGENT, SPRINT
+    return await console_assistants.collect_advice(
+        nats, ITEM, AGENT, SPRINT, _workspace_root
     )
 
 
@@ -115,7 +114,7 @@ async def test_claude_capability_sends_one_request():
     _, payload, timeout = executes[0]
     assert "claude" in payload["command"]
     assert "copilot" not in payload["command"]
-    assert timeout == task_worker.CONSOLE_ASSISTANT_TIMEOUT
+    assert timeout == console_assistants.CONSOLE_ASSISTANT_TIMEOUT
     assert [source["label"] for source in result["sources"]] == ["Claude CLI"]
 
 

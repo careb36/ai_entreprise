@@ -22,8 +22,7 @@ import hashlib
 import json
 import os
 import re
-import shlex
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -34,7 +33,6 @@ from logging_config import setup_logger
 from models import (
     Agent,
     AgentMessage,
-    AssistantRuntimeState,
     BacklogItem,
     Company,
     OutboxEvent,
@@ -49,7 +47,7 @@ from sqlmodel import Session, select, text
 from llm.model_factory import default_model_for_role
 from services import (
     agent_run_service,
-    console_capabilities,
+    console_assistants,
     procedures,
     workspace_daemon,
 )
@@ -67,6 +65,8 @@ from services.board import (
     rework_requests_by,
 )
 from services.carry_over import carry_over_on_the_companys_own, previous_attempt_context
+from services.console_assistants import normalize_utc
+from services.glassroom import publish_glassroom
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
@@ -104,62 +104,8 @@ DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
     os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")
 )
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
-CONSOLE_ASSISTANTS_ENABLED = settings.CONSOLE_ASSISTANTS_ENABLED
 ARCHITECT_CONSULT_ENABLED = settings.ARCHITECT_CONSULT_ENABLED
-CONSOLE_ASSISTANT_TIMEOUT = float(settings.CONSOLE_ASSISTANT_TIMEOUT_SECONDS)
-COPILOT_CLI_COMMAND_TEMPLATE = settings.COPILOT_CLI_COMMAND_TEMPLATE
-CLAUDE_CLI_COMMAND_TEMPLATE = settings.CLAUDE_CLI_COMMAND_TEMPLATE or ""
-CLAUDE_CLI_ALLOWED_TOOLS = settings.CLAUDE_CLI_ALLOWED_TOOLS
-CLAUDE_CLI_APPEND_SYSTEM_PROMPT = settings.CLAUDE_CLI_APPEND_SYSTEM_PROMPT
-CONSOLE_ASSISTANT_STRATEGY = settings.CONSOLE_ASSISTANT_STRATEGY
-CLAUDE_CLI_HIGH_VALUE_ROLES = {
-    role.strip()
-    for role in settings.CLAUDE_CLI_HIGH_VALUE_ROLES.split(",")
-    if role.strip()
-}
-CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES = max(
-    1, int(settings.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES)
-)
-ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES = int(
-    os.getenv("ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES", "30")
-)
-CONSOLE_ASSISTANT_EXCERPT_CHARS = int(
-    os.getenv("CONSOLE_ASSISTANT_EXCERPT_CHARS", "240")
-)
-CONSOLE_ASSISTANT_ALLOWED_ROLES = {
-    role.strip()
-    for role in settings.CONSOLE_ASSISTANT_ALLOWED_ROLES.split(",")
-    if role.strip()
-}
-CLAUDE_QUOTA_PATTERNS = (
-    "usage limit",
-    "rate limit",
-    "quota",
-    "too many requests",
-)
-ASSISTANT_UNAVAILABLE_PATTERNS = (
-    "not found",
-    "cannot find github copilot cli",
-    "no such file or directory",
-    "command not found",
-)
-CLAUDE_RESET_TIME_PATTERNS = (
-    re.compile(
-        r"(?:available|retry|resets?)\s+(?:at|after)\s+(?P<time>\d{1,2}:\d{2}\s?(?:am|pm)?)",
-        re.IGNORECASE,
-    ),
-    re.compile(r"(?P<time>\d{1,2}:\d{2}\s?(?:am|pm))", re.IGNORECASE),
-)
 LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
-
-
-def _normalize_utc(value: datetime | None) -> datetime | None:
-    """Normalize datetimes loaded from the DB to timezone-aware UTC values."""
-    if not value:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 def _queued_recently(item_id: int, now: datetime) -> bool:
@@ -1251,534 +1197,6 @@ def _complete_sprint_and_plan_follow_up(
         return result
 
 
-def _build_console_assistant_prompt(
-    item: dict[str, Any], agent: dict[str, Any], sprint_name: str
-) -> str:
-    """Build a concise prompt for external console assistants."""
-    return (
-        f"Repository task for {agent.get('role', 'Developer')} in sprint '{sprint_name}'.\n"
-        f"Task: {item.get('title', '')}\n"
-        f"Description: {item.get('description', '')}\n"
-        f"Priority: {item.get('priority', 'medium')}\n\n"
-        "Provide concise actionable advice for implementing this task in the current repository. "
-        "Prefer incremental changes, mention relevant existing code or GitHub/MCP-backed ideas when useful, and avoid suggesting destructive rewrites."
-    )
-
-
-def _assistant_purpose(item: dict[str, Any], agent: dict[str, Any], label: str) -> str:
-    """Describe why an external assistant is being consulted for the current task."""
-    role = (agent.get("role") or "Developer").strip()
-    priority = (item.get("priority") or "medium").strip().lower()
-    task_text = f"{item.get('title', '')}\n{item.get('description', '')}".lower()
-
-    if label == "Claude CLI":
-        if role in {"Architect", "PO", "ScrumMaster"}:
-            return "planning and architecture advice"
-        if role == "QA" or any(
-            token in task_text for token in ("validate", "review", "security", "risk")
-        ):
-            return "review and risk analysis advice"
-        return "high-value implementation guidance"
-
-    if priority in {"high", "critical"}:
-        return "high-priority implementation guidance"
-    return "incremental implementation guidance"
-
-
-def _claude_is_high_value(item: dict[str, Any], agent: dict[str, Any]) -> bool:
-    """Use Claude selectively for strategic, review-heavy, or high-priority work."""
-    role = (agent.get("role") or "Developer").strip()
-    priority = (item.get("priority") or "medium").strip().lower()
-    task_text = f"{item.get('title', '')}\n{item.get('description', '')}".lower()
-    strategic_keywords = (
-        "architecture",
-        "plan",
-        "planning",
-        "review",
-        "security",
-        "risk",
-        "refactor",
-        "scrumban",
-        "autonomy",
-        "self-improvement",
-        "design",
-    )
-    return (
-        role in CLAUDE_CLI_HIGH_VALUE_ROLES
-        or priority in {"high", "critical"}
-        or any(keyword in task_text for keyword in strategic_keywords)
-    )
-
-
-def _get_assistant_runtime_state(
-    company_id: int, assistant_key: str
-) -> AssistantRuntimeState | None:
-    """Load the persisted runtime state for a company/assistant pair."""
-    with Session(engine) as session:
-        return session.exec(
-            select(AssistantRuntimeState).where(
-                AssistantRuntimeState.company_id == company_id,
-                AssistantRuntimeState.assistant_key == assistant_key,
-            )
-        ).first()
-
-
-def _set_assistant_runtime_state(
-    company_id: int,
-    assistant_key: str,
-    *,
-    cooldown_until: datetime | None,
-    last_error: str | None = None,
-) -> datetime | None:
-    """Persist runtime state updates so assistant cooldown survives backend restarts."""
-    normalized_cooldown = _normalize_utc(cooldown_until)
-    with Session(engine) as session:
-        state = session.exec(
-            select(AssistantRuntimeState).where(
-                AssistantRuntimeState.company_id == company_id,
-                AssistantRuntimeState.assistant_key == assistant_key,
-            )
-        ).first()
-        if not state:
-            state = AssistantRuntimeState(
-                company_id=company_id, assistant_key=assistant_key
-            )
-        state.cooldown_until = normalized_cooldown
-        state.last_error = (last_error or "")[:1000] or None
-        state.updated_at = datetime.now(UTC)
-        session.add(state)
-        session.commit()
-    return normalized_cooldown
-
-
-def _get_claude_cooldown_until(company_id: int) -> datetime | None:
-    """Return the persisted Claude cooldown deadline when quota was recently hit."""
-    now = datetime.now(UTC)
-    state = _get_assistant_runtime_state(company_id, "claude")
-    cooldown_until = _normalize_utc(state.cooldown_until) if state else None
-    if cooldown_until and cooldown_until <= now:
-        _set_assistant_runtime_state(
-            company_id, "claude", cooldown_until=None, last_error=None
-        )
-        return None
-    return cooldown_until
-
-
-def _get_assistant_cooldown_until(
-    company_id: int, assistant_key: str
-) -> datetime | None:
-    """Return the persisted cooldown deadline for any assistant key."""
-    now = datetime.now(UTC)
-    state = _get_assistant_runtime_state(company_id, assistant_key)
-    cooldown_until = _normalize_utc(state.cooldown_until) if state else None
-    if cooldown_until and cooldown_until <= now:
-        _set_assistant_runtime_state(
-            company_id, assistant_key, cooldown_until=None, last_error=None
-        )
-        return None
-    return cooldown_until
-
-
-def _parse_claude_reset_time(text: str) -> datetime | None:
-    """Best-effort parse for reset times embedded in Claude CLI quota messages."""
-    now = datetime.now().astimezone()
-    for pattern in CLAUDE_RESET_TIME_PATTERNS:
-        match = pattern.search(text or "")
-        if not match:
-            continue
-        raw_time = (match.group("time") or "").strip().upper().replace(" ", "")
-        formats = ["%I:%M%p", "%H:%M"]
-        for fmt in formats:
-            try:
-                parsed = datetime.strptime(raw_time, fmt)
-            except ValueError:
-                continue
-            candidate = now.replace(
-                hour=parsed.hour, minute=parsed.minute, second=0, microsecond=0
-            )
-            if candidate <= now:
-                candidate += timedelta(days=1)
-            return candidate.astimezone(UTC)
-    return None
-
-
-def _maybe_activate_claude_cooldown(company_id: int, output: str) -> datetime | None:
-    """Detect Claude quota exhaustion and persist a cooldown window for the company."""
-    lowered = (output or "").lower()
-    if not any(token in lowered for token in CLAUDE_QUOTA_PATTERNS):
-        return None
-    cooldown_until = _parse_claude_reset_time(output) or (
-        datetime.now(UTC) + timedelta(minutes=CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES)
-    )
-    return _set_assistant_runtime_state(
-        company_id,
-        "claude",
-        cooldown_until=cooldown_until,
-        last_error=output,
-    )
-
-
-def _assistant_key_for_label(label: str) -> str:
-    if label == "Claude CLI":
-        return "claude"
-    if label == "GitHub Copilot CLI":
-        return "copilot"
-    return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "assistant"
-
-
-def _maybe_activate_assistant_unavailable_cooldown(
-    company_id: int,
-    label: str,
-    output: str,
-) -> datetime | None:
-    """Persist a short cooldown when an assistant binary is missing or unusable."""
-    lowered = (output or "").lower()
-    if not any(token in lowered for token in ASSISTANT_UNAVAILABLE_PATTERNS):
-        return None
-    return _set_assistant_runtime_state(
-        company_id,
-        _assistant_key_for_label(label),
-        cooldown_until=datetime.now(UTC)
-        + timedelta(minutes=max(1, ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES)),
-        last_error=output,
-    )
-
-
-async def _publish_console_assistant_event(
-    nats_client: NATSClient,
-    sprint_id: int,
-    item: dict[str, Any],
-    label: str,
-    purpose: str,
-    message: str,
-    *,
-    decision: str,
-    detail: str | None = None,
-) -> None:
-    """Publish a GlassRoom status event explaining assistant usage decisions."""
-    await _publish_glassroom(
-        nats_client,
-        sprint_id,
-        {
-            "type": "status",
-            "semantic_type": "assistant.telemetry",
-            "source": "task_worker",
-            "agent": "System",
-            "role": "System",
-            "task_id": item.get("id"),
-            "task": item.get("title", "Task"),
-            "message": message,
-            "assistant_label": label,
-            "assistant_purpose": purpose,
-            "assistant_decision": decision,
-            "assistant_detail": detail or "",
-        },
-    )
-
-
-def _select_console_assistants(
-    item: dict[str, Any], agent: dict[str, Any]
-) -> list[tuple[str, str, str]]:
-    """Choose assistants efficiently so Copilot is the default and Claude stays budget-aware."""
-    assistants: list[tuple[str, str, str]] = []
-    if CONSOLE_ASSISTANT_STRATEGY == "copilot_first" and COPILOT_CLI_COMMAND_TEMPLATE:
-        assistants.append(
-            (
-                "GitHub Copilot CLI",
-                COPILOT_CLI_COMMAND_TEMPLATE,
-                _assistant_purpose(item, agent, "GitHub Copilot CLI"),
-            )
-        )
-
-    if CLAUDE_CLI_COMMAND_TEMPLATE and _claude_is_high_value(item, agent):
-        assistants.append(
-            (
-                "Claude CLI",
-                CLAUDE_CLI_COMMAND_TEMPLATE,
-                _assistant_purpose(item, agent, "Claude CLI"),
-            )
-        )
-
-    if not assistants and COPILOT_CLI_COMMAND_TEMPLATE:
-        assistants.append(
-            (
-                "GitHub Copilot CLI",
-                COPILOT_CLI_COMMAND_TEMPLATE,
-                _assistant_purpose(item, agent, "GitHub Copilot CLI"),
-            )
-        )
-
-    return assistants
-
-
-def _render_console_command(
-    template: str, prompt: str, workspace_root: str
-) -> str | None:
-    """Render a shell command template with a safely quoted prompt."""
-    normalized = (template or "").strip()
-    if not normalized:
-        return None
-    quoted_values = {
-        "prompt": shlex.quote(prompt),
-        "workspace_root": shlex.quote(workspace_root),
-        "allowed_tools": shlex.quote(CLAUDE_CLI_ALLOWED_TOOLS),
-        "system_prompt": shlex.quote(CLAUDE_CLI_APPEND_SYSTEM_PROMPT),
-    }
-    if any(
-        token in normalized
-        for token in (
-            "{prompt}",
-            "{workspace_root}",
-            "{allowed_tools}",
-            "{system_prompt}",
-        )
-    ):
-        return normalized.format(**quoted_values)
-    return f"{normalized} {quoted_values['prompt']}"
-
-
-def _replace_command_binary(command: str, original: str, replacement: str) -> str:
-    """Swap the first command token while preserving the rest of the shell command."""
-    if command == original:
-        return replacement
-    prefix = f"{original} "
-    if command.startswith(prefix):
-        return f"{replacement}{command[len(original) :]}"
-    return command
-
-
-def _wrap_console_command_with_fallback(label: str, command: str) -> str:
-    """Add host-specific binary fallback paths for known assistants."""
-    if label == "GitHub Copilot CLI":
-        fallback = '"$HOME/Library/Application Support/Code/User/globalStorage/github.copilot-chat/copilotCli/copilot"'
-        fallback_command = _replace_command_binary(command, "copilot", fallback)
-        return (
-            f"if [ -x {fallback} ]; then {fallback_command}; "
-            f"elif command -v copilot >/dev/null 2>&1; then {command}; "
-            f"else {command}; fi"
-        )
-
-    if label == "Claude CLI":
-        fallback = '"$HOME/.local/bin/claude"'
-        fallback_command = _replace_command_binary(command, "claude", fallback)
-        return (
-            f"if command -v claude >/dev/null 2>&1; then {command}; "
-            f"elif [ -x {fallback} ]; then {fallback_command}; "
-            f"else {command}; fi"
-        )
-
-    return command
-
-
-async def _collect_console_assistant_advice(
-    nats_client: NATSClient,
-    item: dict[str, Any],
-    agent: dict[str, Any],
-    sprint: dict[str, Any],
-) -> dict[str, Any]:
-    """Query configured terminal assistants via the VS Code daemon and return their advice."""
-    if not CONSOLE_ASSISTANTS_ENABLED:
-        return {"combined": "", "sources": []}
-
-    role = agent.get("role", "Developer")
-    if role not in CONSOLE_ASSISTANT_ALLOWED_ROLES:
-        return {"combined": "", "sources": []}
-
-    # Only consult assistants the daemon reported it can run; the capability
-    # probe runs once when workers start (see lifecycle).
-    available = set(console_capabilities.available_console_assistants())
-    if not available:
-        console_capabilities.log_skip_once()
-        return {"combined": "", "sources": []}
-    assistants = [
-        assistant
-        for assistant in _select_console_assistants(item, agent)
-        if console_capabilities.command_binary(assistant[1]) in available
-    ]
-    if not assistants:
-        return {"combined": "", "sources": []}
-
-    workspace_root = await asyncio.to_thread(
-        _resolve_workspace_root, sprint["company_id"]
-    )
-    if not workspace_root:
-        return {"combined": "", "sources": []}
-
-    prompt = _build_console_assistant_prompt(item, agent, sprint["name"])
-    notes: list[str] = []
-    sources: list[dict[str, str]] = []
-
-    for label, template, purpose in assistants:
-        assistant_key = _assistant_key_for_label(label)
-        cooldown_until = await asyncio.to_thread(
-            _get_assistant_cooldown_until, sprint["company_id"], assistant_key
-        )
-        if cooldown_until:
-            cooldown_local = cooldown_until.astimezone().strftime("%H:%M")
-            if label == "Claude CLI":
-                await _publish_console_assistant_event(
-                    nats_client,
-                    sprint["id"],
-                    item,
-                    label,
-                    purpose,
-                    f"Claude CLI skipped for now due to quota cooldown until {cooldown_local}. Copilot remains the default assistant.",
-                    decision="skipped_quota_cooldown",
-                    detail=f"cooldown_until={cooldown_until.isoformat()}",
-                )
-            else:
-                await _publish_console_assistant_event(
-                    nats_client,
-                    sprint["id"],
-                    item,
-                    label,
-                    purpose,
-                    f"{label} skipped temporarily after repeated local availability failures. Cooldown until {cooldown_local}.",
-                    decision="skipped_unavailable_cooldown",
-                    detail=f"cooldown_until={cooldown_until.isoformat()}",
-                )
-            continue
-
-        await _publish_console_assistant_event(
-            nats_client,
-            sprint["id"],
-            item,
-            label,
-            purpose,
-            f"Consulting {label} for {purpose} on: {item.get('title', 'task')}",
-            decision="requested",
-        )
-
-        command = _render_console_command(template, prompt, workspace_root)
-        if not command:
-            continue
-        command = _wrap_console_command_with_fallback(label, command)
-
-        try:
-            result = await nats_client.request(
-                "workspace.execute",
-                {
-                    "workspace_root": workspace_root,
-                    "command": command,
-                    "sprint_id": sprint["id"],
-                },
-                timeout=CONSOLE_ASSISTANT_TIMEOUT,
-            )
-        except Exception as exc:  # noqa: BLE001 - Assistant failures fall back without aborting task execution.
-            logger.warning(
-                "Console assistant request failed for %s on item=%s: %s",
-                label,
-                item.get("id"),
-                exc,
-            )
-            await _publish_console_assistant_event(
-                nats_client,
-                sprint["id"],
-                item,
-                label,
-                purpose,
-                f"{label} request failed while gathering {purpose}.",
-                decision="failed",
-                detail=str(exc),
-            )
-            continue
-
-        output = str(result.get("stdout") or result.get("stderr") or "").strip()
-        if not result.get("success"):
-            logger.info(
-                "Console assistant %s unavailable for item=%s exit=%s",
-                label,
-                item.get("id"),
-                result.get("exit_code"),
-            )
-            if label == "Claude CLI":
-                cooldown_until = await asyncio.to_thread(
-                    _maybe_activate_claude_cooldown, sprint["company_id"], output
-                )
-                if cooldown_until:
-                    cooldown_local = cooldown_until.astimezone().strftime("%H:%M")
-                    await _publish_console_assistant_event(
-                        nats_client,
-                        sprint["id"],
-                        item,
-                        label,
-                        purpose,
-                        f"Claude CLI hit quota limits and entered cooldown until {cooldown_local}. Future tasks will prefer Copilot until then.",
-                        decision="quota_cooldown",
-                        detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
-                    )
-                    continue
-            unavailable_cooldown = await asyncio.to_thread(
-                _maybe_activate_assistant_unavailable_cooldown,
-                sprint["company_id"],
-                label,
-                output,
-            )
-            if unavailable_cooldown:
-                cooldown_local = unavailable_cooldown.astimezone().strftime("%H:%M")
-                await _publish_console_assistant_event(
-                    nats_client,
-                    sprint["id"],
-                    item,
-                    label,
-                    purpose,
-                    f"{label} is unavailable in the local runtime and entered cooldown until {cooldown_local}.",
-                    decision="unavailable_cooldown",
-                    detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
-                )
-                continue
-            await _publish_console_assistant_event(
-                nats_client,
-                sprint["id"],
-                item,
-                label,
-                purpose,
-                f"{label} was unavailable for {purpose}.",
-                decision="unavailable",
-                detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
-            )
-            continue
-
-        if output:
-            notes.append(f"[{label}]\n{output[:2500]}")
-            sources.append(
-                {
-                    "label": label,
-                    "purpose": purpose,
-                    "excerpt": output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
-                }
-            )
-            await _publish_console_assistant_event(
-                nats_client,
-                sprint["id"],
-                item,
-                label,
-                purpose,
-                f"{label} contributed {purpose} for: {item.get('title', 'task')}",
-                decision="used",
-                detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
-            )
-
-    return {
-        "combined": "\n\n".join(notes),
-        "sources": sources,
-    }
-
-
-def _build_console_assistant_usage_comment(sources: list[dict[str, str]]) -> str:
-    """Summarize which external assistants were used and their immediate value."""
-    if not sources:
-        return ""
-
-    lines = ["External assistant context used for this task:"]
-    for source in sources:
-        label = source.get("label", "Assistant")
-        purpose = source.get("purpose", "advice")
-        excerpt = (source.get("excerpt") or "").strip().replace("\n", " ")
-        lines.append(f"- {label} ({purpose}): {excerpt}")
-    return "\n".join(lines)[:1800]
-
-
 def _describe_follow_up_reason(result: dict[str, Any]) -> str:
     """Render a human-readable reason for autonomous follow-up decisions."""
     reason = result.get("reason")
@@ -1868,7 +1286,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
                 "Retrospective engram write failed for sprint=%s: %s", sprint_id, exc
             )
 
-        await _publish_glassroom(
+        await publish_glassroom(
             nats_client,
             sprint_id,
             {
@@ -1889,7 +1307,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
             },
         )
 
-    await _publish_glassroom(
+    await publish_glassroom(
         nats_client,
         sprint_id,
         {
@@ -1901,7 +1319,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
         },
     )
 
-    await _publish_glassroom(
+    await publish_glassroom(
         nats_client,
         sprint_id,
         {
@@ -1922,7 +1340,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     )
 
     if result.get("auto_opened") and result.get("next_sprint_id"):
-        await _publish_glassroom(
+        await publish_glassroom(
             nats_client,
             result["next_sprint_id"],
             {
@@ -2656,7 +2074,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         _append_item_comment, item_id, f"Queued delivery: {comment}", "System"
     )
     if sprint_id is not None:
-        await _publish_glassroom(
+        await publish_glassroom(
             nats_client,
             sprint_id,
             {
@@ -2761,7 +2179,7 @@ async def _deliver_artifacts(
             comment_text=comment,
             comment_author="System",
         )
-        await _publish_glassroom(
+        await publish_glassroom(
             nats_client,
             sprint["id"],
             {
@@ -2826,7 +2244,7 @@ async def _send_back_from_quality_gate(
         kind="request" if rework else "escalation",
         body=text,
     )
-    await _publish_glassroom(
+    await publish_glassroom(
         nats_client,
         sprint["id"],
         {
@@ -2909,7 +2327,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             # 2. Mark as in_progress and notify glassroom.
             await asyncio.to_thread(_update_item_status, item["id"], "in_progress")
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -2926,7 +2344,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 },
             )
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -2963,15 +2381,17 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
-                _collect_console_assistant_advice(nats_client, item, agent, sprint),
+                console_assistants.collect_advice(
+                    nats_client, item, agent, sprint, _resolve_workspace_root
+                ),
             )
             external_advice = assistant_context.get("combined", "")
-            assistant_usage_comment = _build_console_assistant_usage_comment(
+            assistant_usage_comment = console_assistants.usage_comment(
                 assistant_context.get("sources", [])
             )
 
             if memory_ctx or lessons_ctx:
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint["id"],
                     {
@@ -3010,7 +2430,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     if isinstance(c, dict)
                     and classify_review_result(str(c.get("text", ""))) == "NEEDS_WORK"
                 ][-2:]
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint["id"],
                     {
@@ -3066,7 +2486,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         comment_text=format_architect_consult_comment(architect_advice),
                         comment_author=ARCHITECT_COMMENT_AUTHOR,
                     )
-                    await _publish_glassroom(
+                    await publish_glassroom(
                         nats_client,
                         sprint["id"],
                         {
@@ -3084,7 +2504,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         },
                     )
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -3124,7 +2544,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 _sanitize_deliverable_text, deliverable
             )
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -3199,7 +2619,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 body=_handoff_body(item["title"], deliverable),
             )
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -3217,7 +2637,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 },
             )
 
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 sprint["id"],
                 {
@@ -3268,7 +2688,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     pass
 
             if data.get("sprint_id"):
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     data["sprint_id"],
                     {
@@ -3303,7 +2723,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
     recovered_items = await asyncio.to_thread(_recover_inflight_items_for_restart)
     for recovered in recovered_items:
-        await _publish_glassroom(
+        await publish_glassroom(
             nats_client,
             recovered["sprint_id"],
             {
@@ -3403,7 +2823,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 session.add(item)
                 session.commit()
 
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3439,7 +2859,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 session.add(item)
                 session.commit()
 
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3507,7 +2927,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 session.commit()
                 if not rework:
                     quality_gate_blocked_ids.add(item.id)
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3541,7 +2961,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             )
 
             try:
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3658,7 +3078,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 if needs_work:
                     if autopilot_rework_allowed:
-                        await _publish_glassroom(
+                        await publish_glassroom(
                             nats_client,
                             sprint.id,
                             {
@@ -3685,7 +3105,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                             AUTOPILOT_MAX_REWORK_CYCLES,
                         )
                     else:
-                        await _publish_glassroom(
+                        await publish_glassroom(
                             nats_client,
                             sprint.id,
                             {
@@ -3712,7 +3132,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                             AUTOPILOT_MAX_REWORK_CYCLES,
                         )
                 else:
-                    await _publish_glassroom(
+                    await publish_glassroom(
                         nats_client,
                         sprint.id,
                         {
@@ -3750,7 +3170,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 session.add(item)
                 session.commit()
 
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3803,7 +3223,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                 sprint = session.get(Sprint, item.sprint_id)
                 if sprint:
-                    await _publish_glassroom(
+                    await publish_glassroom(
                         nats_client,
                         sprint.id,
                         {
@@ -3840,7 +3260,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
             sprint = session.get(Sprint, item.sprint_id)
             if sprint:
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     sprint.id,
                     {
@@ -3969,7 +3389,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 item.updated_at = dispatch_time
                 session.add(item)
                 _clear_queue_marker(item.id)
-                await _publish_glassroom(
+                await publish_glassroom(
                     nats_client,
                     item.sprint_id,
                     {
@@ -4002,7 +3422,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
 
             # Durable: one stored assignment per todo state of the item, even
             # though this runs every review cycle while the worker is busy.
-            updated = _normalize_utc(item.updated_at)
+            updated = normalize_utc(item.updated_at)
             await nats_client.publish(
                 "task.assign",
                 {
@@ -4014,7 +3434,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 msg_id=f"assign-{item.id}-{updated.isoformat() if updated else '-'}",
             )
             _mark_queued(item.id, dispatch_time)
-            await _publish_glassroom(
+            await publish_glassroom(
                 nats_client,
                 item.sprint_id,
                 {
@@ -4031,19 +3451,3 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 },
             )
         session.commit()
-
-
-async def _publish_glassroom(
-    nats_client: NATSClient,
-    sprint_id: int,
-    event: dict[str, Any],
-):
-    """Publish a real-time event to the Glassroom SSE stream for a sprint."""
-    try:
-        event.setdefault("event_id", str(uuid4()))
-        event.setdefault("source", "backend")
-        event.setdefault("semantic_version", 1)
-        event["timestamp"] = datetime.now(UTC).isoformat()
-        await nats_client.publish(f"glassroom.{sprint_id}", event)
-    except Exception as e:  # noqa: BLE001 - Glassroom notifications are best-effort.
-        logger.warning("Failed to publish glassroom event: %s", e)

@@ -132,6 +132,8 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/services/board.py`** — The pure readers of a task's comment thread, shared by the task worker, `routers/inbox.py` and `services/carry_over.py`: which comment is the deliverable to review, the pending `NEEDS WORK:` requests, whether a blocked task waits for a person (`blocked_item_next_step`, `item_is_settled`) and its `block_reason`. No engine, no I/O; the gate author names (`Quality gate`, `Verifier`) live here too.
 
+**`backend/app/services/console_assistants.py`** — The terminal assistants the daemon can run (GitHub Copilot CLI, Claude CLI): which ones to ask for a task (`select_assistants`), the command with the prompt shell-quoted, `collect_advice` through `workspace.execute`, and the per-company cooldown persisted in `AssistantRuntimeState` when one is out of quota or missing on the host. Their advice is prompt context and a board note, never evidence. `services/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
+
 **`backend/app/nats_client.py`** — `enable_jetstream()` declares the work-queue streams in `DURABLE_STREAMS` (`task.assign`, `workspace.deliver`, `workspace.delivered`); `publish()` stores durable subjects with a `Nats-Msg-Id`, `consume()` is a durable pull consumer with explicit acks. Without JetStream both fall back to core NATS with a warning; `/health` reports `jetstream`.
 
 **`frontend/src/`** — React 18 app. Key views:
@@ -269,6 +271,7 @@ Test files:
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
 | `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
+| `test_console_assistants.py` | Which assistants a task gets, the prompt quoted into the command, persisted quota and missing-binary cooldowns, and the full path with its Glassroom telemetry |
 | `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
