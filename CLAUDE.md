@@ -176,7 +176,15 @@ the LangGraph graph is only an optional kickoff conversation.
    (daemon reports) are kept apart; the board and Glassroom show the verdict.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
-   `APPROVED:` closes the task.
+   `APPROVED:` closes the task. Before any of that, the text checks on the
+   deliverable (length, sections, balanced fences — `_validate_minimum_deliverable`)
+   send it back with the reason as `Quality gate`, up to
+   `AUTOPILOT_MAX_REWORK_CYCLES`, then block the task and escalate to the
+   ScrumMaster. A sprint closes when every task is settled: done, or blocked
+   until a person acts (nothing the worker retries, re-reviews or an operator
+   froze). Blocked tasks stay on the board, appear in the retrospective and
+   count in the procedures' `blocked_rate`; approvals close the sprint on the
+   spot and the review cycle closes one whose last open task got blocked.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
    - the Developer's question to the Architect and its answer;
@@ -241,6 +249,7 @@ Test files:
 | `test_task_delivery.py` | File manifest parsing, delivery to the real daemon against `tmp_path`, sha256 `files_written` check, daemon-down → unverifiable |
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
+| `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
