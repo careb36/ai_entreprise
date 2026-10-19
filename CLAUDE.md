@@ -195,7 +195,7 @@ the LangGraph graph is only an optional kickoff conversation.
    runs of other producers nobody decided on (the company's own task worker
    and kickoff runs, `IN_HOUSE_PRODUCERS`, are decided by the review loop;
    `GET /v1/agent_runs?exclude_in_house=true` lists the rest). The Review page shows them (a Manager can send a
-   blocked task back to work) and the navigation counts them. A blocked task
+   blocked task back to work, with how earlier second attempts went beside them) and the navigation counts them. A blocked task
    can also get another attempt in the next sprint (`services/carry_over.py`):
    `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the
    "Plan a sprint" form offers them (with how earlier second attempts went,
@@ -381,7 +381,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
-| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, Viewer and error states |
+| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, how earlier second attempts went beside the blocked tasks, Viewer and error states |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)

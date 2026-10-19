@@ -1463,6 +1463,7 @@
     "subtitle": "Lo que la empresa necesita de vos. El resto lo hacen los agentes.",
     "blockedTitle": "Tareas bloqueadas hasta que alguien actúe",
     "blockedHint": "Los agentes las dejaron después del límite de retrabajos. Mandá una de vuelta al trabajo, o cerrala en su tablero.",
+    "secondAttemptsRecord": "Hasta ahora se completaron {{done}} de {{total}} segundos intentos; con la consigna del ScrumMaster, {{briefedDone}} de {{briefed}}.",
     "noBlocked": "Ninguna tarea espera a una persona.",
     "frozen": "congelada por un operador",
     "triageRetry": "ScrumMaster: otro intento en el próximo sprint.",

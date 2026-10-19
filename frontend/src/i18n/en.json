@@ -1463,6 +1463,7 @@
     "subtitle": "What the company needs you for. The agents do the rest.",
     "blockedTitle": "Tasks blocked until someone acts",
     "blockedHint": "The agents gave up on these after the rework limit. Send one back to work, or close it on its board.",
+    "secondAttemptsRecord": "So far {{done}} of {{total}} second attempts got done; with the ScrumMaster's brief, {{briefedDone}} of {{briefed}}.",
     "noBlocked": "No task is waiting for a person.",
     "frozen": "frozen by an operator",
     "triageRetry": "ScrumMaster: another attempt in the next sprint.",

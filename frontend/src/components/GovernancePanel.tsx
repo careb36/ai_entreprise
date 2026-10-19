@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshCw, ShieldCheck, Undo2 } from 'lucide-react'
-import { useAgentRuns, useCurrentRole, useInbox, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAgentRuns, useCurrentRole, useInbox, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
+import { secondAttempts } from '../lib/learningTrend'
 import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
 
@@ -145,6 +146,11 @@ function Inbox({ companyId }: { companyId: number }) {
   const inbox = useInbox(companyId)
   const blocked = inbox.data?.blocked_tasks ?? []
   const proposals = inbox.data?.proposals ?? []
+  // How earlier second attempts went, counted from the closed sprints' boards:
+  // the evidence beside the ScrumMaster's advice when a person decides what to
+  // do with a blocked task. Only fetched while there is one to decide on.
+  const sprints = useSprints(blocked.length > 0 ? companyId : null)
+  const record = secondAttempts(sprints.data ?? [])
 
   return (
     <div className="space-y-8">
@@ -165,6 +171,17 @@ function Inbox({ companyId }: { companyId: number }) {
               <PauseOctagon size={12} aria-hidden="true" />
               {t('inbox.blockedHint', { defaultValue: 'The agents gave up on these after the rework limit. Send one back to work, or close it on its board.' })}
             </p>
+            {record.total > 0 && (
+              <p className="text-xs text-gray-400">
+                {t('inbox.secondAttemptsRecord', {
+                  done: record.done,
+                  total: record.total,
+                  briefedDone: record.briefed_done,
+                  briefed: record.briefed,
+                  defaultValue: "So far {{done}} of {{total}} second attempts got done; with the ScrumMaster's brief, {{briefedDone}} of {{briefed}}.",
+                })}
+              </p>
+            )}
             {blocked.map(task => <BlockedTask key={task.id} task={task} canManage={canManage} />)}
           </>
         )}
