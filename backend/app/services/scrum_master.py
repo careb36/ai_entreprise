@@ -19,6 +19,7 @@ keeps the deterministic default: one more attempt, then a person.
 
 import os
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 from llm_proxy_client import LLMProxyClient
@@ -28,7 +29,12 @@ from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
 from services import procedures
-from services.board import SCRUM_MASTER_ROLE, is_rework_request, since_send_back
+from services.board import (
+    SCRUM_MASTER_ROLE,
+    is_rework_request,
+    last_send_back_at,
+    since_send_back,
+)
 
 logger = setup_logger("fabrique-scrum-master")
 
@@ -44,10 +50,13 @@ WHY_LIMIT = 300
 FEEDBACK_SHOWN = 3
 FEEDBACK_CHARS = 400
 TIMEOUT_SECONDS = 90
+# The triage is advice the worker waits for: one short attempt, no retries, so
+# a slow or failing proxy cannot hold the review loop for long.
+TRIAGE_TIMEOUT_SECONDS = 45
 
 _ANSWER = re.compile(
     r"DECISION:[\s*`\"']*(?P<decision>retry|person)\b"
-    r"(?P<rest>.*?)(?:^|\n)[\s*`]*END\b",
+    r"(?P<rest>.*?)(?:^|\n)[ \t*`]*END[ \t*`]*(?:\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _FIELD_START = re.compile(
@@ -135,8 +144,8 @@ def parse_answer(text: str) -> dict[str, str] | None:
     }
 
 
-def ask(session: Session, company_id: int, prompt: str) -> str:
-    """Ask the company's ScrumMaster agent (its model, or the role's default)."""
+def profile(session: Session, company_id: int) -> tuple[str, str | None]:
+    """The company's ScrumMaster agent: its model (or the role's default) and system prompt."""
     scrum_master = session.exec(
         select(Agent).where(
             Agent.company_id == company_id, Agent.role == SCRUM_MASTER_ROLE
@@ -144,16 +153,30 @@ def ask(session: Session, company_id: int, prompt: str) -> str:
     ).first()
     configured = (scrum_master.model if scrum_master else "") or ""
     model = configured.strip() or default_model_for_role(SCRUM_MASTER_ROLE)
+    return model, (scrum_master.system_prompt if scrum_master else None) or None
+
+
+def ask_model(
+    model: str,
+    system_prompt: str | None,
+    prompt: str,
+    *,
+    timeout: float = TIMEOUT_SECONDS,
+    retries: int | None = None,
+) -> str:
+    """One question to the ScrumMaster through the proxy; no database involved.
+
+    *retries* ``None`` keeps the client's default (``LLM_PROXY_MAX_RETRIES``).
+    """
     messages = [{"role": "user", "content": prompt}]
-    if scrum_master and scrum_master.system_prompt:
-        messages.insert(0, {"role": "system", "content": scrum_master.system_prompt})
+    if system_prompt:
+        messages.insert(0, {"role": "system", "content": system_prompt})
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
-    client.timeout = TIMEOUT_SECONDS
-    # One attempt: the triage is advice and the caller waits for it; a proxy
-    # outage must not hold the review loop for the client's full retry budget.
-    client.max_retries = 0
+    client.timeout = timeout
+    if retries is not None:
+        client.max_retries = retries
     result = client.chat(messages=messages, model=model, role=SCRUM_MASTER_ROLE)
     if not isinstance(result, dict) or result.get("error"):
         raise ScrumMasterError(f"LLM call failed: {result!r}"[:500])
@@ -162,6 +185,19 @@ def ask(session: Session, company_id: int, prompt: str) -> str:
     if not str(content).strip():
         raise ScrumMasterError("LLM call failed: empty response")
     return str(content).strip()
+
+
+def ask(
+    session: Session,
+    company_id: int,
+    prompt: str,
+    *,
+    timeout: float = TIMEOUT_SECONDS,
+    retries: int | None = None,
+) -> str:
+    """Ask the company's ScrumMaster agent (its model, or the role's default)."""
+    model, system_prompt = profile(session, company_id)
+    return ask_model(model, system_prompt, prompt, timeout=timeout, retries=retries)
 
 
 # ---------------------------------------------------------------------------
@@ -197,36 +233,50 @@ def parse_decision_body(body: str) -> dict[str, str] | None:
     return {"decision": decision, "why": why, "brief": brief}
 
 
-def triage(
-    session: Session, company_id: int, sprint_id: int, item: BacklogItem, reason: str
-) -> AgentMessage | None:
-    """Ask the ScrumMaster about a blocked task and record its decision.
+def prepare_triage(
+    session: Session, company_id: int, item: BacklogItem, reason: str
+) -> tuple[str, str, str | None]:
+    """What the triage needs from the database: the prompt and who answers it."""
+    context = procedures.procedures_prompt(
+        procedures.active_procedures(session, company_id, item.assignee)
+    )
+    model, system_prompt = profile(session, company_id)
+    return triage_prompt(item, reason, context), model, system_prompt
 
-    Returns the recorded message, or ``None`` when the call failed or the
-    answer was unusable: the company then keeps its deterministic default.
-    The caller commits.
-    """
-    try:
-        context = procedures.procedures_prompt(
-            procedures.active_procedures(session, company_id, item.assignee)
-        )
-        answer = ask(session, company_id, triage_prompt(item, reason, context))
-    except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
-        logger.warning("ScrumMaster triage failed for item=%s: %s", item.id, exc)
-        return None
+
+def ask_triage(model: str, system_prompt: str | None, prompt: str) -> str:
+    """The triage question itself: one short attempt (see ``TRIAGE_TIMEOUT_SECONDS``)."""
+    return ask_model(
+        model, system_prompt, prompt, timeout=TRIAGE_TIMEOUT_SECONDS, retries=0
+    )
+
+
+def decide(answer: str, item_id: int | None = None) -> dict[str, str] | None:
+    """The decision in an answer, or ``None`` (logged) when it is unusable."""
     decision = parse_answer(answer)
     if decision is None:
         logger.info(
-            "ScrumMaster triage of item=%s was unusable: %r", item.id, answer[:200]
+            "ScrumMaster triage of item=%s was unusable: %r", item_id, answer[:200]
         )
-        return None
+    return decision
+
+
+def record_decision(
+    session: Session,
+    company_id: int,
+    sprint_id: int | None,
+    item_id: int,
+    assignee: str | None,
+    decision: dict[str, str],
+) -> AgentMessage:
+    """Record a triage as the ScrumMaster's ``decision`` message. The caller commits."""
     message = AgentMessage(
         company_id=company_id,
         sprint_id=sprint_id,
-        backlog_item_id=item.id,
+        backlog_item_id=item_id,
         from_name=SCRUM_MASTER_ROLE,
         from_role=SCRUM_MASTER_ROLE,
-        to_role=item.assignee if decision["decision"] == DECISION_RETRY else None,
+        to_role=assignee if decision["decision"] == DECISION_RETRY else None,
         kind="decision",
         body=decision_body(decision),
     )
@@ -234,16 +284,53 @@ def triage(
     return message
 
 
-def decisions_for(session: Session, item_ids: list[int]) -> dict[int, dict[str, Any]]:
+def triage(
+    session: Session, company_id: int, sprint_id: int, item: BacklogItem, reason: str
+) -> AgentMessage | None:
+    """Ask the ScrumMaster about a blocked task and record its decision, in one session.
+
+    Returns the recorded message, or ``None`` when the call failed or the
+    answer was unusable: the company then keeps its deterministic default.
+    The caller commits. The task worker uses the steps above instead, so no
+    database connection is held while the model answers.
+    """
+    try:
+        prompt, model, system_prompt = prepare_triage(session, company_id, item, reason)
+        answer = ask_triage(model, system_prompt, prompt)
+    except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
+        logger.warning("ScrumMaster triage failed for item=%s: %s", item.id, exc)
+        return None
+    decision = decide(answer, item.id)
+    if decision is None:
+        return None
+    return record_decision(
+        session, company_id, sprint_id, item.id, item.assignee, decision
+    )
+
+
+def _naive_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+
+def decisions_for(
+    session: Session,
+    item_ids: list[int],
+    sent_back_at: dict[int, datetime] | None = None,
+) -> dict[int, dict[str, Any]]:
     """The ScrumMaster's current triage of each of *item_ids*, by item id.
 
-    A triage answers one escalation: a decision recorded before the item's
-    latest escalation is stale (the task was sent back and blocked again) and
-    is left out, so an unanswered new block keeps the deterministic default.
+    A triage answers one block. It is stale, and left out, once the task was
+    escalated again (a later ``escalation`` message) or sent back to work by a
+    person after it (*sent_back_at*, from the task's comments): the next block
+    may have another cause and gets its own answer, or the deterministic
+    default when none comes.
     """
     ids = list(dict.fromkeys(i for i in item_ids if i is not None))
     if not ids:
         return {}
+    sent_back = {k: _naive_utc(v) for k, v in (sent_back_at or {}).items()}
     rows = session.exec(
         select(
             AgentMessage.backlog_item_id,
@@ -251,6 +338,7 @@ def decisions_for(session: Session, item_ids: list[int]) -> dict[int, dict[str, 
             AgentMessage.kind,
             AgentMessage.from_role,
             AgentMessage.body,
+            AgentMessage.created_at,
         )
         .where(
             AgentMessage.backlog_item_id.in_(ids),
@@ -258,21 +346,38 @@ def decisions_for(session: Session, item_ids: list[int]) -> dict[int, dict[str, 
         )
         .order_by(AgentMessage.id)
     ).all()
-    latest_escalation: dict[int, int] = {}
     decisions: dict[int, dict[str, Any]] = {}
-    for item_id, message_id, kind, from_role, body in rows:
+    for item_id, _message_id, kind, from_role, body, created_at in rows:
         if kind == "escalation":
-            latest_escalation[item_id] = message_id
             decisions.pop(item_id, None)
             continue
         if from_role != SCRUM_MASTER_ROLE:
             continue
         decision = parse_decision_body(body)
-        if decision and message_id > latest_escalation.get(item_id, 0):
-            decisions[item_id] = decision
+        if decision is None:
+            continue
+        cutoff = sent_back.get(item_id)
+        if cutoff is not None and (_naive_utc(created_at) or cutoff) <= cutoff:
+            continue
+        decisions[item_id] = decision
     return decisions
+
+
+def triages_for(
+    session: Session, items: list[BacklogItem]
+) -> dict[int, dict[str, Any]]:
+    """``decisions_for`` the given tasks, minding when a person last sent each back."""
+    sent_back = {
+        item.id: moment
+        for item in items
+        if (moment := last_send_back_at(item.comments)) is not None
+    }
+    return decisions_for(session, [item.id for item in items], sent_back)
 
 
 def decision_for(session: Session, item_id: int) -> dict[str, Any] | None:
     """The ScrumMaster's current triage of *item_id*, or ``None``."""
-    return decisions_for(session, [item_id]).get(item_id)
+    item = session.get(BacklogItem, item_id)
+    if item is None:
+        return decisions_for(session, [item_id]).get(item_id)
+    return triages_for(session, [item]).get(item_id)

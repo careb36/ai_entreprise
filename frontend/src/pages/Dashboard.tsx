@@ -7,7 +7,7 @@
  * app shell, so nothing here repeats it.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -256,14 +256,20 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   // When a plan preview appears, start with the tasks the ScrumMaster's triage
   // recommends retrying, within the room the scope leaves; the person unticks
   // or adds from there. The triage is advice: nothing is sent without the tick.
+  // Pre-ticked once per plan, so a later scope change or inbox refetch never
+  // overwrites what the person chose.
+  const pretickedPlan = useRef<SprintPlanResponse | null>(null)
   useEffect(() => {
     if (!plannedSprint) {
+      pretickedPlan.current = null
       setCarryOver([])
       return
     }
+    if (pretickedPlan.current === plannedSprint || !inbox.data) return
+    pretickedPlan.current = plannedSprint
     const room = Math.max(0, SCOPE_META[scope].limit - plannedSprint.tasks.length)
     setCarryOver(
-      (inbox.data?.blocked_tasks ?? [])
+      inbox.data.blocked_tasks
         .filter(task => !task.frozen && task.triage?.decision === 'retry')
         .slice(0, room)
         .map(task => task.id),

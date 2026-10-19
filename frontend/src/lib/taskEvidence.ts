@@ -3,12 +3,6 @@ import type { AgentRun, AgentRunListItem } from '../services/api'
 /** The producer the task worker records deliverables under (backend TASK_WORKER_PRODUCER). */
 export const TASK_WORKER_PRODUCER = 'le-fabrique-task-worker'
 
-/**
- * The company's own producers (backend IN_HOUSE_PRODUCERS). The review loop
- * decides their runs, so they never wait for a person's approval.
- */
-export const IN_HOUSE_PRODUCERS: readonly string[] = [TASK_WORKER_PRODUCER, 'le-fabrique-graph']
-
 /** Every version of a task's deliverable shares this external_ref. */
 export function taskExternalRef(taskId: number): string {
   return `task-${taskId}`

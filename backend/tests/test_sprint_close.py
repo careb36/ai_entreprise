@@ -319,11 +319,17 @@ def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
     monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
     asked = []
 
-    def _ask(session, company_id, prompt):
+    def _ask(model, system_prompt, prompt):
+        # Asked before the task counts as blocked, so a sprint closing in the
+        # meantime already sees the decision.
+        statuses.append(
+            db.exec(select(BacklogItem.status).where(BacklogItem.id == item.id)).one()
+        )
         asked.append(prompt)
         return "DECISION: retry\nBRIEF: Write at least 180 words.\nWHY: cut short.\nEND"
 
-    monkeypatch.setattr(scrum_master, "ask", _ask)
+    statuses = []
+    monkeypatch.setattr(scrum_master, "ask_triage", _ask)
     sprint, item = _doc_task(db)
     nats = _task_assign_handler(monkeypatch)
 
@@ -332,6 +338,7 @@ def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
     db.expire_all()
     assert db.get(BacklogItem, item.id).status == "blocked"
     assert len(asked) == 1
+    assert statuses != ["blocked"]
     assert (
         "## What blocked it\nPre-review quality gate failed after 0 rework(s)"
         in asked[0]
