@@ -86,7 +86,7 @@ echo "stack up: $API (logs in $WORK)"
 api() { curl -s "$@"; }
 json() { "$PY" -c "import sys, json; d = json.load(sys.stdin); print($1)"; }
 sprint_status() { api "$API/v1/sprints?company_id=$CID" | json "next((s['status'] for s in d if s['id'] == $1), '')"; }
-board() { api "$API/v1/sprints/$1/board" | json "' '.join(f\"{i['title'][:24]}={i['status']}\" for c in d['columns'].values() for i in c)"; }
+board() { api "$API/v1/sprints/$1/board" | json "' '.join(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)"; }
 wait_sprint() {  # wait_sprint <sprint id>
   local start=$SECONDS
   while (( SECONDS - start < TIMEOUT )); do
@@ -105,7 +105,7 @@ S0=$(echo "$COMPANY" | json "d.get('sprint_id', '')")
 [ -n "$CID" ] && [ -n "$S0" ] || { echo "init_company failed: $COMPANY"; exit 2; }
 check "the foundation sprint closes" wait_sprint "$S0"
 echo "     board: $(board "$S0")"
-check "its task is blocked for a person" test "$(board "$S0")" = "Create testing strategy d=blocked"
+check "its task is blocked for a person" test "$(board "$S0")" = "Create testing strategy document=blocked"
 check "the quality gate asked for rework twice" test "$(api "$API/v1/messages?company_id=$CID&kind=request" | json "len(d['messages'])")" = 2
 check "the ScrumMaster posted the retrospective" test "$(api "$API/v1/messages?company_id=$CID&kind=retrospective" | json "len(d['messages'])")" = 1
 check "a procedure was proposed and adopted (autonomy 3)" test "$(api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')")" = 1
@@ -123,7 +123,7 @@ S1=$(echo "$NEW" | json "d.get('sprint_id', '')")
 check "the sprint starts with two tasks" test "$(echo "$NEW" | json "len(d.get('backlog_item_ids', []))")" = 2
 check "Sprint 1 closes" wait_sprint "$S1"
 echo "     board: $(board "$S1")"
-check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy d=blocked"
+check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
 check "the retried task's prompts carry the previous attempt" test "$(grep -c '## Previous attempt' "$PROMPTS")" -ge 1
 check "files were written to the project" test -f "$WORK/project/src/add_parser.py" -a -f "$WORK/project/tests/test_add_parser.py"
 check "the delivery was verified" test "$(api "$API/v1/agent_runs?company_id=$CID" | json "sum(1 for r in d['agent_runs'] if r['status'] == 'verified')")" -ge 1
