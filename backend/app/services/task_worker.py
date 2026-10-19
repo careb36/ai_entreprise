@@ -49,6 +49,7 @@ from services import (
     agent_run_service,
     console_assistants,
     procedures,
+    scrum_master,
     workspace_daemon,
 )
 from services.board import (
@@ -1524,6 +1525,21 @@ def _post_message(**fields: Any) -> None:
         logger.warning("Agent message not recorded (%s): %s", fields.get("kind"), exc)
 
 
+def _triage_blocked_task(
+    company_id: int, sprint_id: int, item_id: int, reason: str
+) -> None:
+    """The ScrumMaster answers an escalation; a failed answer changes nothing."""
+    try:
+        with Session(engine) as session:
+            item = session.get(BacklogItem, item_id)
+            if item is None:
+                return
+            if scrum_master.triage(session, company_id, sprint_id, item, reason):
+                session.commit()
+    except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
+        logger.warning("ScrumMaster triage not recorded for item=%s: %s", item_id, exc)
+
+
 def _handoff_body(title: str, deliverable: str) -> str:
     """What the developer hands to review: the files it declared, by path."""
     paths = [entry["path"] for entry in parse_file_manifest(deliverable or "")]
@@ -2265,6 +2281,10 @@ async def _send_back_from_quality_gate(
             "preview": deliverable[:200] if deliverable else "",
         },
     )
+    if not rework:
+        await asyncio.to_thread(
+            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
+        )
     logger.warning(
         "Pre-review gate %s item=%s by %s: %s",
         "sent back" if rework else "blocked",
@@ -2927,6 +2947,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 session.commit()
                 if not rework:
                     quality_gate_blocked_ids.add(item.id)
+                    await asyncio.to_thread(
+                        _triage_blocked_task,
+                        sprint.company_id,
+                        sprint.id,
+                        item.id,
+                        comments[-1]["text"],
+                    )
                 await publish_glassroom(
                     nats_client,
                     sprint.id,
@@ -3075,6 +3102,15 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         )
                     )
                 session.commit()
+                if needs_work and not autopilot_rework_allowed:
+                    await asyncio.to_thread(
+                        _triage_blocked_task,
+                        sprint.company_id,
+                        sprint.id,
+                        item.id,
+                        f"Still not accepted after {previous_reworks} rework(s). "
+                        f"Last review: {normalized_review[:500]}",
+                    )
 
                 if needs_work:
                     if autopilot_rework_allowed:

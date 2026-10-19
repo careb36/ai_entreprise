@@ -494,6 +494,8 @@ export interface InboxBlockedTask {
   sprint_name: string
   sprint_status: string
   reason: string
+  /** The ScrumMaster's answer to the escalation, when it gave one: a claim for the person to weigh. */
+  triage: { decision: 'retry' | 'person'; why: string; brief: string } | null
   frozen: boolean
   updated_at: string | null
 }

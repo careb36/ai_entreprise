@@ -199,7 +199,14 @@ the LangGraph graph is only an optional kickoff conversation.
    "Plan a sprint" form offers them, and with `autonomy_level` 3 the follow-up
    sprint carries the closed sprint's blocked tasks on its own, once each. The
    new task carries what blocked the old one (a `Previous attempt` prompt
-   section); the old one is marked and leaves the inbox.
+   section); the old one is marked and leaves the inbox. The escalation gets
+   an answer (`services/scrum_master.py`): the ScrumMaster reads what blocked
+   the task and the rework asked for and decides, in a fixed `DECISION … END`
+   format a parser checks, between another attempt with a brief for it or
+   leaving it to a person. The decision is a `decision` message, a claim: the
+   inbox shows it as `triage`, the brief travels with the carried task into
+   its prompt, and a task left for a person is not carried over on the
+   company's own (a person still can). No usable answer keeps the default.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
    - the Developer's question to the Architect and its answer;
@@ -267,6 +274,7 @@ Test files:
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
+| `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
@@ -289,7 +297,8 @@ deterministic answers) against a Postgres and a NATS you provide
 and `E2E_NATS_URL`; the e2e database is recreated on every run), then drives
 one company through the loop and checks it through the API: the foundation
 sprint closes with its task blocked for a person after two rework requests,
-the retrospective and an adopted procedure; the inbox lists the task;
+the ScrumMaster's triage of it, the retrospective and an adopted procedure;
+the inbox lists the task;
 `start_sprint` with `carry_over_ids` retries it beside a new task whose
 files are written and verified; the inbox then lists only the new attempt.
 Run it with the backend's interpreter (`E2E_PYTHON="poetry run python"` from

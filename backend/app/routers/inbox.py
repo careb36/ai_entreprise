@@ -2,15 +2,17 @@
 Inbox router — what the company needs a person for.
 
 ``GET /v1/inbox`` lists, for one company, the decisions only a person can
-take: tasks blocked until someone acts, procedure proposals waiting for a
-Manager, and agent runs nobody has approved or rejected. The agents do the
-rest on their own, so this is the whole of a person's queue.
+take: tasks blocked until someone acts (with the ScrumMaster's triage of each,
+when it answered the escalation), procedure proposals waiting for a Manager,
+and agent runs nobody has approved or rejected. The agents do the rest on
+their own, so this is the whole of a person's queue.
 """
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
+from services import scrum_master
 from services.board import block_reason, blocked_item_next_step
 from services.carry_over import carried_over
 from sqlalchemy import func
@@ -39,6 +41,8 @@ async def inbox(
     ).all()
     blocked_tasks = []
     blocked_total = 0
+    # The ScrumMaster's answers to the escalations, one query for the page.
+    triages = scrum_master.decisions_for(session, [item.id for item, _ in rows])
     for item, sprint in rows:
         next_step = blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):
@@ -57,6 +61,9 @@ async def inbox(
                 "sprint_name": sprint.sprint_name,
                 "sprint_status": sprint.status,
                 "reason": block_reason(item.comments)[:REASON_LIMIT],
+                # The ScrumMaster's answer to the escalation, a claim for the
+                # person to weigh: another attempt (with a brief) or a person.
+                "triage": triages.get(item.id),
                 "frozen": next_step == "frozen",
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }

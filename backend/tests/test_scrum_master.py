@@ -1,0 +1,473 @@
+"""
+services/scrum_master.py: the ScrumMaster answers an escalation.
+
+- The answer is asked for in a fixed format; only that format is a decision.
+- The decision is recorded as a message to the assignee (another attempt,
+  with a brief) or to nobody in particular (a person decides), and read back
+  from the conversation.
+- A failed call or an unusable answer records nothing: the company keeps its
+  deterministic default.
+- The decision reaches the loop: a task left for a person is not carried over
+  on the company's own; a brief travels with the new attempt into the prompt.
+"""
+
+import secrets
+
+import pytest
+from models import Agent, AgentMessage, BacklogItem, Company, Sprint
+from services import carry_over, scrum_master
+from sqlmodel import select
+
+TRIAGE = (
+    "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: "
+    "Too short (41 words, minimum 180)."
+)
+RETRY_ANSWER = (
+    "DECISION: retry\n"
+    "BRIEF: Write the full strategy document (at least 180 words) with sections for "
+    "unit, integration and end-to-end tests, as a path= block.\n"
+    "WHY: the attempts were cut short, not wrong.\n"
+    "END"
+)
+
+
+@pytest.fixture()
+def company(sqlite_session):
+    company = Company(company_name=f"SM {secrets.token_hex(3)}", autonomy_level=3)
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sqlite_session.refresh(company)
+    sprint = Sprint(company_id=company.id, sprint_name="Sprint 0", status="active")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    sqlite_session.refresh(sprint)
+    return company, sprint
+
+
+def _blocked(session, sprint, comments=None, **fields):
+    item = BacklogItem(
+        sprint_id=sprint.id,
+        title=fields.pop("title", "Create testing strategy document"),
+        description="Define the testing pyramid.",
+        priority="high",
+        assignee="QA",
+        status="blocked",
+        comments=comments
+        or [
+            {"author": "QA Quinn", "text": "NEEDS WORK: cover integration tests too"},
+            {"author": "Quality gate", "text": "NEEDS WORK: Too short (12 words)."},
+            {"author": "Quality gate", "text": TRIAGE},
+        ],
+        **fields,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+# ---------------------------------------------------------------------------
+# The question and the answer
+# ---------------------------------------------------------------------------
+
+
+def test_the_prompt_carries_the_task_the_block_and_the_rework_asked(
+    sqlite_session, company
+):
+    _company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+
+    prompt = scrum_master.triage_prompt(item, TRIAGE, "\n\n## Company Procedures\nx")
+
+    assert prompt.startswith("You are the ScrumMaster. A task was blocked")
+    assert "## Task: Create testing strategy document" in prompt
+    assert "Assigned to: QA" in prompt
+    assert f"## What blocked it\n{TRIAGE}" in prompt
+    assert "- QA Quinn: NEEDS WORK: cover integration tests too" in prompt
+    assert "- Quality gate: NEEDS WORK: Too short (12 words)." in prompt
+    assert "## Company Procedures" in prompt
+    assert "DECISION: <retry or person>" in prompt
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (
+            RETRY_ANSWER,
+            {
+                "decision": "retry",
+                "brief": "Write the full strategy document (at least 180 words) with sections for unit, integration and end-to-end tests, as a path= block.",
+                "why": "the attempts were cut short, not wrong.",
+            },
+        ),
+        (
+            "Sure.\nDECISION: person\nBRIEF: n/a\nWHY: it needs the team's test budget.\nEND\nThanks",
+            {
+                "decision": "person",
+                "brief": "",
+                "why": "it needs the team's test budget.",
+            },
+        ),
+        ("decision: Retry\nEND", {"decision": "retry", "brief": "", "why": ""}),
+        ("I think it should be retried with a longer document.", None),
+        ("DECISION: maybe\nEND", None),
+        ("DECISION: retry\nBRIEF: no END marker", None),
+    ],
+    ids=["retry", "person", "bare", "prose", "unknown", "unterminated"],
+)
+def test_only_the_fixed_format_is_a_decision(answer, expected):
+    assert scrum_master.parse_answer(answer) == expected
+
+
+def test_a_long_brief_is_cut():
+    answer = f"DECISION: retry\nBRIEF: {'x' * 700}\nWHY: y\nEND"
+
+    assert len(scrum_master.parse_answer(answer)["brief"]) == scrum_master.BRIEF_LIMIT
+
+
+def test_the_decision_is_asked_of_the_companys_scrum_master(
+    sqlite_session, company, monkeypatch
+):
+    company, _sprint = company
+    sqlite_session.add(
+        Agent(
+            company_id=company.id,
+            name="Sam",
+            role="ScrumMaster",
+            model="deepseek-v4-pro",
+            system_prompt="Be brief.",
+        )
+    )
+    sqlite_session.commit()
+    calls = []
+
+    class _Client:
+        def __init__(self, base_url=None):
+            self.timeout = None
+
+        def chat(self, messages, model, role, bu_id=None):
+            calls.append((messages, model, role, self.timeout))
+            return {"choices": [{"message": {"content": "  DECISION: person\nEND "}}]}
+
+    monkeypatch.setattr(scrum_master, "LLMProxyClient", _Client)
+
+    answer = scrum_master.ask(sqlite_session, company.id, "the question")
+
+    assert answer == "DECISION: person\nEND"
+    (messages, model, role, timeout) = calls[0]
+    assert (model, role, timeout) == ("deepseek-v4-pro", "ScrumMaster", 90)
+    assert messages == [
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": "the question"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "result",
+    [{"error": "proxy down", "status_code": 503}, {"choices": [{"message": {}}]}],
+    ids=["error", "empty"],
+)
+def test_a_failed_call_raises(sqlite_session, company, monkeypatch, result):
+    company, _sprint = company
+
+    class _Client:
+        def __init__(self, base_url=None):
+            self.timeout = None
+
+        def chat(self, messages, model, role, bu_id=None):
+            return result
+
+    monkeypatch.setattr(scrum_master, "LLMProxyClient", _Client)
+
+    with pytest.raises(scrum_master.ScrumMasterError):
+        scrum_master.ask(sqlite_session, company.id, "q")
+
+
+# ---------------------------------------------------------------------------
+# The decision, recorded and read back
+# ---------------------------------------------------------------------------
+
+
+def test_the_triage_is_a_message_the_conversation_keeps(
+    sqlite_session, company, monkeypatch
+):
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+    asked = []
+
+    def _ask(session, company_id, prompt):
+        asked.append((company_id, prompt))
+        return RETRY_ANSWER
+
+    monkeypatch.setattr(scrum_master, "ask", _ask)
+
+    message = scrum_master.triage(sqlite_session, company.id, sprint.id, item, TRIAGE)
+    sqlite_session.commit()
+
+    assert asked[0][0] == company.id and "## What blocked it" in asked[0][1]
+    recorded = sqlite_session.exec(
+        select(AgentMessage).where(AgentMessage.backlog_item_id == item.id)
+    ).one()
+    assert recorded.id == message.id
+    assert (
+        recorded.from_role,
+        recorded.to_role,
+        recorded.kind,
+        recorded.sprint_id,
+    ) == (
+        "ScrumMaster",
+        "QA",
+        "decision",
+        sprint.id,
+    )
+    assert recorded.body == (
+        "Triage decision: another attempt in the next sprint.\n"
+        "Why: the attempts were cut short, not wrong.\n"
+        "Brief for the next attempt: Write the full strategy document (at least 180 "
+        "words) with sections for unit, integration and end-to-end tests, as a path= block."
+    )
+    assert scrum_master.decision_for(sqlite_session, item.id) == {
+        "decision": "retry",
+        "why": "the attempts were cut short, not wrong.",
+        "brief": "Write the full strategy document (at least 180 words) with sections for unit, integration and end-to-end tests, as a path= block.",
+    }
+
+
+def test_a_person_decision_is_addressed_to_nobody_and_read_back(
+    sqlite_session, company, monkeypatch
+):
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+    monkeypatch.setattr(
+        scrum_master,
+        "ask",
+        lambda *a: "DECISION: person\nWHY: it needs a budget decision.\nEND",
+    )
+
+    message = scrum_master.triage(sqlite_session, company.id, sprint.id, item, TRIAGE)
+    sqlite_session.commit()
+
+    assert message.to_role is None
+    assert message.body == (
+        "Triage decision: leave it for a person.\nWhy: it needs a budget decision."
+    )
+    assert scrum_master.decision_for(sqlite_session, item.id) == {
+        "decision": "person",
+        "why": "it needs a budget decision.",
+        "brief": "",
+    }
+
+
+@pytest.mark.parametrize(
+    "ask",
+    [
+        lambda *a: (_ for _ in ()).throw(scrum_master.ScrumMasterError("proxy 503")),
+        lambda *a: "I would retry it.",
+    ],
+    ids=["failed-call", "unusable-answer"],
+)
+def test_without_a_usable_answer_nothing_is_recorded(
+    sqlite_session, company, monkeypatch, ask
+):
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+    monkeypatch.setattr(scrum_master, "ask", ask)
+
+    assert (
+        scrum_master.triage(sqlite_session, company.id, sprint.id, item, TRIAGE) is None
+    )
+    sqlite_session.commit()
+
+    assert (
+        sqlite_session.exec(
+            select(AgentMessage).where(AgentMessage.backlog_item_id == item.id)
+        ).all()
+        == []
+    )
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+
+
+def test_other_scrum_master_messages_are_not_a_triage(sqlite_session, company):
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+    sqlite_session.add(
+        AgentMessage(
+            company_id=company.id,
+            sprint_id=sprint.id,
+            backlog_item_id=item.id,
+            from_name="ScrumMaster",
+            from_role="ScrumMaster",
+            to_role="QA",
+            kind="decision",
+            body='"Create testing strategy document" gets another attempt in sprint "Sprint 1".',
+        )
+    )
+    sqlite_session.commit()
+
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+
+
+# ---------------------------------------------------------------------------
+# The decision reaches the loop
+# ---------------------------------------------------------------------------
+
+
+def _decide(monkeypatch, session, company, sprint, item, answer):
+    monkeypatch.setattr(scrum_master, "ask", lambda *a: answer)
+    scrum_master.triage(session, company.id, sprint.id, item, TRIAGE)
+    session.commit()
+
+
+def test_the_brief_travels_with_the_next_attempt(sqlite_session, company, monkeypatch):
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint)
+    _decide(monkeypatch, sqlite_session, company, sprint, item, RETRY_ANSWER)
+    next_sprint = Sprint(company_id=company.id, sprint_name="Sprint 1", status="active")
+    sqlite_session.add(next_sprint)
+    sqlite_session.commit()
+
+    (clone,) = carry_over.carry_over_on_the_companys_own(
+        sqlite_session, company.id, sprint.id, next_sprint, room=4
+    )
+    sqlite_session.commit()
+
+    note = clone.comments[0]["text"]
+    assert note.startswith(
+        f'Carried over from task {item.id} ("Sprint 0"), which was blocked: {TRIAGE}'
+    )
+    assert "\nBrief for the next attempt: Write the full strategy document" in note
+    prompt_section = carry_over.previous_attempt_context(clone)
+    assert "## Previous attempt" in prompt_section
+    assert (
+        "Brief for the next attempt: Write the full strategy document" in prompt_section
+    )
+    told = sqlite_session.exec(
+        select(AgentMessage).where(AgentMessage.backlog_item_id == clone.id)
+    ).one()
+    assert "Brief for the next attempt:" in told.body
+
+
+def test_a_task_left_for_a_person_is_not_carried_on_the_companys_own(
+    sqlite_session, company, monkeypatch
+):
+    company, sprint = company
+    kept = _blocked(sqlite_session, sprint, title="Needs a budget")
+    _decide(
+        monkeypatch,
+        sqlite_session,
+        company,
+        sprint,
+        kept,
+        "DECISION: person\nWHY: budget.\nEND",
+    )
+    retried = _blocked(sqlite_session, sprint, title="Just too short")
+    _decide(monkeypatch, sqlite_session, company, sprint, retried, RETRY_ANSWER)
+    undecided = _blocked(sqlite_session, sprint, title="No answer")
+    next_sprint = Sprint(company_id=company.id, sprint_name="Sprint 1", status="active")
+    sqlite_session.add(next_sprint)
+    sqlite_session.commit()
+
+    clones = carry_over.carry_over_on_the_companys_own(
+        sqlite_session, company.id, sprint.id, next_sprint, room=4
+    )
+    sqlite_session.commit()
+
+    assert [c.title for c in clones] == ["Just too short", "No answer"]
+    assert carry_over.left_for_a_person(sqlite_session, kept)
+    assert not carry_over.left_for_a_person(sqlite_session, undecided)
+    # A person may still carry it over by hand: the triage is advice.
+    (by_hand,) = carry_over.carry_over(
+        sqlite_session, company.id, [kept.id], next_sprint, "ana", "Manager"
+    )
+    assert by_hand.title == "Needs a budget"
+
+
+# ---------------------------------------------------------------------------
+# What the review of this module asked for
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        (
+            "**DECISION:** `retry`\n**BRIEF:** Write the full document\n(at least 180 words) as a path= block.\n**WHY:** cut short.\n**END**",
+            {
+                "decision": "retry",
+                "brief": "Write the full document (at least 180 words) as a path= block.",
+                "why": "cut short.",
+            },
+        ),
+        (
+            'DECISION: "person"\nWHY: needs a budget decision\nthe team cannot make.\nEND',
+            {
+                "decision": "person",
+                "brief": "",
+                "why": "needs a budget decision the team cannot make.",
+            },
+        ),
+    ],
+    ids=["markdown-and-wrapped-brief", "quoted-and-wrapped-why"],
+)
+def test_markdown_and_wrapped_fields_are_still_a_decision(answer, expected):
+    assert scrum_master.parse_answer(answer) == expected
+
+
+def test_the_prompt_shows_only_the_rework_since_the_last_send_back(
+    sqlite_session, company
+):
+    _company, sprint = company
+    item = _blocked(
+        sqlite_session,
+        sprint,
+        comments=[
+            {"author": "QA Quinn", "text": "NEEDS WORK: the old attempt's problem"},
+            {"author": "Quality gate", "text": TRIAGE},
+            {"author": "user", "text": "Sent back to work by a person."},
+            {"author": "Quality gate", "text": "NEEDS WORK: Too short (30 words)."},
+        ],
+    )
+
+    prompt = scrum_master.triage_prompt(item, TRIAGE)
+
+    assert "- Quality gate: NEEDS WORK: Too short (30 words)." in prompt
+    assert "the old attempt's problem" not in prompt
+
+
+def test_a_decision_answers_one_escalation_only(sqlite_session, company, monkeypatch):
+    """Sent back by a person and blocked again, the task is escalated again; the
+    earlier triage no longer counts, so an unanswered new block keeps the default."""
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Needs a budget")
+
+    def _escalate():
+        sqlite_session.add(
+            AgentMessage(
+                company_id=company.id,
+                sprint_id=sprint.id,
+                backlog_item_id=item.id,
+                from_name="Quality gate",
+                from_role="Quality gate",
+                to_role="ScrumMaster",
+                kind="escalation",
+                body=TRIAGE,
+            )
+        )
+        sqlite_session.commit()
+
+    _escalate()
+    _decide(monkeypatch, sqlite_session, company, sprint, item, "DECISION: person\nEND")
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "person"
+    assert carry_over.left_for_a_person(sqlite_session, item)
+
+    _escalate()  # blocked again after a send-back; this time no usable answer
+
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+    assert not carry_over.left_for_a_person(sqlite_session, item)
+
+    _decide(monkeypatch, sqlite_session, company, sprint, item, RETRY_ANSWER)
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "retry"
+    assert scrum_master.decisions_for(sqlite_session, [item.id, 999_999]) == {
+        item.id: scrum_master.decision_for(sqlite_session, item.id)
+    }
+    assert scrum_master.decisions_for(sqlite_session, []) == {}

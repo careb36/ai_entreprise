@@ -61,6 +61,25 @@ def disable_auth_for_legacy_tests(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
 
 
+@pytest.fixture(autouse=True)
+def no_scrum_master_proxy(monkeypatch):
+    """The ScrumMaster's triage of a blocked task never reaches a real proxy.
+
+    A test that blocks a task gets the deterministic default (no decision)
+    unless it patches ``scrum_master.ask`` or ``scrum_master.LLMProxyClient``.
+    """
+    from services import scrum_master
+
+    class _NoProxy:
+        def __init__(self, base_url=None):
+            self.timeout = None
+
+        def chat(self, messages, model, role, bu_id=None):
+            return {"error": "no LLM proxy in tests"}
+
+    monkeypatch.setattr(scrum_master, "LLMProxyClient", _NoProxy)
+
+
 SQLModel.metadata.create_all(
     _engine,
     tables=[
