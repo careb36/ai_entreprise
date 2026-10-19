@@ -272,7 +272,7 @@ def parse_claude_reset_time(text: str) -> datetime | None:
         formats = ["%I:%M%p", "%H:%M"]
         for fmt in formats:
             try:
-                parsed = datetime.strptime(raw_time, fmt)
+                parsed = datetime.strptime(raw_time, fmt).replace(tzinfo=now.tzinfo)
             except ValueError:
                 continue
             candidate = now.replace(

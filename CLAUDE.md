@@ -337,7 +337,9 @@ runs it after the backend tests.
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
-from `backend/poetry.lock`. Feature-branch pushes do not trigger it; open a
+from `backend/poetry.lock`. The lint step runs the ruff version the workflow
+pins (`pip install "ruff==0.17.1"`); lint locally with that same version, since
+ruff's default rule set moves between releases. Feature-branch pushes do not trigger it; open a
 pull request to get a run. Add new backend dependencies to
 `backend/pyproject.toml` and commit the refreshed lock file, or CI will fail
 the `poetry check --lock` step.
