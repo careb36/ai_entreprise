@@ -15,6 +15,12 @@
 #      task; the new attempt's prompts carry "Previous attempt"; the new task
 #      is delivered, reviewed and approved; the sprint closes.
 #   4. The inbox no longer lists the original task.
+#   5. A person carries the blocked attempt into a third sprint (the company
+#      would not, on its own); it blocks again, and this time the ScrumMaster's
+#      triage is told how the company's second attempts went. The procedure
+#      adopted after the foundation sprint is measured over the two sprints
+#      since and kept, and the proposal prompt lists what earlier procedures
+#      did.
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -135,6 +141,24 @@ echo "4. the inbox after the carry-over"
 check "no longer lists the original task" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['id'] for t in d['blocked_tasks']]")" != "[$BLOCKED_ID]"
 check "lists the new attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "len(d['blocked_tasks'])")" = 1
 check "counts no run of the company's own for a person" test "$(api "$API/v1/inbox?company_id=$CID" | json "d['pending_runs']")" = 0
+
+echo "5. a third attempt, carried by a person"
+ATTEMPT2=$(api "$API/v1/inbox?company_id=$CID" | json "d['blocked_tasks'][0]['id'] if d['blocked_tasks'] else ''")
+NEW2=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Sprint 2\", \"start_date\": \"2026-01-03\", \"scope_size\": \"S\",
+  \"backlog_items\": [{\"title\": \"Add formatter\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"}],
+  \"carry_over_ids\": [${ATTEMPT2:-0}]}")
+S2=$(echo "$NEW2" | json "d.get('sprint_id', '')")
+check "the sprint starts with two tasks" test "$(echo "$NEW2" | json "len(d.get('backlog_item_ids', []))")" = 2
+check "Sprint 2 closes" wait_sprint "$S2"
+echo "     board: $(board "$S2")"
+check "the new task is done and the carried one blocked a third time" test "$(board "$S2")" = "Add formatter=done Create testing strategy document=blocked"
+check "its triage was told how earlier second attempts went" test "$(grep -c 'How second attempts went in this company' "$PROMPTS")" -ge 1
+check "with the numbers counted from the boards" test "$(grep -c '0 of 1 tasks carried into another sprint got done. With a brief from you: 0 of 1; without one: 0 of 0.' "$PROMPTS")" -ge 1
+check "the procedure adopted after the foundation sprint was measured and kept" test "$(api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == 'Cover edge cases'), '')")" = "kept"
+check "the proposal prompt listed what earlier procedures did" test "$(grep -c '"Cover edge cases" (Developer, v1): kept, rework per task' "$PROMPTS")" -ge 1
+check "the sprint list counts the briefed third attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S2)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
+check "the inbox lists only the latest attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['sprint_id'] for t in d['blocked_tasks']]")" = "[$S2]"
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi
