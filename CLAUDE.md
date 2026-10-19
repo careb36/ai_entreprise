@@ -185,6 +185,11 @@ the LangGraph graph is only an optional kickoff conversation.
    froze). Blocked tasks stay on the board, appear in the retrospective and
    count in the procedures' `blocked_rate`; approvals close the sprint on the
    spot and the review cycle closes one whose last open task got blocked.
+   `GET /v1/inbox` (Viewer, `routers/inbox.py`) lists what the company needs a
+   person for: the tasks blocked until someone acts (not the ones the worker
+   still retries or re-reviews), the procedure proposals waiting and how many
+   runs nobody decided on. The Review page shows them (a Manager can send a
+   blocked task back to work) and the navigation counts them.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
    - the Developer's question to the Architect and its answer;
@@ -250,6 +255,7 @@ Test files:
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
+| `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
@@ -309,6 +315,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
+| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, Viewer and error states |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)
