@@ -1589,8 +1589,17 @@ def _ask_scrum_master_for_procedures(
     company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
 ) -> tuple[str, list[str]]:
     """The ScrumMaster's answer, and the company's roles it may propose for."""
+    lessons = _load_recent_lessons(company_id, 0)
     with Session(engine) as session:
-        agents = session.exec(select(Agent).where(Agent.company_id == company_id)).all()
+        roles = sorted(
+            {
+                role
+                for role in session.exec(
+                    select(Agent.role).where(Agent.company_id == company_id)
+                ).all()
+                if role
+            }
+        )
         current = procedures.procedures_prompt(
             list(
                 session.exec(
@@ -1601,38 +1610,17 @@ def _ask_scrum_master_for_procedures(
                 ).all()
             )
         )
-    roles = sorted({a.role for a in agents if a.role})
-    scrum_master = next((a for a in agents if a.role == SCRUM_MASTER_ROLE), None)
-    lessons = _load_recent_lessons(company_id, 0)
-    prompt = (
-        "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
-        "whether a written procedure for one of the roles would have prevented its "
-        "rework or blocked tasks.\n\n"
-        f"## What happened\n{_format_retrospective_summary(retro_metrics)}\n\n"
-        f"## Lessons from the last sprints\n{lessons or '(none)'}\n"
-        f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}\n\n"
-        "A procedure is a short, concrete rule a role can follow on every task. Do not "
-        "repeat an existing one.\n\n" + procedures.proposal_format(roles)
-    )
-    model = _resolve_agent_model(
-        {
-            "model": scrum_master.model if scrum_master else "",
-            "role": SCRUM_MASTER_ROLE,
-        },
-        default_role=SCRUM_MASTER_ROLE,
-    )
-    messages = [{"role": "user", "content": prompt}]
-    if scrum_master and scrum_master.system_prompt:
-        messages.insert(0, {"role": "system", "content": scrum_master.system_prompt})
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
-    client.timeout = 90
-    result = client.chat(messages=messages, model=model, role=SCRUM_MASTER_ROLE)
-    failure = _llm_failure(result, model)
-    if failure:
-        raise LLMCallError(failure)
-    return _llm_content(result), roles
+        prompt = (
+            "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
+            "whether a written procedure for one of the roles would have prevented its "
+            "rework or blocked tasks.\n\n"
+            f"## What happened\n{_format_retrospective_summary(retro_metrics)}\n\n"
+            f"## Lessons from the last sprints\n{lessons or '(none)'}\n"
+            f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}\n\n"
+            "A procedure is a short, concrete rule a role can follow on every task. Do not "
+            "repeat an existing one.\n\n" + procedures.proposal_format(roles)
+        )
+        return scrum_master.ask(session, company_id, prompt), roles
 
 
 def _propose_procedures(

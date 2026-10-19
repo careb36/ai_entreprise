@@ -86,6 +86,15 @@ def since_send_back(comments: Any) -> list[dict[str, Any]]:
     return comments
 
 
+def rework_request_count(comments: Any) -> int:
+    """Every ``NEEDS WORK:`` request on the task, whoever made it.
+
+    The number the sprint list shows and the procedures are judged by: a
+    gate's, a reviewer's or the Verifier's request each count once.
+    """
+    return sum(1 for c in verdict_comments(comments) if is_rework_request(c))
+
+
 def rework_requests_by(comments: Any, author: str) -> int:
     """How many ``NEEDS WORK:`` requests *author* made since the last send-back.
 

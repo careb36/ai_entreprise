@@ -11,7 +11,6 @@ version it replaced comes back; otherwise it is kept.
 Every function takes the caller's session and leaves committing to it.
 """
 
-import json
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -19,6 +18,8 @@ from typing import Any
 from models import BacklogItem, Procedure, Sprint
 from models.procedure import ALL_ROLES
 from sqlmodel import Session, select
+
+from services.board import rework_request_count
 
 BASELINE_SPRINTS = 2
 MEASURE_AFTER_SPRINTS = 2
@@ -41,16 +42,6 @@ _PROPOSAL = re.compile(
 # ── Numbers from the board ───────────────────────────────────────────────────
 
 
-def _comments(item: BacklogItem) -> list[dict]:
-    comments = item.comments or []
-    if isinstance(comments, str):
-        try:
-            comments = json.loads(comments)
-        except ValueError:
-            return []
-    return [c for c in comments if isinstance(c, dict)]
-
-
 def board_metrics(session: Session, sprint_ids: list[int]) -> dict[str, Any]:
     """Rework requests per task and the share of blocked tasks in *sprint_ids*."""
     items = (
@@ -61,12 +52,7 @@ def board_metrics(session: Session, sprint_ids: list[int]) -> dict[str, Any]:
         else []
     )
     tasks = len(items)
-    rework = sum(
-        1
-        for item in items
-        for comment in _comments(item)
-        if str(comment.get("text", "")).strip().upper().startswith("NEEDS WORK:")
-    )
+    rework = sum(rework_request_count(item.comments) for item in items)
     blocked = sum(1 for item in items if item.status == "blocked")
     return {
         "sprints": len(sprint_ids),

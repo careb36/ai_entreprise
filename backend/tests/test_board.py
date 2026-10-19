@@ -108,3 +108,22 @@ def test_a_gate_verdict_settles_the_task_without_a_prior_rework_request():
     assert board.item_is_settled(
         BacklogItem(sprint_id=1, title="t", status="blocked", comments=comments)
     )
+
+
+def test_every_rework_request_counts_once_whoever_made_it():
+    comments = [
+        {"author": "Dev", "text": "# Artifact: a.py\nprint(1)"},
+        {"author": "QA", "text": "needs work: add a test"},
+        {"author": "Verifier", "text": "NEEDS WORK: delivery refuted"},
+        {"author": "Quality gate", "text": "NEEDS WORK: too short"},
+        {"author": "Quality gate", "text": TRIAGE},
+        SEND_BACK,
+        {
+            "author": "System",
+            "text": 'Carried over to sprint 3 ("S") as task 9 by ana. NEEDS WORK: not this one',
+        },
+    ]
+
+    assert board.rework_request_count(comments) == 3
+    assert board.rework_request_count([]) == 0
+    assert board.rework_request_count("not json") == 0
