@@ -298,6 +298,93 @@ def test_the_scrum_master_proposes_after_a_sprint_with_rework(
     assert all(m.body.startswith(expected) for m in messages)
 
 
+def test_the_scrum_master_sees_what_earlier_procedures_did_and_cannot_repeat_a_failed_one(
+    db, monkeypatch
+):
+    calls = _scrum_master_answers(monkeypatch, PROPOSAL_TEXT)
+    company = _company(db, autonomy=3)
+    db.add(task_worker.Agent(company_id=company.id, name="Dev", role="Developer"))
+    db.commit()
+    # The same "Validate inputs" text was adopted once and the board reverted it;
+    # "Small tasks" was proposed once and a person rejected it.
+    reverted, rejected = procedures.propose(
+        db,
+        company.id,
+        procedures.parse_proposals(PROPOSAL_TEXT, ["Developer"]),
+        "ScrumMaster",
+    )
+    reverted.status = "retired"
+    reverted.baseline = {"rework_per_task": 0.5, "blocked_rate": 0.0}
+    reverted.outcome = {
+        "result": "reverted",
+        "rework_per_task": 1.5,
+        "blocked_rate": 0.5,
+    }
+    procedures.reject(db, rejected, "manager@example.com")
+    kept = _adopted(db, company)
+    kept.outcome = {"result": "kept", "rework_per_task": 0.0, "blocked_rate": 0.0}
+    db.add_all([reverted, kept])
+    db.commit()
+    sprint = _sprint(db, company, tasks=2, reworks=2)
+
+    task_worker._propose_procedures(
+        company.id, sprint.id, task_worker._build_sprint_retrospective(sprint.id)
+    )
+
+    prompt = calls[0]["prompt"]
+    assert "## What earlier procedures did" in prompt
+    assert (
+        '- "Validate inputs" (Developer, v1): reverted, '
+        "rework per task 0.5 → 1.5, blocked 0.0 → 0.5"
+    ) in prompt
+    assert '- "Small tasks" (All, v1): rejected by a person' in prompt
+    assert '- "Rule" (Developer, v1): kept, rework per task' in prompt
+    assert prompt.index('"Rule"') < prompt.index('"Validate inputs"')  # newest first
+    assert "nor one that was reverted or rejected" in prompt
+    db.expire_all()
+    # The same two texts again: neither is recorded, so autonomy adopts nothing.
+    assert db.exec(
+        select(Procedure).where(
+            Procedure.company_id == company.id, Procedure.status == "active"
+        )
+    ).all() == [kept]
+    assert (
+        db.exec(
+            select(AgentMessage).where(
+                AgentMessage.company_id == company.id, AgentMessage.kind == "proposal"
+            )
+        ).all()
+        == []
+    )
+
+
+def test_a_person_can_bring_back_a_rejected_procedure(db):
+    company = _company(db)
+    rule = {"role": "Developer", "title": "Rule", "body": "Write the test first."}
+    [first] = procedures.propose(db, company.id, [rule], "ScrumMaster")
+    procedures.reject(db, first, "manager@example.com")
+    db.commit()
+
+    assert (
+        procedures.propose(db, company.id, [rule], "ScrumMaster", skip_failed=True)
+        == []
+    )
+    [again] = procedures.propose(db, company.id, [rule], "manager@example.com")
+    assert again.id != first.id
+
+
+def test_no_history_before_any_procedure_has_a_result(db):
+    company = _company(db)
+    _adopted(db, company)  # active, not measured yet
+    procedures.propose(
+        db,
+        company.id,
+        [{"role": "QA", "title": "Waiting", "body": "Pending."}],
+        "ScrumMaster",
+    )
+    assert procedures.history_prompt(db, company.id) == ""
+
+
 def test_no_proposal_after_a_clean_sprint(db, monkeypatch):
     calls = _scrum_master_answers(monkeypatch, PROPOSAL_TEXT)
     company = _company(db, autonomy=3)
