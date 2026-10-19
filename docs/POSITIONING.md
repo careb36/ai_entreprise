@@ -264,6 +264,9 @@ replaces none of it.
      boards, go into the ScrumMaster's next triage, so its judgement is
      confronted with the outcome of its earlier calls rather than with its
      own account of them.
+   - Console-assistant advice is measured the same way: tasks that got it
+     against tasks that did not, done and rework per group, counted from the
+     boards. The advice stays prompt context; whether it helps is a number.
 
 ### What this changes in the tables above
 

@@ -1191,7 +1191,9 @@
     "sprintColumn": "Sprint",
     "secondAttempts": "Second attempts that got done",
     "ofTotal": "{{done}} of {{total}}",
-    "secondAttemptsSplit": "With the ScrumMaster's brief: {{briefedDone}} of {{briefed}} · without: {{unbriefedDone}} of {{unbriefed}}"
+    "secondAttemptsSplit": "With the ScrumMaster's brief: {{briefedDone}} of {{briefed}} · without: {{unbriefedDone}} of {{unbriefed}}",
+    "consoleAdviceTitle": "Tasks done with console advice",
+    "consoleAdviceSplit": "{{rework}} rework requests per task · without advice: {{done}} of {{total}} done, {{reworkOther}} per task"
   },
   "projectFolder": {
     "label": "Project folder",

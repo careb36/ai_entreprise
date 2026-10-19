@@ -39,6 +39,10 @@ CARRIED_FROM_PREFIX = "Carried over from"
 # The line the ScrumMaster's brief travels on, in its decision and in the
 # carry-over note of the next attempt.
 BRIEF_PREFIX = "Brief for the next attempt: "
+# The note the worker writes when console assistants (Copilot CLI, Claude CLI)
+# advised on a task. Their advice is context, never evidence; whether it helps
+# is counted from the boards.
+CONSOLE_ADVICE_PREFIX = "External assistant context used for this task:"
 
 
 def comment_list(comments: Any) -> list[dict[str, Any]]:
@@ -325,3 +329,29 @@ def count_second_attempt(tally: dict[str, int], status: str, comments: Any) -> N
     if briefed:
         tally["briefed"] += 1
         tally["briefed_done"] += done
+
+
+def has_console_advice(comments: Any) -> bool:
+    """Whether a console assistant's advice was written onto the task."""
+    return any(
+        _text(comment).startswith(CONSOLE_ADVICE_PREFIX)
+        for comment in comment_list(comments)
+    )
+
+
+def no_console_advice() -> dict[str, dict[str, int]]:
+    """An empty tally: tasks that got console advice and tasks that did not."""
+    return {
+        "advised": {"total": 0, "done": 0, "rework": 0},
+        "unadvised": {"total": 0, "done": 0, "rework": 0},
+    }
+
+
+def count_console_advice(
+    tally: dict[str, dict[str, int]], status: str, comments: Any
+) -> None:
+    """Add one task to *tally*, under the group its board puts it in."""
+    group = tally["advised" if has_console_advice(comments) else "unadvised"]
+    group["total"] += 1
+    group["done"] += int(status == "done")
+    group["rework"] += rework_request_count(comments)

@@ -30,6 +30,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services import console_capabilities
+from services.board import CONSOLE_ADVICE_PREFIX
 from services.glassroom import publish_glassroom
 
 logger = setup_logger("fabrique-console-assistants")
@@ -614,7 +615,7 @@ def usage_comment(sources: list[dict[str, str]]) -> str:
     if not sources:
         return ""
 
-    lines = ["External assistant context used for this task:"]
+    lines = [CONSOLE_ADVICE_PREFIX]
     for source in sources:
         label = source.get("label", "Assistant")
         purpose = source.get("purpose", "advice")

@@ -18,7 +18,7 @@ describe('useSprints', () => {
 
   it('caches each company under its own key', async () => {
     const list = vi.spyOn(api, 'listSprints').mockImplementation(async companyId => [
-      { id: companyId, sprint_name: `Sprint of ${companyId}`, status: 'active', goal: null, start_date: null, scope_size: 'M', total: 0, done: 0, blocked: 0, rework: 0, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 } },
+      { id: companyId, sprint_name: `Sprint of ${companyId}`, status: 'active', goal: null, start_date: null, scope_size: 'M', total: 0, done: 0, blocked: 0, rework: 0, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } },
     ])
     const { result, rerender } = renderHook(({ companyId }) => useSprints(companyId), { wrapper, initialProps: { companyId: 1 } })
     await waitFor(() => expect(result.current.data?.[0].sprint_name).toBe('Sprint of 1'))

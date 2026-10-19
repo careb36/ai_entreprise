@@ -371,6 +371,19 @@ export interface SprintSummary {
   rework: number
   /** Tasks carried over from an earlier sprint, how many got done, and the same for those the ScrumMaster briefed. */
   second_attempts: SecondAttempts
+  /** Tasks a console assistant advised on and tasks none did: how many got done and how many rework requests each drew. */
+  console_advice: ConsoleAdvice
+}
+
+export interface AdviceGroup {
+  total: number
+  done: number
+  rework: number
+}
+
+export interface ConsoleAdvice {
+  advised: AdviceGroup
+  unadvised: AdviceGroup
 }
 
 export interface SecondAttempts {

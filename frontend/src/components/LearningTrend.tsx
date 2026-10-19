@@ -5,12 +5,13 @@
  * both, so a drop reads as good. Every value is also in a table for readers
  * without a pointer or without colour. Below them, once a task was carried
  * over, how many second attempts got done, with and without the
- * ScrumMaster's brief.
+ * ScrumMaster's brief; and once a console assistant advised on a task, how
+ * advised tasks fared against the rest.
  */
 import { useTranslation } from 'react-i18next'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import type { SprintSummary } from '../services/api'
-import { formatRework, formatShare, learningTrend, secondAttempts, type SprintPoint } from '../lib/learningTrend'
+import { consoleAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
 
 const SPARK_POINTS = 12
 const BAR_WIDTH = 8
@@ -121,6 +122,29 @@ function SecondAttemptsCard({ sprints }: { sprints: SprintSummary[] }) {
   )
 }
 
+function ConsoleAdviceCard({ sprints }: { sprints: SprintSummary[] }) {
+  const { t } = useTranslation()
+  const tally = consoleAdvice(sprints)
+  if (tally.advised.total === 0) return null
+  return (
+    <div className="card space-y-1 p-4">
+      <p className="text-xs text-gray-400">{t('sprints.consoleAdviceTitle', { defaultValue: 'Tasks done with console advice' })}</p>
+      <p className="text-2xl font-semibold text-white">
+        {t('sprints.ofTotal', { done: tally.advised.done, total: tally.advised.total, defaultValue: '{{done}} of {{total}}' })}
+      </p>
+      <p className="text-[11px] text-gray-500">
+        {t('sprints.consoleAdviceSplit', {
+          rework: formatRework(reworkPerTask(tally.advised)),
+          done: tally.unadvised.done,
+          total: tally.unadvised.total,
+          reworkOther: formatRework(reworkPerTask(tally.unadvised)),
+          defaultValue: '{{rework}} rework requests per task · without advice: {{done}} of {{total}} done, {{reworkOther}} per task',
+        })}
+      </p>
+    </div>
+  )
+}
+
 export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
   const { t } = useTranslation()
   const points = learningTrend(sprints)
@@ -140,7 +164,10 @@ export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
         <Tile label={reworkLabel} points={points} pick={p => p.reworkPerTask} format={formatRework} />
         <Tile label={blockedLabel} points={points} pick={p => p.blockedShare} format={formatShare} />
       </div>
-      <SecondAttemptsCard sprints={sprints} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SecondAttemptsCard sprints={sprints} />
+        <ConsoleAdviceCard sprints={sprints} />
+      </div>
       <table className="sr-only">
         <caption>{t('sprints.trendTable', { defaultValue: 'Closed sprints, oldest first' })}</caption>
         <thead>

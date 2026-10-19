@@ -209,9 +209,9 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(useInbox).mockReturnValue({ data: inboxData } as never)
     vi.mocked(useSprints).mockReturnValue({
       data: [
-        { id: 3, sprint_name: 'Sprint 1', status: 'completed', goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 } },
+        { id: 3, sprint_name: 'Sprint 1', status: 'completed', goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } },
         // Still open: its second attempts have no outcome yet.
-        { id: 4, sprint_name: 'Sprint 2', status: 'active', goal: null, start_date: null, scope_size: 'S', total: 2, done: 0, blocked: 0, rework: 0, second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 } },
+        { id: 4, sprint_name: 'Sprint 2', status: 'active', goal: null, start_date: null, scope_size: 'S', total: 2, done: 0, blocked: 0, rework: 0, second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } },
       ],
     } as never)
     const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
