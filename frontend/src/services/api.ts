@@ -545,6 +545,8 @@ export interface AgentRunFilters {
   external_ref?: string
   /** Runs whose `subject.sprint_id` is this sprint. */
   sprint_id?: number
+  /** Leave out the company's own task worker and kickoff runs (the review loop decides them). */
+  exclude_in_house?: boolean
 }
 
 export interface AgentRun extends Omit<AgentRunListItem, 'latest_approval'> {
@@ -856,7 +858,7 @@ export const api = {
     // Omit unset filters rather than sending them as the string "undefined".
     const params: Record<string, string | number> = { company_id: companyId }
     for (const [key, value] of Object.entries(filters)) {
-      if (value !== undefined) params[key] = value
+      if (value !== undefined) params[key] = typeof value === 'boolean' ? String(value) : value
     }
     return api.get<{ agent_runs: AgentRunListItem[] }>('/v1/agent_runs', params)
   },

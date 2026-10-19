@@ -46,6 +46,8 @@ describe('GovernancePanel', () => {
         agent_runs: [
           { id: 1, external_ref: 'needs-review', producer: 'producer-a', agent_role: 'Developer', latest_approval: null },
           { id: 2, external_ref: 'already-reviewed', producer: 'producer-b', agent_role: 'QA', latest_approval: { decision: 'approved' } },
+          { id: 3, external_ref: 'task-12', producer: 'le-fabrique-task-worker', agent_role: 'Developer', latest_approval: null },
+          { id: 4, external_ref: 'graph:abc', producer: 'le-fabrique-graph', agent_role: 'Developer', latest_approval: null },
         ],
       },
       isLoading: false,
@@ -62,6 +64,9 @@ describe('GovernancePanel', () => {
 
     expect(screen.getByText('needs-review')).toBeInTheDocument()
     expect(screen.queryByText('already-reviewed')).not.toBeInTheDocument()
+    // The company's own deliveries and kickoff transcripts are decided by the review loop.
+    expect(screen.queryByText('task-12')).not.toBeInTheDocument()
+    expect(screen.queryByText('graph:abc')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Review evidence/ })).toHaveAttribute('href', '/evidence/1')
     expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
   })

@@ -216,7 +216,21 @@ def test_lists_proposals_and_counts_undecided_runs(test_client, sqlite_session, 
         artifact_digest="d",
         artifact_size=1,
     )
-    sqlite_session.add_all([undecided, decided, theirs])
+    # The company's own runs: the review loop decided them already.
+    own = [
+        AgentRun(
+            company_id=company,
+            external_ref=ref,
+            producer=producer,
+            artifact_digest="d",
+            artifact_size=1,
+        )
+        for ref, producer in (
+            ("task-1", "le-fabrique-task-worker"),
+            ("graph:abc", "le-fabrique-graph"),
+        )
+    ]
+    sqlite_session.add_all([undecided, decided, theirs, *own])
     sqlite_session.commit()
     sqlite_session.add(
         AgentRunApproval(

@@ -133,6 +133,7 @@ check "the delivery was verified" test "$(api "$API/v1/agent_runs?company_id=$CI
 echo "4. the inbox after the carry-over"
 check "no longer lists the original task" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['id'] for t in d['blocked_tasks']]")" != "[$BLOCKED_ID]"
 check "lists the new attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "len(d['blocked_tasks'])")" = 1
+check "counts no run of the company's own for a person" test "$(api "$API/v1/inbox?company_id=$CID" | json "d['pending_runs']")" = 0
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi
