@@ -415,7 +415,7 @@ export interface AgentRunApproval {
 }
 
 /** What a message does in the conversation between roles. */
-export const MESSAGE_KINDS = ['question', 'answer', 'handoff', 'request', 'decision', 'escalation', 'retrospective'] as const
+export const MESSAGE_KINDS = ['question', 'answer', 'handoff', 'request', 'decision', 'escalation', 'retrospective', 'proposal'] as const
 export type MessageKind = typeof MESSAGE_KINDS[number]
 
 /** One message between the company's agents. A claim, never evidence. */
@@ -438,6 +438,40 @@ export interface MessageFilters {
   backlog_item_id?: number
   kind?: MessageKind
   limit?: number
+}
+
+export type ProcedureStatus = 'proposed' | 'active' | 'rejected' | 'retired'
+/** The role name of procedures every role follows. */
+export const ALL_ROLES = 'All'
+
+/** The board's numbers before a procedure (baseline) or after it (outcome). */
+export interface ProcedureMetrics {
+  sprints: number
+  tasks: number
+  rework_per_task: number
+  blocked_rate: number
+  /** On outcomes: kept, reverted, unmeasured, superseded, restored or retired. */
+  result?: string
+  by?: number | string
+}
+
+export interface Procedure {
+  id: number
+  role: string
+  title: string
+  body: string
+  status: ProcedureStatus
+  version: number
+  supersedes_id: number | null
+  proposed_by: string
+  rationale: string | null
+  source_sprint_id: number | null
+  baseline: ProcedureMetrics | null
+  outcome: ProcedureMetrics | null
+  decided_by: string | null
+  created_at: string | null
+  decided_at: string | null
+  retired_at: string | null
 }
 
 export interface AgentRunListItem {
@@ -762,6 +796,15 @@ export const api = {
     }
     return api.get<{ messages: AgentMessage[] }>('/v1/messages', params)
   },
+
+  getProcedures: (companyId: number) =>
+    api.get<{ procedures: Procedure[] }>('/v1/procedures', { company_id: companyId }),
+
+  createProcedure: (data: { company_id: number; role: string; title: string; body: string }) =>
+    api.post<Procedure>('/v1/procedures', data),
+
+  decideProcedure: (procedureId: number, decision: 'adopt' | 'reject' | 'retire') =>
+    api.post<Procedure>(`/v1/procedures/${procedureId}/${decision}`, {}),
 
   getAgentRuns: (companyId: number, filters: AgentRunFilters = {}) => {
     // Omit unset filters rather than sending them as the string "undefined".

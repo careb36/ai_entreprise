@@ -35,6 +35,7 @@ from models.company import (
     User,
 )
 from models.github import GitHubRepoBinding
+from models.procedure import Procedure
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
 from sqlalchemy.pool import StaticPool
@@ -78,6 +79,7 @@ SQLModel.metadata.create_all(
         GitHubRepoBinding.__table__,
         BugReport.__table__,
         AgentMessage.__table__,
+        Procedure.__table__,
     ],
 )
 

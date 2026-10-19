@@ -151,7 +151,8 @@ the LangGraph graph is only an optional kickoff conversation.
    the company's past decisions from memory (scoped by `company_id`), and
    **Lessons from Recent Sprints**: the retrospective counts and the review
    requests from the company's last two completed sprints, read from the board
-   (`_load_recent_lessons`).
+   (`_load_recent_lessons`), and the **Company Procedures** in force for the
+   agent's role (QA's go into its review prompt).
 3. `parse_file_manifest` turns the answer into files. The worker sends them to the
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
@@ -181,10 +182,22 @@ the LangGraph graph is only an optional kickoff conversation.
    Messages are claims: comments still drive the review loop, and the evidence
    decides. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
    `kind`) feeds the sprint's Conversation tab and the task page.
-8. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
+8. When a sprint closes, procedures are measured and proposed
+   (`services/procedures.py`):
+   - Each active procedure with two completed sprints since its adoption is
+     kept, or reverted if rework per task or the share of blocked tasks got
+     clearly worse. A reverted procedure brings back the version it replaced.
+   - After a sprint with rework or blocked tasks, the ScrumMaster proposes up to
+     two procedures in a fixed `PROCEDURE … END` format; anything else is
+     ignored. With `autonomy_level` 3 a proposal is adopted at once; otherwise
+     a Manager adopts or rejects it (`/v1/procedures`, the Procedures page).
+   - Adoption records the numbers of the last two completed sprints as the
+     baseline. Outcomes and proposals are posted to the team as `proposal`
+     messages. The numbers decide, never a model.
+9. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
    the sprint; its transcript is ingested as an `AgentRun` (`le-fabrique-graph`).
    A failed kickoff never blocks the sprint.
-9. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
+10. Engram events go to Neo4j for episodic memory; embeddings to pgvector for RAG.
 
 ### Memory Architecture
 
@@ -230,6 +243,7 @@ Test files:
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
+| `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, procedures in prompts, `/v1/procedures` |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
@@ -277,6 +291,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
 | `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
+| `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 

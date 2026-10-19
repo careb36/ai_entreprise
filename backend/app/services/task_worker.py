@@ -47,7 +47,12 @@ from schemas import AgentRunCreate
 from sqlmodel import Session, select, text
 
 from llm.model_factory import default_model_for_role
-from services import agent_run_service, console_capabilities, workspace_daemon
+from services import (
+    agent_run_service,
+    console_capabilities,
+    procedures,
+    workspace_daemon,
+)
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
     ACTION_EXECUTE_TASK,
@@ -503,6 +508,7 @@ def _execute_task(
     company_id: int | None = None,
     sprint_id: int | None = None,
     lessons_context: str | None = None,
+    procedures_context: str | None = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -536,6 +542,7 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
         f"{FILE_MANIFEST_INSTRUCTIONS}"
+        f"{procedures_context or ''}"
     )
 
     rework_feedback = _pending_rework_feedback(item.get("comments"))
@@ -1893,6 +1900,27 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
             kind="retrospective",
             body=_format_retrospective_summary(retro_metrics),
         )
+        # Measure adopted procedures first, so a proposal starts from today's
+        # rules. Learning never blocks closing a sprint.
+        try:
+            await asyncio.to_thread(
+                _evaluate_procedures, retro_metrics["company_id"], sprint_id
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Procedure evaluation failed for sprint=%s: %s", sprint_id, exc
+            )
+        try:
+            await asyncio.to_thread(
+                _propose_procedures,
+                retro_metrics["company_id"],
+                sprint_id,
+                retro_metrics,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Procedure proposal failed for sprint=%s: %s", sprint_id, exc
+            )
 
     # Burn retrospective engram to memory so future sprints can learn from it.
     if retro_metrics:
@@ -2166,6 +2194,140 @@ def _handoff_body(title: str, deliverable: str) -> str:
         f" and {len(paths) - 10} more" if len(paths) > 10 else ""
     )
     return f'Delivered "{title}" for review: {len(paths)} file(s) declared — {listed}.'
+
+
+def _load_procedures_context(company_id: int | None, role: str | None) -> str:
+    """The company's active procedures for *role*, as a prompt section."""
+    if company_id is None:
+        return ""
+    try:
+        with Session(engine) as session:
+            return procedures.procedures_prompt(
+                procedures.active_procedures(session, company_id, role)
+            )
+    except Exception as exc:  # noqa: BLE001 - Procedures are context; the task goes on without them.
+        logger.debug("Procedures fetch failed for company=%s: %s", company_id, exc)
+        return ""
+
+
+def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
+    """Keep or revert procedures with enough sprints since adoption, and tell the team."""
+    with Session(engine) as session:
+        decided = procedures.evaluate(session, company_id)
+        for procedure in decided:
+            session.add(
+                _message(
+                    company_id,
+                    sprint_id,
+                    None,
+                    SCRUM_MASTER_ROLE,
+                    SCRUM_MASTER_ROLE,
+                    None,
+                    "proposal",
+                    procedures.describe_outcome(procedure),
+                )
+            )
+        session.commit()
+
+
+def _ask_scrum_master_for_procedures(
+    company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
+) -> tuple[str, list[str]]:
+    """The ScrumMaster's answer, and the company's roles it may propose for."""
+    with Session(engine) as session:
+        agents = session.exec(select(Agent).where(Agent.company_id == company_id)).all()
+        current = procedures.procedures_prompt(
+            list(
+                session.exec(
+                    select(procedures.Procedure).where(
+                        procedures.Procedure.company_id == company_id,
+                        procedures.Procedure.status == "active",
+                    )
+                ).all()
+            )
+        )
+    roles = sorted({a.role for a in agents if a.role})
+    scrum_master = next((a for a in agents if a.role == SCRUM_MASTER_ROLE), None)
+    lessons = _load_recent_lessons(company_id, 0)
+    prompt = (
+        "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
+        "whether a written procedure for one of the roles would have prevented its "
+        "rework or blocked tasks.\n\n"
+        f"## What happened\n{_format_retrospective_summary(retro_metrics)}\n\n"
+        f"## Lessons from the last sprints\n{lessons or '(none)'}\n"
+        f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}\n\n"
+        "A procedure is a short, concrete rule a role can follow on every task. Do not "
+        "repeat an existing one.\n\n" + procedures.proposal_format(roles)
+    )
+    model = _resolve_agent_model(
+        {
+            "model": scrum_master.model if scrum_master else "",
+            "role": SCRUM_MASTER_ROLE,
+        },
+        default_role=SCRUM_MASTER_ROLE,
+    )
+    messages = [{"role": "user", "content": prompt}]
+    if scrum_master and scrum_master.system_prompt:
+        messages.insert(0, {"role": "system", "content": scrum_master.system_prompt})
+    client = LLMProxyClient(
+        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
+    )
+    client.timeout = 90
+    result = client.chat(messages=messages, model=model, role=SCRUM_MASTER_ROLE)
+    failure = _llm_failure(result, model)
+    if failure:
+        raise LLMCallError(failure)
+    return _llm_content(result), roles
+
+
+def _propose_procedures(
+    company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
+) -> None:
+    """After a sprint with rework or blocked tasks, the ScrumMaster proposes procedures.
+
+    With ``autonomy_level`` 3 a proposal is adopted at once; otherwise it waits
+    for a Manager. Either way the board's numbers keep or revert it later.
+    """
+    if not (retro_metrics.get("rework_cycles") or retro_metrics.get("blocked_tasks")):
+        return  # nothing went wrong: nothing to learn
+    answer, roles = _ask_scrum_master_for_procedures(
+        company_id, sprint_id, retro_metrics
+    )
+    proposals = procedures.parse_proposals(answer, roles)
+    if not proposals:
+        return
+    with Session(engine) as session:
+        company = session.get(Company, company_id)
+        autonomous = bool(company and (company.autonomy_level or 0) >= 3)
+        created = procedures.propose(
+            session,
+            company_id,
+            proposals,
+            SCRUM_MASTER_ROLE,
+            source_sprint_id=sprint_id,
+        )
+        for procedure in created:
+            if autonomous:
+                procedures.adopt(session, procedure, "autonomy")
+            state = (
+                "Adopted (autonomy level 3)"
+                if autonomous
+                else "Proposed, waiting for a Manager"
+            )
+            session.add(
+                _message(
+                    company_id,
+                    sprint_id,
+                    None,
+                    SCRUM_MASTER_ROLE,
+                    SCRUM_MASTER_ROLE,
+                    None if procedure.role == procedures.ALL_ROLES else procedure.role,
+                    "proposal",
+                    f'{state}: "{procedure.title}" (v{procedure.version})\n'
+                    f"{procedure.body}\nWhy: {procedure.rationale or '-'}",
+                )
+            )
+        session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -2792,6 +2954,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             (
                 memory_ctx,
                 lessons_ctx,
+                procedures_ctx,
                 completed_ctx,
                 assistant_context,
             ) = await asyncio.gather(
@@ -2800,6 +2963,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 ),
                 asyncio.to_thread(
                     _load_recent_lessons, sprint["company_id"], sprint["id"]
+                ),
+                asyncio.to_thread(
+                    _load_procedures_context, sprint["company_id"], agent.get("role")
                 ),
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
@@ -2959,6 +3125,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 sprint["company_id"],
                 sprint["id"],
                 lessons_ctx or None,
+                procedures_ctx or None,
             )
             deliverable = await asyncio.to_thread(
                 _sanitize_deliverable_text, deliverable
@@ -3406,6 +3573,10 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 f"--- DELIVERABLE ---\n{deliverable[:3000]}\n--- END ---\n\n"
                 "Provide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
                 "If not, start with 'NEEDS WORK:' and explain what's missing."
+            ) + procedures.procedures_prompt(
+                procedures.active_procedures(
+                    session, sprint.company_id, reviewer_dict["role"]
+                )
             )
 
             try:
