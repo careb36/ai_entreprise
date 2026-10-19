@@ -30,11 +30,14 @@ from models import (
     User,
 )
 from schemas import (
+    SCOPE_HARD_MAX,
+    SCOPE_LIMITS,
     BacklogItemUpdate,
     SelfImprovementSprintRequest,
     SprintPlanRequest,
     SprintStartRequest,
 )
+from services.carry_over import CarryOverError, carry_over
 from services.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -50,10 +53,6 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 # Allowed values for validation; rejected values return HTTP 422.
 VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
-
-# Scope guardrail — max backlog items per scope size.
-SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
-SCOPE_HARD_MAX = 12
 
 
 def _load_planning_context(session: Session, company_id: int):
@@ -187,15 +186,17 @@ async def start_sprint(
         )
 
     item_limit = SCOPE_LIMITS[scope_size]
-    if len(req.backlog_items) > SCOPE_HARD_MAX:
+    carry_over_ids = list(dict.fromkeys(req.carry_over_ids))
+    item_count = len(req.backlog_items) + len(carry_over_ids)
+    if item_count > SCOPE_HARD_MAX:
         raise HTTPException(
             status_code=422,
-            detail=f"Too many backlog items ({len(req.backlog_items)}). Hard limit is {SCOPE_HARD_MAX}. Split into multiple sprints.",
+            detail=f"Too many backlog items ({item_count}). Hard limit is {SCOPE_HARD_MAX}. Split into multiple sprints.",
         )
-    if len(req.backlog_items) > item_limit:
+    if item_count > item_limit:
         raise HTTPException(
             status_code=422,
-            detail=f"Scope '{scope_size}' allows up to {item_limit} items, got {len(req.backlog_items)}. Use scope 'L' or split this sprint.",
+            detail=f"Scope '{scope_size}' allows up to {item_limit} items, got {item_count}. Use scope 'L' or split this sprint.",
         )
 
     sprint = Sprint(
@@ -247,6 +248,30 @@ async def start_sprint(
             )
         )
 
+    if carry_over_ids:
+        try:
+            carried = carry_over(
+                session,
+                req.company_id,
+                carry_over_ids,
+                sprint,
+                user.email if user is not None else "a person",
+                "Manager",
+            )
+        except CarryOverError as exc:
+            session.rollback()
+            raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+        item_ids.extend(item.id for item in carried)
+        story_items = [
+            *req.backlog_items,
+            *(
+                {"title": item.title, "description": item.description or ""}
+                for item in carried
+            ),
+        ]
+    else:
+        story_items = list(req.backlog_items)
+
     kickoff_story = "\n".join(
         [
             f"Sprint kickoff: {req.sprint_name}",
@@ -254,7 +279,7 @@ async def start_sprint(
             "Backlog:",
             *[
                 f"- {item.get('title', '').strip()}: {item.get('description', '').strip()}"
-                for item in req.backlog_items
+                for item in story_items
             ],
             "Goal: PO, Scrum Master and Developer must coordinate, surface blockers, and agree the first execution plan.",
         ]

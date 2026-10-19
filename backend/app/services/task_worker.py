@@ -43,7 +43,7 @@ from models import (
 )
 from models.agent_run import AgentRun, Verification
 from nats_client import NATSClient
-from schemas import AgentRunCreate
+from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
 
 from llm.model_factory import default_model_for_role
@@ -560,6 +560,11 @@ def _execute_task(
             "below and deliver the complete result again.\n\n"
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
+
+    # A task carried over from an earlier sprint says what blocked it there.
+    from services.carry_over import previous_attempt_context
+
+    user_prompt += previous_attempt_context(item)
 
     if memory_context:
         user_prompt += (
@@ -1402,6 +1407,27 @@ def _complete_sprint_and_plan_follow_up(
                     },
                 )
             )
+
+        # The tasks the agents gave up on get one more attempt, with what
+        # blocked them; a second failure stays for a person.
+        from services.carry_over import carry_over_on_the_companys_own
+
+        try:
+            carried = carry_over_on_the_companys_own(
+                session,
+                company.id,
+                sprint.id,
+                next_sprint,
+                SCOPE_LIMITS.get(scope_size, SCOPE_HARD_MAX) - len(tasks),
+            )
+        except Exception as exc:  # noqa: BLE001 - A failed carry-over never stops the follow-up sprint.
+            logger.warning("Carry-over into sprint=%s failed: %s", next_sprint.id, exc)
+            carried = []
+        backlog_payloads.extend(
+            {"title": item.title, "description": item.description or ""}
+            for item in carried
+        )
+        result["carried_over"] = [item.id for item in carried]
 
         session.add(
             OutboxEvent(

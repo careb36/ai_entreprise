@@ -18,7 +18,7 @@ import {
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useAnalyticsSummary, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas } from '../hooks/useQueries'
+import { useSprintBoard, useAnalyticsSummary, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas, useInbox } from '../hooks/useQueries'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
@@ -248,7 +248,11 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   const [scope, setScope] = useState<'S' | 'M' | 'L'>('M')
   const [plannedSprint, setPlannedSprint] = useState<SprintPlanResponse | null>(null)
   const [planSource, setPlanSource] = useState<'manual' | 'autonomous' | null>(null)
+  // Blocked tasks of earlier sprints the person wants to try again here.
+  const [carryOver, setCarryOver] = useState<number[]>([])
   const { companyId, companyName, setCompany } = useAppStore()
+  const inbox = useInbox(companyId, false)
+  const blockedTasks = (inbox.data?.blocked_tasks ?? []).filter(task => !task.frozen)
   const initMutation    = useInitCompany()
   const planMutation    = usePlanSprint()
   const autoPlanMutation = usePlanSelfImprovementSprint()
@@ -277,6 +281,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   function resetPreview() {
     setPlannedSprint(null)
     setPlanSource(null)
+    setCarryOver([])
   }
 
   async function generatePlan() {
@@ -346,6 +351,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         scope_size: scope,
         goal: plannedSprint.goal,
         backlog_items: plannedSprint.tasks,
+        ...(carryOver.length > 0 ? { carry_over_ids: carryOver } : {}),
       })
 
       onSuccess(sprint.sprint_id)
@@ -488,6 +494,28 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
               </div>
             ))}
           </div>
+
+          {blockedTasks.length > 0 && (
+            <fieldset className="space-y-1.5 rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
+              <legend className="px-1 text-xs font-semibold text-gray-100">
+                {t('dashboard.carryOverTitle', { defaultValue: 'Bring back blocked tasks' })}
+              </legend>
+              <p className="text-[11px] text-gray-500">
+                {t('dashboard.carryOverHint', { defaultValue: 'Tasks the agents gave up on. Each one you tick gets a fresh attempt in this sprint, with what blocked it; they count towards the scope.' })}
+              </p>
+              {blockedTasks.map(task => (
+                <label key={task.id} className="flex items-start gap-2 text-xs text-gray-300">
+                  <input type="checkbox" className="mt-0.5" checked={carryOver.includes(task.id)}
+                    disabled={!carryOver.includes(task.id) && plannedSprint.tasks.length + carryOver.length >= SCOPE_META[scope].limit}
+                    onChange={e => setCarryOver(ids => e.target.checked ? [...ids, task.id] : ids.filter(id => id !== task.id))} />
+                  <span>{t('dashboard.carryOverTask', { title: task.title, sprint: task.sprint_name, defaultValue: '{{title}} · {{sprint}}' })}</span>
+                </label>
+              ))}
+              {plannedSprint.tasks.length + carryOver.length >= SCOPE_META[scope].limit && carryOver.length < blockedTasks.length && (
+                <p className="text-[11px] text-amber-300">{t('dashboard.carryOverFull', { defaultValue: 'The scope is full: untick a task or pick a larger scope.' })}</p>
+              )}
+            </fieldset>
+          )}
 
           <p className="text-[11px] text-gray-500">
             {t('dashboard.reviewPlan', { defaultValue: 'Review the plan, regenerate if needed, then launch the sprint.' })}

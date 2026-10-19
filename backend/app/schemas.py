@@ -59,6 +59,11 @@ class CompanyInitRequest(BaseModel):
     detected_stack: dict[str, Any] | None = None  # Stack analysis from discovery phase
 
 
+# How many tasks a sprint of each scope may hold, and the ceiling for any.
+SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
+SCOPE_HARD_MAX = 12
+
+
 class SprintStartRequest(BaseModel):
     """Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."""
 
@@ -71,6 +76,9 @@ class SprintStartRequest(BaseModel):
     backlog_items: list[
         dict[str, str]
     ]  # Each item has at least "title" and "description"
+    # Blocked tasks of earlier sprints to try again in this one (they count
+    # towards the scope). Each gets a fresh task carrying what blocked it.
+    carry_over_ids: list[int] = []
 
 
 class SprintPlanRequest(BaseModel):
