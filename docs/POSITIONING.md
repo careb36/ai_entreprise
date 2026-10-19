@@ -232,6 +232,22 @@ replaces none of it.
      and the agent has no tools.
    - It is enabled with `SUPPORT_AGENT_ENABLED`. Next candidates: agents for
      the other tasks people still do by hand.
+5. **The loop closes** (done). What the first four steps left open was what
+   happens to work the agents give up on.
+   - A sprint closes when every task is settled: done, or blocked until a
+     person acts. Before, a blocked task held the sprint open for good, so
+     there was no retrospective, no proposal and no measurement; the blocked
+     share could only ever be measured over sprints that had none.
+   - The text checks before review ask for rework with the reason, like a
+     reviewer, instead of blocking a task on a judgement about form; after
+     the rework limit they block it and escalate to the ScrumMaster.
+   - `GET /v1/inbox` and the Review page are a person's queue: blocked
+     tasks, procedure proposals waiting, runs nobody decided on. A Manager
+     sends a task back to work or carries it into the next sprint with what
+     blocked it; at autonomy level 3 the company carries it over on its own,
+     once. A task that blocks twice stays for a person.
+   - The sprint list shows blocked tasks and rework requests per sprint, so
+     whether the company is learning is visible without opening anything.
 
 ### What this changes in the tables above
 

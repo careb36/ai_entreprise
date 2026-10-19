@@ -366,6 +366,9 @@ export interface SprintSummary {
   scope_size: string
   total: number
   done: number
+  /** Tasks blocked on the board, and rework requests over the sprint: the numbers procedures are judged by. */
+  blocked: number
+  rework: number
 }
 
 export interface PlannedSprintTask {

@@ -6,6 +6,7 @@ import auth_tokens
 import pytest
 from config import settings
 from models import BacklogItem, Company, CompanyMember, Sprint, User
+from sqlmodel import select
 
 
 @pytest.fixture
@@ -61,12 +62,23 @@ def test_member_lists_own_sprints_newest_first_with_progress(
         sqlite_session,
         mine.id,
         "Foundation",
-        statuses=("done", "todo", "in_progress"),
+        statuses=("done", "todo", "blocked"),
         start_date="2026-10-01",
         goal="Lay the base",
         scope_size="S",
         status="completed",
     )
+    reworked = sqlite_session.exec(
+        select(BacklogItem).where(BacklogItem.sprint_id == older.id)
+    ).first()
+    reworked.comments = [
+        {"author": "QA", "text": "NEEDS WORK: add a test"},
+        {"author": "Dev", "text": "Delivered again"},
+        {"author": "Verifier", "text": "Delivery verified: 2 files written"},
+        {"author": "Quality gate", "text": "NEEDS WORK: too short"},
+    ]
+    sqlite_session.add(reworked)
+    sqlite_session.commit()
     newer = _sprint(sqlite_session, mine.id, "Hardening", start_date="2026-10-15")
     _sprint(sqlite_session, other.id, "Someone else's", statuses=("done",))
     headers = _user_headers(sqlite_session, mine.id, role="Viewer")
@@ -86,6 +98,8 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "scope_size": "M",
             "total": 0,
             "done": 0,
+            "blocked": 0,
+            "rework": 0,
         },
         {
             "id": older.id,
@@ -96,6 +110,8 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "scope_size": "S",
             "total": 3,
             "done": 1,
+            "blocked": 1,
+            "rework": 2,
         },
     ]
 

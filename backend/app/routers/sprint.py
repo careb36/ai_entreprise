@@ -328,18 +328,37 @@ async def list_sprints(
         select(Sprint).where(Sprint.company_id == company_id).order_by(Sprint.id.desc())
     ).all()
     sprint_ids = [s.id for s in sprints]
-    counts: dict[int, tuple[int, int]] = {}
+    counts: dict[int, tuple[int, int, int]] = {}
+    rework: dict[int, int] = {}
     if sprint_ids:
         rows = session.exec(
             select(
                 BacklogItem.sprint_id,
                 func.count(BacklogItem.id),
                 func.sum(case((BacklogItem.status == "done", 1), else_=0)),
+                func.sum(case((BacklogItem.status == "blocked", 1), else_=0)),
             )
             .where(BacklogItem.sprint_id.in_(sprint_ids))
             .group_by(BacklogItem.sprint_id)
         ).all()
-        counts = {sid: (int(total), int(done or 0)) for sid, total, done in rows}
+        counts = {
+            sid: (int(total), int(done or 0), int(blocked or 0))
+            for sid, total, done, blocked in rows
+        }
+        # Rework requests live in the comments, so they are counted in Python;
+        # together with the blocked share they are the numbers the procedures
+        # are judged by, shown per sprint so a person sees the trend.
+        for sid, comments in session.exec(
+            select(BacklogItem.sprint_id, BacklogItem.comments).where(
+                BacklogItem.sprint_id.in_(sprint_ids)
+            )
+        ).all():
+            rework[sid] = rework.get(sid, 0) + sum(
+                1
+                for c in (comments or [])
+                if isinstance(c, dict)
+                and str(c.get("text", "")).strip().upper().startswith("NEEDS WORK:")
+            )
     return [
         {
             "id": s.id,
@@ -348,8 +367,10 @@ async def list_sprints(
             "goal": s.goal,
             "start_date": s.start_date,
             "scope_size": s.scope_size,
-            "total": counts.get(s.id, (0, 0))[0],
-            "done": counts.get(s.id, (0, 0))[1],
+            "total": counts.get(s.id, (0, 0, 0))[0],
+            "done": counts.get(s.id, (0, 0, 0))[1],
+            "blocked": counts.get(s.id, (0, 0, 0))[2],
+            "rework": rework.get(s.id, 0),
         }
         for s in sprints
     ]

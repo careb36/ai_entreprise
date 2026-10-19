@@ -267,7 +267,7 @@ Test files:
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
 | `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
-| `test_sprint_list.py` | `GET /v1/sprints`: progress, ordering, membership scoping |
+| `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
