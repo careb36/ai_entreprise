@@ -355,6 +355,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
 | `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
 | `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
+| `src/components/LearningTrend.test.tsx` | The "Is the company learning?" tiles: rework per task and blocked share per closed sprint, the change since the previous one, the sparkline's values and the table view |
 | `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |

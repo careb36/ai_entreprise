@@ -10,6 +10,7 @@ import { useSprints } from '../hooks/useQueries'
 import type { SprintSummary } from '../services/api'
 import { QuickLaunch } from './Dashboard'
 import { sprintPath } from './SprintWorkspace'
+import { LearningTrend } from '../components/LearningTrend'
 
 const STATUS_TONE: Record<string, string> = {
   active: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
@@ -108,9 +109,12 @@ export default function Sprints() {
           </div>
         </div>
       ) : (
-        <ul className="space-y-2" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })}>
-          {sprints.map(sprint => <SprintRow key={sprint.id} sprint={sprint} current={sprint.id === activeSprintId} />)}
-        </ul>
+        <>
+          <LearningTrend sprints={sprints} />
+          <ul className="space-y-2" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })}>
+            {sprints.map(sprint => <SprintRow key={sprint.id} sprint={sprint} current={sprint.id === activeSprintId} />)}
+          </ul>
+        </>
       )}
 
       <section id="plan-sprint" aria-label={t('sprints.planSprint', { defaultValue: 'Plan a sprint' })} className="scroll-mt-20">
