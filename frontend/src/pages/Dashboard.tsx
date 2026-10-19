@@ -253,6 +253,22 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   const { companyId, companyName, setCompany } = useAppStore()
   const inbox = useInbox(companyId, false)
   const blockedTasks = (inbox.data?.blocked_tasks ?? []).filter(task => !task.frozen)
+  // When a plan preview appears, start with the tasks the ScrumMaster's triage
+  // recommends retrying, within the room the scope leaves; the person unticks
+  // or adds from there. The triage is advice: nothing is sent without the tick.
+  useEffect(() => {
+    if (!plannedSprint) {
+      setCarryOver([])
+      return
+    }
+    const room = Math.max(0, SCOPE_META[scope].limit - plannedSprint.tasks.length)
+    setCarryOver(
+      (inbox.data?.blocked_tasks ?? [])
+        .filter(task => !task.frozen && task.triage?.decision === 'retry')
+        .slice(0, room)
+        .map(task => task.id),
+    )
+  }, [plannedSprint, inbox.data, scope])
   const initMutation    = useInitCompany()
   const planMutation    = usePlanSprint()
   const autoPlanMutation = usePlanSelfImprovementSprint()
@@ -508,7 +524,17 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                   <input type="checkbox" className="mt-0.5" checked={carryOver.includes(task.id)}
                     disabled={!carryOver.includes(task.id) && plannedSprint.tasks.length + carryOver.length >= SCOPE_META[scope].limit}
                     onChange={e => setCarryOver(ids => e.target.checked ? [...ids, task.id] : ids.filter(id => id !== task.id))} />
-                  <span>{t('dashboard.carryOverTask', { title: task.title, sprint: task.sprint_name, defaultValue: '{{title}} · {{sprint}}' })}</span>
+                  <span className="min-w-0">
+                    {t('dashboard.carryOverTask', { title: task.title, sprint: task.sprint_name, defaultValue: '{{title}} · {{sprint}}' })}
+                    {task.triage && (
+                      // The ScrumMaster's answer to the escalation: a claim for the person to weigh.
+                      <span className="block text-[11px] text-sky-200/80">
+                        {task.triage.decision === 'retry'
+                          ? t('dashboard.carryOverTriageRetry', { why: task.triage.why, defaultValue: 'ScrumMaster: another attempt. {{why}}' })
+                          : t('dashboard.carryOverTriagePerson', { why: task.triage.why, defaultValue: 'ScrumMaster: leave it for a person. {{why}}' })}
+                      </span>
+                    )}
+                  </span>
                 </label>
               ))}
               {plannedSprint.tasks.length + carryOver.length >= SCOPE_META[scope].limit && carryOver.length < blockedTasks.length && (

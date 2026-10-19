@@ -205,8 +205,10 @@ the LangGraph graph is only an optional kickoff conversation.
    format a parser checks, between another attempt with a brief for it or
    leaving it to a person. The decision is a `decision` message, a claim: the
    inbox shows it as `triage`, the brief travels with the carried task into
-   its prompt, and a task left for a person is not carried over on the
-   company's own (a person still can). No usable answer keeps the default.
+   its prompt (and into QA's review prompt, so the second attempt is judged
+   against the same context), and a task left for a person is not carried
+   over on the company's own (a person still can). No usable answer keeps
+   the default.
    Every question to the ScrumMaster (the triage, the procedure proposals)
    goes through `scrum_master.ask`, and every count of rework requests
    (the sprint list, the procedures' numbers) through

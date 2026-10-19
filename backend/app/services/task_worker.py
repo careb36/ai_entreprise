@@ -2969,6 +2969,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 f"--- DELIVERABLE ---\n{deliverable[:3000]}\n--- END ---\n\n"
                 "Provide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
                 "If not, start with 'NEEDS WORK:' and explain what's missing."
+                # A second attempt is judged against what blocked the first and
+                # the ScrumMaster's brief for it, the same context the agent had.
+                + previous_attempt_context(item)
             ) + procedures.procedures_prompt(
                 procedures.active_procedures(
                     session, sprint.company_id, reviewer_dict["role"]

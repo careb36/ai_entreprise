@@ -198,10 +198,12 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(useInbox).mockReturnValue({
       data: {
         blocked_tasks: [
-          { id: 7, title: 'Create testing strategy', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', frozen: false, updated_at: null },
-          { id: 8, title: 'Frozen one', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'frozen', frozen: true, updated_at: null },
+          { id: 7, title: 'Create testing strategy', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', triage: null, frozen: false, updated_at: null },
+          { id: 8, title: 'Frozen one', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'frozen', triage: null, frozen: true, updated_at: null },
+          { id: 9, title: 'Needs a budget', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'budget', triage: { decision: 'person', why: 'It needs a decision the team cannot make.', brief: '' }, frozen: false, updated_at: null },
+          { id: 10, title: 'Write the parser', assignee: 'Developer', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', triage: { decision: 'retry', why: 'Cut short, not wrong.', brief: 'Deliver every file in full.' }, frozen: false, updated_at: null },
         ],
-        proposals: [], pending_runs: 0, total: 2,
+        proposals: [], pending_runs: 0, total: 4,
       },
     } as never)
     const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
@@ -215,12 +217,19 @@ describe('Dashboard Spanish localization', () => {
     const group = screen.getByRole('group', { name: 'Traer de vuelta tareas bloqueadas' })
     const box = within(group).getByRole('checkbox', { name: 'Create testing strategy · Sprint 0' })
     expect(within(group).queryByRole('checkbox', { name: /Frozen one/ })).not.toBeInTheDocument()
+    expect(box).not.toBeChecked()
     fireEvent.click(box)
     expect(box).toBeChecked()
+    // The ScrumMaster's triage sits under each task; the one it recommends
+    // retrying starts ticked, the one it left to a person does not.
+    expect(within(group).getByText('ScrumMaster: otro intento. Cut short, not wrong.')).toBeInTheDocument()
+    expect(within(group).getByText('ScrumMaster: que lo decida una persona. It needs a decision the team cannot make.')).toBeInTheDocument()
+    expect(within(group).getByRole('checkbox', { name: /Write the parser/ })).toBeChecked()
+    expect(within(group).getByRole('checkbox', { name: /Needs a budget/ })).not.toBeChecked()
 
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sprint' }))
     expect(await screen.findByTestId('workspace')).toBeInTheDocument()
-    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ carry_over_ids: [7] }))
+    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ carry_over_ids: [10, 7] }))
   })
 
   it('generates and launches a Spanish preview without translating API identifiers or freeform plan data', async () => {
