@@ -38,12 +38,16 @@ async def inbox(
         .order_by(BacklogItem.updated_at.desc(), BacklogItem.id.desc())
     ).all()
     blocked_tasks = []
+    blocked_total = 0
     for item, sprint in rows:
         next_step = blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own
         if carried_over(item):
             continue  # it got another attempt in a later sprint
+        blocked_total += 1
+        if len(blocked_tasks) == limit:
+            continue  # listed up to the limit, counted in full
         blocked_tasks.append(
             {
                 "id": item.id,
@@ -57,8 +61,6 @@ async def inbox(
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )
-        if len(blocked_tasks) == limit:
-            break
 
     proposals = session.exec(
         select(Procedure)
@@ -90,5 +92,6 @@ async def inbox(
             for p in proposals
         ],
         "pending_runs": int(pending_runs or 0),
-        "total": len(blocked_tasks) + len(proposals) + int(pending_runs or 0),
+        "blocked_total": blocked_total,
+        "total": blocked_total + len(proposals) + int(pending_runs or 0),
     }

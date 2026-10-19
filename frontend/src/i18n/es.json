@@ -1453,7 +1453,6 @@
     "noBlocked": "Ninguna tarea espera a una persona.",
     "frozen": "congelada por un operador",
     "sendBack": "Mandar de vuelta al trabajo",
-    "sentBackComment": "Devuelta al trabajo por una persona.",
     "sendBackError": "No se pudo mandar de vuelta: {{message}}",
     "proposalsTitle": "Propuestas de procedimiento a la espera de una decisión",
     "proposalsHint": "El ScrumMaster las propuso después de un sprint con retrabajo o tareas bloqueadas; los números del tablero las juzgarán.",

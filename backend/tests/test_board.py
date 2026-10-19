@@ -1,0 +1,110 @@
+"""
+services/board.py: how a task's comment thread is read.
+
+- A carry-over note quotes another task's verdict and never counts as this
+  task's: a clone keeps its retry.
+- A person's send-back note and the gates' verdicts are neither a deliverable
+  nor the end of the pending rework; every rework budget restarts after a
+  send-back. A person's other notes may be a deliverable, as before.
+- A gate's "manual triage" verdict settles the task on its own.
+"""
+
+from models import BacklogItem
+from services import board
+
+TRIAGE = (
+    "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: x"
+)
+SEND_BACK = {"author": "user", "text": "Sent back to work by a person."}
+
+
+def test_a_carried_over_clone_keeps_its_retry_and_its_reason_is_its_own():
+    comments = [
+        {
+            "author": "System",
+            "text": f'Carried over from task 7 ("Sprint 0"), which was blocked: {TRIAGE}',
+        },
+        {"author": "System", "text": "Agent error: proxy 503"},
+    ]
+
+    assert board.blocked_item_next_step(comments, "QA") == "retry"
+    assert board.block_reason(comments) == "Agent error: proxy 503"
+    assert (
+        board.has_manual_freeze_marker(
+            [
+                {
+                    "author": "System",
+                    "text": 'Carried over from task 7 ("S"), which was blocked: freeze after sleep-induced churn',
+                }
+            ]
+        )
+        is False
+    )
+
+
+def test_the_original_marked_as_carried_still_reads_its_own_verdict():
+    comments = [
+        {"author": "Quality gate", "text": TRIAGE},
+        {
+            "author": "System",
+            "text": 'Carried over to sprint 3 ("Sprint 1") as task 9 by ana.',
+        },
+    ]
+
+    assert board.blocked_item_next_step(comments, "QA") is None
+    assert board.block_reason(comments) == TRIAGE
+
+
+def test_pending_rework_survives_a_gate_verdict_and_a_send_back():
+    comments = [
+        {"author": "Dev", "text": "# Artifact: a.py\nprint(1)"},
+        {"author": "QA", "text": "NEEDS WORK: add a test for empty input"},
+        {"author": "Quality gate", "text": TRIAGE},
+        SEND_BACK,
+    ]
+
+    assert board.pending_rework_feedback(comments) == [
+        "QA: NEEDS WORK: add a test for empty input"
+    ]
+    assert board.extract_latest_reviewable_comment(comments, "Developer") == ""
+
+
+def test_a_persons_note_is_never_the_deliverable():
+    """A note a Manager leaves on the board goes to nobody's review; the
+    task runs again instead (see test_sprint_close)."""
+    comments = [
+        {"author": "Dev", "text": "# Artifact: a.py\nprint(1)"},
+        {"author": "QA", "text": "NEEDS WORK: add a test"},
+        {"author": "user", "text": "Please try once more, and mind the edge cases."},
+    ]
+
+    assert board.extract_latest_reviewable_comment(comments, "Developer") == ""
+    assert board.pending_rework_feedback(comments) == ["QA: NEEDS WORK: add a test"]
+
+
+def test_rework_budgets_restart_after_a_send_back():
+    comments = [
+        {"author": "Quality gate", "text": "NEEDS WORK: too short"},
+        {"author": "Quality gate", "text": "NEEDS WORK: too short"},
+        {"author": "Quality gate", "text": TRIAGE},
+        SEND_BACK,
+        {"author": "Quality gate", "text": "NEEDS WORK: too short"},
+    ]
+
+    assert board.rework_requests_by(comments, "Quality gate") == 1
+    assert board.rework_requests_by(comments[:3], "Quality gate") == 2
+    assert board.rework_requests_by(comments, "Verifier") == 0
+
+
+def test_a_gate_verdict_settles_the_task_without_a_prior_rework_request():
+    comments = [
+        {
+            "author": "Verifier",
+            "text": "Tests failed after 0 rework(s) — blocked for manual triage: exit 1",
+        }
+    ]
+
+    assert board.blocked_item_next_step(comments, "Developer") is None
+    assert board.item_is_settled(
+        BacklogItem(sprint_id=1, title="t", status="blocked", comments=comments)
+    )

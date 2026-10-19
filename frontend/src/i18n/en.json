@@ -1453,7 +1453,6 @@
     "noBlocked": "No task is waiting for a person.",
     "frozen": "frozen by an operator",
     "sendBack": "Send back to work",
-    "sentBackComment": "Sent back to work by a person.",
     "sendBackError": "Could not send it back: {{message}}",
     "proposalsTitle": "Procedure proposals waiting for a decision",
     "proposalsHint": "The ScrumMaster proposed these after a sprint with rework or blocked tasks; the board's numbers will judge them.",
