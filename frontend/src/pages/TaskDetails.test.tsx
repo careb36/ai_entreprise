@@ -112,6 +112,56 @@ describe('task detail errors', () => {
   })
 })
 
+describe('carry-over lineage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ companyId: 42, activeSprintId: 9 })
+    capabilitiesQuery.mockReturnValue({ data: { memory: false } } as never)
+  })
+
+  it('links the earlier attempt and the later one', () => {
+    boardQuery.mockReturnValue({
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening' },
+        columns: { blocked: [{
+          id: 12, sprint_id: 9, title: 'Encrypt credentials', description: '',
+          status: 'blocked', priority: 'high', assignee: 'Developer',
+          comments: [
+            { author: 'System', text: 'Carried over from task 7 ("Sprint 0"), which was blocked: too short', created_at: '' },
+            { author: 'System', text: 'Carried over to sprint 10 ("Sprint 2") as task 15 by ana.', created_at: '' },
+          ],
+          created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+        }] },
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup('/sprints/9/tasks/12')
+    const lineage = screen.getByRole('navigation', { name: 'Earlier and later attempts' })
+    expect(lineage).toHaveTextContent('Another attempt at a task blocked in Sprint 0: task #7')
+    expect(within(lineage).getByRole('link', { name: 'task #7' })).toHaveAttribute('href', '/task/7')
+    expect(lineage).toHaveTextContent('Given another attempt in Sprint 2: task #15')
+    expect(within(lineage).getByRole('link', { name: 'task #15' })).toHaveAttribute('href', '/sprints/10/tasks/15')
+  })
+
+  it('shows nothing for an ordinary task', () => {
+    boardQuery.mockReturnValue({
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening' },
+        columns: { done: [{
+          id: 12, sprint_id: 9, title: 'Encrypt credentials', description: '',
+          status: 'done', priority: 'high', assignee: 'Developer', comments: [{ author: 'Dev', text: 'Done.', created_at: '' }],
+          created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+        }] },
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup('/sprints/9/tasks/12')
+    expect(screen.queryByRole('navigation', { name: 'Earlier and later attempts' })).not.toBeInTheDocument()
+  })
+})
+
 describe('task delivery evidence', () => {
   const boardWithTask = {
     data: {

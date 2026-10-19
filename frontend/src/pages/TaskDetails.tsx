@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck, RotateCcw } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Verdict } from '../components/Verdict'
 import { Conversation } from '../components/Conversation'
@@ -10,6 +10,7 @@ import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueri
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
+import { carryOverLineage } from '../lib/carryOver'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { lineagePath } from './Lineage'
 
@@ -158,6 +159,8 @@ export default function TaskDetails() {
     )
   }
 
+  const lineage = carryOverLineage(task.comments)
+
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
       <div className="mb-6">
@@ -184,6 +187,30 @@ export default function TaskDetails() {
         </div>
         <h1 className="text-xl font-bold text-white leading-snug">{task.title}</h1>
       </div>
+
+      {/* Carry-over lineage: another attempt at an earlier task, or the attempt this one got */}
+      {(lineage.from || lineage.to) && (
+        <nav aria-label={t('taskDetails.lineageLabel', { defaultValue: 'Earlier and later attempts' })} className="card p-3 mb-4 space-y-1 text-xs text-gray-400">
+          {lineage.from && (
+            <p>
+              <RotateCcw size={11} className="inline mr-1" aria-hidden="true" />
+              {t('taskDetails.carriedFrom', { sprint: lineage.from.sprintName, defaultValue: 'Another attempt at a task blocked in {{sprint}}:' })}{' '}
+              <Link to={`/task/${lineage.from.taskId}`} className="text-brand-300 hover:underline">
+                {t('taskDetails.taskNumber', { id: lineage.from.taskId, defaultValue: 'task #{{id}}' })}
+              </Link>
+            </p>
+          )}
+          {lineage.to && (
+            <p>
+              <RotateCcw size={11} className="inline mr-1" aria-hidden="true" />
+              {t('taskDetails.carriedTo', { sprint: lineage.to.sprintName, defaultValue: 'Given another attempt in {{sprint}}:' })}{' '}
+              <Link to={`/sprints/${lineage.to.sprintId}/tasks/${lineage.to.taskId}`} className="text-brand-300 hover:underline">
+                {t('taskDetails.taskNumber', { id: lineage.to.taskId, defaultValue: 'task #{{id}}' })}
+              </Link>
+            </p>
+          )}
+        </nav>
+      )}
 
       {/* Description */}
       {task.description && (
