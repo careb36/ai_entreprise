@@ -64,9 +64,9 @@ La Fabrique is a multi-agent platform that orchestrates AI agents through a stru
 | M    | 8                 | Feature iterations (default) |
 | L    | 12                | Large features, foundational work |
 
-When an agent workflow exhausts its capacity before completing all items, the sprint transitions to `needs_split` — signalling that the scope must be broken into smaller sprints before retrying.
+A sprint closes when every task is settled: done, or blocked until a person acts. Blocked tasks stay on the board, appear in the retrospective and count in the numbers the company's procedures are judged by; a person can send one back to work from the **Review** page or carry it into the next sprint, and with autonomy level 3 the company carries it over on its own, once. When the optional kickoff graph decides the scope exceeds the team's capacity, the sprint transitions to `needs_split`.
 
-**Sprint lifecycle:** `active` → `completed` | `needs_split` | `cancelled`
+**Sprint lifecycle:** `active` ⇄ `paused` → `completed` | `needs_split` | `cancelled`
 
 ---
 
@@ -93,26 +93,32 @@ graph TD
 
 ### Data flow for a sprint
 
+Tasks are executed by the **task worker** (`backend/app/services/task_worker.py`). The LangGraph graph is an optional kickoff conversation, off by default.
+
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant FE as Frontend
+    participant U as Person
     participant BE as FastAPI
-    participant NJ as NATS
-    participant LG as LangGraph
     participant DB as PostgreSQL
-    participant N4J as Neo4j
+    participant NJ as NATS JetStream
+    participant TW as Task worker
+    participant LLM as LLM proxy
+    participant D as Workspace daemon
 
-    U->>FE: Start sprint (scope S/M/L + backlog)
-    FE->>BE: POST /v1/start_sprint
-    BE->>DB: Insert sprint (status=active)
-    BE->>NJ: publish workspace.generate
-    NJ->>LG: kickoff → PO → ScrumMaster → Developer → PO wrap
-    LG-->>NJ: glassroom.<sprint_id> events (SSE bridge)
-    NJ-->>FE: Real-time agent messages
-    LG->>N4J: burn_node — persist engram
-    LG->>BE: needs_split=true (if capacity exceeded)
-    BE->>DB: UPDATE sprint SET status='needs_split'
+    U->>BE: POST /v1/start_sprint (scope S/M/L, backlog, carry_over_ids)
+    BE->>DB: sprint + backlog items + outbox events
+    DB-->>NJ: task.assign (outbox processor, durable)
+    NJ->>TW: assignment
+    TW->>LLM: task prompt (procedures, lessons, memory, previous attempt)
+    LLM-->>TW: deliverable with path= file blocks
+    TW->>TW: quality gate (text checks) → rework or continue
+    TW->>D: workspace.generate (write files)
+    D-->>TW: sha256 of each file read back (observation)
+    TW->>DB: AgentRun + Verification (claims kept apart from observations)
+    TW->>LLM: QA review (only APPROVED: closes the task)
+    TW->>DB: done / rework / blocked for a person; AgentMessages at each hand-over
+    TW->>DB: sprint closes when every task is settled → retrospective, procedures measured and proposed
+    BE-->>U: GET /v1/inbox: what needs a person
 ```
 
 [⬆ Back to Top](#la-fabrique)
@@ -203,14 +209,22 @@ curl -X POST http://localhost:8000/v1/init_company \
   -H "Content-Type: application/json" \
   -d '{"company_name": "My Company"}'
 
-# Start a sprint
+# Start a sprint (carry_over_ids: blocked tasks of earlier sprints to try again)
 curl -X POST http://localhost:8000/v1/start_sprint \
   -H "Content-Type: application/json" \
   -d '{
-    "company_id": "<company_id>",
-    "scope": "M",
-    "backlog": ["Implement user authentication", "Add dashboard widgets"]
+    "company_id": <company_id>,
+    "sprint_name": "Sprint 1",
+    "start_date": "2026-10-20",
+    "scope_size": "M",
+    "backlog_items": [
+      {"title": "Implement user authentication", "description": "Login with email and password.", "assignee": "Developer"},
+      {"title": "Add dashboard widgets", "description": "KPI tiles on the dashboard.", "assignee": "Developer"}
+    ]
   }'
+
+# What the company needs a person for
+curl "http://localhost:8000/v1/inbox?company_id=<company_id>"
 
 # Open API docs
 open http://localhost:8000/docs
@@ -222,7 +236,7 @@ open http://localhost:8000/docs
 
 ## Agent Orchestration
 
-Each sprint kickoff triggers a **LangGraph workflow** via the `workspace.generate` NATS subject. The graph has a fixed topology with `recursion_limit=12`:
+With `AGENT_GRAPH_ENABLED=true` (off by default), each sprint kickoff also runs a **LangGraph conversation** via the `workspace.generate` NATS subject; its transcript is recorded as an `AgentRun` and never blocks the sprint's tasks. The graph has a fixed topology with `recursion_limit=12`:
 
 ```mermaid
 flowchart LR
@@ -298,10 +312,13 @@ la-fabrique/
 │   │   ├── models/                   # SQLModel ORM (Sprint, Company, BacklogItem…)
 │   │   ├── schemas.py                # Pydantic request/response schemas
 │   │   ├── database.py               # Engine · session · _ensure_runtime_schema()
-│   │   ├── routers/                  # sprint · agents · enterprise · support
+│   │   ├── routers/                  # sprint · inbox · procedures · messages · agent_runs · support · workspace · github
 │   │   ├── services/
 │   │   │   ├── agent_worker.py       # NATS consumer → LangGraph execution
-│   │   │   ├── task_worker.py        # Task assignment worker
+│   │   │   ├── task_worker.py        # Executes tasks, delivery gate, QA review, closes sprints
+│   │   │   ├── procedures.py         # Procedures: proposals, adoption, keep/revert by the numbers
+│   │   │   ├── carry_over.py         # A blocked task gets another attempt in the next sprint
+│   │   │   ├── support_agent.py      # Triages help-desk tickets (SUPPORT_AGENT_ENABLED)
 │   │   │   └── outbox_service.py     # Transactional outbox → NATS drain
 │   │   └── nats_client.py            # Async NATS publish/subscribe wrapper
 │   ├── llm/
@@ -315,10 +332,14 @@ la-fabrique/
 │       ├── components/
 │       │   ├── GlassRoom.tsx         # 3-column real-time sprint view
 │       │   ├── KanbanBoard.tsx       # Sprint backlog board (dnd-kit)
+│       │   ├── GovernancePanel.tsx   # Review: what needs a person (inbox)
+│       │   ├── Conversation.tsx      # Messages between roles per sprint and task
 │       │   ├── ControlPanel.tsx      # Sprint configuration UI
 │       │   └── ErrorBoundary.tsx     # Global React error boundary
 │       ├── pages/
-│       │   ├── Dashboard.tsx         # KPI strip · sprint cards · quick launch
+│       │   ├── Dashboard.tsx         # Sprint planner (QuickLaunch) with carry-over of blocked tasks
+│       │   ├── Sprints.tsx           # Every sprint with done, blocked and rework counts
+│       │   ├── Procedures.tsx        # Proposals, procedures in force, history with their numbers
 │       │   └── CompanyNew.tsx        # Company onboarding wizard
 │       ├── store/
 │       │   └── agentStore.ts         # Zustand FSM store (idle/active/waiting/error)
@@ -340,18 +361,35 @@ la-fabrique/
 
 ## API Reference
 
-Interactive docs at `http://localhost:8000/docs` when running locally.
+Interactive docs at `http://localhost:8000/docs` when running locally. Routes other than the public ones require a JWT (`POST /v1/auth/login`) and a company role: Viewer reads, Manager runs sprints and decides, Owner invites.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/health` | Service health check |
-| `POST` | `/v1/init_company` | Create company with default scope size (S/M/L) |
-| `POST` | `/v1/start_sprint` | Start sprint; validates scope constraint and item count |
-| `POST` | `/v1/generate` | Trigger LangGraph workflow via NATS |
-| `GET`  | `/v1/glassroom/stream` | SSE stream for real-time sprint agent events |
-| `POST` | `/v1/audit` | Write structured audit entry |
-| `GET`  | `/v1/memory/search` | Semantic search over engram memory (pgvector) |
-| `POST` | `/v1/memory/store` | Store content in vector memory |
+| `GET`  | `/health` | Service health check; `/health/deep` probes each dependency |
+| `GET`  | `/v1/capabilities` | Feature flags (graph, memory, GitHub, support agent); public |
+| `POST` | `/v1/auth/register` · `/v1/auth/login` · `GET /v1/auth/me` | Accounts and sessions |
+| `POST` | `/v1/company/invite` | Invite a member (Owner) |
+| `POST` | `/v1/init_company` | Create a company, its agents and the foundation sprint |
+| `POST` | `/v1/discover_team` | Inspect a project folder through the daemon and suggest a team |
+| `GET` · `POST` · `PATCH` · `DELETE` | `/v1/agents` | The company's agents and their models |
+| `POST` | `/v1/plan_sprint` · `/v1/plan_self_improvement_sprint` | Turn a goal, or the repository, into a backlog |
+| `POST` | `/v1/start_sprint` | Start a sprint; validates the scope; `carry_over_ids` retries blocked tasks |
+| `GET`  | `/v1/sprints` | The company's sprints with done, blocked and rework counts |
+| `GET`  | `/v1/sprints/{id}/board` | The Kanban board of a sprint |
+| `POST` | `/v1/sprints/{id}/pause` · `/resume` · `/dispatch` | Hold, resume or re-queue a sprint's tasks |
+| `PATCH` | `/v1/backlog/{id}` | Change a task's status, priority or assignee, or add a note (Manager) |
+| `GET`  | `/v1/inbox` | What needs a person: blocked tasks, procedure proposals, undecided runs |
+| `GET`  | `/v1/messages` | The conversation between roles (filters: sprint, task, kind) |
+| `GET` · `POST` | `/v1/procedures` (+ `/adopt`, `/reject`, `/retire`) | The rules each role follows, proposed by the ScrumMaster and measured by the board |
+| `GET` · `POST` | `/v1/agent_runs` (+ `/verify`, `/approve`, `/verifications`) | Evidence: runs, deterministic verifications, human decisions |
+| `POST` | `/v1/integrations/github/bindings` · `/webhook` · `/backfill` | Record a repository's pull requests as runs |
+| `GET`  | `/v1/workspace/status` · `/browse` · `/inspect` | The daemon on the person's computer: folder picker and project check |
+| `GET`  | `/v1/glassroom/stream` | SSE stream of a sprint's agent events |
+| `GET`  | `/v1/enterprise/quotas` · `/quota_usage_history` · `/lineage` · `/v1/analytics/summary` | Budgets, usage and metrics |
+| `POST` | `/v1/support/report_bug` · `/chat` · `GET /v1/support/tickets` | The help desk; triaged by the Support agent when enabled |
+| `POST` | `/v1/generate` | Trigger the optional LangGraph workflow (409 unless enabled) |
+| `GET`  | `/v1/memory/search` · `POST /v1/memory/store` | Semantic memory over pgvector |
+| `POST` | `/v1/audit` · `GET /v1/audit/verify` | Structured, signed audit entries |
 
 [⬆ Back to Top](#la-fabrique)
 
