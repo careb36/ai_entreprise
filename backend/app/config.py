@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     AUTO_SELF_IMPROVEMENT_ENABLED: bool = True
     CONSOLE_ASSISTANTS_ENABLED: bool = True
+    # The Support agent triages new help-desk tickets (suggested severity and
+    # category, a first reply to the reporter). Off by default: reporting a
+    # bug is public, and each new ticket costs an LLM call.
+    SUPPORT_AGENT_ENABLED: bool = False
+    SUPPORT_AGENT_INTERVAL_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
     # Consult the Architect agent before Developers start high-priority, design-sensitive

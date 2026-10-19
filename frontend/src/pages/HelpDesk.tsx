@@ -195,6 +195,33 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
           </div>
         ))}
       </dl>
+      {ticket.triaged_by && (
+        <div className="rounded-lg border border-surface-700 p-3 text-sm" aria-label={t('helpDesk.triage', { defaultValue: 'Triage' })}>
+          <p className="mb-1 text-xs font-semibold text-gray-400">
+            {t('helpDesk.triagedBy', { who: ticket.triaged_by, defaultValue: 'Triage by {{who}} (suggestions; the reporter chose the severity)' })}
+          </p>
+          {ticket.suggested_severity ? (
+            <>
+              <p className="text-xs text-gray-300">
+                {t('helpDesk.suggested', {
+                  severity: t(`helpDesk.severities.${ticket.suggested_severity}`, { defaultValue: ticket.suggested_severity }),
+                  category: ticket.suggested_category ?? '—',
+                  reported: t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }),
+                  defaultValue: 'Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}',
+                })}
+              </p>
+              {ticket.agent_reply && (
+                <>
+                  <p className="mt-2 text-xs font-semibold text-gray-400">{t('helpDesk.agentReply', { defaultValue: 'First reply sent to the reporter' })}</p>
+                  <p className="whitespace-pre-wrap break-words text-gray-200">{ticket.agent_reply}</p>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-gray-400">{t('helpDesk.untriaged', { defaultValue: 'The agent could not triage this ticket; it is left to people.' })}</p>
+          )}
+        </div>
+      )}
       <UpdateForm ticket={ticket} />
     </section>
   )

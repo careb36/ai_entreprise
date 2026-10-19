@@ -58,6 +58,31 @@ describe('SupportBot', () => {
     expect(url.searchParams.get('reporter_email')).toBe('ana@example.com')
   })
 
+  it("shows the reporter the Support agent's first reply", async () => {
+    useAuthStore.setState({ user: { user_id: 3, email: 'me@example.com', full_name: 'Me' } })
+    const fetch = vi.fn(async (url: string) => {
+      const { pathname } = new URL(url)
+      if (pathname === '/v1/support/tickets') {
+        return response(200, { tickets: [{ ticket_num: 'FAB-00009', title: 'Board', status: 'in_progress', severity: 'low', created_at: null }], count: 1 })
+      }
+      return response(200, {
+        ticket_num: 'FAB-00009', title: 'Board', status: 'in_progress', severity: 'low', category: 'bug',
+        description: 'Spinner', created_at: null, updated_at: null, resolved_at: null, resolution: null,
+        agent_reply: 'Gracias, ya lo estamos viendo.',
+      })
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<SupportBot />)
+
+    fireEvent.click(screen.getByTitle('Open Support'))
+    fireEvent.click(screen.getByTitle('My Tickets'))
+    fireEvent.keyDown(screen.getByPlaceholderText(/email/i), { key: 'Enter' })
+    fireEvent.click(await screen.findByText('FAB-00009'))
+
+    expect(await screen.findByText('Reply from the Support agent')).toBeInTheDocument()
+    expect(screen.getByText('Gracias, ya lo estamos viendo.')).toBeInTheDocument()
+  })
+
   it('fills in the account email once the profile loads', async () => {
     vi.stubGlobal('fetch', vi.fn())
     render(<SupportBot />)

@@ -132,6 +132,7 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       SUPPORT_ADMIN_EMAILS: ${SUPPORT_ADMIN_EMAILS:-}
+      SUPPORT_AGENT_ENABLED: ${SUPPORT_AGENT_ENABLED:-false}
       NATS_URL: nats://nats:4222
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs

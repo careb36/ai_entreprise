@@ -146,6 +146,17 @@ async def startup(app):
     _background_tasks.add(connect_task)
     connect_task.add_done_callback(_on_task_done)
 
+    # The Support agent needs only the database and the LLM proxy.
+    if settings.SUPPORT_AGENT_ENABLED:
+        from database import engine
+        from services.support_agent import run_support_agent
+
+        support_task = asyncio.create_task(
+            run_support_agent(engine), name="support_agent"
+        )
+        _background_tasks.add(support_task)
+        support_task.add_done_callback(_on_task_done)
+
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
     try:

@@ -981,7 +981,8 @@
       "closed": "Closed"
     },
     "emailPlaceholder": "you@company.com",
-    "ownTicketsOnly": "You can only see the tickets reported with your account email ({{email}})."
+    "ownTicketsOnly": "You can only see the tickets reported with your account email ({{email}}).",
+    "agentReply": "Reply from the Support agent"
   },
   "sprintCalendar": {
     "title": "Sprint Calendar",
@@ -1341,7 +1342,12 @@
     "downloadLogs": "Download logs",
     "noLogs": "No logs have been written yet.",
     "logsError": "Could not download the logs: {{message}}",
-    "adminOnly": "The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend."
+    "adminOnly": "The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend.",
+    "triage": "Triage",
+    "triagedBy": "Triage by {{who}} (suggestions; the reporter chose the severity)",
+    "suggested": "Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}",
+    "agentReply": "First reply sent to the reporter",
+    "untriaged": "The agent could not triage this ticket; it is left to people."
   },
   "health": {
     "title": "Service status",
