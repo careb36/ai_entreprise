@@ -1515,23 +1515,35 @@ def _message(
     )
 
 
-def _post_message(**fields: Any) -> None:
-    """Record a message in its own transaction; never stops the task."""
+def _post_message(**fields: Any) -> int | None:
+    """Record a message in its own transaction; never stops the task.
+
+    Returns the message's id, or ``None`` when it was not recorded.
+    """
     try:
         with Session(engine) as session:
-            session.add(_message(**fields))
+            message = _message(**fields)
+            session.add(message)
             session.commit()
+            return message.id
     except Exception as exc:  # noqa: BLE001 - The conversation record is best-effort.
         logger.warning("Agent message not recorded (%s): %s", fields.get("kind"), exc)
+        return None
 
 
 def _triage_blocked_task(
-    company_id: int, sprint_id: int, item_id: int, reason: str
+    company_id: int,
+    sprint_id: int,
+    item_id: int,
+    reason: str,
+    escalation_id: int | None = None,
 ) -> None:
     """The ScrumMaster answers an escalation; a failed answer changes nothing.
 
     The prompt is read and the decision written in two short sessions, so no
-    database connection waits while the model answers.
+    database connection waits while the model answers. The decision names the
+    escalation it answers (*escalation_id*), so a late answer is never read
+    against a newer escalation.
     """
     try:
         with Session(engine) as session:
@@ -1549,7 +1561,13 @@ def _triage_blocked_task(
             return
         with Session(engine) as session:
             scrum_master.record_decision(
-                session, company_id, sprint_id, item_id, assignee, decision
+                session,
+                company_id,
+                sprint_id,
+                item_id,
+                assignee,
+                decision,
+                answers=escalation_id,
             )
             session.commit()
     except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
@@ -2252,7 +2270,7 @@ async def _send_back_from_quality_gate(
         else f"Pre-review quality gate failed after {previous_reworks} rework(s) "
         f"— blocked for manual triage: {reason}"
     )
-    await asyncio.to_thread(
+    message_id = await asyncio.to_thread(
         _post_message,
         company_id=sprint["company_id"],
         sprint_id=sprint["id"],
@@ -2268,7 +2286,12 @@ async def _send_back_from_quality_gate(
         # cycle may close the sprint (and, at autonomy 3, carry the task over)
         # as soon as it is, and that must see the ScrumMaster's decision.
         await asyncio.to_thread(
-            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
+            _triage_blocked_task,
+            sprint["company_id"],
+            sprint["id"],
+            item["id"],
+            text,
+            message_id,
         )
     await asyncio.to_thread(
         _update_item_status,
@@ -2945,18 +2968,17 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 item.status = "todo" if rework else "blocked"
                 item.updated_at = datetime.now(UTC)
                 session.add(item)
-                session.add(
-                    _message(
-                        sprint.company_id,
-                        sprint.id,
-                        item.id,
-                        DELIVERY_GATE_AUTHOR,
-                        DELIVERY_GATE_AUTHOR,
-                        (item.assignee or "Developer") if rework else SCRUM_MASTER_ROLE,
-                        "request" if rework else "escalation",
-                        comments[-1]["text"],
-                    )
+                gate_message = _message(
+                    sprint.company_id,
+                    sprint.id,
+                    item.id,
+                    DELIVERY_GATE_AUTHOR,
+                    DELIVERY_GATE_AUTHOR,
+                    (item.assignee or "Developer") if rework else SCRUM_MASTER_ROLE,
+                    "request" if rework else "escalation",
+                    comments[-1]["text"],
                 )
+                session.add(gate_message)
                 session.commit()
                 if not rework:
                     quality_gate_blocked_ids.add(item.id)
@@ -2966,6 +2988,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         sprint.id,
                         item.id,
                         comments[-1]["text"],
+                        gate_message.id,
                     )
                 await publish_glassroom(
                     nats_client,
@@ -3103,22 +3126,22 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         normalized_review[:2000],
                     )
                 )
+                escalation = None
                 if needs_work and not autopilot_rework_allowed:
-                    session.add(
-                        _message(
-                            sprint.company_id,
-                            sprint.id,
-                            item.id,
-                            reviewer_dict["name"],
-                            reviewer_dict["role"],
-                            SCRUM_MASTER_ROLE,
-                            "escalation",
-                            f'"{item.title}" is blocked: still not accepted after '
-                            f"{previous_reworks} rework(s). Last review: {normalized_review[:500]}",
-                        )
+                    escalation = _message(
+                        sprint.company_id,
+                        sprint.id,
+                        item.id,
+                        reviewer_dict["name"],
+                        reviewer_dict["role"],
+                        SCRUM_MASTER_ROLE,
+                        "escalation",
+                        f'"{item.title}" is blocked: still not accepted after '
+                        f"{previous_reworks} rework(s). Last review: {normalized_review[:500]}",
                     )
+                    session.add(escalation)
                 session.commit()
-                if needs_work and not autopilot_rework_allowed:
+                if escalation is not None:
                     await asyncio.to_thread(
                         _triage_blocked_task,
                         sprint.company_id,
@@ -3126,6 +3149,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         item.id,
                         f"Still not accepted after {previous_reworks} rework(s). "
                         f"Last review: {normalized_review[:500]}",
+                        escalation.id,
                     )
 
                 if needs_work:

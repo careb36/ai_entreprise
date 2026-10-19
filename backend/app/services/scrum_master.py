@@ -47,6 +47,8 @@ TRIAGE_PREFIX = "Triage decision: "
 RETRY_LINE = TRIAGE_PREFIX + "another attempt in the next sprint."
 PERSON_LINE = TRIAGE_PREFIX + "leave it for a person."
 WHY_PREFIX = "Why: "
+# Written by the worker, never by the model: which escalation a decision answers.
+ANSWERS_PREFIX = "Answers escalation #"
 BRIEF_LIMIT = 600
 WHY_LIMIT = 300
 FEEDBACK_SHOWN = 3
@@ -244,13 +246,16 @@ def ask(
 # ---------------------------------------------------------------------------
 
 
-def decision_body(decision: dict[str, str]) -> str:
+def decision_body(decision: dict[str, str], answers: int | None = None) -> str:
+    """The recorded form of a decision; *answers* is the escalation's message id."""
     retry = decision["decision"] == DECISION_RETRY
     lines = [RETRY_LINE if retry else PERSON_LINE]
     if decision.get("why"):
         lines.append(WHY_PREFIX + decision["why"])
     if retry and decision.get("brief"):
         lines.append(BRIEF_PREFIX + decision["brief"])
+    if answers is not None:
+        lines.append(f"{ANSWERS_PREFIX}{answers}")
     return "\n".join(lines)
 
 
@@ -270,6 +275,14 @@ def parse_decision_body(body: str) -> dict[str, str] | None:
         elif line.startswith(BRIEF_PREFIX):
             brief = line[len(BRIEF_PREFIX) :]
     return {"decision": decision, "why": why, "brief": brief}
+
+
+def answered_escalation(body: str) -> int | None:
+    """The id of the escalation a recorded decision says it answers, if any."""
+    for line in (body or "").split("\n"):
+        if line.startswith(ANSWERS_PREFIX) and line[len(ANSWERS_PREFIX) :].isdigit():
+            return int(line[len(ANSWERS_PREFIX) :])
+    return None
 
 
 def prepare_triage(
@@ -308,8 +321,14 @@ def record_decision(
     item_id: int,
     assignee: str | None,
     decision: dict[str, str],
+    answers: int | None = None,
 ) -> AgentMessage:
-    """Record a triage as the ScrumMaster's ``decision`` message. The caller commits."""
+    """Record a triage as the ScrumMaster's ``decision`` message. The caller commits.
+
+    *answers* is the id of the escalation message it replies to; with it, the
+    decision is read back against that escalation and not against whichever
+    was the latest when the answer finally arrived.
+    """
     message = AgentMessage(
         company_id=company_id,
         sprint_id=sprint_id,
@@ -318,7 +337,7 @@ def record_decision(
         from_role=SCRUM_MASTER_ROLE,
         to_role=assignee if decision["decision"] == DECISION_RETRY else None,
         kind="decision",
-        body=decision_body(decision),
+        body=decision_body(decision, answers),
     )
     session.add(message)
     return message
@@ -387,28 +406,36 @@ def decisions_for(
         .order_by(AgentMessage.id)
     ).all()
     decisions: dict[int, dict[str, Any]] = {}
-    escalated: dict[int, datetime | None] = {}
-    for item_id, _message_id, kind, from_role, body, created_at in rows:
+    latest_escalation: dict[int, int] = {}
+    escalated_at: dict[int, datetime | None] = {}  # by escalation message id
+    for item_id, message_id, kind, from_role, body, created_at in rows:
         if kind == "escalation":
             decisions.pop(item_id, None)
-            escalated[item_id] = _naive_utc(created_at)
+            latest_escalation[item_id] = message_id
+            escalated_at[message_id] = _naive_utc(created_at)
             continue
         if from_role != SCRUM_MASTER_ROLE:
             continue
         decision = parse_decision_body(body)
         if decision is None:
             continue
+        # The escalation this decision answers: the one it names, or else the
+        # latest before it. One that names an older escalation is about a
+        # block a later escalation replaced, however late it was recorded.
+        latest = latest_escalation.get(item_id)
+        answers = answered_escalation(body)
+        if answers is not None and answers != latest:
+            continue
         cutoff = sent_back.get(item_id)
         if cutoff is not None:
-            # Stale when the person sent the task back after the escalation
-            # this decision answers, even if the answer itself came later: the
-            # worker posts the escalation, then waits up to
-            # TRIAGE_TIMEOUT_SECONDS for the answer, and on the Verifier and
-            # QA paths the task is already blocked, so a person can act in
-            # that window.
-            answered = escalated.get(item_id)
+            # Stale when the person sent the task back after that escalation,
+            # even if the answer itself came later: the worker posts the
+            # escalation, then waits up to TRIAGE_TIMEOUT_SECONDS for the
+            # answer, and on the Verifier and QA paths the task is already
+            # blocked, so a person can act in that window.
+            answered_at = escalated_at.get(latest) if latest is not None else None
             if (_naive_utc(created_at) or cutoff) <= cutoff or (
-                answered is not None and answered <= cutoff
+                answered_at is not None and answered_at <= cutoff
             ):
                 continue
         decisions[item_id] = decision

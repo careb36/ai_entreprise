@@ -656,3 +656,116 @@ def test_without_second_attempts_the_prompt_has_no_track_record(
     )
 
     assert "How second attempts went" not in prompt
+
+
+def test_a_decision_is_judged_by_the_escalation_it_names(
+    sqlite_session, company, monkeypatch
+):
+    """The worker records which escalation a decision answers. One that names an
+    older escalation is dropped however late it was recorded; one that names the
+    latest counts, until a person sends the task back after that escalation."""
+    from datetime import UTC, datetime, timedelta
+
+    company_row, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Answered late")
+    now = datetime.now(UTC)
+
+    def escalate(at):
+        message = AgentMessage(
+            company_id=company_row.id,
+            sprint_id=sprint.id,
+            backlog_item_id=item.id,
+            from_name="Verifier",
+            from_role="Verifier",
+            to_role="ScrumMaster",
+            kind="escalation",
+            body=TRIAGE,
+            created_at=at,
+        )
+        sqlite_session.add(message)
+        sqlite_session.commit()
+        sqlite_session.refresh(message)
+        return message
+
+    first = escalate(now - timedelta(seconds=60))
+    second = escalate(now - timedelta(seconds=20))
+    # The answer to the first escalation lands after the second was posted.
+    person = {"decision": "person", "why": "needs a budget", "brief": ""}
+    scrum_master.record_decision(
+        sqlite_session,
+        company_row.id,
+        sprint.id,
+        item.id,
+        "QA",
+        person,
+        answers=first.id,
+    )
+    sqlite_session.commit()
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+    assert not carry_over.left_for_a_person(sqlite_session, item)
+
+    retry = {"decision": "retry", "why": "cut short", "brief": "Write it in full."}
+    recorded = scrum_master.record_decision(
+        sqlite_session,
+        company_row.id,
+        sprint.id,
+        item.id,
+        "QA",
+        retry,
+        answers=second.id,
+    )
+    sqlite_session.commit()
+    assert scrum_master.answered_escalation(recorded.body) == second.id
+    assert scrum_master.parse_decision_body(recorded.body) == retry
+    assert scrum_master.decision_for(sqlite_session, item.id) == retry
+
+    # A send-back after the escalation it answers makes it stale, even though the
+    # decision itself was recorded later still.
+    item.comments = [
+        *item.comments,
+        {
+            "author": "user",
+            "text": "Sent back to work by a person.",
+            "created_at": str((now - timedelta(seconds=10)).replace(tzinfo=None)),
+        },
+    ]
+    sqlite_session.add(item)
+    sqlite_session.commit()
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+
+
+def test_the_worker_names_the_escalation_in_the_decision(
+    sqlite_session, company, monkeypatch
+):
+    from services import task_worker
+
+    company_row, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Named by the worker")
+    escalation = AgentMessage(
+        company_id=company_row.id,
+        sprint_id=sprint.id,
+        backlog_item_id=item.id,
+        from_name="Quality gate",
+        from_role="Quality gate",
+        to_role="ScrumMaster",
+        kind="escalation",
+        body=TRIAGE,
+    )
+    sqlite_session.add(escalation)
+    sqlite_session.commit()
+    sqlite_session.refresh(escalation)
+    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    monkeypatch.setattr(scrum_master, "ask_triage", lambda *a, **k: RETRY_ANSWER)
+
+    task_worker._triage_blocked_task(
+        company_row.id, sprint.id, item.id, TRIAGE, escalation.id
+    )
+
+    sqlite_session.expire_all()
+    decision = sqlite_session.exec(
+        select(AgentMessage).where(
+            AgentMessage.backlog_item_id == item.id, AgentMessage.kind == "decision"
+        )
+    ).one()
+    assert scrum_master.answered_escalation(decision.body) == escalation.id
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "retry"

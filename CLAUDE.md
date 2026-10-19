@@ -209,7 +209,8 @@ the LangGraph graph is only an optional kickoff conversation.
    from the boards of completed sprints, the same numbers the Sprints page
    shows) and decides, in a fixed `DECISION … END`
    format a parser checks, between another attempt with a brief for it or
-   leaving it to a person. The decision is a `decision` message, a claim: the
+   leaving it to a person. The decision is a `decision` message that names
+   the escalation it answers (written by the worker, not the model), a claim: the
    inbox shows it as `triage`, the brief travels with the carried task into
    its prompt (and into QA's review prompt, so the second attempt is judged
    against the same context), and a task left for a person is not carried
@@ -291,7 +292,7 @@ Test files:
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
-| `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own, the second-attempt track record in the prompt, a send-back during the triage window makes the answer stale, `END` with a period or Windows line endings |
+| `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own, the second-attempt track record in the prompt, a send-back during the triage window makes the answer stale, a decision names the escalation it answers and is judged by it, `END` with a period or Windows line endings |
 | `test_database_timezone.py` | The Postgres session is pinned to UTC, so aware datetimes in `timestamp` columns and the naive UTC text in board comments stay comparable |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
