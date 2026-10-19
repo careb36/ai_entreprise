@@ -189,7 +189,13 @@ the LangGraph graph is only an optional kickoff conversation.
    person for: the tasks blocked until someone acts (not the ones the worker
    still retries or re-reviews), the procedure proposals waiting and how many
    runs nobody decided on. The Review page shows them (a Manager can send a
-   blocked task back to work) and the navigation counts them.
+   blocked task back to work) and the navigation counts them. A blocked task
+   can also get another attempt in the next sprint (`services/carry_over.py`):
+   `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the
+   "Plan a sprint" form offers them, and with `autonomy_level` 3 the follow-up
+   sprint carries the closed sprint's blocked tasks on its own, once each. The
+   new task carries what blocked the old one (a `Previous attempt` prompt
+   section); the old one is marked and leaves the inbox.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
    - the Developer's question to the Architect and its answer;
@@ -256,6 +262,7 @@ Test files:
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
+| `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |

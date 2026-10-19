@@ -32,6 +32,7 @@ from models.company import (
     Company,
     CompanyMember,
     ProjectCredential,
+    ProjectDiscovery,
     User,
 )
 from models.github import GitHubRepoBinding
@@ -69,6 +70,7 @@ SQLModel.metadata.create_all(
         BusinessUnit.__table__,
         Agent.__table__,
         ProjectCredential.__table__,
+        ProjectDiscovery.__table__,
         Sprint.__table__,
         BacklogItem.__table__,
         OutboxEvent.__table__,

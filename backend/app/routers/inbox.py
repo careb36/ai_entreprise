@@ -11,6 +11,7 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
+from services.carry_over import carried_over
 from services.task_worker import _block_reason, _blocked_item_next_step
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -41,6 +42,8 @@ async def inbox(
         next_step = _blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own
+        if carried_over(item):
+            continue  # it got another attempt in a later sprint
         blocked_tasks.append(
             {
                 "id": item.id,

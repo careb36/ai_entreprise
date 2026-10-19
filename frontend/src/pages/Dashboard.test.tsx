@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import i18n, { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import {
   useAnalyticsSummary, useCapabilities, useInitCompany, usePlanSelfImprovementSprint,
-  usePlanSprint, useQuotas, useSprintBoard, useStartSprint,
+  useInbox, usePlanSprint, useQuotas, useSprintBoard, useStartSprint,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
@@ -21,6 +21,7 @@ vi.mock('../hooks/useQueries', () => ({
   usePlanSprint: vi.fn(),
   useSprintBoard: vi.fn(),
   useStartSprint: vi.fn(),
+  useInbox: vi.fn(),
   useQuotas: vi.fn(() => ({ data: [] })),
 }))
 
@@ -76,6 +77,7 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(usePlanSelfImprovementSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(plan) }) as never)
     vi.mocked(useStartSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) }) as never)
     vi.mocked(useQuotas).mockReturnValue({ data: [] } as never)
+    vi.mocked(useInbox).mockReturnValue({ data: { blocked_tasks: [], proposals: [], pending_runs: 0, total: 0 } } as never)
   })
 
   it('renders Spanish empty-state, KPI, scope and stream labels without repeating the shell', () => {
@@ -190,6 +192,35 @@ describe('Dashboard Spanish localization', () => {
     renderDashboard(9)
     expect(screen.getByText(chartEmpty)).toBeInTheDocument()
     expect(screen.getByText(healthEmpty)).toBeInTheDocument()
+  })
+
+  it('offers the blocked tasks of earlier sprints and sends the ticked ones along', async () => {
+    vi.mocked(useInbox).mockReturnValue({
+      data: {
+        blocked_tasks: [
+          { id: 7, title: 'Create testing strategy', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', frozen: false, updated_at: null },
+          { id: 8, title: 'Frozen one', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'frozen', frozen: true, updated_at: null },
+        ],
+        proposals: [], pending_runs: 0, total: 2,
+      },
+    } as never)
+    const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
+    renderDashboard()
+
+    fireEvent.change(screen.getByPlaceholderText('Describe el objetivo del sprint…'), { target: { value: 'User goal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generar plan' }))
+    expect(await screen.findByText('Vista previa del plan')).toBeInTheDocument()
+
+    const group = screen.getByRole('group', { name: 'Traer de vuelta tareas bloqueadas' })
+    const box = within(group).getByRole('checkbox', { name: 'Create testing strategy · Sprint 0' })
+    expect(within(group).queryByRole('checkbox', { name: /Frozen one/ })).not.toBeInTheDocument()
+    fireEvent.click(box)
+    expect(box).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sprint' }))
+    expect(await screen.findByTestId('workspace')).toBeInTheDocument()
+    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ carry_over_ids: [7] }))
   })
 
   it('generates and launches a Spanish preview without translating API identifiers or freeform plan data', async () => {
