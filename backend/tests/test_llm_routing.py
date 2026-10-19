@@ -17,7 +17,7 @@ from models.agent_message import AgentMessage
 from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services import console_assistants, task_worker
 from sqlmodel import Session, select
 
 from llm.model_factory import AgentRole, ModelFactory
@@ -254,12 +254,10 @@ def _task_assign_handler(monkeypatch):
         task_worker, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
     )
 
-    async def _no_assistants(nats, item, agent, sprint):
+    async def _no_assistants(nats, item, agent, sprint, resolve_workspace_root):
         return {"combined": "", "sources": []}
 
-    monkeypatch.setattr(
-        task_worker, "_collect_console_assistant_advice", _no_assistants
-    )
+    monkeypatch.setattr(console_assistants, "collect_advice", _no_assistants)
     nats = _Nats()
     with pytest.raises(_StopAfterSubscribe):
         asyncio.run(task_worker.process_backlog_tasks(nats))
