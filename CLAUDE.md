@@ -279,6 +279,20 @@ Test files:
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 
+**End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
+the workspace daemon and a fake LLM proxy (`scripts/e2e/fake_llm.py`,
+deterministic answers) against a Postgres and a NATS you provide
+(`docker compose up -d postgres nats`, or a local pair via `E2E_POSTGRES_*`
+and `E2E_NATS_URL`; the e2e database is recreated on every run), then drives
+one company through the loop and checks it through the API: the foundation
+sprint closes with its task blocked for a person after two rework requests,
+the retrospective and an adopted procedure; the inbox lists the task;
+`start_sprint` with `carry_over_ids` retries it beside a new task whose
+files are written and verified; the inbox then lists only the new attempt.
+Run it with the backend's interpreter (`E2E_PYTHON="poetry run python"` from
+`backend/`, or the venv's `python`); it exits 0 only when every check passed
+and leaves the logs in `E2E_WORKDIR`. Not run by CI.
+
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
 repo root with the proxy's Poetry environment plus
