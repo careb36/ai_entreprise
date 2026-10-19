@@ -2,19 +2,21 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GovernancePanel } from './GovernancePanel'
-import { useAgentRuns, useCurrentRole, useInbox, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAgentRuns, useCurrentRole, useInbox, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
 vi.mock('../hooks/useQueries', () => ({
   useAgentRuns: vi.fn(),
   useCurrentRole: vi.fn(),
   useInbox: vi.fn(),
+  useSprints: vi.fn(),
   useUpdateBacklogItem: vi.fn(),
 }))
 
 const mockedUseAgentRuns = vi.mocked(useAgentRuns)
 const mockedUseCurrentRole = vi.mocked(useCurrentRole)
 const mockedUseInbox = vi.mocked(useInbox)
+const mockedUseSprints = vi.mocked(useSprints)
 const mockedUseUpdateBacklogItem = vi.mocked(useUpdateBacklogItem)
 
 const INBOX = {
@@ -54,6 +56,7 @@ describe('GovernancePanel', () => {
     } as never)
     mockedUseInbox.mockReturnValue({ data: INBOX, isLoading: false, isError: false, refetch: vi.fn() } as never)
     mockedUseCurrentRole.mockReturnValue('Manager')
+    mockedUseSprints.mockReturnValue({ data: [] } as never)
     mockedUseUpdateBacklogItem.mockReturnValue({ mutate, isPending: false, isError: false, error: null } as never)
   })
 
@@ -70,9 +73,22 @@ describe('GovernancePanel', () => {
   })
 
   it('shows the tasks blocked for a person with their reason, and a Manager can send one back', () => {
+    const sprint = (id: number, status: string, second_attempts: object) => ({
+      id, sprint_name: `S${id}`, status, goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts,
+    })
+    mockedUseSprints.mockReturnValue({
+      data: [
+        // Still open: its second attempts have no outcome yet.
+        sprint(4, 'active', { total: 2, done: 0, briefed: 2, briefed_done: 0 }),
+        sprint(3, 'completed', { total: 3, done: 2, briefed: 2, briefed_done: 2 }),
+      ],
+    } as never)
     render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
 
     const blocked = screen.getByRole('region', { name: /Tasks blocked until someone acts/ })
+    // What earlier second attempts did, from the closed sprints' boards, beside the advice.
+    expect(mockedUseSprints).toHaveBeenCalledWith(42)
+    expect(within(blocked).getByText("So far 2 of 3 second attempts got done; with the ScrumMaster's brief, 2 of 2.")).toBeInTheDocument()
     expect(within(blocked).getByRole('link', { name: 'Create testing strategy document' })).toHaveAttribute('href', '/sprints/1/tasks/7')
     expect(within(blocked).getByText(/blocked for manual triage: Too short/)).toBeInTheDocument()
     expect(within(blocked).getByText(/frozen by an operator/)).toBeInTheDocument()
@@ -107,6 +123,8 @@ describe('GovernancePanel', () => {
     render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
 
     expect(screen.queryByRole('button', { name: 'Send back to work' })).not.toBeInTheDocument()
+    // Nothing to decide on, so the sprint list is not fetched.
+    expect(mockedUseSprints).toHaveBeenCalledWith(null)
     expect(screen.getByText('No task is waiting for a person.')).toBeInTheDocument()
     expect(screen.getByText('No proposal is waiting.')).toBeInTheDocument()
   })
