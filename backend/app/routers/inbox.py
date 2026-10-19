@@ -4,14 +4,17 @@ Inbox router — what the company needs a person for.
 ``GET /v1/inbox`` lists, for one company, the decisions only a person can
 take: tasks blocked until someone acts (with the ScrumMaster's triage of each,
 when it answered the escalation), procedure proposals waiting for a Manager,
-and agent runs nobody has approved or rejected. The agents do the rest on
-their own, so this is the whole of a person's queue.
+and the agent runs of other producers nobody has approved or rejected (the
+company's own task worker and kickoff runs are decided by the review loop).
+The agents do the rest on their own, so this is the whole of a person's
+queue.
 """
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
+from models.agent_run import IN_HOUSE_PRODUCERS
 from services import scrum_master
 from services.board import block_reason, blocked_item_next_step
 from services.carry_over import carried_over
@@ -81,7 +84,10 @@ async def inbox(
     )
     pending_runs = session.exec(
         select(func.count(AgentRun.id)).where(
-            AgentRun.company_id == company_id, AgentRun.id.not_in(decided)
+            AgentRun.company_id == company_id,
+            AgentRun.id.not_in(decided),
+            # The company's own runs are decided by the review loop.
+            AgentRun.producer.not_in(IN_HOUSE_PRODUCERS),
         )
     ).one()
 

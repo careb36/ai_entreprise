@@ -4,6 +4,14 @@ from typing import Any
 from sqlalchemy import JSON, UniqueConstraint
 from sqlmodel import Column, Field, SQLModel
 
+# Runs the company produces itself. The review loop already decides them: the
+# Verifier and QA judge a task worker delivery (a blocked one reaches a person
+# as a blocked task), and a kickoff transcript is context, not a deliverable.
+# Only runs ingested from other producers wait for a person's approval.
+TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
+GRAPH_PRODUCER = "le-fabrique-graph"
+IN_HOUSE_PRODUCERS = (TASK_WORKER_PRODUCER, GRAPH_PRODUCER)
+
 
 class AgentRun(SQLModel, table=True):
     __tablename__ = "agent_runs"

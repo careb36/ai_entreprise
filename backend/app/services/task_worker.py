@@ -39,7 +39,7 @@ from models import (
     ProjectDiscovery,
     Sprint,
 )
-from models.agent_run import AgentRun, Verification
+from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from nats_client import NATSClient
 from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
@@ -1678,7 +1678,6 @@ def _propose_procedures(
 # ---------------------------------------------------------------------------
 
 
-TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
 DELIVERY_QUEUED = "delivery queued"
 TASK_ASSIGN_CONSUMER = "task-worker"
 DELIVERY_RESULTS_CONSUMER = "delivery-results"

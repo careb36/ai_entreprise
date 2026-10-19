@@ -4,6 +4,7 @@ import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshC
 import { useAgentRuns, useCurrentRole, useInbox, useUpdateBacklogItem } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
+import { IN_HOUSE_PRODUCERS } from '../lib/taskEvidence'
 
 // The note written on the task when a person sends it back to work. Not
 // translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
@@ -94,8 +95,12 @@ function Proposal({ proposal }: { proposal: InboxProposal }) {
 
 function PendingRuns({ companyId }: { companyId: number }) {
   const { t } = useTranslation()
-  const { data, isLoading, isError, refetch } = useAgentRuns(companyId, { limit: 500 })
-  const runs = (data?.agent_runs ?? []).filter(run => run.latest_approval === null)
+  // The company's own runs are decided by the review loop; only other
+  // producers' runs wait for a person (the inbox counts them the same way).
+  // The server leaves them out so they never crowd the page; the client
+  // check guards against an older backend.
+  const { data, isLoading, isError, refetch } = useAgentRuns(companyId, { limit: 500, exclude_in_house: true })
+  const runs = (data?.agent_runs ?? []).filter(run => run.latest_approval === null && !IN_HOUSE_PRODUCERS.includes(run.producer))
 
   if (isLoading) {
     return <div role="status" className="space-y-3" aria-label={t('common.loading')}>

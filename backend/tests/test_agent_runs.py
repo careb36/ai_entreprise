@@ -339,6 +339,37 @@ def test_list_filters_and_requires_company_id(
     assert missing_company.status_code == 422
 
 
+def test_list_can_leave_out_the_companys_own_runs(
+    sqlite_session, test_client, monkeypatch, tmp_path
+):
+    """The Review page asks only for the runs a person decides: the task
+    worker's deliveries and the kickoff transcripts are decided by the loop."""
+    company_id = _make_company(sqlite_session, "In-house runs")
+    for ref, producer in (
+        ("github:pr-1", "copilot"),
+        ("task-1", "le-fabrique-task-worker"),
+        ("graph:abc", "le-fabrique-graph"),
+    ):
+        _ingest(
+            test_client,
+            monkeypatch,
+            tmp_path,
+            _payload(company_id, external_ref=ref, producer=producer),
+        )
+
+    every = test_client.get("/v1/agent_runs", params={"company_id": company_id})
+    external = test_client.get(
+        "/v1/agent_runs", params={"company_id": company_id, "exclude_in_house": "true"}
+    )
+
+    assert sorted(r["producer"] for r in every.json()["agent_runs"]) == [
+        "copilot",
+        "le-fabrique-graph",
+        "le-fabrique-task-worker",
+    ]
+    assert [r["external_ref"] for r in external.json()["agent_runs"]] == ["github:pr-1"]
+
+
 def test_company_external_ref_version_is_unique(sqlite_session):
     company_id = _make_company(sqlite_session)
     first = AgentRun(

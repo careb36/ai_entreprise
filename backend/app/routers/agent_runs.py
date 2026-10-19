@@ -7,7 +7,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from logging_config import logger
 from models import User
-from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.agent_run import (
+    IN_HOUSE_PRODUCERS,
+    AgentRun,
+    AgentRunApproval,
+    Verification,
+)
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.agent_service import AgentService
@@ -67,6 +72,7 @@ def list_agent_runs(
     until: datetime | None = None,
     external_ref: str | None = None,
     sprint_id: int | None = None,
+    exclude_in_house: bool = False,
     limit: int = Query(50, ge=1, le=500),
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
@@ -81,6 +87,9 @@ def list_agent_runs(
         statement = statement.where(AgentRun.external_ref == external_ref)
     if sprint_id is not None:
         statement = statement.where(_subject_sprint_id_equals(sprint_id))
+    if exclude_in_house:
+        # The company's own runs, which the review loop decides (see the inbox).
+        statement = statement.where(AgentRun.producer.not_in(IN_HOUSE_PRODUCERS))
     if since is not None:
         statement = statement.where(AgentRun.ingested_at >= since)
     if until is not None:

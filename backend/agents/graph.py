@@ -633,6 +633,7 @@ async def run_fabrique_workflow(
                 from sqlmodel import Session
 
                 import database
+                from models.agent_run import GRAPH_PRODUCER
                 from schemas import AgentRunCreate
                 from services import agent_run_service
 
@@ -649,7 +650,7 @@ async def run_fabrique_workflow(
                 payload = AgentRunCreate(
                     company_id=company_id,
                     external_ref=f"graph:{interaction_id}",
-                    producer="le-fabrique-graph",
+                    producer=GRAPH_PRODUCER,
                     model=_resolve_model_name("Developer"),
                     agent_role="Developer",
                     subject={

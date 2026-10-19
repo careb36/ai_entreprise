@@ -192,7 +192,9 @@ the LangGraph graph is only an optional kickoff conversation.
    `GET /v1/inbox` (Viewer, `routers/inbox.py`) lists what the company needs a
    person for: the tasks blocked until someone acts (not the ones the worker
    still retries or re-reviews), the procedure proposals waiting and how many
-   runs nobody decided on. The Review page shows them (a Manager can send a
+   runs of other producers nobody decided on (the company's own task worker
+   and kickoff runs, `IN_HOUSE_PRODUCERS`, are decided by the review loop;
+   `GET /v1/agent_runs?exclude_in_house=true` lists the rest). The Review page shows them (a Manager can send a
    blocked task back to work) and the navigation counts them. A blocked task
    can also get another attempt in the next sprint (`services/carry_over.py`):
    `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the
