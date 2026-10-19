@@ -37,6 +37,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
+from services.board import rework_request_count
 from services.carry_over import CarryOverError, carry_over
 from services.sprint_planner import (
     build_self_improvement_objective,
@@ -353,12 +354,7 @@ async def list_sprints(
                 BacklogItem.sprint_id.in_(sprint_ids)
             )
         ).all():
-            rework[sid] = rework.get(sid, 0) + sum(
-                1
-                for c in (comments or [])
-                if isinstance(c, dict)
-                and str(c.get("text", "")).strip().upper().startswith("NEEDS WORK:")
-            )
+            rework[sid] = rework.get(sid, 0) + rework_request_count(comments)
     return [
         {
             "id": s.id,

@@ -207,6 +207,10 @@ the LangGraph graph is only an optional kickoff conversation.
    inbox shows it as `triage`, the brief travels with the carried task into
    its prompt, and a task left for a person is not carried over on the
    company's own (a person still can). No usable answer keeps the default.
+   Every question to the ScrumMaster (the triage, the procedure proposals)
+   goes through `scrum_master.ask`, and every count of rework requests
+   (the sprint list, the procedures' numbers) through
+   `board.rework_request_count`.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
    - the Developer's question to the Architect and its answer;
