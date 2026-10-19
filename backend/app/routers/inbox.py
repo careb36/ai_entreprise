@@ -45,7 +45,7 @@ async def inbox(
     blocked_tasks = []
     blocked_total = 0
     # The ScrumMaster's answers to the escalations, one query for the page.
-    triages = scrum_master.decisions_for(session, [item.id for item, _ in rows])
+    triages = scrum_master.triages_for(session, [item for item, _ in rows])
     for item, sprint in rows:
         next_step = blocked_item_next_step(item.comments, item.assignee)
         if next_step not in (None, "frozen"):

@@ -18,15 +18,14 @@ const SPRINTS: SprintSummary[] = [
 
 describe('learningTrend', () => {
   it('reads closed sprints with tasks, oldest first, as rework per task and blocked share', () => {
-    const trend = learningTrend(SPRINTS)
-    expect(trend.points.map(p => p.name)).toEqual(['Sprint 1', 'Sprint 2'])
-    expect(trend.points[0]).toMatchObject({ reworkPerTask: 1, blockedShare: 0.5 })
-    expect(trend.latest).toMatchObject({ name: 'Sprint 2', reworkPerTask: 0.4, blockedShare: 0.2 })
-    expect(trend.previous?.name).toBe('Sprint 1')
+    const points = learningTrend(SPRINTS)
+    expect(points.map(p => p.name)).toEqual(['Sprint 1', 'Sprint 2'])
+    expect(points[0]).toMatchObject({ reworkPerTask: 1, blockedShare: 0.5 })
+    expect(points[1]).toMatchObject({ name: 'Sprint 2', reworkPerTask: 0.4, blockedShare: 0.2 })
   })
 
   it('has nothing to say before a sprint closes', () => {
-    expect(learningTrend([SPRINTS[0]])).toEqual({ points: [], latest: null, previous: null })
+    expect(learningTrend([SPRINTS[0]])).toEqual([])
   })
 })
 

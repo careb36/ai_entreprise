@@ -68,7 +68,7 @@ def is_carry_over(item: BacklogItem) -> bool:
 
 def left_for_a_person(session: Session, item: BacklogItem) -> bool:
     """The ScrumMaster's triage said a person must decide, not another attempt."""
-    return _left_for_a_person(scrum_master.decision_for(session, item.id))
+    return _left_for_a_person(scrum_master.triages_for(session, [item]).get(item.id))
 
 
 def _left_for_a_person(triage: dict[str, Any] | None) -> bool:
@@ -109,7 +109,7 @@ def carry_over(
 
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
-    triages = scrum_master.decisions_for(session, [item.id for item, _ in originals])
+    triages = scrum_master.triages_for(session, [item for item, _ in originals])
     for item, sprint in originals:
         reason = block_reason(item.comments)[:REASON_LIMIT]
         brief = (triages.get(item.id) or {}).get("brief") or ""
@@ -218,7 +218,7 @@ def carry_over_on_the_companys_own(
         )
         .order_by(BacklogItem.id)
     ).all()
-    triages = scrum_master.decisions_for(session, [item.id for item in candidates])
+    triages = scrum_master.triages_for(session, list(candidates))
     ids = [
         item.id
         for item in candidates

@@ -16,6 +16,7 @@ read as this task's.
 """
 
 import json
+from datetime import datetime
 from typing import Any
 
 from models import BacklogItem
@@ -84,6 +85,17 @@ def since_send_back(comments: Any) -> list[dict[str, Any]]:
         if is_send_back(comments[index]):
             return comments[index + 1 :]
     return comments
+
+
+def last_send_back_at(comments: Any) -> datetime | None:
+    """When a person last sent the task back to work, or ``None`` (or unknown)."""
+    for comment in reversed(comment_list(comments)):
+        if is_send_back(comment):
+            try:
+                return datetime.fromisoformat(str(comment.get("created_at") or ""))
+            except ValueError:
+                return None
+    return None
 
 
 def rework_request_count(comments: Any) -> int:

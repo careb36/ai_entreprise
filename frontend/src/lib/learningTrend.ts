@@ -16,16 +16,9 @@ export interface SprintPoint {
   blockedShare: number
 }
 
-export interface LearningTrend {
-  /** Closed sprints with tasks, oldest first. Empty when nothing closed yet. */
-  points: SprintPoint[]
-  latest: SprintPoint | null
-  /** The sprint before the latest, when there is one to compare with. */
-  previous: SprintPoint | null
-}
-
-export function learningTrend(sprints: SprintSummary[]): LearningTrend {
-  const points = sprints
+/** Closed sprints with tasks, oldest first. Empty when nothing closed yet. */
+export function learningTrend(sprints: SprintSummary[]): SprintPoint[] {
+  return sprints
     .filter(sprint => sprint.status === 'completed' && sprint.total > 0)
     .sort((a, b) => a.id - b.id)
     .map(sprint => ({
@@ -34,11 +27,6 @@ export function learningTrend(sprints: SprintSummary[]): LearningTrend {
       reworkPerTask: sprint.rework / sprint.total,
       blockedShare: sprint.blocked / sprint.total,
     }))
-  return {
-    points,
-    latest: points[points.length - 1] ?? null,
-    previous: points.length >= 2 ? points[points.length - 2] : null,
-  }
 }
 
 export const formatRework = (value: number) => value.toFixed(2)

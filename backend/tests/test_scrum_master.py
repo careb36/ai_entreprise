@@ -195,16 +195,16 @@ def test_the_triage_is_a_message_the_conversation_keeps(
     item = _blocked(sqlite_session, sprint)
     asked = []
 
-    def _ask(session, company_id, prompt):
-        asked.append((company_id, prompt))
+    def _ask(model, system_prompt, prompt):
+        asked.append((model, prompt))
         return RETRY_ANSWER
 
-    monkeypatch.setattr(scrum_master, "ask", _ask)
+    monkeypatch.setattr(scrum_master, "ask_triage", _ask)
 
     message = scrum_master.triage(sqlite_session, company.id, sprint.id, item, TRIAGE)
     sqlite_session.commit()
 
-    assert asked[0][0] == company.id and "## What blocked it" in asked[0][1]
+    assert asked[0][0] and "## What blocked it" in asked[0][1]
     recorded = sqlite_session.exec(
         select(AgentMessage).where(AgentMessage.backlog_item_id == item.id)
     ).one()
@@ -240,7 +240,7 @@ def test_a_person_decision_is_addressed_to_nobody_and_read_back(
     item = _blocked(sqlite_session, sprint)
     monkeypatch.setattr(
         scrum_master,
-        "ask",
+        "ask_triage",
         lambda *a: "DECISION: person\nWHY: it needs a budget decision.\nEND",
     )
 
@@ -271,7 +271,7 @@ def test_without_a_usable_answer_nothing_is_recorded(
 ):
     company, sprint = company
     item = _blocked(sqlite_session, sprint)
-    monkeypatch.setattr(scrum_master, "ask", ask)
+    monkeypatch.setattr(scrum_master, "ask_triage", ask)
 
     assert (
         scrum_master.triage(sqlite_session, company.id, sprint.id, item, TRIAGE) is None
@@ -313,7 +313,7 @@ def test_other_scrum_master_messages_are_not_a_triage(sqlite_session, company):
 
 
 def _decide(monkeypatch, session, company, sprint, item, answer):
-    monkeypatch.setattr(scrum_master, "ask", lambda *a: answer)
+    monkeypatch.setattr(scrum_master, "ask_triage", lambda *a: answer)
     scrum_master.triage(session, company.id, sprint.id, item, TRIAGE)
     session.commit()
 
@@ -471,3 +471,78 @@ def test_a_decision_answers_one_escalation_only(sqlite_session, company, monkeyp
         item.id: scrum_master.decision_for(sqlite_session, item.id)
     }
     assert scrum_master.decisions_for(sqlite_session, []) == {}
+
+
+# ---------------------------------------------------------------------------
+# What the review of the merged triage asked for
+# ---------------------------------------------------------------------------
+
+
+def test_a_wrapped_line_starting_with_end_does_not_end_the_answer():
+    answer = (
+        "DECISION: retry\n"
+        "BRIEF: Deliver all files and\n"
+        "end-to-end tests for the parser.\n"
+        "WHY: the tests were missing\n"
+        "END"
+    )
+
+    assert scrum_master.parse_answer(answer) == {
+        "decision": "retry",
+        "brief": "Deliver all files and end-to-end tests for the parser.",
+        "why": "the tests were missing",
+    }
+
+
+def test_a_send_back_after_the_decision_makes_it_stale(
+    sqlite_session, company, monkeypatch
+):
+    """A person sent the task back after the ScrumMaster answered, and the next
+    attempt failed without an escalation (an agent error): the old decision is
+    about another block and no longer counts."""
+    from datetime import UTC, datetime, timedelta
+
+    company, sprint = company
+    item = _blocked(sqlite_session, sprint, title="Sent back since")
+    _decide(monkeypatch, sqlite_session, company, sprint, item, "DECISION: person\nEND")
+    assert scrum_master.decision_for(sqlite_session, item.id)["decision"] == "person"
+
+    later = datetime.now(UTC) + timedelta(seconds=5)
+    item.comments = [
+        *item.comments,
+        {
+            "author": "user",
+            "text": "Sent back to work by a person.",
+            "created_at": str(later.replace(tzinfo=None)),
+        },
+        {"author": "System", "text": "Agent error: proxy 503"},
+    ]
+    sqlite_session.add(item)
+    sqlite_session.commit()
+
+    assert scrum_master.decision_for(sqlite_session, item.id) is None
+    assert scrum_master.triages_for(sqlite_session, [item]) == {}
+    assert not carry_over.left_for_a_person(sqlite_session, item)
+
+
+def test_the_triage_asks_once_with_a_short_timeout(monkeypatch):
+    seen = []
+
+    class _Client:
+        def __init__(self, base_url=None):
+            self.timeout = None
+            self.max_retries = 2
+
+        def chat(self, messages, model, role, bu_id=None):
+            seen.append((self.timeout, self.max_retries))
+            return {"choices": [{"message": {"content": "DECISION: person\nEND"}}]}
+
+    monkeypatch.setattr(scrum_master, "LLMProxyClient", _Client)
+
+    scrum_master.ask_triage("m", None, "q")
+    scrum_master.ask_model("m", None, "q")
+
+    assert seen == [
+        (scrum_master.TRIAGE_TIMEOUT_SECONDS, 0),
+        (scrum_master.TIMEOUT_SECONDS, 2),
+    ]

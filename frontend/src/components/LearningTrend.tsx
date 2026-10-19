@@ -96,7 +96,7 @@ function Tile({ label, points, pick, format }: {
 
 export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
   const { t } = useTranslation()
-  const { points } = learningTrend(sprints)
+  const points = learningTrend(sprints)
   if (points.length === 0) return null
   const title = t('sprints.learningTitle', { defaultValue: 'Is the company learning?' })
   const reworkLabel = t('sprints.reworkPerTask', { defaultValue: 'Rework requests per task' })

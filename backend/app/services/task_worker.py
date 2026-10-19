@@ -1528,14 +1528,30 @@ def _post_message(**fields: Any) -> None:
 def _triage_blocked_task(
     company_id: int, sprint_id: int, item_id: int, reason: str
 ) -> None:
-    """The ScrumMaster answers an escalation; a failed answer changes nothing."""
+    """The ScrumMaster answers an escalation; a failed answer changes nothing.
+
+    The prompt is read and the decision written in two short sessions, so no
+    database connection waits while the model answers.
+    """
     try:
         with Session(engine) as session:
             item = session.get(BacklogItem, item_id)
             if item is None:
                 return
-            if scrum_master.triage(session, company_id, sprint_id, item, reason):
-                session.commit()
+            assignee = item.assignee
+            prompt, model, system_prompt = scrum_master.prepare_triage(
+                session, company_id, item, reason
+            )
+        decision = scrum_master.decide(
+            scrum_master.ask_triage(model, system_prompt, prompt), item_id
+        )
+        if decision is None:
+            return
+        with Session(engine) as session:
+            scrum_master.record_decision(
+                session, company_id, sprint_id, item_id, assignee, decision
+            )
+            session.commit()
     except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
         logger.warning("ScrumMaster triage not recorded for item=%s: %s", item_id, exc)
 
@@ -1620,7 +1636,10 @@ def _ask_scrum_master_for_procedures(
             "A procedure is a short, concrete rule a role can follow on every task. Do not "
             "repeat an existing one.\n\n" + procedures.proposal_format(roles)
         )
-        return scrum_master.ask(session, company_id, prompt), roles
+        model, system_prompt = scrum_master.profile(session, company_id)
+    # Asked outside the session, with the client's usual retries: a sprint
+    # closes once, and a transient proxy error should not lose its proposals.
+    return scrum_master.ask_model(model, system_prompt, prompt), roles
 
 
 def _propose_procedures(
@@ -2230,13 +2249,6 @@ async def _send_back_from_quality_gate(
         f"— blocked for manual triage: {reason}"
     )
     await asyncio.to_thread(
-        _update_item_status,
-        item["id"],
-        "todo" if rework else "blocked",
-        comment_text=text,
-        comment_author=QUALITY_GATE_AUTHOR,
-    )
-    await asyncio.to_thread(
         _post_message,
         company_id=sprint["company_id"],
         sprint_id=sprint["id"],
@@ -2246,6 +2258,20 @@ async def _send_back_from_quality_gate(
         to_role=agent["role"] if rework else SCRUM_MASTER_ROLE,
         kind="request" if rework else "escalation",
         body=text,
+    )
+    if not rework:
+        # Answer the escalation before the task counts as blocked: the review
+        # cycle may close the sprint (and, at autonomy 3, carry the task over)
+        # as soon as it is, and that must see the ScrumMaster's decision.
+        await asyncio.to_thread(
+            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
+        )
+    await asyncio.to_thread(
+        _update_item_status,
+        item["id"],
+        "todo" if rework else "blocked",
+        comment_text=text,
+        comment_author=QUALITY_GATE_AUTHOR,
     )
     await publish_glassroom(
         nats_client,
@@ -2268,10 +2294,6 @@ async def _send_back_from_quality_gate(
             "preview": deliverable[:200] if deliverable else "",
         },
     )
-    if not rework:
-        await asyncio.to_thread(
-            _triage_blocked_task, sprint["company_id"], sprint["id"], item["id"], text
-        )
     logger.warning(
         "Pre-review gate %s item=%s by %s: %s",
         "sent back" if rework else "blocked",

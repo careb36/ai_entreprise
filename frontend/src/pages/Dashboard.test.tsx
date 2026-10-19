@@ -195,8 +195,7 @@ describe('Dashboard Spanish localization', () => {
   })
 
   it('offers the blocked tasks of earlier sprints and sends the ticked ones along', async () => {
-    vi.mocked(useInbox).mockReturnValue({
-      data: {
+    const inboxData = {
         blocked_tasks: [
           { id: 7, title: 'Create testing strategy', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', triage: null, frozen: false, updated_at: null },
           { id: 8, title: 'Frozen one', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'frozen', triage: null, frozen: true, updated_at: null },
@@ -204,11 +203,11 @@ describe('Dashboard Spanish localization', () => {
           { id: 10, title: 'Write the parser', assignee: 'Developer', sprint_id: 1, sprint_name: 'Sprint 0', sprint_status: 'completed', reason: 'too short', triage: { decision: 'retry', why: 'Cut short, not wrong.', brief: 'Deliver every file in full.' }, frozen: false, updated_at: null },
         ],
         proposals: [], pending_runs: 0, total: 4,
-      },
-    } as never)
+    }
+    vi.mocked(useInbox).mockReturnValue({ data: inboxData } as never)
     const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
     vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
-    renderDashboard()
+    const { rerender } = renderDashboard()
 
     fireEvent.change(screen.getByPlaceholderText('Describe el objetivo del sprint…'), { target: { value: 'User goal' } })
     fireEvent.click(screen.getByRole('button', { name: 'Generar plan' }))
@@ -227,9 +226,24 @@ describe('Dashboard Spanish localization', () => {
     expect(within(group).getByRole('checkbox', { name: /Write the parser/ })).toBeChecked()
     expect(within(group).getByRole('checkbox', { name: /Needs a budget/ })).not.toBeChecked()
 
+    // An inbox refetch never overwrites what the person chose.
+    fireEvent.click(within(group).getByRole('checkbox', { name: /Write the parser/ }))
+    vi.mocked(useInbox).mockReturnValue({ data: { ...inboxData } } as never)
+    rerender(
+      <MemoryRouter>
+        <Routes>
+          <Route path="/" element={<Dashboard sprintId={null} />} />
+          <Route path="/sprints/23/board" element={<div data-testid="workspace" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const again = screen.getByRole('group', { name: 'Traer de vuelta tareas bloqueadas' })
+    expect(within(again).getByRole('checkbox', { name: /Write the parser/ })).not.toBeChecked()
+    fireEvent.click(within(again).getByRole('checkbox', { name: /Write the parser/ }))
+
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sprint' }))
     expect(await screen.findByTestId('workspace')).toBeInTheDocument()
-    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ carry_over_ids: [10, 7] }))
+    expect(startMutation.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ carry_over_ids: [7, 10] }))
   })
 
   it('generates and launches a Spanish preview without translating API identifiers or freeform plan data', async () => {
