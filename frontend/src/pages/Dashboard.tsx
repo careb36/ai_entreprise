@@ -18,7 +18,8 @@ import {
 import type { SprintPlanResponse } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
-import { useSprintBoard, useAnalyticsSummary, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas, useInbox } from '../hooks/useQueries'
+import { useSprintBoard, useAnalyticsSummary, useStartSprint, useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useQuotas, useInbox, useSprints } from '../hooks/useQueries'
+import { secondAttempts } from '../lib/learningTrend'
 import { SprintHealthChart } from '../components/SprintHealthChart'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
@@ -253,6 +254,10 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   const { companyId, companyName, setCompany } = useAppStore()
   const inbox = useInbox(companyId, false)
   const blockedTasks = (inbox.data?.blocked_tasks ?? []).filter(task => !task.frozen)
+  // How earlier second attempts went, counted from the closed sprints' boards:
+  // the evidence beside the ScrumMaster's advice when the person decides.
+  const sprints = useSprints(blockedTasks.length > 0 ? companyId : null)
+  const record = secondAttempts(sprints.data ?? [])
   // When a plan preview appears, start with the tasks the ScrumMaster's triage
   // recommends retrying, within the room the scope leaves; the person unticks
   // or adds from there. The triage is advice: nothing is sent without the tick.
@@ -525,6 +530,17 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
               <p className="text-[11px] text-gray-500">
                 {t('dashboard.carryOverHint', { defaultValue: 'Tasks the agents gave up on. Each one you tick gets a fresh attempt in this sprint, with what blocked it; they count towards the scope.' })}
               </p>
+              {record.total > 0 && (
+                <p className="text-[11px] text-gray-400">
+                  {t('dashboard.carryOverRecord', {
+                    done: record.done,
+                    total: record.total,
+                    briefedDone: record.briefed_done,
+                    briefed: record.briefed,
+                    defaultValue: "So far {{done}} of {{total}} second attempts got done; with the ScrumMaster's brief, {{briefedDone}} of {{briefed}}.",
+                  })}
+                </p>
+              )}
               {blockedTasks.map(task => (
                 <label key={task.id} className="flex items-start gap-2 text-xs text-gray-300">
                   <input type="checkbox" className="mt-0.5" checked={carryOver.includes(task.id)}

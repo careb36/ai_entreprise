@@ -64,6 +64,7 @@
     "regenerate": "Regenerar",
     "carryOverTitle": "Traer de vuelta tareas bloqueadas",
     "carryOverHint": "Tareas que los agentes dejaron. Cada una que marques tiene un intento nuevo en este sprint, con lo que la bloqueó; cuentan para el alcance.",
+    "carryOverRecord": "Hasta ahora se completaron {{done}} de {{total}} segundos intentos; con la consigna del ScrumMaster, {{briefedDone}} de {{briefed}}.",
     "carryOverTask": "{{title}} · {{sprint}}",
     "carryOverTriageRetry": "ScrumMaster: otro intento. {{why}}",
     "carryOverTriagePerson": "ScrumMaster: que lo decida una persona. {{why}}",

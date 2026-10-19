@@ -64,6 +64,7 @@
     "regenerate": "Regenerate",
     "carryOverTitle": "Bring back blocked tasks",
     "carryOverHint": "Tasks the agents gave up on. Each one you tick gets a fresh attempt in this sprint, with what blocked it; they count towards the scope.",
+    "carryOverRecord": "So far {{done}} of {{total}} second attempts got done; with the ScrumMaster's brief, {{briefedDone}} of {{briefed}}.",
     "carryOverTask": "{{title}} · {{sprint}}",
     "carryOverTriageRetry": "ScrumMaster: another attempt. {{why}}",
     "carryOverTriagePerson": "ScrumMaster: leave it for a person. {{why}}",

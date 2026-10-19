@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import {
   useAnalyticsSummary, useCapabilities, useInitCompany, usePlanSelfImprovementSprint,
-  useInbox, usePlanSprint, useQuotas, useSprintBoard, useStartSprint,
+  useInbox, usePlanSprint, useQuotas, useSprintBoard, useSprints, useStartSprint,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
@@ -23,6 +23,7 @@ vi.mock('../hooks/useQueries', () => ({
   useStartSprint: vi.fn(),
   useInbox: vi.fn(),
   useQuotas: vi.fn(() => ({ data: [] })),
+  useSprints: vi.fn(),
 }))
 
 const plan: SprintPlanResponse = {
@@ -78,6 +79,7 @@ describe('Dashboard Spanish localization', () => {
     vi.mocked(useStartSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) }) as never)
     vi.mocked(useQuotas).mockReturnValue({ data: [] } as never)
     vi.mocked(useInbox).mockReturnValue({ data: { blocked_tasks: [], proposals: [], pending_runs: 0, total: 0 } } as never)
+    vi.mocked(useSprints).mockReturnValue({ data: [] } as never)
   })
 
   it('renders Spanish empty-state, KPI, scope and stream labels without repeating the shell', () => {
@@ -205,6 +207,13 @@ describe('Dashboard Spanish localization', () => {
         proposals: [], pending_runs: 0, total: 4,
     }
     vi.mocked(useInbox).mockReturnValue({ data: inboxData } as never)
+    vi.mocked(useSprints).mockReturnValue({
+      data: [
+        { id: 3, sprint_name: 'Sprint 1', status: 'completed', goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts: { total: 3, done: 2, briefed: 2, briefed_done: 2 } },
+        // Still open: its second attempts have no outcome yet.
+        { id: 4, sprint_name: 'Sprint 2', status: 'active', goal: null, start_date: null, scope_size: 'S', total: 2, done: 0, blocked: 0, rework: 0, second_attempts: { total: 2, done: 0, briefed: 2, briefed_done: 0 } },
+      ],
+    } as never)
     const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
     vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
     const { rerender } = renderDashboard()
@@ -214,6 +223,8 @@ describe('Dashboard Spanish localization', () => {
     expect(await screen.findByText('Vista previa del plan')).toBeInTheDocument()
 
     const group = screen.getByRole('group', { name: 'Traer de vuelta tareas bloqueadas' })
+    // What earlier second attempts did, beside the ScrumMaster's advice.
+    expect(within(group).getByText('Hasta ahora se completaron 2 de 3 segundos intentos; con la consigna del ScrumMaster, 2 de 2.')).toBeInTheDocument()
     const box = within(group).getByRole('checkbox', { name: 'Create testing strategy · Sprint 0' })
     expect(within(group).queryByRole('checkbox', { name: /Frozen one/ })).not.toBeInTheDocument()
     expect(box).not.toBeChecked()
