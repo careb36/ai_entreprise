@@ -222,6 +222,11 @@ replaces none of it.
      task, share of blocked tasks) keep the procedure or revert it to the
      version it replaced. A procedure with no sprints to compare with is
      marked unmeasured, not kept.
+   - The ScrumMaster proposes knowing what earlier procedures did: kept,
+     reverted or unmeasured with the board's numbers, or rejected by a
+     person. The same text as one reverted or rejected is not recorded
+     again from its proposals, so autonomy cannot re-adopt what the numbers
+     or a person already turned down; a person can still bring it back.
 4. **Operational agents**: the first one is done. The **Support agent** triages
    new help-desk tickets with its own identity (`Support agent`).
    - It suggests a severity and a category and writes the reporter a first

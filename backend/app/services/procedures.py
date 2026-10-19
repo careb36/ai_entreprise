@@ -30,6 +30,9 @@ MAX_PROPOSALS = 2
 TITLE_LIMIT = 120
 BODY_LIMIT = 2000
 PROMPT_LIMIT = 3000
+HISTORY_SHOWN = 8
+# What a procedure's record can say once it is decided or measured.
+FAILED_RESULTS = ("reverted",)
 
 _PROPOSAL = re.compile(
     r"^PROCEDURE\s+role=(?P<role>\S+)\s+title=(?P<title>.+?)\s*$"
@@ -153,20 +156,32 @@ def propose(
     proposals: list[dict[str, str]],
     proposed_by: str,
     source_sprint_id: int | None = None,
+    skip_failed: bool = False,
 ) -> list[Procedure]:
-    """Record proposals; one already active or pending with the same text is skipped."""
+    """Record proposals.
+
+    One with the same text as a procedure already active or pending is
+    skipped. With *skip_failed* (the ScrumMaster's proposals), so is one the
+    board reverted or a person rejected: the same rule again would only
+    repeat what was already decided. A person writing a procedure can still
+    bring one back.
+    """
     created = []
     for proposal in proposals:
-        same_title = session.exec(
+        earlier = session.exec(
             select(Procedure).where(
                 Procedure.company_id == company_id,
                 Procedure.role == proposal["role"],
                 Procedure.title == proposal["title"],
-                Procedure.status.in_(("active", "proposed")),
             )
         ).all()
-        if any(p.body == proposal["body"] for p in same_title):
+        if any(
+            p.body == proposal["body"]
+            and (p.status in ("active", "proposed") or (skip_failed and _failed(p)))
+            for p in earlier
+        ):
             continue
+        same_title = [p for p in earlier if p.status in ("active", "proposed")]
         current = next((p for p in same_title if p.status == "active"), None)
         procedure = Procedure(
             company_id=company_id,
@@ -183,6 +198,58 @@ def propose(
         session.flush()
         created.append(procedure)
     return created
+
+
+def _failed(procedure: Procedure) -> bool:
+    """Reverted by the board's numbers, or rejected by a person."""
+    return (
+        procedure.status == "rejected"
+        or (procedure.outcome or {}).get("result") in FAILED_RESULTS
+    )
+
+
+def history_prompt(session: Session, company_id: int) -> str:
+    """The prompt section with what earlier procedures did, newest first, or ''.
+
+    Kept, reverted and unmeasured come with the board's numbers; a rejection
+    is a person's decision. Proposals still waiting and procedures no one
+    measured yet are left out: they have no result to learn from.
+    """
+    decided = [
+        p
+        for p in session.exec(
+            select(Procedure)
+            .where(Procedure.company_id == company_id)
+            .order_by(Procedure.id.desc())
+        ).all()
+        if p.status == "rejected"
+        or (p.outcome or {}).get("result") in ("kept", "reverted", "unmeasured")
+    ][:HISTORY_SHOWN]
+    if not decided:
+        return ""
+    lines = [
+        f'- "{p.title}" ({p.role}, v{p.version}): '
+        + (
+            "rejected by a person"
+            if p.status == "rejected"
+            else f"{p.outcome['result']}, {_numbers(p)}"
+        )
+        for p in decided
+    ]
+    return (
+        "\n\n## What earlier procedures did\n"
+        "Counted from the boards of the sprints before and after adoption.\n"
+        + "\n".join(lines)
+    )
+
+
+def _numbers(procedure: Procedure) -> str:
+    outcome = procedure.outcome or {}
+    baseline = procedure.baseline or {}
+    return (
+        f"rework per task {baseline.get('rework_per_task', 0)} → {outcome.get('rework_per_task', 0)}, "
+        f"blocked {baseline.get('blocked_rate', 0)} → {outcome.get('blocked_rate', 0)}"
+    )
 
 
 # ── Decisions ────────────────────────────────────────────────────────────────
@@ -290,13 +357,8 @@ def evaluate(session: Session, company_id: int) -> list[Procedure]:
 
 def describe_outcome(procedure: Procedure) -> str:
     """One line for the team: what the numbers said about *procedure*."""
-    outcome = procedure.outcome or {}
-    baseline = procedure.baseline or {}
-    numbers = (
-        f"rework per task {baseline.get('rework_per_task', 0)} → {outcome.get('rework_per_task', 0)}, "
-        f"blocked {baseline.get('blocked_rate', 0)} → {outcome.get('blocked_rate', 0)}"
-    )
-    result = outcome.get("result")
+    numbers = _numbers(procedure)
+    result = (procedure.outcome or {}).get("result")
     if result == "reverted":
         return f'Procedure "{procedure.title}" ({procedure.role}) is reverted: things got worse ({numbers}).'
     if result == "unmeasured":

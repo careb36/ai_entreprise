@@ -1626,15 +1626,18 @@ def _ask_scrum_master_for_procedures(
                 ).all()
             )
         )
+        history = procedures.history_prompt(session, company_id)
         prompt = (
             "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
             "whether a written procedure for one of the roles would have prevented its "
             "rework or blocked tasks.\n\n"
             f"## What happened\n{_format_retrospective_summary(retro_metrics)}\n\n"
             f"## Lessons from the last sprints\n{lessons or '(none)'}\n"
-            f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}\n\n"
+            f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}"
+            f"{history}\n\n"
             "A procedure is a short, concrete rule a role can follow on every task. Do not "
-            "repeat an existing one.\n\n" + procedures.proposal_format(roles)
+            "repeat an existing one, nor one that was reverted or rejected, unless you "
+            "change what made it fail.\n\n" + procedures.proposal_format(roles)
         )
         model, system_prompt = scrum_master.profile(session, company_id)
     # Asked outside the session, with the client's usual retries: a sprint
@@ -1667,6 +1670,7 @@ def _propose_procedures(
             proposals,
             SCRUM_MASTER_ROLE,
             source_sprint_id=sprint_id,
+            skip_failed=True,
         )
         for procedure in created:
             if autonomous:

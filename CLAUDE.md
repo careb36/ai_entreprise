@@ -238,6 +238,11 @@ the LangGraph graph is only an optional kickoff conversation.
      two procedures in a fixed `PROCEDURE … END` format; anything else is
      ignored. With `autonomy_level` 3 a proposal is adopted at once; otherwise
      a Manager adopts or rejects it (`/v1/procedures`, the Procedures page).
+     The ScrumMaster is shown what earlier procedures did (kept, reverted or
+     unmeasured with the board's numbers, or rejected by a person;
+     `procedures.history_prompt`), and a proposal with the same text as one
+     reverted or rejected is dropped (`propose(skip_failed=True)`); a Manager
+     writing a procedure can still bring one back.
    - Adoption records the numbers of the last two completed sprints as the
      baseline. Outcomes and proposals are posted to the team as `proposal`
      messages. The numbers decide, never a model.
@@ -295,7 +300,7 @@ Test files:
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
-| `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, procedures in prompts, `/v1/procedures` |
+| `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, what earlier procedures did in the proposal prompt, a reverted or rejected text not proposed again (a person still can), procedures in prompts, `/v1/procedures` |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter |
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member |
