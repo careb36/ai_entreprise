@@ -60,7 +60,7 @@ def _author(comment: dict[str, Any]) -> str:
 def is_lineage_comment(comment: dict[str, Any]) -> bool:
     """A carry-over note: it quotes another task's verdict, not this one's."""
     text = _text(comment)
-    return text.startswith(CARRIED_TO_PREFIX) or text.startswith(CARRIED_FROM_PREFIX)
+    return text.startswith((CARRIED_TO_PREFIX, CARRIED_FROM_PREFIX))
 
 
 def is_send_back(comment: dict[str, Any]) -> bool:
