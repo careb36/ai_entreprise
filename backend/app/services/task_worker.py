@@ -81,6 +81,11 @@ MAX_QA_REVIEW_FAILURES = 3
 MAX_QA_REWORK_CYCLES = 2
 MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
+# Who signs the text checks a deliverable passes before anyone reviews it, and
+# who signs the delivery evidence check; neither ever writes a deliverable.
+QUALITY_GATE_AUTHOR = "Quality gate"
+DELIVERY_GATE_AUTHOR = "Verifier"
+GATE_AUTHORS_LOWER = {QUALITY_GATE_AUTHOR.lower(), DELIVERY_GATE_AUTHOR.lower()}
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
     "AUTOPILOT_QA_REWORK_ENABLED", "true"
 ).lower() in {"1", "true", "yes", "on"}
@@ -414,8 +419,10 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                     ):
                         qa_fail_count += 1
                 if item.status == "blocked":
-                    reason = _extract_latest_reviewable_comment(
-                        comments, assignee_role=item.assignee
+                    reason = _block_reason(comments) or (
+                        _extract_latest_reviewable_comment(
+                            comments, assignee_role=item.assignee
+                        )
                     )
                     if reason:
                         blocked_reasons.append(f"{item.title[:60]}: {reason[:120]}")
@@ -929,6 +936,10 @@ def _extract_latest_reviewable_comment(
             # A rework request after the latest deliverable makes it stale:
             # the task must run again before anything is reviewed.
             return ""
+        if author in GATE_AUTHORS_LOWER or author == "user":
+            # The gates write verdicts and a person on the board writes notes;
+            # neither is a deliverable.
+            continue
         if author == "qa" and assignee_normalized != "qa":
             continue
         if text.upper().startswith("APPROVED:"):
@@ -1003,6 +1014,96 @@ def _can_resume_blocked_item_from_deliverable(
     return bool(
         _extract_latest_reviewable_comment(comments, assignee_role=assignee_role)
     )
+
+
+def _comment_list(comments: Any) -> list[dict[str, Any]]:
+    """A backlog item's comments as a list, whatever the column holds."""
+    if isinstance(comments, str):
+        try:
+            comments = json.loads(comments)
+        except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
+            comments = []
+    if not isinstance(comments, list):
+        return []
+    return [c for c in comments if isinstance(c, dict)]
+
+
+def _blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | None:
+    """What the worker still does on its own with a blocked item.
+
+    ``"frozen"``: an operator froze it, so only a person moves it. ``"review"``:
+    a deliverable exists and nothing says it must stay blocked, so it goes back
+    to review. ``"retry"``: a transient failure not retried yet. ``None``: it
+    stays blocked until a person acts, which is the only case a sprint may
+    close around (see ``_item_is_settled``).
+    """
+    comments = _comment_list(comments)
+    if _has_manual_freeze_marker(comments):
+        return "frozen"
+    if _can_resume_blocked_item_from_deliverable(comments, assignee_role=assignee_role):
+        return "review"
+
+    # QA quality-gate blocks require manual triage; do not auto-retry.
+    qa_quality_gate_block = any(
+        (
+            c.get("author") == "System"
+            and "manual triage" in str(c.get("text", "")).lower()
+        )
+        or (
+            c.get("author") == "System"
+            and "qa quality gate failed" in str(c.get("text", "")).lower()
+        )
+        or str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+        for c in comments
+    )
+    if qa_quality_gate_block:
+        return None
+
+    # Only retry blocked items that failed for transient/system reasons.
+    retryable_system_block = any(
+        c.get("author") == "System"
+        and (
+            "qa review failed" in str(c.get("text", "")).lower()
+            or "agent error:" in str(c.get("text", "")).lower()
+            or "no deliverable found" in str(c.get("text", "")).lower()
+            or "unfinished in-progress task returned to todo for redispatch"
+            in str(c.get("text", "")).lower()
+        )
+        for c in comments
+    )
+    if not retryable_system_block:
+        return None
+
+    # Only retry once — check if there's already a retry comment
+    retry_count = sum(
+        1
+        for c in comments
+        if c.get("author") == "System" and "retry" in str(c.get("text", "")).lower()
+    )
+    return None if retry_count >= 1 else "retry"
+
+
+def _block_reason(comments: Any) -> str:
+    """The latest verdict on a blocked item: what a gate, the system or a reviewer said."""
+    for comment in reversed(_comment_list(comments)):
+        text = str(comment.get("text", "")).strip()
+        author = str(comment.get("author", "")).strip().lower()
+        if text and (
+            author == "system"
+            or author in GATE_AUTHORS_LOWER
+            or text.upper().startswith("NEEDS WORK:")
+        ):
+            return text
+    return ""
+
+
+def _item_is_settled(item: BacklogItem) -> bool:
+    """Done, or blocked until a person acts: nothing the worker does moves it."""
+    if item.status == "done":
+        return True
+    if item.status != "blocked":
+        return False
+    return _blocked_item_next_step(item.comments, item.assignee) is None
 
 
 def _has_manual_freeze_marker(comments: Any) -> bool:
@@ -1154,7 +1255,14 @@ def _complete_sprint_and_plan_follow_up(
     completed_sprint_id: int,
     retro_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Mark a sprint completed when all items are done and optionally open an autonomous follow-up sprint."""
+    """Mark a sprint completed once every item is settled; optionally open a follow-up sprint.
+
+    A sprint ends like a real one: when nothing in it can still move on its
+    own. Tasks blocked until a person acts count as settled, so the sprint
+    closes around them, the retrospective records them and ``blocked_rate``
+    measures them. Holding the sprint open for a blocked task would leave the
+    company without a retrospective, and its procedures unmeasured, for good.
+    """
     with Session(engine) as session:
         sprint = session.get(Sprint, completed_sprint_id)
         if not sprint or sprint.status != "active":
@@ -1163,7 +1271,7 @@ def _complete_sprint_and_plan_follow_up(
         items = session.exec(
             select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
         ).all()
-        if not items or any(item.status != "done" for item in items):
+        if not items or not all(_item_is_settled(item) for item in items):
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
         sprint.status = "completed"
@@ -2336,7 +2444,6 @@ def _propose_procedures(
 
 
 TASK_WORKER_PRODUCER = "le-fabrique-task-worker"
-DELIVERY_GATE_AUTHOR = "Verifier"
 DELIVERY_QUEUED = "delivery queued"
 TASK_ASSIGN_CONSUMER = "task-worker"
 DELIVERY_RESULTS_CONSUMER = "delivery-results"
@@ -2863,6 +2970,84 @@ async def _deliver_artifacts(
     return review_payload
 
 
+async def _send_back_from_quality_gate(
+    nats_client: NATSClient,
+    item: dict[str, Any],
+    agent: dict[str, Any],
+    sprint: dict[str, Any],
+    deliverable: str,
+    reason: str,
+) -> None:
+    """Ask for another attempt when the text checks reject a deliverable; block after the limit.
+
+    The checks look at the text's form (length, sections, fences): a
+    deterministic opinion, not evidence. It may send work back with the
+    reason, like a reviewer, but holding a task for good on it would leave the
+    sprint open forever. After ``AUTOPILOT_MAX_REWORK_CYCLES`` attempts the
+    task is blocked for a person and escalated to the ScrumMaster.
+    """
+    previous_reworks = sum(
+        1
+        for c in _comment_list(item.get("comments"))
+        if c.get("author") == QUALITY_GATE_AUTHOR
+        and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+    )
+    rework = previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
+    text = (
+        f"NEEDS WORK: {reason}. Deliver the complete result again, with every "
+        "file in full as a path= block."
+        if rework
+        else f"Pre-review quality gate failed after {previous_reworks} rework(s) "
+        f"— blocked for manual triage: {reason}"
+    )
+    await asyncio.to_thread(
+        _update_item_status,
+        item["id"],
+        "todo" if rework else "blocked",
+        comment_text=text,
+        comment_author=QUALITY_GATE_AUTHOR,
+    )
+    await asyncio.to_thread(
+        _post_message,
+        company_id=sprint["company_id"],
+        sprint_id=sprint["id"],
+        item_id=item["id"],
+        from_name=QUALITY_GATE_AUTHOR,
+        from_role=QUALITY_GATE_AUTHOR,
+        to_role=agent["role"] if rework else SCRUM_MASTER_ROLE,
+        kind="request" if rework else "escalation",
+        body=text,
+    )
+    await _publish_glassroom(
+        nats_client,
+        sprint["id"],
+        {
+            "type": "status" if rework else "error",
+            "semantic_type": "task.rework_scheduled" if rework else "task.blocked",
+            "source": "task_worker",
+            "agent": QUALITY_GATE_AUTHOR,
+            "role": "System",
+            "task_id": item["id"],
+            "task_status": "todo" if rework else "blocked",
+            "phase": "quality_gate",
+            "task": item["title"],
+            "message": (
+                f"↩️ Sent back for rework: {item['title']} ({reason})."
+                if rework
+                else f"❌ Pre-review gate blocked deliverable for: {item['title']} ({reason})."
+            ),
+            "preview": deliverable[:200] if deliverable else "",
+        },
+    )
+    logger.warning(
+        "Pre-review gate %s item=%s by %s: %s",
+        "sent back" if rework else "blocked",
+        item["id"],
+        agent.get("name") or agent["role"],
+        reason,
+    )
+
+
 async def process_backlog_tasks(nats_client: NATSClient) -> None:
     """
     Background coroutine that subscribes to ``task.assign`` and processes
@@ -3172,37 +3357,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 item, deliverable
             )
             if not is_valid:
-                await asyncio.to_thread(
-                    _update_item_status,
-                    item["id"],
-                    "blocked",
-                    comment_text=f"Pre-review quality gate failed: {validation_reason}",
-                    comment_author="System",
-                )
-
-                await _publish_glassroom(
-                    nats_client,
-                    sprint["id"],
-                    {
-                        "type": "error",
-                        "semantic_type": "task.blocked",
-                        "source": "task_worker",
-                        "agent": agent.get("name") or agent["role"],
-                        "role": agent["role"],
-                        "task_id": item["id"],
-                        "task_status": "blocked",
-                        "phase": "quality_gate",
-                        "task": item["title"],
-                        "message": f"❌ Pre-review gate blocked deliverable for: {item['title']} ({validation_reason}).",
-                        "preview": deliverable[:200] if deliverable else "",
-                    },
-                )
-
-                logger.warning(
-                    "Pre-review gate blocked item=%s by %s: %s",
-                    backlog_item_id,
-                    agent.get("name") or agent["role"],
-                    validation_reason,
+                await _send_back_from_quality_gate(
+                    nats_client, item, agent, sprint, deliverable, validation_reason
                 )
                 return
 
@@ -3813,24 +3969,24 @@ async def _review_cycle(nats_client: NATSClient) -> None:
         blocked = session.exec(
             select(BacklogItem).where(BacklogItem.status == "blocked")
         ).all()
+        # Sprints holding an item that stays blocked until a person acts may
+        # have nothing left to move; they are checked for closing below.
+        settled_sprint_ids: set[int] = set()
 
         for item in blocked:
             if item.id in quality_gate_blocked_ids:
+                settled_sprint_ids.add(item.sprint_id)
                 continue
 
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
-
-            if _has_manual_freeze_marker(comments):
+            comments = _comment_list(item.comments)
+            next_step = _blocked_item_next_step(comments, item.assignee)
+            if next_step is None:
+                settled_sprint_ids.add(item.sprint_id)
+                continue
+            if next_step == "frozen":
                 continue
 
-            if _can_resume_blocked_item_from_deliverable(
-                comments, assignee_role=item.assignee
-            ):
+            if next_step == "review":
                 comments.append(
                     {
                         "author": "System",
@@ -3868,50 +4024,6 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            # QA quality-gate blocks require manual triage; do not auto-retry.
-            qa_quality_gate_block = any(
-                (
-                    c.get("author") == "System"
-                    and "manual triage" in str(c.get("text", "")).lower()
-                )
-                or (
-                    c.get("author") == "System"
-                    and "qa quality gate failed" in str(c.get("text", "")).lower()
-                )
-                or (
-                    c.get("author") == "QA"
-                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
-                )
-                or str(c.get("text", "")).upper().startswith("NEEDS WORK:")
-                for c in comments
-            )
-            if qa_quality_gate_block:
-                continue
-
-            # Only retry blocked items that failed for transient/system reasons.
-            retryable_system_block = any(
-                c.get("author") == "System"
-                and (
-                    "qa review failed" in str(c.get("text", "")).lower()
-                    or "agent error:" in str(c.get("text", "")).lower()
-                    or "no deliverable found" in str(c.get("text", "")).lower()
-                    or "unfinished in-progress task returned to todo for redispatch"
-                    in str(c.get("text", "")).lower()
-                )
-                for c in comments
-            )
-            if not retryable_system_block:
-                continue
-
-            # Only retry once — check if there's already a retry comment
-            retry_count = sum(
-                1
-                for c in comments
-                if c.get("author") == "System" and "retry" in c.get("text", "").lower()
-            )
-            if retry_count >= 1:
-                continue
-
             comments.append(
                 {
                     "author": "System",
@@ -3946,6 +4058,23 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             logger.info("Retrying blocked item=%s", item.id)
 
         session.commit()
+
+        closing_candidates = (
+            list(
+                session.exec(
+                    select(Sprint.id).where(
+                        Sprint.id.in_(settled_sprint_ids), Sprint.status == "active"
+                    )
+                ).all()
+            )
+            if settled_sprint_ids
+            else []
+        )
+
+    # A sprint whose last open task just got blocked for a person closes now,
+    # with its retrospective; approvals close theirs on the spot.
+    for sprint_id in closing_candidates:
+        await _finalize_sprint_if_ready(nats_client, sprint_id)
 
     # Re-dispatch any items that just went back to todo
     await _dispatch_todo_items(nats_client)
