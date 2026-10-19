@@ -1178,7 +1178,14 @@
     "blockedCount_one": "{{count}} bloqueada",
     "blockedCount_other": "{{count}} bloqueadas",
     "reworkCount_one": "{{count}} pedido de retrabajo",
-    "reworkCount_other": "{{count}} pedidos de retrabajo"
+    "reworkCount_other": "{{count}} pedidos de retrabajo",
+    "learningTitle": "¿La empresa aprende?",
+    "learningHint": "Por sprint cerrado, del más viejo al más nuevo. Son los números que mantienen o revierten un procedimiento; cuanto más bajos, mejor.",
+    "reworkPerTask": "Pedidos de retrabajo por tarea",
+    "blockedShare": "Proporción de tareas bloqueadas",
+    "vsPrevious": "respecto del sprint anterior",
+    "trendTable": "Sprints cerrados, del más viejo al más nuevo",
+    "sprintColumn": "Sprint"
   },
   "projectFolder": {
     "label": "Carpeta del proyecto",

@@ -1178,7 +1178,14 @@
     "blockedCount_one": "{{count}} blocked",
     "blockedCount_other": "{{count}} blocked",
     "reworkCount_one": "{{count}} rework request",
-    "reworkCount_other": "{{count}} rework requests"
+    "reworkCount_other": "{{count}} rework requests",
+    "learningTitle": "Is the company learning?",
+    "learningHint": "Per closed sprint, oldest to newest. These are the numbers that keep or revert a procedure; lower is better.",
+    "reworkPerTask": "Rework requests per task",
+    "blockedShare": "Share of blocked tasks",
+    "vsPrevious": "vs previous sprint",
+    "trendTable": "Closed sprints, oldest first",
+    "sprintColumn": "Sprint"
   },
   "projectFolder": {
     "label": "Project folder",
