@@ -318,7 +318,12 @@ sprint closes with its task blocked for a person after two rework requests,
 the ScrumMaster's triage of it, the retrospective and an adopted procedure;
 the inbox lists the task;
 `start_sprint` with `carry_over_ids` retries it beside a new task whose
-files are written and verified; the sprint list counts the retry as a briefed second attempt; the inbox then lists only the new attempt.
+files are written and verified; the sprint list counts the retry as a briefed second attempt; the inbox then lists only the new attempt;
+a person carries that attempt into a third sprint, where it blocks again and
+the ScrumMaster's triage is told how the company's second attempts went
+(counted from the boards), the procedure adopted after the foundation sprint
+is measured over the two sprints since and kept, and the proposal prompt
+lists what earlier procedures did.
 Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 `python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
