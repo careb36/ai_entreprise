@@ -444,6 +444,9 @@ async def update_backlog_item(
 
     Supports updating ``status``, ``priority``, ``assignee``, or appending a
     new comment.  All fields are optional; only provided fields are changed.
+    A comment is recorded as a person's note (author ``user``): it is never
+    taken for a deliverable to review, and one starting with
+    ``services.board.SEND_BACK_MARKER`` restarts the task's rework budgets.
     Invalid ``status`` or ``priority`` values return HTTP 422.
     """
     if req.status and req.status not in VALID_STATUSES:

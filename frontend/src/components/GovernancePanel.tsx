@@ -5,6 +5,11 @@ import { useAgentRuns, useCurrentRole, useInbox, useUpdateBacklogItem } from '..
 import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
 
+// The note written on the task when a person sends it back to work. Not
+// translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
+// and restarts the rework budgets after it.
+const SEND_BACK_COMMENT = 'Sent back to work by a person.'
+
 /**
  * The company's agents do the work; this page is what they need a person
  * for: tasks blocked until someone acts, procedure proposals waiting for a
@@ -27,7 +32,7 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: b
   const update = useUpdateBacklogItem()
   const sendBack = () => update.mutate({
     itemId: task.id,
-    data: { status: 'todo', comment: t('inbox.sentBackComment', { defaultValue: 'Sent back to work by a person.' }) },
+    data: { status: 'todo', comment: SEND_BACK_COMMENT },
   })
 
   return (

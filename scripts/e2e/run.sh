@@ -69,7 +69,7 @@ rm -f "$PROMPTS"
 FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 NATS_URL=$NATS_URL WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 (
-  cd "$REPO/backend" && env \
+  cd "$REPO/backend" && exec env \
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
     NATS_URL=$NATS_URL LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e CONSOLE_ASSISTANTS_ENABLED=false \

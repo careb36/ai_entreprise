@@ -64,6 +64,7 @@ from services.board import (
     has_manual_freeze_marker,
     item_is_settled,
     pending_rework_feedback,
+    rework_requests_by,
 )
 from services.carry_over import carry_over_on_the_companys_own, previous_attempt_context
 from services.orchestration_metrics import (
@@ -1197,13 +1198,16 @@ def _complete_sprint_and_plan_follow_up(
         # The tasks the agents gave up on get one more attempt, with what
         # blocked them; a second failure stays for a person.
         try:
-            carried = carry_over_on_the_companys_own(
-                session,
-                company.id,
-                sprint.id,
-                next_sprint,
-                SCOPE_LIMITS.get(scope_size, SCOPE_HARD_MAX) - len(tasks),
-            )
+            # A savepoint: a failure halfway leaves no half-carried task behind
+            # and the session stays usable for the commit below.
+            with session.begin_nested():
+                carried = carry_over_on_the_companys_own(
+                    session,
+                    company.id,
+                    sprint.id,
+                    next_sprint,
+                    SCOPE_LIMITS.get(scope_size, SCOPE_HARD_MAX) - len(tasks),
+                )
         except Exception as exc:  # noqa: BLE001 - A failed carry-over never stops the follow-up sprint.
             logger.warning("Carry-over into sprint=%s failed: %s", next_sprint.id, exc)
             carried = []
@@ -2795,12 +2799,7 @@ async def _send_back_from_quality_gate(
     sprint open forever. After ``AUTOPILOT_MAX_REWORK_CYCLES`` attempts the
     task is blocked for a person and escalated to the ScrumMaster.
     """
-    previous_reworks = sum(
-        1
-        for c in comment_list(item.get("comments"))
-        if c.get("author") == QUALITY_GATE_AUTHOR
-        and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
-    )
+    previous_reworks = rework_requests_by(item.get("comments"), QUALITY_GATE_AUTHOR)
     rework = previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
     text = (
         f"NEEDS WORK: {reason}. Deliver the complete result again, with every "
@@ -3467,11 +3466,8 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 continue
             if gate is not None:
                 problem, observation = gate
-                previous_gate_reworks = sum(
-                    1
-                    for c in comments
-                    if c.get("author") == DELIVERY_GATE_AUTHOR
-                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                previous_gate_reworks = rework_requests_by(
+                    comments, DELIVERY_GATE_AUTHOR
                 )
                 rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
                 instruction = (
@@ -3593,11 +3589,8 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     }
                 )
 
-                previous_reworks = sum(
-                    1
-                    for c in comments[:-1]
-                    if c.get("author") == reviewer_dict["name"]
-                    and str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+                previous_reworks = rework_requests_by(
+                    comments[:-1], reviewer_dict["name"]
                 )
 
                 autopilot_rework_allowed = (
@@ -3868,17 +3861,25 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
         session.commit()
 
-        closing_candidates = (
-            list(
+        # Only a sprint with nothing left to move is worth the retrospective.
+        closing_candidates = [
+            sprint_id
+            for sprint_id in (
                 session.exec(
                     select(Sprint.id).where(
                         Sprint.id.in_(settled_sprint_ids), Sprint.status == "active"
                     )
                 ).all()
+                if settled_sprint_ids
+                else []
             )
-            if settled_sprint_ids
-            else []
-        )
+            if all(
+                item_is_settled(item)
+                for item in session.exec(
+                    select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
+                ).all()
+            )
+        ]
 
     # A sprint whose last open task just got blocked for a person closes now,
     # with its retrospective; approvals close theirs on the spot.

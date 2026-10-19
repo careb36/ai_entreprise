@@ -17,6 +17,7 @@ Every prompt it receives is appended, one per line, to the file named by
 import json
 import os
 import re
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PADDING = (
@@ -28,6 +29,7 @@ PADDING = (
     "acceptance criteria written in the backlog item."
 )
 REVIEWED: set[str] = set()
+REVIEWED_LOCK = threading.Lock()
 PROMPT_LOG = os.environ.get("FAKE_LLM_PROMPTS", "fake_llm.prompts.log")
 
 
@@ -48,8 +50,10 @@ def answer(prompt: str) -> str:
     if "You are reviewing" in prompt:
         task = re.search(r"for the task: '(.+?)'", prompt)
         key = task.group(1) if task else prompt[:80]
-        if key not in REVIEWED:
+        with REVIEWED_LOCK:
+            first_review = key not in REVIEWED
             REVIEWED.add(key)
+        if first_review:
             return "NEEDS WORK: add a test for empty input."
         return "APPROVED: the module and its test match the task."
     task = re.search(r"## Task: (.+)", prompt)

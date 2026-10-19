@@ -334,3 +334,30 @@ def test_a_person_can_send_a_gate_blocked_task_back_to_work(db):
     assert db.get(BacklogItem, item.id).status == "todo"
     assert [s for s, _ in nats.published if s == "task.assign"] == ["task.assign"]
     assert board.block_reason(db.get(BacklogItem, item.id).comments) == TRIAGE
+
+
+def test_a_send_back_gives_the_gate_a_fresh_rework_budget(llm, db, monkeypatch):
+    """After a person sends a gate-blocked task back, its first short deliverable
+    is sent back for rework again, not blocked on the spot."""
+    _short_answer(llm)
+    monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
+    sprint, item = _doc_task(db)
+    item.comments = [
+        {
+            "author": "Quality gate",
+            "text": "NEEDS WORK: Too short (9 words, minimum 180).",
+        },
+        {"author": "Quality gate", "text": TRIAGE},
+        {"author": "user", "text": "Sent back to work by a person."},
+    ]
+    db.add(item)
+    db.commit()
+    nats = _task_assign_handler(monkeypatch)
+
+    _assign(nats, sprint, item)
+
+    db.expire_all()
+    assert db.get(BacklogItem, item.id).status == "todo"
+    author, text = _comments(db, item.id)[-1]
+    assert author == "Quality gate"
+    assert text.startswith("NEEDS WORK: Too short (")

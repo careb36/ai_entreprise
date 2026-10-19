@@ -214,3 +214,23 @@ def test_inbox_is_scoped_to_the_members_company(test_client, member):
         ).status_code
         == 401
     )
+
+
+def test_the_total_counts_every_blocked_task_beyond_the_limit(
+    test_client, sqlite_session, member
+):
+    sprint = _sprint(sqlite_session, member["company"])
+    for title in ("One", "Two", "Three"):
+        _blocked(
+            sqlite_session, sprint, title, [{"author": "Quality gate", "text": TRIAGE}]
+        )
+
+    body = test_client.get(
+        "/v1/inbox",
+        params={"company_id": member["company"], "limit": 2},
+        headers=member["headers"],
+    ).json()
+
+    assert len(body["blocked_tasks"]) == 2
+    assert body["blocked_total"] == 3
+    assert body["total"] == 3

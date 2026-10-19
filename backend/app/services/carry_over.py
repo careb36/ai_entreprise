@@ -19,14 +19,14 @@ from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
 from services.board import (
+    CARRIED_FROM_PREFIX,
+    CARRIED_TO_PREFIX,
     SCRUM_MASTER_ROLE,
     block_reason,
     blocked_item_next_step,
     comment_list,
 )
 
-CARRIED_TO_PREFIX = "Carried over to sprint"
-CARRIED_FROM_PREFIX = "Carried over from"
 REASON_LIMIT = 500
 
 

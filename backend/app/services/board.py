@@ -6,6 +6,13 @@ from a task's comment thread: which comment is the deliverable to review,
 which rework requests are still pending, whether a blocked task is waiting
 for a person or will move again on its own. They live here, with no engine
 and no I/O, so every caller reads the board the same way.
+
+Three kinds of comment are never a deliverable and never a verdict on the
+task they sit on: the gates' texts (``Quality gate``, ``Verifier``), a
+person's notes (author ``user``; the send-back one, ``SEND_BACK_MARKER``,
+also restarts the rework budgets) and the carry-over lineage notes
+(``CARRIED_*_PREFIX``), which quote an earlier task's verdict and must not be
+read as this task's.
 """
 
 import json
@@ -21,6 +28,13 @@ QUALITY_GATE_AUTHOR = "Quality gate"
 DELIVERY_GATE_AUTHOR = "Verifier"
 GATE_AUTHORS_LOWER = {QUALITY_GATE_AUTHOR.lower(), DELIVERY_GATE_AUTHOR.lower()}
 SCRUM_MASTER_ROLE = "ScrumMaster"
+# A person's note when they send a blocked task back to work (author "user",
+# written as-is by the frontend, never translated). Rework budgets restart
+# after it.
+SEND_BACK_MARKER = "Sent back to work"
+# The carry-over notes on the original task and on its new attempt.
+CARRIED_TO_PREFIX = "Carried over to sprint"
+CARRIED_FROM_PREFIX = "Carried over from"
 
 
 def comment_list(comments: Any) -> list[dict[str, Any]]:
@@ -35,12 +49,63 @@ def comment_list(comments: Any) -> list[dict[str, Any]]:
     return [c for c in comments if isinstance(c, dict)]
 
 
+def _text(comment: dict[str, Any]) -> str:
+    return str(comment.get("text", "")).strip()
+
+
+def _author(comment: dict[str, Any]) -> str:
+    return str(comment.get("author", "")).strip().lower()
+
+
+def is_lineage_comment(comment: dict[str, Any]) -> bool:
+    """A carry-over note: it quotes another task's verdict, not this one's."""
+    text = _text(comment)
+    return text.startswith(CARRIED_TO_PREFIX) or text.startswith(CARRIED_FROM_PREFIX)
+
+
+def is_send_back(comment: dict[str, Any]) -> bool:
+    """A person's note sending the task back to work."""
+    return _author(comment) == "user" and _text(comment).startswith(SEND_BACK_MARKER)
+
+
+def is_rework_request(comment: dict[str, Any]) -> bool:
+    return _text(comment).upper().startswith("NEEDS WORK:")
+
+
+def verdict_comments(comments: Any) -> list[dict[str, Any]]:
+    """The comments that may say something about *this* task's state."""
+    return [c for c in comment_list(comments) if not is_lineage_comment(c)]
+
+
+def since_send_back(comments: Any) -> list[dict[str, Any]]:
+    """The comments after the last time a person sent the task back, or all of them."""
+    comments = comment_list(comments)
+    for index in range(len(comments) - 1, -1, -1):
+        if is_send_back(comments[index]):
+            return comments[index + 1 :]
+    return comments
+
+
+def rework_requests_by(comments: Any, author: str) -> int:
+    """How many ``NEEDS WORK:`` requests *author* made since the last send-back.
+
+    A person sending a task back to work gives every gate and reviewer a fresh
+    rework budget; otherwise the task would be blocked again on its first
+    rejected attempt.
+    """
+    return sum(
+        1
+        for c in since_send_back(comments)
+        if str(c.get("author", "")) == author and is_rework_request(c)
+    )
+
+
 def has_manual_freeze_marker(comments: Any) -> bool:
     """Detect operator comments that intentionally freeze a task out of automation."""
     return any(
-        "sleep-induced churn" in str(comment.get("text", "")).lower()
-        or str(comment.get("text", "")).strip().lower().startswith("freeze after")
-        for comment in comment_list(comments)
+        "sleep-induced churn" in _text(comment).lower()
+        or _text(comment).lower().startswith("freeze after")
+        for comment in verdict_comments(comments)
     )
 
 
@@ -51,8 +116,8 @@ def extract_latest_reviewable_comment(
     assignee_normalized = (assignee_role or "").strip().lower()
 
     for comment in reversed(comment_list(comments)):
-        author = str(comment.get("author", "")).strip().lower()
-        text = str(comment.get("text", "")).strip()
+        author = _author(comment)
+        text = _text(comment)
         if not text:
             continue
         if (
@@ -62,13 +127,14 @@ def extract_latest_reviewable_comment(
             continue
         if author == "system":
             continue
-        if text.upper().startswith("NEEDS WORK:"):
+        if is_rework_request(comment):
             # A rework request after the latest deliverable makes it stale:
             # the task must run again before anything is reviewed.
             return ""
         if author in GATE_AUTHORS_LOWER or author == "user":
-            # The gates write verdicts and a person on the board writes notes;
-            # neither is a deliverable.
+            # The gates write verdicts and a person on the board writes notes
+            # (``PATCH /v1/backlog`` records them as "user"); neither is a
+            # deliverable, so neither goes to review.
             continue
         if author == "qa" and assignee_normalized != "qa":
             continue
@@ -85,14 +151,16 @@ def pending_rework_feedback(comments: Any) -> list[str]:
     """The ``NEEDS WORK:`` requests made since the task's latest deliverable."""
     feedback: list[str] = []
     for comment in reversed(comment_list(comments)):
-        text = str(comment.get("text", "")).strip()
-        if text.upper().startswith("NEEDS WORK:"):
+        text = _text(comment)
+        if is_rework_request(comment):
             feedback.append(f"{comment.get('author') or 'Reviewer'}: {text}")
             continue
-        author = str(comment.get("author", "")).strip().lower()
+        author = _author(comment)
         if (
             text
             and author != "system"
+            and author not in GATE_AUTHORS_LOWER
+            and author != "user"
             and not text.upper().startswith("APPROVED:")
             and not is_architect_consult_comment(comment)
         ):
@@ -122,12 +190,12 @@ def can_resume_blocked_item_from_deliverable(
     comments: Any, assignee_role: str | None = None
 ) -> bool:
     """Detect blocked items that already have a deliverable and no explicit block reason."""
-    comments = comment_list(comments)
+    comments = verdict_comments(comments)
     if not comments:
         return False
     if has_manual_freeze_marker(comments):
         return False
-    if any(is_explicit_block_reason(str(c.get("text", ""))) for c in comments):
+    if any(is_explicit_block_reason(_text(c)) for c in comments):
         return False
     return bool(
         extract_latest_reviewable_comment(comments, assignee_role=assignee_role)
@@ -143,37 +211,35 @@ def blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | No
     stays blocked until a person acts, which is the only case a sprint may
     close around (see ``item_is_settled``).
     """
-    comments = comment_list(comments)
+    comments = verdict_comments(comments)
     if has_manual_freeze_marker(comments):
         return "frozen"
     if can_resume_blocked_item_from_deliverable(comments, assignee_role=assignee_role):
         return "review"
 
-    # QA quality-gate blocks require manual triage; do not auto-retry.
-    qa_quality_gate_block = any(
+    # A verdict that needs a person: a gate or the system said "manual triage",
+    # or a reviewer asked for rework the task already spent. Never retried.
+    needs_a_person = any(
         (
-            c.get("author") == "System"
-            and "manual triage" in str(c.get("text", "")).lower()
+            _author(c) in ({"system"} | GATE_AUTHORS_LOWER)
+            and "manual triage" in _text(c).lower()
         )
-        or (
-            c.get("author") == "System"
-            and "qa quality gate failed" in str(c.get("text", "")).lower()
-        )
-        or str(c.get("text", "")).upper().startswith("NEEDS WORK:")
+        or (_author(c) == "system" and "qa quality gate failed" in _text(c).lower())
+        or is_rework_request(c)
         for c in comments
     )
-    if qa_quality_gate_block:
+    if needs_a_person:
         return None
 
     # Only retry blocked items that failed for transient/system reasons.
     retryable_system_block = any(
-        c.get("author") == "System"
+        _author(c) == "system"
         and (
-            "qa review failed" in str(c.get("text", "")).lower()
-            or "agent error:" in str(c.get("text", "")).lower()
-            or "no deliverable found" in str(c.get("text", "")).lower()
+            "qa review failed" in _text(c).lower()
+            or "agent error:" in _text(c).lower()
+            or "no deliverable found" in _text(c).lower()
             or "unfinished in-progress task returned to todo for redispatch"
-            in str(c.get("text", "")).lower()
+            in _text(c).lower()
         )
         for c in comments
     )
@@ -182,22 +248,20 @@ def blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | No
 
     # Only retry once — check if there's already a retry comment
     retry_count = sum(
-        1
-        for c in comments
-        if c.get("author") == "System" and "retry" in str(c.get("text", "")).lower()
+        1 for c in comments if _author(c) == "system" and "retry" in _text(c).lower()
     )
     return None if retry_count >= 1 else "retry"
 
 
 def block_reason(comments: Any) -> str:
     """The latest verdict on a blocked item: what a gate, the system or a reviewer said."""
-    for comment in reversed(comment_list(comments)):
-        text = str(comment.get("text", "")).strip()
-        author = str(comment.get("author", "")).strip().lower()
+    for comment in reversed(verdict_comments(comments)):
+        text = _text(comment)
+        author = _author(comment)
         if text and (
             author == "system"
             or author in GATE_AUTHORS_LOWER
-            or text.upper().startswith("NEEDS WORK:")
+            or is_rework_request(comment)
         ):
             return text
     return ""
