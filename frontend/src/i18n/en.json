@@ -484,6 +484,10 @@
     "sprintActionFailed": "Could not complete the action: {{message}}"
   },
   "taskDetails": {
+    "lineageLabel": "Earlier and later attempts",
+    "carriedFrom": "Another attempt at a task blocked in {{sprint}}:",
+    "carriedTo": "Given another attempt in {{sprint}}:",
+    "taskNumber": "task #{{id}}",
     "invalidId": "Invalid task ID: {{taskId}}.",
     "noSprint": "Select a sprint to look up task #{{taskId}}.",
     "notFound": "Task #{{taskId}} was not found in sprint #{{sprintId}}.",

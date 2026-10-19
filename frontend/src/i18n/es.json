@@ -484,6 +484,10 @@
     "sprintActionFailed": "No se pudo completar la acción: {{message}}"
   },
   "taskDetails": {
+    "lineageLabel": "Intentos anterior y posterior",
+    "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
+    "carriedTo": "Tiene otro intento en {{sprint}}:",
+    "taskNumber": "tarea #{{id}}",
     "invalidId": "ID de tarea no válido: {{taskId}}.",
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
