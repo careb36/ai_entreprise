@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 from models import AgentMessage, BacklogItem, Company, OutboxEvent, Sprint
+from models.agent_run import AgentRun, Verification
 from services import carry_over, task_worker
 from sqlmodel import select
 
@@ -306,3 +307,72 @@ def test_the_company_carries_its_blocked_tasks_into_the_follow_up_once(
         select(AgentMessage).where(AgentMessage.backlog_item_id == clone.id)
     ).one()
     assert (message.from_role, message.kind) == ("ScrumMaster", "decision")
+
+
+def test_qa_reviews_the_second_attempt_with_the_previous_attempts_context(
+    sqlite_session, company, monkeypatch
+):
+    """The reviewer sees what blocked the first attempt and the ScrumMaster's
+    brief, the same context the agent had, so it judges the attempt against them."""
+    import asyncio
+
+    from test_review_gate import _FakeNATS
+
+    sprint = _sprint(sqlite_session, company.id, "Sprint 1", "active")
+    note = (
+        f'Carried over from task 7 ("Sprint 0"), which was blocked: {TRIAGE}\n'
+        "Brief for the next attempt: Write at least 180 words with one section per test level."
+    )
+    clone = BacklogItem(
+        sprint_id=sprint.id,
+        title=f"Create testing strategy {secrets.token_hex(2)}",
+        status="in_review",
+        assignee="QA",
+        comments=[
+            {"author": "System", "text": note},
+            {"author": "QA Quinn", "text": "# Artifact: STRATEGY.md\n" + "word " * 200},
+        ],
+    )
+    sqlite_session.add(clone)
+    sqlite_session.commit()
+    sqlite_session.refresh(clone)
+    run = AgentRun(
+        company_id=company.id,
+        external_ref=f"task-{clone.id}",
+        producer=task_worker.TASK_WORKER_PRODUCER,
+        claims={"files": ["STRATEGY.md"]},
+        artifact_digest="d",
+        artifact_size=1,
+        status="verified",
+    )
+    sqlite_session.add(run)
+    sqlite_session.commit()
+    sqlite_session.refresh(run)
+    sqlite_session.add(
+        Verification(
+            company_id=company.id,
+            agent_run_id=run.id,
+            verdict="verified",
+            checks=[
+                {"name": "files_written", "outcome": "verified", "observation": ""}
+            ],
+        )
+    )
+    sqlite_session.commit()
+    prompts = []
+
+    def _review(agent, prompt, **kwargs):
+        if clone.title in prompt:
+            prompts.append(prompt)
+        return "APPROVED: covers every level."
+
+    monkeypatch.setattr(task_worker, "_call_llm_for_review", _review)
+
+    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+
+    assert len(prompts) == 1
+    assert "## Previous attempt" in prompts[0]
+    assert TRIAGE in prompts[0]
+    assert "Brief for the next attempt: Write at least 180 words" in prompts[0]
+    sqlite_session.expire_all()
+    assert sqlite_session.get(BacklogItem, clone.id).status == "done"

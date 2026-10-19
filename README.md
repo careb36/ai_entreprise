@@ -64,7 +64,7 @@ La Fabrique is a multi-agent platform that orchestrates AI agents through a stru
 | M    | 8                 | Feature iterations (default) |
 | L    | 12                | Large features, foundational work |
 
-A sprint closes when every task is settled: done, or blocked until a person acts. Blocked tasks stay on the board, appear in the retrospective and count in the numbers the company's procedures are judged by; a person can send one back to work from the **Review** page or carry it into the next sprint, and with autonomy level 3 the company carries it over on its own, once. When the optional kickoff graph decides the scope exceeds the team's capacity, the sprint transitions to `needs_split`.
+A sprint closes when every task is settled: done, or blocked until a person acts. Blocked tasks stay on the board, appear in the retrospective and count in the numbers the company's procedures are judged by; a person can send one back to work from the **Review** page or carry it into the next sprint, and with autonomy level 3 the company carries it over on its own, once. The escalation is answered: the ScrumMaster reads what blocked the task and decides, in a fixed format a parser checks, between another attempt with a brief for it or leaving it to a person. That decision is a message, so a claim: the Review page shows it, the brief travels with the next attempt into the agent's prompt, and the company never carries over on its own what the ScrumMaster left to a person. When the optional kickoff graph decides the scope exceeds the team's capacity, the sprint transitions to `needs_split`.
 
 **Sprint lifecycle:** `active` ⇄ `paused` → `completed` | `needs_split` | `cancelled`
 
@@ -117,6 +117,7 @@ sequenceDiagram
     TW->>DB: AgentRun + Verification (claims kept apart from observations)
     TW->>LLM: QA review (only APPROVED: closes the task)
     TW->>DB: done / rework / blocked for a person; AgentMessages at each hand-over
+    TW->>LLM: ScrumMaster triage of a blocked task (another attempt with a brief, or a person)
     TW->>DB: sprint closes when every task is settled → retrospective, procedures measured and proposed
     BE-->>U: GET /v1/inbox: what needs a person
 ```
@@ -318,6 +319,9 @@ la-fabrique/
 │   │   │   ├── task_worker.py        # Executes tasks, delivery gate, QA review, closes sprints
 │   │   │   ├── procedures.py         # Procedures: proposals, adoption, keep/revert by the numbers
 │   │   │   ├── carry_over.py         # A blocked task gets another attempt in the next sprint
+│   │   │   ├── scrum_master.py       # The ScrumMaster answers escalations: triage of a blocked task
+│   │   │   ├── board.py              # Pure readers of a task's comment thread
+│   │   │   ├── console_assistants.py # Terminal assistants on the daemon's machine (Copilot CLI, Claude CLI)
 │   │   │   ├── support_agent.py      # Triages help-desk tickets (SUPPORT_AGENT_ENABLED)
 │   │   │   └── outbox_service.py     # Transactional outbox → NATS drain
 │   │   └── nats_client.py            # Async NATS publish/subscribe wrapper

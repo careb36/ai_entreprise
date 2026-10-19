@@ -65,6 +65,8 @@
     "carryOverTitle": "Traer de vuelta tareas bloqueadas",
     "carryOverHint": "Tareas que los agentes dejaron. Cada una que marques tiene un intento nuevo en este sprint, con lo que la bloqueó; cuentan para el alcance.",
     "carryOverTask": "{{title}} · {{sprint}}",
+    "carryOverTriageRetry": "ScrumMaster: otro intento. {{why}}",
+    "carryOverTriagePerson": "ScrumMaster: que lo decida una persona. {{why}}",
     "carryOverFull": "El alcance está lleno: desmarcá una tarea o elegí un alcance mayor.",
     "planning": "Planificando…",
     "launching": "Iniciando…",
