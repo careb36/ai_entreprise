@@ -198,7 +198,8 @@ the LangGraph graph is only an optional kickoff conversation.
    blocked task back to work) and the navigation counts them. A blocked task
    can also get another attempt in the next sprint (`services/carry_over.py`):
    `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the
-   "Plan a sprint" form offers them, and with `autonomy_level` 3 the follow-up
+   "Plan a sprint" form offers them (with how earlier second attempts went,
+   from the sprint list's `second_attempts`), and with `autonomy_level` 3 the follow-up
    sprint carries the closed sprint's blocked tasks on its own, once each. The
    new task carries what blocked the old one (a `Previous attempt` prompt
    section); the old one is marked and leaves the inbox. The escalation gets
