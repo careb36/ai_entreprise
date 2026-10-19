@@ -8,7 +8,10 @@ previous one, so the agent does not repeat it blind. The original stays on
 its board, marked as carried over, and leaves the person's inbox.
 
 A task is carried over at most once on the company's own initiative; one
-that blocks again stays for a person.
+that blocks again stays for a person. The ScrumMaster's triage of the block
+(``services.scrum_master``) is honoured: a task it left for a person is not
+carried on the company's own, and its brief for the next attempt travels
+with the new task into the agent's prompt.
 """
 
 from datetime import UTC, datetime
@@ -18,6 +21,7 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
+from services import scrum_master
 from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
@@ -62,6 +66,12 @@ def is_carry_over(item: BacklogItem) -> bool:
     )
 
 
+def left_for_a_person(session: Session, item: BacklogItem) -> bool:
+    """The ScrumMaster's triage said a person must decide, not another attempt."""
+    triage = scrum_master.decision_for(session, item.id)
+    return bool(triage) and triage["decision"] == scrum_master.DECISION_PERSON
+
+
 def carry_over(
     session: Session,
     company_id: int,
@@ -98,6 +108,8 @@ def carry_over(
     created: list[BacklogItem] = []
     for item, sprint in originals:
         reason = block_reason(item.comments)[:REASON_LIMIT]
+        triage = scrum_master.decision_for(session, item.id) or {}
+        brief = triage.get("brief") or ""
         clone = BacklogItem(
             sprint_id=new_sprint.id,
             title=item.title,
@@ -111,6 +123,7 @@ def carry_over(
                     "text": (
                         f'{CARRIED_FROM_PREFIX} task {item.id} ("{sprint.sprint_name}"), '
                         f"which was blocked: {reason or 'no reason recorded'}"
+                        + (f"\n{scrum_master.BRIEF_PREFIX}{brief}" if brief else "")
                     ),
                     "created_at": now.isoformat(),
                 }
@@ -159,6 +172,7 @@ def carry_over(
                 body=(
                     f'"{item.title}" gets another attempt in sprint "{new_sprint.sprint_name}". '
                     f"Last time it was blocked: {reason or 'no reason recorded'}"
+                    + (f"\n{scrum_master.BRIEF_PREFIX}{brief}" if brief else "")
                 ),
             )
         )
@@ -188,8 +202,9 @@ def carry_over_on_the_companys_own(
 ) -> list[BacklogItem]:
     """At sprint close with autonomy 3: give each blocked task one more attempt.
 
-    Tasks that were already a second attempt stay for a person. At most
-    *room* tasks, oldest first, so the next sprint keeps within its scope.
+    Tasks that were already a second attempt, and tasks the ScrumMaster's
+    triage left for a person, stay for a person. At most *room* tasks, oldest
+    first, so the next sprint keeps within its scope.
     """
     if room <= 0:
         return []
@@ -206,6 +221,7 @@ def carry_over_on_the_companys_own(
         if waits_for_a_person(item)
         and not carried_over(item)
         and not is_carry_over(item)
+        and not left_for_a_person(session, item)
     ][:room]
     if not ids:
         return []

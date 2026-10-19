@@ -108,6 +108,7 @@ echo "     board: $(board "$S0")"
 check "its task is blocked for a person" test "$(board "$S0")" = "Create testing strategy document=blocked"
 check "the quality gate asked for rework twice" test "$(api "$API/v1/messages?company_id=$CID&kind=request" | json "len(d['messages'])")" = 2
 check "the ScrumMaster posted the retrospective" test "$(api "$API/v1/messages?company_id=$CID&kind=retrospective" | json "len(d['messages'])")" = 1
+check "the ScrumMaster answered the escalation" test "$(api "$API/v1/messages?company_id=$CID&kind=decision" | json "sum(1 for m in d['messages'] if m['body'].startswith('Triage decision: another attempt'))")" = 1
 check "a procedure was proposed and adopted (autonomy 3)" test "$(api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')")" = 1
 
 echo "2. the inbox"
@@ -125,6 +126,7 @@ check "Sprint 1 closes" wait_sprint "$S1"
 echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
 check "the retried task's prompts carry the previous attempt" test "$(grep -c '## Previous attempt' "$PROMPTS")" -ge 1
+check "and the ScrumMaster's brief" test "$(grep -c 'Brief for the next attempt: Write the full document' "$PROMPTS")" -ge 1
 check "files were written to the project" test -f "$WORK/project/src/add_parser.py" -a -f "$WORK/project/tests/test_add_parser.py"
 check "the delivery was verified" test "$(api "$API/v1/agent_runs?company_id=$CID" | json "sum(1 for r in d['agent_runs'] if r['status'] == 'verified')")" -ge 1
 

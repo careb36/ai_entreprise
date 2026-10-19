@@ -19,7 +19,7 @@ import pytest
 from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import board, task_worker
+from services import board, scrum_master, task_worker
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
@@ -310,6 +310,44 @@ def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
     ).one()
     assert "Completed 0/1 tasks" in retro.body
     assert "blocked for manual triage" in retro.body
+
+
+def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
+    """Blocked by the gate, the task is escalated and the ScrumMaster's triage is
+    recorded with what blocked it; the task stays blocked for a person."""
+    _short_answer(llm)
+    monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
+    asked = []
+
+    def _ask(session, company_id, prompt):
+        asked.append(prompt)
+        return "DECISION: retry\nBRIEF: Write at least 180 words.\nWHY: cut short.\nEND"
+
+    monkeypatch.setattr(scrum_master, "ask", _ask)
+    sprint, item = _doc_task(db)
+    nats = _task_assign_handler(monkeypatch)
+
+    _assign(nats, sprint, item)
+
+    db.expire_all()
+    assert db.get(BacklogItem, item.id).status == "blocked"
+    assert len(asked) == 1
+    assert (
+        "## What blocked it\nPre-review quality gate failed after 0 rework(s)"
+        in asked[0]
+    )
+    kinds = db.exec(
+        select(AgentMessage.kind, AgentMessage.from_role, AgentMessage.to_role)
+        .where(AgentMessage.backlog_item_id == item.id)
+        .order_by(AgentMessage.id)
+    ).all()
+    assert list(kinds) == [
+        ("escalation", "Quality gate", "ScrumMaster"),
+        ("decision", "ScrumMaster", "Developer"),
+    ]
+    assert (
+        scrum_master.decision_for(db, item.id)["brief"] == "Write at least 180 words."
+    )
 
 
 def test_a_person_can_send_a_gate_blocked_task_back_to_work(db):

@@ -47,6 +47,17 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: b
           {task.frozen && ` · ${t('inbox.frozen', { defaultValue: 'frozen by an operator' })}`}
         </p>
         {task.reason && <p className="break-words text-xs text-gray-400">{task.reason}</p>}
+        {task.triage && (
+          <p className="break-words text-xs text-sky-200/80">
+            <span className="font-semibold">
+              {task.triage.decision === 'retry'
+                ? t('inbox.triageRetry', { defaultValue: 'ScrumMaster: another attempt in the next sprint.' })
+                : t('inbox.triagePerson', { defaultValue: 'ScrumMaster: leave it for a person.' })}
+            </span>
+            {task.triage.why && ` ${task.triage.why}`}
+            {task.triage.brief && ` ${t('inbox.triageBrief', { brief: task.triage.brief, defaultValue: 'Brief: {{brief}}' })}`}
+          </p>
+        )}
         {update.isError && (
           <p role="alert" className="text-xs text-red-300">
             {t('inbox.sendBackError', { message: errorDetail(update.error), defaultValue: 'Could not send it back: {{message}}' })}

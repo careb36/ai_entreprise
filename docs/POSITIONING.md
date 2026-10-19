@@ -246,6 +246,12 @@ replaces none of it.
      sends a task back to work or carries it into the next sprint with what
      blocked it; at autonomy level 3 the company carries it over on its own,
      once. A task that blocks twice stays for a person.
+   - The escalation is answered. The ScrumMaster reads what blocked a task
+     and decides, in a fixed format a parser checks, between another attempt
+     with a brief for it or leaving it to a person. The decision is a
+     message, so a claim: the brief goes into the next attempt's prompt, the
+     company does not carry over on its own what the ScrumMaster left to a
+     person, and a person sees the triage in the inbox and still decides.
    - The sprint list shows blocked tasks and rework requests per sprint, so
      whether the company is learning is visible without opening anything.
 

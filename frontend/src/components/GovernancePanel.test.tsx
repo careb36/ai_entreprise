@@ -22,11 +22,12 @@ const INBOX = {
     {
       id: 7, title: 'Create testing strategy document', assignee: 'QA', sprint_id: 1, sprint_name: 'Sprint 0 — Foundations',
       sprint_status: 'completed', reason: 'Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: Too short',
+      triage: { decision: 'retry', why: 'The attempts were cut short, not wrong.', brief: 'Write at least 180 words with a section per test level.' },
       frozen: false, updated_at: '2026-10-19T04:39:00',
     },
     {
       id: 8, title: 'Frozen one', assignee: 'Developer', sprint_id: 1, sprint_name: 'Sprint 0 — Foundations',
-      sprint_status: 'completed', reason: 'freeze after sleep-induced churn', frozen: true, updated_at: null,
+      sprint_status: 'completed', reason: 'freeze after sleep-induced churn', triage: null, frozen: true, updated_at: null,
     },
   ],
   proposals: [{ id: 3, role: 'Developer', title: 'Cover edge cases', proposed_by: 'ScrumMaster', source_sprint_id: 1, created_at: null }],
@@ -72,6 +73,10 @@ describe('GovernancePanel', () => {
     expect(within(blocked).getByRole('link', { name: 'Create testing strategy document' })).toHaveAttribute('href', '/sprints/1/tasks/7')
     expect(within(blocked).getByText(/blocked for manual triage: Too short/)).toBeInTheDocument()
     expect(within(blocked).getByText(/frozen by an operator/)).toBeInTheDocument()
+    // The ScrumMaster's answer to the escalation sits under the reason, as its claim.
+    const triage = within(blocked).getByText(/ScrumMaster: another attempt in the next sprint\./)
+    expect(triage.closest('p')).toHaveTextContent('The attempts were cut short, not wrong. Brief: Write at least 180 words with a section per test level.')
+    expect(within(blocked).queryByText(/leave it for a person/)).not.toBeInTheDocument()
     // Only the task the agents gave up on gets the button; a frozen one is the operator's.
     const buttons = within(blocked).getAllByRole('button', { name: 'Send back to work' })
     expect(buttons).toHaveLength(1)

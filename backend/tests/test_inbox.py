@@ -117,6 +117,7 @@ def test_lists_the_tasks_only_a_person_can_move(test_client, sqlite_session, mem
         "sprint_name": "Sprint 0",
         "sprint_status": "completed",
         "reason": TRIAGE,
+        "triage": None,
         "frozen": False,
         "updated_at": triage.updated_at.isoformat(),
     }
@@ -125,6 +126,45 @@ def test_lists_the_tasks_only_a_person_can_move(test_client, sqlite_session, mem
     assert body["proposals"] == []
     assert body["pending_runs"] == 0
     assert body["total"] == 2
+
+
+def test_a_blocked_task_carries_the_scrum_masters_triage(
+    test_client, sqlite_session, member
+):
+    from models import AgentMessage
+
+    sprint = _sprint(sqlite_session, member["company"])
+    item = _blocked(
+        sqlite_session,
+        sprint,
+        "Needs a budget",
+        [{"author": "Quality gate", "text": TRIAGE}],
+    )
+    sqlite_session.add(
+        AgentMessage(
+            company_id=member["company"],
+            sprint_id=sprint.id,
+            backlog_item_id=item.id,
+            from_name="ScrumMaster",
+            from_role="ScrumMaster",
+            to_role=None,
+            kind="decision",
+            body="Triage decision: leave it for a person.\nWhy: it needs a budget decision.",
+        )
+    )
+    sqlite_session.commit()
+
+    response = test_client.get(
+        "/v1/inbox", params={"company_id": member["company"]}, headers=member["headers"]
+    )
+
+    assert response.status_code == 200
+    (task,) = response.json()["blocked_tasks"]
+    assert task["triage"] == {
+        "decision": "person",
+        "why": "it needs a budget decision.",
+        "brief": "",
+    }
 
 
 def test_lists_proposals_and_counts_undecided_runs(test_client, sqlite_session, member):
