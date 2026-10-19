@@ -254,6 +254,11 @@ replaces none of it.
      person, and a person sees the triage in the inbox and still decides.
    - The sprint list shows blocked tasks and rework requests per sprint, so
      whether the company is learning is visible without opening anything.
+   - Second attempts are measured: how many carried tasks got done, with and
+     without the ScrumMaster's brief. The same numbers, counted from the
+     boards, go into the ScrumMaster's next triage, so its judgement is
+     confronted with the outcome of its earlier calls rather than with its
+     own account of them.
 
 ### What this changes in the tables above
 

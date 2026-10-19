@@ -66,15 +66,6 @@ def is_carry_over(item: BacklogItem) -> bool:
     )
 
 
-def second_attempt_briefed(comments: Any) -> bool | None:
-    """None for a first attempt; for a second, whether the ScrumMaster briefed it."""
-    for comment in comment_list(comments):
-        text = str(comment.get("text", ""))
-        if text.startswith(CARRIED_FROM_PREFIX):
-            return f"\n{scrum_master.BRIEF_PREFIX}" in text
-    return None
-
-
 def left_for_a_person(session: Session, item: BacklogItem) -> bool:
     """The ScrumMaster's triage said a person must decide, not another attempt."""
     return _left_for_a_person(scrum_master.triages_for(session, [item]).get(item.id))

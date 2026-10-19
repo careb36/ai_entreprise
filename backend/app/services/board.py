@@ -36,6 +36,9 @@ SEND_BACK_MARKER = "Sent back to work"
 # The carry-over notes on the original task and on its new attempt.
 CARRIED_TO_PREFIX = "Carried over to sprint"
 CARRIED_FROM_PREFIX = "Carried over from"
+# The line the ScrumMaster's brief travels on, in its decision and in the
+# carry-over note of the next attempt.
+BRIEF_PREFIX = "Brief for the next attempt: "
 
 
 def comment_list(comments: Any) -> list[dict[str, Any]]:
@@ -295,3 +298,30 @@ def item_is_settled(item: BacklogItem) -> bool:
     if item.status != "blocked":
         return False
     return blocked_item_next_step(item.comments, item.assignee) is None
+
+
+def second_attempt_briefed(comments: Any) -> bool | None:
+    """None for a first attempt; for a second, whether the ScrumMaster briefed it."""
+    for comment in comment_list(comments):
+        text = _text(comment)
+        if text.startswith(CARRIED_FROM_PREFIX):
+            return f"\n{BRIEF_PREFIX}" in text
+    return None
+
+
+def no_second_attempts() -> dict[str, int]:
+    """An empty tally of second attempts: how many, how many done, and briefed."""
+    return {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0}
+
+
+def count_second_attempt(tally: dict[str, int], status: str, comments: Any) -> None:
+    """Add one task to *tally* when it is a second attempt."""
+    briefed = second_attempt_briefed(comments)
+    if briefed is None:
+        return
+    done = int(status == "done")
+    tally["total"] += 1
+    tally["done"] += done
+    if briefed:
+        tally["briefed"] += 1
+        tally["briefed_done"] += done
