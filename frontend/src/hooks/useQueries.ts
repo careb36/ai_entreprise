@@ -458,11 +458,12 @@ export function useUpdateTicket() {
   return useMutation({
     mutationFn: ({ ticketNum, data }: { ticketNum: string; data: TicketUpdateRequest }) =>
       api.updateTicket(ticketNum, data),
-    onSuccess: (_result, { ticketNum }) => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] })
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ticket(ticketNum) })
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.supportAgentRecord() })
-    },
+    // Returned, so the caller's own onSuccess runs once the ticket is refetched.
+    onSuccess: (_result, { ticketNum }) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['tickets'] }),
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ticket(ticketNum) }),
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.supportAgentRecord() }),
+    ]),
   })
 }
 

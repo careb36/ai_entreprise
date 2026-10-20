@@ -205,6 +205,9 @@ export interface SupportTicket {
   status: string
   reporter_email: string | null
   assigned_to: string | null
+  /** A support admin's decision, kept apart from the reporter's choice. */
+  decided_severity?: string | null
+  decided_category?: string | null
   created_at: string | null
   updated_at: string | null
   resolved_at: string | null
@@ -291,9 +294,7 @@ export interface SupportTicketDetail extends SupportTicket {
   suggested_category?: string | null
   triaged_by?: string | null
   triaged_at?: string | null
-  /** A support admin's decision. */
-  decided_severity?: string | null
-  decided_category?: string | null
+  /** Who last changed the decision, and when. */
   decided_by?: string | null
   decided_at?: string | null
   [key: string]: unknown
