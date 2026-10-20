@@ -958,6 +958,12 @@ export const api = {
   getSprintBoard: (sprintId: number) =>
     api.get<SprintBoard>(`/v1/sprints/${sprintId}/board`),
 
+  /** A short-lived ticket for the sprint's Glassroom stream; null when no login is required. */
+  getStreamTicket: (sprintId: string) =>
+    api.post<{ ticket: string | null; expires_in: number }>(
+      `/v1/sprints/${encodeURIComponent(sprintId)}/stream_ticket`,
+    ),
+
   updateBacklogItem: (itemId: number, data: {
     status?: string
     priority?: string

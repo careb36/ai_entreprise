@@ -83,3 +83,54 @@ def decode_access_token(token: str) -> dict:
     if claims.get("typ") != "access":
         raise InvalidTokenError("Invalid token type")
     return claims
+
+
+STREAM_TICKET_MINUTES = 5
+
+
+def create_stream_ticket(
+    *, user_id: int, sprint_id: int, expires_delta: timedelta | None = None
+) -> str:
+    """A short-lived token that opens one sprint's Glassroom stream for *user_id*.
+
+    A browser EventSource cannot send an Authorization header, so the stream
+    takes this in its query string instead of the access token: it is good
+    for one sprint and a few minutes, and membership is checked again when it
+    is used.
+    """
+    from config import settings
+
+    key = _configured_key()
+    if key is None:
+        raise AuthNotConfiguredError("JWT_SECRET_KEY is not configured")
+    now = datetime.now(UTC)
+    claims = {
+        "sub": str(user_id),
+        "sprint": sprint_id,
+        "iat": now,
+        "exp": now + (expires_delta or timedelta(minutes=STREAM_TICKET_MINUTES)),
+        "typ": "glassroom",
+    }
+    return jwt.encode(claims, key, algorithm=settings.JWT_ALGORITHM)
+
+
+def decode_stream_ticket(ticket: str, sprint_id: int) -> int:
+    """The user a valid ticket for *sprint_id* was issued to; raises otherwise."""
+    from config import settings
+
+    key = _configured_key()
+    if key is None:
+        raise AuthNotConfiguredError("JWT_SECRET_KEY is not configured")
+    try:
+        claims = jwt.decode(
+            ticket,
+            key,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"require": ["sub", "exp", "typ", "sprint"]},
+        )
+        user_id = int(claims["sub"])
+    except (jwt.PyJWTError, TypeError, ValueError) as exc:
+        raise InvalidTokenError("Invalid or expired stream ticket") from exc
+    if claims.get("typ") != "glassroom" or claims.get("sprint") != sprint_id:
+        raise InvalidTokenError("The ticket is not for this sprint's stream")
+    return user_id
