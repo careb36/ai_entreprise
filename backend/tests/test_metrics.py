@@ -53,3 +53,22 @@ def test_request_increments_counter(test_client):
     response = test_client.get("/metrics")
     # The counter should be present (value may vary)
     assert "fabrique_requests_total" in response.text
+
+
+def test_requests_are_labelled_by_route_not_by_path(test_client):
+    """The public /metrics never shows an id, and scanned URLs share one label."""
+    test_client.get("/v1/sprints/987654/board")
+    test_client.get("/scanner/987654/wp-login.php")
+
+    text = test_client.get("/metrics").text
+
+    assert 'endpoint="/v1/sprints/{sprint_id}/board"' in text
+    assert 'endpoint="unmatched"' in text
+    assert "987654" not in text
+
+
+def test_memory_search_caps_its_limit(test_client):
+    response = test_client.get(
+        "/v1/memory/search", params={"query": "x", "limit": 100000}
+    )
+    assert response.status_code == 422
