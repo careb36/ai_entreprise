@@ -155,3 +155,106 @@ def test_the_reporter_sees_the_agents_reply(
     assert detail["agent_reply"].startswith("Gracias por avisar.")
     assert (detail["severity"], detail["suggested_severity"]) == ("low", "high")
     assert detail["triaged_by"] == support_agent.SUPPORT_AGENT_NAME
+
+
+def _decided(session, **fields):
+    """A ticket the agent triaged and a support admin then decided."""
+    return _ticket(
+        session,
+        triaged_by=support_agent.SUPPORT_AGENT_NAME,
+        decided_by="admin@example.com",
+        **fields,
+    )
+
+
+def _isolated_record(session, keep):
+    """The shared test database holds other tickets; count only *keep*."""
+    for other in session.query(BugReport).all():
+        if other.id not in keep and (other.decided_severity or other.decided_category):
+            other.decided_severity = other.decided_category = None
+            session.add(other)
+    session.commit()
+    return support_agent.track_record(session)
+
+
+def test_the_record_compares_the_agent_and_the_reporter_with_the_decision(
+    sqlite_session,
+):
+    tickets = [
+        # Agent right, reporter wrong, on both fields.
+        _decided(
+            sqlite_session,
+            suggested_severity="high",
+            suggested_category="incident",
+            decided_severity="high",
+            decided_category="incident",
+        ),
+        # Agent wrong; the reporter (severity low, category bug) right.
+        _decided(
+            sqlite_session,
+            suggested_severity="medium",
+            suggested_category="question",
+            decided_severity="low",
+            decided_category="bug",
+        ),
+        # Decided, but the agent suggested nothing: not counted.
+        _decided(sqlite_session, decided_severity="low"),
+        # Only the category decided: severity not counted for it.
+        _decided(
+            sqlite_session,
+            suggested_severity="high",
+            suggested_category="bug",
+            decided_category="bug",
+        ),
+    ]
+
+    record = _isolated_record(sqlite_session, {t.id for t in tickets})
+
+    assert record == {
+        "severity": {"decided": 2, "agent_agreed": 1, "reporter_agreed": 1},
+        "category": {"decided": 3, "agent_agreed": 2, "reporter_agreed": 2},
+    }
+    context = support_agent.record_context(record)
+    assert "counted from the tickets, not reported by anyone" in context
+    assert (
+        "- severity: yours matched 1 of 2; the reporter's own choice matched 1 of 2."
+        in context
+    )
+    assert (
+        support_agent.record_context(
+            {"severity": {"decided": 0, "agent_agreed": 0, "reporter_agreed": 0}}
+        )
+        == ""
+    )
+
+
+def test_the_next_triage_is_told_how_earlier_suggestions_fared(sqlite_session, engine):
+    decided = _decided(
+        sqlite_session,
+        suggested_severity="high",
+        suggested_category="bug",
+        decided_severity="high",
+        decided_category="bug",
+    )
+    _isolated_record(sqlite_session, {decided.id})
+    ticket = _ticket(sqlite_session)
+    _pending_only(sqlite_session, {ticket.id})
+    prompts = []
+
+    support_agent.triage_cycle(
+        engine, ask=lambda prompt: prompts.append(prompt) or TRIAGE
+    )
+
+    assert (
+        "How your earlier suggestions compared with what a support admin" in prompts[0]
+    )
+    assert (
+        "- severity: yours matched 1 of 1; the reporter's own choice matched 0 of 1."
+        in prompts[0]
+    )
+    # After the ticket and before the answer format.
+    assert (
+        prompts[0].index("--- END OF TICKET ---")
+        < prompts[0].index("How your earlier")
+        < prompts[0].index("Answer exactly in this form")
+    )

@@ -391,6 +391,7 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `GET`  | `/v1/glassroom/stream` | SSE stream of a sprint's agent events |
 | `GET`  | `/v1/enterprise/quotas` · `/quota_usage_history` · `/lineage` · `/v1/analytics/summary` | Budgets, usage and metrics |
 | `POST` | `/v1/support/report_bug` · `/chat` · `GET /v1/support/tickets` | The help desk; triaged by the Support agent when enabled |
+| `GET`  | `/v1/support/agent_record` | Support admins: how often the Support agent's suggestions matched their decisions on severity and category, beside the reporters' own choices |
 | `POST` | `/v1/generate` | Trigger the optional LangGraph workflow (409 unless enabled) |
 | `GET`  | `/v1/memory/search` · `POST /v1/memory/store` | Semantic memory over pgvector |
 | `POST` | `/v1/audit` · `GET /v1/audit/verify` | Structured, signed audit entries |

@@ -30,6 +30,7 @@ export const QUERY_KEYS = {
   orchestrationHealth: (companyId: number, weeks: number) => ['orchestration_health', companyId, weeks] as const,
   tickets: (filters: TicketFilters) => ['tickets', filters] as const,
   ticket: (num: string) => ['ticket', num] as const,
+  supportAgentRecord: () => ['support-agent-record'] as const,
   lineage: (companyId: number | null, file: string) => ['lineage', companyId, file] as const,
   memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
@@ -460,7 +461,17 @@ export function useUpdateTicket() {
     onSuccess: (_result, { ticketNum }) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ticket(ticketNum) })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.supportAgentRecord() })
     },
+  })
+}
+
+/** Support admins only: how the Support agent's suggestions compared with their decisions. */
+export function useSupportAgentRecord(enabled: boolean) {
+  return useQuery({
+    queryKey: QUERY_KEYS.supportAgentRecord(),
+    queryFn: () => api.getSupportAgentRecord(),
+    enabled,
   })
 }
 

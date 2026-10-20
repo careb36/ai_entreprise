@@ -205,6 +205,9 @@ class BugStatusUpdateRequest(BaseModel):
     status: str  # "open" | "in_progress" | "waiting" | "resolved" | "closed"
     resolution: str | None = None  # Mandatory when status is "resolved" or "closed"
     assigned_to: str | None = None
+    # The support admin's decision; stored apart from the reporter's choice.
+    severity: str | None = None  # "low" | "medium" | "high" | "critical"
+    category: str | None = None  # "bug" | "feature" | "question" | "incident"
 
 
 class ChatMessage(BaseModel):

@@ -1374,7 +1374,22 @@
     "triagedBy": "Triage de {{who}} (sugerencias; la severidad la eligió quien reportó)",
     "suggested": "Impacto sugerido: {{severity}} (reportado: {{reported}}) · categoría: {{category}}",
     "agentReply": "Primera respuesta enviada a quien reportó",
-    "untriaged": "El agente no pudo hacer el triage de este ticket; queda para las personas."
+    "untriaged": "El agente no pudo hacer el triage de este ticket; queda para las personas.",
+    "decided": "Decidido: impacto {{severity}} · categoría {{category}}, por {{who}}",
+    "decidedSeverity": "Impacto decidido",
+    "decidedCategory": "Categoría decidida",
+    "notDecided": "Sin decidir",
+    "categories": {
+      "bug": "Error",
+      "feature": "Funcionalidad",
+      "question": "Pregunta",
+      "incident": "Incidente"
+    },
+    "record": {
+      "title": "El registro del Support agent",
+      "severity": "Impacto: el agente coincidió con {{agent}} de {{total}} decisiones; quienes reportaron, con {{reporter}} de {{total}}.",
+      "category": "Categoría: el agente coincidió con {{agent}} de {{total}} decisiones; quienes reportaron, con {{reporter}} de {{total}}."
+    }
   },
   "health": {
     "title": "Estado de los servicios",

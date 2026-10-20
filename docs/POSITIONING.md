@@ -237,6 +237,10 @@ replaces none of it.
      and the agent has no tools.
    - It is enabled with `SUPPORT_AGENT_ENABLED`. Next candidates: agents for
      the other tasks people still do by hand.
+   - A support admin's decision on severity and category is stored apart from
+     both claims, and the agent is measured against it: how often its
+     suggestion matched, beside how often the reporter's own choice did. The
+     numbers go into its next prompt and the help desk shows them.
 5. **The loop closes** (done). What the first four steps left open was what
    happens to work the agents give up on.
    - A sprint closes when every task is settled: done, or blocked until a

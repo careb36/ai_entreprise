@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Download, LifeBuoy, Loader2, Save } from 'lucide-react'
-import { useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
+import { useSupportAgentRecord, useTicket, useTickets, useUpdateTicket } from '../hooks/useQueries'
 import { useAuthStore } from '../store/useAuthStore'
 import {
   api,
   ApiError,
   errorDetail,
+  type AgentRecordField,
   type SupportTicketDetail,
+  type TicketCategory,
   type TicketFilters,
   type TicketSeverity,
   type TicketStatus,
@@ -15,6 +17,9 @@ import {
 
 const STATUSES: TicketStatus[] = ['open', 'in_progress', 'waiting', 'resolved', 'closed']
 const SEVERITIES: TicketSeverity[] = ['critical', 'high', 'medium', 'low']
+const CATEGORIES: TicketCategory[] = ['bug', 'feature', 'question', 'incident']
+// The fields a support admin decides and the Support agent is measured on.
+const RECORD_FIELDS = ['severity', 'category'] as const
 // Statuses that close a ticket; the API documents a resolution as mandatory for them.
 const TERMINAL: TicketStatus[] = ['resolved', 'closed']
 
@@ -51,6 +56,7 @@ export default function HelpDesk() {
         </div>
         {canTriage && <LogsDownload />}
       </div>
+      {canTriage && <AgentRecord />}
       {!canTriage ? (
         <div role="status" className="card p-4 text-sm text-gray-300">
           {t('helpDesk.adminOnly', { defaultValue: 'The help desk is for support admins. An administrator can add your email to SUPPORT_ADMIN_EMAILS in the backend.' })}
@@ -222,6 +228,16 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
           )}
         </div>
       )}
+      {ticket.decided_by && (
+        <p className="text-xs text-gray-300">
+          {t('helpDesk.decided', {
+            severity: ticket.decided_severity ? t(`helpDesk.severities.${ticket.decided_severity}`, { defaultValue: ticket.decided_severity }) : '—',
+            category: ticket.decided_category ? t(`helpDesk.categories.${ticket.decided_category}`, { defaultValue: ticket.decided_category }) : '—',
+            who: ticket.decided_by,
+            defaultValue: 'Decided: impact {{severity}} · category {{category}}, by {{who}}',
+          })}
+        </p>
+      )}
       <UpdateForm ticket={ticket} />
     </section>
   )
@@ -235,6 +251,14 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
   )
   const [resolution, setResolution] = useState(ticket.resolution ?? '')
   const [assignee, setAssignee] = useState(ticket.assigned_to ?? '')
+  // The admin's decision starts from an earlier decision, never from the
+  // reporter's choice or the agent's suggestion: leaving it empty decides nothing.
+  const [severity, setSeverity] = useState<TicketSeverity | ''>(
+    SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : '',
+  )
+  const [category, setCategory] = useState<TicketCategory | ''>(
+    CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : '',
+  )
   const needsResolution = TERMINAL.includes(status) && !resolution.trim()
 
   function submit() {
@@ -245,6 +269,8 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         status,
         ...(resolution.trim() ? { resolution: resolution.trim() } : {}),
         ...(assignee.trim() ? { assigned_to: assignee.trim() } : {}),
+        ...(severity ? { severity } : {}),
+        ...(category ? { category } : {}),
       },
     })
   }
@@ -261,6 +287,20 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         <label className="block">
           <span className="input-label">{t('helpDesk.assignee', { defaultValue: 'Assigned to' })}</span>
           <input className="input w-full" value={assignee} onChange={e => setAssignee(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="input-label">{t('helpDesk.decidedSeverity', { defaultValue: 'Decided impact' })}</span>
+          <select className="select w-full" value={severity} onChange={e => setSeverity(e.target.value as TicketSeverity | '')}>
+            <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
+            {SEVERITIES.map(value => <option key={value} value={value}>{t(`helpDesk.severities.${value}`)}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="input-label">{t('helpDesk.decidedCategory', { defaultValue: 'Decided category' })}</span>
+          <select className="select w-full" value={category} onChange={e => setCategory(e.target.value as TicketCategory | '')}>
+            <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
+            {CATEGORIES.map(value => <option key={value} value={value}>{t(`helpDesk.categories.${value}`)}</option>)}
+          </select>
         </label>
       </div>
       <label className="block">
@@ -289,6 +329,35 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         </div>
       )}
     </form>
+  )
+}
+
+/**
+ * How the Support agent's suggestions compared with what support admins
+ * decided, beside how the reporters' own choices did: the agent's triage is a
+ * claim, and this is what the tickets say about it.
+ */
+function AgentRecord() {
+  const { t } = useTranslation()
+  const record = useSupportAgentRecord(true)
+  if (!record.data || (record.data.severity.decided === 0 && record.data.category.decided === 0)) return null
+  const line = (key: typeof RECORD_FIELDS[number], field: AgentRecordField) => field.decided > 0 && (
+    <p key={key} className="text-xs text-gray-300">
+      {t(`helpDesk.record.${key}`, {
+        agent: field.agent_agreed,
+        reporter: field.reporter_agreed,
+        total: field.decided,
+        defaultValue: key === 'severity'
+          ? 'Impact: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}.'
+          : 'Category: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}.',
+      })}
+    </p>
+  )
+  return (
+    <section className="card space-y-1 p-4" aria-label={t('helpDesk.record.title', { defaultValue: "The Support agent's record" })}>
+      <h2 className="text-sm font-semibold text-white">{t('helpDesk.record.title', { defaultValue: "The Support agent's record" })}</h2>
+      {RECORD_FIELDS.map(key => line(key, record.data[key]))}
+    </section>
   )
 }
 

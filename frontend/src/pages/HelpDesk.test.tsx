@@ -16,12 +16,18 @@ const TICKET = {
   created_at: '2026-10-01T10:00:00', updated_at: null, resolved_at: null,
 }
 
+const NO_RECORD = {
+  severity: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
+  category: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
+}
+
 function stubApi(overrides: Record<string, (init: RequestInit) => Response> = {}) {
   const fetch = vi.fn(async (url: string, init: RequestInit = {}) => {
     const { pathname } = new URL(url)
     const key = `${init.method ?? 'GET'} ${pathname}`
     if (overrides[key]) return overrides[key](init)
     if (key === 'GET /v1/support/tickets') return response(200, { tickets: [TICKET], count: 1 })
+    if (key === 'GET /v1/support/agent_record') return response(200, NO_RECORD)
     if (key === 'GET /v1/support/tickets/BUG-0001') {
       return response(200, { ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null })
     }
@@ -168,3 +174,72 @@ describe('HelpDesk triage by the Support agent', () => {
     expect(triage).toHaveTextContent('Thanks, we are looking into it.')
   })
 })
+
+describe('HelpDesk decisions on the agent\'s suggestions', () => {
+  beforeEach(() => {
+    queryClient.clear()
+    useAppStore.setState({ companyId: 4 })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    useAuthStore.getState().logout()
+    queryClient.clear()
+  })
+
+  it('decides impact and category apart from the suggestion, and shows the decision', async () => {
+    const patch = vi.fn((init: RequestInit) => {
+      void init
+      return response(200, { ticket_num: 'BUG-0001', status: 'in_progress', updated_at: '2026-10-02T00:00:00' })
+    })
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, {
+        ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+        severity: 'low', triaged_by: 'Support agent', suggested_severity: 'high', suggested_category: 'bug',
+        decided_severity: 'critical', decided_category: null, decided_by: 'admin@acme.test',
+      }),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+
+    const detail = await screen.findByRole('region', { name: 'Board does not load' })
+    expect(within(detail).getByText('Decided: impact Critical · category —, by admin@acme.test')).toBeInTheDocument()
+    // The form starts from the earlier decision, not from the reporter's or the agent's value.
+    expect(within(detail).getByRole('combobox', { name: 'Decided impact' })).toHaveValue('critical')
+    expect(within(detail).getByRole('combobox', { name: 'Decided category' })).toHaveValue('')
+
+    fireEvent.change(within(detail).getByRole('combobox', { name: 'Status' }), { target: { value: 'in_progress' } })
+    fireEvent.change(within(detail).getByRole('combobox', { name: 'Decided category' }), { target: { value: 'incident' } })
+    fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
+
+    expect(await within(detail).findByText('Ticket updated')).toBeInTheDocument()
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({
+      status: 'in_progress', severity: 'critical', category: 'incident',
+    })
+  })
+
+  it("shows how the agent's suggestions compared with the decisions, beside the reporters'", async () => {
+    stubApi({
+      'GET /v1/support/agent_record': () => response(200, {
+        severity: { decided: 4, agent_agreed: 3, reporter_agreed: 1 },
+        category: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
+      }),
+    })
+    renderAs(true)
+
+    const record = await screen.findByRole('region', { name: "The Support agent's record" })
+    expect(record).toHaveTextContent('Impact: the agent matched 3 of 4 decisions; the reporters 1 of 4.')
+    // No category decided yet: no line for it.
+    expect(record).not.toHaveTextContent('Category:')
+  })
+
+  it('shows no record before anything was decided', async () => {
+    const fetch = stubApi()
+    renderAs(true)
+    expect(await screen.findByText('Board does not load')).toBeInTheDocument()
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).includes('/v1/support/agent_record'))).toBe(true))
+    expect(screen.queryByRole('region', { name: "The Support agent's record" })).not.toBeInTheDocument()
+  })
+})
+
