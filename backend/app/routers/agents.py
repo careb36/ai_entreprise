@@ -354,7 +354,7 @@ async def verify_audit(
 async def search_memory(
     request: Request,
     query: str = Query(...),
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=100),
     company_id: int | None = None,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.

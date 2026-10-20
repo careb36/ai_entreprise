@@ -68,6 +68,17 @@ ERRORS_TOTAL = Counter(
 )
 
 
+def endpoint_label(request: Request) -> str:
+    """The matched route's template, e.g. ``/v1/sprints/{sprint_id}/board``.
+
+    The raw path would put sprint, task and ticket ids on a public endpoint
+    and give every scanned URL its own series; a path no route matched is
+    counted as ``unmatched``.
+    """
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "unmatched"
+
+
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Middleware to collect request metrics."""
 
@@ -80,16 +91,17 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             duration = time.time() - start_time
+            endpoint = endpoint_label(request)
 
             REQUEST_COUNT.labels(
                 method=request.method,
-                endpoint=request.url.path,
+                endpoint=endpoint,
                 status=response.status_code,
             ).inc()
 
             REQUEST_LATENCY.labels(
                 method=request.method,
-                endpoint=request.url.path,
+                endpoint=endpoint,
             ).observe(duration)
 
             return response
