@@ -1191,7 +1191,9 @@
     "sprintColumn": "Sprint",
     "secondAttempts": "Segundos intentos que se completaron",
     "ofTotal": "{{done}} de {{total}}",
-    "secondAttemptsSplit": "Con la consigna del ScrumMaster: {{briefedDone}} de {{briefed}} · sin ella: {{unbriefedDone}} de {{unbriefed}}"
+    "secondAttemptsSplit": "Con la consigna del ScrumMaster: {{briefedDone}} de {{briefed}} · sin ella: {{unbriefedDone}} de {{unbriefed}}",
+    "consoleAdviceTitle": "Tareas completadas con consejo de consola",
+    "consoleAdviceSplit": "{{rework}} pedidos de retrabajo por tarea · sin consejo: {{done}} de {{total}} completadas, {{reworkOther}} por tarea"
   },
   "projectFolder": {
     "label": "Carpeta del proyecto",

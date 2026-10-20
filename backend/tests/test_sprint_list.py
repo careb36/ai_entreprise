@@ -6,7 +6,7 @@ import auth_tokens
 import pytest
 from config import settings
 from models import BacklogItem, Company, CompanyMember, Sprint, User
-from services import scrum_master
+from services import console_assistants, scrum_master
 from services.board import CARRIED_FROM_PREFIX
 from sqlmodel import select
 
@@ -103,6 +103,10 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "blocked": 0,
             "rework": 0,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
+            "console_advice": {
+                "advised": {"total": 0, "done": 0, "rework": 0},
+                "unadvised": {"total": 0, "done": 0, "rework": 0},
+            },
         },
         {
             "id": older.id,
@@ -116,6 +120,10 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "blocked": 1,
             "rework": 2,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
+            "console_advice": {
+                "advised": {"total": 0, "done": 0, "rework": 0},
+                "unadvised": {"total": 3, "done": 1, "rework": 2},
+            },
         },
     ]
 
@@ -156,6 +164,41 @@ def test_counts_second_attempts_and_those_briefed_by_the_scrum_master(
         "done": 2,
         "briefed": 2,
         "briefed_done": 1,
+    }
+
+
+def test_counts_tasks_with_and_without_console_advice(test_client, sqlite_session):
+    company = _company(sqlite_session, "Sprint list console advice")
+    sprint = _sprint(
+        sqlite_session,
+        company.id,
+        "Advised",
+        statuses=("done", "blocked", "done"),
+        status="completed",
+    )
+    items = sqlite_session.exec(
+        select(BacklogItem)
+        .where(BacklogItem.sprint_id == sprint.id)
+        .order_by(BacklogItem.id)
+    ).all()
+    # The note the worker writes after asking the assistants, as it writes it.
+    advice = console_assistants.usage_comment(
+        [{"label": "Claude CLI", "purpose": "review", "excerpt": "Add a test."}]
+    )
+    rework = {"author": "QA", "text": "NEEDS WORK: cover the empty case"}
+    items[0].comments = [{"author": "System", "text": advice}, rework]
+    items[1].comments = [{"author": "System", "text": advice}]
+    items[2].comments = [rework]
+    sqlite_session.add_all(items)
+    sqlite_session.commit()
+
+    response = test_client.get("/v1/sprints", params={"company_id": company.id})
+
+    assert response.status_code == 200
+    [row] = response.json()
+    assert row["console_advice"] == {
+        "advised": {"total": 2, "done": 1, "rework": 1},
+        "unadvised": {"total": 1, "done": 1, "rework": 1},
     }
 
 

@@ -7,7 +7,7 @@
  * anything. Only completed sprints with at least one task count: an active
  * sprint's numbers are still moving and an empty one measures nothing.
  */
-import type { SecondAttempts, SprintSummary } from '../services/api'
+import type { AdviceGroup, ConsoleAdvice, SecondAttempts, SprintSummary } from '../services/api'
 
 export interface SprintPoint {
   id: number
@@ -48,6 +48,29 @@ export function secondAttempts(sprints: SprintSummary[]): SecondAttempts {
   }
   return sum
 }
+
+/**
+ * Console-assistant advice across the closed sprints: tasks that got it and
+ * tasks that did not, each with how many got done and how many rework
+ * requests they drew. The advice is a claim; this is what the boards say.
+ */
+export function consoleAdvice(sprints: SprintSummary[]): ConsoleAdvice {
+  const add = (sum: AdviceGroup, group?: AdviceGroup) => {
+    if (!group) return
+    sum.total += group.total
+    sum.done += group.done
+    sum.rework += group.rework
+  }
+  const tally: ConsoleAdvice = { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }
+  for (const sprint of sprints.filter(closed)) {
+    add(tally.advised, sprint.console_advice?.advised)
+    add(tally.unadvised, sprint.console_advice?.unadvised)
+  }
+  return tally
+}
+
+/** Rework requests per task in a group; 0 for an empty group. */
+export const reworkPerTask = (group: AdviceGroup) => (group.total > 0 ? group.rework / group.total : 0)
 
 export const formatRework = (value: number) => value.toFixed(2)
 export const formatShare = (value: number) => `${Math.round(value * 100)}%`

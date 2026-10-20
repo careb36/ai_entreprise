@@ -132,7 +132,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/services/board.py`** — The pure readers of a task's comment thread, shared by the task worker, `routers/inbox.py` and `services/carry_over.py`: which comment is the deliverable to review, the pending `NEEDS WORK:` requests, whether a blocked task waits for a person (`blocked_item_next_step`, `item_is_settled`) and its `block_reason`. No engine, no I/O; the gate author names (`Quality gate`, `Verifier`) live here too.
 
-**`backend/app/services/console_assistants.py`** — The terminal assistants the daemon can run (GitHub Copilot CLI, Claude CLI): which ones to ask for a task (`select_assistants`), the command with the prompt shell-quoted, `collect_advice` through `workspace.execute`, and the per-company cooldown persisted in `AssistantRuntimeState` when one is out of quota or missing on the host. Their advice is prompt context and a board note, never evidence. `services/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
+**`backend/app/services/console_assistants.py`** — The terminal assistants the daemon can run (GitHub Copilot CLI, Claude CLI): which ones to ask for a task (`select_assistants`), the command with the prompt shell-quoted, `collect_advice` through `workspace.execute`, and the per-company cooldown persisted in `AssistantRuntimeState` when one is out of quota or missing on the host. Their advice is prompt context and a board note, never evidence; `GET /v1/sprints` counts tasks with and without it (`console_advice`: done and rework per group), so the Sprints page shows whether it helps. `services/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
 
 **`backend/app/nats_client.py`** — `enable_jetstream()` declares the work-queue streams in `DURABLE_STREAMS` (`task.assign`, `workspace.deliver`, `workspace.delivered`); `publish()` stores durable subjects with a `Nats-Msg-Id`, `consume()` is a durable pull consumer with explicit acks. Without JetStream both fall back to core NATS with a warning; `/health` reports `jetstream`.
 
@@ -299,7 +299,7 @@ Test files:
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
 | `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
 | `test_console_assistants.py` | Which assistants a task gets, the prompt quoted into the command, persisted quota and missing-binary cooldowns, and the full path with its Glassroom telemetry |
-| `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, second attempts (done, and briefed by the ScrumMaster), ordering, membership scoping |
+| `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, second attempts (done, and briefed by the ScrumMaster), tasks with and without console advice, ordering, membership scoping |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
@@ -377,7 +377,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
 | `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
 | `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
-| `src/components/LearningTrend.test.tsx` | The "Is the company learning?" tiles: rework per task and blocked share per closed sprint, the change since the previous one, the sparkline's values and the table view; second attempts that got done, with and without the ScrumMaster's brief |
+| `src/components/LearningTrend.test.tsx` | The "Is the company learning?" tiles: rework per task and blocked share per closed sprint, the change since the previous one, the sparkline's values and the table view; second attempts that got done, with and without the ScrumMaster's brief; tasks with console advice against the rest |
 | `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
