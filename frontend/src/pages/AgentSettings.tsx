@@ -15,7 +15,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react'
-import { useAgents, useCreateAgent, useDeleteAgent, useGenerateAgentPrompt, useModels, useUpdateAgentConfig } from '../hooks/useQueries'
+import { useAgents, useCreateAgent, useCurrentRole, useDeleteAgent, useGenerateAgentPrompt, useModels, useUpdateAgentConfig } from '../hooks/useQueries'
 import type { AgentActivity, ManagedAgent, ModelCatalogEntry } from '../services/api'
 import { useAppStore } from '../store/useAppStore'
 import { useToast } from '../store/toastStore'
@@ -622,6 +622,7 @@ function AgentCard({
   deleting,
   expanded,
   confirmingDelete,
+  readOnly,
   onToggleExpand,
   onSave,
   onDelete,
@@ -633,6 +634,7 @@ function AgentCard({
   deleting: boolean
   expanded: boolean
   confirmingDelete: boolean
+  readOnly: boolean
   onToggleExpand: () => void
   onSave: (agentId: number, draft: AgentDraft) => void
   onDelete: (agentId: number) => void
@@ -684,7 +686,7 @@ function AgentCard({
           </div>
           <ActivityRow activity={agent.activity} className="mt-1.5" />
         </div>
-        <div
+        {!readOnly && <div
           className="flex items-center gap-1 flex-shrink-0"
           onClick={e => e.stopPropagation()}
           role="presentation"
@@ -712,14 +714,16 @@ function AgentCard({
               {confirmingDelete ? t('agentsConfig.deleteConfirm') : t('agentsConfig.delete')}
             </span>
           </button>
-        </div>
+        </div>}
       </button>
 
       {expanded && (
         <div className="border-t border-surface-800 p-4 space-y-4 bg-surface-900/40">
-          <DraftFields draft={draft} setDraft={setDraft} models={models} />
+          <fieldset disabled={readOnly} className="min-w-0">
+            <DraftFields draft={draft} setDraft={setDraft} models={models} />
+          </fieldset>
 
-          <div className="flex items-center justify-between gap-3">
+          {!readOnly && <div className="flex items-center justify-between gap-3">
             <span className={`text-[11px] ${dirty ? 'text-amber-300' : 'text-gray-500'}`}>
               {dirty ? t('agentsConfig.dirtyHint') : t('agentsConfig.cleanHint')}
             </span>
@@ -747,7 +751,7 @@ function AgentCard({
                 </span>
               </button>
             </div>
-          </div>
+          </div>}
         </div>
       )}
     </div>
@@ -773,6 +777,9 @@ export default function AgentSettings() {
   const createAgent = useCreateAgent(companyId)
   const updateAgent = useUpdateAgentConfig(companyId)
   const deleteAgent = useDeleteAgent(companyId)
+  // A Viewer reads the agents; only a Manager or the Owner changes them (the
+  // backend refuses the rest). Without a login, as in a local demo, nothing is hidden.
+  const readOnly = useCurrentRole() === 'Viewer'
 
   const [newAgent, setNewAgent] = useState<AgentDraft>(defaultDraft())
   const [creatorOpen, setCreatorOpen] = useState(false)
@@ -976,6 +983,12 @@ export default function AgentSettings() {
               <p className="mt-2 text-xs text-gray-500">{t('agentsConfig.shardingNote')}</p>
             </div>
 
+            {readOnly && (
+              <p role="status" className="rounded-xl border border-surface-700 bg-surface-900 p-3 text-xs text-gray-400">
+                {t('agentsConfig.readOnly', { defaultValue: 'You can read the agents. Only a Manager or the Owner changes them.' })}
+              </p>
+            )}
+
             {/* Toolbar: search + filter chips + new-agent button */}
             <div className="rounded-xl border border-surface-700 bg-surface-900 p-3 space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
@@ -1005,20 +1018,22 @@ export default function AgentSettings() {
                 >
                   {t('agentsConfig.refresh')}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewAgent(defaultDraft())
-                    setCreatorOpen(o => !o)
-                    if (!creatorOpen) setCreatorScrollRequest(n => n + 1)
-                  }}
-                  className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-500"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <Plus size={12} />
-                    {creatorOpen ? t('agentsConfig.closeCreator') : t('agentsConfig.newAgent')}
-                  </span>
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewAgent(defaultDraft())
+                      setCreatorOpen(o => !o)
+                      if (!creatorOpen) setCreatorScrollRequest(n => n + 1)
+                    }}
+                    className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-500"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Plus size={12} />
+                      {creatorOpen ? t('agentsConfig.closeCreator') : t('agentsConfig.newAgent')}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {filterChips.length > 0 && (
@@ -1053,7 +1068,7 @@ export default function AgentSettings() {
             </div>
 
             {/* New-agent creator */}
-            {creatorOpen && (
+            {creatorOpen && !readOnly && (
               <div id="agent-creator" className="rounded-xl border border-brand-500/30 bg-surface-900 p-4 space-y-4">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -1154,6 +1169,7 @@ export default function AgentSettings() {
                               models={models}
                               expanded={expandedAgents.has(agent.id)}
                               confirmingDelete={confirmingDeleteId === agent.id}
+                              readOnly={readOnly}
                               saving={updateAgent.isPending && updateAgent.variables?.agentId === agent.id}
                               deleting={deleteAgent.isPending && deleteAgent.variables === agent.id}
                               onToggleExpand={() => toggleAgentExpand(agent.id)}

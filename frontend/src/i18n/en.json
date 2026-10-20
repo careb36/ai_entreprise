@@ -1128,7 +1128,8 @@
       "security": "Prefers reasoning-heavy models for threat analysis, hardening, and policy trade-offs.",
       "support": "Favors fast, balanced models for clear responses and lightweight triage.",
       "generalist": "Uses a balanced general-purpose model when the role does not clearly call for a specialist."
-    }
+    },
+    "readOnly": "You can read the agents. Only a Manager or the Owner changes them."
   },
   "common": {
     "loading": "Loading...",
