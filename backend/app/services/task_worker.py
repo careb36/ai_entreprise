@@ -52,6 +52,8 @@ from services import (
     scrum_master,
     workspace_daemon,
 )
+from services.architect import track_record as architect_track_record
+from services.architect import track_record_context as architect_record_context
 from services.board import (
     DELIVERY_GATE_AUTHOR,
     QUALITY_GATE_AUTHOR,
@@ -620,6 +622,14 @@ def _consult_architect(
                 Agent.role == KPI_ROLE_ARCHITECT,
             )
         ).first()
+        # How tasks went after its earlier briefs, counted from the boards.
+        record = (
+            architect_record_context(
+                architect_track_record(session, sprint["company_id"])
+            )
+            if architect_row
+            else ""
+        )
 
     if not architect_row:
         logger.info(
@@ -645,7 +655,7 @@ def _consult_architect(
         "You advise developers with concise, decisive technical briefs."
     )
     prompt = build_architect_consult_prompt(
-        item, developer, sprint.get("name", ""), prior_feedback or ()
+        item, developer, sprint.get("name", ""), prior_feedback or (), record
     )
 
     client = LLMProxyClient(

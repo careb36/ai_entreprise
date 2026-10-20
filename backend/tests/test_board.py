@@ -10,10 +10,17 @@ services/board.py: how a task's comment thread is read.
 - The worker's console-advice note quotes an assistant and is never a
   verdict; only the worker's own note marks a task as advised, and an advised
   task's rework counts from that note on.
+- The Architect's brief is never a verdict either, and the phrases that keep
+  a task blocked count only from the system, the gates or a person, not from
+  a deliverable; a briefed task's rework counts from the brief on.
 """
 
 from models import BacklogItem
 from services import board
+from services.orchestration_metrics import (
+    ARCHITECT_COMMENT_AUTHOR,
+    format_architect_consult_comment,
+)
 
 TRIAGE = (
     "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: x"
@@ -184,4 +191,48 @@ def test_an_advised_tasks_rework_counts_from_the_advice_on():
     assert tally == {
         "advised": {"total": 1, "done": 1, "rework": 1},
         "unadvised": {"total": 1, "done": 0, "rework": 1},
+    }
+
+
+BRIEF = {
+    "author": ARCHITECT_COMMENT_AUTHOR,
+    "text": format_architect_consult_comment(
+        "Handle the missing deliverable case; on agent error: retry once, then "
+        "manual triage. NEEDS WORK: nothing yet."
+    ),
+}
+
+
+def test_the_architects_brief_is_never_read_as_a_verdict():
+    deliverable = {"author": "Dev", "text": "# Artifact: a.py\nprint(1)"}
+
+    # A deliverable and no verdict: it goes back to review, whatever the brief says.
+    assert board.blocked_item_next_step([BRIEF, deliverable], "Developer") == "review"
+    assert board.block_reason([BRIEF]) == ""
+    assert board.rework_request_count([BRIEF]) == 0
+
+
+def test_a_deliverables_words_are_not_a_block_reason():
+    deliverable = {
+        "author": "Dev",
+        "text": "def run():\n    raise RuntimeError('agent error: missing deliverable')",
+    }
+    stopped = {"author": "System", "text": "Agent error: proxy 503"}
+
+    assert board.blocked_item_next_step([deliverable], "Developer") == "review"
+    # The same words from the system still keep it from review.
+    assert board.blocked_item_next_step([deliverable, stopped], "Developer") == "retry"
+
+
+def test_a_briefed_tasks_rework_counts_from_the_brief_on():
+    tally = board.no_architect_advice()
+    rework = {"author": "QA", "text": "NEEDS WORK: add a test"}
+    board.count_architect_advice(tally, "done", [rework, BRIEF, rework])
+    board.count_architect_advice(tally, "blocked", [rework])
+    # The worker's console note is not the Architect's brief.
+    board.count_architect_advice(tally, "done", [ADVICE])
+
+    assert tally == {
+        "advised": {"total": 1, "done": 1, "rework": 1},
+        "unadvised": {"total": 2, "done": 1, "rework": 1},
     }

@@ -10,6 +10,7 @@ prompt's section headers, so one run exercises the whole loop:
 - the first review of each task asks for rework, the second approves;
 - the ScrumMaster answers an escalation with "retry" and a brief, and
   proposes one procedure in the fixed format;
+- the Architect answers every consultation with the same short brief;
 - the Support agent triages every ticket as a high-severity bug.
 
 Every prompt it receives is appended, one per line, to the file named by
@@ -41,7 +42,8 @@ def _slug(text: str) -> str:
 
 def answer(prompt: str) -> str:
     with open(PROMPT_LOG, "a") as log:
-        log.write(prompt.replace("\n", " ")[:6000] + "\n")
+        # Long enough for a task prompt with every section the checks read.
+        log.write(prompt.replace("\n", " ")[:20000] + "\n")
     if "You are the ScrumMaster. A task was blocked" in prompt:
         return (
             "DECISION: retry\n"
@@ -49,6 +51,8 @@ def answer(prompt: str) -> str:
             "WHY: the attempts were cut short, not wrong\n"
             "END"
         )
+    if prompt.startswith("## Consultation request from"):
+        return "Reuse the existing module layout and test the empty input first."
     if "You are the Support agent" in prompt:
         return (
             "SEVERITY: high\n"

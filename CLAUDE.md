@@ -137,9 +137,9 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/routers/workspace.py`** / **`services/workspace_daemon.py`** — `GET /v1/workspace/{status,browse,inspect}` relay the picker and project check to the daemon (503 with start instructions when none is connected). `POST /v1/discover_team` inspects the folder through the daemon and runs stack detection on its file snapshot (`materialized_snapshot`), recording the host path.
 
-**`backend/app/services/board.py`** — The pure readers of a task's comment thread, shared by the task worker, `routers/inbox.py` and `services/carry_over.py`: which comment is the deliverable to review, the pending `NEEDS WORK:` requests, whether a blocked task waits for a person (`blocked_item_next_step`, `item_is_settled`) and its `block_reason`. No engine, no I/O; the gate author names (`Quality gate`, `Verifier`) live here too.
+**`backend/app/services/board.py`** — The pure readers of a task's comment thread, shared by the task worker, `routers/inbox.py` and `services/carry_over.py`: which comment is the deliverable to review, the pending `NEEDS WORK:` requests, whether a blocked task waits for a person (`blocked_item_next_step`, `item_is_settled`) and its `block_reason`. No engine, no I/O; the gate author names (`Quality gate`, `Verifier`) live here too. The advice a task got (the worker's console-advice note, the Architect's `ARCHITECT_CONSULTED:` brief) is never a verdict, and the phrases that keep a task blocked count only from the system, a gate or a person (`BLOCK_VERDICT_AUTHORS`), never from a deliverable.
 
-**`backend/app/services/console_assistants.py`** — The terminal assistants the daemon can run (GitHub Copilot CLI, Claude CLI): which ones to ask for a task (`select_assistants`), the command with the prompt shell-quoted, `collect_advice` through `workspace.execute`, and the per-company cooldown persisted in `AssistantRuntimeState` when one is out of quota or missing on the host. Their advice is prompt context and a board note, never evidence; `GET /v1/sprints` counts tasks with and without it (`console_advice`: done and rework per group), so the Sprints page shows whether it helps. `services/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
+**`backend/app/services/console_assistants.py`** — The terminal assistants the daemon can run (GitHub Copilot CLI, Claude CLI): which ones to ask for a task (`select_assistants`), the command with the prompt shell-quoted, `collect_advice` through `workspace.execute`, and the per-company cooldown persisted in `AssistantRuntimeState` when one is out of quota or missing on the host. Their advice is prompt context and a board note, never evidence; `GET /v1/sprints` counts tasks with and without it (`console_advice`: done and rework per group), so the Sprints page shows whether it helps. The Architect's briefs are counted the same way (`architect_advice`, rework from the first brief on), and `services/architect.py` tells the Architect, when it is asked again, how the company's briefed tasks went in its completed sprints against the rest. `services/glassroom.py` holds `publish_glassroom`, the best-effort publisher every worker uses for the sprint's SSE stream.
 
 **`backend/app/nats_client.py`** — `enable_jetstream()` declares the work-queue streams in `DURABLE_STREAMS` (`task.assign`, `workspace.deliver`, `workspace.delivered`); `publish()` stores durable subjects with a `Nats-Msg-Id`, `consume()` is a durable pull consumer with explicit acks. Without JetStream both fall back to core NATS with a warning; `/health` reports `jetstream`.
 
@@ -229,7 +229,8 @@ the LangGraph graph is only an optional kickoff conversation.
    `board.rework_request_count`.
 7. Each hand-over between roles is also recorded as an `AgentMessage`
    (`agent_messages`), the company's conversation:
-   - the Developer's question to the Architect and its answer;
+   - the Developer's question to the Architect and its answer (the Architect
+     is told how tasks went after its earlier briefs, counted from the boards);
    - the handoff to QA, listing the declared files;
    - QA's decision or rework request, and the Verifier's;
    - escalations to the ScrumMaster when a task is blocked;
@@ -296,7 +297,7 @@ Test files:
 | `test_task_delivery.py` | File manifest parsing, delivery to the real daemon against `tmp_path`, sha256 `files_written` check, daemon-down → unverifiable |
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
-| `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on |
+| `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on; the Architect's brief is never a verdict either, a deliverable's words are not a block reason, and a briefed task's rework counts from the brief on |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
@@ -307,7 +308,8 @@ Test files:
 | `test_nats_connect_retry.py` | NATS connect backoff; workers start once connected |
 | `test_console_capabilities.py` / `test_daemon_capabilities.py` | `workspace.capabilities` probe and daemon handler; assistants skipped when absent |
 | `test_console_assistants.py` | Which assistants a task gets, the prompt quoted into the command, persisted quota and missing-binary cooldowns, and the full path with its Glassroom telemetry |
-| `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, second attempts (done, and briefed by the ScrumMaster), tasks with and without console advice, ordering, membership scoping |
+| `test_sprint_list.py` | `GET /v1/sprints`: progress, blocked and rework counts per sprint, second attempts (done, and briefed by the ScrumMaster), tasks with and without console advice and the Architect's brief, ordering, membership scoping |
+| `test_architect.py` | The Architect's record: briefed tasks against the rest over the company's completed sprints, rework from the brief on, and that record in its next consultation prompt |
 | `test_agent_runs.py` | AgentRun ingest, verification, `external_ref` and `sprint_id` filters |
 | `test_jetstream_durability.py` | JetStream publish/consume/ack and core fallback; deliveries queued for an offline daemon, held by the gate, verified from the daemon's report |
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
@@ -334,7 +336,10 @@ a person carries that attempt into a third sprint, where it blocks again and
 the ScrumMaster's triage is told how the company's second attempts went
 (counted from the boards), the procedure adopted after the foundation sprint
 is measured over the two sprints since and kept, and the proposal prompt
-lists what earlier procedures did. Last, the help desk: the Support agent
+lists what earlier procedures did. An Architect hired after the foundation
+sprint briefs each new task after its first rework; the sprint list counts
+the briefed tasks, and the Architect, asked again, is told how its earlier
+brief went. Last, the help desk: the Support agent
 (enabled for the run) triages a ticket from the public form beside the
 reporter's choice, a support admin decides, `/v1/support/agent_record`
 counts the decision, and the next ticket's prompt carries that record.
@@ -390,7 +395,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
 | `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
 | `src/pages/Sprints.test.tsx` / `src/hooks/useSprints.test.tsx` | Sprint list page and its `GET /v1/sprints` hook |
-| `src/components/LearningTrend.test.tsx` | The "Is the company learning?" tiles: rework per task and blocked share per closed sprint, the change since the previous one, the sparkline's values and the table view; second attempts that got done, with and without the ScrumMaster's brief; tasks with console advice against the rest |
+| `src/components/LearningTrend.test.tsx` | The "Is the company learning?" tiles: rework per task and blocked share per closed sprint, the change since the previous one, the sparkline's values and the table view; second attempts that got done, with and without the ScrumMaster's brief; tasks with console advice, and tasks the Architect briefed, against the rest |
 | `src/pages/SprintWorkspace.test.tsx` | Sprint page tabs, URL sprint validation, Pause/Resume |
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |

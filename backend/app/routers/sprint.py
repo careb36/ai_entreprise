@@ -38,8 +38,10 @@ from schemas import (
     SprintStartRequest,
 )
 from services.board import (
+    count_architect_advice,
     count_console_advice,
     count_second_attempt,
+    no_architect_advice,
     no_console_advice,
     no_second_attempts,
     rework_request_count,
@@ -335,7 +337,8 @@ async def list_sprints(
     brief, pay off. ``console_advice`` splits the tasks into those a console
     assistant advised on and those none did, with how many got done and how
     many rework requests each group drew, so whether that advice helps is a
-    number too.
+    number too. ``architect_advice`` does the same for the Architect's
+    briefs.
     """
     require_company_role(session, user, company_id, "Viewer")
     sprints = session.exec(
@@ -346,6 +349,7 @@ async def list_sprints(
     rework: dict[int, int] = {}
     attempts: dict[int, dict[str, int]] = {}
     advice: dict[int, dict[str, dict[str, int]]] = {}
+    briefs: dict[int, dict[str, dict[str, int]]] = {}
     if sprint_ids:
         rows = session.exec(
             select(
@@ -376,6 +380,9 @@ async def list_sprints(
             count_console_advice(
                 advice.setdefault(sid, no_console_advice()), status, comments
             )
+            count_architect_advice(
+                briefs.setdefault(sid, no_architect_advice()), status, comments
+            )
     return [
         {
             "id": s.id,
@@ -390,6 +397,7 @@ async def list_sprints(
             "rework": rework.get(s.id, 0),
             "second_attempts": attempts.get(s.id, no_second_attempts()),
             "console_advice": advice.get(s.id, no_console_advice()),
+            "architect_advice": briefs.get(s.id, no_architect_advice()),
         }
         for s in sprints
     ]

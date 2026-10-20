@@ -275,6 +275,11 @@ replaces none of it.
    - Console-assistant advice is measured the same way: tasks that got it
      against tasks that did not, done and rework per group, counted from the
      boards. The advice stays prompt context; whether it helps is a number.
+   - So is the Architect's brief, which a Developer asks for before a
+     design-sensitive or reworked task: briefed tasks against the rest, a
+     briefed task's rework counted from the brief on. The Architect is told
+     those numbers when it is asked again. The brief is a claim, and it is
+     never read as a verdict on the task.
 
 ### What this changes in the tables above
 

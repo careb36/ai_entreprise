@@ -12,11 +12,16 @@ task they sit on: the gates' texts (``Quality gate``, ``Verifier``), a
 person's notes (author ``user``; the send-back one, ``SEND_BACK_MARKER``,
 also restarts the rework budgets), the carry-over lineage notes
 (``CARRIED_*_PREFIX``), which quote an earlier task's verdict and must not be
-read as this task's, and the worker's console-advice note
-(``CONSOLE_ADVICE_PREFIX``), which quotes an assistant's words.
+read as this task's, and the advice a task got: the worker's console-advice
+note (``CONSOLE_ADVICE_PREFIX``), which quotes an assistant's words, and the
+Architect's brief (``ARCHITECT_CONSULTED:``). Whether that advice helps is
+counted from the boards (``count_console_advice``, ``count_architect_advice``).
+Only the system, the gates and a person write the phrases that keep a task
+blocked; the same words in a deliverable or a brief are not a verdict.
 """
 
 import json
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -29,6 +34,9 @@ from services.orchestration_metrics import is_architect_consult_comment
 QUALITY_GATE_AUTHOR = "Quality gate"
 DELIVERY_GATE_AUTHOR = "Verifier"
 GATE_AUTHORS_LOWER = {QUALITY_GATE_AUTHOR.lower(), DELIVERY_GATE_AUTHOR.lower()}
+# Who writes the phrases that keep a task blocked ("manual triage", "agent
+# error:"): the system, the gates and a person, never a deliverable's author.
+BLOCK_VERDICT_AUTHORS = {"system", "user"} | GATE_AUTHORS_LOWER
 SCRUM_MASTER_ROLE = "ScrumMaster"
 # A person's note when they send a blocked task back to work (author "user",
 # written as-is by the frontend, never translated). Rework budgets restart
@@ -99,7 +107,9 @@ def verdict_comments(comments: Any) -> list[dict[str, Any]]:
     return [
         c
         for c in comment_list(comments)
-        if not is_lineage_comment(c) and not is_console_advice_note(c)
+        if not is_lineage_comment(c)
+        and not is_console_advice_note(c)
+        and not is_architect_consult_comment(c)
     ]
 
 
@@ -241,7 +251,11 @@ def can_resume_blocked_item_from_deliverable(
         return False
     if has_manual_freeze_marker(comments):
         return False
-    if any(is_explicit_block_reason(_text(c)) for c in comments):
+    if any(
+        is_explicit_block_reason(_text(c))
+        for c in comments
+        if _author(c) in BLOCK_VERDICT_AUTHORS
+    ):
         return False
     return bool(
         extract_latest_reviewable_comment(comments, assignee_role=assignee_role)
@@ -355,28 +369,55 @@ def has_console_advice(comments: Any) -> bool:
 
 
 def no_console_advice() -> dict[str, dict[str, int]]:
-    """An empty tally: tasks that got console advice and tasks that did not."""
+    """An empty tally: tasks that got advice and tasks that did not."""
     return {
         "advised": {"total": 0, "done": 0, "rework": 0},
         "unadvised": {"total": 0, "done": 0, "rework": 0},
     }
 
 
-def count_console_advice(
-    tally: dict[str, dict[str, int]], status: str, comments: Any
+# The Architect's briefs are tallied the same way.
+no_architect_advice = no_console_advice
+
+
+def _count_advice(
+    tally: dict[str, dict[str, int]],
+    status: str,
+    comments: Any,
+    is_advice: Callable[[dict[str, Any]], bool],
 ) -> None:
     """Add one task to *tally*, under the group its board puts it in.
 
-    An advised task's rework counts from its first advice note on: requests
-    an earlier, unadvised attempt drew (the assistant was cooling down, or
-    did not answer) are not the advice's doing.
+    An advised task's rework counts from its first advice on: requests an
+    earlier, unadvised attempt drew are not the advice's doing.
     """
     comments = comment_list(comments)
     first_advice = next(
-        (i for i, comment in enumerate(comments) if is_console_advice_note(comment)),
-        None,
+        (i for i, comment in enumerate(comments) if is_advice(comment)), None
     )
     group = tally["unadvised" if first_advice is None else "advised"]
     group["total"] += 1
     group["done"] += int(status == "done")
     group["rework"] += rework_request_count(comments[first_advice or 0 :])
+
+
+def count_console_advice(
+    tally: dict[str, dict[str, int]], status: str, comments: Any
+) -> None:
+    """Tally a task by whether a console assistant advised on it.
+
+    An assistant may have been cooling down, or silent, on the first attempt;
+    the rework that attempt drew is not the advice's doing.
+    """
+    _count_advice(tally, status, comments, is_console_advice_note)
+
+
+def count_architect_advice(
+    tally: dict[str, dict[str, int]], status: str, comments: Any
+) -> None:
+    """Tally a task by whether the Architect briefed it.
+
+    The Architect is often consulted only after a review sent the task back;
+    the rework before the brief is not the brief's doing.
+    """
+    _count_advice(tally, status, comments, is_architect_consult_comment)

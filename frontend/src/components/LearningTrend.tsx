@@ -5,13 +5,13 @@
  * both, so a drop reads as good. Every value is also in a table for readers
  * without a pointer or without colour. Below them, once a task was carried
  * over, how many second attempts got done, with and without the
- * ScrumMaster's brief; and once a console assistant advised on a task, how
- * advised tasks fared against the rest.
+ * ScrumMaster's brief; and once a console assistant advised on a task, or
+ * the Architect briefed one, how those tasks fared against the rest.
  */
 import { useTranslation } from 'react-i18next'
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
-import type { SprintSummary } from '../services/api'
-import { consoleAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
+import type { ConsoleAdvice, SprintSummary } from '../services/api'
+import { architectAdvice, consoleAdvice, formatRework, formatShare, learningTrend, reworkPerTask, secondAttempts, type SprintPoint } from '../lib/learningTrend'
 
 const SPARK_POINTS = 12
 const BAR_WIDTH = 8
@@ -122,23 +122,26 @@ function SecondAttemptsCard({ sprints }: { sprints: SprintSummary[] }) {
   )
 }
 
-function ConsoleAdviceCard({ sprints }: { sprints: SprintSummary[] }) {
+/** Tasks that got some advice against the rest; nothing until one got it. */
+function AdviceCard({ tally, title, split }: {
+  tally: ConsoleAdvice
+  title: string
+  split: (values: { rework: string; done: number; total: number; reworkOther: string }) => string
+}) {
   const { t } = useTranslation()
-  const tally = consoleAdvice(sprints)
   if (tally.advised.total === 0) return null
   return (
     <div className="card space-y-1 p-4">
-      <p className="text-xs text-gray-400">{t('sprints.consoleAdviceTitle', { defaultValue: 'Tasks done with console advice' })}</p>
+      <p className="text-xs text-gray-400">{title}</p>
       <p className="text-2xl font-semibold text-white">
         {t('sprints.ofTotal', { done: tally.advised.done, total: tally.advised.total, defaultValue: '{{done}} of {{total}}' })}
       </p>
       <p className="text-[11px] text-gray-500">
-        {t('sprints.consoleAdviceSplit', {
+        {split({
           rework: formatRework(reworkPerTask(tally.advised)),
           done: tally.unadvised.done,
           total: tally.unadvised.total,
           reworkOther: formatRework(reworkPerTask(tally.unadvised)),
-          defaultValue: '{{rework}} rework requests per task · without advice: {{done}} of {{total}} done, {{reworkOther}} per task',
         })}
       </p>
     </div>
@@ -166,7 +169,22 @@ export function LearningTrend({ sprints }: { sprints: SprintSummary[] }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <SecondAttemptsCard sprints={sprints} />
-        <ConsoleAdviceCard sprints={sprints} />
+        <AdviceCard
+          tally={consoleAdvice(sprints)}
+          title={t('sprints.consoleAdviceTitle', { defaultValue: 'Tasks done with console advice' })}
+          split={values => t('sprints.consoleAdviceSplit', {
+            ...values,
+            defaultValue: '{{rework}} rework requests per task · without advice: {{done}} of {{total}} done, {{reworkOther}} per task',
+          })}
+        />
+        <AdviceCard
+          tally={architectAdvice(sprints)}
+          title={t('sprints.architectAdviceTitle', { defaultValue: "Tasks done with the Architect's brief" })}
+          split={values => t('sprints.architectAdviceSplit', {
+            ...values,
+            defaultValue: '{{rework}} rework requests per task after the brief · without one: {{done}} of {{total}} done, {{reworkOther}} per task',
+          })}
+        />
       </div>
       <table className="sr-only">
         <caption>{t('sprints.trendTable', { defaultValue: 'Closed sprints, oldest first' })}</caption>

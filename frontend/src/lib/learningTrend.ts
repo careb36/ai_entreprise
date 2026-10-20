@@ -50,11 +50,11 @@ export function secondAttempts(sprints: SprintSummary[]): SecondAttempts {
 }
 
 /**
- * Console-assistant advice across the closed sprints: tasks that got it and
- * tasks that did not, each with how many got done and how many rework
- * requests they drew. The advice is a claim; this is what the boards say.
+ * Advice across the closed sprints: tasks that got it and tasks that did
+ * not, each with how many got done and how many rework requests they drew.
+ * The advice is a claim; this is what the boards say.
  */
-export function consoleAdvice(sprints: SprintSummary[]): ConsoleAdvice {
+function adviceTally(sprints: SprintSummary[], pick: (sprint: SprintSummary) => ConsoleAdvice | undefined): ConsoleAdvice {
   const add = (sum: AdviceGroup, group?: AdviceGroup) => {
     if (!group) return
     sum.total += group.total
@@ -63,11 +63,17 @@ export function consoleAdvice(sprints: SprintSummary[]): ConsoleAdvice {
   }
   const tally: ConsoleAdvice = { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }
   for (const sprint of sprints.filter(closed)) {
-    add(tally.advised, sprint.console_advice?.advised)
-    add(tally.unadvised, sprint.console_advice?.unadvised)
+    add(tally.advised, pick(sprint)?.advised)
+    add(tally.unadvised, pick(sprint)?.unadvised)
   }
   return tally
 }
+
+/** Tasks a console assistant advised on against the rest. */
+export const consoleAdvice = (sprints: SprintSummary[]) => adviceTally(sprints, sprint => sprint.console_advice)
+
+/** Tasks the Architect briefed against the rest. */
+export const architectAdvice = (sprints: SprintSummary[]) => adviceTally(sprints, sprint => sprint.architect_advice)
 
 /** Rework requests per task in a group; 0 for an empty group. */
 export const reworkPerTask = (group: AdviceGroup) => (group.total > 0 ? group.rework / group.total : 0)

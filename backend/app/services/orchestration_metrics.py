@@ -273,8 +273,13 @@ def build_architect_consult_prompt(
     developer: dict[str, Any],
     sprint_name: str,
     prior_feedback: Iterable[str] = (),
+    record: str = "",
 ) -> str:
-    """Prompt asking the Architect for a compact technical brief on a task."""
+    """Prompt asking the Architect for a compact technical brief on a task.
+
+    *record* is how tasks went after its earlier briefs
+    (``services.architect.track_record_context``), or ''.
+    """
     feedback_lines = [
         f"- {line.strip()[:600]}" for line in prior_feedback if line and line.strip()
     ]
@@ -292,7 +297,7 @@ def build_architect_consult_prompt(
         prompt += "\n\n## QA feedback from the previous attempt\n" + "\n".join(
             feedback_lines
         )
-    return prompt
+    return prompt + record
 
 
 # ---------------------------------------------------------------------------
