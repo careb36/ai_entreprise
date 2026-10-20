@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from auth_policy import current_user_if_required, require_company_role
+from auth_tokens import STREAM_TICKET_MINUTES, create_stream_ticket
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
@@ -401,6 +402,30 @@ async def list_sprints(
         }
         for s in sprints
     ]
+
+
+@router.post("/sprints/{sprint_id}/stream_ticket")
+async def glassroom_stream_ticket(
+    sprint_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """A short-lived ticket to open this sprint's Glassroom stream (Viewer).
+
+    The browser's EventSource cannot send an Authorization header, so the
+    stream takes this ticket in its query string. Without a login (a local
+    demo) the stream needs none and ``ticket`` is null.
+    """
+    sprint = session.get(Sprint, sprint_id)
+    if not sprint:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+    require_company_role(session, user, sprint.company_id, "Viewer")
+    if user is None:
+        return {"ticket": None, "expires_in": 0}
+    return {
+        "ticket": create_stream_ticket(user_id=user.id, sprint_id=sprint.id),
+        "expires_in": STREAM_TICKET_MINUTES * 60,
+    }
 
 
 @router.get("/sprints/{sprint_id}/board")

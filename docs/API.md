@@ -368,6 +368,10 @@ Server-Sent Events stream for real-time sprint events.
 
 **Query Parameters:**
 - `sprint_id` — Sprint ID to subscribe to
+- `ticket` — required when authentication is on: a five-minute ticket for this
+  sprint from `POST /v1/sprints/{id}/stream_ticket` (Viewer of the sprint's
+  company). A browser EventSource cannot send an Authorization header, so the
+  stream takes this instead; the holder's membership is checked again on use.
 
 **Event Types:**
 - `status` — Sprint status change

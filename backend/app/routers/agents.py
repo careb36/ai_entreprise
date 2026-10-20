@@ -28,12 +28,13 @@ from auth_policy import (
     require_company_role,
     viewer_company_ids,
 )
+from auth_tokens import AuthTokenError, decode_stream_ticket
 from config import settings
 from database import engine, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from logging_config import logger
-from models import AuditLog, BusinessUnit, User
+from models import AuditLog, BusinessUnit, Sprint, User
 from models.agent_run import AgentRun
 from schemas import AuditRequest, GenerateRequest
 from services.agent_service import AgentService
@@ -408,8 +409,33 @@ async def store_memory(
     return {"status": "stored"}
 
 
+def _check_stream_ticket(sprint_id: str, ticket: str | None) -> None:
+    """401 unless *ticket* opens this sprint's stream for a member of its company."""
+    unauthorized = HTTPException(
+        status_code=401,
+        detail="A valid stream ticket for this sprint is required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        sprint_number = int(sprint_id)
+        user_id = decode_stream_ticket(ticket or "", sprint_number)
+    except (ValueError, AuthTokenError):
+        raise unauthorized from None
+    with Session(engine) as session:
+        sprint = session.get(Sprint, sprint_number)
+        user = session.get(User, user_id)
+        if sprint is None or user is None:
+            raise unauthorized
+        # Checked again here: the ticket proves who asked, not that they still belong.
+        require_company_role(session, user, sprint.company_id, "Viewer")
+
+
 @router.get("/glassroom/stream")
-async def glassroom_stream(sprint_id: str = Query(...), request: Request = None):
+async def glassroom_stream(
+    sprint_id: str = Query(...),
+    ticket: str | None = Query(None),
+    request: Request = None,
+):
     """
     Server-Sent Events (SSE) stream for real-time Glassroom monitoring.
 
@@ -419,8 +445,13 @@ async def glassroom_stream(sprint_id: str = Query(...), request: Request = None)
 
     If NATS is unavailable, a red system error event is emitted immediately so
     the user sees a clear explanation instead of silent inactivity.
+
+    A browser EventSource cannot send an Authorization header: with
+    authentication required, the stream takes a short-lived ``ticket`` for
+    this sprint from ``POST /v1/sprints/{id}/stream_ticket`` instead.
     """
-    # Public: browser EventSource cannot send Authorization headers.
+    if settings.AUTH_REQUIRED:
+        _check_stream_ticket(sprint_id, ticket)
     queue: asyncio.Queue[str] = asyncio.Queue()
     register_sse_connection(sprint_id, queue)
 

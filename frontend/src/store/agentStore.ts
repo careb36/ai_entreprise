@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../services/api'
 import {
   type AgentEvent,
   type AgentFsmState,
@@ -124,13 +125,28 @@ function closeActiveEventSource() {
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => {
-  const openConnection = (sprintId: string, token: number) => {
+  // An EventSource cannot send an Authorization header: with authentication
+  // required the stream takes a short-lived ticket for the sprint, fetched
+  // anew for every connection and reconnection. Without one (no login, or the
+  // request failed) the stream is tried as is, and refuses when it must.
+  const connectWithTicket = (sprintId: string, token: number) => {
+    clearReconnectTimer()
+    closeActiveEventSource()
+    void api.getStreamTicket(sprintId)
+      .then(({ ticket }) => ticket, () => null)
+      .then((ticket) => {
+        if (token !== connectionToken) return
+        openConnection(sprintId, token, ticket)
+      })
+  }
+
+  const openConnection = (sprintId: string, token: number, ticket: string | null) => {
     clearReconnectTimer()
     closeActiveEventSource()
 
-    const eventSource = new EventSource(
-      `${BACKEND_URL}/v1/glassroom/stream?sprint_id=${encodeURIComponent(sprintId)}`,
-    )
+    const params = new URLSearchParams({ sprint_id: sprintId })
+    if (ticket) params.set('ticket', ticket)
+    const eventSource = new EventSource(`${BACKEND_URL}/v1/glassroom/stream?${params}`)
     activeEventSource = eventSource
 
     eventSource.onopen = () => {
@@ -285,7 +301,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
 
       reconnectTimer = setTimeout(() => {
         if (token !== connectionToken) return
-        openConnection(sprintId, token)
+        connectWithTicket(sprintId, token)
       }, delay)
     }
   }
@@ -406,7 +422,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
       clearReconnectTimer()
       closeActiveEventSource()
       set({ isConnected: false, sprintId, connectionError: null })
-      openConnection(sprintId, token)
+      connectWithTicket(sprintId, token)
     },
 
     disconnect: () => {
