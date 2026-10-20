@@ -109,8 +109,12 @@ def test_start_sprint_carries_a_blocked_task_with_its_reason(
     )
     assert carry_over.carried_over(original)
     # Queued for an agent like any new task, and said to the team.
+    # A sprint's event can share the number in the shared test database.
     events = sqlite_session.exec(
-        select(OutboxEvent).where(OutboxEvent.aggregate_id == str(clone.id))
+        select(OutboxEvent).where(
+            OutboxEvent.aggregate_type == "backlog_item",
+            OutboxEvent.aggregate_id == str(clone.id),
+        )
     ).all()
     assert [e.payload["message"]["backlog_item_id"] for e in events] == [clone.id]
     message = sqlite_session.exec(

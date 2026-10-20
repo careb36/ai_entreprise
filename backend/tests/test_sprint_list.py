@@ -8,6 +8,10 @@ from config import settings
 from models import BacklogItem, Company, CompanyMember, Sprint, User
 from services import console_assistants, scrum_master
 from services.board import CARRIED_FROM_PREFIX
+from services.orchestration_metrics import (
+    ARCHITECT_COMMENT_AUTHOR,
+    format_architect_consult_comment,
+)
 from sqlmodel import select
 
 
@@ -107,6 +111,10 @@ def test_member_lists_own_sprints_newest_first_with_progress(
                 "advised": {"total": 0, "done": 0, "rework": 0},
                 "unadvised": {"total": 0, "done": 0, "rework": 0},
             },
+            "architect_advice": {
+                "advised": {"total": 0, "done": 0, "rework": 0},
+                "unadvised": {"total": 0, "done": 0, "rework": 0},
+            },
         },
         {
             "id": older.id,
@@ -121,6 +129,10 @@ def test_member_lists_own_sprints_newest_first_with_progress(
             "rework": 2,
             "second_attempts": {"total": 0, "done": 0, "briefed": 0, "briefed_done": 0},
             "console_advice": {
+                "advised": {"total": 0, "done": 0, "rework": 0},
+                "unadvised": {"total": 3, "done": 1, "rework": 2},
+            },
+            "architect_advice": {
                 "advised": {"total": 0, "done": 0, "rework": 0},
                 "unadvised": {"total": 3, "done": 1, "rework": 2},
             },
@@ -197,6 +209,44 @@ def test_counts_tasks_with_and_without_console_advice(test_client, sqlite_sessio
     assert response.status_code == 200
     [row] = response.json()
     assert row["console_advice"] == {
+        "advised": {"total": 2, "done": 1, "rework": 1},
+        "unadvised": {"total": 1, "done": 1, "rework": 1},
+    }
+
+
+def test_counts_tasks_with_and_without_the_architects_brief(
+    test_client, sqlite_session
+):
+    company = _company(sqlite_session, "Sprint list architect briefs")
+    sprint = _sprint(
+        sqlite_session,
+        company.id,
+        "Briefed",
+        statuses=("done", "blocked", "done"),
+        status="completed",
+    )
+    items = sqlite_session.exec(
+        select(BacklogItem)
+        .where(BacklogItem.sprint_id == sprint.id)
+        .order_by(BacklogItem.id)
+    ).all()
+    brief = {
+        "author": ARCHITECT_COMMENT_AUTHOR,
+        "text": format_architect_consult_comment("Reuse the parser; test empty input."),
+    }
+    rework = {"author": "QA", "text": "NEEDS WORK: cover the empty case"}
+    # Briefed after its first rework: only the request after the brief counts.
+    items[0].comments = [rework, brief, rework]
+    items[1].comments = [brief]
+    items[2].comments = [rework]
+    sqlite_session.add_all(items)
+    sqlite_session.commit()
+
+    response = test_client.get("/v1/sprints", params={"company_id": company.id})
+
+    assert response.status_code == 200
+    [row] = response.json()
+    assert row["architect_advice"] == {
         "advised": {"total": 2, "done": 1, "rework": 1},
         "unadvised": {"total": 1, "done": 1, "rework": 1},
     }

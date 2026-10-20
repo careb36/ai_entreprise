@@ -1193,7 +1193,9 @@
     "ofTotal": "{{done}} de {{total}}",
     "secondAttemptsSplit": "Con la consigna del ScrumMaster: {{briefedDone}} de {{briefed}} · sin ella: {{unbriefedDone}} de {{unbriefed}}",
     "consoleAdviceTitle": "Tareas completadas con consejo de consola",
-    "consoleAdviceSplit": "{{rework}} pedidos de retrabajo por tarea · sin consejo: {{done}} de {{total}} completadas, {{reworkOther}} por tarea"
+    "consoleAdviceSplit": "{{rework}} pedidos de retrabajo por tarea · sin consejo: {{done}} de {{total}} completadas, {{reworkOther}} por tarea",
+    "architectAdviceTitle": "Tareas completadas con el brief del Architect",
+    "architectAdviceSplit": "{{rework}} pedidos de retrabajo por tarea después del brief · sin él: {{done}} de {{total}} completadas, {{reworkOther}} por tarea"
   },
   "projectFolder": {
     "label": "Carpeta del proyecto",

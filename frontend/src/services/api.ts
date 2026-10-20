@@ -401,6 +401,8 @@ export interface SprintSummary {
   second_attempts: SecondAttempts
   /** Tasks a console assistant advised on and tasks none did: how many got done and how many rework requests each drew. */
   console_advice: ConsoleAdvice
+  /** The same split for the Architect's briefs; a briefed task's rework counts from its first brief on. */
+  architect_advice: ConsoleAdvice
 }
 
 export interface AdviceGroup {

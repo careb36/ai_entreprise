@@ -74,7 +74,7 @@ describe('GovernancePanel', () => {
 
   it('shows the tasks blocked for a person with their reason, and a Manager can send one back', () => {
     const sprint = (id: number, status: string, second_attempts: object) => ({
-      id, sprint_name: `S${id}`, status, goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } },
+      id, sprint_name: `S${id}`, status, goal: null, start_date: null, scope_size: 'S', total: 4, done: 3, blocked: 1, rework: 2, second_attempts, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } },
     })
     mockedUseSprints.mockReturnValue({
       data: [

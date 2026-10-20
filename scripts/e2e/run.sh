@@ -14,16 +14,18 @@
 #      daemon's PATH; the advice reaches the agents' prompts and the sprint
 #      list counts the tasks as advised.
 #   2. The blocked task is listed in the inbox.
-#   3. start_sprint with carry_over_ids gives it another attempt beside a new
-#      task; the new attempt's prompts carry "Previous attempt"; the new task
-#      is delivered, reviewed and approved; the sprint closes.
+#   3. An Architect joins the team (after the foundation sprint, so that one
+#      stays as planned). start_sprint with carry_over_ids gives the blocked
+#      task another attempt beside a new task; the new attempt's prompts
+#      carry "Previous attempt"; the new task is delivered, reviewed, sent
+#      back once, briefed by the Architect and approved; the sprint closes.
 #   4. The inbox no longer lists the original task.
 #   5. A person carries the blocked attempt into a third sprint (the company
 #      would not, on its own); it blocks again, and this time the ScrumMaster's
 #      triage is told how the company's second attempts went. The procedure
 #      adopted after the foundation sprint is measured over the two sprints
 #      since and kept, and the proposal prompt lists what earlier procedures
-#      did.
+#      did. The Architect, asked again, is told how its earlier brief went.
 #   6. A ticket reported through the public form is triaged by the Support
 #      agent beside the reporter's choice; a support admin decides, the
 #      agent's record counts the decision, and the next ticket's prompt
@@ -133,6 +135,7 @@ active_procedures() { api "$API/v1/procedures?company_id=$CID" | json "sum(1 for
 procedure_result() { api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == '$1'), '')"; }
 prompt_seen() { if [ "$(grep -c "$1" "$PROMPTS")" -ge 1 ]; then echo yes; else echo no; fi; }
 advice_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['unadvised']['total']) for s in d if s['id'] == $1 for a in [s['console_advice']])"; }
+brief_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['advised']['rework']) for s in d if s['id'] == $1 for a in [s['architect_advice']])"; }
 
 echo "1. init_company → foundation sprint"
 COMPANY=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d "{
@@ -154,6 +157,8 @@ BLOCKED_ID=$(api "$API/v1/inbox?company_id=$CID" | json "d['blocked_tasks'][0]['
 check "lists the blocked task" test -n "$BLOCKED_ID"
 
 echo "3. start_sprint with carry_over_ids"
+# The company hires an Architect after its foundation sprint, which stays as planned.
+check "an Architect joins the team" test "$(api -X POST "$API/v1/agents" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"role\": \"Architect\", \"name\": \"Ari\"}" | json "d.get('role', '')")" = Architect
 NEW=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
   \"company_id\": $CID, \"sprint_name\": \"Sprint 1\", \"start_date\": \"2026-01-02\", \"scope_size\": \"S\",
   \"backlog_items\": [{\"title\": \"Add parser\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"}],
@@ -165,6 +170,8 @@ echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
 check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
 check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
+check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
+check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes
 check "the sprint list counts it as a briefed second attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S1)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the retried task's prompts carry the previous attempt" test "$(grep -c '## Previous attempt' "$PROMPTS")" -ge 1
 check "and the ScrumMaster's brief" test "$(grep -c 'Brief for the next attempt: Write the full document' "$PROMPTS")" -ge 1
@@ -191,6 +198,7 @@ check "its triage was told how earlier second attempts went" test "$(grep -c 'Ho
 check "with the numbers counted from the boards" test "$(grep -c '0 of 1 tasks carried into another sprint got done. With a brief from you: 0 of 1; without one: 0 of 0.' "$PROMPTS")" -ge 1
 check "the procedure adopted after the foundation sprint was measured and kept" wait_value 60 kept procedure_result "Cover edge cases"
 check "the proposal prompt listed what earlier procedures did" wait_value 60 yes prompt_seen '"Cover edge cases" (Developer, v1): kept, rework per task'
+check "the Architect, asked again, was told how its earlier brief went" test "$(prompt_seen "Task: Add formatter.*earlier briefs.*Tasks you briefed: 1 of 1 got done, 0.00 rework requests per task")" = yes
 check "the sprint list counts the briefed third attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S2)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the inbox lists only the latest attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['sprint_id'] for t in d['blocked_tasks']]")" = "[$S2]"
 
