@@ -77,7 +77,8 @@ export const SupportBot: React.FC = () => {
   // Bug form
   const [title, setTitle]             = useState('')
   const [description, setDescription] = useState('')
-  const [severity, setSeverity]       = useState<'low'|'medium'|'high'|'critical'>('medium')
+  // Empty until the reporter picks one: a preset would pass for their choice.
+  const [severity, setSeverity]       = useState<'' | 'low'|'medium'|'high'|'critical'>('')
   const [reporterEmail, setReporterEmail] = useState(
     () => localStorage.getItem('fabrique-support-email') || ''
   )
@@ -171,7 +172,7 @@ export const SupportBot: React.FC = () => {
       const res = await api.reportBug({
         title: title.trim(),
         description: description.trim(),
-        severity,
+        severity: severity || undefined,
         reporter_email: reporterEmail.trim() || undefined,
         browser_info: {
           userAgent: navigator.userAgent,
@@ -185,7 +186,7 @@ export const SupportBot: React.FC = () => {
         setEmail(reporterEmail.trim())
       }
       // Reset form
-      setTitle(''); setDescription(''); setSeverity('medium'); setReporterEmail('')
+      setTitle(''); setDescription(''); setSeverity(''); setReporterEmail('')
       // Return to chat with confirmation
       setView('chat')
       addMsg('bot',
@@ -346,6 +347,7 @@ export const SupportBot: React.FC = () => {
                     <span className="text-xs font-semibold text-gray-600">{t('support.severity')}</span>
                     <select value={severity} onChange={e => setSeverity(e.target.value as any)}
                       className="mt-1 w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+                      <option value="">{t('support.severityNotSure', { defaultValue: 'Not sure' })}</option>
                       {SEVERITIES.map(s => (
                         <option key={s} value={s}>{t(`support.${s}`)}</option>
                       ))}
@@ -435,9 +437,11 @@ export const SupportBot: React.FC = () => {
                 <div>
                   <p className="font-semibold text-gray-900 text-sm">{selectedTicket.title}</p>
                   <div className="flex gap-2 mt-1.5 flex-wrap">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLOR[selectedTicket.severity]}`}>
-                      {selectedTicket.severity}
-                    </span>
+                    {selectedTicket.severity && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLOR[selectedTicket.severity]}`}>
+                        {selectedTicket.severity}
+                      </span>
+                    )}
                     {selectedTicket.category && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{selectedTicket.category}</span>
                     )}

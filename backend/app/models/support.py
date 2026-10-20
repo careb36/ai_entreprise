@@ -30,7 +30,8 @@ class BugReport(SQLModel, table=True):
     steps: str | None = None  # Step-by-step reproduction instructions
     expected: str | None = None  # What the user expected to happen
     actual: str | None = None  # What actually happened (the bug)
-    severity: str = "medium"  # "low" | "medium" | "high" | "critical"
+    # "low" | "medium" | "high" | "critical"; None when the reporter chose none.
+    severity: str | None = None
     # "bug" | "feature" | "question" | "incident"; None when the reporter chose none.
     category: str | None = None
     status: str = "open"  # "open" | "in_progress" | "waiting" | "resolved" | "closed"

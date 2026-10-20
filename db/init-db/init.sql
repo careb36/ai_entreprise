@@ -217,8 +217,8 @@ CREATE TABLE IF NOT EXISTS bug_reports (
     steps        TEXT,
     expected     TEXT,
     actual       TEXT,
-    severity     VARCHAR(20) NOT NULL DEFAULT 'medium',
-    category     VARCHAR(50)  NOT NULL DEFAULT 'bug',
+    severity     VARCHAR(20),   -- what the reporter chose, or NULL
+    category     VARCHAR(50),   -- what the reporter chose, or NULL
     status       VARCHAR(30)  NOT NULL DEFAULT 'open',
     reporter_email VARCHAR(255),
     assigned_to  VARCHAR(100),

@@ -199,7 +199,8 @@ export interface SupportTicket {
   id: number
   ticket_num: string
   title: string
-  severity: string
+  /** What the reporter chose, or null when they chose none. */
+  severity: string | null
   category: string | null
   status: string
   reporter_email: string | null

@@ -223,14 +223,22 @@ def test_the_record_compares_the_agent_and_the_reporter_with_the_decision(
         ),
         # Decided before the agent triaged it: not the agent's record.
         _ticket(sqlite_session, decided_severity="high", decided_by="admin"),
+        # The reporter chose no severity: no baseline for it on this ticket.
+        _decided(
+            sqlite_session,
+            severity=None,
+            suggested_severity="high",
+            suggested_category="bug",
+            decided_severity="high",
+        ),
     ]
 
     record = _isolated_record(sqlite_session, {t.id for t in tickets})
 
     assert record == {
         "severity": {
-            "decided": 4,
-            "agent_agreed": 1,
+            "decided": 5,
+            "agent_agreed": 2,
             "agent_unusable": 1,
             "reporter_chose": 4,
             "reporter_agreed": 3,
@@ -246,7 +254,7 @@ def test_the_record_compares_the_agent_and_the_reporter_with_the_decision(
     context = support_agent.record_context(record)
     assert "counted from the tickets, not reported by anyone" in context
     assert (
-        "- severity: yours matched 1 of 4 (1 of them without a usable answer from "
+        "- severity: yours matched 2 of 5 (1 of them without a usable answer from "
         "you); the reporter's own choice matched 3 of 4." in context
     )
     assert (

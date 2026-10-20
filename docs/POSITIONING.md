@@ -241,9 +241,9 @@ replaces none of it.
      both claims, and the agent is measured against it: how often its
      suggestion matched, beside how often the reporter's own choice did. The
      numbers go into its next prompt and the help desk shows them.
-   - The baseline is only what reporters actually chose: the form asks for
-     no category, so the platform no longer fills one in that would pass for
-     theirs. An answer the agent could not give counts as a miss, and is
+   - The baseline is only what reporters actually chose: the form presets
+     no impact and asks for no category, so the platform fills in neither as
+     if it were theirs. An answer the agent could not give counts as a miss, and is
      counted, so a silent agent does not look accurate.
 5. **The loop closes** (done). What the first four steps left open was what
    happens to work the agents give up on.

@@ -193,9 +193,10 @@ class BugReportRequest(BaseModel):
     steps: str | None = None  # Reproduction steps
     expected: str | None = None  # Expected behaviour
     actual: str | None = None  # Actual (buggy) behaviour
-    severity: str = "medium"  # "low" | "medium" | "high" | "critical"
-    # "bug" | "feature" | "question" | "incident"; the help-desk form asks for
-    # none, and a default would pass for the reporter's choice.
+    # "low" | "medium" | "high" | "critical" and "bug" | "feature" | "question"
+    # | "incident": what the reporter chose, or nothing. A default would pass
+    # for the reporter's choice.
+    severity: str | None = None
     category: str | None = None
     reporter_email: str | None = None
     browser_info: dict[str, Any] | None = None  # User-agent, viewport, etc.

@@ -135,3 +135,24 @@ def test_no_record_before_any_brief(prompts, sqlite_session):
     )
 
     assert "earlier briefs" not in prompts[0]
+
+
+def test_a_failed_record_leaves_it_out_and_the_brief_still_comes(
+    prompts, sqlite_session, monkeypatch
+):
+    company = _company(sqlite_session)
+    sprint = _sprint(sqlite_session, company, "active", [])
+
+    def _broken(session, company_id):
+        raise RuntimeError("statement timeout")
+
+    monkeypatch.setattr(task_worker, "architect_track_record", _broken)
+
+    advice = task_worker._consult_architect(
+        {"id": 1, "title": "Add parser"},
+        {"role": "Developer"},
+        {"id": sprint.id, "company_id": company.id, "name": "S"},
+    )
+
+    assert advice == "Use a service layer."
+    assert "earlier briefs" not in prompts[0]
