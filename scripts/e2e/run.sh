@@ -10,6 +10,9 @@
 #      is too short for the text checks, is sent back twice and then blocked
 #      for a person; the sprint closes anyway, with its retrospective, and the
 #      ScrumMaster's proposal is adopted (autonomy level 3).
+#      Every task is advised by a fake Copilot CLI (e2e-copilot) on the
+#      daemon's PATH; the advice reaches the agents' prompts and the sprint
+#      list counts the tasks as advised.
 #   2. The blocked task is listed in the inbox.
 #   3. start_sprint with carry_over_ids gives it another attempt beside a new
 #      task; the new attempt's prompts carry "Previous attempt"; the new task
@@ -72,18 +75,29 @@ conn.close()
 EOF
 
 rm -f "$PROMPTS"
+# A console assistant the daemon can run, under its own name so a real
+# Copilot or Claude CLI on this machine is never asked.
+ADVICE="Fake Copilot advice: keep each module beside its test."
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
+chmod +x "$WORK/bin/e2e-copilot"
 FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
-NATS_URL=$NATS_URL WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
+PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
+  NATS_URL=$NATS_URL WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
+cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
+trap cleanup EXIT
+# The backend asks the daemon once, at startup, which assistants it can run.
+for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
+grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }
 (
   cd "$REPO/backend" && exec env \
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
     NATS_URL=$NATS_URL LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
-    AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e CONSOLE_ASSISTANTS_ENABLED=false \
+    AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
+    CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
-cleanup() { kill $BPID $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
-trap cleanup EXIT
 
 for _ in $(seq 1 60); do curl -sf "$API/health" >/dev/null && break; sleep 1; done
 curl -sf "$API/health" >/dev/null || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
@@ -113,6 +127,7 @@ retry_decisions() { api "$API/v1/messages?company_id=$CID&kind=decision" | json 
 active_procedures() { api "$API/v1/procedures?company_id=$CID" | json "sum(1 for p in d['procedures'] if p['status'] == 'active')"; }
 procedure_result() { api "$API/v1/procedures?company_id=$CID" | json "next(((p['outcome'] or {}).get('result', '') for p in d['procedures'] if p['title'] == '$1'), '')"; }
 prompt_seen() { if [ "$(grep -c "$1" "$PROMPTS")" -ge 1 ]; then echo yes; else echo no; fi; }
+advice_counts() { api "$API/v1/sprints?company_id=$CID" | json "next((a['advised']['total'], a['advised']['done'], a['unadvised']['total']) for s in d if s['id'] == $1 for a in [s['console_advice']])"; }
 
 echo "1. init_company → foundation sprint"
 COMPANY=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d "{
@@ -143,6 +158,8 @@ check "the sprint starts with two tasks" test "$(echo "$NEW" | json "len(d.get('
 check "Sprint 1 closes" wait_sprint "$S1"
 echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
+check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
+check "its advice reached the agents' prompts" test "$(prompt_seen "External Console Assistant Notes.*$ADVICE")" = yes
 check "the sprint list counts it as a briefed second attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S1)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the retried task's prompts carry the previous attempt" test "$(grep -c '## Previous attempt' "$PROMPTS")" -ge 1
 check "and the ScrumMaster's brief" test "$(grep -c 'Brief for the next attempt: Write the full document' "$PROMPTS")" -ge 1

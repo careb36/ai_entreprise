@@ -314,12 +314,14 @@ the workspace daemon and a fake LLM proxy (`scripts/e2e/fake_llm.py`,
 deterministic answers) against a Postgres and a NATS you provide
 (`docker compose up -d postgres nats`, or a local pair via `E2E_POSTGRES_*`
 and `E2E_NATS_URL`; the e2e database is recreated on every run), then drives
-one company through the loop and checks it through the API: the foundation
+one company through the loop and checks it through the API (a fake Copilot
+CLI, `e2e-copilot`, on the daemon's PATH advises every task, so the
+console-assistant path runs too): the foundation
 sprint closes with its task blocked for a person after two rework requests,
 the ScrumMaster's triage of it, the retrospective and an adopted procedure;
 the inbox lists the task;
 `start_sprint` with `carry_over_ids` retries it beside a new task whose
-files are written and verified; the sprint list counts the retry as a briefed second attempt; the inbox then lists only the new attempt;
+files are written and verified; both tasks were advised and the advice reached their prompts; the sprint list counts the retry as a briefed second attempt; the inbox then lists only the new attempt;
 a person carries that attempt into a third sprint, where it blocks again and
 the ScrumMaster's triage is told how the company's second attempts went
 (counted from the boards), the procedure adopted after the foundation sprint
