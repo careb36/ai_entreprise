@@ -438,7 +438,9 @@ export const SupportBot: React.FC = () => {
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${SEVERITY_COLOR[selectedTicket.severity]}`}>
                       {selectedTicket.severity}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{selectedTicket.category}</span>
+                    {selectedTicket.category && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{selectedTicket.category}</span>
+                    )}
                     {selectedTicket.assigned_to && (
                       <span className="text-[10px] text-gray-400">👤 {selectedTicket.assigned_to}</span>
                     )}

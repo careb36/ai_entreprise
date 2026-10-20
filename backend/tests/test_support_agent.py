@@ -25,8 +25,7 @@ def _ticket(session, **fields):
         ticket_num=f"FAB-S{secrets.token_hex(3).upper()}",
         title="Board does not load",
         description="Spinner forever after login",
-        severity="low",
-        **fields,
+        **{"severity": "low", "category": "bug", **fields},
     )
     session.add(ticket)
     session.commit()
@@ -197,7 +196,7 @@ def test_the_record_compares_the_agent_and_the_reporter_with_the_decision(
             decided_severity="low",
             decided_category="bug",
         ),
-        # Decided, but the agent suggested nothing: not counted.
+        # Decided, but the agent's answer was unusable: a miss, and said so.
         _decided(sqlite_session, decided_severity="low"),
         # Only the category decided: severity not counted for it.
         _decided(
@@ -206,25 +205,67 @@ def test_the_record_compares_the_agent_and_the_reporter_with_the_decision(
             suggested_category="bug",
             decided_category="bug",
         ),
+        # The reporter chose no category: no baseline for it on this ticket.
+        _decided(
+            sqlite_session,
+            category=None,
+            suggested_severity="high",
+            suggested_category="bug",
+            decided_category="bug",
+        ),
+        # A row from before the reporter's values were normalized.
+        _decided(
+            sqlite_session,
+            severity="High ",
+            suggested_severity="low",
+            suggested_category="bug",
+            decided_severity="high",
+        ),
+        # Decided before the agent triaged it: not the agent's record.
+        _ticket(sqlite_session, decided_severity="high", decided_by="admin"),
     ]
 
     record = _isolated_record(sqlite_session, {t.id for t in tickets})
 
     assert record == {
-        "severity": {"decided": 2, "agent_agreed": 1, "reporter_agreed": 1},
-        "category": {"decided": 3, "agent_agreed": 2, "reporter_agreed": 2},
+        "severity": {
+            "decided": 4,
+            "agent_agreed": 1,
+            "agent_unusable": 1,
+            "reporter_chose": 4,
+            "reporter_agreed": 3,
+        },
+        "category": {
+            "decided": 4,
+            "agent_agreed": 3,
+            "agent_unusable": 0,
+            "reporter_chose": 3,
+            "reporter_agreed": 2,
+        },
     }
     context = support_agent.record_context(record)
     assert "counted from the tickets, not reported by anyone" in context
     assert (
-        "- severity: yours matched 1 of 2; the reporter's own choice matched 1 of 2."
-        in context
+        "- severity: yours matched 1 of 4 (1 of them without a usable answer from "
+        "you); the reporter's own choice matched 3 of 4." in context
     )
     assert (
-        support_agent.record_context(
-            {"severity": {"decided": 0, "agent_agreed": 0, "reporter_agreed": 0}}
-        )
-        == ""
+        "- category: yours matched 3 of 4; the reporter's own choice matched 2 of 3."
+        in context
+    )
+    nobody_chose = {
+        "decided": 1,
+        "agent_agreed": 1,
+        "agent_unusable": 0,
+        "reporter_chose": 0,
+        "reporter_agreed": 0,
+    }
+    assert (
+        "- category: yours matched 1 of 1; no reporter chose one."
+        in support_agent.record_context({"category": nobody_chose})
+    )
+    assert (
+        support_agent.record_context({"severity": {**nobody_chose, "decided": 0}}) == ""
     )
 
 

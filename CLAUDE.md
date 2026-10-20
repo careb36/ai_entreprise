@@ -85,9 +85,12 @@ Copy `.env.example` to `.env` and fill in:
   Off by default because reporting a bug is public and each ticket costs an
   LLM call. A support admin decides a ticket's severity and category in the
   help desk; the decision is stored apart from the reporter's choice and the
-  agent's suggestion (`decided_*`), `GET /v1/support/agent_record` counts how
-  often the agent's suggestions matched it beside how often the reporters'
-  own choices did, and those numbers go into the agent's next prompt.
+  agent's suggestion (`decided_*`, stamped with who changed it only when it
+  changes; an empty value clears it), `GET /v1/support/agent_record` counts
+  how often the agent's suggestions matched it (its unusable answers count as
+  misses, and are counted) beside how often the reporters' own choices did
+  (only where a reporter chose: the form asks for no category, so none is
+  made up), and those numbers go into the agent's next prompt.
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL.
@@ -310,8 +313,8 @@ Test files:
 | `test_agent_messages.py` | The conversation between roles: messages at each hand-over, escalation and retrospective; `GET /v1/messages` scoping and filters |
 | `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, what earlier procedures did in the proposal prompt, a reverted or rejected text not proposed again (a person still can), procedures in prompts, `/v1/procedures` |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
-| `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter; its record against the admins' decisions (beside the reporters') and that record in its next prompt |
-| `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member; an admin's severity and category decision stored apart, unknown values refused, `/v1/support/agent_record` admin-only |
+| `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter; its record against the admins' decisions (unusable answers as misses, beside the reporters who chose a value, legacy rows compared case-blind) and that record in its next prompt |
+| `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member; an admin's severity and category decision stored apart, credited to whoever changed it and clearable, unknown values refused, `/v1/support/agent_record` admin-only; the reporter's values normalized and no category made up |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -331,7 +334,10 @@ a person carries that attempt into a third sprint, where it blocks again and
 the ScrumMaster's triage is told how the company's second attempts went
 (counted from the boards), the procedure adopted after the foundation sprint
 is measured over the two sprints since and kept, and the proposal prompt
-lists what earlier procedures did.
+lists what earlier procedures did. Last, the help desk: the Support agent
+(enabled for the run) triages a ticket from the public form beside the
+reporter's choice, a support admin decides, `/v1/support/agent_record`
+counts the decision, and the next ticket's prompt carries that record.
 Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 `python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
@@ -390,7 +396,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
 | `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, how earlier second attempts went beside the blocked tasks, Viewer and error states |
-| `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category, the Support agent's record |
+| `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a changed decision is sent, an empty one clears it), the Support agent's record with its unusable answers and the reporters who chose |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 
 ### Manual validation (no test deps needed)

@@ -1375,7 +1375,7 @@
     "suggested": "Impacto sugerido: {{severity}} (reportado: {{reported}}) · categoría: {{category}}",
     "agentReply": "Primera respuesta enviada a quien reportó",
     "untriaged": "El agente no pudo hacer el triage de este ticket; queda para las personas.",
-    "decided": "Decidido: impacto {{severity}} · categoría {{category}}, por {{who}}",
+    "decided": "Decidido: impacto {{severity}} · categoría {{category}}, cambiado por última vez por {{who}}",
     "decidedSeverity": "Impacto decidido",
     "decidedCategory": "Categoría decidida",
     "notDecided": "Sin decidir",
@@ -1387,8 +1387,11 @@
     },
     "record": {
       "title": "El registro del Support agent",
-      "severity": "Impacto: el agente coincidió con {{agent}} de {{total}} decisiones; quienes reportaron, con {{reporter}} de {{total}}.",
-      "category": "Categoría: el agente coincidió con {{agent}} de {{total}} decisiones; quienes reportaron, con {{reporter}} de {{total}}."
+      "severity": "Impacto: el agente coincidió con {{agent}} de {{total}} decisiones",
+      "category": "Categoría: el agente coincidió con {{agent}} de {{total}} decisiones",
+      "unusable": " ({{n}} sin una respuesta utilizable)",
+      "reporters": "; quienes reportaron, con {{reporter}} de {{chose}}.",
+      "noReporters": "; nadie que reportó eligió una."
     }
   },
   "health": {

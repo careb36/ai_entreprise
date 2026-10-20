@@ -213,15 +213,22 @@ export interface TicketUpdateRequest {
   status: TicketStatus
   resolution?: string
   assigned_to?: string
-  /** The support admin's decision, stored apart from the reporter's choice and the agent's suggestion. */
-  severity?: TicketSeverity
-  category?: TicketCategory
+  /**
+   * The support admin's decision, stored apart from the reporter's choice and
+   * the agent's suggestion. Omitted keeps the earlier decision; '' clears it.
+   */
+  severity?: TicketSeverity | ''
+  category?: TicketCategory | ''
 }
 
-/** Per field: tickets the Support agent suggested a value for and a person decided. */
+/** Per field: tickets the Support agent triaged and a person then decided. */
 export interface AgentRecordField {
   decided: number
   agent_agreed: number
+  /** Decided tickets the agent gave no usable answer for (misses too). */
+  agent_unusable: number
+  /** Decided tickets whose reporter chose a value: the reporters' baseline. */
+  reporter_chose: number
   reporter_agreed: number
 }
 

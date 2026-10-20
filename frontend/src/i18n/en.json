@@ -1375,7 +1375,7 @@
     "suggested": "Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}",
     "agentReply": "First reply sent to the reporter",
     "untriaged": "The agent could not triage this ticket; it is left to people.",
-    "decided": "Decided: impact {{severity}} · category {{category}}, by {{who}}",
+    "decided": "Decided: impact {{severity}} · category {{category}}, last changed by {{who}}",
     "decidedSeverity": "Decided impact",
     "decidedCategory": "Decided category",
     "notDecided": "Not decided",
@@ -1387,8 +1387,11 @@
     },
     "record": {
       "title": "The Support agent's record",
-      "severity": "Impact: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}.",
-      "category": "Category: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}."
+      "severity": "Impact: the agent matched {{agent}} of {{total}} decisions",
+      "category": "Category: the agent matched {{agent}} of {{total}} decisions",
+      "unusable": " ({{n}} without a usable answer)",
+      "reporters": "; the reporters {{reporter}} of {{chose}}.",
+      "noReporters": "; no reporter chose one."
     }
   },
   "health": {

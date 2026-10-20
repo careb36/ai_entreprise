@@ -9,7 +9,8 @@ prompt's section headers, so one run exercises the whole loop:
   pre-review text checks, so it is sent back and finally blocked;
 - the first review of each task asks for rework, the second approves;
 - the ScrumMaster answers an escalation with "retry" and a brief, and
-  proposes one procedure in the fixed format.
+  proposes one procedure in the fixed format;
+- the Support agent triages every ticket as a high-severity bug.
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -46,6 +47,15 @@ def answer(prompt: str) -> str:
             "DECISION: retry\n"
             "BRIEF: Write the full document, at least 180 words, as one path= block.\n"
             "WHY: the attempts were cut short, not wrong\n"
+            "END"
+        )
+    if "You are the Support agent" in prompt:
+        return (
+            "SEVERITY: high\n"
+            "CATEGORY: bug\n"
+            "REPLY:\n"
+            "Thanks for the report. We understood the board does not load; a "
+            "person will follow up.\n"
             "END"
         )
     if "You are the ScrumMaster" in prompt:

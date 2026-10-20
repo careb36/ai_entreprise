@@ -17,8 +17,8 @@ const TICKET = {
 }
 
 const NO_RECORD = {
-  severity: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
-  category: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
+  severity: { decided: 0, agent_agreed: 0, agent_unusable: 0, reporter_chose: 0, reporter_agreed: 0 },
+  category: { decided: 0, agent_agreed: 0, agent_unusable: 0, reporter_chose: 0, reporter_agreed: 0 },
 }
 
 function stubApi(overrides: Record<string, (init: RequestInit) => Response> = {}) {
@@ -204,7 +204,7 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
 
     const detail = await screen.findByRole('region', { name: 'Board does not load' })
-    expect(within(detail).getByText('Decided: impact Critical · category —, by admin@acme.test')).toBeInTheDocument()
+    expect(within(detail).getByText('Decided: impact Critical · category —, last changed by admin@acme.test')).toBeInTheDocument()
     // The form starts from the earlier decision, not from the reporter's or the agent's value.
     expect(within(detail).getByRole('combobox', { name: 'Decided impact' })).toHaveValue('critical')
     expect(within(detail).getByRole('combobox', { name: 'Decided category' })).toHaveValue('')
@@ -214,16 +214,44 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
     fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
 
     expect(await within(detail).findByText('Ticket updated')).toBeInTheDocument()
+    // The unchanged impact is not sent again: saving is not deciding it anew.
     expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({
-      status: 'in_progress', severity: 'critical', category: 'incident',
+      status: 'in_progress', category: 'incident',
     })
+  })
+
+  it('clears a decision by sending it empty, and sends none when only the status changes', async () => {
+    const patch = vi.fn((init: RequestInit) => {
+      void init
+      return response(200, { ticket_num: 'BUG-0001', status: 'waiting', updated_at: '2026-10-02T00:00:00' })
+    })
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, {
+        ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+        decided_severity: 'critical', decided_category: 'bug', decided_by: 'admin@acme.test',
+      }),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+    const detail = await screen.findByRole('region', { name: 'Board does not load' })
+
+    fireEvent.change(within(detail).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
+    fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'waiting' })
+
+    fireEvent.change(within(detail).getByRole('combobox', { name: 'Decided impact' }), { target: { value: '' } })
+    fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
+    expect(JSON.parse(String(patch.mock.calls[1][0].body))).toEqual({ status: 'waiting', severity: '' })
   })
 
   it("shows how the agent's suggestions compared with the decisions, beside the reporters'", async () => {
     stubApi({
       'GET /v1/support/agent_record': () => response(200, {
-        severity: { decided: 4, agent_agreed: 3, reporter_agreed: 1 },
-        category: { decided: 0, agent_agreed: 0, reporter_agreed: 0 },
+        severity: { decided: 4, agent_agreed: 3, agent_unusable: 0, reporter_chose: 4, reporter_agreed: 1 },
+        category: { decided: 0, agent_agreed: 0, agent_unusable: 0, reporter_chose: 0, reporter_agreed: 0 },
       }),
     })
     renderAs(true)
@@ -232,6 +260,20 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
     expect(record).toHaveTextContent('Impact: the agent matched 3 of 4 decisions; the reporters 1 of 4.')
     // No category decided yet: no line for it.
     expect(record).not.toHaveTextContent('Category:')
+  })
+
+  it("counts the agent's unusable answers, and the reporters only where they chose", async () => {
+    stubApi({
+      'GET /v1/support/agent_record': () => response(200, {
+        severity: { decided: 4, agent_agreed: 2, agent_unusable: 1, reporter_chose: 3, reporter_agreed: 1 },
+        category: { decided: 2, agent_agreed: 2, agent_unusable: 0, reporter_chose: 0, reporter_agreed: 0 },
+      }),
+    })
+    renderAs(true)
+
+    const record = await screen.findByRole('region', { name: "The Support agent's record" })
+    expect(record).toHaveTextContent('Impact: the agent matched 2 of 4 decisions (1 without a usable answer); the reporters 1 of 3.')
+    expect(record).toHaveTextContent('Category: the agent matched 2 of 2 decisions; no reporter chose one.')
   })
 
   it('shows no record before anything was decided', async () => {

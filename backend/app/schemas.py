@@ -194,7 +194,9 @@ class BugReportRequest(BaseModel):
     expected: str | None = None  # Expected behaviour
     actual: str | None = None  # Actual (buggy) behaviour
     severity: str = "medium"  # "low" | "medium" | "high" | "critical"
-    category: str = "bug"  # "bug" | "feature" | "question" | "incident"
+    # "bug" | "feature" | "question" | "incident"; the help-desk form asks for
+    # none, and a default would pass for the reporter's choice.
+    category: str | None = None
     reporter_email: str | None = None
     browser_info: dict[str, Any] | None = None  # User-agent, viewport, etc.
 
@@ -206,6 +208,7 @@ class BugStatusUpdateRequest(BaseModel):
     resolution: str | None = None  # Mandatory when status is "resolved" or "closed"
     assigned_to: str | None = None
     # The support admin's decision; stored apart from the reporter's choice.
+    # Omitted keeps the earlier decision; "" clears it.
     severity: str | None = None  # "low" | "medium" | "high" | "critical"
     category: str | None = None  # "bug" | "feature" | "question" | "incident"
 
