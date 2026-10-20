@@ -7,12 +7,13 @@ which rework requests are still pending, whether a blocked task is waiting
 for a person or will move again on its own. They live here, with no engine
 and no I/O, so every caller reads the board the same way.
 
-Three kinds of comment are never a deliverable and never a verdict on the
+Four kinds of comment are never a deliverable and never a verdict on the
 task they sit on: the gates' texts (``Quality gate``, ``Verifier``), a
 person's notes (author ``user``; the send-back one, ``SEND_BACK_MARKER``,
-also restarts the rework budgets) and the carry-over lineage notes
+also restarts the rework budgets), the carry-over lineage notes
 (``CARRIED_*_PREFIX``), which quote an earlier task's verdict and must not be
-read as this task's.
+read as this task's, and the worker's console-advice note
+(``CONSOLE_ADVICE_PREFIX``), which quotes an assistant's words.
 """
 
 import json
@@ -71,6 +72,19 @@ def is_lineage_comment(comment: dict[str, Any]) -> bool:
     return text.startswith((CARRIED_TO_PREFIX, CARRIED_FROM_PREFIX))
 
 
+def is_console_advice_note(comment: dict[str, Any]) -> bool:
+    """The worker's note quoting console assistants' advice.
+
+    It carries an excerpt of what an assistant wrote ("add retry logic", "needs
+    manual triage"), so it is never read as a verdict; and only the worker's
+    own note (author ``System``) counts, not a deliverable or a person's note
+    that happens to start the same way.
+    """
+    return _author(comment) == "system" and _text(comment).startswith(
+        CONSOLE_ADVICE_PREFIX
+    )
+
+
 def is_send_back(comment: dict[str, Any]) -> bool:
     """A person's note sending the task back to work."""
     return _author(comment) == "user" and _text(comment).startswith(SEND_BACK_MARKER)
@@ -82,7 +96,11 @@ def is_rework_request(comment: dict[str, Any]) -> bool:
 
 def verdict_comments(comments: Any) -> list[dict[str, Any]]:
     """The comments that may say something about *this* task's state."""
-    return [c for c in comment_list(comments) if not is_lineage_comment(c)]
+    return [
+        c
+        for c in comment_list(comments)
+        if not is_lineage_comment(c) and not is_console_advice_note(c)
+    ]
 
 
 def since_send_back(comments: Any) -> list[dict[str, Any]]:
@@ -332,11 +350,8 @@ def count_second_attempt(tally: dict[str, int], status: str, comments: Any) -> N
 
 
 def has_console_advice(comments: Any) -> bool:
-    """Whether a console assistant's advice was written onto the task."""
-    return any(
-        _text(comment).startswith(CONSOLE_ADVICE_PREFIX)
-        for comment in comment_list(comments)
-    )
+    """Whether the worker wrote a console assistant's advice onto the task."""
+    return any(is_console_advice_note(comment) for comment in comment_list(comments))
 
 
 def no_console_advice() -> dict[str, dict[str, int]]:
@@ -350,8 +365,18 @@ def no_console_advice() -> dict[str, dict[str, int]]:
 def count_console_advice(
     tally: dict[str, dict[str, int]], status: str, comments: Any
 ) -> None:
-    """Add one task to *tally*, under the group its board puts it in."""
-    group = tally["advised" if has_console_advice(comments) else "unadvised"]
+    """Add one task to *tally*, under the group its board puts it in.
+
+    An advised task's rework counts from its first advice note on: requests
+    an earlier, unadvised attempt drew (the assistant was cooling down, or
+    did not answer) are not the advice's doing.
+    """
+    comments = comment_list(comments)
+    first_advice = next(
+        (i for i, comment in enumerate(comments) if is_console_advice_note(comment)),
+        None,
+    )
+    group = tally["unadvised" if first_advice is None else "advised"]
     group["total"] += 1
     group["done"] += int(status == "done")
-    group["rework"] += rework_request_count(comments)
+    group["rework"] += rework_request_count(comments[first_advice or 0 :])

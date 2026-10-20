@@ -293,6 +293,7 @@ Test files:
 | `test_task_delivery.py` | File manifest parsing, delivery to the real daemon against `tmp_path`, sha256 `files_written` check, daemon-down → unverifiable |
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
+| `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |

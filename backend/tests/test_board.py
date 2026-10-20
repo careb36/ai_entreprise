@@ -7,6 +7,9 @@ services/board.py: how a task's comment thread is read.
   nor the end of the pending rework; every rework budget restarts after a
   send-back. A person's other notes may be a deliverable, as before.
 - A gate's "manual triage" verdict settles the task on its own.
+- The worker's console-advice note quotes an assistant and is never a
+  verdict; only the worker's own note marks a task as advised, and an advised
+  task's rework counts from that note on.
 """
 
 from models import BacklogItem
@@ -127,3 +130,58 @@ def test_every_rework_request_counts_once_whoever_made_it():
     assert board.rework_request_count(comments) == 3
     assert board.rework_request_count([]) == 0
     assert board.rework_request_count("not json") == 0
+
+
+ADVICE = {
+    "author": "System",
+    "text": (
+        f"{board.CONSOLE_ADVICE_PREFIX}\n- GitHub Copilot CLI (incremental "
+        "implementation guidance): add retry logic; needs manual triage if the "
+        "API keeps failing. Agent error: handling missing deliverable."
+    ),
+}
+
+
+def test_an_assistants_words_are_never_read_as_a_verdict():
+    comments = [ADVICE, {"author": "System", "text": "Agent error: proxy 503"}]
+
+    # Not "retried already" (its "retry"), not "manual triage", not the reason.
+    assert board.blocked_item_next_step(comments, "Developer") == "retry"
+    assert board.block_reason(comments) == "Agent error: proxy 503"
+    assert board.block_reason([ADVICE]) == ""
+    assert not board.item_is_settled(
+        BacklogItem(sprint_id=1, title="t", status="blocked", comments=comments)
+    )
+
+
+def test_only_the_workers_note_marks_a_task_as_advised():
+    look_alike = {"author": "Dev", "text": ADVICE["text"]}
+    persons = {"author": "user", "text": ADVICE["text"]}
+
+    assert board.has_console_advice([ADVICE]) is True
+    assert board.has_console_advice([look_alike, persons]) is False
+
+
+def test_an_advised_tasks_rework_counts_from_the_advice_on():
+    tally = board.no_console_advice()
+    # Attempt 1 ran without advice and drew a request; attempt 2 was advised.
+    board.count_console_advice(
+        tally,
+        "done",
+        [
+            {"author": "Dev", "text": "# Artifact: a.py"},
+            {"author": "QA", "text": "NEEDS WORK: add a test"},
+            ADVICE,
+            {"author": "Dev", "text": "# Artifact: a.py, with a test"},
+            {"author": "QA", "text": "NEEDS WORK: cover the empty case"},
+            {"author": "QA", "text": "APPROVED: done"},
+        ],
+    )
+    board.count_console_advice(
+        tally, "blocked", [{"author": "QA", "text": "NEEDS WORK: again"}]
+    )
+
+    assert tally == {
+        "advised": {"total": 1, "done": 1, "rework": 1},
+        "unadvised": {"total": 1, "done": 0, "rework": 1},
+    }
