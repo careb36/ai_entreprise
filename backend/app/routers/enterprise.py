@@ -438,9 +438,12 @@ async def discover_team(
     per-role justifications. Falls back to rule-based team if LLM unavailable.
 
     If ``company_id`` is provided, the result is persisted in the
-    ``project_discovery`` table.
+    ``project_discovery`` table, and it becomes the folder that company's
+    agents write to, so that needs a Manager of the company.
     """
     require_authenticated(user)
+    if req.company_id is not None:
+        require_company_role(session, user, req.company_id, "Manager")
     llm_proxy_url = None
     llm_client = getattr(request.app.state, "llm_client", None)
     if llm_client:
