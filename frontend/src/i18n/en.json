@@ -955,6 +955,7 @@
     "emailToSearch": "Enter your email to find tickets",
     "description": "What happened?",
     "severity": "Impact",
+    "severityNotSure": "Not sure",
     "critical": "🔴 Critical — system down",
     "high": "🟠 High — major feature broken",
     "medium": "🟡 Medium — minor issue",

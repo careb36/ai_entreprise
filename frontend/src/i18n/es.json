@@ -955,6 +955,7 @@
     "emailToSearch": "Ingresa tu correo para buscar tickets",
     "description": "¿Qué pasó?",
     "severity": "Impacto",
+    "severityNotSure": "No estoy seguro",
     "critical": "🔴 Crítico — sistema caído",
     "high": "🟠 Alto — función principal rota",
     "medium": "🟡 Medio — problema menor",

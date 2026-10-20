@@ -622,14 +622,20 @@ def _consult_architect(
                 Agent.role == KPI_ROLE_ARCHITECT,
             )
         ).first()
-        # How tasks went after its earlier briefs, counted from the boards.
-        record = (
-            architect_record_context(
-                architect_track_record(session, sprint["company_id"])
-            )
-            if architect_row
-            else ""
-        )
+        # How tasks went after its earlier briefs, counted from the boards. A
+        # failed count leaves the record out; it never blocks the Developer.
+        record = ""
+        if architect_row:
+            try:
+                record = architect_record_context(
+                    architect_track_record(session, sprint["company_id"])
+                )
+            except Exception as exc:  # noqa: BLE001 - The brief goes without its record.
+                logger.warning(
+                    "Architect record unavailable for company=%s: %s",
+                    sprint["company_id"],
+                    exc,
+                )
 
     if not architect_row:
         logger.info(

@@ -156,8 +156,8 @@ def test_admin_decides_severity_and_category_apart_from_the_reporter(
     detail = test_client.get(
         f"/v1/support/tickets/{people['mine']}", headers=people["admin"]
     ).json()
-    # The reporter's choice stays as they made it; the decision sits beside it.
-    assert (detail["severity"], detail["category"]) == ("medium", None)
+    # The reporter's choice stays as they made it (none); the decision sits beside it.
+    assert (detail["severity"], detail["category"]) == (None, None)
     assert (detail["decided_severity"], detail["decided_category"]) == (
         "critical",
         "incident",
@@ -222,7 +222,7 @@ def test_a_decision_is_credited_to_whoever_changed_it_and_can_be_cleared(
     assert test_client.get(url, headers=people["admin"]).json()["decided_at"] is None
 
 
-def test_the_reporters_choice_is_normalized_and_no_category_is_made_up(
+def test_the_reporters_choice_is_normalized_and_nothing_is_made_up(
     test_client, sqlite_session
 ):
     def report(**fields):
@@ -241,7 +241,7 @@ def test_the_reporters_choice_is_normalized_and_no_category_is_made_up(
     assert (
         sqlite_session.get(BugReport, unchosen).severity,
         sqlite_session.get(BugReport, unchosen).category,
-    ) == ("medium", None)
+    ) == (None, None)
     refused = report(severity="urgent")
     assert refused.status_code == 400
     assert refused.json()["detail"].startswith("Invalid severity.")

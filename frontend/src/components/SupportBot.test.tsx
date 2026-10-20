@@ -42,6 +42,32 @@ describe('SupportBot', () => {
     expect(body.messages[0].role).toBe('assistant')
   })
 
+  it('reports no impact the reporter did not choose, and the one they did', async () => {
+    const fetch = vi.fn().mockResolvedValue(response(200, { ticket_num: 'FAB-00001', status: 'open' }))
+    vi.stubGlobal('fetch', fetch)
+    render(<SupportBot />)
+    const submit = () => {
+      fireEvent.change(screen.getByPlaceholderText("e.g. Sprint board won't load"), { target: { value: 'Board' } })
+      fireEvent.change(screen.getByPlaceholderText(/Describe what you were doing/), { target: { value: 'Spins' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Submit Report' }))
+    }
+    const sent = () => JSON.parse(String(fetch.mock.calls.at(-1)![1].body))
+
+    fireEvent.click(screen.getByTitle('Open Support'))
+    fireEvent.click(screen.getByTitle('Report a Problem'))
+    // Nothing preset: a preset would pass for the reporter's choice.
+    expect(screen.getByRole('combobox')).toHaveValue('')
+    submit()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Submit Report' })).not.toBeInTheDocument())
+    expect(sent()).not.toHaveProperty('severity')
+
+    fireEvent.click(screen.getByTitle('Report a Problem'))
+    expect(screen.getByRole('combobox')).toHaveValue('')
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'high' } })
+    submit()
+    await waitFor(() => expect(sent().severity).toBe('high'))
+  })
+
   it('looks tickets up on the support endpoints', async () => {
     const fetch = vi.fn().mockResolvedValue(response(200, { tickets: [], count: 0 }))
     vi.stubGlobal('fetch', fetch)

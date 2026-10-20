@@ -78,8 +78,8 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
     The caller should store the returned ``ticket_num`` for status polling via
     ``GET /v1/support/tickets/{ticket_num}``.
     """
-    severity = _known(req.severity, SEVERITIES, "severity") or "medium"
-    # No category unless the reporter chose one.
+    # Nothing the reporter did not choose: a default would pass for their claim.
+    severity = _known(req.severity, SEVERITIES, "severity") or None
     category = _known(req.category, CATEGORIES, "category") or None
     ticket_num = _next_ticket_num(session)
     report = BugReport(

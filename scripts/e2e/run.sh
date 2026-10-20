@@ -219,8 +219,8 @@ check "the decision sits beside both claims" test "$(ticket "$T1" "d['severity']
 record_row() { api "$API/v1/support/agent_record" | json "[(f, t['decided'], t['agent_agreed'], t['agent_unusable'], t['reporter_chose'], t['reporter_agreed']) for f, t in sorted(d.items())]"; }
 check "the agent's record counts it against the agent and the reporter" test "$(record_row)" = "[('category', 1, 0, 0, 1, 0), ('severity', 1, 1, 0, 1, 0)]"
 DECIDED_AT=$(ticket "$T1" "d['decided_at']")
-api -X PATCH "$API/v1/support/tickets/$T1" -H 'Content-Type: application/json' -d '{"status": "waiting", "severity": "high"}' > /dev/null
-check "saving the same decision again does not decide anew" test "$(ticket "$T1" "d['decided_at']")" = "$DECIDED_AT"
+RESAVED=$(api -X PATCH "$API/v1/support/tickets/$T1" -H 'Content-Type: application/json' -d '{"status": "waiting", "severity": "high"}' | json "d.get('status', '')")
+check "saving the same decision again does not decide anew" test "$RESAVED" = waiting -a "$(ticket "$T1" "d['decided_at']")" = "$DECIDED_AT"
 T2=$(report_bug "Sprint page is blank")
 check "a reporter who chose no category has none" test "$(ticket "$T2" "d['category']")" = None
 check "the next ticket is triaged" wait_value 60 "Support agent high" ticket "$T2" "d['triaged_by'], d['suggested_severity']"

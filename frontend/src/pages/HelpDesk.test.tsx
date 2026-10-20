@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import HelpDesk from './HelpDesk'
@@ -245,6 +245,34 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
     fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
     expect(JSON.parse(String(patch.mock.calls[1][0].body))).toEqual({ status: 'waiting', severity: '' })
+  })
+
+  it('does not clear a decision another admin made while the form was open', async () => {
+    const patch = vi.fn((init: RequestInit) => {
+      void init
+      return response(200, { ticket_num: 'BUG-0001', status: 'waiting', updated_at: '2026-10-02T00:00:00' })
+    })
+    let detail: Record<string, unknown> = {
+      ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+      decided_severity: null, decided_category: null, decided_by: null,
+    }
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, detail),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+    const region = await screen.findByRole('region', { name: 'Board does not load' })
+
+    // Another admin decides meanwhile, and the page refetches the ticket.
+    detail = { ...detail, decided_severity: 'critical', decided_by: 'b@acme.test' }
+    await act(() => queryClient.invalidateQueries())
+    expect(await within(region).findByText(/last changed by b@acme.test/)).toBeInTheDocument()
+
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'waiting' })
   })
 
   it("shows how the agent's suggestions compared with the decisions, beside the reporters'", async () => {

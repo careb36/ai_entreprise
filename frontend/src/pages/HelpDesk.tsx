@@ -134,7 +134,7 @@ function TicketList({ filters, onFilters, selected, onSelect }: {
                 <span className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
                   <span className="font-mono text-gray-300">{ticket.ticket_num}</span>
                   <span className="badge">{t(`support.status.${ticket.status}`, { defaultValue: ticket.status })}</span>
-                  <span>{t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity })}</span>
+                  <span>{ticket.severity ? t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }) : '—'}</span>
                   <span className="ml-auto">{formatDate(ticket.created_at)}</span>
                 </span>
                 <span className="mt-0.5 block truncate text-sm text-white">{ticket.title}</span>
@@ -212,7 +212,7 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
                 {t('helpDesk.suggested', {
                   severity: t(`helpDesk.severities.${ticket.suggested_severity}`, { defaultValue: ticket.suggested_severity }),
                   category: ticket.suggested_category ?? '—',
-                  reported: t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }),
+                  reported: ticket.severity ? t(`helpDesk.severities.${ticket.severity}`, { defaultValue: ticket.severity }) : '—',
                   defaultValue: 'Suggested impact: {{severity}} (reported: {{reported}}) · category: {{category}}',
                 })}
               </p>
@@ -253,10 +253,16 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
   const [assignee, setAssignee] = useState(ticket.assigned_to ?? '')
   // The admin's decision starts from an earlier decision, never from the
   // reporter's choice or the agent's suggestion: leaving it empty decides nothing.
-  const decidedSeverity = SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : ''
-  const decidedCategory = CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : ''
-  const [severity, setSeverity] = useState<TicketSeverity | ''>(decidedSeverity)
-  const [category, setCategory] = useState<TicketCategory | ''>(decidedCategory)
+  // What the form started from: only a decision the admin changed here is
+  // sent, so one another admin made meanwhile is not overwritten or cleared.
+  const [startSeverity] = useState<TicketSeverity | ''>(
+    SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : '',
+  )
+  const [startCategory] = useState<TicketCategory | ''>(
+    CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : '',
+  )
+  const [severity, setSeverity] = useState<TicketSeverity | ''>(startSeverity)
+  const [category, setCategory] = useState<TicketCategory | ''>(startCategory)
   const needsResolution = TERMINAL.includes(status) && !resolution.trim()
 
   function submit() {
@@ -269,8 +275,8 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         ...(assignee.trim() ? { assigned_to: assignee.trim() } : {}),
         // Only a changed decision is sent ('' clears one), so saving the
         // status does not decide again in the saver's name.
-        ...(severity !== decidedSeverity ? { severity } : {}),
-        ...(category !== decidedCategory ? { category } : {}),
+        ...(severity !== startSeverity ? { severity } : {}),
+        ...(category !== startCategory ? { category } : {}),
       },
     })
   }
