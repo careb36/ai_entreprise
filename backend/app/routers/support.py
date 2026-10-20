@@ -54,6 +54,22 @@ def _next_ticket_num(session: Session) -> str:
     return f"FAB-{result:05d}"
 
 
+def _known(value: str | None, allowed: tuple[str, ...], field: str) -> str | None:
+    """*value* stripped and lower-cased: None when absent, "" when blank.
+
+    An unknown value is a 400, so the reporter's choice and an admin's
+    decision compare as the same words.
+    """
+    if value is None:
+        return None
+    choice = value.strip().lower()
+    if choice and choice not in allowed:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid {field}. Use: {', '.join(allowed)}"
+        )
+    return choice
+
+
 @router.post("/report_bug")
 async def report_bug(req: BugReportRequest, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
     """
@@ -62,6 +78,9 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
     The caller should store the returned ``ticket_num`` for status polling via
     ``GET /v1/support/tickets/{ticket_num}``.
     """
+    severity = _known(req.severity, SEVERITIES, "severity") or "medium"
+    # No category unless the reporter chose one.
+    category = _known(req.category, CATEGORIES, "category") or None
     ticket_num = _next_ticket_num(session)
     report = BugReport(
         ticket_num=ticket_num,
@@ -70,8 +89,8 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
         steps=req.steps,
         expected=req.expected,
         actual=req.actual,
-        severity=req.severity,
-        category=req.category,
+        severity=severity,
+        category=category,
         reporter_email=req.reporter_email,
         browser_info=req.browser_info,
     )
@@ -221,7 +240,8 @@ async def update_ticket_status(
     When the status transitions to ``"resolved"`` or ``"closed"``,
     ``resolved_at`` is automatically set to the current UTC timestamp.
     A ``severity`` or ``category`` is the admin's decision: it is stored apart
-    from the reporter's choice and the Support agent's suggestion.
+    from the reporter's choice and the Support agent's suggestion. Omitted, the
+    earlier decision stays; an empty string clears it.
     Requires a support admin.
     """
     require_support_admin(user)
@@ -230,14 +250,10 @@ async def update_ticket_status(
         raise HTTPException(
             status_code=400, detail=f"Invalid status. Use: {valid_statuses}"
         )
-    if req.severity is not None and req.severity not in SEVERITIES:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid severity. Use: {', '.join(SEVERITIES)}"
-        )
-    if req.category is not None and req.category not in CATEGORIES:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid category. Use: {', '.join(CATEGORIES)}"
-        )
+    decisions = {
+        "severity": _known(req.severity, SEVERITIES, "severity"),
+        "category": _known(req.category, CATEGORIES, "category"),
+    }
 
     report = session.exec(
         select(BugReport).where(BugReport.ticket_num == ticket_num.upper())
@@ -251,13 +267,18 @@ async def update_ticket_status(
     if req.assigned_to:
         report.assigned_to = req.assigned_to
     report.updated_at = datetime.now(UTC).replace(tzinfo=None)
-    if req.severity is not None or req.category is not None:
-        if req.severity is not None:
-            report.decided_severity = req.severity
-        if req.category is not None:
-            report.decided_category = req.category
-        report.decided_by = user.email if user is not None else "support admin"
-        report.decided_at = report.updated_at
+    # Stamped only when a decision changes: saving a ticket's status does not
+    # credit whoever saved it with an earlier decision.
+    changed = False
+    for field, value in decisions.items():
+        if value is not None and getattr(report, f"decided_{field}") != (value or None):
+            setattr(report, f"decided_{field}", value or None)
+            changed = True
+    if changed:
+        decided = bool(report.decided_severity or report.decided_category)
+        who = user.email if user is not None else "support admin"
+        report.decided_by = who if decided else None
+        report.decided_at = report.updated_at if decided else None
     # Stamp resolution time when the ticket reaches a terminal state.
     if req.status in ("resolved", "closed"):
         report.resolved_at = datetime.now(UTC).replace(tzinfo=None)
@@ -271,6 +292,7 @@ async def update_ticket_status(
         "updated_at": report.updated_at.isoformat(),
         "decided_severity": report.decided_severity,
         "decided_category": report.decided_category,
+        "decided_by": report.decided_by,
     }
 
 
@@ -281,9 +303,10 @@ async def support_agent_record(
 ):
     """How the Support agent's suggestions compared with support admins' decisions.
 
-    Per field (``severity``, ``category``): tickets with a suggestion and a
-    decision, how many the agent matched, and how many the reporter's own
-    choice matched. Counted from the tickets; requires a support admin.
+    Per field (``severity``, ``category``), over the tickets the agent triaged
+    and an admin decided: how many, how many the agent matched and how many it
+    gave no usable answer for, how many reporters chose a value and how many of
+    those matched. Counted from the tickets; requires a support admin.
     """
     require_support_admin(user)
     return track_record(session)

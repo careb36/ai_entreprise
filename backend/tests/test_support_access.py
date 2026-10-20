@@ -157,7 +157,7 @@ def test_admin_decides_severity_and_category_apart_from_the_reporter(
         f"/v1/support/tickets/{people['mine']}", headers=people["admin"]
     ).json()
     # The reporter's choice stays as they made it; the decision sits beside it.
-    assert (detail["severity"], detail["category"]) == ("medium", "bug")
+    assert (detail["severity"], detail["category"]) == ("medium", None)
     assert (detail["decided_severity"], detail["decided_category"]) == (
         "critical",
         "incident",
@@ -175,6 +175,76 @@ def test_admin_decides_severity_and_category_apart_from_the_reporter(
         f"/v1/support/tickets/{people['mine']}", headers=people["admin"]
     ).json()
     assert (again["decided_severity"], again["decided_category"]) == ("critical", "bug")
+
+
+def test_a_decision_is_credited_to_whoever_changed_it_and_can_be_cleared(
+    test_client, people, sqlite_session, monkeypatch
+):
+    second, second_headers = _user(sqlite_session, "second")
+    monkeypatch.setattr(
+        settings,
+        "SUPPORT_ADMIN_EMAILS",
+        f"{settings.SUPPORT_ADMIN_EMAILS},{second.email}",
+    )
+    url = f"/v1/support/tickets/{people['mine']}"
+
+    def decision():
+        detail = test_client.get(url, headers=people["admin"]).json()
+        return (
+            detail["decided_severity"],
+            detail["decided_category"],
+            (detail["decided_by"] or "").split("-")[0],
+        )
+
+    test_client.patch(
+        url, json={"status": "in_progress", "severity": "high"}, headers=people["admin"]
+    )
+    # Saving the same decision with a new status is not deciding again.
+    test_client.patch(
+        url, json={"status": "waiting", "severity": "high"}, headers=second_headers
+    )
+    assert decision() == ("high", None, "admin")
+
+    test_client.patch(
+        url, json={"status": "waiting", "category": "Incident"}, headers=second_headers
+    )
+    assert decision() == ("high", "incident", "second")
+
+    cleared = test_client.patch(
+        url, json={"status": "waiting", "severity": ""}, headers=second_headers
+    )
+    assert cleared.status_code == 200
+    assert decision() == (None, "incident", "second")
+    test_client.patch(
+        url, json={"status": "waiting", "category": " "}, headers=second_headers
+    )
+    assert decision() == (None, None, "")
+    assert test_client.get(url, headers=people["admin"]).json()["decided_at"] is None
+
+
+def test_the_reporters_choice_is_normalized_and_no_category_is_made_up(
+    test_client, sqlite_session
+):
+    def report(**fields):
+        return test_client.post(
+            "/v1/support/report_bug",
+            json={"title": "Board does not load", "description": "Spinner", **fields},
+        )
+
+    chosen = report(severity="High ", category=" Bug").json()["id"]
+    unchosen = report().json()["id"]
+    sqlite_session.expire_all()
+    assert (
+        sqlite_session.get(BugReport, chosen).severity,
+        sqlite_session.get(BugReport, chosen).category,
+    ) == ("high", "bug")
+    assert (
+        sqlite_session.get(BugReport, unchosen).severity,
+        sqlite_session.get(BugReport, unchosen).category,
+    ) == ("medium", None)
+    refused = report(severity="urgent")
+    assert refused.status_code == 400
+    assert refused.json()["detail"].startswith("Invalid severity.")
 
 
 @pytest.mark.parametrize("field, value", [("severity", "urgent"), ("category", "rant")])

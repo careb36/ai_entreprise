@@ -24,6 +24,10 @@
 #      adopted after the foundation sprint is measured over the two sprints
 #      since and kept, and the proposal prompt lists what earlier procedures
 #      did.
+#   6. A ticket reported through the public form is triaged by the Support
+#      agent beside the reporter's choice; a support admin decides, the
+#      agent's record counts the decision, and the next ticket's prompt
+#      carries that record.
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -95,6 +99,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     NATS_URL=$NATS_URL LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
+    SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
@@ -188,6 +193,30 @@ check "the procedure adopted after the foundation sprint was measured and kept" 
 check "the proposal prompt listed what earlier procedures did" wait_value 60 yes prompt_seen '"Cover edge cases" (Developer, v1): kept, rework per task'
 check "the sprint list counts the briefed third attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S2)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
 check "the inbox lists only the latest attempt" test "$(api "$API/v1/inbox?company_id=$CID" | json "[t['sprint_id'] for t in d['blocked_tasks']]")" = "[$S2]"
+
+echo "6. the help desk"
+# Authentication is off, so every caller acts as a support admin.
+report_bug() {  # report_bug <title> [extra JSON fields]
+  api -X POST "$API/v1/support/report_bug" -H 'Content-Type: application/json' -d "{
+  \"title\": \"$1\", \"description\": \"It spins forever.\", \"severity\": \"low\", \"reporter_email\": \"ana@e2e.test\"${2:+, $2}}" | json "d.get('ticket_num', '')"; }
+ticket() { api "$API/v1/support/tickets/$1" | json "$2"; }
+T1=$(report_bug "Board does not load" '"category": "bug"')
+check "the Support agent triages a ticket from the public form" wait_value 60 "Support agent high" ticket "$T1" "d['triaged_by'], d['suggested_severity']"
+check "beside the reporter's choice, which stays as reported" test "$(ticket "$T1" "d['severity'], d['category'], d['suggested_category']")" = "low bug bug"
+check "and writes the reporter a first reply" test "$(ticket "$T1" "bool(d['agent_reply'])")" = True
+check "its first prompt has no record yet" test "$(prompt_seen "TICKET $T1 .*How your earlier suggestions")" = no
+DECIDED=$(api -X PATCH "$API/v1/support/tickets/$T1" -H 'Content-Type: application/json' -d '{"status": "in_progress", "severity": "high", "category": "incident"}' | json "d.get('decided_severity'), d.get('decided_category')")
+check "a support admin decides impact and category" test "$DECIDED" = "high incident"
+check "the decision sits beside both claims" test "$(ticket "$T1" "d['severity'], d['suggested_category'], d['decided_category'], d['decided_by']")" = "low bug incident support admin"
+record_row() { api "$API/v1/support/agent_record" | json "[(f, t['decided'], t['agent_agreed'], t['agent_unusable'], t['reporter_chose'], t['reporter_agreed']) for f, t in sorted(d.items())]"; }
+check "the agent's record counts it against the agent and the reporter" test "$(record_row)" = "[('category', 1, 0, 0, 1, 0), ('severity', 1, 1, 0, 1, 0)]"
+DECIDED_AT=$(ticket "$T1" "d['decided_at']")
+api -X PATCH "$API/v1/support/tickets/$T1" -H 'Content-Type: application/json' -d '{"status": "waiting", "severity": "high"}' > /dev/null
+check "saving the same decision again does not decide anew" test "$(ticket "$T1" "d['decided_at']")" = "$DECIDED_AT"
+T2=$(report_bug "Sprint page is blank")
+check "a reporter who chose no category has none" test "$(ticket "$T2" "d['category']")" = None
+check "the next ticket is triaged" wait_value 60 "Support agent high" ticket "$T2" "d['triaged_by'], d['suggested_severity']"
+check "with that record in its prompt" test "$(prompt_seen "TICKET $T2 .*severity: yours matched 1 of 1; the reporter's own choice matched 0 of 1.*category: yours matched 0 of 1")" = yes
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi

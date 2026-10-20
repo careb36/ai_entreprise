@@ -234,7 +234,7 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
             severity: ticket.decided_severity ? t(`helpDesk.severities.${ticket.decided_severity}`, { defaultValue: ticket.decided_severity }) : '—',
             category: ticket.decided_category ? t(`helpDesk.categories.${ticket.decided_category}`, { defaultValue: ticket.decided_category }) : '—',
             who: ticket.decided_by,
-            defaultValue: 'Decided: impact {{severity}} · category {{category}}, by {{who}}',
+            defaultValue: 'Decided: impact {{severity}} · category {{category}}, last changed by {{who}}',
           })}
         </p>
       )}
@@ -253,12 +253,10 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
   const [assignee, setAssignee] = useState(ticket.assigned_to ?? '')
   // The admin's decision starts from an earlier decision, never from the
   // reporter's choice or the agent's suggestion: leaving it empty decides nothing.
-  const [severity, setSeverity] = useState<TicketSeverity | ''>(
-    SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : '',
-  )
-  const [category, setCategory] = useState<TicketCategory | ''>(
-    CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : '',
-  )
+  const decidedSeverity = SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : ''
+  const decidedCategory = CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : ''
+  const [severity, setSeverity] = useState<TicketSeverity | ''>(decidedSeverity)
+  const [category, setCategory] = useState<TicketCategory | ''>(decidedCategory)
   const needsResolution = TERMINAL.includes(status) && !resolution.trim()
 
   function submit() {
@@ -269,8 +267,10 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
         status,
         ...(resolution.trim() ? { resolution: resolution.trim() } : {}),
         ...(assignee.trim() ? { assigned_to: assignee.trim() } : {}),
-        ...(severity ? { severity } : {}),
-        ...(category ? { category } : {}),
+        // Only a changed decision is sent ('' clears one), so saving the
+        // status does not decide again in the saver's name.
+        ...(severity !== decidedSeverity ? { severity } : {}),
+        ...(category !== decidedCategory ? { category } : {}),
       },
     })
   }
@@ -345,12 +345,22 @@ function AgentRecord() {
     <p key={key} className="text-xs text-gray-300">
       {t(`helpDesk.record.${key}`, {
         agent: field.agent_agreed,
-        reporter: field.reporter_agreed,
         total: field.decided,
         defaultValue: key === 'severity'
-          ? 'Impact: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}.'
-          : 'Category: the agent matched {{agent}} of {{total}} decisions; the reporters {{reporter}} of {{total}}.',
+          ? 'Impact: the agent matched {{agent}} of {{total}} decisions'
+          : 'Category: the agent matched {{agent}} of {{total}} decisions',
       })}
+      {field.agent_unusable > 0 && t('helpDesk.record.unusable', {
+        n: field.agent_unusable,
+        defaultValue: ' ({{n}} without a usable answer)',
+      })}
+      {field.reporter_chose > 0
+        ? t('helpDesk.record.reporters', {
+          reporter: field.reporter_agreed,
+          chose: field.reporter_chose,
+          defaultValue: '; the reporters {{reporter}} of {{chose}}.',
+        })
+        : t('helpDesk.record.noReporters', { defaultValue: '; no reporter chose one.' })}
     </p>
   )
   return (

@@ -31,7 +31,8 @@ class BugReport(SQLModel, table=True):
     expected: str | None = None  # What the user expected to happen
     actual: str | None = None  # What actually happened (the bug)
     severity: str = "medium"  # "low" | "medium" | "high" | "critical"
-    category: str = "bug"  # "bug" | "feature" | "question" | "incident"
+    # "bug" | "feature" | "question" | "incident"; None when the reporter chose none.
+    category: str | None = None
     status: str = "open"  # "open" | "in_progress" | "waiting" | "resolved" | "closed"
     reporter_email: str | None = None
     assigned_to: str | None = None

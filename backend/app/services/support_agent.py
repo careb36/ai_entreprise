@@ -49,18 +49,28 @@ _TRIAGE = re.compile(
 def track_record(session: Session) -> dict[str, dict[str, int]]:
     """How the agent's suggestions fared against the support admins' decisions.
 
-    Per field, over the tickets the agent suggested a value for and a person
-    then decided: how many, how many the agent matched, and how many the
-    reporter's own choice matched (the baseline the agent has to beat).
+    Per field, over the tickets the agent triaged and a person then decided:
+    how many (``decided``); how many the agent's suggestion matched
+    (``agent_agreed``) and how many got no usable answer from it
+    (``agent_unusable``, misses too); how many reporters chose a value
+    (``reporter_chose``) and how many of those matched (``reporter_agreed``,
+    the baseline the agent has to beat).
     """
     record = {
-        field: {"decided": 0, "agent_agreed": 0, "reporter_agreed": 0}
+        field: {
+            "decided": 0,
+            "agent_agreed": 0,
+            "agent_unusable": 0,
+            "reporter_chose": 0,
+            "reporter_agreed": 0,
+        }
         for field in ("severity", "category")
     }
     for ticket in session.exec(
         select(BugReport).where(
+            BugReport.triaged_by == SUPPORT_AGENT_NAME,
             (BugReport.decided_severity.is_not(None))
-            | (BugReport.decided_category.is_not(None))
+            | (BugReport.decided_category.is_not(None)),
         )
     ).all():
         for field, decided, suggested, reported in (
@@ -77,20 +87,36 @@ def track_record(session: Session) -> dict[str, dict[str, int]]:
                 ticket.category,
             ),
         ):
-            if decided is None or suggested is None:
+            if decided is None:
                 continue
             tally = record[field]
             tally["decided"] += 1
             tally["agent_agreed"] += int(suggested == decided)
-            tally["reporter_agreed"] += int(reported == decided)
+            tally["agent_unusable"] += int(suggested is None)
+            # Rows from before the reporter's values were normalized may differ in case.
+            reported = (reported or "").strip().lower()
+            if reported:
+                tally["reporter_chose"] += 1
+                tally["reporter_agreed"] += int(reported == decided)
     return record
+
+
+def _record_line(field: str, tally: dict[str, int]) -> str:
+    line = f"- {field}: yours matched {tally['agent_agreed']} of {tally['decided']}"
+    if tally["agent_unusable"]:
+        line += f" ({tally['agent_unusable']} of them without a usable answer from you)"
+    if tally["reporter_chose"]:
+        return (
+            f"{line}; the reporter's own choice matched "
+            f"{tally['reporter_agreed']} of {tally['reporter_chose']}."
+        )
+    return f"{line}; no reporter chose one."
 
 
 def record_context(record: dict[str, dict[str, int]]) -> str:
     """The prompt section with how earlier suggestions fared, or ''."""
     lines = [
-        f"- {field}: yours matched {tally['agent_agreed']} of {tally['decided']}; "
-        f"the reporter's own choice matched {tally['reporter_agreed']} of {tally['decided']}."
+        _record_line(field, tally)
         for field, tally in record.items()
         if tally["decided"]
     ]
