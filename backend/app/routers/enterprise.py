@@ -25,7 +25,7 @@ from config import settings
 from database import get_neo4j_driver, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logging_config import logger
-from models import AuditLog, BusinessUnit, Sprint, User
+from models import Agent, AuditLog, BusinessUnit, Sprint, User
 from schemas import (
     AgentCreateRequest,
     AgentPromptRequest,
@@ -336,8 +336,10 @@ async def quota_usage_history(
     company_id: int,
     days: int = Query(7, ge=1, le=90),
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Return daily token usage for a company over the last *days* days."""
+    """Return daily token usage for a company over the last *days* days (Viewer)."""
+    require_company_role(session, user, company_id, "Viewer")
     from datetime import timedelta
 
     from sqlmodel import func
@@ -593,9 +595,22 @@ def _build_template_prompt(
     ).strip()
 
 
+def _agent_company(session: Session, agent_id: int) -> int:
+    """The company an agent belongs to; 404 when there is no such agent."""
+    agent = session.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+    return agent.company_id
+
+
 @router.get("/agents", tags=["Enterprise"])
-async def list_agents(company_id: int, session: Session = Depends(get_session)):  # noqa: B008
-    """List all agents for a company."""
+async def list_agents(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """List all agents for a company (Viewer)."""
+    require_company_role(session, user, company_id, "Viewer")
     service = CompanyService(session)
     try:
         return {"agents": service.list_agents(company_id)}
@@ -607,8 +622,10 @@ async def list_agents(company_id: int, session: Session = Depends(get_session)):
 async def create_agent(
     req: AgentCreateRequest,
     session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
 ):
-    """Create a new agent configuration."""
+    """Create a new agent configuration (Manager)."""
+    require_company_role(session, user, req.company_id, "Manager")
     service = CompanyService(session)
     try:
         return service.create_agent(
@@ -634,8 +651,14 @@ async def update_agent(
     agent_id: int,
     req: AgentUpdateRequest,
     session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
 ):
-    """Update an existing agent configuration."""
+    """Update an existing agent configuration (Manager of its company).
+
+    An agent's prompt, model and budget decide what it does for the company,
+    so only its Managers change them.
+    """
+    require_company_role(session, user, _agent_company(session, agent_id), "Manager")
     service = CompanyService(session)
     try:
         return service.update_agent(agent_id, req.model_dump(exclude_unset=True))
@@ -645,8 +668,13 @@ async def update_agent(
 
 
 @router.delete("/agents/{agent_id}", tags=["Enterprise"])
-async def delete_agent(agent_id: int, session: Session = Depends(get_session)):  # noqa: B008
-    """Delete an existing agent configuration."""
+async def delete_agent(
+    agent_id: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Delete an existing agent configuration (Manager of its company)."""
+    require_company_role(session, user, _agent_company(session, agent_id), "Manager")
     service = CompanyService(session)
     try:
         return service.delete_agent(agent_id)

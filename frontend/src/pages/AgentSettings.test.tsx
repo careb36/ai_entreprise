@@ -8,6 +8,7 @@ type CatalogEntry = { id: string; provider: string; tier: string; description: s
 const catalogue = vi.hoisted(() => ({
   models: [] as CatalogEntry[],
   agents: [] as Record<string, unknown>[],
+  role: null as string | null,
 }))
 
 vi.mock('../hooks/useQueries', () => {
@@ -19,6 +20,7 @@ vi.mock('../hooks/useQueries', () => {
     useUpdateAgentConfig: mutation,
     useDeleteAgent: mutation,
     useGenerateAgentPrompt: mutation,
+    useCurrentRole: () => catalogue.role,
   }
 })
 
@@ -72,5 +74,45 @@ describe('AgentSettings model selector', () => {
 
     fireEvent.change(select, { target: { value: '' } })
     expect(select.value).toBe('')
+  })
+})
+
+describe('AgentSettings for a Viewer', () => {
+  beforeEach(() => {
+    catalogue.models = [{ id: 'qwen3.6-flash', provider: 'qwen', tier: 'balanced', description: 'Qwen qwen3.6-flash' }]
+    catalogue.agents = [{
+      id: 7, company_id: 1, name: 'Dev Ana', role: 'Developer', persona: null, seniority: 'Senior', specialty: '',
+      model: 'qwen3.6-flash', system_prompt: 'Write tests first.', token_budget: 500000, activity: null,
+    }]
+    useAppStore.setState({ companyId: 1, companyName: 'Routing Corp' })
+  })
+
+  afterEach(() => {
+    catalogue.role = null
+    useAppStore.setState({ companyId: null, companyName: null })
+  })
+
+  it('reads the agents but offers nothing to change them', () => {
+    catalogue.role = 'Viewer'
+    render(<AgentSettings />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Only a Manager or the Owner changes them.')
+    expect(screen.queryByRole('button', { name: 'New agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Duplicate/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Dev Ana/ }))
+    expect(screen.getByDisplayValue('Write tests first.')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  it('offers the changes to a Manager', () => {
+    catalogue.role = 'Manager'
+    render(<AgentSettings />)
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New agent' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Dev Ana/ }))
+    expect(screen.getByDisplayValue('Write tests first.')).toBeEnabled()
   })
 })

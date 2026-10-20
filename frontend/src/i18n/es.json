@@ -1128,7 +1128,8 @@
       "security": "Prioriza modelos con razonamiento intensivo para el análisis de amenazas, el endurecimiento y las decisiones de políticas.",
       "support": "Prioriza modelos rápidos y equilibrados para respuestas claras y una clasificación ágil.",
       "generalist": "Usa un modelo general y equilibrado cuando el rol no requiere claramente un especialista."
-    }
+    },
+    "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia."
   },
   "common": {
     "loading": "Cargando...",
