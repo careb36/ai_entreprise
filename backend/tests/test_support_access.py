@@ -140,6 +140,66 @@ def test_admin_sees_everything_and_triages(test_client, people, sqlite_session):
     )
 
 
+def test_admin_decides_severity_and_category_apart_from_the_reporter(
+    test_client, people, sqlite_session
+):
+    patched = test_client.patch(
+        f"/v1/support/tickets/{people['mine']}",
+        json={"status": "in_progress", "severity": "critical", "category": "incident"},
+        headers=people["admin"],
+    )
+    assert patched.status_code == 200
+    assert (patched.json()["decided_severity"], patched.json()["decided_category"]) == (
+        "critical",
+        "incident",
+    )
+    detail = test_client.get(
+        f"/v1/support/tickets/{people['mine']}", headers=people["admin"]
+    ).json()
+    # The reporter's choice stays as they made it; the decision sits beside it.
+    assert (detail["severity"], detail["category"]) == ("medium", "bug")
+    assert (detail["decided_severity"], detail["decided_category"]) == (
+        "critical",
+        "incident",
+    )
+    assert detail["decided_by"].endswith("@example.com")
+    assert detail["decided_at"] is not None
+
+    # A later update that decides only the category keeps the severity decided.
+    test_client.patch(
+        f"/v1/support/tickets/{people['mine']}",
+        json={"status": "waiting", "category": "bug"},
+        headers=people["admin"],
+    )
+    again = test_client.get(
+        f"/v1/support/tickets/{people['mine']}", headers=people["admin"]
+    ).json()
+    assert (again["decided_severity"], again["decided_category"]) == ("critical", "bug")
+
+
+@pytest.mark.parametrize("field, value", [("severity", "urgent"), ("category", "rant")])
+def test_an_unknown_decision_is_refused(test_client, people, field, value):
+    response = test_client.patch(
+        f"/v1/support/tickets/{people['mine']}",
+        json={"status": "open", field: value},
+        headers=people["admin"],
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith(f"Invalid {field}.")
+
+
+def test_only_admins_read_the_agents_record(test_client, people):
+    assert (
+        test_client.get(
+            "/v1/support/agent_record", headers=people["reporter"]
+        ).status_code
+        == 403
+    )
+    record = test_client.get("/v1/support/agent_record", headers=people["admin"])
+    assert record.status_code == 200
+    assert set(record.json()) == {"severity", "category"}
+
+
 def test_auth_me_reports_support_admin(test_client, people):
     assert (
         test_client.get("/v1/auth/me", headers=people["admin"]).json()["support_admin"]

@@ -93,6 +93,10 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS suggested_category VARCHAR(50)",
         "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_by VARCHAR(100)",
         "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_at TIMESTAMP",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_severity VARCHAR(20)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_category VARCHAR(50)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_by VARCHAR(255)",
+        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_at TIMESTAMP",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         """

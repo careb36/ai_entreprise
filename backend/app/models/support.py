@@ -43,6 +43,13 @@ class BugReport(SQLModel, table=True):
     suggested_category: str | None = None
     triaged_by: str | None = None
     triaged_at: datetime | None = None
+    # A support admin's decision, beside the reporter's choice and the agent's
+    # suggestion; none of the three overwrites another. Comparing the
+    # suggestion with the decision is how the agent's triage is measured.
+    decided_severity: str | None = None
+    decided_category: str | None = None
+    decided_by: str | None = None
+    decided_at: datetime | None = None
     browser_info: Any | None = Field(
         default=None, sa_column=Column(JSON)
     )  # User-agent, viewport, etc.

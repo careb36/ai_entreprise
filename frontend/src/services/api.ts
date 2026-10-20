@@ -168,6 +168,7 @@ export interface SupportChatMessage {
 }
 
 export type TicketSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type TicketCategory = 'bug' | 'feature' | 'question' | 'incident'
 export type TicketStatus = 'open' | 'in_progress' | 'waiting' | 'resolved' | 'closed'
 
 export interface BugReportRequest {
@@ -212,6 +213,21 @@ export interface TicketUpdateRequest {
   status: TicketStatus
   resolution?: string
   assigned_to?: string
+  /** The support admin's decision, stored apart from the reporter's choice and the agent's suggestion. */
+  severity?: TicketSeverity
+  category?: TicketCategory
+}
+
+/** Per field: tickets the Support agent suggested a value for and a person decided. */
+export interface AgentRecordField {
+  decided: number
+  agent_agreed: number
+  reporter_agreed: number
+}
+
+export interface SupportAgentRecord {
+  severity: AgentRecordField
+  category: AgentRecordField
 }
 
 export type CompanyRole = 'Owner' | 'Manager' | 'Viewer'
@@ -267,6 +283,11 @@ export interface SupportTicketDetail extends SupportTicket {
   suggested_category?: string | null
   triaged_by?: string | null
   triaged_at?: string | null
+  /** A support admin's decision. */
+  decided_severity?: string | null
+  decided_category?: string | null
+  decided_by?: string | null
+  decided_at?: string | null
   [key: string]: unknown
 }
 
@@ -995,6 +1016,9 @@ export const api = {
       `/v1/support/tickets/${encodeURIComponent(ticketNum)}`,
       data,
     ),
+
+  /** How the Support agent's suggestions compared with support admins' decisions. */
+  getSupportAgentRecord: () => api.get<SupportAgentRecord>('/v1/support/agent_record'),
 
   /** The audit log as a JSONL file; 404 until a workflow has written one. */
   downloadSupportLogs: () => fetchBlob('/v1/support/logs'),

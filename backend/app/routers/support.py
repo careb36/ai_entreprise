@@ -5,7 +5,10 @@ Endpoints:
 - ``POST /v1/support/report_bug``         — submit a new support ticket.
 - ``GET  /v1/support/tickets``            — list tickets with optional filters.
 - ``GET  /v1/support/tickets/{num}``      — get full detail of a single ticket.
-- ``PATCH /v1/support/tickets/{num}``     — update ticket status / resolution.
+- ``PATCH /v1/support/tickets/{num}``     — update ticket status / resolution,
+  and a support admin's decision on severity and category.
+- ``GET  /v1/support/agent_record``       — how the Support agent's suggestions
+  compared with those decisions.
 - ``POST /v1/support/chat``               — bilingual AI support assistant.
 - ``GET  /v1/support/logs``               — download structured audit JSONL logs.
 
@@ -32,6 +35,7 @@ from fastapi.responses import FileResponse
 from logging_config import logger
 from models import BugReport, User
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
+from services.support_agent import CATEGORIES, SEVERITIES, track_record
 from sqlmodel import Session, func, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
@@ -140,6 +144,8 @@ async def list_tickets(
             "assigned_to": r.assigned_to,
             "suggested_severity": r.suggested_severity,
             "triaged_by": r.triaged_by,
+            "decided_severity": r.decided_severity,
+            "decided_category": r.decided_category,
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
             "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
@@ -190,6 +196,11 @@ async def get_ticket(
         "suggested_category": report.suggested_category,
         "triaged_by": report.triaged_by,
         "triaged_at": report.triaged_at.isoformat() if report.triaged_at else None,
+        # A support admin's decision, apart from the reporter's and the agent's.
+        "decided_severity": report.decided_severity,
+        "decided_category": report.decided_category,
+        "decided_by": report.decided_by,
+        "decided_at": report.decided_at.isoformat() if report.decided_at else None,
         "browser_info": report.browser_info,
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "updated_at": report.updated_at.isoformat() if report.updated_at else None,
@@ -209,6 +220,8 @@ async def update_ticket_status(
 
     When the status transitions to ``"resolved"`` or ``"closed"``,
     ``resolved_at`` is automatically set to the current UTC timestamp.
+    A ``severity`` or ``category`` is the admin's decision: it is stored apart
+    from the reporter's choice and the Support agent's suggestion.
     Requires a support admin.
     """
     require_support_admin(user)
@@ -216,6 +229,14 @@ async def update_ticket_status(
     if req.status not in valid_statuses:
         raise HTTPException(
             status_code=400, detail=f"Invalid status. Use: {valid_statuses}"
+        )
+    if req.severity is not None and req.severity not in SEVERITIES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid severity. Use: {', '.join(SEVERITIES)}"
+        )
+    if req.category is not None and req.category not in CATEGORIES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid category. Use: {', '.join(CATEGORIES)}"
         )
 
     report = session.exec(
@@ -230,6 +251,13 @@ async def update_ticket_status(
     if req.assigned_to:
         report.assigned_to = req.assigned_to
     report.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    if req.severity is not None or req.category is not None:
+        if req.severity is not None:
+            report.decided_severity = req.severity
+        if req.category is not None:
+            report.decided_category = req.category
+        report.decided_by = user.email if user is not None else "support admin"
+        report.decided_at = report.updated_at
     # Stamp resolution time when the ticket reaches a terminal state.
     if req.status in ("resolved", "closed"):
         report.resolved_at = datetime.now(UTC).replace(tzinfo=None)
@@ -241,7 +269,24 @@ async def update_ticket_status(
         "ticket_num": report.ticket_num,
         "status": report.status,
         "updated_at": report.updated_at.isoformat(),
+        "decided_severity": report.decided_severity,
+        "decided_category": report.decided_category,
     }
+
+
+@router.get("/agent_record")
+async def support_agent_record(
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """How the Support agent's suggestions compared with support admins' decisions.
+
+    Per field (``severity``, ``category``): tickets with a suggestion and a
+    decision, how many the agent matched, and how many the reporter's own
+    choice matched. Counted from the tickets; requires a support admin.
+    """
+    require_support_admin(user)
+    return track_record(session)
 
 
 @router.post("/chat")
