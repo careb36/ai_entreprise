@@ -238,17 +238,21 @@ class CompanyService:
 
     def get_project_health(self, sprint_id: int) -> dict[str, Any]:
         """Generate a sprint health report using SQLModel idiomatic queries."""
-        # 1. Calculate total tokens for this sprint's backlog interactions
+        # 1. Calculate total tokens for this sprint's backlog interactions,
+        # counting only the sprint company's rows: another company can log
+        # under the same "task-<id>" before this task exists.
+        sprint = self.session.get(Sprint, sprint_id)
         item_ids = self.session.exec(
             select(BacklogItem.id).where(BacklogItem.sprint_id == sprint_id)
         ).all()
         interaction_ids = [f"task-{item_id}" for item_id in item_ids]
         total_tokens = 0
-        if interaction_ids:
+        if interaction_ids and sprint is not None:
             total_tokens = (
                 self.session.exec(
                     select(func.sum(AuditLog.cost_tokens)).where(
-                        AuditLog.interaction_id.in_(interaction_ids)
+                        AuditLog.interaction_id.in_(interaction_ids),
+                        AuditLog.company_id == sprint.company_id,
                     )
                 ).one()
                 or 0

@@ -292,6 +292,7 @@ def test_project_health_sums_only_sprints_own_items(sqlite_session):
     for item, tokens in zip(items, [10, 20, 100]):
         sqlite_session.add(
             AuditLog(
+                company_id=company.id,
                 interaction_id=f"task-{item.id}",
                 action="agent_turn",
                 cost_tokens=tokens,
@@ -299,7 +300,10 @@ def test_project_health_sums_only_sprints_own_items(sqlite_session):
         )
     sqlite_session.add(
         AuditLog(
-            interaction_id=f"task-{items[0].id}", action="agent_turn", cost_tokens=5
+            company_id=company.id,
+            interaction_id=f"task-{items[0].id}",
+            action="agent_turn",
+            cost_tokens=5,
         )
     )
     sqlite_session.commit()

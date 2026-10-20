@@ -33,7 +33,7 @@ from database import engine, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from logging_config import logger
-from models import AuditLog, User
+from models import AuditLog, BusinessUnit, User
 from models.agent_run import AgentRun
 from schemas import AuditRequest, GenerateRequest
 from services.agent_service import AgentService
@@ -190,6 +190,14 @@ async def generate(
     Trigger a LangGraph agent workflow run.
     """
     require_company_role(session, user, req.company_id, "Manager")
+    # The business unit is billed for the run's tokens: it must be this company's.
+    if req.business_unit_id is not None:
+        unit = session.get(BusinessUnit, req.business_unit_id)
+        if unit is None or unit.company_id != req.company_id:
+            raise HTTPException(
+                status_code=403,
+                detail="The business unit does not belong to this company",
+            )
     if not settings.AGENT_GRAPH_ENABLED:
         raise HTTPException(
             status_code=409,
