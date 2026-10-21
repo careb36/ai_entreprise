@@ -47,6 +47,50 @@ Check them again before submitting; they win over this summary.
 - **Design guidance from Meta:** seated-optimized, fast to enter and leave,
   something engaging within the first minutes.
 
+### What the Devpost pages add (rules, FAQ, judging; read 2026-10-21)
+
+- **The Productivity track, in Meta's words:** "apps that make you more
+  effective anywhere or are designed around specific daily moments:
+  multi-panel workspaces, task management, creative tools, or habits tied to
+  a recurring context". The room is a multi-panel workspace for one daily
+  moment: deciding on the company's work.
+- **Four tests the judges apply to every entry:** hands-first ("can someone
+  complete the entire experience without ever pairing a controller?"); the
+  *airplane seat test* (every interaction within a 2 ft radius, seated); the
+  *one bus stop test* (fast cold start, clean pause and resume, satisfying in
+  ten minutes or less); the *take it away test* (remove any third-party
+  service and there is still a project: the demo company runs with nothing
+  else, the live mode is the product's own API).
+- **Adapted division:** the entry must include a one-to-two-paragraph summary
+  of what was added since the project's original release; a changelog,
+  screenshots and demo videos are "strongly encouraged". The changelog is
+  kept below. A ported experience counts as Adapted. Last year's winners may
+  enter an update of the same project.
+- **Judged cold, on a Quest 3 or 3S**, by a panel that "may use AI tools to
+  assist"; the submission is frozen at the deadline, and a build changed
+  during judging may be disqualified (a bug fix is allowed only until the
+  deadline). Backward compatibility with Quest 2 or Pro is not judged.
+- **What the judging page says a high score needs:** innovation that
+  "uniquely leverages" the device (spatial depth, hands-first, gaze); design
+  with "intuitive navigation from the moment of entry, clear onboarding, and
+  a rewarding, habit-forming purpose"; technical reliability at 60 fps,
+  "solid and bug-free"; polish, including the submission materials. On the
+  video: "show real gameplay that honestly represents the experience … don't
+  lean on AI-generated video to carry the pitch".
+- **Content rules that touch the room:** no brand names, logos or commercial
+  artwork in the project (the demo company's producers are made up:
+  `pr-agent`, `issue-agent`; a real company shows its own names in live mode,
+  which is the person's data, not the entry's), no identifiable person other
+  than the entrants, English or subtitles, content for a 10+, 13+ or 18+
+  rating, and no Meta funding behind the project.
+- **No headset is required to enter**, but the judges use one; the Meta
+  Quest Developer Hub and the XR Simulator cover the video and the testing
+  for a person without a device.
+- **Help on offer (Start membership required):** mentor sessions every week
+  until the deadline, with a *Playtest & React* on October 27 and 29 where
+  other developers try the build cold, and *Monday Unblock: Building and
+  Testing* on October 26 (10:00 AM PT / 3:00 PM CEST).
+
 ## The experience
 
 Three panels on an arc at eye height, within reach of a seated person:
@@ -96,10 +140,14 @@ npm run build        # vr/dist, a static site
   press *Enter VR*. Hand tracking must be on in the headset settings.
 - **Without a headset:** Meta's Immersive Web Emulator (a browser extension)
   simulates a headset and hands; the desktop view also works with the mouse.
-- **The branch:** the competition entry lives on `main_meta`; `main` is the
-  web product and carries none of `vr/`. Changes the room needs from the
+- **The branches:** the competition entry lives on `main_meta` and
+  `develop_meta`, apart from the web product's `main` and `develop`, which
+  carry none of `vr/`. The room's pull requests land on `develop_meta`;
+  `develop_meta` is merged into `main_meta` when a state is worth releasing,
+  and `main_meta` is what the judges' link serves (Pages deploys from it, so
+  it stays untouched after the deadline). Changes the room needs from the
   product (API shapes, the stream) land on `main` and are merged into
-  `main_meta`; the room's own work goes to `main_meta` directly.
+  `develop_meta` from there.
 - **Hosting for the judges:** `.github/workflows/vr-pages.yml` builds with
   `VR_BASE=/<repository name>/` and publishes `vr/dist` to GitHub Pages on a
   push to `main_meta` once the repository variable `VR_PAGES` is `1` and
@@ -172,6 +220,38 @@ means:
   decides. The Devpost text and the video show a real company's sprint, not
   the demo.
 
+## Changelog (the Adapted division's summary of what is new)
+
+Le Fabrique existed before the entry period as a web product: a company of
+AI agents that runs software sprints, verifies their work deterministically
+and keeps the evidence for a person to decide on. Everything below was built
+in the competition window, on the `develop_meta` and `main_meta` branches, and is the new
+platform integration the division asks for: the product in a headset, with
+hands.
+
+- **2026-10-21 · The room** (#160): a WebXR app beside the product; three
+  panels on an arc (board, company at work, inbox), cards picked up with a
+  pinch, a detail panel with the evidence and the actions, a bundled demo
+  company.
+- **2026-10-21 · Live mode** (#161): a real company read through the
+  product's API, its Glassroom stream in the room, decisions recorded through
+  the same endpoints the web app uses.
+- **2026-10-21 · Hands and voice** (#162): cards lift under the hand and
+  further once picked up; the Reviewer agent's reason and a block's cause can
+  be heard aloud; the conversation between roles opens the log; a Pages
+  deployment for the judges' link.
+- **2026-10-21 · Legibility** (#163): titles wrap from the top and are
+  clipped to their card.
+- **2026-10-21 · The first minute** (#164): the demo company keeps working
+  after the room opens: a delivery, the Verifier's observations, a review
+  request, a brief, a new run in the inbox.
+- **2026-10-21 · Holding up in a headset** (#165): font and hand models
+  bundled (nothing from a CDN), reloads that keep the room, decisions shown
+  once recorded, the inbox and the agents capped with "+n more".
+- **2026-10-21 · The Quest pass** (#167): an entry hint that trails the head
+  until the first pinch, flat materials, larger board labels, the frame rate
+  in the room with `?stats=1`.
+
 ## Devpost description (draft)
 
 **Inspiration.** Le Fabrique runs software sprints with a company of AI
@@ -200,10 +280,18 @@ the live mode is an adapter over the REST and SSE endpoints the web app
 already uses. Nothing in the room decides on its own: suggestions are shown
 as claims, verdicts as observations, and the platform records who pinched.
 
-**What's next.** Hearing the Reviewer agent's reason aloud, the company's
-conversation between roles in the room, and a Quest-first pass on comfort:
-larger hit areas, head-locked hints on first entry, and a frame-time budget
-checked on a Quest 3.
+**What's new since the product's release (Adapted division).** The room
+itself: the product had no headset mode before September 24, 2026. In the
+window we built the WebXR room and its demo company, the live mode over the
+product's API and stream, hand interaction on every card and action, the
+reasons read aloud, the entry hint, and the hardening a headset needs (no
+CDN, reloads that keep the room, decisions shown once recorded). The
+changelog in the repository lists each step.
+
+**What's next.** A pass with testers on a Quest 3 (comfort over ten minutes,
+hit areas, the frame rate on the hosted build), the company's conversation
+between roles as a panel of its own, and passthrough for the board on a real
+desk.
 
 **Launch.** The room ships with the product (open source); the hosted build
 is the entry's link.

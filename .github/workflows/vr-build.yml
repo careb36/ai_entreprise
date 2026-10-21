@@ -6,7 +6,7 @@ on:
       - "vr/**"
       - ".github/workflows/vr-build.yml"
   push:
-    branches: [main_meta, main, develop]
+    branches: [main_meta, develop_meta, main, develop]
     paths:
       - "vr/**"
       - ".github/workflows/vr-build.yml"
