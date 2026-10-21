@@ -2,13 +2,14 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GovernancePanel } from './GovernancePanel'
-import { useAgentRuns, useCurrentRole, useInbox, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAgentRuns, useCurrentRole, useInbox, useReviewerRecord, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 
 vi.mock('../hooks/useQueries', () => ({
   useAgentRuns: vi.fn(),
   useCurrentRole: vi.fn(),
   useInbox: vi.fn(),
+  useReviewerRecord: vi.fn(),
   useSprints: vi.fn(),
   useUpdateBacklogItem: vi.fn(),
 }))
@@ -16,6 +17,7 @@ vi.mock('../hooks/useQueries', () => ({
 const mockedUseAgentRuns = vi.mocked(useAgentRuns)
 const mockedUseCurrentRole = vi.mocked(useCurrentRole)
 const mockedUseInbox = vi.mocked(useInbox)
+const mockedUseReviewerRecord = vi.mocked(useReviewerRecord)
 const mockedUseSprints = vi.mocked(useSprints)
 const mockedUseUpdateBacklogItem = vi.mocked(useUpdateBacklogItem)
 
@@ -55,6 +57,7 @@ describe('GovernancePanel', () => {
       refetch: vi.fn(),
     } as never)
     mockedUseInbox.mockReturnValue({ data: INBOX, isLoading: false, isError: false, refetch: vi.fn() } as never)
+    mockedUseReviewerRecord.mockReturnValue({ data: undefined } as never)
     mockedUseCurrentRole.mockReturnValue('Manager')
     mockedUseSprints.mockReturnValue({ data: [] } as never)
     mockedUseUpdateBacklogItem.mockReturnValue({ mutate, isPending: false, isError: false, error: null } as never)
@@ -70,6 +73,39 @@ describe('GovernancePanel', () => {
     expect(mockedUseAgentRuns).toHaveBeenCalledWith(42, { limit: 500, exclude_in_house: true })
     expect(screen.getByRole('link', { name: /Review evidence/ })).toHaveAttribute('href', '/evidence/1')
     expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
+  })
+
+  it("shows the Reviewer agent's suggestion beside a run, and its record against the decisions", () => {
+    mockedUseAgentRuns.mockReturnValue({
+      data: {
+        agent_runs: [
+          {
+            id: 1, external_ref: 'needs-review', producer: 'producer-a', agent_role: 'Developer', latest_approval: null,
+            reviewed_by: 'Reviewer agent', suggested_decision: 'rejected', suggested_category: 'quality', suggested_reason: 'The suite exited 1.',
+          },
+          { id: 3, external_ref: 'left-to-people', producer: 'producer-c', agent_role: null, latest_approval: null, reviewed_by: 'Reviewer agent', suggested_decision: null },
+          { id: 4, external_ref: 'not-yet-reviewed', producer: 'producer-d', agent_role: null, latest_approval: null },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    mockedUseReviewerRecord.mockReturnValue({
+      data: { decided: 4, agent_agreed: 3, agent_unusable: 1, verifier_called: 2, verifier_agreed: 2 },
+    } as never)
+    render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
+
+    expect(mockedUseReviewerRecord).toHaveBeenCalledWith(42)
+    expect(screen.getByRole('note')).toHaveTextContent(
+      "The Reviewer agent's suggestion matched 3 of 4 decisions (1 without a usable answer); the Verifier's verdict alone 2 of the 2 it called.",
+    )
+    const reviewed = screen.getByText('needs-review').closest('article') as HTMLElement
+    expect(within(reviewed).getByText('Reviewer agent suggests: Rejected')).toBeInTheDocument()
+    const unusable = screen.getByText('left-to-people').closest('article') as HTMLElement
+    expect(within(unusable).getByText('The Reviewer agent could not suggest a decision; it is left to people.')).toBeInTheDocument()
+    const pending = screen.getByText('not-yet-reviewed').closest('article') as HTMLElement
+    expect(within(pending).queryByText(/Reviewer agent/)).not.toBeInTheDocument()
   })
 
   it('shows the tasks blocked for a person with their reason, and a Manager can send one back', () => {

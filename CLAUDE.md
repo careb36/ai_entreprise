@@ -92,6 +92,18 @@ Copy `.env.example` to `.env` and fill in:
   (only where a reporter chose: the form presets no impact and asks for no
   category, so neither is made up), and those numbers go into the agent's
   next prompt.
+- `REVIEWER_AGENT_ENABLED` — optional, default `false`. The Reviewer agent
+  (`services/reviewer_agent.py`) reads the evidence of each run another
+  producer sent that waits for a person (the Verifier's checks, the claims,
+  the artifact as data) every `REVIEWER_AGENT_INTERVAL_SECONDS` (60) and
+  suggests the decision in a fixed format: approve or reject, a category and
+  a reason, stored on the run (`suggested_*`, `reviewed_by`) apart from the
+  approval a Manager records; an unusable answer leaves the run to people.
+  `GET /v1/agent_runs/reviewer_record` counts how often its suggestions
+  matched the decisions (unusable answers as misses) beside how often the
+  Verifier's verdict alone would have (verified → approved, refuted →
+  rejected), and those numbers go into its next prompt. Off by default: each
+  run costs an LLM call.
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL.
@@ -202,7 +214,9 @@ the LangGraph graph is only an optional kickoff conversation.
    still retries or re-reviews), the procedure proposals waiting and how many
    runs of other producers nobody decided on (the company's own task worker
    and kickoff runs, `IN_HOUSE_PRODUCERS`, are decided by the review loop;
-   `GET /v1/agent_runs?exclude_in_house=true` lists the rest). The Review page shows them (a Manager can send a
+   `GET /v1/agent_runs?exclude_in_house=true` lists the rest; with
+   `REVIEWER_AGENT_ENABLED` the Reviewer agent suggests a decision on each,
+   kept on the run apart from the approval). The Review page shows them (a Manager can send a
    blocked task back to work, with how earlier second attempts went beside them) and the navigation counts them. A blocked task
    can also get another attempt in the next sprint (`services/carry_over.py`):
    `POST /v1/start_sprint` takes `carry_over_ids` (counted in the scope), the
@@ -317,6 +331,7 @@ Test files:
 | `test_procedures.py` | Proposal parsing, versions and supersession, baseline at adoption, keep / revert / unmeasured after two sprints, ScrumMaster proposals by autonomy level, what earlier procedures did in the proposal prompt, a reverted or rejected text not proposed again (a person still can), procedures in prompts, `/v1/procedures` |
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter; its record against the admins' decisions (unusable answers as misses, beside the reporters who chose a value, legacy rows compared case-blind) and that record in its next prompt |
+| `test_reviewer_agent.py` | The Reviewer agent: fixed answer format, the prompt treats the run as data and carries the Verifier's checks, a suggestion stored on an outside producer's run beside no approval (in-house and decided runs skipped), unusable answers left to people, failed calls retried; its record against the decisions people recorded, with the Verifier's verdict as the baseline, company-scoped, and in its next prompt |
 | `test_support_access.py` | Support admins versus reporters on tickets and logs, `support_admin` in `/v1/auth/me`, 409 when re-inviting a member; an admin's severity and category decision stored apart, credited to whoever changed it and clearable, unknown values refused, `/v1/support/agent_record` admin-only; the reporter's values normalized and no severity or category made up; the Impact filter reads the decision first, else the reporter's choice; `resolved_at` is when the ticket was resolved, kept by later saves and cleared on reopening |
 | `test_agent_access.py` | A company's agents and token usage: 401 without a token, 403 outside the company, a Viewer reads but cannot create, change or delete, a Manager can |
 | `test_cross_company_access.py` | Only a Manager sets where a company's agents write (`discover_team`), `/v1/generate` bills only the company's own business unit, a sprint's tokens are its own company's |
@@ -348,6 +363,11 @@ brief went. Last, the help desk: the Support agent
 (enabled for the run) triages a ticket from the public form beside the
 reporter's choice, a support admin decides, `/v1/support/agent_record`
 counts the decision, and the next ticket's prompt carries that record.
+Then the Reviewer agent (enabled too): a run ingested from another
+producer gets a suggested decision beside no approval, a Manager decides
+against it, `/v1/agent_runs/reviewer_record` counts the miss beside what the
+Verifier's verdict alone would have decided, and the next run's prompt
+carries that record.
 Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 `python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
@@ -405,7 +425,8 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
-| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, how earlier second attempts went beside the blocked tasks, Viewer and error states |
+| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs with the Reviewer agent's suggestion beside each and its record against the decisions, how earlier second attempts went beside the blocked tasks, Viewer and error states |
+| `src/pages/EvidenceDetail.test.tsx` | Run page: claims beside observations, audit rows, the review form's validation and body, task links; the Reviewer agent's suggestion shown as a claim beside the review form, and when it could not suggest |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 | `src/store/agentStore.test.ts` | The Glassroom connection asks for a stream ticket on every connection, opens without one when none is needed or none could be had, and opens nothing once disconnected; an event the backend replays on a reconnection is shown once |

@@ -31,6 +31,7 @@ export const QUERY_KEYS = {
   tickets: (filters: TicketFilters) => ['tickets', filters] as const,
   ticket: (num: string) => ['ticket', num] as const,
   supportAgentRecord: () => ['support-agent-record'] as const,
+  reviewerRecord: (companyId: number) => ['reviewer-record', companyId] as const,
   lineage: (companyId: number | null, file: string) => ['lineage', companyId, file] as const,
   memory: (companyId: number | null, query: string) => ['memory', companyId, query] as const,
   models: () => ['models'] as const,
@@ -189,6 +190,7 @@ export function useApproveAgentRun(companyId: number, runId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.approvals(companyId, runId) })
       queryClient.invalidateQueries({ queryKey: ['agent-runs', companyId] })
       queryClient.invalidateQueries({ queryKey: ['audit-verification'] })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.reviewerRecord(companyId) })
     },
   })
 }
@@ -464,6 +466,15 @@ export function useUpdateTicket() {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ticket(ticketNum) }),
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.supportAgentRecord() }),
     ]),
+  })
+}
+
+/** How the Reviewer agent's suggestions compared with the decisions recorded on the company's runs. */
+export function useReviewerRecord(companyId: number | null) {
+  return useQuery({
+    queryKey: QUERY_KEYS.reviewerRecord(companyId ?? 0),
+    queryFn: () => api.getReviewerRecord(companyId!),
+    enabled: companyId !== null,
   })
 }
 

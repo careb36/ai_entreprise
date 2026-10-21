@@ -16,6 +16,7 @@ from models.agent_run import (
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.agent_service import AgentService
+from services.reviewer_agent import track_record as reviewer_track_record
 from services.verification import verify_agent_run
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
@@ -124,6 +125,17 @@ def list_agent_runs(
         )
         items.append(item)
     return {"agent_runs": items}
+
+
+@router.get("/reviewer_record")
+def reviewer_record(
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """How the Reviewer agent's suggestions compared with the decisions people recorded."""
+    require_company_role(session, user, company_id, "Viewer")
+    return reviewer_track_record(session, company_id)
 
 
 @router.get("/{run_id}")

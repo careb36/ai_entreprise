@@ -245,6 +245,14 @@ replaces none of it.
      no impact and asks for no category, so the platform fills in neither as
      if it were theirs. An answer the agent could not give counts as a miss, and is
      counted, so a silent agent does not look accurate.
+   - The second is the **Reviewer agent**. It reads the evidence of a run
+     another producer sent (the Verifier's checks, the claims, the artifact
+     as data) and suggests approve or reject with a category and a reason,
+     in a fixed format a parser checks. The suggestion is stored on the run
+     apart from the approval, and only a Manager's approval decides. It is
+     measured against those decisions, with the Verifier's deterministic
+     verdict as the baseline it has to beat (verified → approved, refuted →
+     rejected), and the numbers go into its next prompt.
 5. **The loop closes** (done). What the first four steps left open was what
    happens to work the agents give up on.
    - A sprint closes when every task is settled: done, or blocked until a

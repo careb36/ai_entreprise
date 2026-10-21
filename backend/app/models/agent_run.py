@@ -34,6 +34,14 @@ class AgentRun(SQLModel, table=True):
     finished_at: datetime | None = None
     ingested_at: datetime = Field(default_factory=datetime.utcnow)
     audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
+    # The Reviewer agent's suggestion: a claim kept apart from the approval a
+    # person records (``AgentRunApproval``). ``reviewed_at`` with no decision
+    # means its answer was unusable and the run is left to people.
+    suggested_decision: str | None = None
+    suggested_category: str | None = None
+    suggested_reason: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
 
 
 class Verification(SQLModel, table=True):

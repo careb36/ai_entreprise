@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshCw, ShieldCheck, Undo2 } from 'lucide-react'
-import { useAgentRuns, useCurrentRole, useInbox, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAgentRuns, useCurrentRole, useInbox, useReviewerRecord, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
 import { secondAttempts } from '../lib/learningTrend'
 import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
@@ -100,6 +100,19 @@ function PendingRuns({ companyId }: { companyId: number }) {
   // in-house producers, the same the inbox counts by).
   const { data, isLoading, isError, refetch } = useAgentRuns(companyId, { limit: 500, exclude_in_house: true })
   const runs = (data?.agent_runs ?? []).filter(run => run.latest_approval === null)
+  // The Reviewer agent's suggestions are claims; this is what the decisions
+  // people recorded say about them, beside what the Verifier's verdict alone
+  // would have decided.
+  const record = useReviewerRecord(companyId).data
+  const recordLine = record && record.decided > 0 ? (
+    <p role="note" className="text-xs text-gray-400">
+      {t('governance.reviewerRecord', { agent: record.agent_agreed, total: record.decided })}
+      {record.agent_unusable > 0 && t('governance.reviewerUnusable', { n: record.agent_unusable })}
+      {record.verifier_called > 0
+        ? t('governance.reviewerVerifier', { verifier: record.verifier_agreed, called: record.verifier_called })
+        : t('governance.reviewerVerifierNone')}
+    </p>
+  ) : null
 
   if (isLoading) {
     return <div role="status" className="space-y-3" aria-label={t('common.loading')}>
@@ -115,20 +128,32 @@ function PendingRuns({ companyId }: { companyId: number }) {
   }
 
   if (runs.length === 0) {
-    return <div className="empty-state py-8">
-      <CheckCircle2 size={32} className="mx-auto mb-3 text-status-success" />
-      <p className="font-semibold text-gray-300">{t('governance.noPendingRuns')}</p>
+    return <div className="space-y-3">
+      {recordLine}
+      <div className="empty-state py-8">
+        <CheckCircle2 size={32} className="mx-auto mb-3 text-status-success" />
+        <p className="font-semibold text-gray-300">{t('governance.noPendingRuns')}</p>
+      </div>
     </div>
   }
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-400">{runs.length} {t('governance.pendingRuns')}</p>
+      {recordLine}
       {runs.map((run: AgentRunListItem) => (
         <article key={run.id} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-200">{run.producer}{run.agent_role ? ` · ${run.agent_role}` : ''}</p>
             <p className="truncate font-mono text-xs text-gray-500">{run.external_ref}</p>
+            {/* A suggestion is a claim: the decision is taken on the evidence page. */}
+            {run.reviewed_by && (
+              <p className="mt-1 text-xs text-gray-400">
+                {run.suggested_decision
+                  ? t('governance.suggestion', { decision: t(`evidence.approval.${run.suggested_decision}`) })
+                  : t('governance.suggestionUnusable')}
+              </p>
+            )}
           </div>
           <Link to={`/evidence/${run.id}`} className="btn btn-primary btn-sm self-start sm:self-auto">
             {t('governance.reviewRun')}
