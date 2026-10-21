@@ -484,7 +484,9 @@ entry hint's timing and where it trails the head) and `src/fps.ts` (the frame
 rate shown with `?stats=1`) are pure and tested too. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
 CI: `.github/workflows/vr-build.yml` on changes under `vr/`. The entry lives on
-the `main_meta` branch; `main` is the web product and carries none of `vr/`.
+the `main_meta` branch (released; Pages deploys from it) and `develop_meta`
+(where its pull requests land); `main` and `develop` are the web product and
+carry none of `vr/`.
 
 ## Documentation
 

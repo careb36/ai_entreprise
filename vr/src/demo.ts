@@ -54,7 +54,7 @@ export function demoTimeline(): TimelineStep[] {
           type: 'run',
           run: {
             id: 104,
-            producer: 'github',
+            producer: 'pr-agent',
             externalRef: 'pr-104 · Fix the CSV header',
             verdict: 'verified',
             observations: ['artifact_nonempty: pass — 640 bytes', 'claimed_files_present: pass — export/csv.py in the diff'],
@@ -81,6 +81,8 @@ export function demoTimeline(): TimelineStep[] {
  * A company a judge can open without a backend: one sprint in progress, its
  * agents, a task blocked for a person and two runs from another producer
  * waiting for a decision, one of them with the Reviewer agent's suggestion.
+ * The producers are made up (`pr-agent`, `issue-agent`): the competition's
+ * rules keep brand names out of an entry, and a real company shows its own.
  */
 export function demoWorld(): World {
   const at = Date.now()
@@ -115,7 +117,7 @@ export function demoWorld(): World {
     runs: [
       {
         id: 101,
-        producer: 'github',
+        producer: 'pr-agent',
         externalRef: 'pr-101 · Add a greeting endpoint',
         verdict: 'verified',
         observations: ['artifact_nonempty: pass — 1,204 bytes', 'claimed_files_present: pass — app/greeting.py in the diff', 'tests_run: pass — `pytest` passed'],
@@ -123,7 +125,7 @@ export function demoWorld(): World {
       },
       {
         id: 102,
-        producer: 'github',
+        producer: 'pr-agent',
         externalRef: 'pr-102 · Rewrite the refund job',
         verdict: 'refuted',
         observations: ['artifact_nonempty: pass — 8,912 bytes', 'tests_run: refuted — `pytest` exited 1: test_refund_twice failed'],
@@ -131,7 +133,7 @@ export function demoWorld(): World {
       },
       {
         id: 103,
-        producer: 'copilot-agent',
+        producer: 'issue-agent',
         externalRef: 'issue-57 · Add CSV export',
         verdict: 'unverifiable',
         observations: ['tests_run: unverifiable — no test command detected'],

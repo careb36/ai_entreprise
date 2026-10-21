@@ -66,7 +66,7 @@ describe('the room\'s model', () => {
     world = reduce(world, { type: 'task', task: { id: 99, title: 'New one' } })
     expect(world.tasks.find(task => task.id === 99)).toEqual({ id: 99, title: 'New one', status: 'todo', rework: 0 })
 
-    const run = { id: 104, producer: 'github', externalRef: 'pr-104', verdict: 'verified' as const, observations: [] }
+    const run = { id: 104, producer: 'pr-agent', externalRef: 'pr-104', verdict: 'verified' as const, observations: [] }
     world = reduce(world, { type: 'run', run })
     expect(pendingRuns(world).map(candidate => candidate.id)).toEqual([101, 102, 103, 104])
     world = reduce(world, { type: 'run', run: { ...run, verdict: 'refuted' } })
