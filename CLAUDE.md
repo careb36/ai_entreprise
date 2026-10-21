@@ -481,7 +481,8 @@ and `src/live.ts` (the API's shapes turned into the room's, the stream's
 events, the calls) have no rendering and are tested; `src/App.test.tsx`
 checks the HTML shell and both modes with the scene mocked. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
-CI: `.github/workflows/vr-build.yml` on changes under `vr/`.
+CI: `.github/workflows/vr-build.yml` on changes under `vr/`. The entry lives on
+the `main_meta` branch; `main` is the web product and carries none of `vr/`.
 
 ## Documentation
 

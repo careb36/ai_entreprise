@@ -96,11 +96,15 @@ npm run build        # vr/dist, a static site
   press *Enter VR*. Hand tracking must be on in the headset settings.
 - **Without a headset:** Meta's Immersive Web Emulator (a browser extension)
   simulates a headset and hands; the desktop view also works with the mouse.
+- **The branch:** the competition entry lives on `main_meta`; `main` is the
+  web product and carries none of `vr/`. Changes the room needs from the
+  product (API shapes, the stream) land on `main` and are merged into
+  `main_meta`; the room's own work goes to `main_meta` directly.
 - **Hosting for the judges:** `.github/workflows/vr-pages.yml` builds with
-  `VR_BASE=/<repository name>/` and publishes `vr/dist` to GitHub Pages once
-  the repository variable `VR_PAGES` is `1` and Pages deploys from GitHub
-  Actions; any static host works too (`VR_BASE=/path/ npm run build`). The
-  link goes into the Devpost entry.
+  `VR_BASE=/<repository name>/` and publishes `vr/dist` to GitHub Pages on a
+  push to `main_meta` once the repository variable `VR_PAGES` is `1` and
+  Pages deploys from GitHub Actions; any static host works too
+  (`VR_BASE=/path/ npm run build`). The link goes into the Devpost entry.
 - **Nothing from a CDN in the headset:** the font (`vr/public/fonts`, Roboto,
   Apache 2.0) and the hand models (`vr/public/hands`, WebXR Input Profiles,
   MIT) ship with the room, licences beside them.
