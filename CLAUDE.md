@@ -462,33 +462,13 @@ When adding new LLM calls in agents, pass `model_preference` to the proxy client
 
 Token budgets are enforced per company at the proxy layer — the backend never calls Gemini/DeepSeek directly.
 
-## Glassroom VR (`vr/`)
-
-A standalone WebXR app (Vite + React 18 + react-three-fiber + `@react-three/xr`),
-the product's hands-first mode for the Meta VR Start Developer Competition
-2026 (`docs/VR_ENTRY.md`: the rules, the experience, what only a person can
-do). A seated person sees three panels on an arc (the board, the company at
-work, the inbox) and picks up a task or a run with a pinch; the detail panel
-shows the Verifier's observations beside the Reviewer agent's suggestion, and
-the action cards (approve, reject, send back) record the person's decision.
-It opens on a bundled demo company, so a judge needs no backend; with
-`?api=<backend>&company=<id>` (`&token=`, `&sprint=`, `&person=`) it reads a
-real company through the REST API, follows the sprint's Glassroom stream and
-records decisions through the same endpoints the web app calls (the room's
-origin must be in `CORS_ORIGINS`). `src/model.ts` (what the room shows and
-the reducer behind every pinch), `src/layout.ts` (where things go, in metres)
-and `src/live.ts` (the API's shapes turned into the room's, the stream's
-events, the calls) have no rendering and are tested; `src/App.test.tsx`
-checks the HTML shell and both modes with the scene mocked. Run it from `vr/`: `npm install`, `npm run dev`,
-`npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
-CI: `.github/workflows/vr-build.yml` on changes under `vr/`.
-
 ## Documentation
 
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
+- The Glassroom VR entry for the Meta VR Start Developer Competition lives on
+  the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
-- [`docs/VR_ENTRY.md`](docs/VR_ENTRY.md) — Glassroom VR: the competition entry, its rules and plan
 - [`runbook.md`](runbook.md) — Production hardening guide
 - [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) — Current refactoring strategy
