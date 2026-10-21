@@ -95,6 +95,24 @@ describe('the room', () => {
     expect(texts.filter(text => text.startsWith('Helper'))).toHaveLength(AGENTS_SHOWN - 6)
   })
 
+  it('says so once everything is decided, and where new work will show up', async () => {
+    let world = demoWorld()
+    for (const run of [101, 102, 103]) world = reduce(world, { type: 'decide_run', id: run, decision: 'approved', by: 'Ana' })
+    world = reduce(world, { type: 'send_back', id: 36, by: 'Ana' })
+    const { renderer } = await render(world)
+    const texts = labels(renderer.scene)
+    expect(texts).toContain('Inbox · nothing waits for you')
+    expect(texts).toContain('Everything is decided. The company keeps working; what needs a person shows up here.')
+    expect(texts).toContain('That was the last one.')
+    expect(texts.some(text => text.startsWith('pr-agent ·'))).toBe(false)
+
+    // A new run from the stream brings the inbox back.
+    const again = reduce(world, { type: 'run', run: { id: 104, producer: 'pr-agent', externalRef: 'pr-104', verdict: 'verified', observations: [] } })
+    await renderer.update(<Room world={again} dispatch={vi.fn()} person="Ana" />)
+    expect(labels(renderer.scene)).toContain('Inbox · 1 waiting for you')
+    expect(labels(renderer.scene)).not.toContain('That was the last one.')
+  })
+
   it('shows the frame rate only when asked', async () => {
     const { renderer } = await render(demoWorld(), { stats: true })
     expect(labels(renderer.scene)).toContain('fps …')
