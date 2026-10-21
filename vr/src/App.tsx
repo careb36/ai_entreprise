@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { Controllers, Hands, VRButton, XR, useXR } from '@react-three/xr'
 import { demoWorld } from './demo'
+import { statsWanted } from './fps'
 import { parseLiveConfig } from './live'
 import { blockedForPerson, pendingRuns, reduce } from './model'
 import { Room } from './scene/Room'
@@ -38,6 +39,7 @@ function DesktopControls() {
 export default function App() {
   const [world, dispatch] = useReducer(reduce, undefined, demoWorld)
   const config = useMemo(() => parseLiveConfig(window.location.search), [])
+  const stats = useMemo(() => statsWanted(window.location.search), [])
   const { perform, status } = useLiveWorld(config, dispatch)
   // The demo company keeps working for a minute after the room opens.
   useDemoTimeline(status === 'demo', dispatch)
@@ -55,13 +57,13 @@ export default function App() {
         </p>
       </header>
       <VRButton />
-      <Canvas camera={{ position: [0, 1.25, 0.2], fov: 70 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+      <Canvas camera={{ position: [0, 1.25, 0.2], fov: 70 }} dpr={[1, 1.5]} gl={{ antialias: true, powerPreference: 'high-performance' }}>
         <XR>
           <Controllers />
           {/* The hand models ship with the room: nothing fetched from a CDN in the headset. */}
           <Hands modelLeft={`${import.meta.env.BASE_URL}hands/left.glb`} modelRight={`${import.meta.env.BASE_URL}hands/right.glb`} />
           <Suspense fallback={null}>
-            <Room world={world} dispatch={perform} person={config?.person ?? PERSON} />
+            <Room world={world} dispatch={perform} person={config?.person ?? PERSON} stats={stats} />
           </Suspense>
           <DesktopControls />
         </XR>

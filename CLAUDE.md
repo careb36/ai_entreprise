@@ -479,7 +479,9 @@ origin must be in `CORS_ORIGINS`). `src/model.ts` (what the room shows and
 the reducer behind every pinch), `src/layout.ts` (where things go, in metres)
 and `src/live.ts` (the API's shapes turned into the room's, the stream's
 events, the calls) have no rendering and are tested; `src/App.test.tsx`
-checks the HTML shell and both modes with the scene mocked. Run it from `vr/`: `npm install`, `npm run dev`,
+checks the HTML shell and both modes with the scene mocked; `src/hint.ts` (the
+entry hint's timing and where it trails the head) and `src/fps.ts` (the frame
+rate shown with `?stats=1`) are pure and tested too. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
 CI: `.github/workflows/vr-build.yml` on changes under `vr/`. The entry lives on
 the `main_meta` branch; `main` is the web product and carries none of `vr/`.

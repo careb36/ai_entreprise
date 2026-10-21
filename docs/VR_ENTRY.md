@@ -108,6 +108,9 @@ npm run build        # vr/dist, a static site
 - **Nothing from a CDN in the headset:** the font (`vr/public/fonts`, Roboto,
   Apache 2.0) and the hand models (`vr/public/hands`, WebXR Input Profiles,
   MIT) ship with the room, licences beside them.
+- **The frame rate on the headset:** `?stats=1` shows it under the detail
+  panel (amber below 60), the number the competition asks for; the browser's
+  own counters are not visible inside a session.
 - **Live mode and the token:** `&token=` puts a JWT in the page URL, which
   browser history and a host's logs keep; use a short-lived token, or run
   the backend with `AUTH_REQUIRED=false` for a demo on a private network.
@@ -133,8 +136,41 @@ npm run build        # vr/dist, a static site
 - [x] The company's conversation between roles opens the log in live mode.
 - [x] GitHub Pages deploy workflow (`vr-pages.yml`, opt-in with the `VR_PAGES`
   variable) and the Devpost description draft below.
-- [ ] A Quest 3 pass: 60 fps budget, hit areas, legibility at 1.5 m, a
-  head-locked hint on first entry.
+- [x] What the Quest pass needs from the code: an entry hint that trails the
+  head for the first seconds of a session until the first pinch (never glued
+  to the eyes), flat materials for the panels and cards (the lights are for
+  the hands), the smallest labels a size up, and the frame rate in the room
+  with `?stats=1` (amber under 60).
+- [ ] The Quest 3 pass itself, by a person with the headset: the rate with
+  `?stats=1` on the hosted build, hit areas and legibility at 1.5 m, hand
+  tracking on the cards and the action cards, comfort over ten minutes.
+
+## The bar
+
+Last year's productivity winner, AnExplorer (a file manager a solo developer
+brought to the Quest Store from its Android codebase; Meta tells it as a
+"Build Faster, Earn More" story), sets the level: not a demo of a technique
+but a tool people use every day, that works the first time it is opened,
+earns its place on the headset with things a screen cannot do (a big
+visual space, hands) and keeps the user coming back. For this entry that
+means:
+
+- The room must be **useful before it is impressive**: a person reviews
+  real work and records real decisions, through the same API the web app
+  uses, and nothing in it is a mock-up when a backend is behind it. The demo
+  company exists so a judge can open the link; the product is live mode.
+- **Reliability over features**: no CDN in the headset, a reload that keeps
+  the room, decisions shown only once recorded, a refusal said out loud.
+  Every PR runs the tests and a headless render before it is merged.
+- **Polish a judge feels in the first minute**: the entry hint, the company
+  working by itself while the person looks around, cards that lift under
+  the hand, a reason read aloud, "+n more" instead of overflow.
+- **A reason to come back**: the inbox is the day's work, not a one-off
+  scene; what waits for the person is counted in the title of the panel and
+  changes while they watch.
+- **The pitch is the product's**: evidence beside claims, a person's pinch
+  decides. The Devpost text and the video show a real company's sprint, not
+  the demo.
 
 ## Devpost description (draft)
 
