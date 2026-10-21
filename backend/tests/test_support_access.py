@@ -177,6 +177,31 @@ def test_admin_decides_severity_and_category_apart_from_the_reporter(
     assert (again["decided_severity"], again["decided_category"]) == ("critical", "bug")
 
 
+def test_resolved_at_is_the_time_the_ticket_was_resolved(test_client, people):
+    url = f"/v1/support/tickets/{people['mine']}"
+
+    def resolved_at():
+        return test_client.get(url, headers=people["admin"]).json()["resolved_at"]
+
+    def save(**fields):
+        assert (
+            test_client.patch(url, json=fields, headers=people["admin"]).status_code
+            == 200
+        )
+
+    save(status="resolved", resolution="Fixed")
+    first = resolved_at()
+    assert first is not None
+    # A later save of the resolved ticket (a decision, say) keeps that time.
+    save(status="resolved", category="bug")
+    assert resolved_at() == first
+    # Reopened, the ticket is not resolved; closed again, the time is new.
+    save(status="open")
+    assert resolved_at() is None
+    save(status="closed")
+    assert resolved_at() is not None
+
+
 def test_a_decision_is_credited_to_whoever_changed_it_and_can_be_cleared(
     test_client, people, sqlite_session, monkeypatch
 ):

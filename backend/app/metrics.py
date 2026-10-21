@@ -72,11 +72,19 @@ def endpoint_label(request: Request) -> str:
     """The matched route's template, e.g. ``/v1/sprints/{sprint_id}/board``.
 
     The raw path would put sprint, task and ticket ids on a public endpoint
-    and give every scanned URL its own series; a path no route matched is
-    counted as ``unmatched``.
+    and give every scanned URL its own series. A plain Starlette route
+    (``/docs``, ``/openapi.json``) has a fixed path, so that is its label; a
+    CORS preflight is answered before any route and counted as ``preflight``;
+    only a path no route answered is ``unmatched``.
     """
     route = request.scope.get("route")
-    return getattr(route, "path", None) or "unmatched"
+    if route is not None:
+        return getattr(route, "path", None) or "unmatched"
+    if request.scope.get("endpoint") is not None:
+        return request.url.path
+    if request.method == "OPTIONS":
+        return "preflight"
+    return "unmatched"
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):

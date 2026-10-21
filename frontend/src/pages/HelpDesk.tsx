@@ -248,48 +248,64 @@ function TicketDetail({ ticket }: { ticket: SupportTicketDetail }) {
   )
 }
 
+interface TicketForm {
+  status: TicketStatus
+  resolution: string
+  assignee: string
+  severity: TicketSeverity | ''
+  category: TicketCategory | ''
+}
+
 function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
   const { t } = useTranslation()
   const update = useUpdateTicket()
-  const [status, setStatus] = useState<TicketStatus>(
-    STATUSES.includes(ticket.status as TicketStatus) ? ticket.status as TicketStatus : 'open',
-  )
-  const [resolution, setResolution] = useState(ticket.resolution ?? '')
-  const [assignee, setAssignee] = useState(ticket.assigned_to ?? '')
-  // The admin's decision shows the ticket's current one, never the reporter's
-  // choice or the agent's suggestion: leaving it empty decides nothing. An
-  // edit is kept apart (null: not touched since the last save), so the form
-  // follows a decision another admin makes meanwhile and sends only the
-  // decision changed here.
-  const [severityEdit, setSeverityEdit] = useState<TicketSeverity | '' | null>(null)
-  const [categoryEdit, setCategoryEdit] = useState<TicketCategory | '' | null>(null)
-  const severity = severityEdit
-    ?? (SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : '')
-  const category = categoryEdit
-    ?? (CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : '')
-  const needsResolution = TERMINAL.includes(status) && !resolution.trim()
+  // What the ticket stores, as the form shows it. The admin's decision is
+  // the ticket's current one, never the reporter's choice or the agent's
+  // suggestion: leaving it empty decides nothing.
+  const stored: TicketForm = {
+    status: STATUSES.includes(ticket.status as TicketStatus) ? ticket.status as TicketStatus : 'open',
+    resolution: ticket.resolution ?? '',
+    assignee: ticket.assigned_to ?? '',
+    severity: SEVERITIES.includes(ticket.decided_severity as TicketSeverity) ? ticket.decided_severity as TicketSeverity : '',
+    category: CATEGORIES.includes(ticket.decided_category as TicketCategory) ? ticket.decided_category as TicketCategory : '',
+  }
+  // The fields edited since the last save, kept apart from the ticket: the
+  // rest follow what another admin saves meanwhile (a ticket they resolved
+  // is not reopened, their decision is not sent again in this admin's name),
+  // and a field put back to what the ticket stores counts as untouched.
+  const [edits, setEdits] = useState<Partial<TicketForm>>({})
+  const form: TicketForm = { ...stored, ...edits }
+  const needsResolution = TERMINAL.includes(form.status) && !form.resolution.trim()
+
+  function edit<K extends keyof TicketForm>(field: K, value: TicketForm[K]) {
+    setEdits(current => {
+      const next = { ...current }
+      if (value === stored[field]) delete next[field]
+      else next[field] = value
+      return next
+    })
+  }
 
   function submit() {
     if (needsResolution) return
-    const sent = { severity: severityEdit, category: categoryEdit }
+    const sent = edits
     update.mutate({
       ticketNum: ticket.ticket_num,
       data: {
-        status,
-        ...(resolution.trim() ? { resolution: resolution.trim() } : {}),
-        ...(assignee.trim() ? { assigned_to: assignee.trim() } : {}),
+        status: form.status,
+        ...(form.resolution.trim() ? { resolution: form.resolution.trim() } : {}),
+        ...(form.assignee.trim() ? { assigned_to: form.assignee.trim() } : {}),
         // Only a decision edited here is sent ('' clears one), so saving the
         // status does not decide again in the saver's name.
-        ...(severityEdit !== null ? { severity: severityEdit } : {}),
-        ...(categoryEdit !== null ? { category: categoryEdit } : {}),
+        ...('severity' in sent ? { severity: sent.severity } : {}),
+        ...('category' in sent ? { category: sent.category } : {}),
       },
     }, {
-      // Saved, and the ticket refetched: the form shows the decision as stored,
-      // unless the admin changed it again while the save was on its way.
-      onSuccess: () => {
-        setSeverityEdit(current => (current === sent.severity ? null : current))
-        setCategoryEdit(current => (current === sent.category ? null : current))
-      },
+      // Saved, and the ticket refetched: the form shows what is stored, except
+      // a field the admin changed again while the save was on its way.
+      onSuccess: () => setEdits(current => Object.fromEntries(
+        Object.entries(current).filter(([field, value]) => value !== sent[field as keyof TicketForm]),
+      ) as Partial<TicketForm>),
     })
   }
 
@@ -298,24 +314,24 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="input-label">{t('helpDesk.newStatus', { defaultValue: 'Status' })}</span>
-          <select className="select w-full" value={status} onChange={e => setStatus(e.target.value as TicketStatus)}>
+          <select className="select w-full" value={form.status} onChange={e => edit('status', e.target.value as TicketStatus)}>
             {STATUSES.map(value => <option key={value} value={value}>{t(`support.status.${value}`)}</option>)}
           </select>
         </label>
         <label className="block">
           <span className="input-label">{t('helpDesk.assignee', { defaultValue: 'Assigned to' })}</span>
-          <input className="input w-full" value={assignee} onChange={e => setAssignee(e.target.value)} />
+          <input className="input w-full" value={form.assignee} onChange={e => edit('assignee', e.target.value)} />
         </label>
         <label className="block">
           <span className="input-label">{t('helpDesk.decidedSeverity', { defaultValue: 'Decided impact' })}</span>
-          <select className="select w-full" value={severity} onChange={e => setSeverityEdit(e.target.value as TicketSeverity | '')}>
+          <select className="select w-full" value={form.severity} onChange={e => edit('severity', e.target.value as TicketSeverity | '')}>
             <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
             {SEVERITIES.map(value => <option key={value} value={value}>{t(`helpDesk.severities.${value}`)}</option>)}
           </select>
         </label>
         <label className="block">
           <span className="input-label">{t('helpDesk.decidedCategory', { defaultValue: 'Decided category' })}</span>
-          <select className="select w-full" value={category} onChange={e => setCategoryEdit(e.target.value as TicketCategory | '')}>
+          <select className="select w-full" value={form.category} onChange={e => edit('category', e.target.value as TicketCategory | '')}>
             <option value="">{t('helpDesk.notDecided', { defaultValue: 'Not decided' })}</option>
             {CATEGORIES.map(value => <option key={value} value={value}>{t(`helpDesk.categories.${value}`)}</option>)}
           </select>
@@ -323,7 +339,7 @@ function UpdateForm({ ticket }: { ticket: SupportTicketDetail }) {
       </div>
       <label className="block">
         <span className="input-label">{t('support.resolution')}</span>
-        <textarea className="input w-full" rows={3} value={resolution} onChange={e => setResolution(e.target.value)}
+        <textarea className="input w-full" rows={3} value={form.resolution} onChange={e => edit('resolution', e.target.value)}
           aria-invalid={needsResolution || undefined} />
       </label>
       {needsResolution && (

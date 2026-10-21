@@ -332,7 +332,7 @@ Semantic search over stored memories.
 **Query Parameters:**
 - `company_id` — Company ID
 - `query` — Search query
-- `limit` — Maximum results (default: 10)
+- `limit` — Maximum results (default: 10, between 1 and 100; anything else is a 422)
 
 **Response:** `200 OK`
 ```json
