@@ -118,18 +118,29 @@ interface CardProps {
   height?: number
   label: string
   sub?: string
+  labelSize?: number
+  subSize?: number
   color?: string
   accent?: string
   selected?: boolean
   onPick: () => void
 }
 
-/** A card a person can pinch (in VR) or click (on a desktop). */
-export function Card({ x, y, width = 0.5, height = 0.12, label, sub, color = CARD, accent, selected = false, onPick }: CardProps) {
+const PAD = 0.025
+
+/**
+ * A card a person can pinch (in VR) or click (on a desktop). The label
+ * wraps from the top and the sub line sits at the bottom; both are clipped
+ * to the card, so a long title never spills over the next card.
+ */
+export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize = 0.03, subSize = 0.022, color = CARD, accent, selected = false, onPick }: CardProps) {
   const [hover, setHover] = useState(false)
   const fill = selected ? SELECTED : hover ? HOVER : color
   // A card lifts off its panel when a hand is on it, and further once picked up.
   const lift = selected ? 0.03 : hover ? 0.015 : 0.004
+  const textWidth = width - PAD * 2
+  const subHeight = sub ? subSize * 1.4 : 0
+  const labelHeight = height - 0.03 - subHeight
   return (
     <Interactive onSelect={onPick} onHover={() => setHover(true)} onBlur={() => setHover(false)}>
       <group position={[x, y, lift]}>
@@ -143,11 +154,28 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, color = CAR
             <meshStandardMaterial color={accent} />
           </mesh>
         )}
-        <Text position={[-width / 2 + 0.025, sub ? height / 4 : 0, 0.002]} fontSize={Math.min(0.03, height * 0.3)} anchorX="left" anchorY="middle" color={INK} maxWidth={width - 0.05}>
+        <Text
+          position={[-width / 2 + PAD, sub ? height / 2 - 0.015 : labelSize * 0.6, 0.002]}
+          fontSize={labelSize}
+          lineHeight={1.1}
+          anchorX="left"
+          anchorY="top"
+          color={INK}
+          maxWidth={textWidth}
+          clipRect={[0, -labelHeight, textWidth, 0]}
+        >
           {label}
         </Text>
         {sub && (
-          <Text position={[-width / 2 + 0.025, -height / 4, 0.002]} fontSize={Math.min(0.022, height * 0.22)} anchorX="left" anchorY="middle" color={MUTED} maxWidth={width - 0.05}>
+          <Text
+            position={[-width / 2 + PAD, -height / 2 + 0.014, 0.002]}
+            fontSize={subSize}
+            anchorX="left"
+            anchorY="bottom"
+            color={MUTED}
+            maxWidth={textWidth * 4}
+            clipRect={[0, 0, textWidth, subSize * 1.3]}
+          >
             {sub}
           </Text>
         )}
@@ -161,35 +189,47 @@ function isSelected(selected: World['selected'], candidate: World['selected']): 
   return selected.kind === 'agent' ? selected.role === (candidate as { role: string }).role : selected.id === (candidate as { id: number }).id
 }
 
+/** Cards a board column shows before "+n more": what fits a panel at arm's length. */
+export const CARDS_PER_COLUMN = 5
+
 function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['selected']; onPick: (s: NonNullable<World['selected']>) => void }) {
   const columns = tasksByStatus(tasks)
-  const columnWidth = 0.24
+  const columnWidth = 0.25
+  const cardHeight = 0.13
   const left = -((COLUMNS.length - 1) * columnWidth) / 2
   return (
     <>
       {COLUMNS.map((column, index) => {
         const x = left + index * columnWidth
         const cards = columns[column.status]
-        const slots = grid(cards.length, { cols: 1, width: 0.22, height: 0.09, gap: 0.015 })
+        const shown = cards.slice(0, CARDS_PER_COLUMN)
+        const slots = grid(shown.length, { cols: 1, width: 0.23, height: cardHeight, gap: 0.015 })
         return (
           <group key={column.status} position={[x, 0, 0]}>
-            <Text position={[-0.11, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={STATUS_COLOR[column.status]}>
+            <Text position={[-0.115, 0.36, 0.002]} fontSize={0.026} anchorX="left" anchorY="middle" color={STATUS_COLOR[column.status]} maxWidth={0.23}>
               {`${column.label} · ${cards.length}`}
             </Text>
-            {cards.map((task, slot) => (
+            {shown.map((task, slot) => (
               <Card
                 key={task.id}
                 x={slots[slot][0]}
                 y={0.26 - (slots[0][1] - slots[slot][1])}
-                width={0.22}
-                height={0.09}
-                label={fit(task.title, 26)}
+                width={0.23}
+                height={cardHeight}
+                label={task.title}
+                labelSize={0.021}
                 sub={task.assignee ? `${task.assignee}${task.rework ? ` · ${task.rework} rework` : ''}` : undefined}
+                subSize={0.017}
                 accent={STATUS_COLOR[task.status]}
                 selected={isSelected(selected, { kind: 'task', id: task.id })}
                 onPick={() => onPick({ kind: 'task', id: task.id })}
               />
             ))}
+            {cards.length > CARDS_PER_COLUMN && (
+              <Text position={[-0.115, 0.26 - shown.length * (cardHeight + 0.015) + 0.02, 0.002]} fontSize={0.02} anchorX="left" anchorY="middle" color={MUTED}>
+                {`+${cards.length - CARDS_PER_COLUMN} more`}
+              </Text>
+            )}
           </group>
         )
       })}
@@ -212,7 +252,9 @@ function Agents({ agents, selected, onPick }: { agents: Agent[]; selected: World
           width={0.36}
           height={0.11}
           label={`${agent.role} · ${agent.state}`}
-          sub={fit(agent.activity, 34)}
+          labelSize={0.026}
+          sub={agent.activity}
+          subSize={0.019}
           accent={AGENT_COLOR[agent.state]}
           selected={isSelected(selected, { kind: 'agent', role: agent.role })}
           onPick={() => onPick({ kind: 'agent', role: agent.role })}
