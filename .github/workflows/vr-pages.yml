@@ -22,7 +22,8 @@ permissions:
 
 concurrency:
   group: vr-pages
-  cancel-in-progress: true
+  # A deployment in flight finishes; the next push queues behind it.
+  cancel-in-progress: false
 
 jobs:
   deploy:

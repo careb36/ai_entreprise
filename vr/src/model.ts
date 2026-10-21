@@ -23,6 +23,14 @@ export interface Task {
   assignee?: string
   /** Why the task waits for a person (blocked tasks only). */
   reason?: string
+  /**
+   * Whether a blocked task waits for a person, as the backend's inbox says
+   * (the worker still retries some blocked tasks, and some were carried
+   * over); unknown counts as yes.
+   */
+  forPerson?: boolean
+  /** Frozen by an operator: shown, but not sent back from here. */
+  frozen?: boolean
   /** Rework requests so far. */
   rework: number
 }
@@ -97,7 +105,7 @@ export function pendingRuns(world: World): Run[] {
 
 /** Tasks blocked until a person acts. */
 export function blockedForPerson(world: World): Task[] {
-  return world.tasks.filter(task => task.status === 'blocked')
+  return world.tasks.filter(task => task.status === 'blocked' && task.forPerson !== false)
 }
 
 export function selectedTask(world: World): Task | undefined {
@@ -151,8 +159,9 @@ export function reduce(world: World, action: Action): World {
     }
     case 'send_back': {
       const task = world.tasks.find(candidate => candidate.id === action.id)
-      if (!task || task.status !== 'blocked') return world
-      const back: Task = { ...task, status: 'in_progress', reason: undefined, rework: task.rework + 1 }
+      if (!task || task.status !== 'blocked' || task.frozen) return world
+      // Back to the top of the board, as the backend puts it.
+      const back: Task = { ...task, status: 'todo', reason: undefined, forPerson: undefined, rework: task.rework + 1 }
       return {
         ...world,
         tasks: world.tasks.map(candidate => (candidate.id === task.id ? back : candidate)),

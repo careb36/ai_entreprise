@@ -50,7 +50,9 @@ export interface ApiBacklogItem {
   comments?: { author: string; text: string; created_at: string }[] | null
 }
 export interface ApiBoard { sprint: { id: number; sprint_name: string; status: string }; columns: Record<string, ApiBacklogItem[]> }
-export interface ApiInbox { blocked_tasks: { id: number; reason: string; sprint_id: number }[] }
+export interface ApiInbox { blocked_tasks: { id: number; reason: string; sprint_id: number; frozen?: boolean }[] }
+
+const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
 export interface ApiRun {
   id: number
   producer: string
@@ -77,34 +79,48 @@ export interface ApiMessage {
 export function logFromMessages(messages: ApiMessage[], now = Date.now()): LogEntry[] {
   return messages.map((message, index) => ({
     at: (message.created_at && Date.parse(message.created_at)) || now - (messages.length - index),
-    text: `${message.from_role} → ${message.to_role ?? 'the team'} (${message.kind}): ${message.body.replace(/\s+/g, ' ').trim().slice(0, 120)}`,
+    text: `${message.from_role} › ${message.to_role ?? 'the team'} (${message.kind}): ${message.body.replace(/\s+/g, ' ').trim().slice(0, 120)}`,
   }))
 }
 
 export const REWORK_PREFIX = 'NEEDS WORK:'
 export const SEND_BACK_COMMENT = 'Sent back to work from Glassroom VR.'
 
-/** The sprint the room opens on: the one asked for, else the newest running one, else the newest. */
+/** The sprint the room opens on: the one asked for when it exists, else the newest active one, else the newest. */
 export function pickSprint(sprints: ApiSprint[], wanted?: number): ApiSprint | undefined {
-  if (wanted) return sprints.find(sprint => sprint.id === wanted)
+  const asked = wanted ? sprints.find(sprint => sprint.id === wanted) : undefined
+  if (asked) return asked
   const byNewest = [...sprints].sort((a, b) => b.id - a.id)
-  return byNewest.find(sprint => sprint.status === 'active' || sprint.status === 'running') ?? byNewest[0]
+  return byNewest.find(sprint => sprint.status === 'active') ?? byNewest[0]
 }
 
-/** The board's items as the room's tasks; a blocked task's reason comes from the inbox. */
+/**
+ * The board's items as the room's tasks. A blocked task waits for a person
+ * only when the inbox lists it (the worker still retries the others), with
+ * the inbox's reason; a status the room does not know lands in "to do", as
+ * the backend's own board does.
+ */
 export function tasksFromBoard(board: ApiBoard, inbox?: ApiInbox): Task[] {
-  const reasons = new Map((inbox?.blocked_tasks ?? []).map(task => [task.id, task.reason]))
+  const waiting = new Map((inbox?.blocked_tasks ?? []).map(task => [task.id, task]))
   const tasks: Task[] = []
   for (const items of Object.values(board.columns)) {
     for (const item of items) {
       const comments = item.comments ?? []
+      const status = STATUSES.includes(item.status) ? item.status : 'todo'
+      const listed = waiting.get(item.id)
       tasks.push({
         id: item.id,
         title: item.title,
-        status: item.status,
+        status,
         assignee: item.assignee ?? undefined,
         rework: comments.filter(comment => (comment.text ?? '').trimStart().startsWith(REWORK_PREFIX)).length,
-        reason: item.status === 'blocked' ? reasons.get(item.id) ?? comments.at(-1)?.text?.slice(0, 200) : undefined,
+        ...(status === 'blocked'
+          ? {
+              reason: listed?.reason ?? comments.at(-1)?.text?.slice(0, 200),
+              forPerson: inbox ? listed !== undefined : undefined,
+              frozen: listed?.frozen ?? false,
+            }
+          : {}),
       })
     }
   }
@@ -155,6 +171,8 @@ export function runsFromApi(runs: ApiRun[], verifications: Record<number, ApiVer
 export interface StreamEvent {
   type?: string
   semantic_type?: string
+  source?: string
+  event_id?: string
   agent?: string
   role?: string
   message?: string
@@ -167,9 +185,14 @@ const ACTIVE = new Set(['task.started', 'task.claimed', 'task.progress', 'task.r
 const WAITING = new Set(['task.review_handoff', 'task.review_started', 'task.agent_complete', 'task.approved'])
 const QUIET = new Set(['stream.connected', 'stream.unavailable'])
 
-/** What a stream event means for the room: a log line, and an agent's new state; nothing for pings and plumbing. */
+/**
+ * What a stream event means for the room: a log line, and an agent's new
+ * state. Nothing for pings, plumbing, and the history the backend replays
+ * on every connection (the room's log opened with the conversation, and a
+ * replayed comment says nothing about what an agent does now).
+ */
 export function readStreamEvent(event: StreamEvent, at = Date.now()): { log?: LogEntry; agent?: Agent } {
-  if (event.ping || !event.message || QUIET.has(event.semantic_type ?? '')) return {}
+  if (event.ping || !event.message || event.source === 'history' || QUIET.has(event.semantic_type ?? '')) return {}
   const who = event.agent || event.role || 'System'
   const log: LogEntry = { at: event.timestamp ? Date.parse(event.timestamp) || at : at, text: `${who}: ${event.message}` }
   const role = event.role || event.agent
@@ -205,8 +228,13 @@ export class LiveApi {
     return response.json() as Promise<T>
   }
 
-  /** Everything the room shows, read once; `sprintId` is what the stream then follows. */
-  async load(): Promise<{ world: Partial<World>; sprintId: number | undefined }> {
+  /**
+   * Everything the room shows; `sprintId` is what the stream then follows.
+   * A `reload` brings only what the board and the inbox can change (the
+   * tasks and the runs), so the log and the agents' states the stream built
+   * since the room opened stay.
+   */
+  async load(reload = false): Promise<{ world: Partial<World>; sprintId: number | undefined }> {
     const { companyId } = this.config
     const sprints = await this.get<ApiSprint[]>(`/v1/sprints?company_id=${companyId}`)
     const sprint = pickSprint(sprints, this.config.sprintId)
@@ -225,6 +253,14 @@ export class LiveApi {
       }),
     )
     const tasks = board ? tasksFromBoard(board, inbox) : []
+    const world: Partial<World> = {
+      mode: 'live',
+      company: `Company ${companyId}`,
+      sprint: sprint ? sprint.sprint_name : 'No sprint yet',
+      tasks,
+      runs: runsFromApi(runs, verifications),
+    }
+    if (reload) return { sprintId: sprint?.id, world }
     // The conversation between roles is context, not what the room needs: a
     // backend without it still opens.
     const messages = sprint
@@ -232,15 +268,7 @@ export class LiveApi {
       : []
     return {
       sprintId: sprint?.id,
-      world: {
-        mode: 'live',
-        company: `Company ${companyId}`,
-        sprint: sprint ? sprint.sprint_name : 'No sprint yet',
-        tasks,
-        agents: agentsFromTasks(tasks),
-        runs: runsFromApi(runs, verifications),
-        log: logFromMessages(messages).sort((a, b) => a.at - b.at),
-      },
+      world: { ...world, agents: agentsFromTasks(tasks), log: logFromMessages(messages).sort((a, b) => a.at - b.at) },
     }
   }
 

@@ -39,10 +39,10 @@ describe('the room\'s model', () => {
     expect(reduce(world, { type: 'decide_run', id: 103, decision: 'approved', by: 'Ana' })).toBe(world)
   })
 
-  it('sends a blocked task back to work with one more rework, and only a blocked one', () => {
+  it('sends a blocked task back to the top of the board with one more rework, and only a blocked one', () => {
     let world = reduce(demoWorld(), { type: 'send_back', id: 36, by: 'Ana' })
     const task = world.tasks.find(candidate => candidate.id === 36)!
-    expect([task.status, task.rework, task.reason]).toEqual(['in_progress', 3, undefined])
+    expect([task.status, task.rework, task.reason]).toEqual(['todo', 3, undefined])
     expect(blockedForPerson(world)).toEqual([])
     expect(world.log.at(-1)?.text).toBe('Ana sent "Create testing strategy document" back to work')
 
