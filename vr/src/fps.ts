@@ -26,8 +26,3 @@ export class FrameRate {
     return rate
   }
 }
-
-/** `?stats=1` shows the frame rate in the room. */
-export function statsWanted(search: string): boolean {
-  return new URLSearchParams(search).get('stats') === '1'
-}

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ComponentProps, type Dispatch, type R
 import { useFrame } from '@react-three/fiber'
 import { Grid, Text } from '@react-three/drei'
 import { Interactive, useXR } from '@react-three/xr'
-import { Vector3, type Group } from 'three'
+import { Raycaster, Vector3, type Group, type Mesh } from 'three'
+import { Dwell } from '../dwell'
 import { FrameRate } from '../fps'
 import { approach, hintTarget, hintVisible, type Vec3 } from '../hint'
 import { arc, fit, grid, type Placement } from '../layout'
@@ -69,6 +70,8 @@ interface RoomProps {
   person: string
   /** Show the frame rate in the room (`?stats=1`), for the Quest pass. */
   stats?: boolean
+  /** Looking at a card for a moment picks it (`?gaze=1`): an eyes-only alternative to the pinch. */
+  gaze?: boolean
 }
 
 /**
@@ -77,7 +80,7 @@ interface RoomProps {
  * for whatever card was picked up. Everything is a pinch away: a card
  * selects, the action cards decide.
  */
-export function Room({ world, dispatch, person, stats = false }: RoomProps) {
+export function Room({ world, dispatch, person, stats = false, gaze = false }: RoomProps) {
   const [board, centre, inbox] = arc(3, { radius: 1.5, spread: Math.PI * 0.62, height: 1.25 })
   const waiting = pendingRuns(world).length + blockedForPerson(world).length
   // The first pinch of the session puts the entry hint away.
@@ -111,6 +114,7 @@ export function Room({ world, dispatch, person, stats = false }: RoomProps) {
       <Detail world={world} dispatch={act} person={person} />
       <Hint pinched={pinched} />
       {stats && <FrameRateLabel />}
+      {gaze && <Gaze />}
     </>
   )
 }
@@ -169,7 +173,8 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
   return (
     <Interactive onSelect={onPick} onHover={() => setHover(true)} onBlur={() => setHover(false)}>
       <group position={[x, y, lift]}>
-        <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)}>
+        {/* The gaze finds a card by the handler on its mesh. */}
+        <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)} userData={{ onPick }}>
           <planeGeometry args={[width, height]} />
           <meshBasicMaterial color={fill} />
         </mesh>
@@ -548,5 +553,54 @@ function FrameRateLabel() {
     <Label position={[DETAIL.position[0] + 0.57, DETAIL.position[1] - 0.26, DETAIL.position[2]]} fontSize={0.03} anchorX="right" anchorY="middle" color={rate !== null && rate < 60 ? '#f59e0b' : MUTED}>
       {rate === null ? 'fps …' : `${rate} fps`}
     </Label>
+  )
+}
+
+const GAZE_DISTANCE = 0.6
+
+/**
+ * `?gaze=1`, an eyes-only pick: a ray from the centre of the view finds the
+ * card under the gaze, and holding it there for a moment picks it, as a
+ * pinch would. A ring in front of the eyes fills while the gaze is held, so
+ * nothing is picked by surprise; looking away resets it.
+ */
+function Gaze() {
+  const dwell = useRef(new Dwell())
+  const elapsed = useRef(0)
+  const raycaster = useRef(new Raycaster())
+  const origin = useRef(new Vector3())
+  const direction = useRef(new Vector3())
+  const ring = useRef<Mesh>(null)
+  const fill = useRef<Mesh>(null)
+
+  useFrame(({ camera, scene }, delta) => {
+    elapsed.current += delta * 1000
+    // The camera is outside the scene graph: its world matrix is ours to refresh.
+    camera.updateMatrixWorld()
+    camera.getWorldPosition(origin.current)
+    camera.getWorldDirection(direction.current)
+    raycaster.current.set(origin.current, direction.current)
+    const hit = raycaster.current.intersectObjects(scene.children, true).find(candidate => typeof candidate.object.userData.onPick === 'function')
+    const step = dwell.current.update(hit ? hit.object.uuid : null, elapsed.current)
+    if (step.fire && hit) (hit.object.userData.onPick as () => void)()
+    for (const part of [ring.current, fill.current]) {
+      if (!part) continue
+      part.position.copy(origin.current).addScaledVector(direction.current, GAZE_DISTANCE)
+      part.quaternion.copy(camera.quaternion)
+    }
+    if (fill.current) fill.current.scale.setScalar(Math.max(0.001, step.progress))
+  })
+
+  return (
+    <>
+      <mesh ref={ring} name="reticle" renderOrder={10}>
+        <ringGeometry args={[0.007, 0.009, 32]} />
+        <meshBasicMaterial color={INK} transparent opacity={0.7} depthTest={false} />
+      </mesh>
+      <mesh ref={fill} name="reticle-fill" renderOrder={10}>
+        <circleGeometry args={[0.007, 32]} />
+        <meshBasicMaterial color={SELECTED} transparent opacity={0.8} depthTest={false} />
+      </mesh>
+    </>
   )
 }

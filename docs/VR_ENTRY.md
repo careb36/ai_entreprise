@@ -159,6 +159,12 @@ npm run build        # vr/dist, a static site
 - **The frame rate on the headset:** `?stats=1` shows it under the detail
   panel (amber below 60), the number the competition asks for; the browser's
   own counters are not visible inside a session.
+- **Eyes-only pick:** `?gaze=1` makes looking at a card for a moment and
+  a half pick it, as a pinch would, with a ring in front of the eyes that
+  fills while the gaze is held (nothing is picked by surprise; looking away
+  resets it). An alternative for a person who cannot pinch, and the gaze
+  interaction the judging page names; off by default so reading a card
+  never picks it.
 - **Live mode and the token:** `&token=` puts a JWT in the page URL, which
   browser history and a host's logs keep; use a short-lived token, or run
   the backend with `AUTH_REQUIRED=false` for a demo on a private network.
@@ -189,6 +195,9 @@ npm run build        # vr/dist, a static site
   to the eyes), flat materials for the panels and cards (the lights are for
   the hands), the smallest labels a size up, and the frame rate in the room
   with `?stats=1` (amber under 60).
+- [x] An eyes-only alternative to the pinch (`?gaze=1`, a dwell with a
+  filling ring), for a person who cannot pinch and for the *Accessibility
+  Forward* award; the pinch stays the default.
 - [ ] The Quest 3 pass itself, by a person with the headset: the rate with
   `?stats=1` on the hosted build, hit areas and legibility at 1.5 m, hand
   tracking on the cards and the action cards, comfort over ten minutes.
@@ -272,6 +281,11 @@ hands.
 - **2026-10-21 · The Quest pass** (#167): an entry hint that trails the head
   until the first pinch, flat materials, larger board labels, the frame rate
   in the room with `?stats=1`.
+- **2026-10-21 · Tests that render the room** (#169), **the payoff of the
+  last decision** (#171): the inbox says when nothing waits and where new
+  work shows up.
+- **2026-10-21 · Eyes-only pick** (#173): `?gaze=1`, a dwell with a filling
+  ring, an alternative to the pinch for a person who cannot make one.
 
 ## Devpost description (draft)
 
