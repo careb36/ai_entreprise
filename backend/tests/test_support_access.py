@@ -222,6 +222,34 @@ def test_a_decision_is_credited_to_whoever_changed_it_and_can_be_cleared(
     assert test_client.get(url, headers=people["admin"]).json()["decided_at"] is None
 
 
+def test_the_impact_filter_reads_the_decision_first(
+    test_client, people, sqlite_session
+):
+    def ticket(severity, decided):
+        report = _ticket(sqlite_session, "filter@example.com")
+        report.severity, report.decided_severity = severity, decided
+        sqlite_session.add(report)
+        sqlite_session.commit()
+        return report.ticket_num
+
+    reported_high = ticket("high", None)
+    decided_high = ticket("low", "high")
+    overruled = ticket("high", "low")
+    legacy = ticket("High", None)
+
+    def listed(severity):
+        response = test_client.get(
+            "/v1/support/tickets",
+            params={"severity": severity, "reporter_email": "filter@example.com"},
+            headers=people["admin"],
+        )
+        assert response.status_code == 200
+        return _nums(response)
+
+    assert listed("high") == {reported_high, decided_high, legacy}
+    assert listed(" LOW ") == {overruled}
+
+
 def test_the_reporters_choice_is_normalized_and_nothing_is_made_up(
     test_client, sqlite_session
 ):

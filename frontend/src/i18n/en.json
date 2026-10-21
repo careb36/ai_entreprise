@@ -1352,6 +1352,7 @@
       "medium": "Medium",
       "low": "Low"
     },
+    "reportedImpact": "{{severity}} (reported)",
     "reporter": "Reporter email",
     "loading": "Loading tickets…",
     "loadError": "Could not load the tickets: {{message}}",

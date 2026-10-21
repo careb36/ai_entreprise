@@ -275,6 +275,67 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
     expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'waiting' })
   })
 
+  it('follows the ticket after a save: a later clear is sent, and a decision made then is kept', async () => {
+    let detail: Record<string, unknown> = {
+      ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+      decided_severity: null, decided_category: null, decided_by: null,
+    }
+    const patch = vi.fn((init: RequestInit) => {
+      const body = JSON.parse(String(init.body))
+      if ('severity' in body) detail = { ...detail, decided_severity: body.severity || null, decided_by: 'admin@acme.test' }
+      return response(200, { ticket_num: 'BUG-0001', status: body.status, updated_at: '2026-10-02T00:00:00' })
+    })
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, detail),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+    const region = await screen.findByRole('region', { name: 'Board does not load' })
+    const impact = () => within(region).getByRole('combobox', { name: 'Decided impact' })
+
+    fireEvent.change(impact(), { target: { value: 'high' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    expect(await within(region).findByText(/last changed by admin@acme.test/)).toBeInTheDocument()
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'open', severity: 'high' })
+
+    // Back to undecided after the save: the clear is a change from what is stored.
+    fireEvent.change(impact(), { target: { value: '' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
+    expect(JSON.parse(String(patch.mock.calls[1][0].body))).toEqual({ status: 'open', severity: '' })
+
+    // Another admin decides next; the form shows it, and a status save leaves it alone.
+    await waitFor(() => expect(detail.decided_severity).toBeNull())
+    detail = { ...detail, decided_severity: 'low', decided_by: 'b@acme.test' }
+    await act(() => queryClient.invalidateQueries())
+    await waitFor(() => expect(impact()).toHaveValue('low'))
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(String(patch.mock.calls[2][0].body))).toEqual({ status: 'waiting' })
+  })
+
+  it("lists the decided impact, else the reporter's marked as theirs", async () => {
+    stubApi({
+      'GET /v1/support/tickets': () => response(200, {
+        tickets: [
+          TICKET,
+          { ...TICKET, id: 2, ticket_num: 'BUG-0002', title: 'Decided one', decided_severity: 'critical' },
+          { ...TICKET, id: 3, ticket_num: 'BUG-0003', title: 'Nobody chose', severity: null },
+        ],
+        count: 3,
+      }),
+    })
+    renderAs(true)
+
+    expect(await screen.findByRole('button', { name: /Board does not load/ })).toHaveTextContent('High (reported)')
+    const decided = screen.getByRole('button', { name: /Decided one/ })
+    expect(decided).toHaveTextContent('Critical')
+    expect(decided).not.toHaveTextContent('(reported)')
+    expect(screen.getByRole('button', { name: /Nobody chose/ })).toHaveTextContent('—')
+  })
+
   it("shows how the agent's suggestions compared with the decisions, beside the reporters'", async () => {
     stubApi({
       'GET /v1/support/agent_record': () => response(200, {

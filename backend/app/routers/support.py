@@ -126,8 +126,10 @@ async def list_tickets(
     """
     List support tickets with optional filters.
 
-    All filters are additive (AND logic).  Results are ordered by
-    ``created_at`` descending (newest first) and capped at *limit* rows.
+    All filters are additive (AND logic).  ``severity`` matches the impact a
+    support admin decided, or the reporter's choice where none was decided.
+    Results are ordered by ``created_at`` descending (newest first) and
+    capped at *limit* rows.
     Support admins see every ticket; other users only the tickets reported
     with their account email, and asking for another reporter is a 403.
     """
@@ -147,7 +149,12 @@ async def list_tickets(
     if status:
         query = query.where(BugReport.status == status)
     if severity:
-        query = query.where(BugReport.severity == severity)
+        # A ticket's impact is what a support admin decided, else what the
+        # reporter chose: the filter reads the decision first.
+        query = query.where(
+            func.lower(func.coalesce(BugReport.decided_severity, BugReport.severity))
+            == severity.strip().lower()
+        )
     query = query.order_by(BugReport.created_at.desc()).limit(limit)
 
     rows = session.exec(query).all()
