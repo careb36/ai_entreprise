@@ -104,7 +104,7 @@ export function Room({ world, dispatch, person, stats = false }: RoomProps) {
         <Log world={world} />
       </Panel>
 
-      <Panel placement={inbox} title={`Inbox · ${waiting} waiting for you`} width={1.2} height={0.95}>
+      <Panel placement={inbox} title={waiting ? `Inbox · ${waiting} waiting for you` : 'Inbox · nothing waits for you'} width={1.2} height={0.95}>
         <Inbox world={world} onPick={pick} />
       </Panel>
 
@@ -327,6 +327,22 @@ function Inbox({ world, onPick }: { world: World; onPick: (s: NonNullable<World[
   const blockedSlots = grid(blocked.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
   const runSlots = grid(runs.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
   const runsTop = 0.36 - 0.06 - blocked.length * 0.115 - 0.08 - (allBlocked.length > blocked.length ? 0.04 : 0)
+  if (allBlocked.length + allRuns.length === 0) {
+    // The payoff of the last decision: the inbox says so, and where new work will show up.
+    return (
+      <>
+        <Label position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+          Tasks blocked for a person · 0
+        </Label>
+        <Label position={[-0.56, 0.26, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+          Runs awaiting a decision · 0
+        </Label>
+        <Label position={[0, 0.02, 0.002]} fontSize={0.036} anchorX="center" anchorY="middle" color={INK} maxWidth={1.0} textAlign="center" lineHeight={1.2}>
+          Everything is decided. The company keeps working; what needs a person shows up here.
+        </Label>
+      </>
+    )
+  }
   return (
     <>
       <Label position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
@@ -428,6 +444,9 @@ function Detail({ world, dispatch, person }: RoomProps) {
   } else if (agent) {
     lines.push({ text: agent.role })
     lines.push({ text: `${agent.state} · ${fit(agent.activity, 60)}`, color: AGENT_COLOR[agent.state] })
+  } else if (pendingRuns(world).length + blockedForPerson(world).length === 0 && world.log.some(entry => / (approved|rejected|sent) /.test(entry.text))) {
+    lines.push({ text: 'That was the last one.', color: INK })
+    lines.push({ text: 'The company keeps working; the inbox fills again when something needs you.', color: MUTED })
   } else {
     lines.push({ text: 'Pinch a card to pick it up; pinch it again to put it down.', color: MUTED })
     lines.push({ text: 'Suggestions and verdicts are shown beside each other: your pinch decides.', color: MUTED })
