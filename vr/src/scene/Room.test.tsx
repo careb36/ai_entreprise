@@ -27,9 +27,11 @@ async function pinch(scene: Scene, text: string) {
   await ReactThreeTestRenderer.act(async () => { (card.props.userData.onSelect as () => void)() })
 }
 
-async function render(world: World, extra: Partial<Parameters<typeof Room>[0]> = {}) {
+async function render(world: World, extra: Partial<Parameters<typeof Room>[0]> = {}, eyes?: [number, number, number]) {
   const dispatch = vi.fn()
-  const renderer = await ReactThreeTestRenderer.create(<Room world={world} dispatch={dispatch} person="Ana" {...extra} />)
+  // `eyes` puts the camera there looking straight ahead (down -Z), as a seated person would.
+  const options = eyes ? { camera: { position: eyes, rotation: [0, 0, 0] as [number, number, number] } } : {}
+  const renderer = await ReactThreeTestRenderer.create(<Room world={world} dispatch={dispatch} person="Ana" {...extra} />, options)
   return { renderer, dispatch }
 }
 
@@ -119,6 +121,27 @@ describe('the room', () => {
     // Forty frames of a sixtieth of a second: the first window closes at 60 fps.
     await ReactThreeTestRenderer.act(async () => { await renderer.advanceFrames(40, 1 / 60) })
     expect(labels(renderer.scene)).toContain('60 fps')
+  })
+
+  it('picks the card under the gaze once it is held, only when the eyes-only pick is on', async () => {
+    // Eyes level with the Developer's card on the centre panel, looking straight at it.
+    const eyes: [number, number, number] = [0.38, 1.475, 0]
+    const { renderer, dispatch } = await render(demoWorld(), {}, eyes)
+    expect(renderer.scene.findAll(node => node.props.name === 'reticle')).toHaveLength(0)
+    await ReactThreeTestRenderer.act(async () => { await renderer.advanceFrames(120, 1 / 60) })
+    expect(dispatch).not.toHaveBeenCalled()
+
+    const gazing = await render(demoWorld(), { gaze: true }, eyes)
+    expect(gazing.renderer.scene.findAll(node => node.props.name === 'reticle')).toHaveLength(1)
+    // Nothing renders here, so the world matrices the raycast reads are refreshed by hand.
+    gazing.renderer.scene.instance.updateMatrixWorld(true)
+    // A second's look: held, not yet picked.
+    await ReactThreeTestRenderer.act(async () => { await gazing.renderer.advanceFrames(60, 1 / 60) })
+    expect(gazing.dispatch).not.toHaveBeenCalled()
+    // A second and a half: picked, once.
+    await ReactThreeTestRenderer.act(async () => { await gazing.renderer.advanceFrames(120, 1 / 60) })
+    expect(gazing.dispatch).toHaveBeenCalledTimes(1)
+    expect(gazing.dispatch).toHaveBeenCalledWith({ type: 'select', selection: { kind: 'agent', role: 'Developer' } })
   })
 
   it('reads the Reviewer agent aloud with the browser voice', async () => {

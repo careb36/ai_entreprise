@@ -484,8 +484,9 @@ checks the HTML shell and both modes with the scene mocked, and
 (labels as meshes, a pinch as the card's handler): the demo company's panels, a
 run picked up with its evidence and decision cards, a frozen task, the "+n
 more" caps, the frame rate; `src/hint.ts` (the
-entry hint's timing and where it trails the head) and `src/fps.ts` (the frame
-rate shown with `?stats=1`) are pure and tested too. Run it from `vr/`: `npm install`, `npm run dev`,
+entry hint's timing and where it trails the head), `src/fps.ts` (the frame
+rate shown with `?stats=1`), `src/dwell.ts` (the gaze dwell behind `?gaze=1`,
+an eyes-only pick) and `src/flags.ts` (those switches) are pure and tested too. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
 CI: `.github/workflows/vr-build.yml` on changes under `vr/`. The entry lives on
 the `main_meta` branch (released; Pages deploys from it) and `develop_meta`
