@@ -295,20 +295,11 @@ The GlassRoom is the real-time observability view for a running sprint. It uses 
 
 The SSE endpoint (`GET /v1/glassroom/stream?sprint_id=<id>`) replays the last 50 events on connect so late-joining clients get full context. With authentication required it also takes `ticket=<t>`, a five-minute token for that sprint from `POST /v1/sprints/{id}/stream_ticket` (a browser EventSource cannot send an Authorization header). Keepalive pings are sent every 15 seconds to maintain the connection.
 
+The same room in a headset, Glassroom VR (the Meta VR Start Developer Competition entry), lives on the `main_meta` branch; `main` is the web product.
+
 [⬆ Back to Top](#la-fabrique)
 
 ---
-
-### Glassroom VR
-
-The same room, in a headset: [`vr/`](vr/) is a standalone hands-first WebXR
-app (react-three-fiber + `@react-three/xr`) where a seated person sees the
-board, the company at work and the inbox on an arc of panels, picks up a task
-or a run with a pinch, reads the Verifier's observations beside the Reviewer
-agent's suggestion, and decides with another pinch. It opens on a bundled demo
-company, so it runs with no backend. It is the product's entry for the Meta VR
-Start Developer Competition 2026; [`docs/VR_ENTRY.md`](docs/VR_ENTRY.md) has
-the rules, the plan and what only a person can do.
 
 ## Project Structure
 
@@ -361,7 +352,6 @@ la-fabrique/
 │       │   └── agentStore.ts         # Zustand FSM store (idle/active/waiting/error)
 │       └── i18n/                     # EN + ES translation files
 ├── llm-proxy/                        # Token budget + audit gateway (Flask :5100)
-├── vr/                               # Glassroom VR: hands-first WebXR room (docs/VR_ENTRY.md)
 ├── vscode-daemon/                    # Local NATS subscriber for IDE file operations
 ├── scripts/
 │   └── verify_infra.py               # Infrastructure health verification script
@@ -431,13 +421,6 @@ The backend test suite uses pytest with in-memory SQLite — no external service
 cd frontend
 npm run test:run    # Vitest + Testing Library (CI mode)
 npm run test        # Watch mode during development
-```
-
-### Glassroom VR
-
-```bash
-cd vr && npm install && npm run test:run   # the model, the layout, the HTML shell
-npm run build                              # vr/dist, a static site
 ```
 
 ### CI
