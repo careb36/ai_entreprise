@@ -6,6 +6,7 @@ import { demoWorld } from './demo'
 import { parseLiveConfig } from './live'
 import { blockedForPerson, pendingRuns, reduce } from './model'
 import { Room } from './scene/Room'
+import { useDemoTimeline } from './useDemoTimeline'
 import { useLiveWorld, type LiveStatus } from './useLiveWorld'
 
 /** Who the pinches are recorded as in the demo; live mode takes `&person=`. */
@@ -38,6 +39,8 @@ export default function App() {
   const [world, dispatch] = useReducer(reduce, undefined, demoWorld)
   const config = useMemo(() => parseLiveConfig(window.location.search), [])
   const { perform, status } = useLiveWorld(config, dispatch)
+  // The demo company keeps working for a minute after the room opens.
+  useDemoTimeline(status === 'demo', dispatch)
   const waiting = pendingRuns(world).length + blockedForPerson(world).length
 
   return (

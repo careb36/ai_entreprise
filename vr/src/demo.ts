@@ -1,4 +1,81 @@
-import type { World } from './model'
+import type { Action, World } from './model'
+
+/** A step of the demo's first minute: what happens, and when, after the room opens. */
+export interface TimelineStep {
+  /** Milliseconds after the room opens. */
+  at: number
+  actions: Action[]
+}
+
+/**
+ * The company keeps working after a judge puts the headset on: a delivery,
+ * the Verifier's observations, a review request, a brief, a new run in the
+ * inbox. One pass, so the room is alive in its first minute and nothing
+ * loops behind the person's back.
+ */
+export function demoTimeline(): TimelineStep[] {
+  return [
+    {
+      at: 6_000,
+      actions: [
+        { type: 'event', text: 'Developer wrote src/checkout/rate_limit.py and its tests' },
+        { type: 'agent', agent: { role: 'Developer', state: 'active', activity: 'Running the tests for rate_limit' } },
+      ],
+    },
+    {
+      at: 14_000,
+      actions: [
+        { type: 'event', text: 'Verifier: files_written pass (2 files), tests_run pass — `pytest` passed' },
+        { type: 'task', task: { id: 33, status: 'in_review' } },
+        { type: 'agent', agent: { role: 'Developer', state: 'waiting', activity: 'Handed "Rate limit the checkout API" to QA' } },
+        { type: 'agent', agent: { role: 'QA', state: 'active', activity: 'Reviewing "Rate limit the checkout API"' } },
+      ],
+    },
+    {
+      at: 24_000,
+      actions: [
+        { type: 'event', text: 'QA → Developer (request): NEEDS WORK: cover the burst case in the tests' },
+        { type: 'task', task: { id: 33, status: 'in_progress', rework: 1 } },
+        { type: 'agent', agent: { role: 'Developer', state: 'active', activity: 'Rework: the burst case' } },
+        { type: 'agent', agent: { role: 'QA', state: 'waiting', activity: 'Asked for one rework' } },
+      ],
+    },
+    {
+      at: 34_000,
+      actions: [
+        { type: 'event', text: 'Architect → Developer (answer): token bucket per key; test the burst window first' },
+        { type: 'agent', agent: { role: 'Architect', state: 'waiting', activity: 'Briefed the burst case' } },
+      ],
+    },
+    {
+      at: 46_000,
+      actions: [
+        {
+          type: 'run',
+          run: {
+            id: 104,
+            producer: 'github',
+            externalRef: 'pr-104 · Fix the CSV header',
+            verdict: 'verified',
+            observations: ['artifact_nonempty: pass — 640 bytes', 'claimed_files_present: pass — export/csv.py in the diff'],
+            suggestion: { decision: 'approved', reason: 'A one-line fix the verifier confirmed; the claims match the diff.' },
+          },
+        },
+        { type: 'event', text: 'Reviewer agent suggested approving pr-104 · Fix the CSV header' },
+        { type: 'agent', agent: { role: 'Reviewer agent', state: 'waiting', activity: 'Suggested on 3 runs' } },
+      ],
+    },
+    {
+      at: 58_000,
+      actions: [
+        { type: 'event', text: 'Developer delivered "Rate limit the checkout API" again, burst case covered' },
+        { type: 'task', task: { id: 33, status: 'in_review' } },
+        { type: 'agent', agent: { role: 'Developer', state: 'waiting', activity: 'Delivered the rework' } },
+        { type: 'agent', agent: { role: 'QA', state: 'active', activity: 'Reviewing the rework' } },
+      ],
+    },
+  ]
+}
 
 /**
  * A company a judge can open without a backend: one sprint in progress, its

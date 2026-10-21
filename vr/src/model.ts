@@ -78,6 +78,8 @@ export type Action =
   | { type: 'send_back'; id: number; by: string }
   | { type: 'event'; text: string; at?: number }
   | { type: 'agent'; agent: Agent }
+  | { type: 'task'; task: Pick<Task, 'id'> & Partial<Task> }
+  | { type: 'run'; run: Run }
   | { type: 'load'; world: Partial<World> }
 
 export const LOG_LIMIT = 40
@@ -162,6 +164,18 @@ export function reduce(world: World, action: Action): World {
       return { ...world, log: logged(world, action.text, action.at) }
     case 'agent':
       return { ...world, agents: withAgent(world.agents, action.agent) }
+    case 'task': {
+      // What the board reports about a task: fields on an existing card, or a new card.
+      const known = world.tasks.some(task => task.id === action.task.id)
+      const tasks = known
+        ? world.tasks.map(task => (task.id === action.task.id ? { ...task, ...action.task } : task))
+        : [...world.tasks, { title: `Task ${action.task.id}`, status: 'todo' as TaskStatus, rework: 0, ...action.task }]
+      return { ...world, tasks }
+    }
+    case 'run': {
+      const known = world.runs.some(run => run.id === action.run.id)
+      return { ...world, runs: known ? world.runs.map(run => (run.id === action.run.id ? action.run : run)) : [...world.runs, action.run] }
+    }
     case 'load':
       return { ...world, ...action.world }
   }
