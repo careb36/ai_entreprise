@@ -471,11 +471,15 @@ do). A seated person sees three panels on an arc (the board, the company at
 work, the inbox) and picks up a task or a run with a pinch; the detail panel
 shows the Verifier's observations beside the Reviewer agent's suggestion, and
 the action cards (approve, reject, send back) record the person's decision.
-It opens on a bundled demo company, so a judge needs no backend; a live mode
-against the REST API is planned. `src/model.ts` (what the room shows and the
-reducer behind every pinch) and `src/layout.ts` (where things go, in metres)
-have no rendering and are tested; `src/App.test.tsx` checks the HTML shell
-with the scene mocked. Run it from `vr/`: `npm install`, `npm run dev`,
+It opens on a bundled demo company, so a judge needs no backend; with
+`?api=<backend>&company=<id>` (`&token=`, `&sprint=`, `&person=`) it reads a
+real company through the REST API, follows the sprint's Glassroom stream and
+records decisions through the same endpoints the web app calls (the room's
+origin must be in `CORS_ORIGINS`). `src/model.ts` (what the room shows and
+the reducer behind every pinch), `src/layout.ts` (where things go, in metres)
+and `src/live.ts` (the API's shapes turned into the room's, the stream's
+events, the calls) have no rendering and are tested; `src/App.test.tsx`
+checks the HTML shell and both modes with the scene mocked. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).
 CI: `.github/workflows/vr-build.yml` on changes under `vr/`.
 
