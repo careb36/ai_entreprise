@@ -781,7 +781,13 @@
     "usageHistory": "Usage history",
     "exportCsv": "Export CSV",
     "lastDays": "{{count}} days",
-    "totalTokens": "Total: {{total}} tokens"
+    "totalTokens": "Total: {{total}} tokens",
+    "reviewerRecord": "The Reviewer agent's suggestion matched {{agent}} of {{total}} decisions",
+    "reviewerUnusable": " ({{n}} without a usable answer)",
+    "reviewerVerifier": "; the Verifier's verdict alone {{verifier}} of the {{called}} it called.",
+    "reviewerVerifierNone": "; the Verifier's verdict called none of them.",
+    "suggestion": "Reviewer agent suggests: {{decision}}",
+    "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people."
   },
   "evidence": {
     "title": "Evidence",
@@ -866,7 +872,10 @@
     "notRecorded": "Not recorded",
     "runCrumb": "Run #{{id}}",
     "taskLabel": "Task",
-    "taskFallback": "Task #{{id}}"
+    "taskFallback": "Task #{{id}}",
+    "suggestionTitle": "The Reviewer agent's suggestion",
+    "suggestionNote": "A claim read from the run and its verification, never a decision: the review below is yours.",
+    "suggestionUnusable": "The Reviewer agent could not suggest a decision; it is left to people."
   },
   "analytics": {
     "title": "Analytics",

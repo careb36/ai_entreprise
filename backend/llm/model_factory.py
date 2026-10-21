@@ -114,6 +114,8 @@ class ModelFactory:
 # Role names stored on Agent rows that are not AgentRole values, keyed by their
 # normalised form (lowercase, no spaces, dashes or underscores).
 _ROLE_ALIASES: Dict[str, AgentRole] = {
+    # The Reviewer agent judges deliverables, as QA does.
+    "reviewer": AgentRole.QA,
     "dev": AgentRole.DEVELOPER,
     "backenddev": AgentRole.DEVELOPER,
     "frontenddev": AgentRole.DEVELOPER,

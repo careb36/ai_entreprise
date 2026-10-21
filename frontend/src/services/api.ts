@@ -226,6 +226,17 @@ export interface TicketUpdateRequest {
 }
 
 /** Per field: tickets the Support agent triaged and a person then decided. */
+/** How the Reviewer agent's suggestions compared with the decisions people recorded on a company's runs. */
+export interface ReviewerRecord {
+  decided: number
+  agent_agreed: number
+  /** Decided runs the agent gave no usable answer for (misses too). */
+  agent_unusable: number
+  /** Decided runs the Verifier's verdict alone called (verified or refuted): its baseline. */
+  verifier_called: number
+  verifier_agreed: number
+}
+
 export interface AgentRecordField {
   decided: number
   agent_agreed: number
@@ -589,6 +600,12 @@ export interface AgentRunListItem {
   ingested_at: string
   audit_log_id: number | null
   latest_approval: Pick<AgentRunApproval, 'decision' | 'feedback' | 'approver_name' | 'decided_at'> | null
+  /** The Reviewer agent's suggestion: a claim beside the approval, never one. `reviewed_at` with no decision: its answer was unusable. */
+  suggested_decision?: 'approved' | 'rejected' | null
+  suggested_category?: 'scope' | 'quality' | 'security' | 'other' | null
+  suggested_reason?: string | null
+  reviewed_by?: string | null
+  reviewed_at?: string | null
 }
 
 export interface AgentRunFilters {
@@ -1036,6 +1053,10 @@ export const api = {
 
   /** How the Support agent's suggestions compared with support admins' decisions. */
   getSupportAgentRecord: () => api.get<SupportAgentRecord>('/v1/support/agent_record'),
+
+  /** The Reviewer agent's record on a company's runs (Viewer). */
+  getReviewerRecord: (companyId: number) =>
+    api.get<ReviewerRecord>(`/v1/agent_runs/reviewer_record?company_id=${companyId}`),
 
   /** The audit log as a JSONL file; 404 until a workflow has written one. */
   downloadSupportLogs: () => fetchBlob('/v1/support/logs'),

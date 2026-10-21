@@ -102,6 +102,12 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN category DROP DEFAULT",
         "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN severity DROP NOT NULL",
         "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN severity DROP DEFAULT",
+        # agent_runs — the Reviewer agent's suggestion beside a person's approval
+        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_decision VARCHAR(20)",
+        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_category VARCHAR(20)",
+        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_reason TEXT",
+        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(100)",
+        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         """

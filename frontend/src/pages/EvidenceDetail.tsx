@@ -213,6 +213,23 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
 
       <section className="card p-4">
         <h2 className="mb-3 text-lg font-semibold text-white">{t('evidence.humanReview')}</h2>
+        {run.reviewed_by && (
+          <aside className="mb-4 rounded-lg border border-surface-700 p-3 text-sm" aria-label={t('evidence.suggestionTitle')}>
+            <p className="text-xs font-semibold text-gray-400">{t('evidence.suggestionTitle')} · {run.reviewed_by}</p>
+            {run.suggested_decision ? (
+              <>
+                <p className="mt-1 font-semibold text-gray-200">
+                  {t(`evidence.approval.${run.suggested_decision}`)}
+                  {run.suggested_category ? ` · ${t(`evidence.categoryValues.${run.suggested_category}`)}` : ''}
+                </p>
+                {run.suggested_reason && <p className="mt-1 whitespace-pre-wrap text-gray-300">{run.suggested_reason}</p>}
+              </>
+            ) : (
+              <p className="mt-1 text-gray-400">{t('evidence.suggestionUnusable')}</p>
+            )}
+            <p className="mt-2 text-xs text-gray-500">{t('evidence.suggestionNote')}</p>
+          </aside>
+        )}
         <form onSubmit={submitApproval} className="grid gap-3 md:grid-cols-2">
           <label className="text-sm text-gray-400">
             {t('evidence.approverName')}

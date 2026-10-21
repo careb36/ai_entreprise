@@ -39,6 +39,27 @@ function setup(id = '7') {
   )
 }
 
+const RUN = {
+  id: 7,
+  company_id: 42,
+  external_ref: 'issue-27-run',
+  version: 1,
+  producer: 'github',
+  model: null,
+  agent_role: 'Developer',
+  subject: null,
+  claims: { title: 'Adds backend/app/crypto.py with Fernet encryption', summary: 'Crypto implementation added' },
+  artifact_text: '',
+  artifact_digest: 'digest',
+  artifact_size: 0,
+  status: 'refuted',
+  started_at: null,
+  finished_at: null,
+  ingested_at: '2026-10-15T12:00:00Z',
+  audit_log_id: 10,
+  latest_approval: null,
+}
+
 describe('Evidence detail', () => {
   it.each(['bad', '7x', '0', '-1', '1.5', '9007199254740992'])('rejects malformed run ID %s without querying', id => {
     setup(id)
@@ -67,30 +88,7 @@ describe('Evidence detail', () => {
     vi.clearAllMocks()
     void i18n.changeLanguage('en')
     useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: null })
-    mockedUseAgentRun.mockReturnValue({
-      data: {
-        id: 7,
-        company_id: 42,
-        external_ref: 'issue-27-run',
-        version: 1,
-        producer: 'github',
-        model: null,
-        agent_role: 'Developer',
-        subject: null,
-        claims: { title: 'Adds backend/app/crypto.py with Fernet encryption', summary: 'Crypto implementation added' },
-        artifact_text: '',
-        artifact_digest: 'digest',
-        artifact_size: 0,
-        status: 'refuted',
-        started_at: null,
-        finished_at: null,
-        ingested_at: '2026-10-15T12:00:00Z',
-        audit_log_id: 10,
-        latest_approval: null,
-      },
-      isLoading: false,
-      isError: false,
-    } as never)
+    mockedUseAgentRun.mockReturnValue({ data: RUN, isLoading: false, isError: false } as never)
     mockedUseAgentRunVerifications.mockReturnValue({
       data: {
         verifications: [{
@@ -143,6 +141,40 @@ describe('Evidence detail', () => {
     const observedPanel = screen.getByText(i18n.t('evidence.observed')).closest('.card') as HTMLElement
     expect(within(observedPanel).getByText('claims present but artifact is empty (0 bytes)')).toBeInTheDocument()
     expect(screen.getByText('artifact_nonempty')).toBeInTheDocument()
+  })
+
+  it("shows the Reviewer agent's suggestion as a claim beside the review form", () => {
+    mockedUseAgentRun.mockReturnValue({
+      data: {
+        ...RUN, reviewed_by: 'Reviewer agent', reviewed_at: '2026-10-15T13:00:00Z',
+        suggested_decision: 'rejected', suggested_category: 'quality', suggested_reason: 'The artifact is empty while the claims name a file.',
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup()
+
+    const aside = screen.getByRole('complementary', { name: "The Reviewer agent's suggestion" })
+    expect(aside).toHaveTextContent('Reviewer agent')
+    expect(aside).toHaveTextContent('Rejected · Quality')
+    expect(aside).toHaveTextContent('The artifact is empty while the claims name a file.')
+    expect(aside).toHaveTextContent('never a decision: the review below is yours')
+    // The form starts from the person's own default, not from the suggestion.
+    expect(screen.getByRole('combobox', { name: /Decision/ })).toHaveValue('approved')
+  })
+
+  it('says when the Reviewer agent could not suggest, and shows nothing before it looked', () => {
+    setup()
+    expect(screen.queryByRole('complementary', { name: "The Reviewer agent's suggestion" })).not.toBeInTheDocument()
+
+    mockedUseAgentRun.mockReturnValue({
+      data: { ...RUN, reviewed_by: 'Reviewer agent', reviewed_at: '2026-10-15T13:00:00Z', suggested_decision: null },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup()
+    expect(screen.getByRole('complementary', { name: "The Reviewer agent's suggestion" }))
+      .toHaveTextContent('The Reviewer agent could not suggest a decision; it is left to people.')
   })
 
   it('shows an Evidence › Run breadcrumb instead of a back link', () => {

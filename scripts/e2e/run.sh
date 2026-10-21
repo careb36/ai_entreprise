@@ -102,6 +102,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
+    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
@@ -225,6 +226,27 @@ T2=$(report_bug "Sprint page is blank")
 check "a reporter who chose no category has none" test "$(ticket "$T2" "d['category']")" = None
 check "the next ticket is triaged" wait_value 60 "Support agent high" ticket "$T2" "d['triaged_by'], d['suggested_severity']"
 check "with that record in its prompt" test "$(prompt_seen "TICKET $T2 .*severity: yours matched 1 of 1; the reporter's own choice matched 0 of 1.*category: yours matched 0 of 1")" = yes
+
+echo "7. the Reviewer agent"
+# A run from another producer waits for a person; the agent suggests, beside the approval.
+ingest_run() {  # ingest_run <external_ref> <claims JSON>
+  api -X POST "$API/v1/agent_runs" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"external_ref\": \"$1\", \"producer\": \"github\", \"agent_role\": \"Developer\",
+  \"claims\": $2, \"artifact\": \"diff --git a/app.py b/app.py\\n+print('hi')\\n\"}" | json "d['id']"; }
+run_field() { api "$API/v1/agent_runs/$1?company_id=$CID" | json "$2"; }
+R1=$(ingest_run "pr-101" '{"files": ["app.py"], "summary": "Adds a greeting"}')
+VERDICT=$(api -X POST "$API/v1/agent_runs/$R1/verify" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"evidence\": {}}" | json "d['verdict']")
+check "the Reviewer agent suggests on a run from another producer" wait_value 60 "Reviewer agent approved" run_field "$R1" "d['reviewed_by'], d['suggested_decision']"
+check "beside no approval: a person still decides" test "$(api "$API/v1/agent_runs?company_id=$CID&exclude_in_house=true" | json "next(r['latest_approval'] for r in d['agent_runs'] if r['id'] == $R1)")" = None
+check "its prompt carried the Verifier's verdict as an observation, and no record yet" test "$(prompt_seen "RUN pr-101 v1 .*Verifier's verdict: $VERDICT")" = yes -a "$(prompt_seen "RUN pr-101 v1 .*How your earlier suggestions")" = no
+DECISION=$(api -X POST "$API/v1/agent_runs/$R1/approve" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"approver_name\": \"ana\", \"decision\": \"rejected\", \"feedback\": \"Not this sprint\", \"rejection_category\": \"scope\"}" | json "d['decision']")
+check "a Manager decides against it, and the suggestion stays beside the decision" test "$DECISION" = rejected -a "$(run_field "$R1" "d['suggested_decision']")" = approved
+reviewer_record() { api "$API/v1/agent_runs/reviewer_record?company_id=$CID" | json "d['decided'], d['agent_agreed'], d['agent_unusable'], d['verifier_called'], d['verifier_agreed']"; }
+case "$VERDICT" in verified) EXPECTED="1 0 0 1 0";; refuted) EXPECTED="1 0 0 1 1";; *) EXPECTED="1 0 0 0 0";; esac
+check "the agent's record counts the miss, beside the Verifier's verdict ($VERDICT)" test "$(reviewer_record)" = "$EXPECTED"
+R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
+check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
+check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi

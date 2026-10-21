@@ -53,6 +53,14 @@ def answer(prompt: str) -> str:
         )
     if prompt.startswith("## Consultation request from"):
         return "Reuse the existing module layout and test the empty input first."
+    if "You are the Reviewer agent" in prompt:
+        return (
+            "DECISION: approve\n"
+            "CATEGORY: none\n"
+            "REASON:\n"
+            "The verifier confirmed the claims; nothing contradicts them.\n"
+            "END"
+        )
     if "You are the Support agent" in prompt:
         return (
             "SEVERITY: high\n"

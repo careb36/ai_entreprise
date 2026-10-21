@@ -157,6 +157,17 @@ async def startup(app):
         _background_tasks.add(support_task)
         support_task.add_done_callback(_on_task_done)
 
+    # So does the Reviewer agent, which suggests on other producers' runs.
+    if settings.REVIEWER_AGENT_ENABLED:
+        from database import engine
+        from services.reviewer_agent import run_reviewer_agent
+
+        reviewer_task = asyncio.create_task(
+            run_reviewer_agent(engine), name="reviewer_agent"
+        )
+        _background_tasks.add(reviewer_task)
+        reviewer_task.add_done_callback(_on_task_done)
+
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
     try:

@@ -243,6 +243,33 @@ List agent runs for a company.
 }
 ```
 
+#### GET /v1/agent_runs/reviewer_record
+
+How the Reviewer agent's suggestions (`REVIEWER_AGENT_ENABLED`) compared with
+the decisions people recorded on the company's runs. A suggestion is stored on
+the run (`suggested_decision`, `suggested_category`, `suggested_reason`,
+`reviewed_by`, `reviewed_at`) apart from the approval; `reviewed_at` with no
+decision means its answer was unusable. Requires Viewer.
+
+**Query Parameters:**
+- `company_id` — Company ID
+
+**Response:** `200 OK`
+```json
+{
+  "decided": 4,
+  "agent_agreed": 3,
+  "agent_unusable": 1,
+  "verifier_called": 2,
+  "verifier_agreed": 2
+}
+```
+
+`verifier_called` counts the decided runs whose latest verification was
+`verified` or `refuted` (the verdict alone would approve or reject them), and
+`verifier_agreed` how many of those the person decided the same way: the
+baseline the agent has to beat.
+
 #### POST /v1/agent_runs/{run_id}/verify
 Verify an agent run's claims against evidence.
 

@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # bug is public, and each new ticket costs an LLM call.
     SUPPORT_AGENT_ENABLED: bool = False
     SUPPORT_AGENT_INTERVAL_SECONDS: float = 60.0
+    # The Reviewer agent reads the evidence of other producers' runs waiting
+    # for a person and suggests the decision; a Manager still decides. Off by
+    # default: each run costs an LLM call.
+    REVIEWER_AGENT_ENABLED: bool = False
+    REVIEWER_AGENT_INTERVAL_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
     # Consult the Architect agent before Developers start high-priority, design-sensitive
