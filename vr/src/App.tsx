@@ -58,7 +58,8 @@ export default function App() {
       <Canvas camera={{ position: [0, 1.25, 0.2], fov: 70 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
         <XR>
           <Controllers />
-          <Hands />
+          {/* The hand models ship with the room: nothing fetched from a CDN in the headset. */}
+          <Hands modelLeft={`${import.meta.env.BASE_URL}hands/left.glb`} modelRight={`${import.meta.env.BASE_URL}hands/right.glb`} />
           <Suspense fallback={null}>
             <Room world={world} dispatch={perform} person={config?.person ?? PERSON} />
           </Suspense>

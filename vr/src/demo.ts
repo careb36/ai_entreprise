@@ -34,7 +34,7 @@ export function demoTimeline(): TimelineStep[] {
     {
       at: 24_000,
       actions: [
-        { type: 'event', text: 'QA → Developer (request): NEEDS WORK: cover the burst case in the tests' },
+        { type: 'event', text: 'QA › Developer (request): NEEDS WORK: cover the burst case in the tests' },
         { type: 'task', task: { id: 33, status: 'in_progress', rework: 1 } },
         { type: 'agent', agent: { role: 'Developer', state: 'active', activity: 'Rework: the burst case' } },
         { type: 'agent', agent: { role: 'QA', state: 'waiting', activity: 'Asked for one rework' } },
@@ -43,7 +43,7 @@ export function demoTimeline(): TimelineStep[] {
     {
       at: 34_000,
       actions: [
-        { type: 'event', text: 'Architect → Developer (answer): token bucket per key; test the burst window first' },
+        { type: 'event', text: 'Architect › Developer (answer): token bucket per key; test the burst window first' },
         { type: 'agent', agent: { role: 'Architect', state: 'waiting', activity: 'Briefed the burst case' } },
       ],
     },
@@ -101,6 +101,7 @@ export function demoWorld(): World {
         assignee: 'QA',
         rework: 2,
         reason: 'Quality gate: the deliverable was cut short twice (under 180 words, no sections). Blocked for a person.',
+        forPerson: true,
       },
     ],
     agents: [

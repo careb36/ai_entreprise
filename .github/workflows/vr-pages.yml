@@ -1,15 +1,16 @@
 name: Glassroom VR to GitHub Pages
 
 # Publishes vr/dist as the repository's GitHub Pages site: the link the
-# competition's judges open. It runs on a push to main that touches vr/ once
+# competition's judges open. It runs on a push to main_meta (the branch that
+# carries the competition entry; main is the web product) that touches vr/ once
 # the repository variable VR_PAGES is "1" (Settings → Secrets and variables →
 # Actions → Variables), and on demand from the Actions tab; Pages must be set
 # to deploy from GitHub Actions (Settings → Pages → Source). Until then it
-# does nothing, so main stays green.
+# does nothing, so main_meta stays green.
 
 on:
   push:
-    branches: [main]
+    branches: [main_meta]
     paths:
       - "vr/**"
       - ".github/workflows/vr-pages.yml"
@@ -22,7 +23,8 @@ permissions:
 
 concurrency:
   group: vr-pages
-  cancel-in-progress: true
+  # A deployment in flight finishes; the next push queues behind it.
+  cancel-in-progress: false
 
 jobs:
   deploy:

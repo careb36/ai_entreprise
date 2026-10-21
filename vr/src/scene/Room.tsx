@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type ReactNode } from 'react'
+import { useState, type ComponentProps, type Dispatch, type ReactNode } from 'react'
 import { Grid, Text } from '@react-three/drei'
 import { Interactive } from '@react-three/xr'
 import { arc, fit, grid, type Placement } from '../layout'
@@ -18,6 +18,16 @@ import {
   type TaskStatus,
   type World,
 } from '../model'
+
+// The font ships with the room (vr/public/fonts), so no label depends on a CDN
+// in the headset; the glyphs beyond ASCII the room uses are listed so the
+// font is loaded once, up front.
+const FONT_URL = `${import.meta.env.BASE_URL}fonts/Roboto-Regular.ttf`
+const CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,:;!?()[]{}+-*/=_#%&\'"`<>@·…—›¿¡áéíóúñÁÉÍÓÚÑ'
+
+function Label(props: ComponentProps<typeof Text>) {
+  return <Text font={FONT_URL} characters={CHARACTERS} {...props} />
+}
 
 const INK = '#f3f4f6'
 const MUTED = '#9ca3af'
@@ -103,9 +113,9 @@ function Panel({ placement, title, width, height, children }: {
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial color={PANEL} transparent opacity={0.92} />
       </mesh>
-      <Text position={[-width / 2 + 0.03, height / 2 - 0.045, 0.002]} fontSize={0.045} anchorX="left" anchorY="middle" color={INK} maxWidth={width - 0.06}>
+      <Label position={[-width / 2 + 0.03, height / 2 - 0.045, 0.002]} fontSize={0.045} anchorX="left" anchorY="middle" color={INK} maxWidth={width - 0.06}>
         {title}
-      </Text>
+      </Label>
       <group position={[0, -0.04, 0]}>{children}</group>
     </group>
   )
@@ -154,7 +164,7 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
             <meshStandardMaterial color={accent} />
           </mesh>
         )}
-        <Text
+        <Label
           position={[-width / 2 + PAD, sub ? height / 2 - 0.015 : labelSize * 0.6, 0.002]}
           fontSize={labelSize}
           lineHeight={1.1}
@@ -165,9 +175,9 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
           clipRect={[0, -labelHeight, textWidth, 0]}
         >
           {label}
-        </Text>
+        </Label>
         {sub && (
-          <Text
+          <Label
             position={[-width / 2 + PAD, -height / 2 + 0.014, 0.002]}
             fontSize={subSize}
             anchorX="left"
@@ -177,7 +187,7 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
             clipRect={[0, 0, textWidth, subSize * 1.3]}
           >
             {sub}
-          </Text>
+          </Label>
         )}
       </group>
     </Interactive>
@@ -206,9 +216,9 @@ function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['se
         const slots = grid(shown.length, { cols: 1, width: 0.23, height: cardHeight, gap: 0.015 })
         return (
           <group key={column.status} position={[x, 0, 0]}>
-            <Text position={[-0.115, 0.36, 0.002]} fontSize={0.026} anchorX="left" anchorY="middle" color={STATUS_COLOR[column.status]} maxWidth={0.23}>
+            <Label position={[-0.115, 0.36, 0.002]} fontSize={0.026} anchorX="left" anchorY="middle" color={STATUS_COLOR[column.status]} maxWidth={0.23}>
               {`${column.label} · ${cards.length}`}
-            </Text>
+            </Label>
             {shown.map((task, slot) => (
               <Card
                 key={task.id}
@@ -226,9 +236,9 @@ function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['se
               />
             ))}
             {cards.length > CARDS_PER_COLUMN && (
-              <Text position={[-0.115, 0.26 - shown.length * (cardHeight + 0.015) + 0.02, 0.002]} fontSize={0.02} anchorX="left" anchorY="middle" color={MUTED}>
+              <Label position={[-0.115, 0.26 - shown.length * (cardHeight + 0.015) + 0.02, 0.002]} fontSize={0.02} anchorX="left" anchorY="middle" color={MUTED}>
                 {`+${cards.length - CARDS_PER_COLUMN} more`}
-              </Text>
+              </Label>
             )}
           </group>
         )
@@ -237,18 +247,28 @@ function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['se
   )
 }
 
+/** Agent cards shown on the centre panel: three rows of three, then "+n more". */
+export const AGENTS_SHOWN = 9
+
 function Agents({ agents, selected, onPick }: { agents: Agent[]; selected: World['selected']; onPick: (s: NonNullable<World['selected']>) => void }) {
-  const slots = grid(agents.length, { cols: 3, width: 0.36, height: 0.11, gap: 0.02 })
+  const shown = agents.slice(0, AGENTS_SHOWN)
+  const slots = grid(shown.length, { cols: 3, width: 0.36, height: 0.11, gap: 0.02 })
+  const top = shown.length ? slots[0][1] : 0
   return (
     <>
-      <Text position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+      <Label position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
         The company at work
-      </Text>
-      {agents.map((agent, index) => (
+      </Label>
+      {agents.length > AGENTS_SHOWN && (
+        <Label position={[0.56, 0.36, 0.002]} fontSize={0.022} anchorX="right" anchorY="middle" color={MUTED}>
+          {`+${agents.length - AGENTS_SHOWN} more`}
+        </Label>
+      )}
+      {shown.map((agent, index) => (
         <Card
           key={agent.role}
           x={slots[index][0]}
-          y={0.2 + slots[index][1]}
+          y={0.265 - (top - slots[index][1])}
           width={0.36}
           height={0.11}
           label={`${agent.role} · ${agent.state}`}
@@ -268,29 +288,40 @@ function Log({ world }: { world: World }) {
   const lines = world.log.slice(-6)
   return (
     <>
-      <Text position={[-0.56, -0.08, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+      <Label position={[-0.56, -0.08, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
         What happened
-      </Text>
+      </Label>
       {lines.map((entry, index) => (
-        <Text key={`${entry.at}-${index}`} position={[-0.56, -0.13 - index * 0.045, 0.002]} fontSize={0.024} anchorX="left" anchorY="middle" color={INK} maxWidth={1.1}>
+        <Label key={`${entry.at}-${index}`} position={[-0.56, -0.13 - index * 0.045, 0.002]} fontSize={0.024} anchorX="left" anchorY="middle" color={INK} maxWidth={1.1}>
           {fit(entry.text, 70)}
-        </Text>
+        </Label>
       ))}
     </>
   )
 }
 
+/** Cards the inbox shows of each kind before "+n more": what fits beside the detail panel. */
+export const INBOX_BLOCKED_SHOWN = 2
+export const INBOX_RUNS_SHOWN = 4
+
 function Inbox({ world, onPick }: { world: World; onPick: (s: NonNullable<World['selected']>) => void }) {
-  const blocked = blockedForPerson(world)
-  const runs = pendingRuns(world)
+  const allBlocked = blockedForPerson(world)
+  const allRuns = pendingRuns(world)
+  const blocked = allBlocked.slice(0, INBOX_BLOCKED_SHOWN)
+  const runs = allRuns.slice(0, INBOX_RUNS_SHOWN)
   const blockedSlots = grid(blocked.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
   const runSlots = grid(runs.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
-  const runsTop = 0.36 - 0.06 - blocked.length * 0.115 - 0.08
+  const runsTop = 0.36 - 0.06 - blocked.length * 0.115 - 0.08 - (allBlocked.length > blocked.length ? 0.04 : 0)
   return (
     <>
-      <Text position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
-        {`Tasks blocked for a person · ${blocked.length}`}
-      </Text>
+      <Label position={[-0.56, 0.36, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+        {`Tasks blocked for a person · ${allBlocked.length}`}
+      </Label>
+      {allBlocked.length > blocked.length && (
+        <Label position={[-0.56, runsTop + 0.05, 0.002]} fontSize={0.022} anchorX="left" anchorY="middle" color={MUTED}>
+          {`+${allBlocked.length - blocked.length} more`}
+        </Label>
+      )}
       {blocked.map((task, index) => (
         <Card
           key={task.id}
@@ -305,9 +336,14 @@ function Inbox({ world, onPick }: { world: World; onPick: (s: NonNullable<World[
           onPick={() => onPick({ kind: 'task', id: task.id })}
         />
       ))}
-      <Text position={[-0.56, runsTop, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
-        {`Runs awaiting a decision · ${runs.length}`}
-      </Text>
+      <Label position={[-0.56, runsTop, 0.002]} fontSize={0.028} anchorX="left" anchorY="middle" color={MUTED}>
+        {`Runs awaiting a decision · ${allRuns.length}`}
+      </Label>
+      {allRuns.length > runs.length && (
+        <Label position={[0.56, runsTop, 0.002]} fontSize={0.022} anchorX="right" anchorY="middle" color={MUTED}>
+          {`+${allRuns.length - runs.length} more`}
+        </Label>
+      )}
       {runs.map((run, index) => (
         <Card
           key={run.id}
@@ -367,7 +403,11 @@ function Detail({ world, dispatch, person }: RoomProps) {
     if (task.reason) lines.push({ text: fit(task.reason, 72), color: MUTED })
     if (task.status === 'blocked') {
       const reason = task.reason
-      actions = [{ label: 'Send back to work', color: '#2563eb', act: () => dispatch({ type: 'send_back', id: task.id, by: person }) }]
+      if (task.frozen) {
+        lines.push({ text: 'Frozen by an operator: it is decided on the web app, not from here.', color: MUTED })
+      } else {
+        actions = [{ label: 'Send back to work', color: '#2563eb', act: () => dispatch({ type: 'send_back', id: task.id, by: person }) }]
+      }
       if (reason) actions.push({ label: 'Hear why it is blocked', color: '#1d4ed8', act: () => { speak(`${task.title} is blocked. ${reason}`) } })
     }
   } else if (agent) {
@@ -385,9 +425,9 @@ function Detail({ world, dispatch, person }: RoomProps) {
         <meshStandardMaterial color={PANEL} transparent opacity={0.92} />
       </mesh>
       {lines.map((entry, index) => (
-        <Text key={index} position={[-width / 2 + 0.03, line(index), 0.002]} fontSize={index === 0 ? 0.036 : 0.026} anchorX="left" anchorY="middle" color={entry.color ?? INK} maxWidth={width - 0.06}>
+        <Label key={index} position={[-width / 2 + 0.03, line(index), 0.002]} fontSize={index === 0 ? 0.036 : 0.026} anchorX="left" anchorY="middle" color={entry.color ?? INK} maxWidth={width - 0.06}>
           {entry.text}
-        </Text>
+        </Label>
       ))}
       {actions.map((action, index) => (
         <Card

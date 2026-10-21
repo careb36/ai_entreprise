@@ -11,7 +11,8 @@ import {
   type ApiBoard,
   type ApiRun,
 } from './live'
-import { withAgent } from './model'
+import { blockedForPerson, reduce, withAgent } from './model'
+import { demoWorld } from './demo'
 
 const BOARD: ApiBoard = {
   sprint: { id: 7, sprint_name: 'Sprint 7', status: 'active' },
@@ -43,6 +44,8 @@ describe('live mode', () => {
     ]
     expect(pickSprint(sprints, 1)?.id).toBe(1)
     expect(pickSprint(sprints)?.id).toBe(2)
+    // A sprint asked for that does not exist falls back, instead of an empty room.
+    expect(pickSprint(sprints, 99)?.id).toBe(2)
     expect(pickSprint(sprints.filter(sprint => sprint.status !== 'active'))?.id).toBe(3)
     expect(pickSprint([])).toBeUndefined()
   })
@@ -50,9 +53,32 @@ describe('live mode', () => {
   it('turns the board into tasks: rework counted from the review requests, a blocked task\'s reason from the inbox', () => {
     const tasks = tasksFromBoard(BOARD, { blocked_tasks: [{ id: 4, reason: 'Quality gate failed twice', sprint_id: 7 }] })
     expect(tasks.map(task => [task.id, task.status, task.rework])).toEqual([[1, 'in_progress', 1], [2, 'in_review', 0], [3, 'todo', 0], [4, 'blocked', 0]])
-    expect(tasks[3].reason).toBe('Quality gate failed twice')
-    // Without the inbox, the last comment stands in for the reason.
-    expect(tasksFromBoard(BOARD)[3].reason).toBe('blocked')
+    expect(tasks[3]).toMatchObject({ reason: 'Quality gate failed twice', forPerson: true, frozen: false })
+    // Without the inbox, the last comment stands in for the reason and nobody knows who the task waits for.
+    expect(tasksFromBoard(BOARD)[3]).toMatchObject({ reason: 'blocked', forPerson: undefined })
+  })
+
+  it('knows which blocked tasks wait for a person and which are frozen, as the inbox says', () => {
+    const board: ApiBoard = {
+      ...BOARD,
+      columns: {
+        blocked: [
+          { id: 4, title: 'For a person', status: 'blocked', comments: [] },
+          { id: 5, title: 'Frozen', status: 'blocked', comments: [] },
+          { id: 6, title: 'Still retried by the worker', status: 'blocked', comments: [] },
+        ],
+      },
+    }
+    const inbox = { blocked_tasks: [{ id: 4, reason: 'Gate', sprint_id: 7 }, { id: 5, reason: 'Operator froze it', sprint_id: 7, frozen: true }] }
+    const world = { ...demoWorld(), tasks: tasksFromBoard(board, inbox) }
+    expect(blockedForPerson(world).map(task => [task.id, task.frozen])).toEqual([[4, false], [5, true]])
+    expect(reduce(world, { type: 'send_back', id: 5, by: 'Ana' })).toBe(world)
+    expect(reduce(world, { type: 'send_back', id: 4, by: 'Ana' }).tasks.find(task => task.id === 4)?.status).toBe('todo')
+  })
+
+  it('puts a status it does not know in "to do", as the backend\'s board does', () => {
+    const board = { ...BOARD, columns: { todo: [{ id: 9, title: 'Odd', status: 'archived' as never, comments: [] }] } }
+    expect(tasksFromBoard(board)[0].status).toBe('todo')
   })
 
   it('shows one agent per role on the board, busiest state first, in the team\'s order', () => {
@@ -86,6 +112,8 @@ describe('live mode', () => {
     expect(started.agent).toEqual({ role: 'Developer', state: 'active', activity: 'Starting — Add the endpoint' })
     expect(readStreamEvent({ type: 'agent_complete', semantic_type: 'task.review_handoff', role: 'QA', message: 'Handed off' }, 5).agent?.state).toBe('waiting')
     expect(readStreamEvent({ type: 'status', agent: 'System', message: 'Sprint closed' }, 5)).toEqual({ log: { at: 5, text: 'System: Sprint closed' } })
+    // The history the backend replays on every connection is not what an agent does now.
+    expect(readStreamEvent({ type: 'agent_complete', semantic_type: 'task.history_comment', source: 'history', role: 'Developer', message: 'delivered' }, 5)).toEqual({})
   })
 
   it('shows the conversation between roles as log lines, oldest first', () => {
@@ -93,9 +121,9 @@ describe('live mode', () => {
       { id: 1, from_role: 'Developer', to_role: 'Architect', kind: 'question', body: 'How should the\n  retry be structured?', created_at: '2026-10-21T10:00:00Z' },
       { id: 2, from_role: 'ScrumMaster', to_role: null, kind: 'retrospective', body: 'x'.repeat(200), created_at: null },
     ], 1000)
-    expect(lines[0]).toEqual({ at: Date.parse('2026-10-21T10:00:00Z'), text: 'Developer → Architect (question): How should the retry be structured?' })
+    expect(lines[0]).toEqual({ at: Date.parse('2026-10-21T10:00:00Z'), text: 'Developer › Architect (question): How should the retry be structured?' })
     expect(lines[1].at).toBe(999)
-    expect(lines[1].text).toBe(`ScrumMaster → the team (retrospective): ${'x'.repeat(120)}`)
+    expect(lines[1].text).toBe(`ScrumMaster › the team (retrospective): ${'x'.repeat(120)}`)
   })
 
   it('replaces an agent\'s card or adds one the board did not list', () => {
@@ -129,8 +157,11 @@ describe('live mode', () => {
     expect(world).toMatchObject({ mode: 'live', sprint: 'Sprint 7' })
     expect(world.tasks?.find(task => task.id === 4)?.reason).toBe('Gate')
     expect(world.runs?.[0].observations).toEqual(['artifact_nonempty: pass — 12 bytes'])
-    expect(world.log?.map(entry => entry.text)).toEqual(['QA → Developer (request): Add a test for the empty case'])
+    expect(world.log?.map(entry => entry.text)).toEqual(['QA › Developer (request): Add a test for the empty case'])
     expect(calls[0].init?.headers).toEqual({ Authorization: 'Bearer jwt' })
+    // A reload brings the board and the runs, not the log or the agents the stream built since.
+    const reloaded = await api.load(true)
+    expect(Object.keys(reloaded.world).sort()).toEqual(['company', 'mode', 'runs', 'sprint', 'tasks'])
 
     await api.decideRun(10, 'rejected')
     const approve = calls.find(call => call.url.endsWith('/approve'))!
