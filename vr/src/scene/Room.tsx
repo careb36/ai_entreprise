@@ -1,6 +1,10 @@
-import { useState, type ComponentProps, type Dispatch, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ComponentProps, type Dispatch, type ReactNode } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { Grid, Text } from '@react-three/drei'
-import { Interactive } from '@react-three/xr'
+import { Interactive, useXR } from '@react-three/xr'
+import { Vector3, type Group } from 'three'
+import { FrameRate } from '../fps'
+import { approach, hintTarget, hintVisible, type Vec3 } from '../hint'
 import { arc, fit, grid, type Placement } from '../layout'
 import { speak } from '../speech'
 import {
@@ -63,6 +67,8 @@ interface RoomProps {
   dispatch: Dispatch<Action>
   /** Who the pinches are recorded as. */
   person: string
+  /** Show the frame rate in the room (`?stats=1`), for the Quest pass. */
+  stats?: boolean
 }
 
 /**
@@ -71,13 +77,20 @@ interface RoomProps {
  * for whatever card was picked up. Everything is a pinch away: a card
  * selects, the action cards decide.
  */
-export function Room({ world, dispatch, person }: RoomProps) {
+export function Room({ world, dispatch, person, stats = false }: RoomProps) {
   const [board, centre, inbox] = arc(3, { radius: 1.5, spread: Math.PI * 0.62, height: 1.25 })
   const waiting = pendingRuns(world).length + blockedForPerson(world).length
-  const pick = (selection: NonNullable<World['selected']>) => dispatch({ type: 'select', selection })
+  // The first pinch of the session puts the entry hint away.
+  const [pinched, setPinched] = useState(false)
+  const act = (action: Action) => {
+    setPinched(true)
+    dispatch(action)
+  }
+  const pick = (selection: NonNullable<World['selected']>) => act({ type: 'select', selection })
 
   return (
     <>
+      {/* The panels and cards are flat (basic materials): the lights are for the hands. */}
       <ambientLight intensity={0.9} />
       <directionalLight position={[1, 3, 2]} intensity={0.7} />
       <Grid infiniteGrid fadeDistance={10} cellColor="#1f2937" sectionColor="#374151" position={[0, 0, 0]} />
@@ -95,7 +108,9 @@ export function Room({ world, dispatch, person }: RoomProps) {
         <Inbox world={world} onPick={pick} />
       </Panel>
 
-      <Detail world={world} dispatch={dispatch} person={person} />
+      <Detail world={world} dispatch={act} person={person} />
+      <Hint pinched={pinched} />
+      {stats && <FrameRateLabel />}
     </>
   )
 }
@@ -111,7 +126,7 @@ function Panel({ placement, title, width, height, children }: {
     <group position={placement.position} rotation={[0, placement.rotationY, 0]}>
       <mesh>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color={PANEL} transparent opacity={0.92} />
+        <meshBasicMaterial color={PANEL} transparent opacity={0.92} />
       </mesh>
       <Label position={[-width / 2 + 0.03, height / 2 - 0.045, 0.002]} fontSize={0.045} anchorX="left" anchorY="middle" color={INK} maxWidth={width - 0.06}>
         {title}
@@ -156,12 +171,12 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
       <group position={[x, y, lift]}>
         <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)}>
           <planeGeometry args={[width, height]} />
-          <meshStandardMaterial color={fill} />
+          <meshBasicMaterial color={fill} />
         </mesh>
         {accent && (
           <mesh position={[-width / 2 + 0.006, 0, 0.001]}>
             <planeGeometry args={[0.012, height]} />
-            <meshStandardMaterial color={accent} />
+            <meshBasicMaterial color={accent} />
           </mesh>
         )}
         <Label
@@ -227,9 +242,9 @@ function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['se
                 width={0.23}
                 height={cardHeight}
                 label={task.title}
-                labelSize={0.021}
+                labelSize={0.023}
                 sub={task.assignee ? `${task.assignee}${task.rework ? ` · ${task.rework} rework` : ''}` : undefined}
-                subSize={0.017}
+                subSize={0.018}
                 accent={STATUS_COLOR[task.status]}
                 selected={isSelected(selected, { kind: 'task', id: task.id })}
                 onPick={() => onPick({ kind: 'task', id: task.id })}
@@ -422,7 +437,7 @@ function Detail({ world, dispatch, person }: RoomProps) {
     <group position={DETAIL.position} rotation={[-0.25, DETAIL.rotationY, 0]}>
       <mesh>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial color={PANEL} transparent opacity={0.92} />
+        <meshBasicMaterial color={PANEL} transparent opacity={0.92} />
       </mesh>
       {lines.map((entry, index) => (
         <Label key={index} position={[-width / 2 + 0.03, line(index), 0.002]} fontSize={index === 0 ? 0.036 : 0.026} anchorX="left" anchorY="middle" color={entry.color ?? INK} maxWidth={width - 0.06}>
@@ -442,5 +457,74 @@ function Detail({ world, dispatch, person }: RoomProps) {
         />
       ))}
     </group>
+  )
+}
+
+const HINT_WIDTH = 0.56
+const HINT_HEIGHT = 0.14
+
+/**
+ * The entry hint: for the first seconds of a headset session, a small panel
+ * trails the head (a lazy follow, never glued to the eyes) and says what a
+ * pinch does. It goes with the first pinch, or on its own. Outside a
+ * session the page's own header says the same.
+ */
+function Hint({ pinched }: { pinched: boolean }) {
+  const presenting = useXR(state => state.isPresenting)
+  const [enteredAt, setEnteredAt] = useState<number | null>(null)
+  const [visible, setVisible] = useState(false)
+  const group = useRef<Group>(null)
+  const placed = useRef(false)
+  const head = useRef(new Vector3())
+  const gaze = useRef(new Vector3())
+
+  useEffect(() => {
+    setEnteredAt(presenting ? Date.now() : null)
+    placed.current = false
+  }, [presenting])
+
+  useFrame(({ camera }) => {
+    const show = hintVisible({ enteredAt, pinched }, Date.now())
+    if (show !== visible) setVisible(show)
+    if (!show || !group.current) return
+    camera.getWorldPosition(head.current)
+    camera.getWorldDirection(gaze.current)
+    const target = hintTarget(head.current.toArray() as Vec3, gaze.current.toArray() as Vec3)
+    const current = group.current.position.toArray() as Vec3
+    const next = placed.current ? approach(current, target, 0.08) : target
+    placed.current = true
+    group.current.position.set(next[0], next[1], next[2])
+    group.current.lookAt(head.current)
+  })
+
+  if (!visible) return null
+  return (
+    <group ref={group}>
+      <mesh>
+        <planeGeometry args={[HINT_WIDTH, HINT_HEIGHT]} />
+        <meshBasicMaterial color={PANEL} transparent opacity={0.9} />
+      </mesh>
+      <Label position={[0, 0.025, 0.002]} fontSize={0.03} anchorX="center" anchorY="middle" color={INK} maxWidth={HINT_WIDTH - 0.04} textAlign="center">
+        Pinch a card to pick it up; pinch it again to put it down.
+      </Label>
+      <Label position={[0, -0.03, 0.002]} fontSize={0.022} anchorX="center" anchorY="middle" color={MUTED} maxWidth={HINT_WIDTH - 0.04} textAlign="center">
+        Your pinch decides; the suggestions are claims.
+      </Label>
+    </group>
+  )
+}
+
+/** The frame rate, under the detail panel, for the pass on the headset (`?stats=1`). */
+function FrameRateLabel() {
+  const counter = useRef(new FrameRate())
+  const [rate, setRate] = useState<number | null>(null)
+  useFrame(() => {
+    const next = counter.current.tick(performance.now())
+    if (next !== null) setRate(next)
+  })
+  return (
+    <Label position={[DETAIL.position[0] + 0.57, DETAIL.position[1] - 0.26, DETAIL.position[2]]} fontSize={0.03} anchorX="right" anchorY="middle" color={rate !== null && rate < 60 ? '#f59e0b' : MUTED}>
+      {rate === null ? 'fps …' : `${rate} fps`}
+    </Label>
   )
 }

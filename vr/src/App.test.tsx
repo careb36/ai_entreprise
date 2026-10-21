@@ -5,7 +5,7 @@ import App from './App'
 // The scene needs a WebGL canvas and a headset; jsdom has neither. The room's
 // model, layout and live adapters are tested on their own; this checks the
 // HTML shell and how the two modes start.
-vi.mock('@react-three/fiber', () => ({ Canvas: () => null }))
+vi.mock('@react-three/fiber', () => ({ Canvas: () => null, useFrame: () => {} }))
 vi.mock('@react-three/drei', () => ({ OrbitControls: () => null, Text: () => null, Grid: () => null }))
 vi.mock('@react-three/xr', () => ({
   VRButton: () => <button type="button">Enter VR</button>,
