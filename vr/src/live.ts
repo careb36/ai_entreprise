@@ -21,6 +21,8 @@ export interface LiveConfig {
 export const DEFAULT_PERSON = 'Glassroom VR'
 /** Runs whose verifications are read in one load: the inbox shows the first ones anyway. */
 export const RUNS_WITH_OBSERVATIONS = 12
+/** The latest messages between roles shown in the log when the room opens. */
+export const MESSAGES_IN_LOG = 12
 
 export function parseLiveConfig(search: string): LiveConfig | null {
   const params = new URLSearchParams(search)
@@ -61,6 +63,23 @@ export interface ApiRun {
   reviewed_by?: string | null
 }
 export interface ApiVerification { verdict: Verdict; checks: { name: string; outcome: string; observation: string }[] | null }
+export interface ApiMessage {
+  id: number
+  from_role: string
+  /** null: the whole team. */
+  to_role: string | null
+  kind: string
+  body: string
+  created_at: string | null
+}
+
+/** The conversation between roles as log lines: who spoke to whom, what kind of message, the first words. */
+export function logFromMessages(messages: ApiMessage[], now = Date.now()): LogEntry[] {
+  return messages.map((message, index) => ({
+    at: (message.created_at && Date.parse(message.created_at)) || now - (messages.length - index),
+    text: `${message.from_role} → ${message.to_role ?? 'the team'} (${message.kind}): ${message.body.replace(/\s+/g, ' ').trim().slice(0, 120)}`,
+  }))
+}
 
 export const REWORK_PREFIX = 'NEEDS WORK:'
 export const SEND_BACK_COMMENT = 'Sent back to work from Glassroom VR.'
@@ -206,6 +225,11 @@ export class LiveApi {
       }),
     )
     const tasks = board ? tasksFromBoard(board, inbox) : []
+    // The conversation between roles is context, not what the room needs: a
+    // backend without it still opens.
+    const messages = sprint
+      ? await this.get<{ messages: ApiMessage[] }>(`/v1/messages?company_id=${companyId}&sprint_id=${sprint.id}&limit=${MESSAGES_IN_LOG}`).then(response => response.messages, () => [])
+      : []
     return {
       sprintId: sprint?.id,
       world: {
@@ -215,6 +239,7 @@ export class LiveApi {
         tasks,
         agents: agentsFromTasks(tasks),
         runs: runsFromApi(runs, verifications),
+        log: logFromMessages(messages).sort((a, b) => a.at - b.at),
       },
     }
   }
