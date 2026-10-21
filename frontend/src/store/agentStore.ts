@@ -108,6 +108,8 @@ const MAX_RECONNECT_ATTEMPTS = SSE_MAX_RECONNECT_ATTEMPTS
 const MAX_RECONNECT_DELAY_MS = SSE_MAX_RECONNECT_DELAY_MS
 
 let activeEventSource: EventSource | null = null
+// The ids of the events shown since the last fresh connection (see addMessage).
+const seenEventIds = new Set<string>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 let connectionToken = 0
@@ -316,11 +318,19 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     memoryHits: 0,
     lastRetro: null,
 
-    addMessage: (message) =>
+    addMessage: (message) => {
+      // The backend replays the sprint's history on every connection, with
+      // the same event ids each time: after a reconnection, what is already
+      // shown is not shown again.
+      if (message.eventId) {
+        if (seenEventIds.has(message.eventId)) return
+        seenEventIds.add(message.eventId)
+      }
       set((state) => {
         const next = [...state.messages, message]
         return { messages: next.length > MAX_MESSAGES ? next.slice(-MAX_MESSAGES) : next }
-      }),
+      })
+    },
 
     /**
      * Drive per-agent FSM state from a normalized AgentEvent.
@@ -413,7 +423,10 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     setConnected: (connected) => set({ isConnected: connected }),
     setConnectionError: (error) => set({ connectionError: error }),
     setSprintId: (sprintId) => set({ sprintId }),
-    clearMessages: () => set({ messages: [], agentStates: {}, rolePalettes: {}, memoryHits: 0, lastRetro: null }),
+    clearMessages: () => {
+      seenEventIds.clear()
+      set({ messages: [], agentStates: {}, rolePalettes: {}, memoryHits: 0, lastRetro: null })
+    },
 
     connect: (sprintId) => {
       const token = ++connectionToken

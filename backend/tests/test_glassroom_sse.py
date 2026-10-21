@@ -96,3 +96,62 @@ async def test_glassroom_stream_emits_final_po_close_before_completion():
 
     await stream.aclose()
     assert sprint_id not in sse_connections
+
+
+def test_the_replayed_history_carries_the_same_event_ids_every_time(
+    sqlite_session, monkeypatch
+):
+    """
+    The history is replayed to every connection, a reconnection included:
+    an event's id names the task and the comment's position, so the client
+    can tell what it already shows from a new event.
+    """
+    from models import BacklogItem, Company, Sprint
+
+    from app.routers import agents
+
+    monkeypatch.setattr(agents, "engine", sqlite_session.get_bind())
+    company = Company(company_name="History")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sprint = Sprint(company_id=company.id, sprint_name="S")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    delivered = BacklogItem(
+        sprint_id=sprint.id,
+        title="Login form",
+        status="done",
+        assignee="Developer",
+        comments=[
+            {
+                "author": "Developer",
+                "text": "## Summary\nDone.",
+                "created_at": "2026-10-01T10:00:00",
+            },
+            {
+                "author": "System",
+                "text": "External assistant context used for this task: copilot",
+                "created_at": "2026-10-01T10:01:00",
+            },
+        ],
+    )
+    quiet = BacklogItem(sprint_id=sprint.id, title="Quiet", status="in_progress")
+    untouched = BacklogItem(sprint_id=sprint.id, title="Untouched", status="todo")
+    sqlite_session.add_all([delivered, quiet, untouched])
+    sqlite_session.commit()
+
+    first = agents.load_sprint_history(str(sprint.id))
+    second = agents.load_sprint_history(str(sprint.id))
+
+    ids = [event["event_id"] for event in first]
+    assert ids == [
+        f"history-{delivered.id}-0",
+        f"history-{delivered.id}-1",
+        f"history-{quiet.id}-status",
+    ]
+    assert [event["semantic_type"] for event in first] == [
+        "task.history_comment",
+        "assistant.history_context",
+        "task.status_snapshot",
+    ]
+    assert [event["event_id"] for event in second] == ids
