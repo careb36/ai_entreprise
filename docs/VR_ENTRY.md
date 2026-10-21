@@ -220,6 +220,27 @@ means:
   decides. The Devpost text and the video show a real company's sprint, not
   the demo.
 
+## The video (under three minutes, a shot list)
+
+Judges need not watch past three minutes, and the judging page asks for
+real footage that "honestly represents the experience". Record it on a
+Quest 3 (the headset's own capture, or the Meta Quest Developer Hub's
+casting) in the hosted build; the demo company is enough, a real company
+is better. English, or subtitles.
+
+| Time | What is on screen | What is said (voice or caption) |
+|---|---|---|
+| 0:00–0:15 | The web app's Review page for a second: the inbox as a list. Cut to the headset view, the room appearing, the entry hint trailing the head. | "Le Fabrique runs software sprints with a company of AI agents and keeps the last word for the evidence. On a screen that review is a list. This is the same inbox as a room." |
+| 0:15–0:45 | A slow look across the arc: the board, the company at work with cards changing state, the inbox counting four. The hand reaches a run; the card lifts. | "Three panels within reach, seated. The agents keep working while you look. Four things wait for a person." |
+| 0:45–1:30 | Pinch the refuted run. The detail panel: the Verifier's observations, the Reviewer agent's suggestion marked as a claim. Pinch *Hear the Reviewer agent*; the reason is read aloud. Pinch *Reject*; the inbox counts three; the log records who decided. | "The Verifier refuted the test run: a refund can be issued twice. The Reviewer agent suggests rejecting, and says why. A suggestion is a claim; the pinch decides, and it is recorded as mine." |
+| 1:30–2:00 | Pinch the blocked task; *Hear why it is blocked*; *Send back to work*. It moves to the board's first column. | "A task the quality gate blocked twice. I hear why, and send it back with one more attempt." |
+| 2:00–2:30 | Decide the remaining runs quickly; the inbox empties: "nothing waits for you", the detail panel's "That was the last one". A new run arrives from the stream and the inbox counts one. | "When nothing waits, the room says so. The company keeps working; the inbox fills again when something needs a person." |
+| 2:30–2:50 | Live mode: the same room on a real company (`?api=…`), the Glassroom stream's events arriving in the log, a decision recorded, then the web app's Review page showing that decision. | "In live mode the room reads a real company through the product's API, and every decision lands in the product." |
+| 2:50–3:00 | The title, the track and division (Productivity, Adapted), the link. | "Glassroom VR. Hands only, seated, ten minutes a day." |
+
+Keep the hands visible in every interaction shot: the competition's test is
+that a controller is never needed.
+
 ## Changelog (the Adapted division's summary of what is new)
 
 Le Fabrique existed before the entry period as a web product: a company of
