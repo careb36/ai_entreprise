@@ -67,6 +67,16 @@ describe('the room', () => {
 
     await pinch(renderer.scene, 'Approve')
     expect(dispatch).toHaveBeenCalledWith({ type: 'decide_run', id: 102, decision: 'approved', by: 'Ana' })
+
+    // The action cards carry no gaze handler: reading them never decides.
+    const handlers = renderer.scene.findAll(node => node.props.name === 'pinchable').map(card => ({
+      text: labels(card as unknown as Scene)[0],
+      gazeable: card.findAll(child => typeof child.props.userData?.onPick === 'function').length > 0,
+    }))
+    expect(handlers.filter(card => ['Approve', 'Reject', 'Hear the Reviewer agent'].includes(card.text)).every(card => !card.gazeable)).toBe(true)
+    expect(handlers.filter(card => card.text === 'Create testing strategy document').every(card => card.gazeable)).toBe(true)
+    // Two observations while the decision cards are up, so the suggestion stays above them.
+    expect(texts.filter(text => text.startsWith('artifact_nonempty') || text.startsWith('tests_run'))).toHaveLength(2)
   })
 
   it('offers to send a blocked task back, but not a frozen one', async () => {
