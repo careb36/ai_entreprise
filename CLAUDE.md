@@ -287,7 +287,7 @@ Test files:
 
 | File | What it covers |
 |------|----------------|
-| `test_glassroom_sse.py` | SSE fan-out and stream ordering |
+| `test_glassroom_sse.py` | SSE fan-out and stream ordering; the replayed history carries the same event ids on every connection, so a reconnecting client can tell it from new events |
 | `test_orchestration_metrics.py` | Orchestration metric helpers |
 | `test_start_sprint.py` | `POST /v1/start_sprint` — happy path, validation, outbox events |
 | `test_graph.py` | LangGraph node compilation, routing helpers, `_invoke_agent` events |
@@ -407,7 +407,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs, how earlier second attempts went beside the blocked tasks, Viewer and error states |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, an empty one clears it, one another admin made meanwhile is kept, and after a save the form follows the stored decision), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
-| `src/store/agentStore.test.ts` | The Glassroom connection asks for a stream ticket on every connection, opens without one when none is needed or none could be had, and opens nothing once disconnected |
+| `src/store/agentStore.test.ts` | The Glassroom connection asks for a stream ticket on every connection, opens without one when none is needed or none could be had, and opens nothing once disconnected; an event the backend replays on a reconnection is shown once |
 
 ### Manual validation (no test deps needed)
 

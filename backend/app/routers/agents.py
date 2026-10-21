@@ -34,7 +34,7 @@ from database import engine, get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from logging_config import logger
-from models import AuditLog, BusinessUnit, Sprint, User
+from models import AuditLog, BacklogItem, BusinessUnit, Sprint, User
 from models.agent_run import AgentRun
 from schemas import AuditRequest, GenerateRequest
 from services.agent_service import AgentService
@@ -146,6 +146,101 @@ def _merge_sse_history(
         merged.append(event)
 
     return merged
+
+
+def load_sprint_history(sprint_id: str) -> list[dict]:
+    """
+    A sprint's past agent comments as Glassroom messages, replayed to every
+    new connection before the live events.
+
+    Each event's ``event_id`` names the task and the comment's position
+    (``history-<task id>-<index>``; ``history-<task id>-status`` for a task
+    without comments), the same on every replay: a client that reconnects
+    can tell the history it already shows from a new event. Comments are
+    only ever appended, so a comment keeps its position.
+    """
+    events: list[dict] = []
+    try:
+        with Session(engine) as session:
+            items = session.exec(
+                select(BacklogItem)
+                .where(BacklogItem.sprint_id == int(sprint_id))
+                .order_by(BacklogItem.id)
+            ).all()
+            for item in items:
+                comments = item.comments or []
+                if isinstance(comments, str):
+                    try:
+                        comments = json.loads(comments)
+                    except (json.JSONDecodeError, TypeError):
+                        comments = []
+                for index, c in enumerate(comments):
+                    text = c.get("text") or ""
+                    if text.startswith(
+                        "External assistant context used for this task:"
+                    ):
+                        events.append(
+                            {
+                                "type": "status",
+                                "semantic_type": "assistant.history_context",
+                                "source": "history",
+                                "semantic_version": 1,
+                                "event_id": f"history-{item.id}-{index}",
+                                "agent": "System",
+                                "role": "System",
+                                "task_id": item.id,
+                                "task": item.title,
+                                "message": "External assistant context was used for this task.",
+                                "preview": text[:300],
+                                "timestamp": c.get("created_at", ""),
+                                "status": item.status,
+                            }
+                        )
+                        continue
+                    events.append(
+                        {
+                            "type": "agent_complete",
+                            "semantic_type": "task.history_comment",
+                            "source": "history",
+                            "semantic_version": 1,
+                            "event_id": f"history-{item.id}-{index}",
+                            "agent": c.get("author", item.assignee or "Agent"),
+                            "role": item.assignee or "Agent",
+                            "task_id": item.id,
+                            "task_status": item.status,
+                            "task": item.title,
+                            "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
+                            "preview": text[:300],
+                            "timestamp": c.get("created_at", ""),
+                            "status": item.status,
+                        }
+                    )
+                # Show current status for items without comments too
+                if not comments and item.status not in ("todo",):
+                    events.append(
+                        {
+                            "type": "status",
+                            "semantic_type": "task.status_snapshot",
+                            "source": "history",
+                            "semantic_version": 1,
+                            "event_id": f"history-{item.id}-status",
+                            "agent": item.assignee or "System",
+                            "role": item.assignee or "System",
+                            "task_id": item.id,
+                            "task_status": item.status,
+                            "task": item.title,
+                            "message": f"📋 {item.title} → {item.status}",
+                            "timestamp": (
+                                item.updated_at or item.created_at or ""
+                            ).isoformat()
+                            if hasattr(item.updated_at or item.created_at, "isoformat")
+                            else "",
+                            "status": item.status,
+                        }
+                    )
+    except Exception:  # noqa: BLE001, S110 - SSE history is best-effort; live events remain available.
+        pass
+    return events
 
 
 async def generate_glassroom_sse(
@@ -455,96 +550,6 @@ async def glassroom_stream(
     queue: asyncio.Queue[str] = asyncio.Queue()
     register_sse_connection(sprint_id, queue)
 
-    def _load_history() -> list[dict]:
-        """Load past agent comments from the DB as GlassRoom messages."""
-        from models import BacklogItem
-        from sqlmodel import Session, select, text
-
-        events = []
-        try:
-            with Session(engine) as session:
-                items = session.exec(
-                    select(BacklogItem)
-                    .where(BacklogItem.sprint_id == int(sprint_id))
-                    .order_by(BacklogItem.id)
-                ).all()
-                for item in items:
-                    comments = item.comments or []
-                    if isinstance(comments, str):
-                        try:
-                            comments = json.loads(comments)
-                        except (json.JSONDecodeError, TypeError):
-                            comments = []
-                    for c in comments:
-                        text = c.get("text") or ""
-                        if text.startswith(
-                            "External assistant context used for this task:"
-                        ):
-                            events.append(
-                                {
-                                    "type": "status",
-                                    "semantic_type": "assistant.history_context",
-                                    "source": "history",
-                                    "semantic_version": 1,
-                                    "event_id": str(uuid4()),
-                                    "agent": "System",
-                                    "role": "System",
-                                    "task_id": item.id,
-                                    "task": item.title,
-                                    "message": "External assistant context was used for this task.",
-                                    "preview": text[:300],
-                                    "timestamp": c.get("created_at", ""),
-                                    "status": item.status,
-                                }
-                            )
-                            continue
-                        events.append(
-                            {
-                                "type": "agent_complete",
-                                "semantic_type": "task.history_comment",
-                                "source": "history",
-                                "semantic_version": 1,
-                                "event_id": str(uuid4()),
-                                "agent": c.get("author", item.assignee or "Agent"),
-                                "role": item.assignee or "Agent",
-                                "task_id": item.id,
-                                "task_status": item.status,
-                                "task": item.title,
-                                "message": f"✅ {c.get('author', 'Agent')} delivered: {item.title}",
-                                "preview": text[:300],
-                                "timestamp": c.get("created_at", ""),
-                                "status": item.status,
-                            }
-                        )
-                    # Show current status for items without comments too
-                    if not comments and item.status not in ("todo",):
-                        events.append(
-                            {
-                                "type": "status",
-                                "semantic_type": "task.status_snapshot",
-                                "source": "history",
-                                "semantic_version": 1,
-                                "event_id": str(uuid4()),
-                                "agent": item.assignee or "System",
-                                "role": item.assignee or "System",
-                                "task_id": item.id,
-                                "task_status": item.status,
-                                "task": item.title,
-                                "message": f"📋 {item.title} → {item.status}",
-                                "timestamp": (
-                                    item.updated_at or item.created_at or ""
-                                ).isoformat()
-                                if hasattr(
-                                    item.updated_at or item.created_at, "isoformat"
-                                )
-                                else "",
-                                "status": item.status,
-                            }
-                        )
-        except Exception:  # noqa: BLE001, S110 - SSE history is best-effort; live events remain available.
-            pass
-        return events
-
     # Detect whether NATS (and therefore agents) is available.
     nats_available = bool(request and getattr(request.app.state, "nats_client", None))
 
@@ -553,7 +558,7 @@ async def glassroom_stream(
             queue=queue,
             sprint_id=sprint_id,
             nats_available=nats_available,
-            history_loader=lambda: asyncio.to_thread(_load_history),
+            history_loader=lambda: asyncio.to_thread(load_sprint_history, sprint_id),
         ),
         media_type="text/event-stream",
         headers={
