@@ -479,7 +479,11 @@ origin must be in `CORS_ORIGINS`). `src/model.ts` (what the room shows and
 the reducer behind every pinch), `src/layout.ts` (where things go, in metres)
 and `src/live.ts` (the API's shapes turned into the room's, the stream's
 events, the calls) have no rendering and are tested; `src/App.test.tsx`
-checks the HTML shell and both modes with the scene mocked; `src/hint.ts` (the
+checks the HTML shell and both modes with the scene mocked, and
+`src/scene/Room.test.tsx` renders the room itself with `@react-three/test-renderer`
+(labels as meshes, a pinch as the card's handler): the demo company's panels, a
+run picked up with its evidence and decision cards, a frozen task, the "+n
+more" caps, the frame rate; `src/hint.ts` (the
 entry hint's timing and where it trails the head) and `src/fps.ts` (the frame
 rate shown with `?stats=1`) are pure and tested too. Run it from `vr/`: `npm install`, `npm run dev`,
 `npm run test:run`, `npm run build` (`VR_BASE=/path/` for a hosted build).

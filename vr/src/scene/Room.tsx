@@ -517,9 +517,12 @@ function Hint({ pinched }: { pinched: boolean }) {
 /** The frame rate, under the detail panel, for the pass on the headset (`?stats=1`). */
 function FrameRateLabel() {
   const counter = useRef(new FrameRate())
+  // The frames' own deltas, summed: the renderer's clock, not the wall's.
+  const elapsed = useRef(0)
   const [rate, setRate] = useState<number | null>(null)
-  useFrame(() => {
-    const next = counter.current.tick(performance.now())
+  useFrame((_, delta) => {
+    elapsed.current += delta * 1000
+    const next = counter.current.tick(elapsed.current)
     if (next !== null) setRate(next)
   })
   return (
