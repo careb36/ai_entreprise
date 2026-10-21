@@ -77,6 +77,7 @@ export type Action =
   | { type: 'decide_run'; id: number; decision: Decision; by: string }
   | { type: 'send_back'; id: number; by: string }
   | { type: 'event'; text: string; at?: number }
+  | { type: 'agent'; agent: Agent }
   | { type: 'load'; world: Partial<World> }
 
 export const LOG_LIMIT = 40
@@ -122,6 +123,13 @@ function logged(world: World, text: string, at = Date.now()): LogEntry[] {
   return [...world.log, { at, text }].slice(-LOG_LIMIT)
 }
 
+/** The agents with one of them in a new state, added when the board did not list it. */
+export function withAgent(agents: Agent[], agent: Agent): Agent[] {
+  const index = agents.findIndex(candidate => candidate.role === agent.role)
+  if (index === -1) return [...agents, agent]
+  return agents.map((candidate, position) => (position === index ? agent : candidate))
+}
+
 export function reduce(world: World, action: Action): World {
   switch (action.type) {
     case 'select':
@@ -152,6 +160,8 @@ export function reduce(world: World, action: Action): World {
     }
     case 'event':
       return { ...world, log: logged(world, action.text, action.at) }
+    case 'agent':
+      return { ...world, agents: withAgent(world.agents, action.agent) }
     case 'load':
       return { ...world, ...action.world }
   }

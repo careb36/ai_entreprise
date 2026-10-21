@@ -70,11 +70,17 @@ Modes:
 - **Demo** (default): a sample company bundled in the page, so a judge can
   open the link with nothing else running. Decisions change the room and
   the log, and are kept for the session.
-- **Live** (next): `?api=<backend url>&company=<id>` reads a real company
-  through the existing REST API (`/v1/sprints`, `/v1/sprints/{id}/board`,
-  `/v1/inbox`, `/v1/agent_runs?exclude_in_house=true`) and follows the
-  Glassroom SSE stream; approvals and send-backs call the same endpoints the
-  web app calls.
+- **Live**: `?api=<backend url>&company=<id>` reads a real company through
+  the existing REST API (`/v1/sprints`, `/v1/sprints/{id}/board`,
+  `/v1/inbox`, `/v1/agent_runs?exclude_in_house=true` and each pending run's
+  verifications), follows the sprint's Glassroom stream (events in the log,
+  agents' states on their cards) and reads the board again every 30 s;
+  approvals and send-backs call the same endpoints the web app calls, and
+  the room says so if the backend refuses one. `&token=<jwt>` when the
+  backend requires a login (the stream takes a ticket), `&sprint=<id>` to
+  pick a sprint, `&person=<name>` for who the decisions are recorded as.
+  The room's origin must be in the backend's `CORS_ORIGINS`. If the backend
+  cannot be read, the room keeps the demo company and says so.
 
 ## Running it
 
@@ -108,7 +114,7 @@ npm run build        # vr/dist, a static site
 
 - [x] The room: panels on an arc, cards picked up with a pinch, the detail
   panel with the actions, the demo company, tests of the model and layout.
-- [ ] Live mode against a backend, with the Glassroom stream in the log.
+- [x] Live mode against a backend, with the Glassroom stream in the log.
 - [ ] Comfort and polish: head-locked hint on first entry, haptics-free
   feedback (card lift and colour), larger hit areas, text legibility pass
   at 1.5 m, 60 fps check on a Quest 3 (few draw calls, instanced cards).
