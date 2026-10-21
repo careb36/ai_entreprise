@@ -115,9 +115,47 @@ npm run build        # vr/dist, a static site
 - [x] The room: panels on an arc, cards picked up with a pinch, the detail
   panel with the actions, the demo company, tests of the model and layout.
 - [x] Live mode against a backend, with the Glassroom stream in the log.
-- [ ] Comfort and polish: head-locked hint on first entry, haptics-free
-  feedback (card lift and colour), larger hit areas, text legibility pass
-  at 1.5 m, 60 fps check on a Quest 3 (few draw calls, instanced cards).
-- [ ] Agentic interaction: ask the Reviewer agent for its reason aloud (text
-  to speech) and show the company's conversation between roles in the room.
-- [ ] GitHub Pages deploy workflow and the Devpost description draft.
+- [x] Cards lift under the hand and further once picked up; the detail panel
+  reads the Reviewer agent's reason or a block's cause aloud (the browser's
+  voice; silent where there is none).
+- [x] The company's conversation between roles opens the log in live mode.
+- [x] GitHub Pages deploy workflow (`vr-pages.yml`, opt-in with the `VR_PAGES`
+  variable) and the Devpost description draft below.
+- [ ] A Quest 3 pass: 60 fps budget, hit areas, legibility at 1.5 m, a
+  head-locked hint on first entry.
+
+## Devpost description (draft)
+
+**Inspiration.** Le Fabrique runs software sprints with a company of AI
+agents and keeps the last word for the evidence: what the agents claim is
+written beside what the platform observed, and a person decides. On a screen
+that review is a list. In a headset it can be a room: the board on one side,
+the agents at work in front, the inbox on the other, and the evidence of
+whatever you pick up at your fingertips. The hands-first brief fit the
+product's rule exactly — only the person's pinch decides.
+
+**What it does.** Glassroom VR is a seated, hands-first room. Three panels on
+an arc show the sprint's board, the company at work (one card per agent with
+what it is doing, and the last events) and the inbox: the tasks blocked
+until a person acts, and the runs of other producers awaiting a decision.
+A pinch picks a card up; the detail panel shows the Verifier's observations
+beside the Reviewer agent's suggestion, and two more pinches decide:
+approve or reject a run, send a blocked task back to work. In live mode the
+room reads a real company through the platform's API and records each
+decision through it; the demo mode runs with nothing else.
+
+**How we built it.** WebXR with react-three-fiber and `@react-three/xr`
+(hand tracking through the WebXR Hand Input API; controllers optional), in
+a small package beside the product: the room's model and layout are pure
+TypeScript with tests, the scene is a few dozen planes and text labels, and
+the live mode is an adapter over the REST and SSE endpoints the web app
+already uses. Nothing in the room decides on its own: suggestions are shown
+as claims, verdicts as observations, and the platform records who pinched.
+
+**What's next.** Hearing the Reviewer agent's reason aloud, the company's
+conversation between roles in the room, and a Quest-first pass on comfort:
+larger hit areas, head-locked hints on first entry, and a frame-time budget
+checked on a Quest 3.
+
+**Launch.** The room ships with the product (open source); the hosted build
+is the entry's link.

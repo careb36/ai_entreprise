@@ -2,6 +2,7 @@ import { useState, type Dispatch, type ReactNode } from 'react'
 import { Grid, Text } from '@react-three/drei'
 import { Interactive } from '@react-three/xr'
 import { arc, fit, grid, type Placement } from '../layout'
+import { speak } from '../speech'
 import {
   COLUMNS,
   blockedForPerson,
@@ -127,9 +128,11 @@ interface CardProps {
 export function Card({ x, y, width = 0.5, height = 0.12, label, sub, color = CARD, accent, selected = false, onPick }: CardProps) {
   const [hover, setHover] = useState(false)
   const fill = selected ? SELECTED : hover ? HOVER : color
+  // A card lifts off its panel when a hand is on it, and further once picked up.
+  const lift = selected ? 0.03 : hover ? 0.015 : 0.004
   return (
     <Interactive onSelect={onPick} onHover={() => setHover(true)} onBlur={() => setHover(false)}>
-      <group position={[x, y, 0.004]}>
+      <group position={[x, y, lift]}>
         <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)}>
           <planeGeometry args={[width, height]} />
           <meshStandardMaterial color={fill} />
@@ -311,12 +314,19 @@ function Detail({ world, dispatch, person }: RoomProps) {
         { label: 'Reject', color: '#dc2626', act: () => dispatch({ type: 'decide_run', id: run.id, decision: 'rejected', by: person }) },
       ]
     }
+    if (run.suggestion) {
+      const suggestion = run.suggestion
+      // The reason read aloud, so the eyes can stay on the observations.
+      actions.push({ label: 'Hear the Reviewer agent', color: '#1d4ed8', act: () => { speak(`The Reviewer agent suggests ${suggestion.decision === 'approved' ? 'approving' : 'rejecting'} this run. ${suggestion.reason}`) } })
+    }
   } else if (task) {
     lines.push({ text: fit(task.title, 60) })
     lines.push({ text: `${COLUMNS.find(column => column.status === task.status)?.label ?? task.status}${task.assignee ? ` · ${task.assignee}` : ''} · ${task.rework} rework`, color: STATUS_COLOR[task.status] })
     if (task.reason) lines.push({ text: fit(task.reason, 72), color: MUTED })
     if (task.status === 'blocked') {
+      const reason = task.reason
       actions = [{ label: 'Send back to work', color: '#2563eb', act: () => dispatch({ type: 'send_back', id: task.id, by: person }) }]
+      if (reason) actions.push({ label: 'Hear why it is blocked', color: '#1d4ed8', act: () => { speak(`${task.title} is blocked. ${reason}`) } })
     }
   } else if (agent) {
     lines.push({ text: agent.role })

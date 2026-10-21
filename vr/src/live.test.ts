@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   LiveApi,
   agentsFromTasks,
+  logFromMessages,
   parseLiveConfig,
   pickSprint,
   readStreamEvent,
@@ -87,6 +88,16 @@ describe('live mode', () => {
     expect(readStreamEvent({ type: 'status', agent: 'System', message: 'Sprint closed' }, 5)).toEqual({ log: { at: 5, text: 'System: Sprint closed' } })
   })
 
+  it('shows the conversation between roles as log lines, oldest first', () => {
+    const lines = logFromMessages([
+      { id: 1, from_role: 'Developer', to_role: 'Architect', kind: 'question', body: 'How should the\n  retry be structured?', created_at: '2026-10-21T10:00:00Z' },
+      { id: 2, from_role: 'ScrumMaster', to_role: null, kind: 'retrospective', body: 'x'.repeat(200), created_at: null },
+    ], 1000)
+    expect(lines[0]).toEqual({ at: Date.parse('2026-10-21T10:00:00Z'), text: 'Developer → Architect (question): How should the retry be structured?' })
+    expect(lines[1].at).toBe(999)
+    expect(lines[1].text).toBe(`ScrumMaster → the team (retrospective): ${'x'.repeat(120)}`)
+  })
+
   it('replaces an agent\'s card or adds one the board did not list', () => {
     const agents = [{ role: 'QA', state: 'idle' as const, activity: '' }]
     expect(withAgent(agents, { role: 'QA', state: 'active', activity: 'Reviewing' })).toEqual([{ role: 'QA', state: 'active', activity: 'Reviewing' }])
@@ -101,6 +112,7 @@ describe('live mode', () => {
       '/v1/inbox?company_id=4': { blocked_tasks: [{ id: 4, reason: 'Gate', sprint_id: 7 }] },
       '/v1/agent_runs?company_id=4&exclude_in_house=true&limit=100': { agent_runs: [{ id: 10, producer: 'github', external_ref: 'pr-1', status: 'verified', latest_approval: null }] },
       '/v1/agent_runs/10/verifications?company_id=4': { verifications: [{ verdict: 'verified', checks: [{ name: 'artifact_nonempty', outcome: 'pass', observation: '12 bytes' }] }] },
+      '/v1/messages?company_id=4&sprint_id=7&limit=12': { messages: [{ id: 1, from_role: 'QA', to_role: 'Developer', kind: 'request', body: 'Add a test for the empty case', created_at: '2026-10-21T09:00:00Z' }] },
       '/v1/agent_runs/10/approve': { id: 1 },
       '/v1/backlog/4': { id: 4 },
       '/v1/sprints/7/stream_ticket': { ticket: 'tkt', expires_in: 300 },
@@ -117,6 +129,7 @@ describe('live mode', () => {
     expect(world).toMatchObject({ mode: 'live', sprint: 'Sprint 7' })
     expect(world.tasks?.find(task => task.id === 4)?.reason).toBe('Gate')
     expect(world.runs?.[0].observations).toEqual(['artifact_nonempty: pass — 12 bytes'])
+    expect(world.log?.map(entry => entry.text)).toEqual(['QA → Developer (request): Add a test for the empty case'])
     expect(calls[0].init?.headers).toEqual({ Authorization: 'Bearer jwt' })
 
     await api.decideRun(10, 'rejected')
