@@ -67,6 +67,23 @@ def test_requests_are_labelled_by_route_not_by_path(test_client):
     assert "987654" not in text
 
 
+def test_fixed_routes_and_preflights_are_not_unmatched(test_client):
+    """``unmatched`` counts only the paths no route answered."""
+    test_client.get("/docs")
+    test_client.options(
+        "/v1/sprints",
+        headers={
+            "Origin": "http://example.test",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    text = test_client.get("/metrics").text
+
+    assert 'endpoint="/docs"' in text
+    assert 'endpoint="preflight"' in text
+
+
 def test_memory_search_caps_its_limit(test_client):
     response = test_client.get(
         "/v1/memory/search", params={"query": "x", "limit": 100000}

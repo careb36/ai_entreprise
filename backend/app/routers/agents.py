@@ -154,10 +154,11 @@ def load_sprint_history(sprint_id: str) -> list[dict]:
     new connection before the live events.
 
     Each event's ``event_id`` names the task and the comment's position
-    (``history-<task id>-<index>``; ``history-<task id>-status`` for a task
-    without comments), the same on every replay: a client that reconnects
-    can tell the history it already shows from a new event. Comments are
-    only ever appended, so a comment keeps its position.
+    (``history-<task id>-<index>``; ``history-<task id>-status-<status>``
+    for a task without comments), the same on every replay: a client that
+    reconnects can tell the history it already shows from a new event, and
+    a status that changed while it was away is new. Comments are only ever
+    appended, so a comment keeps its position.
     """
     events: list[dict] = []
     try:
@@ -223,7 +224,7 @@ def load_sprint_history(sprint_id: str) -> list[dict]:
                             "semantic_type": "task.status_snapshot",
                             "source": "history",
                             "semantic_version": 1,
-                            "event_id": f"history-{item.id}-status",
+                            "event_id": f"history-{item.id}-status-{item.status}",
                             "agent": item.assignee or "System",
                             "role": item.assignee or "System",
                             "task_id": item.id,

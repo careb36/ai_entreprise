@@ -221,30 +221,93 @@ describe('HelpDesk decisions on the agent\'s suggestions', () => {
   })
 
   it('clears a decision by sending it empty, and sends none when only the status changes', async () => {
+    let detail: Record<string, unknown> = {
+      ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+      decided_severity: 'critical', decided_category: 'bug', decided_by: 'admin@acme.test',
+    }
     const patch = vi.fn((init: RequestInit) => {
-      void init
-      return response(200, { ticket_num: 'BUG-0001', status: 'waiting', updated_at: '2026-10-02T00:00:00' })
+      const body = JSON.parse(String(init.body))
+      detail = { ...detail, status: body.status }
+      return response(200, { ticket_num: 'BUG-0001', status: body.status, updated_at: '2026-10-02T00:00:00' })
     })
     stubApi({
-      'GET /v1/support/tickets/BUG-0001': () => response(200, {
-        ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
-        decided_severity: 'critical', decided_category: 'bug', decided_by: 'admin@acme.test',
-      }),
+      'GET /v1/support/tickets/BUG-0001': () => response(200, detail),
       'PATCH /v1/support/tickets/BUG-0001': patch,
     })
     renderAs(true)
     fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
-    const detail = await screen.findByRole('region', { name: 'Board does not load' })
+    const region = await screen.findByRole('region', { name: 'Board does not load' })
 
-    fireEvent.change(within(detail).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
-    fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    expect(await within(region).findByText('Ticket updated')).toBeInTheDocument()
     expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'waiting' })
 
-    fireEvent.change(within(detail).getByRole('combobox', { name: 'Decided impact' }), { target: { value: '' } })
-    fireEvent.click(within(detail).getByRole('button', { name: 'Save' }))
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Decided impact' }), { target: { value: '' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(2))
     expect(JSON.parse(String(patch.mock.calls[1][0].body))).toEqual({ status: 'waiting', severity: '' })
+  })
+
+  it('does not send a decision put back as the ticket stores it, so another admin\'s made meanwhile is kept', async () => {
+    const patch = vi.fn((init: RequestInit) => {
+      void init
+      return response(200, { ticket_num: 'BUG-0001', status: 'waiting', updated_at: '2026-10-02T00:00:00' })
+    })
+    let detail: Record<string, unknown> = {
+      ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+      decided_severity: null, decided_category: null, decided_by: null,
+    }
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, detail),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+    const region = await screen.findByRole('region', { name: 'Board does not load' })
+    const impact = () => within(region).getByRole('combobox', { name: 'Decided impact' })
+
+    fireEvent.change(impact(), { target: { value: 'high' } })
+    fireEvent.change(impact(), { target: { value: '' } })
+    // Another admin decides meanwhile: the form shows it, since nothing is edited here.
+    detail = { ...detail, decided_severity: 'critical', decided_by: 'b@acme.test' }
+    await act(() => queryClient.invalidateQueries())
+    await waitFor(() => expect(impact()).toHaveValue('critical'))
+
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Status' }), { target: { value: 'waiting' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({ status: 'waiting' })
+  })
+
+  it('follows the status and resolution another admin saved: a category change does not reopen the ticket', async () => {
+    const patch = vi.fn((init: RequestInit) => {
+      void init
+      return response(200, { ticket_num: 'BUG-0001', status: 'resolved', updated_at: '2026-10-02T00:00:00' })
+    })
+    let detail: Record<string, unknown> = {
+      ...TICKET, description: 'Spinner forever', steps: null, expected: null, actual: null, resolution: null,
+    }
+    stubApi({
+      'GET /v1/support/tickets/BUG-0001': () => response(200, detail),
+      'PATCH /v1/support/tickets/BUG-0001': patch,
+    })
+    renderAs(true)
+    fireEvent.click(await screen.findByRole('button', { name: /Board does not load/ }))
+    const region = await screen.findByRole('region', { name: 'Board does not load' })
+    expect(within(region).getByRole('combobox', { name: 'Status' })).toHaveValue('open')
+
+    detail = { ...detail, status: 'resolved', resolution: 'Restarted the worker', resolved_at: '2026-10-02T00:00:00' }
+    await act(() => queryClient.invalidateQueries())
+    await waitFor(() => expect(within(region).getByRole('combobox', { name: 'Status' })).toHaveValue('resolved'))
+    expect(within(region).getByRole('textbox', { name: 'Resolution' })).toHaveValue('Restarted the worker')
+
+    fireEvent.change(within(region).getByRole('combobox', { name: 'Decided category' }), { target: { value: 'bug' } })
+    fireEvent.click(within(region).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    expect(JSON.parse(String(patch.mock.calls[0][0].body))).toEqual({
+      status: 'resolved', resolution: 'Restarted the worker', category: 'bug',
+    })
   })
 
   it('does not clear a decision another admin made while the form was open', async () => {

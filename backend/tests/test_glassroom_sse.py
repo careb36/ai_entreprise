@@ -147,7 +147,7 @@ def test_the_replayed_history_carries_the_same_event_ids_every_time(
     assert ids == [
         f"history-{delivered.id}-0",
         f"history-{delivered.id}-1",
-        f"history-{quiet.id}-status",
+        f"history-{quiet.id}-status-in_progress",
     ]
     assert [event["semantic_type"] for event in first] == [
         "task.history_comment",

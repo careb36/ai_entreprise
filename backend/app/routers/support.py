@@ -40,6 +40,9 @@ from sqlmodel import Session, func, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
 
+# The statuses in which a ticket is settled: reaching one stamps ``resolved_at``.
+TERMINAL_STATUSES = ("resolved", "closed")
+
 
 def _next_ticket_num(session: Session) -> str:
     """
@@ -244,8 +247,9 @@ async def update_ticket_status(
     """
     Update the status (and optionally resolution / assignee) of a ticket.
 
-    When the status transitions to ``"resolved"`` or ``"closed"``,
-    ``resolved_at`` is automatically set to the current UTC timestamp.
+    When the status reaches ``"resolved"`` or ``"closed"``, ``resolved_at``
+    is set to the current UTC timestamp; a later save keeps it, and
+    reopening the ticket clears it.
     A ``severity`` or ``category`` is the admin's decision: it is stored apart
     from the reporter's choice and the Support agent's suggestion. Omitted, the
     earlier decision stays; an empty string clears it.
@@ -268,6 +272,7 @@ async def update_ticket_status(
     if not report:
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_num} not found")
 
+    was_terminal = report.status in TERMINAL_STATUSES
     report.status = req.status
     if req.resolution:
         report.resolution = req.resolution
@@ -286,8 +291,11 @@ async def update_ticket_status(
         who = user.email if user is not None else "support admin"
         report.decided_by = who if decided else None
         report.decided_at = report.updated_at if decided else None
-    # Stamp resolution time when the ticket reaches a terminal state.
-    if req.status in ("resolved", "closed"):
+    # ``resolved_at`` is when the ticket reached a terminal state: a later save
+    # of a resolved ticket (a decision, say) keeps it, and reopening clears it.
+    if req.status not in TERMINAL_STATUSES:
+        report.resolved_at = None
+    elif not was_terminal:
         report.resolved_at = datetime.now(UTC).replace(tzinfo=None)
 
     session.add(report)
