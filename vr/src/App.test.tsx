@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
@@ -32,6 +32,19 @@ describe('Glassroom VR', () => {
     expect(screen.getByText('Acme Payments · Sprint 3 — Checkout · demo company')).toBeInTheDocument()
     expect(screen.getByText(/^4 waiting for you/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Enter VR' })).toBeInTheDocument()
+  })
+
+  it('keeps the demo company working for its first minute', () => {
+    vi.useFakeTimers()
+    try {
+      render(<App />)
+      expect(screen.getByText(/^4 waiting for you/)).toBeInTheDocument()
+      act(() => { vi.advanceTimersByTime(61_000) })
+      // A run arrived in the inbox meanwhile.
+      expect(screen.getByText(/^5 waiting for you/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reads a company from the backend named in the URL, and says when it cannot', async () => {

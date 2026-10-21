@@ -60,6 +60,19 @@ describe('the room\'s model', () => {
     expect(world.log[0].text).toBe('event 5')
   })
 
+  it('updates a task or a run the board reports, or adds one it did not know', () => {
+    let world = reduce(demoWorld(), { type: 'task', task: { id: 33, status: 'in_review', rework: 1 } })
+    expect(world.tasks.find(task => task.id === 33)).toMatchObject({ title: 'Rate limit the checkout API', status: 'in_review', rework: 1 })
+    world = reduce(world, { type: 'task', task: { id: 99, title: 'New one' } })
+    expect(world.tasks.find(task => task.id === 99)).toEqual({ id: 99, title: 'New one', status: 'todo', rework: 0 })
+
+    const run = { id: 104, producer: 'github', externalRef: 'pr-104', verdict: 'verified' as const, observations: [] }
+    world = reduce(world, { type: 'run', run })
+    expect(pendingRuns(world).map(candidate => candidate.id)).toEqual([101, 102, 103, 104])
+    world = reduce(world, { type: 'run', run: { ...run, verdict: 'refuted' } })
+    expect(world.runs.filter(candidate => candidate.id === 104).map(candidate => candidate.verdict)).toEqual(['refuted'])
+  })
+
   it('loads a world from a backend over the demo', () => {
     const world = reduce(demoWorld(), { type: 'load', world: { mode: 'live', company: 'Real Co', tasks: [] } })
     expect([world.mode, world.company, world.tasks]).toEqual(['live', 'Real Co', []])
