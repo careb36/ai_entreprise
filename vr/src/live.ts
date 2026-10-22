@@ -76,10 +76,19 @@ export interface ApiMessage {
 }
 
 /** The conversation between roles as log lines: who spoke to whom, what kind of message, the first words. */
+/**
+ * The text as the room's bundled font can draw it: the backend's lines start
+ * with emoji, and a glyph the font lacks would be fetched from a CDN in the
+ * headset, or left blank.
+ */
+export function plain(text: string): string {
+  return text.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim()
+}
+
 export function logFromMessages(messages: ApiMessage[], now = Date.now()): LogEntry[] {
   return messages.map((message, index) => ({
     at: (message.created_at && Date.parse(message.created_at)) || now - (messages.length - index),
-    text: `${message.from_role} › ${message.to_role ?? 'the team'} (${message.kind}): ${message.body.replace(/\s+/g, ' ').trim().slice(0, 120)}`,
+    text: `${message.from_role} › ${message.to_role ?? 'the team'} (${message.kind}): ${plain(message.body).slice(0, 120)}`,
   }))
 }
 
@@ -194,7 +203,7 @@ const QUIET = new Set(['stream.connected', 'stream.unavailable'])
 export function readStreamEvent(event: StreamEvent, at = Date.now()): { log?: LogEntry; agent?: Agent } {
   if (event.ping || !event.message || event.source === 'history' || QUIET.has(event.semantic_type ?? '')) return {}
   const who = event.agent || event.role || 'System'
-  const log: LogEntry = { at: event.timestamp ? Date.parse(event.timestamp) || at : at, text: `${who}: ${event.message}` }
+  const log: LogEntry = { at: event.timestamp ? Date.parse(event.timestamp) || at : at, text: `${who}: ${plain(event.message)}` }
   const role = event.role || event.agent
   if (!role || role === 'System') return { log }
   const kind = event.semantic_type ?? ''

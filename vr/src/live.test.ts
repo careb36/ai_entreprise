@@ -10,6 +10,7 @@ import {
   tasksFromBoard,
   type ApiBoard,
   type ApiRun,
+  plain,
 } from './live'
 import { blockedForPerson, reduce, withAgent } from './model'
 import { demoWorld } from './demo'
@@ -170,5 +171,11 @@ describe('live mode', () => {
     const patch = calls.find(call => call.url.endsWith('/v1/backlog/4'))!
     expect([patch.init?.method, JSON.parse(String(patch.init?.body)).status]).toEqual(['PATCH', 'todo'])
     expect(await api.streamUrl(7)).toBe('https://api.test/v1/glassroom/stream?sprint_id=7&ticket=tkt')
+  })
+
+  it('draws the text with the glyphs the bundled font has: no emoji, no CDN fallback', () => {
+    expect(plain('🚀 Developer started "Rate limit the checkout API"')).toBe('Developer started "Rate limit the checkout API"')
+    expect(plain('✅  QA approved  ·  done ❤️')).toBe('QA approved · done')
+    expect(readStreamEvent({ semantic_type: 'message', agent: 'QA', message: '🧪 Running the tests' }).log?.text).toBe('QA: Running the tests')
   })
 })

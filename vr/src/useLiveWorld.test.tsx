@@ -7,7 +7,8 @@ import { RELOAD_MS, useLiveWorld } from './useLiveWorld'
 
 const CONFIG: LiveConfig = { api: 'https://api.test', companyId: 4, person: 'Ana' }
 
-function stubFetch(approve = 200) {
+function stubFetch(approve = 200, hold?: { url: string; after: number; gate: Promise<void> }) {
+  let calls = 0
   const answers: Record<string, [number, unknown]> = {
     '/v1/sprints?company_id=4': [200, [{ id: 7, sprint_name: 'Sprint 7', status: 'active' }]],
     '/v1/sprints/7/board': [200, { sprint: { id: 7, sprint_name: 'Sprint 7', status: 'active' }, columns: {} }],
@@ -17,7 +18,10 @@ function stubFetch(approve = 200) {
     '/v1/agent_runs/10/approve': [approve, approve === 200 ? { id: 1 } : { detail: 'Requires Manager role' }],
   }
   const fetchImpl = vi.fn(async (url: string) => {
-    const [status, body] = answers[url.replace('https://api.test', '')] ?? [404, {}]
+    const path = url.replace('https://api.test', '')
+    // One request held back, to make a reload sit in flight while a decision lands.
+    if (hold && path === hold.url && ++calls > hold.after) await hold.gate
+    const [status, body] = answers[path] ?? [404, {}]
     return { ok: status < 300, status, json: async () => body } as Response
   })
   vi.stubGlobal('fetch', fetchImpl)
@@ -52,6 +56,31 @@ describe('useLiveWorld', () => {
     const reloaded = (loads(dispatch)[1] as { world: object }).world
     expect(reloaded).not.toHaveProperty('log')
     expect(reloaded).not.toHaveProperty('agents')
+  })
+
+  it('drops a reload that was in flight when a decision was recorded, so the decided run does not come back', async () => {
+    vi.useFakeTimers()
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    stubFetch(200, { url: '/v1/agent_runs?company_id=4&exclude_in_house=true&limit=100', after: 1, gate })
+    const dispatch = vi.fn()
+    const { result } = renderHook(() => useLiveWorld(CONFIG, dispatch))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(loads(dispatch)).toHaveLength(1)
+
+    // The reload starts and hangs on the runs; meanwhile the person decides.
+    await act(async () => { await vi.advanceTimersByTimeAsync(RELOAD_MS) })
+    act(() => result.current.perform({ type: 'decide_run', id: 10, decision: 'approved', by: 'Ana' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'decide_run', id: 10, decision: 'approved', by: 'Ana' })
+
+    // The stale reload resolves: nothing is loaded from it.
+    release()
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(loads(dispatch)).toHaveLength(1)
+    // The next reload, started after the decision, is taken.
+    await act(async () => { await vi.advanceTimersByTimeAsync(RELOAD_MS) })
+    expect(loads(dispatch)).toHaveLength(2)
   })
 
   it('shows a decision once the backend recorded it, and says so when it refused', async () => {

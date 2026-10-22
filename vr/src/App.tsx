@@ -1,7 +1,7 @@
 import { Suspense, useMemo, useReducer } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import { Controllers, Hands, VRButton, XR, useXR } from '@react-three/xr'
+import { Hands, VRButton, XR, useXR } from '@react-three/xr'
 import { demoWorld } from './demo'
 import { parseFlags } from './flags'
 import { parseLiveConfig } from './live'
@@ -59,7 +59,7 @@ export default function App() {
       <VRButton />
       <Canvas camera={{ position: [0, 1.25, 0.2], fov: 70 }} dpr={[1, 1.5]} gl={{ antialias: true, powerPreference: 'high-performance' }}>
         <XR>
-          <Controllers />
+          {/* No controller models: the brief is hands, and a controller's model would come from a CDN. A controller still selects. */}
           {/* The hand models ship with the room: nothing fetched from a CDN in the headset. */}
           <Hands modelLeft={`${import.meta.env.BASE_URL}hands/left.glb`} modelRight={`${import.meta.env.BASE_URL}hands/right.glb`} />
           <Suspense fallback={null}>

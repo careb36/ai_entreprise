@@ -155,7 +155,9 @@ npm run build        # vr/dist, a static site
   (`VR_BASE=/path/ npm run build`). The link goes into the Devpost entry.
 - **Nothing from a CDN in the headset:** the font (`vr/public/fonts`, Roboto,
   Apache 2.0) and the hand models (`vr/public/hands`, WebXR Input Profiles,
-  MIT) ship with the room, licences beside them.
+  MIT) ship with the room, licences beside them; the text drops glyphs the
+  font lacks (the backend's emoji) rather than fetch a fallback, and no
+  controller model is drawn (a controller still selects; hands are the brief).
 - **The frame rate on the headset:** `?stats=1` shows it under the detail
   panel (amber below 60), the number the competition asks for; the browser's
   own counters are not visible inside a session.
@@ -286,6 +288,13 @@ hands.
   work shows up.
 - **2026-10-21 · Eyes-only pick** (#173): `?gaze=1`, a dwell with a filling
   ring, an alternative to the pinch for a person who cannot make one.
+- **2026-10-21 · Fixes from the second review** (#175): the gaze never
+  decides (the action cards opt out), the Reviewer agent's suggestion stays
+  above the decision cards, a dot shows where each hand's ray lands, a
+  clipped label cannot steal a pinch from the next card, the gaze ring sits
+  on the card it looks at, a reload in flight cannot undo a decision, the
+  text drops the glyphs the bundled font lacks (no CDN fallback), no
+  controller models (hands are the brief; a controller still selects).
 
 ## Devpost description (draft)
 

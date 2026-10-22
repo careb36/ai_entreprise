@@ -161,7 +161,8 @@ export function reduce(world: World, action: Action): World {
       const task = world.tasks.find(candidate => candidate.id === action.id)
       if (!task || task.status !== 'blocked' || task.frozen) return world
       // Back to the top of the board, as the backend puts it.
-      const back: Task = { ...task, status: 'todo', reason: undefined, forPerson: undefined, rework: task.rework + 1 }
+      // The rework count is the backend's (its review requests); a send-back is not one.
+      const back: Task = { ...task, status: 'todo', reason: undefined, forPerson: undefined }
       return {
         ...world,
         tasks: world.tasks.map(candidate => (candidate.id === task.id ? back : candidate)),

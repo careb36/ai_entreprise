@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentProps, type Dispatch, type R
 import { useFrame } from '@react-three/fiber'
 import { Grid, Text } from '@react-three/drei'
 import { Interactive, useXR } from '@react-three/xr'
-import { Raycaster, Vector3, type Group, type Mesh } from 'three'
+import { Raycaster, Vector3, type Group, type Mesh, type Object3D } from 'three'
 import { Dwell } from '../dwell'
 import { FrameRate } from '../fps'
 import { approach, hintTarget, hintVisible, type Vec3 } from '../hint'
@@ -113,6 +113,7 @@ export function Room({ world, dispatch, person, stats = false, gaze = false }: R
 
       <Detail world={world} dispatch={act} person={person} />
       <Hint pinched={pinched} />
+      <Cursors />
       {stats && <FrameRateLabel />}
       {gaze && <Gaze />}
     </>
@@ -153,6 +154,8 @@ interface CardProps {
   accent?: string
   selected?: boolean
   onPick: () => void
+  /** Whether the eyes-only pick (`?gaze=1`) may pick this card; the action cards say no, so reading them never decides. */
+  gaze?: boolean
 }
 
 const PAD = 0.025
@@ -162,7 +165,7 @@ const PAD = 0.025
  * wraps from the top and the sub line sits at the bottom; both are clipped
  * to the card, so a long title never spills over the next card.
  */
-export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize = 0.03, subSize = 0.022, color = CARD, accent, selected = false, onPick }: CardProps) {
+export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize = 0.03, subSize = 0.022, color = CARD, accent, selected = false, onPick, gaze = true }: CardProps) {
   const [hover, setHover] = useState(false)
   const fill = selected ? SELECTED : hover ? HOVER : color
   // A card lifts off its panel when a hand is on it, and further once picked up.
@@ -173,8 +176,8 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
   return (
     <Interactive onSelect={onPick} onHover={() => setHover(true)} onBlur={() => setHover(false)}>
       <group position={[x, y, lift]}>
-        {/* The gaze finds a card by the handler on its mesh. */}
-        <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)} userData={{ onPick }}>
+        {/* The gaze finds a card by the handler on its mesh; a card that opts out carries none. */}
+        <mesh onClick={onPick} onPointerOver={() => setHover(true)} onPointerOut={() => setHover(false)} userData={gaze ? { onPick } : {}}>
           <planeGeometry args={[width, height]} />
           <meshBasicMaterial color={fill} />
         </mesh>
@@ -184,7 +187,9 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
             <meshBasicMaterial color={accent} />
           </mesh>
         )}
+        {/* The labels catch no ray (the plane does), so a clipped overflow never steals a pinch from the next card. */}
         <Label
+          raycast={() => null}
           position={[-width / 2 + PAD, sub ? height / 2 - 0.015 : labelSize * 0.6, 0.002]}
           fontSize={labelSize}
           lineHeight={1.1}
@@ -198,6 +203,7 @@ export function Card({ x, y, width = 0.5, height = 0.12, label, sub, labelSize =
         </Label>
         {sub && (
           <Label
+            raycast={() => null}
             position={[-width / 2 + PAD, -height / 2 + 0.014, 0.002]}
             fontSize={subSize}
             anchorX="left"
@@ -256,7 +262,7 @@ function Board({ tasks, selected, onPick }: { tasks: Task[]; selected: World['se
               />
             ))}
             {cards.length > CARDS_PER_COLUMN && (
-              <Label position={[-0.115, 0.26 - shown.length * (cardHeight + 0.015) + 0.02, 0.002]} fontSize={0.02} anchorX="left" anchorY="middle" color={MUTED}>
+              <Label position={[-0.115, 0.26 - shown.length * (cardHeight + 0.015) + 0.04, 0.002]} fontSize={0.02} anchorX="left" anchorY="middle" color={MUTED}>
                 {`+${cards.length - CARDS_PER_COLUMN} more`}
               </Label>
             )}
@@ -328,7 +334,9 @@ function Inbox({ world, onPick }: { world: World; onPick: (s: NonNullable<World[
   const allBlocked = blockedForPerson(world)
   const allRuns = pendingRuns(world)
   const blocked = allBlocked.slice(0, INBOX_BLOCKED_SHOWN)
-  const runs = allRuns.slice(0, INBOX_RUNS_SHOWN)
+  // Each row above the runs (a second blocked task, its "+n more") takes one run's place, so the last card stays on the panel.
+  const runsShown = INBOX_RUNS_SHOWN - (blocked.length >= 2 ? 1 : 0) - (allBlocked.length > blocked.length ? 1 : 0)
+  const runs = allRuns.slice(0, runsShown)
   const blockedSlots = grid(blocked.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
   const runSlots = grid(runs.length, { cols: 1, width: 1.1, height: 0.1, gap: 0.015 })
   const runsTop = 0.36 - 0.06 - blocked.length * 0.115 - 0.08 - (allBlocked.length > blocked.length ? 0.04 : 0)
@@ -407,16 +415,18 @@ function Detail({ world, dispatch, person }: RoomProps) {
   const agent = selectedAgent(world)
   const width = 1.2
   const height = 0.42
-  const line = (index: number) => 0.12 - index * 0.05
+  // Lines from the top, close enough that six of them stay above the action row.
+  const line = (index: number) => 0.15 - index * 0.04
   const lines: { text: string; color?: string }[] = []
   let actions: { label: string; color: string; act: () => void }[] = []
 
   if (run) {
     lines.push({ text: fit(`${run.producer} · ${run.externalRef}`, 60) })
     lines.push({ text: `Verifier: ${run.verdict}`, color: VERDICT_COLOR[run.verdict] })
-    for (const observation of run.observations.slice(0, 3)) lines.push({ text: fit(observation, 72), color: MUTED })
+    // Two observations while the decision cards are up; the third would sit behind them.
+    for (const observation of run.observations.slice(0, run.decision ? 3 : 2)) lines.push({ text: fit(observation, 72), color: MUTED })
     if (run.suggestion) {
-      lines.push({ text: `Reviewer agent suggests ${run.suggestion.decision} (a claim): ${fit(run.suggestion.reason, 60)}`, color: '#93c5fd' })
+      lines.push({ text: `Reviewer agent suggests ${run.suggestion.decision} (a claim): ${fit(run.suggestion.reason, 40)}`, color: '#93c5fd' })
     } else {
       lines.push({ text: 'The Reviewer agent made no suggestion; it is yours to decide.', color: MUTED })
     }
@@ -464,7 +474,7 @@ function Detail({ world, dispatch, person }: RoomProps) {
         <meshBasicMaterial color={PANEL} transparent opacity={0.92} />
       </mesh>
       {lines.map((entry, index) => (
-        <Label key={index} position={[-width / 2 + 0.03, line(index), 0.002]} fontSize={index === 0 ? 0.036 : 0.026} anchorX="left" anchorY="middle" color={entry.color ?? INK} maxWidth={width - 0.06}>
+        <Label key={index} position={[-width / 2 + 0.03, line(index), 0.002]} fontSize={index === 0 ? 0.034 : 0.024} anchorX="left" anchorY="middle" color={entry.color ?? INK} maxWidth={width - 0.06}>
           {entry.text}
         </Label>
       ))}
@@ -476,8 +486,10 @@ function Detail({ world, dispatch, person }: RoomProps) {
           width={0.34}
           height={0.08}
           label={action.label}
+          labelSize={0.026}
           color={action.color}
           onPick={action.act}
+          gaze={false}
         />
       ))}
     </group>
@@ -556,7 +568,9 @@ function FrameRateLabel() {
   )
 }
 
-const GAZE_DISTANCE = 0.6
+/** Where the ring sits when the gaze is on nothing, and the depth its size is drawn for. */
+const GAZE_DISTANCE = 1.4
+const GAZE_SIZE_AT = 0.6
 
 /**
  * `?gaze=1`, an eyes-only pick: a ray from the centre of the view finds the
@@ -572,6 +586,7 @@ function Gaze() {
   const direction = useRef(new Vector3())
   const ring = useRef<Mesh>(null)
   const fill = useRef<Mesh>(null)
+  const cards = useRef<Object3D[]>([])
 
   useFrame(({ camera, scene }, delta) => {
     elapsed.current += delta * 1000
@@ -580,15 +595,22 @@ function Gaze() {
     camera.getWorldPosition(origin.current)
     camera.getWorldDirection(direction.current)
     raycaster.current.set(origin.current, direction.current)
-    const hit = raycaster.current.intersectObjects(scene.children, true).find(candidate => typeof candidate.object.userData.onPick === 'function')
+    // Only the cards are tested: the hands' skinned meshes would cost a bone pass per frame.
+    cards.current.length = 0
+    scene.traverse(object => { if (typeof object.userData.onPick === 'function') cards.current.push(object) })
+    const hit = raycaster.current.intersectObjects(cards.current, false)[0]
     const step = dwell.current.update(hit ? hit.object.uuid : null, elapsed.current)
     if (step.fire && hit) (hit.object.userData.onPick as () => void)()
+    // The ring sits on the card it looks at (a little in front), so the eyes converge once; its size follows the depth.
+    const distance = hit ? Math.max(0.3, hit.distance - 0.01) : GAZE_DISTANCE
+    const size = distance / GAZE_SIZE_AT
     for (const part of [ring.current, fill.current]) {
       if (!part) continue
-      part.position.copy(origin.current).addScaledVector(direction.current, GAZE_DISTANCE)
+      part.position.copy(origin.current).addScaledVector(direction.current, distance)
       part.quaternion.copy(camera.quaternion)
     }
-    if (fill.current) fill.current.scale.setScalar(Math.max(0.001, step.progress))
+    if (ring.current) ring.current.scale.setScalar(size)
+    if (fill.current) fill.current.scale.setScalar(Math.max(0.001, step.progress) * size)
   })
 
   return (
@@ -600,6 +622,40 @@ function Gaze() {
       <mesh ref={fill} name="reticle-fill" renderOrder={10}>
         <circleGeometry args={[0.007, 32]} />
         <meshBasicMaterial color={SELECTED} transparent opacity={0.8} depthTest={false} />
+      </mesh>
+    </>
+  )
+}
+
+/**
+ * A dot where each hand's ray lands on a card: with hand tracking there is
+ * no visible ray, so without it the only cue is the hover lift. Drawn only
+ * in a session, from the hover state the XR interaction keeps per hand.
+ */
+function Cursors() {
+  const presenting = useXR(state => state.isPresenting)
+  const hoverState = useXR(state => state.hoverState)
+  const left = useRef<Mesh>(null)
+  const right = useRef<Mesh>(null)
+  useFrame(() => {
+    for (const [hand, dot] of [['left', left.current], ['right', right.current]] as const) {
+      if (!dot) continue
+      const hovered = hoverState && typeof hoverState === 'object' ? (hoverState as Record<string, Map<Object3D, { point: Vector3 }>>)[hand] : undefined
+      const first = hovered instanceof Map ? hovered.values().next().value : undefined
+      dot.visible = Boolean(first)
+      if (first) dot.position.copy(first.point)
+    }
+  })
+  if (!presenting) return null
+  return (
+    <>
+      <mesh ref={left} name="cursor-left" visible={false} renderOrder={9}>
+        <sphereGeometry args={[0.006, 12, 12]} />
+        <meshBasicMaterial color={INK} depthTest={false} />
+      </mesh>
+      <mesh ref={right} name="cursor-right" visible={false} renderOrder={9}>
+        <sphereGeometry args={[0.006, 12, 12]} />
+        <meshBasicMaterial color={INK} depthTest={false} />
       </mesh>
     </>
   )
