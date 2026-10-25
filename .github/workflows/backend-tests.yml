@@ -12,16 +12,21 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    env:
+      # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
+      POETRY_VIRTUALENVS_CREATE: "false"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
+      - name: Set up Python 3.12 (uv)
+        shell: bash
+        run: |
+          python3 -m pip install --user --break-system-packages uv >/dev/null
+          ~/.local/bin/uv python install 3.12
+          ~/.local/bin/uv venv --python 3.12 --seed "$RUNNER_TEMP/venv-3.12"
+          echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         working-directory: ./backend
@@ -50,6 +55,10 @@ jobs:
 
       - name: Run llm-proxy tests
         working-directory: .
+        env:
+          # El proxy tiene su propio pyproject y necesita un venv separado.
+          POETRY_VIRTUALENVS_CREATE: "true"
+          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-llm
         run: |
           (cd llm-proxy && poetry install --no-interaction --no-root)
           PROXY_PYTHON="$(cd llm-proxy && poetry env info --path)/bin/python"
