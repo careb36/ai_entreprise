@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from audit_signing import canonical_payload, sign_audit_payload
+from audit_chain import seal_audit_row
 from models import AuditLog
 from sqlmodel import Session
 
@@ -134,22 +134,9 @@ class AgentService:
             cost_tokens=cost_tokens,
             created_at=now,
         )
-        session.add(log)
-        session.flush()
-        session.refresh(log)
-
-        signature = sign_audit_payload(
-            canonical_payload(
-                interaction_id=log.interaction_id,
-                agent_id=log.agent_id,
-                action=log.action,
-                details=log.details,
-                result=log.result,
-                cost_tokens=log.cost_tokens,
-                created_at=log.created_at,
-            )
-        )
-        log.decision_signature = signature
+        # Signed, and appended to the company's hash chain (audit_chain.py).
+        seal_audit_row(session, log)
+        signature = log.decision_signature
 
         entry = {
             "company_id": log.company_id,
@@ -161,6 +148,9 @@ class AgentService:
             "result": log.result,
             "decision_signature": signature,
             "cost_tokens": log.cost_tokens,
+            "chain_seq": log.chain_seq,
+            "prev_hash": log.prev_hash,
+            "chain_hash": log.chain_hash,
         }
 
         audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))

@@ -10,7 +10,7 @@ filesystem (JSONL) and this table for queryable history.
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON
+from sqlalchemy import JSON, Index
 from sqlmodel import Column, Field, SQLModel
 
 
@@ -23,6 +23,10 @@ class AuditLog(SQLModel, table=True):
     """
 
     __tablename__ = "audit_log"
+    # One row per sequence number in a company's chain (audit_chain.py).
+    __table_args__ = (
+        Index("ux_audit_log_company_chain_seq", "company_id", "chain_seq", unique=True),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     company_id: int | None = Field(default=None, foreign_key="companies.id", index=True)
@@ -49,3 +53,10 @@ class AuditLog(SQLModel, table=True):
     cost_tokens: int = 0
 
     created_at: datetime | None = Field(default_factory=lambda: datetime.now(UTC))
+
+    # The company's hash chain (audit_chain.py): this row's place in it, the
+    # previous row's hash and this row's hash. Empty for rows without a
+    # company and for rows written before the chain existed.
+    chain_seq: int | None = None
+    prev_hash: str | None = None
+    chain_hash: str | None = None

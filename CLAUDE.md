@@ -107,7 +107,11 @@ Copy `.env.example` to `.env` and fill in:
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL.
-- `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
+- `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256, and keys
+  each company's audit hash chain (`audit_chain.py`: every company row carries
+  `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
+  a deleted, inserted, reordered, altered or moved row breaks it). Without a
+  key the chain is unkeyed and says so.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
   the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
@@ -337,6 +341,7 @@ Test files:
 | `test_cross_company_access.py` | Only a Manager sets where a company's agents write (`discover_team`), `/v1/generate` bills only the company's own business unit, a sprint's tokens are its own company's |
 | `test_glassroom_access.py` | The Glassroom stream with authentication required: a sprint-scoped ticket for a Viewer, refused without one, with an access token, another sprint's or an expired one, and once its holder left the company |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
+| `test_audit_chain.py` | The audit hash chain per company: numbered and linked rows, each company its own chain, a deleted, altered or moved row breaks it where it was, a chain rewritten without the key does not verify, unkeyed chains say so, rows without a company stay unchained, KPI turn rows are signed and chained too |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,

@@ -400,6 +400,7 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `POST` | `/v1/generate` | Trigger the optional LangGraph workflow (409 unless enabled) |
 | `GET`  | `/v1/memory/search` · `POST /v1/memory/store` | Semantic memory over pgvector |
 | `POST` | `/v1/audit` · `GET /v1/audit/verify` | Structured, signed audit entries |
+| `GET` | `/v1/audit/chain?company_id=` | Walks the company's audit hash chain: intact or where it breaks (gap, link, altered row), and its head (Viewer) |
 
 [⬆ Back to Top](#la-fabrique)
 

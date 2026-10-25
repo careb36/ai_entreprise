@@ -63,7 +63,8 @@ deterministic code decides. What they add is mostly rigour around that rule.
 
 ## Phase 1: the evidence spine
 
-5. **A hash chain per company for audit rows (M).** Each row gets
+5. **A hash chain per company for audit rows (M)** (done 2026-10-25; it also
+   signs the KPI turn rows `orchestration_metrics.py` wrote with no signature). Each row gets
    `company_id`, a per-company `seq` and `prev_hash` in what is hashed, with a
    version prefix so existing rows keep verifying; writes take a per-company
    advisory lock; audit verification checks the whole chain, so a missing or

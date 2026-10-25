@@ -360,8 +360,12 @@ def record_agent_turn(
     )
 
     try:
+        # Signed and chained like every other audit row (audit_chain.py);
+        # these rows used to be stored with no signature at all.
+        from audit_chain import seal_audit_row
+
         if session is not None:
-            session.add(row)
+            seal_audit_row(session, row)
             session.commit()
             session.refresh(row)
             return row
@@ -370,7 +374,7 @@ def record_agent_turn(
         from sqlmodel import Session
 
         with Session(engine) as own_session:
-            own_session.add(row)
+            seal_audit_row(own_session, row)
             own_session.commit()
             own_session.refresh(row)
             return row
