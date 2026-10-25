@@ -13,6 +13,9 @@ on:
 jobs:
   test:
     runs-on: [self-hosted, linux, x64, lafabrique]
+    env:
+      # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
+      POETRY_VIRTUALENVS_CREATE: "false"
 
     steps:
       - uses: actions/checkout@v4
