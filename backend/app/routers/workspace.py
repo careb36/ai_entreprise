@@ -15,8 +15,8 @@ from services.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
     DaemonUnavailable,
-    daemon_request,
     daemon_presence,
+    daemon_request,
     inspect_project,
     without_snapshot,
 )
