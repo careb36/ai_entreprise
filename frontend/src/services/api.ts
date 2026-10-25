@@ -463,6 +463,8 @@ export interface OrchestrationHealthWeek {
   architect_consult_count: number
   task_count: number
   post_batch1: boolean
+  /** Developer turns whose token usage was not reported: left out of the average, not counted as zero. */
+  developer_turns_without_tokens?: number
 }
 
 export interface OrchestrationHealthSummary {

@@ -904,7 +904,8 @@
       "empty": "No weekly data yet. Run sprints to populate orchestration health metrics.",
       "summary_averages": "Period Averages",
       "weekly_trend": "Weekly Trend",
-      "anchor_date": "Batch 1 anchor"
+      "anchor_date": "Batch 1 anchor",
+      "tokens_unreported": "{{count}} Developer turns had no reported token count and are left out of the average."
     }
   },
   "memorySearch": {

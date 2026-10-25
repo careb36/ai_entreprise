@@ -904,7 +904,8 @@
       "empty": "Aún no hay datos semanales. Ejecuta sprints para poblar las métricas de salud de orquestación.",
       "summary_averages": "Promedios por Período",
       "weekly_trend": "Tendencia Semanal",
-      "anchor_date": "Ancla Lote 1"
+      "anchor_date": "Ancla Lote 1",
+      "tokens_unreported": "{{count}} turnos del Desarrollador no informaron tokens y quedan fuera del promedio."
     }
   },
   "memorySearch": {

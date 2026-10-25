@@ -8,7 +8,10 @@ from data that the task pipeline must write in a specific shape:
 1. **QA NEEDS WORK rate** — ``audit_log`` rows where
    ``details->>'role' = 'QA'`` and ``details->>'result_type' = 'NEEDS_WORK'``.
 2. **Avg Developer tokens** — ``audit_log.cost_tokens`` for rows where
-   ``details->>'role' = 'Developer'``.
+   ``details->>'role' = 'Developer'`` and the proxy reported the usage
+   (``details->>'tokens' = 'reported'``; older rows without the key count
+   when their total is above zero). Turns without a reported count are
+   counted apart, never averaged in as zero.
 3. **Architect consult frequency** — ``backlog_items.comments`` entries authored
    by ``Architect`` whose text starts with ``ARCHITECT_CONSULTED:``.
 
@@ -136,6 +139,32 @@ def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
     if total:
         return total
     return _as_int(usage.get("prompt_tokens")) + _as_int(usage.get("completion_tokens"))
+
+
+TOKENS_REPORTED = "reported"
+TOKENS_UNAVAILABLE = "unavailable"
+
+
+def usage_status(llm_result: dict[str, Any] | None) -> str:
+    """Whether the proxy reported the call's token usage: ``reported`` or ``unavailable``.
+
+    ``extract_usage_tokens`` returns 0 for a call whose usage is missing or
+    malformed; this tells that 0 apart from a call that really used none, so
+    the KPIs leave unknown counts out of an average instead of counting them
+    as zero.
+    """
+    if not isinstance(llm_result, dict) or not isinstance(
+        llm_result.get("usage"), dict
+    ):
+        return TOKENS_UNAVAILABLE
+    usage = llm_result["usage"]
+    for key in ("total_tokens", "prompt_tokens", "completion_tokens"):
+        try:
+            int(usage.get(key))
+        except (TypeError, ValueError):
+            continue
+        return TOKENS_REPORTED
+    return TOKENS_UNAVAILABLE
 
 
 def classify_review_result(review_text: str | None) -> str | None:
@@ -343,6 +372,8 @@ def record_agent_turn(
         agent_name=agent.get("name"),
         result_type=result_type,
     )
+    # Unknown is not zero: the KPI average reads this to leave such turns out.
+    details["tokens"] = usage_status(llm_result)
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]

@@ -421,7 +421,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 
 | File | What it covers |
 |------|----------------|
-| `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
+| `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior; how many Developer turns had no reported token count, shown only when some did |
 | `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option; a Viewer reads the agents with nothing to change them, a Manager changes them |
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
 | `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |

@@ -223,18 +223,23 @@ async def get_orchestration_health(
         ORDER BY 1
     """)
 
-    tokens_sql = text("""
+    reported = "COALESCE(a.details->>'tokens', CASE WHEN a.cost_tokens > 0 THEN 'reported' END) = 'reported'"
+    tokens_sql = text(
+        """
         SELECT
             to_char(date_trunc('week', a.created_at), 'IYYY-"W"IW') AS week,
-            COALESCE(AVG(a.cost_tokens), 0) AS avg_developer_tokens,
-            COUNT(*) AS developer_turn_count
+            -- Turns whose usage the proxy did not report are counted apart, not averaged as zero.
+            COALESCE(AVG(a.cost_tokens) FILTER (WHERE {reported}), 0) AS avg_developer_tokens,
+            COUNT(*) FILTER (WHERE {reported}) AS developer_turn_count,
+            COUNT(*) FILTER (WHERE NOT ({reported})) AS developer_turns_without_tokens
         FROM audit_log a
         WHERE a.details->>'role' = 'Developer'
           AND NULLIF(a.details->>'company_id', '')::int = :company_id
           AND a.created_at >= :cutoff
         GROUP BY 1
         ORDER BY 1
-    """)
+    """.replace("{reported}", reported)
+    )
 
     consult_sql = text("""
         SELECT
@@ -290,6 +295,9 @@ async def get_orchestration_health(
                     consult_row.get("architect_consult_count", 0)
                 ),
                 task_count=int(qa_row.get("task_count", 0)),
+                developer_turns_without_tokens=int(
+                    token_row.get("developer_turns_without_tokens", 0) or 0
+                ),
                 post_batch1=week_label >= anchor_week,
             )
         )
