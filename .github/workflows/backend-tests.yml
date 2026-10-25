@@ -55,12 +55,15 @@ jobs:
 
       - name: Run llm-proxy tests
         working-directory: .
+        env:
+          # El proxy tiene su propio pyproject y necesita un venv separado.
+          POETRY_VIRTUALENVS_CREATE: "true"
+          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-llm
         run: |
-          # Con POETRY_VIRTUALENVS_CREATE=false, Poetry usa el venv activo del job;
-          # poetry env info --path devolvería la Python base de uv.
           (cd llm-proxy && poetry install --no-interaction --no-root)
-          python -m pip install -r llm-proxy/requirements-dev.txt
-          python -m pytest llm-proxy/tests -q
+          PROXY_PYTHON="$(cd llm-proxy && poetry env info --path)/bin/python"
+          "$PROXY_PYTHON" -m pip install -r llm-proxy/requirements-dev.txt
+          "$PROXY_PYTHON" -m pytest llm-proxy/tests -q
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
