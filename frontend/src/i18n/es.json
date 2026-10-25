@@ -1257,6 +1257,7 @@
     "unixLabel": "macOS / Ubuntu",
     "windowsLabel": "Windows (PowerShell)",
     "statusError": "Estado del daemon del espacio de trabajo no disponible: {{message}}",
+    "unknown": "No se puede saber si el daemon del espacio de trabajo está corriendo: {{reason}}. Puede estar corriendo; vuelve a comprobarlo en un momento.",
     "platforms": {
       "darwin": "macOS",
       "linux": "Ubuntu/Linux",

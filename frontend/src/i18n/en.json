@@ -1257,6 +1257,7 @@
     "unixLabel": "macOS / Ubuntu",
     "windowsLabel": "Windows (PowerShell)",
     "statusError": "Workspace daemon status unavailable: {{message}}",
+    "unknown": "Cannot tell whether the workspace daemon is running: {{reason}}. It may be running; check again in a moment.",
     "platforms": {
       "darwin": "macOS",
       "linux": "Ubuntu/Linux",

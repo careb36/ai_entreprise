@@ -78,7 +78,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
    table (`users`, `companies`, help-desk tickets, outbox events). From buzz
    `crates/buzz-db/src/runtime/migration.rs`. POSITIONING calls tenant scoping
    expensive to retrofit; this keeps it from wearing away.
-7. **The daemon is connected, absent or unknown (S)**, with the reason, and
+7. **The daemon is connected, absent or unknown (S)** (done 2026-10-25), with the reason, and
    the web app shows "unknown" as unknown. From buzz
    `docs/agent-availability.md`. It is POSITIONING's rule 7 ("unknown is not
    absent") applied to the daemon.

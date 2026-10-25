@@ -393,7 +393,7 @@ describe('project folder on the user\'s computer', () => {
   })
 
   function renderWizard() {
-    render(
+    return render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <CompanyNew />
@@ -410,6 +410,27 @@ describe('project folder on the user\'s computer', () => {
     expect(input).toHaveAttribute('placeholder', '~/code/my-app')
     expect(screen.getByRole('button', { name: '🔍 Scan' })).toBeDisabled()
     expect(screen.getByText('Workspace daemon connected on ana-mbp (macOS)')).toBeInTheDocument()
+  })
+
+  it('says it cannot tell when the daemon state is unknown, and shows how to start it only when absent', () => {
+    daemon.status = {
+      data: { connected: false, state: 'unknown', reason: 'no answer within 3 s', host: null, jetstream: true },
+      isPending: false,
+      error: null,
+    }
+    const { unmount } = renderWizard()
+    expect(screen.getByText(/Cannot tell whether the workspace daemon is running: no answer within 3 s/)).toBeInTheDocument()
+    expect(screen.queryByText('./scripts/start-daemon.sh')).not.toBeInTheDocument()
+    unmount()
+
+    daemon.status = {
+      data: { connected: false, state: 'absent', reason: 'no daemon is listening', host: null, jetstream: true },
+      isPending: false,
+      error: null,
+    }
+    renderWizard()
+    expect(screen.queryByText(/Cannot tell whether/)).not.toBeInTheDocument()
+    expect(screen.getByText('./scripts/start-daemon.sh')).toBeInTheDocument()
   })
 
   it('inspects the folder chosen in the picker and shows the canonical path, provider and branch', async () => {
