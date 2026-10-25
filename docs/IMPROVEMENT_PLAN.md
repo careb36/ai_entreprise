@@ -48,12 +48,12 @@ deterministic code decides. What they add is mostly rigour around that rule.
    Feature PRs land on `develop`; a release PR promotes it to `main` and a
    person merges it, as `CONTRIBUTING.md` already required ("agents do not
    merge to `main`"). `CONTRIBUTING.md` has a Branches section.
-2. **Pin CI actions by commit SHA** with the version in a comment, and add
-   Renovate (or Dependabot) with digest pinning, a few days' delay after a
+2. **Pin CI actions by commit SHA** (done 2026-10-25) with the version in a comment, and add
+   Renovate (or Dependabot; Dependabot was chosen, `.github/dependabot.yml`) with digest pinning, a few days' delay after a
    release and no auto-merge of major updates. From buzz
    (`renovate.json`, `_ci-security.yml`). A verification product should not
    run code from a moving branch in its own CI.
-3. **A PR template that separates claims from observations.** Required
+3. **A PR template that separates claims from observations** (done 2026-10-25). Required
    sections: commands run with their exit status or CI link; what the agent
    exercised (a claim); what a person tested (an attestation the agent never
    ticks); which AI tool was used and for what. From buzz's `AGENTS.md`
