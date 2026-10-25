@@ -72,7 +72,8 @@ deterministic code decides. What they add is mostly rigour around that rule.
    `service.rs`), which also cuts timestamps to the precision Postgres stores
    before hashing. Files: `audit_signing.py`, `models/audit.py`, the audit
    verification route, `database.py` for the new columns.
-6. **A test that every table carries `company_id` (S)**, over
+6. **A test that every table carries `company_id` (S)** (done 2026-10-25,
+   `tests/test_tenant_scoping.py`), over
    `Base.metadata`, with an allowlist that states a reason for each global
    table (`users`, `companies`, help-desk tickets, outbox events). From buzz
    `crates/buzz-db/src/runtime/migration.rs`. POSITIONING calls tenant scoping
