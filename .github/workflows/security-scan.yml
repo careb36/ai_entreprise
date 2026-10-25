@@ -8,6 +8,13 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
+
+# One self-hosted runner takes jobs one at a time: a new push cancels the
+# runs of the commit it replaces instead of queueing behind them.
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   security:
     runs-on: [self-hosted, linux, x64, lafabrique]

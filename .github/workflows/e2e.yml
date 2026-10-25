@@ -17,6 +17,13 @@ on:
       - 'scripts/e2e/**'
       - '.github/workflows/e2e.yml'
 
+
+# One self-hosted runner takes jobs one at a time: a new push cancels the
+# runs of the commit it replaces instead of queueing behind them.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
     runs-on: [self-hosted, linux, x64, lafabrique]

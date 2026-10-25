@@ -9,6 +9,13 @@ on:
       - 'frontend/**'
       - '.github/workflows/frontend-tests.yml'
 
+
+# One self-hosted runner takes jobs one at a time: a new push cancels the
+# runs of the commit it replaces instead of queueing behind them.
+concurrency:
+  group: frontend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: [self-hosted, linux, x64, lafabrique]
