@@ -397,6 +397,13 @@ pushes to `main` and `develop`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
 artifact.
 
+`scripts/check_file_sizes.py` is a ratchet on file size: a source file
+(backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
+stays at or under 600 lines, and the files already over it, listed with
+their size in `scripts/file_size_baseline.json`, may shrink but never grow.
+When one shrinks, `--update` lowers its entry. CI runs it on every pull
+request that touches source (`.github/workflows/file-sizes.yml`).
+
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
 repo root with the proxy's Poetry environment plus

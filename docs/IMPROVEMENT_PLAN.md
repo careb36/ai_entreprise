@@ -162,7 +162,10 @@ deterministic code decides. What they add is mostly rigour around that rule.
     prompt for a task with no `files_written` observation yet, so the run
     fails at the boundary instead of in an assertion afterwards. From
     gentle-ai `docs/testing-agents-deterministically.md`.
-18. **Ratchets for file size and dead code (S each).** A file over its size
+18. **Ratchets for file size and dead code (S each).** File size done
+    2026-10-25 (`scripts/check_file_sizes.py`, 600 lines, baseline in
+    `scripts/file_size_baseline.json`, `.github/workflows/file-sizes.yml`);
+    the dead-code ratchet still to follow. A file over its size
     limit may not grow (only changed files are checked); a new unreachable
     function fails CI against a baseline (`vulture`). From buzz
     `scripts/check-file-sizes-core.mjs` and gentle-ai
