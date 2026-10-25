@@ -27,7 +27,9 @@ concurrency:
 jobs:
   e2e:
     runs-on: [self-hosted, linux, x64, lafabrique]
-    timeout-minutes: 25
+    # The self-hosted runner installs the backend before the loop starts
+    # (about 20 minutes on a cold cache); the loop itself takes about 10.
+    timeout-minutes: 50
 
     services:
       postgres:
