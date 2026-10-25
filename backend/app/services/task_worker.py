@@ -49,6 +49,7 @@ from services import (
     agent_run_service,
     console_assistants,
     procedures,
+    risk,
     scrum_master,
     workspace_daemon,
 )
@@ -57,7 +58,9 @@ from services.architect import track_record_context as architect_record_context
 from services.board import (
     DELIVERY_GATE_AUTHOR,
     QUALITY_GATE_AUTHOR,
+    RISK_HOLD_PREFIX,
     SCRUM_MASTER_ROLE,
+    awaits_risk_acceptance,
     block_reason,
     blocked_item_next_step,
     comment_list,
@@ -354,7 +357,14 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
             sprint = session.get(Sprint, sprint_id)
             total = len(items)
             done = sum(1 for i in items if i.status == "done")
-            blocked = sum(1 for i in items if i.status == "blocked")
+            # An approved high-risk delivery waiting for a person is not a
+            # failure: counted apart from the blocked tasks.
+            awaiting_person = sum(
+                1
+                for i in items
+                if i.status == "blocked" and awaits_risk_acceptance(i.comments)
+            )
+            blocked = sum(1 for i in items if i.status == "blocked") - awaiting_person
             rework_count = 0
             qa_fail_count = 0
             blocked_reasons: list[str] = []
@@ -375,7 +385,7 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                         or "qa review failed" in text.lower()
                     ):
                         qa_fail_count += 1
-                if item.status == "blocked":
+                if item.status == "blocked" and not awaits_risk_acceptance(comments):
                     reason = block_reason(comments) or (
                         extract_latest_reviewable_comment(
                             comments, assignee_role=item.assignee
@@ -390,6 +400,7 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
                 "total_tasks": total,
                 "done_tasks": done,
                 "blocked_tasks": blocked,
+                "awaiting_person_tasks": awaiting_person,
                 "completion_rate": round(done / total * 100) if total else 0,
                 "rework_cycles": rework_count,
                 "qa_failures": qa_fail_count,
@@ -1760,6 +1771,35 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
     ingest a run with any producer and reference, so a run is only trusted
     when it belongs to the same company as the task.
     """
+    verification = _latest_task_verification(company_id, item_id)
+    if verification is None:
+        return None
+    if (verification.evidence or {}).get("delivery_queued"):
+        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
+    for check in verification.checks or []:
+        name, outcome = check.get("name"), check.get("outcome")
+        if name == "files_written" and outcome == VERDICT_REFUTED:
+            return "delivery refuted", check.get("observation", "")
+        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
+            return "delivery unconfirmed", check.get("observation", "")
+        if name == "tests_run" and outcome == VERDICT_REFUTED:
+            return "tests failed", check.get("observation", "")
+    return None
+
+
+def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
+    """The Verifier's ``risk_tier`` check on the task's latest delivery, if any."""
+    verification = _latest_task_verification(company_id, item_id)
+    if verification is None:
+        return None
+    for check in verification.checks or []:
+        if check.get("name") == "risk_tier":
+            return check
+    return None
+
+
+def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
+    """The latest verification of the task worker's run for this task, in its company."""
     with Session(engine) as session:
         run = session.exec(
             select(AgentRun)
@@ -1777,19 +1817,7 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
             .where(Verification.agent_run_id == run.id)
             .order_by(Verification.id.desc())
         ).first()
-    if verification is None:
-        return None
-    if (verification.evidence or {}).get("delivery_queued"):
-        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
-    for check in verification.checks or []:
-        name, outcome = check.get("name"), check.get("outcome")
-        if name == "files_written" and outcome == VERDICT_REFUTED:
-            return "delivery refuted", check.get("observation", "")
-        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
-            return "delivery unconfirmed", check.get("observation", "")
-        if name == "tests_run" and outcome == VERDICT_REFUTED:
-            return "tests failed", check.get("observation", "")
-    return None
+    return verification
 
 
 def _sha256_text(content: str) -> str:
@@ -3081,6 +3109,25 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         f"{normalized_review[:120]!r}"
                     )
                 needs_work = verdict == RESULT_NEEDS_WORK
+                # Approved, but a high-risk delivery waits for a person at
+                # every autonomy level (services/risk.py).
+                risk_check = (
+                    None
+                    if needs_work
+                    else await asyncio.to_thread(
+                        _delivery_risk, sprint.company_id, item.id
+                    )
+                )
+                if risk_check is None and not needs_work:
+                    # No recorded check (the run was not recorded): unknown is
+                    # not low, so the paths the deliverable declares decide; a
+                    # claim, which can only raise the tier.
+                    risk_check = risk.classify(
+                        [f["path"] for f in parse_file_manifest(deliverable)]
+                    )
+                risk_hold = risk_check is not None and risk.is_high(
+                    risk_check.get("tier")
+                )
 
                 # Append review comment
                 comments.append(
@@ -3105,7 +3152,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 if needs_work:
                     item.status = "todo" if autopilot_rework_allowed else "blocked"
                 else:
-                    item.status = "done"
+                    item.status = "blocked" if risk_hold else "done"
                 item.updated_at = datetime.now(UTC)
 
                 if needs_work:
@@ -3129,6 +3176,22 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
                     item.comments = comments
 
+                risk_note = None
+                if risk_hold:
+                    risk_reasons = "; ".join(risk_check.get("reasons") or [])
+                    risk_note = (
+                        f"{RISK_HOLD_PREFIX} ({risk_reasons or 'high tier'}). "
+                        "Mark it done to accept it, or send it back to work."
+                    )
+                    comments.append(
+                        {
+                            "author": "System",
+                            "text": risk_note,
+                            "created_at": datetime.now(UTC).isoformat(),
+                        }
+                    )
+                    item.comments = comments
+
                 session.add(item)
                 session.add(
                     _message(
@@ -3142,6 +3205,21 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         normalized_review[:2000],
                     )
                 )
+                if risk_note is not None:
+                    # To a person, not the ScrumMaster: its triage decides
+                    # retries, and this delivery was approved.
+                    session.add(
+                        _message(
+                            sprint.company_id,
+                            sprint.id,
+                            item.id,
+                            DELIVERY_GATE_AUTHOR,
+                            DELIVERY_GATE_AUTHOR,
+                            "Manager",
+                            "escalation",
+                            risk_note,
+                        )
+                    )
                 escalation = None
                 if needs_work and not autopilot_rework_allowed:
                     escalation = _message(
@@ -3223,6 +3301,31 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                             previous_reworks + 1,
                             AUTOPILOT_MAX_REWORK_CYCLES,
                         )
+                elif risk_hold:
+                    await publish_glassroom(
+                        nats_client,
+                        sprint.id,
+                        {
+                            "type": "status",
+                            "semantic_type": "task.awaiting_person",
+                            "source": "task_worker",
+                            "agent": DELIVERY_GATE_AUTHOR,
+                            "role": "System",
+                            "task_id": item.id,
+                            "task_status": "blocked",
+                            "phase": "risk_hold",
+                            "risk_tier": risk_check.get("tier"),
+                            "task": f"Reviewed: {item.title}",
+                            "message": f"🛡️ {reviewer_dict['name']} approved {item.title}; "
+                            "high-risk delivery, waiting for a person to accept it.",
+                            "preview": "; ".join(risk_check.get("reasons") or [])[:200],
+                        },
+                    )
+                    logger.info(
+                        "Reviewed item=%s → blocked (high risk, awaiting a person)",
+                        item.id,
+                    )
+                    await _finalize_sprint_if_ready(nats_client, sprint.id)
                 else:
                     await publish_glassroom(
                         nats_client,

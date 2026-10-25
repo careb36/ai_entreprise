@@ -17,6 +17,7 @@ import math
 from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
+from usage import estimated_usage, openai_reported_count, openai_text, reported_count, with_usage
 
 # --- OpenTelemetry ---
 from opentelemetry import trace
@@ -600,8 +601,7 @@ def _call_openai_compatible(provider: str, model: str, data: dict, timeout: floa
     )
     if not result.get("choices"):
         raise UpstreamError(provider, model, status, "response contained no choices", retriable=False)
-    tokens = (result.get("usage") or {}).get("total_tokens", 0)
-    return result, tokens
+    return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))
 
 
 def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
@@ -628,13 +628,9 @@ def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
     except (KeyError, IndexError, TypeError):
         reason = (res.get("promptFeedback") or {}).get("blockReason") or "no candidates"
         raise UpstreamError("gemini", model, status, f"response had no text ({reason})", retriable=False)
-    tokens = (len(str(messages)) + len(text_out)) // 4
-    result = {
-        "choices": [{"message": {"role": "assistant", "content": text_out}}],
-        "usage": {"total_tokens": tokens},
-        "model": model,
-    }
-    return result, tokens
+    result = {"choices": [{"message": {"role": "assistant", "content": text_out}}], "model": model}
+    reported = reported_count((res.get("usageMetadata") or {}).get("totalTokenCount"))
+    return with_usage(result, reported, messages, text_out)
 
 
 def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
@@ -753,11 +749,13 @@ def embeddings():
             body = resp.json()
             values = body.get("embedding", {}).get("values") or []
             if values:
-                track_usage_in_db(bu_id, max(1, len(input_text) // 4))
+                estimate = max(1, len(input_text) // 4)
+                track_usage_in_db(bu_id, estimate)
                 return jsonify(
                     {
                         "data": [{"embedding": values, "index": 0}],
                         "model": "text-embedding-004",
+                        **estimated_usage(estimate),
                     }
                 )
 

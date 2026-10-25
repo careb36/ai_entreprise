@@ -107,7 +107,11 @@ Copy `.env.example` to `.env` and fill in:
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL.
-- `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256.
+- `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256, and keys
+  each company's audit hash chain (`audit_chain.py`: every company row carries
+  `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
+  a deleted, inserted, reordered, altered or moved row breaks it). Without a
+  key the chain is unkeyed and says so.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
   the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
@@ -138,17 +142,17 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Key Components
 
-**`backend/app/main.py`** — All FastAPI routes (single large file). Responsible for: company init, sprint management, kanban board state, memory search/store, enterprise quotas, support tickets, and analytics.
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`).
 
 **`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
 **`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. Use `model_preference="fast"` (flash models) or `"powerful"` (pro models).
 
-**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly.
+**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly. Each answer says how its token count is known (`llm-proxy/usage.py`): `usage_status: reported` with the provider's figure in `usage`, or `estimated` with a characters/4 estimate apart in `usage_estimate` (charged to the quota, never shown as usage); the backend's `usage_status` keeps estimates out of the KPI averages.
 
 **`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
 
-**`backend/app/routers/workspace.py`** / **`services/workspace_daemon.py`** — `GET /v1/workspace/{status,browse,inspect}` relay the picker and project check to the daemon (503 with start instructions when none is connected). `POST /v1/discover_team` inspects the folder through the daemon and runs stack detection on its file snapshot (`materialized_snapshot`), recording the host path.
+**`backend/app/routers/workspace.py`** / **`services/workspace_daemon.py`** — `GET /v1/workspace/{status,browse,inspect}` relay the picker and project check to the daemon (503 with start instructions when none is connected). `status` reports `state`: `connected`, `absent` (NATS says nothing listens) or `unknown` (NATS unreachable, no answer in time, or an error reply), with a `reason`; unknown is never shown as stopped. `POST /v1/discover_team` inspects the folder through the daemon and runs stack detection on its file snapshot (`materialized_snapshot`), recording the host path.
 
 **`backend/app/services/board.py`** — The pure readers of a task's comment thread, shared by the task worker, `routers/inbox.py` and `services/carry_over.py`: which comment is the deliverable to review, the pending `NEEDS WORK:` requests, whether a blocked task waits for a person (`blocked_item_next_step`, `item_is_settled`) and its `block_reason`. No engine, no I/O; the gate author names (`Quality gate`, `Verifier`) live here too. The advice a task got (the worker's console-advice note, the Architect's `ARCHITECT_CONSULTED:` brief) is never a verdict, and the phrases that keep a task blocked count only from the system, a gate or a person (`BLOCK_VERDICT_AUTHORS`), never from a deliverable.
 
@@ -200,7 +204,15 @@ the LangGraph graph is only an optional kickoff conversation.
    (daemon reports) are kept apart; the board and Glassroom show the verdict.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
-   `APPROVED:` closes the task. Before any of that, the text checks on the
+   `APPROVED:` closes the task. The Verifier also records a `risk_tier` check
+   (`services/risk.py`: high for authentication, secrets, payments or the CI
+   pipeline, medium for shell scripts, migrations, dependency manifests or
+   container files, from the paths the daemon wrote and the producer declared;
+   a producer may raise it with a reason, never lower it). An approved task
+   whose tier is high waits for a person at every autonomy level, level 3
+   included: the inbox lists it with `risk_hold`, a Manager accepts it (marks
+   it done) or sends it back, and it counts neither as blocked in the
+   procedures' numbers nor as a task to carry over on the company's own. Before any of that, the text checks on the
    deliverable (length, sections, balanced fences — `_validate_minimum_deliverable`)
    send it back with the reason as `Quality gate`, up to
    `AUTOPILOT_MAX_REWORK_CYCLES`, then block the task and escalate to the
@@ -313,6 +325,8 @@ Test files:
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
 | `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on; the Architect's brief is never a verdict either, a deliverable's words are not a block reason, and a briefed task's rework counts from the brief on |
+| `test_risk_tier.py` | The risk tier: each area a path marks, look-alike words left low, the highest path decides, a producer raises but never lowers it, the Verifier's check never decides the verdict; an approved high-risk task waits for a person at autonomy 3, settles the sprint, is listed as `risk_hold`, is not a failure in the procedures' numbers and is not carried over on the company's own |
+| `test_history_check.py` | The independent checker of task histories (`app/history_check.py`): done needs an approval or a person, an approval needs a deliverable before it and a verified latest run (unless a person closed it), a high-risk hold closes only through a person, a task is carried over once, a ScrumMaster decision answers an escalation of its own task; the database is read the same way, and the checker imports none of the production readers |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
@@ -337,6 +351,8 @@ Test files:
 | `test_cross_company_access.py` | Only a Manager sets where a company's agents write (`discover_team`), `/v1/generate` bills only the company's own business unit, a sprint's tokens are its own company's |
 | `test_glassroom_access.py` | The Glassroom stream with authentication required: a sprint-scoped ticket for a Viewer, refused without one, with an access token, another sprint's or an expired one, and once its holder left the company |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
+| `test_audit_chain.py` | The audit hash chain per company: numbered and linked rows, each company its own chain, a deleted, altered or moved row breaks it where it was, a chain rewritten without the key does not verify, unkeyed chains say so, rows without a company stay unchained, KPI turn rows are signed and chained too |
+| `test_tenant_scoping.py` | Every table carries a required `company_id` that references `companies`, or is listed with its reason (the tenant, users, help-desk tickets, the outbox, backlog items through their sprint); `audit_log` alone may hold rows without a company; the lists hold no stale names |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -367,7 +383,15 @@ Then the Reviewer agent (enabled too): a run ingested from another
 producer gets a suggested decision beside no approval, a Manager decides
 against it, `/v1/agent_runs/reviewer_record` counts the miss beside what the
 Verifier's verdict alone would have decided, and the next run's prompt
-carries that record.
+carries that record. Then a task whose file marks authentication is approved
+by QA and still waits for a person (the risk tier, at autonomy level 3), the
+inbox lists it as a high-risk hold, and a Manager accepts it.
+At the end, `app/history_check.py` reads every task's history from the run's
+database, sharing no code with the readers it checks, and the run fails on
+an illegal one.
+The fake model also checks the loop's order from its side: a QA review of a
+task must follow a delivery of it, one review per delivery, and show QA the
+files that delivery wrote; a violation fails the run.
 Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 `python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
@@ -377,11 +401,24 @@ pushes to `main` and `develop`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
 artifact.
 
+`scripts/check_file_sizes.py` is a ratchet on file size: a source file
+(backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
+stays at or under 600 lines, and the files already over it, listed with
+their size in `scripts/file_size_baseline.json`, may shrink but never grow.
+When one shrinks, `--update` lowers its entry. CI runs it on every pull
+request that touches source (`.github/workflows/file-sizes.yml`).
+
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,
 `unknown_model` 400s, upstream errors, catalogue-only fallback), run from the
 repo root with the proxy's Poetry environment plus
 `llm-proxy/requirements-dev.txt`: `python -m pytest llm-proxy/tests -q`. CI
 runs it after the backend tests.
+
+CI jobs run on the self-hosted runner labelled `lafabrique`
+(`runs-on: [self-hosted, linux, x64, lafabrique]`), not on GitHub-hosted
+machines; only the SLSA release generator stays on `ubuntu-latest`. The
+runner keeps its state between jobs, so a job cleans up what it starts (the
+e2e removes its NATS container) and avoids the ports a local stack uses.
 
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
@@ -415,7 +452,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 
 | File | What it covers |
 |------|----------------|
-| `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior |
+| `src/components/AnalyticsDashboard.test.tsx` | Orchestration health KPI rendering, loading/error handling, empty state, and pre/post Batch 1 weekly trend behavior; how many Developer turns had no reported token count, shown only when some did |
 | `src/pages/AgentSettings.test.tsx` | Model selector lists `/v1/models` entries after a "Default for role" option; a Viewer reads the agents with nothing to change them, a Manager changes them |
 | `src/i18n/coverage.test.ts` | Every statically referenced translation key exists in both `en.json` and `es.json` |
 | `src/App.test.tsx` | Navigation order, capability-gated links, redirects, language switcher |
@@ -425,7 +462,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
-| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs with the Reviewer agent's suggestion beside each and its record against the decisions, how earlier second attempts went beside the blocked tasks, Viewer and error states |
+| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", "Accept" on an approved high-risk delivery only, proposals linked to Procedures, undecided runs with the Reviewer agent's suggestion beside each and its record against the decisions, how earlier second attempts went beside the blocked tasks, Viewer and error states |
 | `src/pages/EvidenceDetail.test.tsx` | Run page: claims beside observations, audit rows, the review form's validation and body, task links; the Reviewer agent's suggestion shown as a claim beside the review form, and when it could not suggest |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
@@ -465,10 +502,12 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 ## Documentation
 
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
+- Branches: pull requests for the web product land on `develop`; a release pull request promotes `develop` to `main`, and a person merges it (`CONTRIBUTING.md`, Branches).
 - The Glassroom VR entry for the Meta VR Start Developer Competition lives on
   the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
+- [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md) — Improvement plan for the web product, from a reading of block/buzz and gentle-ai
 - [`runbook.md`](runbook.md) — Production hardening guide
 - [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) — Current refactoring strategy

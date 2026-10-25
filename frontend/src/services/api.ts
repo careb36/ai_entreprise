@@ -328,6 +328,10 @@ export interface WorkspaceHost {
 
 export interface WorkspaceStatus {
   connected: boolean
+  /** connected, absent (nothing listens) or unknown (the backend cannot tell); older backends omit it. */
+  state?: 'connected' | 'absent' | 'unknown'
+  /** Why the state is absent or unknown. */
+  reason?: string | null
   host: WorkspaceHost | null
   jetstream?: boolean
 }
@@ -459,6 +463,8 @@ export interface OrchestrationHealthWeek {
   architect_consult_count: number
   task_count: number
   post_batch1: boolean
+  /** Developer turns whose token usage was not reported: left out of the average, not counted as zero. */
+  developer_turns_without_tokens?: number
 }
 
 export interface OrchestrationHealthSummary {
@@ -562,6 +568,8 @@ export interface InboxBlockedTask {
   /** The ScrumMaster's answer to the escalation, when it gave one: a claim for the person to weigh. */
   triage: { decision: 'retry' | 'person'; why: string; brief: string } | null
   frozen: boolean
+  /** Approved by QA but high risk: waits for a person to accept it (mark it done) or send it back. */
+  risk_hold?: boolean
   updated_at: string | null
 }
 

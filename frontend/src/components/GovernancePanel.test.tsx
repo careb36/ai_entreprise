@@ -141,6 +141,34 @@ describe('GovernancePanel', () => {
     expect(mutate).toHaveBeenCalledWith({ itemId: 7, data: { status: 'todo', comment: 'Sent back to work by a person.' } })
   })
 
+  it('lets a Manager accept an approved high-risk delivery, or send it back', () => {
+    mockedUseInbox.mockReturnValue({
+      data: {
+        ...INBOX,
+        blocked_tasks: [{
+          id: 9, title: 'Rework login', assignee: 'Developer', sprint_id: 2, sprint_name: 'S2', sprint_status: 'active',
+          reason: 'High-risk delivery approved by QA, waiting for a person to accept it (authentication: app/auth.py).',
+          triage: null, frozen: false, risk_hold: true, updated_at: null,
+        }],
+      },
+      isLoading: false, isError: false, refetch: vi.fn(),
+    } as never)
+    render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
+
+    const blocked = screen.getByRole('region', { name: /Tasks blocked until someone acts/ })
+    expect(within(blocked).getByText('Approved by QA, but high risk: a person accepts it or sends it back.')).toBeInTheDocument()
+    expect(within(blocked).getByRole('button', { name: 'Send back to work' })).toBeInTheDocument()
+
+    fireEvent.click(within(blocked).getByRole('button', { name: 'Accept' }))
+
+    expect(mutate).toHaveBeenCalledWith({ itemId: 9, data: { status: 'done', comment: 'High-risk delivery accepted by a person.' } })
+  })
+
+  it('offers Accept only on a high-risk hold', () => {
+    render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
+  })
+
   it('links proposals to the procedures page and counts undecided runs', () => {
     render(<MemoryRouter><GovernancePanel /></MemoryRouter>)
 

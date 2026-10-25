@@ -30,6 +30,13 @@
 #      agent beside the reporter's choice; a support admin decides, the
 #      agent's record counts the decision, and the next ticket's prompt
 #      carries that record.
+#   7. A run from another producer gets the Reviewer agent's suggestion.
+#   8. A task whose file marks authentication is approved by QA and still
+#      waits for a person (the risk tier, at autonomy level 3 too); a
+#      Manager accepts it.
+#   9. Every task's history is legal, read by app/history_check.py, which
+#      shares no code with the readers it checks.
+#  10. QA only reviewed delivered work (the fake model's order check).
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -59,6 +66,8 @@ mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
 API=http://127.0.0.1:$BACKEND_PORT
 PROMPTS=$WORK/fake_llm.prompts.log
+VIOLATIONS=$WORK/fake_llm.violations.log
+: > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
 FAILED=0
 
 check() {  # check <description> <shell test...>
@@ -87,7 +96,7 @@ ADVICE="Fake Copilot advice: keep each module beside its test."
 mkdir -p "$WORK/bin"
 printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
-FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
+FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
   NATS_URL=$NATS_URL WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
@@ -247,6 +256,31 @@ check "the agent's record counts the miss, beside the Verifier's verdict ($VERDI
 R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
 check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
 check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
+
+echo "8. a high-risk delivery waits for a person"
+# Its file name marks authentication (services/risk.py): QA's approval does
+# not close it, at autonomy level 3 too; a Manager accepts it.
+NEW3=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Sprint 3\", \"start_date\": \"2026-01-04\", \"scope_size\": \"S\",
+  \"backlog_items\": [{\"title\": \"Add login check\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"}]}")
+S3=$(echo "$NEW3" | json "d.get('sprint_id', '')")
+RISKY=$(echo "$NEW3" | json "d.get('backlog_item_ids', [''])[0]")
+check "Sprint 3 closes around the held task" wait_sprint "$S3"
+check "QA approved it, and it waits for a person" test "$(board "$S3")" = "Add login check=blocked"
+check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?company_id=$CID" | json "[(t['title'], t['risk_hold'], 'authentication: src/add_login_check.py' in t['reason']) for t in d['blocked_tasks'] if t['sprint_id'] == $S3]")" = "[('Add login check', True, True)]"
+ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
+check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
+
+echo "9. every task's history, read independently"
+# app/history_check.py imports none of the production readers it checks.
+HISTORY=$(cd "$REPO/backend" && POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER \
+  POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB PYTHONPATH=.:app "$PY" app/history_check.py 2>&1)
+check "no illegal history (done without approval or verified delivery, carried twice, stray decision)" test "$(echo "$HISTORY" | tail -1)" = "0 illegal history(ies)"
+echo "$HISTORY" | grep -v "illegal history" | sed 's/^/       /'
+
+echo "10. the loop's order, seen from the model"
+check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
+[ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi

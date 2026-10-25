@@ -15,8 +15,8 @@ from services.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
     DaemonUnavailable,
+    daemon_presence,
     daemon_request,
-    daemon_status,
     inspect_project,
     without_snapshot,
 )
@@ -41,11 +41,19 @@ async def workspace_status(
     request: Request,
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Whether a workspace daemon is connected, and on which machine."""
+    """Whether a workspace daemon is connected, absent or unknown, and on which machine.
+
+    ``state`` is ``connected``, ``absent`` (nothing listens) or ``unknown``
+    (NATS unreachable, no answer in time, or an error reply), with ``reason``;
+    ``connected`` stays for older clients.
+    """
     require_authenticated(user)
-    status = await daemon_status(_nats(request))
+    presence = await daemon_presence(_nats(request))
+    status = presence["status"]
     return {
-        "connected": status is not None,
+        "connected": presence["state"] == "connected",
+        "state": presence["state"],
+        "reason": presence["reason"],
         "host": (status or {}).get("host"),
         "jetstream": bool(getattr(request.app.state, "jetstream", False)),
     }

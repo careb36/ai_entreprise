@@ -17,10 +17,19 @@ on:
       - 'scripts/e2e/**'
       - '.github/workflows/e2e.yml'
 
+
+# One self-hosted runner takes jobs one at a time: a new push cancels the
+# runs of the commit it replaces instead of queueing behind them.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    # The self-hosted runner installs the backend before the loop starts
+    # (about 20 minutes on a cold cache); the loop itself takes about 10.
+    timeout-minutes: 50
 
     services:
       postgres:
@@ -29,8 +38,10 @@ jobs:
           POSTGRES_USER: factory
           POSTGRES_PASSWORD: factorypw
           POSTGRES_DB: factory
+        # Not the default ports: the self-hosted runner's machine may run the
+        # project's own stack on 5432 and 4222.
         ports:
-          - 5432:5432
+          - 55432:5432
         options: >-
           --health-cmd "pg_isready -U factory"
           --health-interval 5s
@@ -38,21 +49,23 @@ jobs:
           --health-retries 12
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # A service container cannot be given arguments, and the stock NATS
       # image starts without JetStream; the backend needs it for the durable
       # task queue the loop relies on.
       - name: Start NATS with JetStream
         run: |
-          docker run -d --name nats -p 4222:4222 nats:2.10 -js
+          # The runner persists between jobs: drop a container a cancelled run left.
+          docker rm -f e2e-nats 2>/dev/null || true
+          docker run -d --name e2e-nats -p 54222:4222 nats:2.10 -js
           for _ in $(seq 1 30); do
-            (echo > /dev/tcp/127.0.0.1/4222) 2>/dev/null && break
+            (echo > /dev/tcp/127.0.0.1/54222) 2>/dev/null && break
             sleep 1
           done
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -67,16 +80,20 @@ jobs:
       - name: Run the loop end to end
         env:
           E2E_POSTGRES_HOST: 127.0.0.1
-          E2E_POSTGRES_PORT: '5432'
+          E2E_POSTGRES_PORT: '55432'
           E2E_POSTGRES_USER: factory
           E2E_POSTGRES_PASSWORD: factorypw
-          E2E_NATS_URL: nats://127.0.0.1:4222
+          E2E_NATS_URL: nats://127.0.0.1:54222
           E2E_WORKDIR: ${{ runner.temp }}/e2e
         run: |
           E2E_PYTHON="$(cd backend && poetry env info --path)/bin/python" bash scripts/e2e/run.sh
 
+      - name: Stop NATS
+        if: always()
+        run: docker rm -f e2e-nats 2>/dev/null || true
+
       - name: Keep the logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: e2e-logs

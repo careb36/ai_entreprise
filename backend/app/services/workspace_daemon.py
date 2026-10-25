@@ -28,7 +28,22 @@ DAEMON_UNAVAILABLE_DETAIL = (
 
 
 class DaemonUnavailable(Exception):
-    """No workspace daemon answered (not running, or NATS is down)."""
+    """No workspace daemon answered (not running, or NATS is down).
+
+    ``absent`` is True only when NATS said that nobody listens on the subject
+    ("no responders"): a daemon that is not running. A timeout or an
+    unreachable NATS leaves it False: whether a daemon runs is then unknown.
+    """
+
+    def __init__(self, message: str, absent: bool = False):
+        super().__init__(message)
+        self.absent = absent
+
+
+def _no_responders(exc: BaseException) -> bool:
+    return (
+        type(exc).__name__ == "NoRespondersError" or "no responders" in str(exc).lower()
+    )
 
 
 class DaemonError(Exception):
@@ -48,7 +63,9 @@ async def daemon_request(
     try:
         reply = await nats_client.request(subject, payload, timeout=timeout)
     except Exception as e:
-        raise DaemonUnavailable(f"{type(e).__name__}: {e}") from e
+        raise DaemonUnavailable(
+            f"{type(e).__name__}: {e}", absent=_no_responders(e)
+        ) from e
     if not isinstance(reply, dict):
         raise DaemonError(502, "The workspace daemon sent an unreadable reply")
     error = reply.get("error")
@@ -60,14 +77,45 @@ async def daemon_request(
     return reply
 
 
-async def daemon_status(nats_client: Any) -> dict[str, Any] | None:
-    """The connected daemon's host and settings, or ``None`` when none answers."""
+async def daemon_presence(nats_client: Any) -> dict[str, Any]:
+    """Whether a daemon is ``connected``, ``absent`` or ``unknown``, and why.
+
+    Unknown is not absent: when NATS cannot be reached, no reply arrives in
+    time or the daemon answers with an error, the backend cannot tell whether
+    a daemon runs, and says so rather than reporting it stopped.
+    """
     try:
-        return await daemon_request(
+        status = await daemon_request(
             nats_client, "workspace.status", {}, STATUS_TIMEOUT_SECONDS
         )
-    except (DaemonUnavailable, DaemonError):
-        return None
+    except DaemonUnavailable as exc:
+        if exc.absent:
+            return {
+                "state": "absent",
+                "reason": "no daemon is listening",
+                "status": None,
+            }
+        if nats_client is None:
+            return {
+                "state": "unknown",
+                "reason": "the backend is not connected to NATS",
+                "status": None,
+            }
+        if (
+            isinstance(exc.__cause__, TimeoutError)
+            or "timeout" in type(exc.__cause__).__name__.lower()
+        ):
+            reason = f"no answer within {STATUS_TIMEOUT_SECONDS:g} s"
+        else:
+            reason = str(exc)
+        return {"state": "unknown", "reason": reason, "status": None}
+    except DaemonError as exc:
+        return {
+            "state": "unknown",
+            "reason": f"the daemon answered with an error: {exc.message}",
+            "status": None,
+        }
+    return {"state": "connected", "reason": None, "status": status}
 
 
 async def inspect_project(
