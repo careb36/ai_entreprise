@@ -326,6 +326,7 @@ Test files:
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
 | `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on; the Architect's brief is never a verdict either, a deliverable's words are not a block reason, and a briefed task's rework counts from the brief on |
 | `test_risk_tier.py` | The risk tier: each area a path marks, look-alike words left low, the highest path decides, a producer raises but never lowers it, the Verifier's check never decides the verdict; an approved high-risk task waits for a person at autonomy 3, settles the sprint, is listed as `risk_hold`, is not a failure in the procedures' numbers and is not carried over on the company's own |
+| `test_history_check.py` | The independent checker of task histories (`app/history_check.py`): done needs an approval or a person, an approval needs a deliverable before it and a verified latest run (unless a person closed it), a high-risk hold closes only through a person, a task is carried over once, a ScrumMaster decision answers an escalation of its own task; the database is read the same way, and the checker imports none of the production readers |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
@@ -385,6 +386,9 @@ Verifier's verdict alone would have decided, and the next run's prompt
 carries that record. Then a task whose file marks authentication is approved
 by QA and still waits for a person (the risk tier, at autonomy level 3), the
 inbox lists it as a high-risk hold, and a Manager accepts it.
+At the end, `app/history_check.py` reads every task's history from the run's
+database, sharing no code with the readers it checks, and the run fails on
+an illegal one.
 The fake model also checks the loop's order from its side: a QA review of a
 task must follow a delivery of it, one review per delivery, and show QA the
 files that delivery wrote; a violation fails the run.

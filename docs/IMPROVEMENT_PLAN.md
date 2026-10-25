@@ -113,7 +113,9 @@ deterministic code decides. What they add is mostly rigour around that rule.
     spec-by-reference (`odd/tasks/odd-spec-by-reference.md`), which credits it
     with fixing failures caused by paraphrased handoffs. The verdicts stay
     claims; what they add is that each one names the requirement it judges.
-11. **An independent checker that replays task histories (M).** It reads a
+11. **An independent checker that replays task histories (M)** (done
+    2026-10-25, `backend/app/history_check.py`, in the tests and at the end
+    of the e2e run). It reads a
     task's comments, messages, verifications and approvals and rejects
     illegal histories: done without a verified delivery and an `APPROVED:`,
     a task carried over twice, a decision whose escalation does not exist.

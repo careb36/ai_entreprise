@@ -34,7 +34,9 @@
 #   8. A task whose file marks authentication is approved by QA and still
 #      waits for a person (the risk tier, at autonomy level 3 too); a
 #      Manager accepts it.
-#   9. QA only reviewed delivered work (the fake model's order check).
+#   9. Every task's history is legal, read by app/history_check.py, which
+#      shares no code with the readers it checks.
+#  10. QA only reviewed delivered work (the fake model's order check).
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -269,7 +271,14 @@ check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?compan
 ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
 check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
 
-echo "9. the loop's order, seen from the model"
+echo "9. every task's history, read independently"
+# app/history_check.py imports none of the production readers it checks.
+HISTORY=$(cd "$REPO/backend" && POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER \
+  POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB PYTHONPATH=.:app "$PY" app/history_check.py 2>&1)
+check "no illegal history (done without approval or verified delivery, carried twice, stray decision)" test "$(echo "$HISTORY" | tail -1)" = "0 illegal history(ies)"
+echo "$HISTORY" | grep -v "illegal history" | sed 's/^/       /'
+
+echo "10. the loop's order, seen from the model"
 check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
 [ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 
