@@ -17,11 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
+      - name: Set up Python 3.12 (uv)
+        shell: bash
+        run: |
+          python3 -m pip install --user --break-system-packages uv >/dev/null
+          ~/.local/bin/uv python install 3.12
+          ~/.local/bin/uv venv --python 3.12 --seed "$RUNNER_TEMP/venv-3.12"
+          echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         working-directory: ./backend
