@@ -30,7 +30,7 @@ permissions:
 jobs:
   build:
     name: typecheck, test, and build (Node 24)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 15
 
     defaults:
