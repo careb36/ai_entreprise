@@ -81,6 +81,12 @@ def test_usage_status_tells_an_unknown_count_from_a_zero():
     assert usage_status(None) == "unavailable"
 
 
+def test_an_estimate_from_the_proxy_is_never_taken_for_a_reported_count():
+    estimated = {"usage_status": "estimated", "usage_estimate": 40}
+    assert usage_status(estimated) == "estimated"
+    assert extract_usage_tokens(estimated) == 0
+
+
 def test_record_agent_turn_marks_whether_tokens_were_reported(audit_session):
     reported = record_agent_turn(
         agent={"role": "Developer", "name": "dev"},

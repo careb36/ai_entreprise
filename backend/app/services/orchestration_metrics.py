@@ -119,9 +119,10 @@ def canonical_kpi_role(role: str | None) -> str:
 def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
     """Return the total token count reported by the LLM proxy for one call.
 
-    The proxy always returns an OpenAI-style ``usage`` block; when only the
-    prompt/completion split is present the two are summed.  Anything
-    malformed yields ``0`` rather than raising.
+    The proxy returns an OpenAI-style ``usage`` block only when the provider
+    reported the count; when only the prompt/completion split is present the
+    two are summed.  A missing or malformed block yields ``0`` rather than
+    raising; ``usage_status`` says whether that 0 is known.
     """
     if not isinstance(llm_result, dict):
         return 0
@@ -143,16 +144,25 @@ def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
 
 TOKENS_REPORTED = "reported"
 TOKENS_UNAVAILABLE = "unavailable"
+TOKENS_ESTIMATED = "estimated"
 
 
 def usage_status(llm_result: dict[str, Any] | None) -> str:
-    """Whether the proxy reported the call's token usage: ``reported`` or ``unavailable``.
+    """How the call's token usage is known: ``reported``, ``estimated`` or ``unavailable``.
+
+    The proxy marks a count it only estimated (``usage_status: estimated``,
+    the estimate apart in ``usage_estimate``): that is not the provider's
+    figure, so it is never taken for one.
 
     ``extract_usage_tokens`` returns 0 for a call whose usage is missing or
     malformed; this tells that 0 apart from a call that really used none, so
     the KPIs leave unknown counts out of an average instead of counting them
     as zero.
     """
+    if isinstance(llm_result, dict) and llm_result.get("usage_status") == (
+        TOKENS_ESTIMATED
+    ):
+        return TOKENS_ESTIMATED
     if not isinstance(llm_result, dict) or not isinstance(
         llm_result.get("usage"), dict
     ):

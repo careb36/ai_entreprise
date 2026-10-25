@@ -83,8 +83,10 @@ deterministic code decides. What they add is mostly rigour around that rule.
    `docs/agent-availability.md`. It is POSITIONING's rule 7 ("unknown is not
    absent") applied to the daemon.
 8. **Token counts as reported, unavailable or unsupported (S–M)** (done
-   2026-10-25 for the KPI turn rows and the Developer token average; the
-   `AgentRun` and proxy audit rows still to follow), never a
+   2026-10-25: the KPI turn rows and the Developer token average; the proxy
+   marks each answer `reported` or `estimated` (`llm-proxy/usage.py`), so
+   its characters/4 estimate for Gemini is no longer passed off as usage;
+   `AgentRun` stores no token count, so nothing defaults to zero there), never a
    default zero, on `AgentRun`, the proxy's audit rows and
    `orchestration_metrics.py`. From gentle-ai `docs/telemetry.md` and its
    aggregate schema.

@@ -148,7 +148,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. Use `model_preference="fast"` (flash models) or `"powerful"` (pro models).
 
-**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly.
+**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly. Each answer says how its token count is known (`llm-proxy/usage.py`): `usage_status: reported` with the provider's figure in `usage`, or `estimated` with a characters/4 estimate apart in `usage_estimate` (charged to the quota, never shown as usage); the backend's `usage_status` keeps estimates out of the KPI averages.
 
 **`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
 
