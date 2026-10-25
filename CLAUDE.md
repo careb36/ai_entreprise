@@ -470,5 +470,6 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
+- [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md) — Improvement plan for the web product, from a reading of block/buzz and gentle-ai
 - [`runbook.md`](runbook.md) — Production hardening guide
 - [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) — Current refactoring strategy
