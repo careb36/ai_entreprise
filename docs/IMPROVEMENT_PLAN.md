@@ -91,7 +91,9 @@ deterministic code decides. What they add is mostly rigour around that rule.
 
 ## Phase 2: how much verification a task gets
 
-9. **A deterministic risk tier (M).** A Verifier check classifies each
+9. **A deterministic risk tier (M)** (done 2026-10-25, `services/risk.py`;
+   the daemon reports neither file modes nor deletions, so executable bits
+   and removed files are not classified yet). A Verifier check classifies each
    delivery from the files the daemon reports (authentication, secrets,
    shell scripts, executable bits, payments, migrations, deletions) as low,
    medium or high, with its reasons. Size never lowers the tier. An agent may

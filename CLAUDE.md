@@ -204,7 +204,15 @@ the LangGraph graph is only an optional kickoff conversation.
    (daemon reports) are kept apart; the board and Glassroom show the verdict.
 6. The review loop sends a refuted/unconfirmed delivery or a failed test run back
    for rework without asking an LLM; otherwise QA reviews, and only an explicit
-   `APPROVED:` closes the task. Before any of that, the text checks on the
+   `APPROVED:` closes the task. The Verifier also records a `risk_tier` check
+   (`services/risk.py`: high for authentication, secrets, payments or the CI
+   pipeline, medium for shell scripts, migrations, dependency manifests or
+   container files, from the paths the daemon wrote and the producer declared;
+   a producer may raise it with a reason, never lower it). An approved task
+   whose tier is high waits for a person at every autonomy level, level 3
+   included: the inbox lists it with `risk_hold`, a Manager accepts it (marks
+   it done) or sends it back, and it counts neither as blocked in the
+   procedures' numbers nor as a task to carry over on the company's own. Before any of that, the text checks on the
    deliverable (length, sections, balanced fences — `_validate_minimum_deliverable`)
    send it back with the reason as `Quality gate`, up to
    `AUTOPILOT_MAX_REWORK_CYCLES`, then block the task and escalate to the
@@ -317,6 +325,7 @@ Test files:
 | `test_delivery_tests.py` | Opt-in post-delivery test run: command detection, `tests_run` check, passing/failing suites through the real daemon |
 | `test_review_gate.py` | Review loop: delivery gate before QA, explicit `APPROVED:` verdict, rework limit, company-scoped evidence |
 | `test_board.py` | Reading a task's comment thread: carry-over notes and the console-advice note are never a verdict (an assistant's "retry" or "manual triage" moves nothing), pending rework survives gate verdicts and send-backs, rework budgets restart after a send-back, only the worker's note marks a task as advised and its rework counts from that note on; the Architect's brief is never a verdict either, a deliverable's words are not a block reason, and a briefed task's rework counts from the brief on |
+| `test_risk_tier.py` | The risk tier: each area a path marks, look-alike words left low, the highest path decides, a producer raises but never lowers it, the Verifier's check never decides the verdict; an approved high-risk task waits for a person at autonomy 3, settles the sprint, is listed as `risk_hold`, is not a failure in the procedures' numbers and is not carried over on the company's own |
 | `test_sprint_close.py` | A sprint closes when every task is settled (blocked for a person counts; retries, re-reviews and freezes keep it open); the pre-review quality gate asks for rework with the reason, then blocks and escalates |
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
@@ -373,7 +382,9 @@ Then the Reviewer agent (enabled too): a run ingested from another
 producer gets a suggested decision beside no approval, a Manager decides
 against it, `/v1/agent_runs/reviewer_record` counts the miss beside what the
 Verifier's verdict alone would have decided, and the next run's prompt
-carries that record.
+carries that record. Then a task whose file marks authentication is approved
+by QA and still waits for a person (the risk tier, at autonomy level 3), the
+inbox lists it as a high-risk hold, and a Manager accepts it.
 The fake model also checks the loop's order from its side: a QA review of a
 task must follow a delivery of it, one review per delivery, and show QA the
 files that delivery wrote; a violation fails the run.
@@ -434,7 +445,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/pages/TaskDetails.test.tsx` | Task page errors and delivery evidence |
 | `src/pages/Procedures.test.tsx` | Proposals, procedures in force and history with their numbers; Manager adopt and write; load error retry |
 | `src/components/Conversation.test.tsx` | Sprint and task conversation: who spoke to whom, kind filter, long messages, empty and error states |
-| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", proposals linked to Procedures, undecided runs with the Reviewer agent's suggestion beside each and its record against the decisions, how earlier second attempts went beside the blocked tasks, Viewer and error states |
+| `src/components/GovernancePanel.test.tsx` | The Review inbox: blocked tasks with their reason and a Manager's "Send back to work", "Accept" on an approved high-risk delivery only, proposals linked to Procedures, undecided runs with the Reviewer agent's suggestion beside each and its record against the decisions, how earlier second attempts went beside the blocked tasks, Viewer and error states |
 | `src/pages/EvidenceDetail.test.tsx` | Run page: claims beside observations, audit rows, the review form's validation and body, task links; the Reviewer agent's suggestion shown as a claim beside the review form, and when it could not suggest |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |

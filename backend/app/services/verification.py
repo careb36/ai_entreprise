@@ -4,6 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
+from services import risk
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -261,6 +262,38 @@ def check_tests_run(evidence: dict) -> dict:
     }
 
 
+def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
+    """
+    How much the delivery needs a person (``services/risk.py``).
+
+    A classification, not a verdict: its outcome is always ``pass`` and the
+    tier travels in ``tier`` and ``reasons``. The paths are the ones the
+    daemon reports written plus the ones the producer declared, which can
+    only raise the tier.
+    """
+    claims = run.claims or {}
+    writes = (evidence or {}).get("workspace_writes") or []
+    written = [
+        w.get("path")
+        for w in writes
+        if isinstance(w, dict) and w.get("status") == "written"
+    ]
+    declared = [p for p in claims.get("files") or [] if isinstance(p, str)]
+    result = risk.classify(
+        [*written, *declared, *extract_claimed_paths(claims)], claims.get("risk")
+    )
+    observation = result["tier"]
+    if result["reasons"]:
+        observation += " — " + "; ".join(result["reasons"])
+    return {
+        "name": "risk_tier",
+        "outcome": "pass",
+        "observation": observation,
+        "tier": result["tier"],
+        "reasons": result["reasons"],
+    }
+
+
 def aggregate_verdict(checks: list[dict]) -> str:
     outcomes = {check["outcome"] for check in checks}
     if VERDICT_REFUTED in outcomes:
@@ -282,6 +315,7 @@ def verify_agent_run(
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))
+    checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(
         company_id=run.company_id,

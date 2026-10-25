@@ -30,6 +30,11 @@
 #      agent beside the reporter's choice; a support admin decides, the
 #      agent's record counts the decision, and the next ticket's prompt
 #      carries that record.
+#   7. A run from another producer gets the Reviewer agent's suggestion.
+#   8. A task whose file marks authentication is approved by QA and still
+#      waits for a person (the risk tier, at autonomy level 3 too); a
+#      Manager accepts it.
+#   9. QA only reviewed delivered work (the fake model's order check).
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -250,7 +255,21 @@ R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
 check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
 check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
 
-echo "8. the loop's order, seen from the model"
+echo "8. a high-risk delivery waits for a person"
+# Its file name marks authentication (services/risk.py): QA's approval does
+# not close it, at autonomy level 3 too; a Manager accepts it.
+NEW3=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Sprint 3\", \"start_date\": \"2026-01-04\", \"scope_size\": \"S\",
+  \"backlog_items\": [{\"title\": \"Add login check\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"}]}")
+S3=$(echo "$NEW3" | json "d.get('sprint_id', '')")
+RISKY=$(echo "$NEW3" | json "d.get('backlog_item_ids', [''])[0]")
+check "Sprint 3 closes around the held task" wait_sprint "$S3"
+check "QA approved it, and it waits for a person" test "$(board "$S3")" = "Add login check=blocked"
+check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?company_id=$CID" | json "[(t['title'], t['risk_hold'], 'authentication: src/add_login_check.py' in t['reason']) for t in d['blocked_tasks'] if t['sprint_id'] == $S3]")" = "[('Add login check', True, True)]"
+ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
+check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
+
+echo "9. the loop's order, seen from the model"
 check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
 [ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 

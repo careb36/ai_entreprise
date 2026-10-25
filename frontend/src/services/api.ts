@@ -568,6 +568,8 @@ export interface InboxBlockedTask {
   /** The ScrumMaster's answer to the escalation, when it gave one: a claim for the person to weigh. */
   triage: { decision: 'retry' | 'person'; why: string; brief: string } | null
   frozen: boolean
+  /** Approved by QA but high risk: waits for a person to accept it (mark it done) or send it back. */
+  risk_hold?: boolean
   updated_at: string | null
 }
 
