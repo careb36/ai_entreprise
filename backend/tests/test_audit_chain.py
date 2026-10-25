@@ -130,18 +130,42 @@ def test_a_row_moved_to_another_company_breaks_both_chains(with_key, sqlite_sess
 
 def test_a_rewritten_chain_without_the_key_does_not_verify(with_key, sqlite_session):
     company = _company()
+    first = _write(sqlite_session, company)
     row = _write(sqlite_session, company)
-    # Someone with database access but no key recomputes the hash unkeyed.
+    # Someone with database access but no key alters the last row and
+    # recomputes its hash. Labelled as keyed, it does not match.
     row.cost_tokens = 0
-    row.chain_hash = chain_hash(company, 1, None, row, key=None).replace(
-        UNSIGNED_PREFIX, SIGNED_PREFIX
-    )
+    forged = chain_hash(company, 2, first.chain_hash, row, key=None)
+    row.chain_hash = forged.replace(UNSIGNED_PREFIX, SIGNED_PREFIX)
     sqlite_session.add(row)
     sqlite_session.commit()
-
     assert verify_chain(sqlite_session, company)["breaks"] == [
-        {"seq": 1, "reason": "hash_mismatch"}
+        {"seq": 2, "reason": "hash_mismatch"}
     ]
+
+    # Labelled honestly as unkeyed, it matches its own hash, but follows a
+    # keyed row while a key is configured: a downgrade.
+    row.chain_hash = forged
+    sqlite_session.add(row)
+    sqlite_session.commit()
+    report = verify_chain(sqlite_session, company)
+    assert (report["status"], report["breaks"]) == (
+        "broken",
+        [{"seq": 2, "reason": "downgrade"}],
+    )
+
+
+def test_unkeyed_rows_from_before_the_key_are_not_a_downgrade(
+    monkeypatch, sqlite_session
+):
+    company = _company()
+    monkeypatch.setattr(audit_signing, "_configured_key", lambda: None)
+    _write(sqlite_session, company)
+    monkeypatch.setattr(audit_signing, "_configured_key", lambda: "chain-test-key")
+    _write(sqlite_session, company)
+
+    report = verify_chain(sqlite_session, company)
+    assert (report["status"], report["mode"]) == ("intact", "mixed")
 
 
 def test_without_a_key_the_chain_is_unkeyed_and_says_so(without_key, sqlite_session):

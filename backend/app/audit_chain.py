@@ -9,11 +9,14 @@ inserted, reordered, altered or moved to another company breaks the chain at
 that point, which a per-row signature cannot show.
 
 ``chain_hash`` is ``hmac-sha256:<hex>`` when ``AUDIT_SIGNING_KEY`` is set, so
-rewriting the whole chain needs the key, or ``unsigned:<sha256-hex>`` when it
+rewriting a keyed stretch needs the key, or ``unsigned:<sha256-hex>`` when it
 is not, which still shows accidental damage but not a rewrite by someone who
-can write to the database. Dropping the newest rows leaves an intact, shorter
-chain; ``verify_chain`` returns the head (last sequence number and hash) so it
-can be recorded elsewhere and compared later.
+can write to the database. With a key configured, an unkeyed row after a keyed
+one is reported as a ``downgrade``: someone without the key cannot rewrite the
+end of a keyed chain as unkeyed and have it pass. What the chain alone cannot
+show is a chain rewritten unkeyed from its first row, or its newest rows
+dropped; ``verify_chain`` returns the head (last sequence number and hash) so
+it can be recorded elsewhere and compared later.
 
 The encoding below is part of the stored format: ``CHAIN_VERSION`` goes into
 every hash, and a change to the encoding needs a new version.
@@ -134,7 +137,8 @@ def verify_chain(session: Session, company_id: int) -> dict:
     number: ``gap`` (a number is missing or repeated: a row was deleted,
     inserted or renumbered), ``prev_mismatch`` (the link to the previous row
     does not match), ``hash_mismatch`` (the row or its place was altered) and
-    ``key_missing`` (a keyed hash with no key configured to check it).
+    ``key_missing`` (a keyed hash with no key configured to check it) and
+    ``downgrade`` (with a key configured, an unkeyed row after a keyed one).
     """
     from models import AuditLog
 
@@ -159,6 +163,7 @@ def verify_chain(session: Session, company_id: int) -> dict:
     modes: set[str] = set()
     expected_seq = 1
     previous_hash: str | None = None
+    keyed_seen = False
 
     def report(seq: int, reason: str) -> None:
         if len(breaks) < _MAX_BREAKS_REPORTED:
@@ -166,12 +171,16 @@ def verify_chain(session: Session, company_id: int) -> dict:
 
     for row in rows:
         stored = row.chain_hash or ""
-        modes.add("hmac-sha256" if stored.startswith(SIGNED_PREFIX) else "unsigned")
+        keyed = stored.startswith(SIGNED_PREFIX)
+        modes.add("hmac-sha256" if keyed else "unsigned")
+        if key is not None and keyed_seen and not keyed:
+            report(row.chain_seq, "downgrade")
+        keyed_seen = keyed_seen or keyed
         if row.chain_seq != expected_seq:
             report(row.chain_seq, "gap")
         if (row.prev_hash or None) != previous_hash:
             report(row.chain_seq, "prev_mismatch")
-        if stored.startswith(SIGNED_PREFIX) and key is None:
+        if keyed and key is None:
             report(row.chain_seq, "key_missing")
         else:
             recomputed = chain_hash(
@@ -179,7 +188,7 @@ def verify_chain(session: Session, company_id: int) -> dict:
                 row.chain_seq,
                 row.prev_hash,
                 row,
-                key if stored.startswith(SIGNED_PREFIX) else None,
+                key if keyed else None,
             )
             if not hmac.compare_digest(stored, recomputed):
                 report(row.chain_seq, "hash_mismatch")

@@ -410,6 +410,12 @@ def record_agent_turn(
             own_session.refresh(row)
             return row
     except Exception as exc:  # noqa: BLE001 - KPI recording must not abort the primary operation.
+        if session is not None:
+            # A failed write must not leave the caller's session unusable.
+            try:
+                session.rollback()
+            except Exception as rollback_exc:  # noqa: BLE001
+                logger.debug("KPI audit rollback failed: %s", rollback_exc)
         logger.warning(
             "KPI audit write failed (action=%s item=%s company=%s): %s",
             action,

@@ -223,7 +223,7 @@ async def get_orchestration_health(
         ORDER BY 1
     """)
 
-    reported = "COALESCE(a.details->>'tokens', CASE WHEN a.cost_tokens > 0 THEN 'reported' END) = 'reported'"
+    reported = "COALESCE(a.details->>'tokens', CASE WHEN a.cost_tokens > 0 THEN 'reported' ELSE 'unavailable' END) = 'reported'"
     tokens_sql = text(
         """
         SELECT
