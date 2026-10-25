@@ -38,13 +38,16 @@ deterministic code decides. What they add is mostly rigour around that rule.
 
 ## Phase 0: housekeeping (all S)
 
-1. **Decide what `develop` is.** Its 33 commits (last one 2026-05-02) predate
-   most of the current loop, and several were rewritten since (orchestration
-   health, task dedup, architect consult). Proposal: list which of the 33 have
-   no equivalent on `main`, port the ones still wanted, then reset `develop` to
-   `main`. From then on, feature PRs land on `develop` and a release PR
-   promotes it to `main`, as `develop_meta` does for the VR entry. **Owner
-   decision.**
+1. **`develop` is where web pull requests land** (done 2026-10-25). Its 33
+   commits of May 2026 were checked against `main`: the orchestration
+   metrics they added are on `main` in `services/orchestration_metrics.py`,
+   and the files only `develop` had (`Home`, `SprintBoard`,
+   `SprintOpsCockpit`, the standalone Glassroom page, `routers/analytics.py`)
+   are the ones the navigation rework removed on purpose. The old line is
+   kept as `archive/develop-2026-05-02` and `develop` now equals `main`.
+   Feature PRs land on `develop`; a release PR promotes it to `main` and a
+   person merges it, as `CONTRIBUTING.md` already required ("agents do not
+   merge to `main`"). `CONTRIBUTING.md` has a Branches section.
 2. **Pin CI actions by commit SHA** with the version in a comment, and add
    Renovate (or Dependabot) with digest pinning, a few days' delay after a
    release and no auto-merge of major updates. From buzz
@@ -56,7 +59,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
    ticks); which AI tool was used and for what. From buzz's `AGENTS.md`
    ("never mark this step done yourself") and gentle-ai's `AI_POLICY.md`. It
    writes into the template the rule POSITIONING adopted after PR #33.
-4. **Fix CLAUDE.md's description of `main.py`.**
+4. **Fix CLAUDE.md's description of `main.py`** (done 2026-10-25).
 
 ## Phase 1: the evidence spine
 
@@ -89,9 +92,11 @@ deterministic code decides. What they add is mostly rigour around that rule.
    shell scripts, executable bits, payments, migrations, deletions) as low,
    medium or high, with its reasons. Size never lowers the tier. An agent may
    raise it with a reason, never lower it. A high tier sends the task to a
-   person through the inbox at any `autonomy_level`. From gentle-ai
-   `internal/reviewtransaction/risk.go` and `internal/cli/review_assess.go`.
-   **Owner decision:** whether a high tier overrides autonomy level 3.
+   person through the inbox at any `autonomy_level`, autonomy level 3
+   included: autonomy decides how much routine work goes without a person,
+   and a delivery that touches authentication, secrets or payments is not
+   routine. From gentle-ai `internal/reviewtransaction/risk.go` and
+   `internal/cli/review_assess.go`.
 10. **Acceptance criteria by reference, a verdict per criterion (M).** A
     backlog item's criteria are numbered and passed verbatim to the
     Developer's and QA's prompts; QA answers each one in a fixed format a
@@ -187,8 +192,10 @@ deterministic code decides. What they add is mostly rigour around that rule.
   assistant probe and run versions already cover our case.
 - **Engram's git-file memory sync** (gentle-ai): Le Fabrique's memory is
   per company on a server.
-- **gentle-ai's ban on AI `Co-Authored-By` lines**: it conflicts with how this
-  repository attributes commits today. **Owner decision.**
+- **gentle-ai's ban on AI `Co-Authored-By` lines**: kept as they are. For a
+  product whose point is knowing who produced what, a commit that says an
+  agent wrote it is evidence, not noise; the PR template (item 3) adds what
+  was verified and by whom.
 
 ## Order
 
@@ -196,8 +203,13 @@ Phase 0 first: it is small and decides where the rest lands. Then items 5
 to 8 (the evidence spine), 9 to 12, 14 and 15, and 16 to 19 alongside as
 small PRs. Item 13 waits until 9 and 11 are in.
 
-## Decisions for the owner
+## Decisions taken (2026-10-25)
 
-1. What happens to `develop` (item 1).
-2. Whether a high risk tier overrides autonomy level 3 (item 9).
-3. Whether to keep AI co-author lines in commits.
+The owner delegated these three:
+
+1. **`develop`** is where web pull requests land; its May line is archived
+   and it was reset to `main`. Releases to `main` are merged by a person
+   (item 1).
+2. **A high risk tier needs a person at every autonomy level**, level 3
+   included (item 9).
+3. **AI co-author lines stay** in commits (see "Considered and left out").

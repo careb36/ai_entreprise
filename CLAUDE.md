@@ -138,7 +138,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Key Components
 
-**`backend/app/main.py`** — All FastAPI routes (single large file). Responsible for: company init, sprint management, kanban board state, memory search/store, enterprise quotas, support tickets, and analytics.
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`).
 
 **`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
@@ -465,6 +465,7 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 ## Documentation
 
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
+- Branches: pull requests for the web product land on `develop`; a release pull request promotes `develop` to `main`, and a person merges it (`CONTRIBUTING.md`, Branches).
 - The Glassroom VR entry for the Meta VR Start Developer Competition lives on
   the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
