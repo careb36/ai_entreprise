@@ -155,7 +155,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
     From gentle-ai `contracts/review-integration/v2/`. Outside producers are
     central to the direction and need a contract that does not move under
     them.
-17. **An adversarial fake model in the e2e run (S).** `scripts/e2e/fake_llm.py`
+17. **An adversarial fake model in the e2e run (S)** (done 2026-10-25). `scripts/e2e/fake_llm.py`
     refuses requests that break the loop's order, for example a QA review
     prompt for a task with no `files_written` observation yet, so the run
     fails at the boundary instead of in an assertion afterwards. From

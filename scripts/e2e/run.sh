@@ -59,6 +59,8 @@ mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
 API=http://127.0.0.1:$BACKEND_PORT
 PROMPTS=$WORK/fake_llm.prompts.log
+VIOLATIONS=$WORK/fake_llm.violations.log
+: > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
 FAILED=0
 
 check() {  # check <description> <shell test...>
@@ -87,7 +89,7 @@ ADVICE="Fake Copilot advice: keep each module beside its test."
 mkdir -p "$WORK/bin"
 printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
-FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
+FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
   NATS_URL=$NATS_URL WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
@@ -247,6 +249,10 @@ check "the agent's record counts the miss, beside the Verifier's verdict ($VERDI
 R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
 check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
 check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
+
+echo "8. the loop's order, seen from the model"
+check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
+[ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
 if [ "$FAILED" = 0 ]; then echo "E2E PASSED"; else echo "E2E FAILED (logs in $WORK)"; fi

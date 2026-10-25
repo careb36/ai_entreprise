@@ -374,6 +374,9 @@ producer gets a suggested decision beside no approval, a Manager decides
 against it, `/v1/agent_runs/reviewer_record` counts the miss beside what the
 Verifier's verdict alone would have decided, and the next run's prompt
 carries that record.
+The fake model also checks the loop's order from its side: a QA review of a
+task must follow a delivery of it, one review per delivery, and show QA the
+files that delivery wrote; a violation fails the run.
 Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 `python`, `$(cd backend && poetry env info --path)/bin/python`); it exits 0
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
