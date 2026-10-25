@@ -19,7 +19,7 @@ on:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 25
 
     services:
@@ -29,8 +29,10 @@ jobs:
           POSTGRES_USER: factory
           POSTGRES_PASSWORD: factorypw
           POSTGRES_DB: factory
+        # Not the default ports: the self-hosted runner's machine may run the
+        # project's own stack on 5432 and 4222.
         ports:
-          - 5432:5432
+          - 55432:5432
         options: >-
           --health-cmd "pg_isready -U factory"
           --health-interval 5s
@@ -45,9 +47,11 @@ jobs:
       # task queue the loop relies on.
       - name: Start NATS with JetStream
         run: |
-          docker run -d --name nats -p 4222:4222 nats:2.10 -js
+          # The runner persists between jobs: drop a container a cancelled run left.
+          docker rm -f e2e-nats 2>/dev/null || true
+          docker run -d --name e2e-nats -p 54222:4222 nats:2.10 -js
           for _ in $(seq 1 30); do
-            (echo > /dev/tcp/127.0.0.1/4222) 2>/dev/null && break
+            (echo > /dev/tcp/127.0.0.1/54222) 2>/dev/null && break
             sleep 1
           done
 
@@ -67,13 +71,17 @@ jobs:
       - name: Run the loop end to end
         env:
           E2E_POSTGRES_HOST: 127.0.0.1
-          E2E_POSTGRES_PORT: '5432'
+          E2E_POSTGRES_PORT: '55432'
           E2E_POSTGRES_USER: factory
           E2E_POSTGRES_PASSWORD: factorypw
-          E2E_NATS_URL: nats://127.0.0.1:4222
+          E2E_NATS_URL: nats://127.0.0.1:54222
           E2E_WORKDIR: ${{ runner.temp }}/e2e
         run: |
           E2E_PYTHON="$(cd backend && poetry env info --path)/bin/python" bash scripts/e2e/run.sh
+
+      - name: Stop NATS
+        if: always()
+        run: docker rm -f e2e-nats 2>/dev/null || true
 
       - name: Keep the logs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

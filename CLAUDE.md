@@ -410,6 +410,12 @@ repo root with the proxy's Poetry environment plus
 `llm-proxy/requirements-dev.txt`: `python -m pytest llm-proxy/tests -q`. CI
 runs it after the backend tests.
 
+CI jobs run on the self-hosted runner labelled `lafabrique`
+(`runs-on: [self-hosted, linux, x64, lafabrique]`), not on GitHub-hosted
+machines; only the SLSA release generator stays on `ubuntu-latest`. The
+runner keeps its state between jobs, so a job cleans up what it starts (the
+e2e removes its NATS container) and avoids the ports a local stack uses.
+
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main` and `develop`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
