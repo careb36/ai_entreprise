@@ -24,14 +24,15 @@ product is the layer that verifies their work and records evidence.
 | `scripts/e2e/` | end-to-end run against a real Postgres and NATS |
 | `db/init-db/`, `deployment/k8s/` | schema bootstrap, manifests |
 
-Toolchain: Python (`^3.11` in `backend/pyproject.toml`; CI runs 3.12), Poetry
-per project, Node 24, React 18, Vite 5, Vitest 3, ESLint 10 flat config, ruff
-(version pinned in CI). The backend and the LLM proxy are **two independent
-Poetry projects**, each with its own lock file.
+Toolchain: Python (`^3.11` in `backend/pyproject.toml`; CI runs 3.12, the
+backend image `python:3.11-slim`), Poetry per project, Node 24, React 18, Vite
+5, Vitest 3, ESLint 10 flat config, ruff (version pinned in CI). The backend and
+the LLM proxy are **two independent Poetry projects**, each with its own lock
+file.
 
 ## Commands
 
-All of these were run green on `main` when this file was written.
+All of these were run green on `main`; the exceptions are called out below.
 
 ```bash
 # Backend — no Postgres, NATS, Neo4j or LLM needed (in-memory SQLite + mocks)
@@ -52,15 +53,28 @@ cd llm-proxy && poetry install --no-interaction --no-root \
 # Whole stack (.env copied from .env.example, keys filled in)
 docker compose up -d        # backend :8000 (docs at /docs), frontend :5173,
                             # llm-proxy :5100, Jaeger :16686
-make dev-backend            # or dev-frontend / dev-llm-proxy: Poetry and Vite directly
+make dev-frontend           # Vite alone; `make dev-llm-proxy` too
 ./scripts/start-daemon.sh   # workspace daemon, on the host, not in Docker
 ```
 
+`make dev-backend` does **not** work: it runs `poetry run uvicorn app.main:app`
+without `PYTHONPATH`, so the top-level imports fail on startup with
+`ModuleNotFoundError: No module named 'config'`. Run the backend with that
+variable, or through Docker (the image sets `PYTHONPATH=/app:/app/app`):
+
+```bash
+cd backend && PYTHONPATH=.:app poetry run uvicorn app.main:app --reload --port 8000
+```
+
+The Vite dev server proxies `/v1` to `http://localhost:8000`, so running
+`make dev-frontend` alone still needs the backend up.
+
 There is no ruff config file, so ruff's defaults apply; the CI-pinned version is
 0.17.1 and its default rule set moves between releases, so lint with that
-version. mypy runs in CI but is non-blocking (`|| true`). Nothing formats
-TypeScript: the prettier step in `frontend-tests.yml` is non-failing and
-prettier is not a dependency.
+version. ruff is not in the backend's Poetry dev group (that lists pytest,
+black, isort and mypy), so install it: `pip install "ruff==0.17.1"`. mypy runs
+in CI but is non-blocking (`|| true`). Nothing formats TypeScript: the prettier
+step in `frontend-tests.yml` is non-failing and prettier is not a dependency.
 
 `scripts/e2e/run.sh` is the end-to-end check. It needs a real Postgres and a
 NATS started with JetStream (`docker compose up -d postgres nats`), recreates
@@ -75,6 +89,13 @@ venv's interpreter.
 - **Layering.** Routers call `services/`; DB access stays out of routers, with
   `get_session` and `auth_deps.get_current_user` injected. Company data is
   scoped by `company_id`; roles are Owner > Manager > Viewer.
+- **The schema is created, never migrated.** There is no Alembic:
+  `create_db_and_tables()` in `app/database.py` runs
+  `SQLModel.metadata.create_all` on startup, and `db/init-db/init.sql` seeds a
+  fresh Postgres volume (the image runs `docker-entrypoint-initdb.d` only
+  once). `create_all` adds missing tables but never alters existing ones, so a
+  new or changed column needs `./reset_infra.sh` (or `docker compose down -v`)
+  or a hand-written `ALTER TABLE`.
 - **Evidence layer.** Agent work is ingested as `AgentRun` (+ `AgentRunApproval`,
   `Verification`) and verified deterministically in `services/verification.py`,
   `services/board.py`, `services/reviewer_agent.py`. Claims (what an agent says
@@ -109,6 +130,10 @@ venv's interpreter.
   text and the `title`/`alt`/`placeholder`/`aria-*`/`label` attributes, so a
   hardcoded English literal fails the build. Use i18next `defaultValue` rather
   than `t(key) || fallback` (a missing key returns the key, which is truthy).
+  Two tests enforce the other half: `src/i18n/coverage.test.ts` fails when a key
+  passed to `t('…')` is missing from either locale, and
+  `src/i18n/locales.test.ts` requires `en.json` and `es.json` to have identical
+  leaf key sets.
 - **Backend tests.** Use the `sqlite_session` and `test_client` fixtures from
   `backend/tests/conftest.py`. Import any new SQLModel table in that conftest,
   or `SQLModel.metadata.create_all()` will not create it.
@@ -152,3 +177,9 @@ here. Trust the code and the workflows over them:
 - `CLAUDE.md` still says `backend/app/main.py` holds every route and that CI
   runs `poetry check --lock`. Neither is true: routes live in
   `backend/app/routers/`, and the backend job runs ruff, mypy and pytest.
+- `CONTRIBUTING.md` says `gitleaks` runs in CI, but no workflow scans for
+  secrets; `security-scan.yml` only looks at dependencies (Trivy over the
+  filesystem, `safety` in the backend, and that one is non-failing). Do not
+  rely on CI to catch a committed key.
+- `README.md` asks for Node 20+, but `frontend/package.json` sets
+  `"engines": { "node": ">=24" }`, and CI and the `Makefile` use Node 24.
