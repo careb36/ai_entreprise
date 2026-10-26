@@ -89,13 +89,18 @@ venv's interpreter.
 - **Layering.** Routers call `services/`; DB access stays out of routers, with
   `get_session` and `auth_deps.get_current_user` injected. Company data is
   scoped by `company_id`; roles are Owner > Manager > Viewer.
-- **The schema is created, never migrated.** There is no Alembic:
-  `create_db_and_tables()` in `app/database.py` runs
-  `SQLModel.metadata.create_all` on startup, and `db/init-db/init.sql` seeds a
-  fresh Postgres volume (the image runs `docker-entrypoint-initdb.d` only
-  once). `create_all` adds missing tables but never alters existing ones, so a
-  new or changed column needs `./reset_infra.sh` (or `docker compose down -v`)
-  or a hand-written `ALTER TABLE`.
+- **Schema evolution is additive SQL, not a migration tool.** There is no
+  Alembic: `create_db_and_tables()` in `app/database.py` runs
+  `SQLModel.metadata.create_all` (adds missing tables) and then
+  `_ensure_runtime_schema()` (same file), which applies idempotent
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` / `ALTER COLUMN ... DROP NOT NULL`
+  statements on startup for tables already released (`agents`, `sprints`,
+  `companies`, `bug_reports`, `agent_runs`, `audit_log`, `vector_memory`).
+  `db/init-db/init.sql` only seeds a fresh Postgres volume (it runs
+  `docker-entrypoint-initdb.d` once). To add or change a column on an existing
+  table, append the additive `ALTER TABLE` to `_ensure_runtime_schema()` — do
+  not require `./reset_infra.sh` (or `docker compose down -v`) for a routine
+  column addition.
 - **Evidence layer.** Agent work is ingested as `AgentRun` (+ `AgentRunApproval`,
   `Verification`) and verified deterministically in `services/verification.py`,
   `services/board.py`, `services/reviewer_agent.py`. Claims (what an agent says
@@ -109,9 +114,13 @@ venv's interpreter.
   The LangGraph graph (`backend/agents/graph.py`) is only an optional kickoff
   producer (`AGENT_GRAPH_ENABLED`).
 - **LLM access always goes through the proxy.** The backend never calls a model
-  provider directly: `app/llm_proxy_client.py` → `llm-proxy/app.py`, with
-  `model_preference="fast"` (default) or `"powerful"` (Architect and other
-  high-stakes callers). Role→model defaults live in `backend/llm/model_factory.py`.
+  provider directly: `app/llm_proxy_client.py` → `llm-proxy/app.py`.
+  `LLMProxyClient.chat()` / `chat_async()` take a model id (`model`, default
+  `"gemini-pro"`), a `role`, and an optional `bu_id`; there is no
+  `model_preference` parameter, and `"powerful"` is only an internal fallback
+  bucket in the proxy's `_PREFERENCE_TIERS`. `/v1/models` classifies models by
+  tier (`fast|balanced|code|strategic|preview`). Role→model defaults live in
+  `backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
 - **Memory.** pgvector in Postgres for RAG (`/v1/memory/*`), Neo4j Engram nodes
   for decision lineage (`backend/memory/engram_processor.py`).
 - **Auth.** Enforced by default (`AUTH_REQUIRED`); login answers 503 until
