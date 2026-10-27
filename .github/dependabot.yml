@@ -1,140 +1,162 @@
 version: 2
 
+# Weekly, grouped dependency updates. Security updates are opened as soon as
+# GitHub publishes them; grouped version updates keep the PR queue small.
 updates:
   # Python — backend y llm-proxy usan Poetry; vscode-daemon usa requirements.txt.
-  - package-ecosystem: "pip"
-    directory: "/backend"
-    target-branch: "main"
+  - package-ecosystem: pip
+    directory: /backend
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:15"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      backend-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
 
-  - package-ecosystem: "pip"
-    directory: "/llm-proxy"
-    target-branch: "main"
+  - package-ecosystem: pip
+    directory: /llm-proxy
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:20"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      llm-proxy-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
 
-  - package-ecosystem: "pip"
-    directory: "/vscode-daemon"
-    target-branch: "main"
+  - package-ecosystem: pip
+    directory: /vscode-daemon
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:25"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      vscode-daemon-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
 
   # Node — frontend/package.json + package-lock.json.
-  - package-ecosystem: "npm"
-    directory: "/frontend"
-    target-branch: "main"
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:30"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      frontend-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
 
   # Docker — un directorio por Dockerfile.
-  - package-ecosystem: "docker"
-    directory: "/backend"
-    target-branch: "main"
+  - package-ecosystem: docker
+    directory: /backend
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:35"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
-  - package-ecosystem: "docker"
-    directory: "/backend/janitor"
-    target-branch: "main"
+  - package-ecosystem: docker
+    directory: /backend/janitor
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:36"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
-  - package-ecosystem: "docker"
-    directory: "/frontend"
-    target-branch: "main"
+  - package-ecosystem: docker
+    directory: /frontend
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:40"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
-  - package-ecosystem: "docker"
-    directory: "/llm-proxy"
-    target-branch: "main"
+  - package-ecosystem: docker
+    directory: /llm-proxy
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:45"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
-  - package-ecosystem: "docker"
-    directory: "/vscode-daemon"
-    target-branch: "main"
+  - package-ecosystem: docker
+    directory: /vscode-daemon
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:50"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
   # Docker Compose — la raíz solo tiene docker-compose.yml, sin Dockerfile,
   # así que el ecosistema "docker" no detectaría ese archivo.
-  - package-ecosystem: "docker-compose"
-    directory: "/"
-    target-branch: "main"
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "03:55"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
 
   # GitHub Actions — los workflows de .github/workflows/.
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    target-branch: "main"
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "UTC"
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: UTC
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
