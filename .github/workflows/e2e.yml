@@ -38,7 +38,7 @@ jobs:
           --health-retries 12
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A service container cannot be given arguments, and the stock NATS
       # image starts without JetStream; the backend needs it for the durable
