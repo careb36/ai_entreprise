@@ -89,6 +89,10 @@ jobs:
           # is the bare uv venv, while `poetry install` put the backend's
           # dependencies somewhere else, so the script's psycopg2 import
           # failed. Ask Poetry which interpreter actually has them.
+          pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
+          export E2E_BACKEND_PORT="$(pick_port)"
+          export E2E_LLM_PORT="$(pick_port)"
+          echo "backend port: $E2E_BACKEND_PORT / llm port: $E2E_LLM_PORT"
           E2E_PYTHON="$(cd backend && poetry run python -c 'import sys; print(sys.executable)')" \
             bash scripts/e2e/run.sh
 
