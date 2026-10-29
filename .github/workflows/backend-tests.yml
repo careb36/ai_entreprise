@@ -22,7 +22,9 @@ jobs:
       # de tests resuelve otro directorio, no encuentra el venv recién creado y
       # hace uno vacío ("Creating virtualenv ...n9PHBxPn" -> "Command not found:
       # pytest"). Con el mismo path, los dos pasos hablan del mismo venv.
-      POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
+      # `runner.temp` no vale aquí: el contexto `runner` solo existe en un `env`
+      # de paso, y a nivel de job deja el workflow inválido.
+      POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
     steps:
       - uses: actions/checkout@v4
 
