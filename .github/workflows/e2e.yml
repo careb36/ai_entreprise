@@ -52,7 +52,7 @@ jobs:
       POETRY_NO_INTERACTION: "1"
       PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Start Postgres, NATS and pick free ports
         run: |
@@ -133,7 +133,7 @@ jobs:
           docker rm -f "pg-e2e-$GITHUB_RUN_ID" "nats-e2e-$GITHUB_RUN_ID" || true
 
       - name: Keep the logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-logs
