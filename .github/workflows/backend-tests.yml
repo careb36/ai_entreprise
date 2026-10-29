@@ -17,10 +17,6 @@ jobs:
     # que nadie se enterara (el default son 6 horas). El job entero tarda ~5
     # minutos, así que cortar a los 20 convierte un cuelgue en un fallo visible.
     timeout-minutes: 20
-    env:
-      # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
-      POETRY_VIRTUALENVS_CREATE: "false"
-
     steps:
       - uses: actions/checkout@v4
 
@@ -34,9 +30,16 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./backend
+        env:
+          # Poetry must own its virtualenv. With POETRY_VIRTUALENVS_CREATE=false
+          # it resolves the *base* interpreter of the uv venv (the uv-managed
+          # CPython), then runs `pip uninstall` against it and dies with
+          # externally-managed-environment. A Poetry-created venv is a real
+          # virtualenv and the install stays inside it.
+          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
         run: |
-          pip install --upgrade pip
-          pip install poetry
+          ~/.local/bin/uv pip install poetry >/dev/null
+          poetry env use python
           poetry install --no-interaction
 
       - name: Lint with ruff

@@ -29,11 +29,6 @@ jobs:
       group: e2e-${{ github.ref }}
       cancel-in-progress: true
 
-    # Same venv strategy as backend-tests.yml: install into the uv venv that
-    # this job creates and puts on PATH, never into Poetry's global cache.
-    env:
-      POETRY_VIRTUALENVS_CREATE: "false"
-
     # Postgres and NATS are started as plain containers on ports picked at run
     # time. Binding the service container to a fixed host port made the job die
     # in eleven seconds with "port is already allocated" whenever anything else
@@ -86,19 +81,24 @@ jobs:
 
       - name: Install the backend
         working-directory: ./backend
+        env:
+          # Poetry must own its virtualenv. With POETRY_VIRTUALENVS_CREATE=false
+          # it resolves the *base* interpreter of the uv venv (the uv-managed
+          # CPython), then runs `pip uninstall` against it and dies with
+          # externally-managed-environment. A Poetry-created venv is a real
+          # virtualenv and the install stays inside it.
+          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
         run: |
-          pip install --upgrade pip
-          pip install poetry
+          ~/.local/bin/uv pip install poetry >/dev/null
+          poetry env use python
           poetry install --no-interaction
 
       - name: Run the loop end to end
         env:
           E2E_WORKDIR: ${{ runner.temp }}/e2e
         run: |
-          # Not `command -v python`: with POETRY_VIRTUALENVS_CREATE=false that
-          # is the bare uv venv, while `poetry install` put the backend's
-          # dependencies somewhere else, so the script's psycopg2 import
-          # failed. Ask Poetry which interpreter actually has them.
+          # Ask Poetry which interpreter has the dependencies: it owns the
+          # backend's virtualenv, so this is the only reliable answer.
           pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
           export E2E_BACKEND_PORT="$(pick_port)"
           export E2E_LLM_PORT="$(pick_port)"
