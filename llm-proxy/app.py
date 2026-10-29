@@ -61,9 +61,14 @@ _tracer = trace.get_tracer(__name__)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
+NEBIUS_API_KEY = os.getenv("NEBIUS_API_KEY", "")
 GEMINI_PROXY_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEEPSEEK_PROXY_URL = "https://api.deepseek.com/v1"
 QWEN_PROXY_URL = "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1"
+# Nebius Token Factory serves the NVIDIA open models (Nemotron) behind an
+# OpenAI-compatible API.  Overridable so a self-hosted Serverless Endpoint can
+# be pointed at without touching code.
+NEBIUS_PROXY_URL = os.getenv("NEBIUS_PROXY_URL", "https://api.tokenfactory.nebius.com/v1")
 # Upper bound for one chat request's provider calls, fallbacks included.  It
 # stays below the backend task client's 120 s timeout so the proxy answers
 # (with an error if need be) before the caller gives up on it.
@@ -134,6 +139,22 @@ def _validate_api_keys():
     else:
         logger.warning("QWEN_API_KEY is not set")
 
+    if NEBIUS_API_KEY:
+        try:
+            resp = requests.get(
+                f"{NEBIUS_PROXY_URL}/models",
+                headers={"Authorization": f"Bearer {NEBIUS_API_KEY}"},
+                timeout=10,
+            )
+            if resp.status_code in (401, 403):
+                errors.append("NEBIUS_API_KEY is invalid")
+            else:
+                logger.info("Nebius Token Factory API key validated successfully")
+        except Exception as e:
+            logger.warning(f"Could not validate Nebius API key: {e}")
+    else:
+        logger.warning("NEBIUS_API_KEY is not set")
+
     if errors:
         for err in errors:
             logger.error(f"API KEY VALIDATION FAILED: {err}")
@@ -188,10 +209,12 @@ _TIER_RULES: list[tuple[list[str], str, str]] = [
 _available_models: set[str] = set()
 _available_deepseek_models: set[str] = set()
 _available_qwen_models: set[str] = set()
+_available_nebius_models: set[str] = set()
 _model_refresh_lock = threading.Lock()
 _last_refresh: float = 0
 _deepseek_last_refresh: float = 0
 _qwen_last_refresh: float = 0
+_nebius_last_refresh: float = 0
 
 
 def _classify_model(model_id: str) -> tuple[str, str]:
@@ -274,6 +297,32 @@ def _refresh_qwen_models():
         logger.warning(f"Qwen model refresh failed: {e}")
 
 
+def _refresh_nebius_models():
+    """Fetch the Token Factory catalogue: the served NVIDIA open models."""
+    global _available_nebius_models, _nebius_last_refresh
+    if not NEBIUS_API_KEY:
+        return
+    try:
+        resp = requests.get(
+            f"{NEBIUS_PROXY_URL}/models",
+            headers={"Authorization": f"Bearer {NEBIUS_API_KEY}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        skip = ("embedding", "rerank")
+        ids = {
+            m.get("id")
+            for m in resp.json().get("data", [])
+            if m.get("id") and not any(k in m.get("id", "").lower() for k in skip)
+        }
+        with _model_refresh_lock:
+            _available_nebius_models = ids
+            _nebius_last_refresh = time.time()
+        logger.info(f"Nebius models refreshed: {sorted(ids)}")
+    except Exception as e:
+        logger.warning(f"Nebius model refresh failed: {e}")
+
+
 # Deprecated Gemini ids mapped to their working equivalents.
 _GEMINI_ALIASES = {
     "gemini-2.5-flash": "gemini-3.8-flash",
@@ -286,10 +335,13 @@ _GEMINI_DEPRECATED = {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", 
 
 # A model id names its provider by prefix.  The id must also be in that
 # provider's fetched catalogue before a request is sent anywhere.
+# Nebius ids carry a vendor segment ("nvidia/…", "meta-llama/…"), hence the
+# vendor/ prefix rather than a bare model-name prefix.
 _PROVIDER_PREFIXES: dict[str, tuple[str, ...]] = {
     "gemini": ("gemini-", "gemma-"),
     "deepseek": ("deepseek-",),
     "qwen": ("qwen", "qwq-", "qvq-"),
+    "nebius": ("nvidia/", "meta-llama/", "mistralai/", "deepseek-ai/", "qwen/", "google/"),
 }
 
 # Where a request goes when its provider answers 429 or 5xx, in order.  Each
@@ -311,7 +363,8 @@ def provider_for_model(model_id: str) -> str | None:
 
 
 def _provider_key(provider: str) -> str:
-    return {"gemini": GEMINI_API_KEY, "deepseek": DEEPSEEK_API_KEY, "qwen": QWEN_API_KEY}.get(provider, "")
+    return {"gemini": GEMINI_API_KEY, "deepseek": DEEPSEEK_API_KEY, "qwen": QWEN_API_KEY,
+            "nebius": NEBIUS_API_KEY}.get(provider, "")
 
 
 def _provider_catalogue(provider: str) -> set[str]:
@@ -320,6 +373,7 @@ def _provider_catalogue(provider: str) -> set[str]:
         "gemini": (_refresh_gemini_models, lambda: _available_models),
         "deepseek": (_refresh_deepseek_models, lambda: _available_deepseek_models),
         "qwen": (_refresh_qwen_models, lambda: _available_qwen_models),
+        "nebius": (_refresh_nebius_models, lambda: _available_nebius_models),
     }
     if provider not in sources:
         return set()
@@ -380,9 +434,11 @@ def _fallback_targets(failed_provider: str) -> list[tuple[str, str]]:
 _refresh_gemini_models()
 _refresh_deepseek_models()
 _refresh_qwen_models()
+_refresh_nebius_models()
 threading.Thread(target=lambda: (time.sleep(3600), _refresh_gemini_models()), daemon=True).start()
 threading.Thread(target=lambda: (time.sleep(3600), _refresh_deepseek_models()), daemon=True).start()
 threading.Thread(target=lambda: (time.sleep(3600), _refresh_qwen_models()), daemon=True).start()
+threading.Thread(target=lambda: (time.sleep(3600), _refresh_nebius_models()), daemon=True).start()
 
 # --- Governance Middleware ---
 @app.before_request
@@ -457,7 +513,7 @@ def list_models():
         "models": [
           {
             "id":          "gemini-2.5-pro",
-            "provider":    "gemini" | "deepseek" | "qwen",
+            "provider":    "gemini" | "deepseek" | "qwen" | "nebius",
             "tier":        "strategic" | "balanced" | "code" | "fast" | "preview",
             "description": "..."
           },
@@ -494,6 +550,20 @@ def list_models():
                 tier = "balanced"
             models.append({"id": mid, "provider": "qwen", "tier": tier,
                            "description": f"Qwen {mid}"})
+
+    # Nebius models host the NVIDIA open models (Nemotron) and are available
+    # only when the API key is configured.
+    if NEBIUS_API_KEY:
+        for mid in sorted(_provider_catalogue("nebius")):
+            lower = mid.lower()
+            if "nano" in lower:
+                tier = "fast"
+            elif "ultra" in lower or "253b" in lower or "340b" in lower:
+                tier = "strategic"
+            else:
+                tier = "balanced"
+            models.append({"id": mid, "provider": "nebius", "tier": tier,
+                           "description": f"NVIDIA/Nebius {mid}"})
 
     # Pick the best non-preview balanced/fast model for orchestration tasks
     # (team suggestion, routing decisions) — prefer stability over power.
@@ -588,8 +658,15 @@ def _post_upstream(provider: str, model: str, url: str, headers: dict, payload: 
     return resp.status_code, body
 
 
+_OPENAI_COMPATIBLE_BASE_URLS = {
+    "deepseek": DEEPSEEK_PROXY_URL,
+    "qwen": QWEN_PROXY_URL,
+    "nebius": NEBIUS_PROXY_URL,
+}
+
+
 def _call_openai_compatible(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:
-    base_url = DEEPSEEK_PROXY_URL if provider == "deepseek" else QWEN_PROXY_URL
+    base_url = _OPENAI_COMPATIBLE_BASE_URLS[provider]
     status, result = _post_upstream(
         provider,
         model,

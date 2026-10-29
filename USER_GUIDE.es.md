@@ -151,7 +151,7 @@ No. Solo necesitas saber qué quieres que logre tu negocio. Gestionas a la IA de
 El sistema cuenta con **Auto-Sanación (Auto-Healing)** integrada. Si un proceso en segundo plano falla o ocurre un error inesperado, Le Fabrique captura la excepción y crea automáticamente una **Tarea de Mantenimiento** de alta prioridad en el tablero Kanban. Asigna esta tarea al Arquitecto de IA, lo que significa que el sistema crea, de manera literal, una tarea para arreglarse a sí mismo antes de que un humano note la caída. Además, la IA prueba su propio trabajo durante los sprints normales; si una prueba falla, reescribe el código hasta que pase.
 
 **¿A quién pertenece el código generado por Fabrique?**
-A ti. Fabrique es tu fábrica propietaria, y todo el código generado por tu equipo de IA pertenece enteramente a tu organización.
+A ti. El resultado de tu equipo de IA pertenece enteramente a tu organización. Fabrique en sí es de código abierto bajo la [licencia Apache 2.0](LICENSE): lo ejecutas, y puedes modificarlo y redistribuirlo.
 
 ---
 *¿Necesitas ayuda para instalar el sistema por primera vez? Por favor, proporciona el [README Técnico Principal](README.es.md) a tu administrador de sistemas o TI.*
