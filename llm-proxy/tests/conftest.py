@@ -16,7 +16,7 @@ import pytest
 
 _APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 
-for _key in ("GEMINI_API_KEY", "DEEPSEEK_API_KEY", "QWEN_API_KEY"):
+for _key in ("GEMINI_API_KEY", "DEEPSEEK_API_KEY", "QWEN_API_KEY", "NEBIUS_API_KEY"):
     os.environ[_key] = ""
 os.environ["OTEL_SDK_DISABLED"] = "true"
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
@@ -63,6 +63,8 @@ class FakeUpstream:
             return "deepseek"
         if "qwen" in url:
             return "qwen"
+        if "tokenfactory" in url:
+            return "nebius"
         if "generativelanguage" in url:
             return "gemini"
         raise AssertionError(f"unexpected upstream URL {url}")
@@ -105,6 +107,16 @@ def proxy(monkeypatch):
     for name in ("_refresh_gemini_models", "_refresh_deepseek_models", "_refresh_qwen_models"):
         monkeypatch.setattr(mod, name, lambda: None)
     return mod
+
+
+@pytest.fixture()
+def nebius(proxy, monkeypatch):
+    """The proxy with the Nebius Token Factory key and catalogue configured."""
+    monkeypatch.setattr(proxy, "NEBIUS_API_KEY", "n-key")
+    monkeypatch.setattr(proxy, "_available_nebius_models",
+                        {"nvidia/Llama-3.1-Nemotron-70B-Instruct", "nvidia/Nemotron-Nano-9B"})
+    monkeypatch.setattr(proxy, "_refresh_nebius_models", lambda: None)
+    return proxy
 
 
 @pytest.fixture()
