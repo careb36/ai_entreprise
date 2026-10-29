@@ -138,3 +138,6 @@ openproject-data/
 openproject/
 
 # ==========================================
+
+# --- Memoria local de agentes (nunca versionar: el repo es publico) ---
+.openhands/

@@ -1,7 +1,11 @@
 # Botón «Informe de estado»: crea un issue en este repositorio con la etiqueta
 # `informe`. La automatización de documentación de la fábrica reacciona a esa
-# etiqueta, redacta el informe ejecutivo para dirección y abre un PR en
-# docs/informes/.
+# etiqueta y publica el informe ejecutivo como comentario en ese mismo issue.
+#
+# El informe NO se commitea: este repositorio es público y el informe detalla el
+# estado operativo de los cinco sistemas, incluidos los que son privados (qué CI
+# falla, cuántas alertas de dependencias hay abiertas y cuántas son críticas).
+# El issue queda igual de accesible para dirección y no lo indexa un buscador.
 #
 # Corre en el runner propio porque los jobs hospedados de la cuenta están
 # bloqueados por el límite de gasto de Actions.
