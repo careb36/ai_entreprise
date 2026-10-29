@@ -10,14 +10,22 @@ Thumbs.db
 *.bak
 
 # --- Secrets & Environment (CRITICAL — never commit real credentials) ---
+# Matches .env and every .env.<suffix> (.env.production, .env.staging, .env.test,
+# ...), not just .env.local. The example file is re-included below, and must stay
+# the only tracked one: this repository is public.
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 *.pem
 *.key
 *.p12
 *.pfx
+*.jks
+id_rsa
+id_ed25519
+.htpasswd
+.npmrc
+.pypirc
 certs/
 secrets/
 password.txt
@@ -40,13 +48,18 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
+coverage/
 .venv/
 venv/
 ENV/
 *.egg-info/
 .mypy_cache/
 .ruff_cache/
+.tox/
+*.orig
+*.rej
 
 # --- Python build artifacts (NOT the project's build/ asset folder) ---
 backend/build/
@@ -55,13 +68,21 @@ vscode-daemon/build/
 
 # --- Node.js ---
 node_modules/
+.eslintcache
+*.log
 
 # --- Frontend build output ---
 frontend/dist/
 frontend/build/
 frontend/.vite/
 frontend/.cache/
+frontend/coverage/
 *.tsbuildinfo
+
+# --- Test tooling reports ---
+test-results/
+playwright-report/
+.playwright/
 
 # --- VS Code extension compiled output ---
 vscode-extension/out/
