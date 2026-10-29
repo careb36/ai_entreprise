@@ -21,7 +21,11 @@ RUN poetry config virtualenvs.create false \
 # Install runtime helpers required by gunicorn and OpenTelemetry instrumentation.
 RUN pip install --no-cache-dir gunicorn 'setuptools<85'
 
-COPY app.py usage.py /app/
+# app.py imports every one of these as a sibling module; copying only app.py
+# and usage.py boots gunicorn into `ModuleNotFoundError: No module named
+# 'upstream'` and the container dies before serving a single request.
+# A new top-level module in llm-proxy/ has to be added here too.
+COPY app.py usage.py upstream.py catalogue.py provider_keys.py telemetry.py /app/
 
 EXPOSE 5100
 
