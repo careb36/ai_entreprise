@@ -25,7 +25,6 @@ import json
 import logging
 import os
 import platform
-import re
 import shutil
 import stat
 import string
@@ -37,9 +36,8 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
 import nats
-from nats.errors import TimeoutError as NATSTimeoutError
-
 import nats_scope
+from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(
     level=logging.INFO,
