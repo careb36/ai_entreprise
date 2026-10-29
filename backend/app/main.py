@@ -8,6 +8,8 @@ Responsibilities:
 - Registers lifecycle handlers (startup/shutdown)
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from config import Settings
@@ -34,7 +36,23 @@ from services.healthcheck import aggregate
 
 settings = Settings()
 
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Runs the startup/shutdown handlers for the app's lifetime.
+
+    Starlette 1.0 removed `add_event_handler`, so this is the only way left to
+    hook the lifecycle.
+    """
+    await startup(application)
+    try:
+        yield
+    finally:
+        await shutdown(application)
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Fabrique Enterprise API",
     description="Autonomous AI Engineering Factory API with Multi-Tenancy, Governance, and Auto-Healing support.",
     version="2026.4.1",
@@ -81,19 +99,6 @@ app.include_router(workspace_router)
 
 # Register exception handlers
 register_exception_handlers(app)
-
-
-# Register lifecycle handlers
-async def on_startup():
-    await startup(app)
-
-
-async def on_shutdown():
-    await shutdown(app)
-
-
-app.add_event_handler("startup", on_startup)
-app.add_event_handler("shutdown", on_shutdown)
 
 
 def _nats_state(request: Request) -> str:
