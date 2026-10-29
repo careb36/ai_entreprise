@@ -81,6 +81,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "@types/react"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-patch:
         applies-to: version-updates
