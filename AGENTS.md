@@ -180,6 +180,21 @@ test workflows — push a pull request to get a run. Backend and frontend jobs
 are path-filtered on `backend/**`, `llm-proxy/**`, `frontend/**` and their own
 workflow file.
 
+A red run does not necessarily mean broken code: read the check-run
+*annotations* (`gh api repos/<owner>/<repo>/check-runs/<job_id>/annotations`),
+not just the log. Two infrastructure failures look identical to test failures in
+the UI and in `--log-failed`:
+
+- *"The self-hosted runner lost communication with the server"* — the tests had
+  already passed (`665 passed`) when the runner dropped; it is the runner host,
+  not the change.
+- *"The job was not started because recent account payments have failed or your
+  spending limit needs to be increased"* — a job on a hosted runner. Every
+  workflow must stay on the self-hosted label for this reason.
+
+The `Run tests` step also reports `conclusion: null` in that first case, which
+is the tell.
+
 ## Docs that mislead
 
 Several top-level documents stop mid-section or describe tooling that is not
@@ -192,9 +207,8 @@ here. Trust the code and the workflows over them:
 - `CLAUDE.md` still says `backend/app/main.py` holds every route and that CI
   runs `poetry check --lock`. Neither is true: routes live in
   `backend/app/routers/`, and the backend job runs ruff, mypy and pytest.
-- `CONTRIBUTING.md` says `gitleaks` runs in CI, but no workflow scans for
-  secrets; `security-scan.yml` only looks at dependencies (Trivy over the
-  filesystem, `safety` in the backend, and that one is non-failing). Do not
-  rely on CI to catch a committed key.
+- No workflow scans for secrets; `security-scan.yml` only looks at
+  dependencies (Trivy over the filesystem, `safety` in the backend, and that one
+  is non-failing). Do not rely on CI to catch a committed key.
 - `README.md` asks for Node 20+, but `frontend/package.json` sets
   `"engines": { "node": ">=24" }`, and CI and the `Makefile` use Node 24.

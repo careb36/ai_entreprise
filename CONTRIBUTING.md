@@ -31,13 +31,22 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 
 ## 2. Non-negotiables
 
-1. **No secrets in the repo.** Ever. Use the secret manager; `gitleaks` runs in CI.
+1. **No secrets in the repo.** Ever. Use the secret manager. No workflow scans
+   for secrets, so nothing will catch a committed key: check before you commit.
 2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
    third-party tools without Security sign-off. No new dependency without §7.4.
 3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
 4. **Every change traces to an issue.** PRs without a linked issue are closed.
 5. **Agents do not merge to `main`.** A human merges every PR (§10.2).
 6. **Tests and observability ship with the change**, not after it (§12).
+
+### Licensing of contributions
+
+La Fabrique is released under the [Apache License 2.0](LICENSE). By opening a
+pull request you agree that your contribution is licensed under the same terms
+(inbound = outbound, no separate CLA). Only contribute code you have the right
+to submit: no copied code from a project whose licence is incompatible with
+Apache 2.0, and keep third-party notices intact.
 
 ---
 
