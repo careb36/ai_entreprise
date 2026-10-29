@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 
 _APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
+# app.py imports its sibling modules (usage.py) by name, as it does in /app.
+sys.path.insert(0, str(_APP_PATH.parent))
 
 for _key in ("GEMINI_API_KEY", "DEEPSEEK_API_KEY", "QWEN_API_KEY", "NEBIUS_API_KEY"):
     os.environ[_key] = ""

@@ -19,7 +19,7 @@ from models import BacklogItem, Procedure, Sprint
 from models.procedure import ALL_ROLES
 from sqlmodel import Session, select
 
-from services.board import rework_request_count
+from services.board import awaits_risk_acceptance, rework_request_count
 
 BASELINE_SPRINTS = 2
 MEASURE_AFTER_SPRINTS = 2
@@ -56,7 +56,13 @@ def board_metrics(session: Session, sprint_ids: list[int]) -> dict[str, Any]:
     )
     tasks = len(items)
     rework = sum(rework_request_count(item.comments) for item in items)
-    blocked = sum(1 for item in items if item.status == "blocked")
+    # An approved high-risk delivery waiting for a person is not a failure
+    # of the procedures in force (services/risk.py).
+    blocked = sum(
+        1
+        for item in items
+        if item.status == "blocked" and not awaits_risk_acceptance(item.comments)
+    )
     return {
         "sprints": len(sprint_ids),
         "tasks": tasks,

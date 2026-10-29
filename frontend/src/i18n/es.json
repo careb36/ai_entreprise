@@ -904,7 +904,8 @@
       "empty": "Aún no hay datos semanales. Ejecuta sprints para poblar las métricas de salud de orquestación.",
       "summary_averages": "Promedios por Período",
       "weekly_trend": "Tendencia Semanal",
-      "anchor_date": "Ancla Lote 1"
+      "anchor_date": "Ancla Lote 1",
+      "tokens_unreported": "{{count}} turnos del Desarrollador no informaron tokens y quedan fuera del promedio."
     }
   },
   "memorySearch": {
@@ -1257,6 +1258,7 @@
     "unixLabel": "macOS / Ubuntu",
     "windowsLabel": "Windows (PowerShell)",
     "statusError": "Estado del daemon del espacio de trabajo no disponible: {{message}}",
+    "unknown": "No se puede saber si el daemon del espacio de trabajo está corriendo: {{reason}}. Puede estar corriendo; vuelve a comprobarlo en un momento.",
     "platforms": {
       "darwin": "macOS",
       "linux": "Ubuntu/Linux",
@@ -1504,6 +1506,9 @@
     "triagePerson": "ScrumMaster: que lo decida una persona.",
     "triageBrief": "Consigna: {{brief}}",
     "sendBack": "Mandar de vuelta al trabajo",
+    "riskHold": "QA la aprobó, pero es de riesgo alto: una persona la acepta o la manda de vuelta.",
+    "accept": "Aceptar",
+    "acceptError": "No se pudo aceptar: {{message}}",
     "sendBackError": "No se pudo mandar de vuelta: {{message}}",
     "proposalsTitle": "Propuestas de procedimiento a la espera de una decisión",
     "proposalsHint": "El ScrumMaster las propuso después de un sprint con retrabajo o tareas bloqueadas; los números del tablero las juzgarán.",

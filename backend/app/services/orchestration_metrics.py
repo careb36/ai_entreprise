@@ -8,7 +8,10 @@ from data that the task pipeline must write in a specific shape:
 1. **QA NEEDS WORK rate** — ``audit_log`` rows where
    ``details->>'role' = 'QA'`` and ``details->>'result_type' = 'NEEDS_WORK'``.
 2. **Avg Developer tokens** — ``audit_log.cost_tokens`` for rows where
-   ``details->>'role' = 'Developer'``.
+   ``details->>'role' = 'Developer'`` and the proxy reported the usage
+   (``details->>'tokens' = 'reported'``; older rows without the key count
+   when their total is above zero). Turns without a reported count are
+   counted apart, never averaged in as zero.
 3. **Architect consult frequency** — ``backlog_items.comments`` entries authored
    by ``Architect`` whose text starts with ``ARCHITECT_CONSULTED:``.
 
@@ -116,9 +119,10 @@ def canonical_kpi_role(role: str | None) -> str:
 def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
     """Return the total token count reported by the LLM proxy for one call.
 
-    The proxy always returns an OpenAI-style ``usage`` block; when only the
-    prompt/completion split is present the two are summed.  Anything
-    malformed yields ``0`` rather than raising.
+    The proxy returns an OpenAI-style ``usage`` block only when the provider
+    reported the count; when only the prompt/completion split is present the
+    two are summed.  A missing or malformed block yields ``0`` rather than
+    raising; ``usage_status`` says whether that 0 is known.
     """
     if not isinstance(llm_result, dict):
         return 0
@@ -136,6 +140,41 @@ def extract_usage_tokens(llm_result: dict[str, Any] | None) -> int:
     if total:
         return total
     return _as_int(usage.get("prompt_tokens")) + _as_int(usage.get("completion_tokens"))
+
+
+TOKENS_REPORTED = "reported"
+TOKENS_UNAVAILABLE = "unavailable"
+TOKENS_ESTIMATED = "estimated"
+
+
+def usage_status(llm_result: dict[str, Any] | None) -> str:
+    """How the call's token usage is known: ``reported``, ``estimated`` or ``unavailable``.
+
+    The proxy marks a count it only estimated (``usage_status: estimated``,
+    the estimate apart in ``usage_estimate``): that is not the provider's
+    figure, so it is never taken for one.
+
+    ``extract_usage_tokens`` returns 0 for a call whose usage is missing or
+    malformed; this tells that 0 apart from a call that really used none, so
+    the KPIs leave unknown counts out of an average instead of counting them
+    as zero.
+    """
+    if isinstance(llm_result, dict) and llm_result.get("usage_status") == (
+        TOKENS_ESTIMATED
+    ):
+        return TOKENS_ESTIMATED
+    if not isinstance(llm_result, dict) or not isinstance(
+        llm_result.get("usage"), dict
+    ):
+        return TOKENS_UNAVAILABLE
+    usage = llm_result["usage"]
+    for key in ("total_tokens", "prompt_tokens", "completion_tokens"):
+        try:
+            int(usage.get(key))
+        except (TypeError, ValueError):
+            continue
+        return TOKENS_REPORTED
+    return TOKENS_UNAVAILABLE
 
 
 def classify_review_result(review_text: str | None) -> str | None:
@@ -343,6 +382,8 @@ def record_agent_turn(
         agent_name=agent.get("name"),
         result_type=result_type,
     )
+    # Unknown is not zero: the KPI average reads this to leave such turns out.
+    details["tokens"] = usage_status(llm_result)
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]
@@ -360,8 +401,12 @@ def record_agent_turn(
     )
 
     try:
+        # Signed and chained like every other audit row (audit_chain.py);
+        # these rows used to be stored with no signature at all.
+        from audit_chain import seal_audit_row
+
         if session is not None:
-            session.add(row)
+            seal_audit_row(session, row)
             session.commit()
             session.refresh(row)
             return row
@@ -370,11 +415,17 @@ def record_agent_turn(
         from sqlmodel import Session
 
         with Session(engine) as own_session:
-            own_session.add(row)
+            seal_audit_row(own_session, row)
             own_session.commit()
             own_session.refresh(row)
             return row
     except Exception as exc:  # noqa: BLE001 - KPI recording must not abort the primary operation.
+        if session is not None:
+            # A failed write must not leave the caller's session unusable.
+            try:
+                session.rollback()
+            except Exception as rollback_exc:  # noqa: BLE001
+                logger.debug("KPI audit rollback failed: %s", rollback_exc)
         logger.warning(
             "KPI audit write failed (action=%s item=%s company=%s): %s",
             action,

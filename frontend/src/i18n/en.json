@@ -904,7 +904,8 @@
       "empty": "No weekly data yet. Run sprints to populate orchestration health metrics.",
       "summary_averages": "Period Averages",
       "weekly_trend": "Weekly Trend",
-      "anchor_date": "Batch 1 anchor"
+      "anchor_date": "Batch 1 anchor",
+      "tokens_unreported": "{{count}} Developer turns had no reported token count and are left out of the average."
     }
   },
   "memorySearch": {
@@ -1257,6 +1258,7 @@
     "unixLabel": "macOS / Ubuntu",
     "windowsLabel": "Windows (PowerShell)",
     "statusError": "Workspace daemon status unavailable: {{message}}",
+    "unknown": "Cannot tell whether the workspace daemon is running: {{reason}}. It may be running; check again in a moment.",
     "platforms": {
       "darwin": "macOS",
       "linux": "Ubuntu/Linux",
@@ -1504,6 +1506,9 @@
     "triagePerson": "ScrumMaster: leave it for a person.",
     "triageBrief": "Brief: {{brief}}",
     "sendBack": "Send back to work",
+    "riskHold": "Approved by QA, but high risk: a person accepts it or sends it back.",
+    "accept": "Accept",
+    "acceptError": "Could not accept it: {{message}}",
     "sendBackError": "Could not send it back: {{message}}",
     "proposalsTitle": "Procedure proposals waiting for a decision",
     "proposalsHint": "The ScrumMaster proposed these after a sprint with rework or blocked tasks; the board's numbers will judge them.",

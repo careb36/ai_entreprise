@@ -260,9 +260,31 @@ class _DaemonNATS:
         pass
 
 
+class NoRespondersError(Exception):
+    """Named like nats-py's: NATS says nobody listens on the subject."""
+
+
 class _NoDaemonNATS:
     async def request(self, subject, payload, timeout=5.0):
-        raise TimeoutError("nats: no responders available for request")
+        raise NoRespondersError("nats: no responders available for request")
+
+    async def close(self):
+        pass
+
+
+class _SilentNATS:
+    """A subscriber exists but nothing answers in time."""
+
+    async def request(self, subject, payload, timeout=5.0):
+        raise TimeoutError("nats: timeout")
+
+    async def close(self):
+        pass
+
+
+class _ErrorReplyNATS:
+    async def request(self, subject, payload, timeout=5.0):
+        return {"error": {"status": 500, "message": "disk full"}}
 
     async def close(self):
         pass
@@ -280,7 +302,33 @@ def test_status_reports_the_daemon_machine(test_client, daemon):
     assert connected.status_code == 200
     assert connected.json()["connected"] is True
     assert connected.json()["host"]["home"] == str(Path.home())
-    assert absent.json() == {"connected": False, "host": None, "jetstream": False}
+    assert connected.json()["state"] == "connected"
+    assert absent.json() == {
+        "connected": False,
+        "state": "absent",
+        "reason": "no daemon is listening",
+        "host": None,
+        "jetstream": False,
+    }
+
+
+def test_status_says_unknown_when_it_cannot_tell(test_client):
+    """Unknown is not absent: no NATS, no answer in time or an error reply."""
+    silent = _with_nats(test_client, _SilentNATS()).get("/v1/workspace/status").json()
+    erroring = (
+        _with_nats(test_client, _ErrorReplyNATS()).get("/v1/workspace/status").json()
+    )
+    no_nats = _with_nats(test_client, None).get("/v1/workspace/status").json()
+    _with_nats(
+        test_client, _SilentNATS()
+    )  # the app's shutdown closes whatever is there
+
+    assert (silent["state"], silent["connected"]) == ("unknown", False)
+    assert silent["reason"].startswith("no answer within")
+    assert erroring["state"] == "unknown"
+    assert erroring["reason"] == "the daemon answered with an error: disk full"
+    assert no_nats["state"] == "unknown"
+    assert no_nats["reason"] == "the backend is not connected to NATS"
 
 
 def test_browse_relays_the_daemon_listing_and_its_errors(test_client, daemon, tmp_path):

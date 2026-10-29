@@ -280,9 +280,11 @@ function ProjectCard({ project }: { project: WorkspaceInspection }) {
 }
 
 /** Whether the native workspace daemon answers, and on which machine. */
-function DaemonStatusLine({ host, connected, isPending, error, fallbackPlatform }: {
+function DaemonStatusLine({ host, connected, state, reason, isPending, error, fallbackPlatform }: {
   host: WorkspaceHost | null | undefined
   connected: boolean | undefined
+  state?: 'connected' | 'absent' | 'unknown'
+  reason?: string | null
   isPending: boolean
   error: unknown
   fallbackPlatform: string | undefined
@@ -294,6 +296,15 @@ function DaemonStatusLine({ host, connected, isPending, error, fallbackPlatform 
       <p role="status" className="flex items-center gap-2 text-xs text-green-300">
         <span className="status-dot bg-green-500" aria-hidden="true" />
         {t('workspaceDaemon.connected', { hostname: host.hostname, platform: platformName(t, host.platform) })}
+      </p>
+    )
+  }
+  // Unknown is not absent: the backend could not tell, so no "start it" instructions.
+  if (state === 'unknown') {
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-amber-300">
+        <span className="status-dot bg-amber-500" aria-hidden="true" />
+        {t('workspaceDaemon.unknown', { reason: reason ?? '' })}
       </p>
     )
   }
@@ -796,6 +807,8 @@ export default function CompanyNew() {
         <DaemonStatusLine
           host={workspaceStatus.data?.host}
           connected={workspaceStatus.data?.connected}
+          state={workspaceStatus.data?.state}
+          reason={workspaceStatus.data?.reason}
           isPending={workspaceStatus.isPending}
           error={workspaceStatus.error}
           fallbackPlatform={hostPlatform} />

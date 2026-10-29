@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshCw, ShieldCheck, Undo2 } from 'lucide-react'
+import { AlertTriangle, BookCheck, CheckCircle2, Loader2, PauseOctagon, RefreshCw, ShieldAlert, ShieldCheck, Undo2 } from 'lucide-react'
 import { useAgentRuns, useCurrentRole, useInbox, useReviewerRecord, useSprints, useUpdateBacklogItem } from '../hooks/useQueries'
 import { secondAttempts } from '../lib/learningTrend'
 import { useAppStore } from '../store/useAppStore'
@@ -10,6 +10,8 @@ import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, t
 // translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
 // and restarts the rework budgets after it.
 const SEND_BACK_COMMENT = 'Sent back to work by a person.'
+// The note written when a person accepts an approved high-risk delivery.
+const ACCEPT_COMMENT = 'High-risk delivery accepted by a person.'
 
 /**
  * The company's agents do the work; this page is what they need a person
@@ -31,10 +33,16 @@ function Section({ id, title, count, children }: { id: string; title: string; co
 function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: boolean }) {
   const { t } = useTranslation()
   const update = useUpdateBacklogItem()
+  const accept = useUpdateBacklogItem()
   const sendBack = () => update.mutate({
     itemId: task.id,
     data: { status: 'todo', comment: SEND_BACK_COMMENT },
   })
+  const acceptDelivery = () => accept.mutate({
+    itemId: task.id,
+    data: { status: 'done', comment: ACCEPT_COMMENT },
+  })
+  const pending = update.isPending || accept.isPending
 
   return (
     <article className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
@@ -47,6 +55,12 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: b
           {task.assignee && ` · ${task.assignee}`}
           {task.frozen && ` · ${t('inbox.frozen', { defaultValue: 'frozen by an operator' })}`}
         </p>
+        {task.risk_hold && (
+          <p className="flex items-center gap-1 text-xs font-semibold text-amber-300">
+            <ShieldAlert size={12} aria-hidden="true" />
+            {t('inbox.riskHold', { defaultValue: 'Approved by QA, but high risk: a person accepts it or sends it back.' })}
+          </p>
+        )}
         {task.reason && <p className="break-words text-xs text-gray-400">{task.reason}</p>}
         {task.triage && (
           <p className="break-words text-xs text-sky-200/80">
@@ -64,12 +78,25 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: b
             {t('inbox.sendBackError', { message: errorDetail(update.error), defaultValue: 'Could not send it back: {{message}}' })}
           </p>
         )}
+        {accept.isError && (
+          <p role="alert" className="text-xs text-red-300">
+            {t('inbox.acceptError', { message: errorDetail(accept.error), defaultValue: 'Could not accept it: {{message}}' })}
+          </p>
+        )}
       </div>
       {canManage && !task.frozen && (
-        <button type="button" onClick={sendBack} disabled={update.isPending} className="btn btn-secondary btn-sm shrink-0 self-start">
-          {update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
-          {t('inbox.sendBack', { defaultValue: 'Send back to work' })}
-        </button>
+        <div className="flex shrink-0 gap-2 self-start">
+          {task.risk_hold && (
+            <button type="button" onClick={acceptDelivery} disabled={pending} className="btn btn-primary btn-sm">
+              {accept.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+              {t('inbox.accept', { defaultValue: 'Accept' })}
+            </button>
+          )}
+          <button type="button" onClick={sendBack} disabled={pending} className="btn btn-secondary btn-sm">
+            {update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+            {t('inbox.sendBack', { defaultValue: 'Send back to work' })}
+          </button>
+        </div>
       )}
     </article>
   )

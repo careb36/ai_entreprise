@@ -21,6 +21,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from audit_chain import verify_chain
 from audit_signing import verify_audit_row
 from auth_policy import (
     current_user_if_required,
@@ -444,6 +445,23 @@ async def verify_audit(
         "rows": verified_rows,
         "summary": summary,
     }
+
+
+@router.get("/audit/chain")
+async def verify_audit_chain(
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Walk a company's audit hash chain and report where it breaks.
+
+    A row deleted, inserted, reordered, altered or moved from another company
+    shows as a break at its sequence number; the head (last number and hash)
+    can be recorded elsewhere to notice newest rows being dropped.
+    """
+    require_authenticated(user)
+    require_company_role(session, user, company_id, "Viewer")
+    return verify_chain(session, company_id)
 
 
 @router.get("/memory/search")

@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from audit_signing import canonical_payload, sign_audit_payload
+from audit_chain import seal_audit_row
 from models import AuditLog
 from sqlmodel import Session
 
@@ -98,9 +98,9 @@ class AgentService:
         Write a dual-destination audit entry for an agent interaction.
 
         Destinations:
-        1. **Filesystem** — appends a JSON line to ``AUDIT_LOG_PATH/audit.jsonl``.
-           This file acts as an immutable, append-only audit trail that persists
-           even if the database is unavailable.
+        1. **Filesystem** — appends a JSON line to ``AUDIT_LOG_PATH/audit.jsonl``
+           once the row is committed, an append-only copy of the trail outside
+           the database.
         2. **Database** — inserts an ``AuditLog`` row in the same SQLModel session.
            Provides queryable history for governance dashboards.
 
@@ -134,22 +134,9 @@ class AgentService:
             cost_tokens=cost_tokens,
             created_at=now,
         )
-        session.add(log)
-        session.flush()
-        session.refresh(log)
-
-        signature = sign_audit_payload(
-            canonical_payload(
-                interaction_id=log.interaction_id,
-                agent_id=log.agent_id,
-                action=log.action,
-                details=log.details,
-                result=log.result,
-                cost_tokens=log.cost_tokens,
-                created_at=log.created_at,
-            )
-        )
-        log.decision_signature = signature
+        # Signed, and appended to the company's hash chain (audit_chain.py).
+        seal_audit_row(session, log)
+        signature = log.decision_signature
 
         entry = {
             "company_id": log.company_id,
@@ -161,15 +148,19 @@ class AgentService:
             "result": log.result,
             "decision_signature": signature,
             "cost_tokens": log.cost_tokens,
+            "chain_seq": log.chain_seq,
+            "prev_hash": log.prev_hash,
+            "chain_hash": log.chain_hash,
         }
-
-        audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
-        audit_log_path.mkdir(parents=True, exist_ok=True)
-
-        # Filesystem audit — append-only JSONL; one JSON object per line.
-        with open(audit_log_path / "audit.jsonl", "a") as f:
-            f.write(json.dumps(entry) + "\n")
 
         # Database audit — queryable via the governance dashboard.
         session.commit()
+
+        # Filesystem audit — append-only JSONL; one JSON object per line.
+        # Written after the commit, so the file never holds a chain entry the
+        # database rolled back (its sequence number would be given out again).
+        audit_log_path = Path(os.getenv("AUDIT_LOG_PATH", "/app/.factory/logs"))
+        audit_log_path.mkdir(parents=True, exist_ok=True)
+        with open(audit_log_path / "audit.jsonl", "a") as f:
+            f.write(json.dumps(entry) + "\n")
         return log
