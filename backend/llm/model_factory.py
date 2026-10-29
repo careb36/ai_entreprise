@@ -76,6 +76,33 @@ class ModelFactory:
     # Class-level cache so each role is instantiated at most once per process.
     _model_cache: Dict[AgentRole, Optional[ChatOpenAI]] = {}
 
+    @staticmethod
+    def model_for_role(role: AgentRole) -> str:
+        """
+        The model id to use for *role*.
+
+        ``NEMOTRON_ROLES`` (comma-separated role names) opts roles into the
+        NVIDIA models served by Nebius Token Factory; ``NEMOTRON_MODEL``
+        (with ``NEMOTRON_MODEL_STRATEGIC`` / ``_FAST`` overrides) names them.
+        Unset means the ``ROLE_MODEL_MAP`` default, so nothing changes for
+        existing deployments.
+        """
+        default = ModelFactory.ROLE_MODEL_MAP[role].model_name
+        opted_in = {
+            r.strip().lower()
+            for r in os.getenv("NEMOTRON_ROLES", "").split(",")
+            if r.strip()
+        }
+        if role.value.lower() not in opted_in:
+            return default
+        tier_var = {
+            AgentRole.PO: "NEMOTRON_MODEL_STRATEGIC",
+            AgentRole.ARCHITECT: "NEMOTRON_MODEL_STRATEGIC",
+            AgentRole.SECOPS: "NEMOTRON_MODEL_STRATEGIC",
+            AgentRole.TECH_WRITER: "NEMOTRON_MODEL_FAST",
+        }.get(role, "NEMOTRON_MODEL")
+        return os.getenv(tier_var) or os.getenv("NEMOTRON_MODEL", "") or default
+
     @classmethod
     def get_model(cls, role: AgentRole) -> ChatOpenAI:
         """
@@ -98,7 +125,7 @@ class ModelFactory:
         proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
 
         model = ChatOpenAI(
-            model=config.model_name,
+            model=cls.model_for_role(role),
             temperature=config.temperature,
             max_tokens=config.max_tokens,
             # "proxy-managed" signals to the OpenAI SDK that auth is handled externally.
