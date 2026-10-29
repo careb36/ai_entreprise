@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/react-%2320232b.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Licencia: Propietaria](https://img.shields.io/badge/licencia-Propietaria-red.svg?style=for-the-badge)](LICENSE.md)
+[![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
 **Plataforma autónoma de desarrollo de software impulsada por IA**
 
@@ -398,10 +398,8 @@ Consulta [SECURITY.md](SECURITY.md) para la política de seguridad y el proceso 
 
 ## Licencia
 
-**Software Propietario.** Todos los derechos reservados.  
+**Apache License 2.0.** Ver [LICENSE](LICENSE).  
 Copyright © 2026 Carolina Pereira.
-
-Queda estrictamente prohibida la copia, distribución o uso comercial no autorizado de este sistema, por cualquier medio, sin el permiso explícito y por escrito de la propietaria.
 
 [⬆ Volver al inicio](#la-fabrique)
 
