@@ -120,7 +120,13 @@ venv's interpreter.
   `model_preference` parameter, and `"powerful"` is only an internal fallback
   bucket in the proxy's `_PREFERENCE_TIERS`. `/v1/models` classifies models by
   tier (`fast|balanced|code|strategic|preview`). Role→model defaults live in
-  `backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
+  `backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`, read through
+  `ModelFactory.model_for_role()` so `NEMOTRON_ROLES` can override per role).
+- **Providers.** The proxy routes by model-id prefix against a catalogue it
+  fetches: `nebius` (`nvidia/`, `meta-llama/`, … → Nebius Token Factory, which
+  serves the NVIDIA open models / Nemotron), `gemini`, `deepseek`, `qwen`. An
+  id that is not in its provider's fetched catalogue is a 400, never silently
+  redirected. Nebius needs `NEBIUS_API_KEY`; `NEBIUS_PROXY_URL` retargets it.
 - **Memory.** pgvector in Postgres for RAG (`/v1/memory/*`), Neo4j Engram nodes
   for decision lineage (`backend/memory/engram_processor.py`).
 - **Auth.** Enforced by default (`AUTH_REQUIRED`); login answers 503 until
@@ -154,8 +160,9 @@ venv's interpreter.
   `claude/…`), commit subjects are written in Spanish and often carry a
   Conventional Commits prefix (`docs: …`, `ci: …`, sometimes none). Fill in
   `.github/PULL_REQUEST_TEMPLATE.md` (it carries the backend and
-  frontend checklists) and reference an issue. A human merges; agents never
-  merge to `main`.
+  frontend checklists) and reference an issue. Agents may merge their own pull
+  request once every required check on the head commit is green; a human
+  reviews and decides otherwise.
 - **Secrets.** Keys (`JWT_SECRET_KEY`, `FERNET_SECRET_KEY`,
   `AUDIT_SIGNING_KEY`, provider API keys) come from `.env`, which is
   git-ignored; only `.env.example` is committed. `SECURITY.md` outranks
@@ -174,6 +181,21 @@ test workflows — push a pull request to get a run. Backend and frontend jobs
 are path-filtered on `backend/**`, `llm-proxy/**`, `frontend/**` and their own
 workflow file.
 
+A red run does not necessarily mean broken code: read the check-run
+*annotations* (`gh api repos/<owner>/<repo>/check-runs/<job_id>/annotations`),
+not just the log. Two infrastructure failures look identical to test failures in
+the UI and in `--log-failed`:
+
+- *"The self-hosted runner lost communication with the server"* — the tests had
+  already passed (`665 passed`) when the runner dropped; it is the runner host,
+  not the change.
+- *"The job was not started because recent account payments have failed or your
+  spending limit needs to be increased"* — a job on a hosted runner. Every
+  workflow must stay on the self-hosted label for this reason.
+
+The `Run tests` step also reports `conclusion: null` in that first case, which
+is the tell.
+
 ## Docs that mislead
 
 Several top-level documents stop mid-section or describe tooling that is not
@@ -186,9 +208,8 @@ here. Trust the code and the workflows over them:
 - `CLAUDE.md` still says `backend/app/main.py` holds every route and that CI
   runs `poetry check --lock`. Neither is true: routes live in
   `backend/app/routers/`, and the backend job runs ruff, mypy and pytest.
-- `CONTRIBUTING.md` says `gitleaks` runs in CI, but no workflow scans for
-  secrets; `security-scan.yml` only looks at dependencies (Trivy over the
-  filesystem, `safety` in the backend, and that one is non-failing). Do not
-  rely on CI to catch a committed key.
+- No workflow scans for secrets; `security-scan.yml` only looks at
+  dependencies (Trivy over the filesystem, `safety` in the backend, and that one
+  is non-failing). Do not rely on CI to catch a committed key.
 - `README.md` asks for Node 20+, but `frontend/package.json` sets
   `"engines": { "node": ">=24" }`, and CI and the `Makefile` use Node 24.

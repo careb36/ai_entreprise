@@ -13,6 +13,10 @@ on:
 jobs:
   test:
     runs-on: [self-hosted, linux, x64, lafabrique]
+    # Un cuelgue de red en `poetry install` dejó este job 40 minutos parado sin
+    # que nadie se enterara (el default son 6 horas). El job entero tarda ~5
+    # minutos, así que cortar a los 20 convierte un cuelgue en un fallo visible.
+    timeout-minutes: 20
     env:
       # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
       POETRY_VIRTUALENVS_CREATE: "false"
@@ -46,7 +50,10 @@ jobs:
         working-directory: ./backend
         run: |
           pip install mypy
-          mypy app --ignore-missing-imports || true
+          # `app` has no __init__.py and imports itself both as `config` and
+          # `app.config`, so mypy finds every file twice and aborts before it
+          # checks anything. explicit-package-bases keeps it to one module name.
+          mypy app --ignore-missing-imports --explicit-package-bases || true
 
       - name: Run tests
         working-directory: ./backend
@@ -60,10 +67,15 @@ jobs:
           POETRY_VIRTUALENVS_CREATE: "true"
           POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-llm
         run: |
-          (cd llm-proxy && poetry install --no-interaction --no-root)
-          PROXY_PYTHON="$(cd llm-proxy && poetry env info --path)/bin/python"
-          "$PROXY_PYTHON" -m pip install -r llm-proxy/requirements-dev.txt
-          "$PROXY_PYTHON" -m pytest llm-proxy/tests -q
+          # `timeout` para que un registro de PyPI que no responde falle con el
+          # comando a la vista en vez de colgar el job entero. El install va
+          # siempre: es idempotente y sale del caché en segundos, y una guarda
+          # del tipo "¿existe pip?" da por bueno un venv vacío.
+          # Todo por `poetry run`: `poetry env info --path` puede resolver a otro
+          # venv del que `poetry install` acaba de llenar.
+          timeout 900 bash -c 'cd llm-proxy && poetry install --no-interaction --no-root'
+          timeout 300 poetry run --directory llm-proxy pip install -r requirements-dev.txt
+          poetry run --directory llm-proxy python -m pytest -q
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
