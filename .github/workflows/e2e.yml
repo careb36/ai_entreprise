@@ -32,9 +32,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, lafabrique]
     timeout-minutes: 25
 
-    concurrency:
-      group: e2e-${{ github.ref }}
-      cancel-in-progress: true
 
     # Postgres and NATS are started as plain containers on ports picked at run
     # time. Binding the service container to a fixed host port made the job die
