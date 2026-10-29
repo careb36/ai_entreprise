@@ -66,6 +66,20 @@ check() {  # check <description> <shell test...>
   if "$@"; then echo "  ok   $what"; else echo "  FAIL $what"; FAILED=1; fi
 }
 
+# A bare /health is not enough: any other server on this port satisfies it.
+# The agent server that also binds 127.0.0.1 on a shared host answers
+# {"status":"ok"} there, so a plain `curl -sf` read "backend is up" while
+# every /v1 call returned 404. Assert our payload, and name the collision
+# explicitly instead of blaming the backend.
+port_busy() { (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+healthy() { curl -sf -m 2 "$API/health" | "$PY" -c 'import sys, json; sys.exit(json.load(sys.stdin).get("status") != "healthy")' 2>/dev/null; }
+
+if port_busy "$BACKEND_PORT"; then
+  echo "port $BACKEND_PORT is already in use by another process."
+  echo "the e2e stack cannot start: set E2E_BACKEND_PORT to a free port."
+  exit 2
+fi
+
 # A fresh database: the backend creates its own schema at startup.
 "$PY" - "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" <<'EOF' || { echo "could not recreate the database"; exit 2; }
 import sys
@@ -107,8 +121,8 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
 
-for _ in $(seq 1 60); do curl -sf "$API/health" >/dev/null && break; sleep 1; done
-curl -sf "$API/health" >/dev/null || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
+for _ in $(seq 1 60); do healthy && break; sleep 1; done
+healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
 echo "stack up: $API (logs in $WORK)"
 
 api() { curl -s "$@"; }
