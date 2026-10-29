@@ -12,9 +12,17 @@ Usage::
         ...
 """
 
+import sys
+from pathlib import Path
 from unittest import mock
 
 import pytest
+
+# The daemon tests load ``vscode-daemon/daemon.py`` by path, which does not put
+# its directory on ``sys.path`` the way ``python daemon.py`` does at runtime.
+# Without this, the daemon cannot import its sibling ``nats_scope``.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
+
 from config import settings
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
