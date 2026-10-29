@@ -19,7 +19,11 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root
 
 # Install runtime helpers required by gunicorn and OpenTelemetry instrumentation.
-RUN pip install --no-cache-dir gunicorn 'setuptools<85'
+# `setuptools<85` is not enough: opentelemetry-instrumentation (a dependency of
+# the Flask instrumentation, imported by app.py) does `from pkg_resources import
+# ...`, and setuptools dropped that module in 81. Anything in 81..84 installs
+# cleanly and then dies at boot with `No module named 'pkg_resources'`.
+RUN pip install --no-cache-dir gunicorn 'setuptools<81'
 
 # app.py imports every one of these as a sibling module; copying only app.py
 # and usage.py boots gunicorn into `ModuleNotFoundError: No module named
