@@ -120,7 +120,13 @@ venv's interpreter.
   `model_preference` parameter, and `"powerful"` is only an internal fallback
   bucket in the proxy's `_PREFERENCE_TIERS`. `/v1/models` classifies models by
   tier (`fast|balanced|code|strategic|preview`). Role→model defaults live in
-  `backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
+  `backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`, read through
+  `ModelFactory.model_for_role()` so `NEMOTRON_ROLES` can override per role).
+- **Providers.** The proxy routes by model-id prefix against a catalogue it
+  fetches: `nebius` (`nvidia/`, `meta-llama/`, … → Nebius Token Factory, which
+  serves the NVIDIA open models / Nemotron), `gemini`, `deepseek`, `qwen`. An
+  id that is not in its provider's fetched catalogue is a 400, never silently
+  redirected. Nebius needs `NEBIUS_API_KEY`; `NEBIUS_PROXY_URL` retargets it.
 - **Memory.** pgvector in Postgres for RAG (`/v1/memory/*`), Neo4j Engram nodes
   for decision lineage (`backend/memory/engram_processor.py`).
 - **Auth.** Enforced by default (`AUTH_REQUIRED`); login answers 503 until

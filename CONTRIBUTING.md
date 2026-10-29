@@ -1,6 +1,6 @@
 # Contributing to La Fabrique
 
-La Fabrique is a proprietary multi-agent orchestration platform: a React web
+La Fabrique is an open-source (Apache 2.0) multi-agent orchestration platform: a React web
 app, a FastAPI control plane, and LangGraph-based sprint orchestration with
 first-class observability.
 
@@ -32,7 +32,7 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 ## 2. Non-negotiables
 
 1. **No secrets in the repo.** Ever. Use the secret manager; `gitleaks` runs in CI.
-2. **Proprietary IP.** Do not paste code, prompts, or designs from La Fabrique into
+2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
    third-party tools without Security sign-off. No new dependency without §7.4.
 3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
 4. **Every change traces to an issue.** PRs without a linked issue are closed.
