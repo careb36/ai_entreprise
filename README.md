@@ -293,16 +293,19 @@ fetched catalogue. Four providers are wired today:
 | `deepseek` | `deepseek-` | `https://api.deepseek.com/v1` |
 | `qwen` | `qwen`, `qwq-`, `qvq-` | Qwen Cloud compatible mode |
 
-**Nebius Token Factory serves the NVIDIA open models.** Set `NEBIUS_API_KEY` and
-the proxy fetches the live catalogue at startup (and hourly), lists what it
-found on `GET /v1/models`, and routes Nemotron ids to Token Factory over the
-OpenAI-compatible chat endpoint:
+**Nebius Token Factory serves the NVIDIA open models.** The key comes from
+<https://tokenfactory.nebius.com> — its own console, *not*
+`console.nebius.com`, whose IAM keys do not authenticate here. Log in, open
+**Workspace → Explore → API keys**, create one and copy it (it is shown once).
+Set `NEBIUS_API_KEY` and the proxy fetches the live catalogue at startup (and
+hourly), lists what it found on `GET /v1/models`, and routes Nemotron ids to
+Token Factory over the OpenAI-compatible chat endpoint:
 
 ```bash
 curl -s localhost:5100/v1/models | jq '.models[] | select(.provider=="nebius")'
 curl -s localhost:5100/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"nvidia/Llama-3.1-Nemotron-70B-Instruct",
+  -d '{"model":"nvidia/nemotron-3-super-120b-a12b",
        "messages":[{"role":"user","content":"Explain the outbox pattern"}]}'
 ```
 
@@ -329,10 +332,32 @@ NEMOTRON_ROLES=PO,Architect,SecOps,Developer,QA,TechWriter
 
 # The model those roles get. The _STRATEGIC and _FAST variants override it
 # per role: PO, Architect and SecOps read _STRATEGIC; TechWriter reads _FAST.
-NEMOTRON_MODEL=nvidia/Llama-3.1-Nemotron-70B-Instruct
-NEMOTRON_MODEL_STRATEGIC=nvidia/Llama-3.1-Nemotron-70B-Instruct
-NEMOTRON_MODEL_FAST=nvidia/Nemotron-Nano-9B
+NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
+NEMOTRON_MODEL_STRATEGIC=nvidia/Nemotron-3-Ultra-550b-a55b
+NEMOTRON_MODEL_FAST=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 ```
+
+### Checking the integration end to end
+
+`scripts/verify-nebius.sh` proves the three layers separately, so a failure
+points at the broken one instead of the whole feature:
+
+```bash
+NEBIUS_API_KEY=... ./scripts/verify-nebius.sh
+# or, against a proxy that is already running:
+PROXY_URL=http://localhost:5100 ./scripts/verify-nebius.sh
+```
+
+| Layer | What it checks |
+|-------|----------------|
+| 1 | The key authenticates against Token Factory and lists the served models |
+| 2 | The proxy publishes those models under `provider: nebius`, with tiers |
+| 3 | A real chat completion comes back through the proxy |
+
+The Nemotron models Token Factory serves are reasoning models: they spend
+tokens on `reasoning` before writing `content`. With a small `max_tokens` the
+completion can come back with `content: null` and `finish_reason: length` — the
+request worked, it just ran out of budget. Give it a few hundred tokens.
 
 `ModelFactory.model_for_role()` resolves this, and `get_model()` uses it, so
 the choice reaches every LangGraph node. Requests still carry

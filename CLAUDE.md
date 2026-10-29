@@ -436,8 +436,8 @@ Frontend changes are checked separately by
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
 and `npm run build` from the `frontend/` directory, using
 `frontend/package-lock.json` as the cache key.
-`.github/workflows/frontend-tests.yml` runs the same steps on the same
-triggers, plus prettier, which reports but does not fail the job.
+`frontend-build.yml` is the only frontend workflow: `frontend-tests.yml` was a
+duplicate of the same checks on the same triggers and was removed.
 
 `npm run lint` (`frontend/eslint.config.mjs`) enforces the i18n rule below with
 `eslint-plugin-i18next`: any literal text in JSX, or in a `title`, `alt`,

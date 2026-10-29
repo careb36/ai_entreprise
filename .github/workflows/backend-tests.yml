@@ -25,9 +25,19 @@ jobs:
     # minutos, así que cortar a los 20 convierte un cuelgue en un fallo visible.
     timeout-minutes: 20
     env:
-      # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
-      POETRY_VIRTUALENVS_CREATE: "false"
-
+      # A nivel de job, no de paso: si solo lo tiene `poetry install`, el paso
+      # de tests resuelve otro directorio, no encuentra el venv recién creado y
+      # hace uno vacío ("Creating virtualenv ...n9PHBxPn" -> "Command not found:
+      # pytest"). Con el mismo path, los dos pasos hablan del mismo venv.
+      # `runner.temp` no vale aquí: el contexto `runner` solo existe en un `env`
+      # de paso, y a nivel de job deja el workflow inválido.
+      POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
+      # Poetry consulta el keyring en cada operación. En un runner sin sesión
+      # de escritorio completa, secretstorage abre DBus, no recibe respuesta y
+      # aborta el `poetry install` ("Cannot install greenlet"). No hay ningún
+      # secreto que buscar aquí: la clave se lee del entorno.
+      POETRY_NO_INTERACTION: "1"
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
     steps:
       - uses: actions/checkout@v4
 
@@ -42,8 +52,12 @@ jobs:
       - name: Install dependencies
         working-directory: ./backend
         run: |
-          pip install --upgrade pip
-          pip install poetry
+          # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
+          # este runner encuentra /home/caro/Dev/.venv (Python 3.14, del host).
+          # Instalaba Poetry ahí, fuera del PATH, y el siguiente paso moría con
+          # `poetry: command not found`.
+          ~/.local/bin/uv pip install --python "$RUNNER_TEMP/venv-3.12/bin/python" poetry >/dev/null
+          poetry env use python
           poetry install --no-interaction
 
       - name: Lint with ruff

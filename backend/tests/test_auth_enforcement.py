@@ -426,9 +426,12 @@ def test_company_mutations_require_manager(
     if role:
         _member(sqlite_session, identity, role)
     company_id = identity[1].id
+    # La query se compone aquí: pasar `params=` descarta la que ya lleva `path`
+    # en el client de Starlette 1.x, y estos casos prueban el orden entre la
+    # validación del cuerpo y la autorización.
+    url = f"{path}{'&' if '?' in path else '?'}company_id={company_id}"
     response = test_client.post(
-        path,
-        params={"company_id": company_id},
+        url,
         json={**payload, "company_id": company_id} if payload is not None else None,
         headers=identity[2],
     )
@@ -465,9 +468,8 @@ def test_quota_reset_uses_business_unit_company(
     ],
 )
 def test_enterprise_reads_reject_nonmembers(test_client, identity, path):
-    response = test_client.get(
-        path, params={"company_id": identity[1].id}, headers=identity[2]
-    )
+    url = f"{path}{'&' if '?' in path else '?'}company_id={identity[1].id}"
+    response = test_client.get(url, headers=identity[2])
     assert response.status_code == 403
     assert response.json() == {"detail": "Not a member of this company"}
 
@@ -611,9 +613,9 @@ def test_payload_company_cannot_override_authorized_context(
     payload = {"company_id": identity[1].id + 100000}
     if operation == "audit":
         payload = {"action": "forged", "details": payload}
+    sep = "&" if "?" in operation else "?"
     response = test_client.post(
-        f"/v1/{operation}",
-        params={"company_id": identity[1].id},
+        f"/v1/{operation}{sep}company_id={identity[1].id}",
         json=payload,
         headers=identity[2],
     )

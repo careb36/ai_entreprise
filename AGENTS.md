@@ -73,8 +73,8 @@ There is no ruff config file, so ruff's defaults apply; the CI-pinned version is
 0.17.1 and its default rule set moves between releases, so lint with that
 version. ruff is not in the backend's Poetry dev group (that lists pytest,
 black, isort and mypy), so install it: `pip install "ruff==0.17.1"`. mypy runs
-in CI but is non-blocking (`|| true`). Nothing formats TypeScript: the prettier
-step in `frontend-tests.yml` is non-failing and prettier is not a dependency.
+in CI but is non-blocking (`|| true`). Nothing formats TypeScript: prettier is
+not a dependency, so no formatting check runs.
 
 `scripts/e2e/run.sh` is the end-to-end check. It needs a real Postgres and a
 NATS started with JetStream (`docker compose up -d postgres nats`), recreates
@@ -173,8 +173,7 @@ venv's interpreter.
 Workflows live in `.github/workflows/` and mostly run on the self-hosted
 `[self-hosted, linux, x64, lafabrique]` runner: `backend-tests.yml` (Poetry,
 ruff, mypy, pytest, then the llm-proxy suite), `frontend-build.yml` (`npm ci`,
-tsc, lint, tests, build), `frontend-tests.yml` (the same plus the non-failing
-prettier step), `e2e.yml` (the loop against pgvector/Postgres and NATS with
+tsc, lint, tests, build), `e2e.yml` (the loop against pgvector/Postgres and NATS with
 JetStream), `security-scan.yml` (Trivy, plus a non-failing `safety check`) and
 a manual SLSA provenance workflow. Feature-branch pushes do **not** trigger the
 test workflows — push a pull request to get a run. Backend and frontend jobs
