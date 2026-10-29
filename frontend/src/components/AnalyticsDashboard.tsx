@@ -105,6 +105,8 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
   const { weeks, summary, anchor_date } = data
   const pre = summary.pre_batch1
   const post = summary.post_batch1
+  // Turns without a reported count are left out of the average, and said so.
+  const unreportedTurns = weeks.reduce((sum, w) => sum + (w.developer_turns_without_tokens ?? 0), 0)
 
   const kpis = [
     {
@@ -116,6 +118,9 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
       label: t('analytics.orchestration_health.avg_tokens'),
       pre: Math.round(pre.avg_developer_tokens).toLocaleString(),
       post: Math.round(post.avg_developer_tokens).toLocaleString(),
+      note: unreportedTurns > 0
+        ? t('analytics.orchestration_health.tokens_unreported', { count: unreportedTurns })
+        : undefined,
     },
     {
       label: t('analytics.orchestration_health.consult_freq'),
@@ -164,6 +169,7 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
                 </div>
               </div>
             )}
+            {'note' in kpi && kpi.note && <p className="mt-2 text-xs text-amber-300">{kpi.note}</p>}
           </div>
         ))}
       </div>

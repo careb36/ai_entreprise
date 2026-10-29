@@ -141,6 +141,24 @@ describe('AnalyticsDashboard orchestration health', () => {
     expect(container.querySelectorAll('rect[fill="#22d3ee"]')).toHaveLength(2)
   })
 
+  it('says how many Developer turns had no reported token count, and only when some did', () => {
+    mockAnalyticsSummary()
+    mockOrchestrationHealth({
+      data: {
+        ...orchestrationHealth,
+        weeks: orchestrationHealth.weeks.map((week, index) => ({ ...week, developer_turns_without_tokens: index })),
+      },
+    })
+    const { unmount } = render(<AnalyticsDashboard sprintId={9} />)
+    const avgTokensCard = getCard(i18n.t('analytics.orchestration_health.avg_tokens'))
+    expect(within(avgTokensCard).getByText(i18n.t('analytics.orchestration_health.tokens_unreported', { count: 3 }))).toBeInTheDocument()
+    unmount()
+
+    mockOrchestrationHealth()
+    render(<AnalyticsDashboard sprintId={9} />)
+    expect(screen.queryByText(/no reported token count/)).not.toBeInTheDocument()
+  })
+
   it('renders the empty state without NaN values or chart bars when no weeks are returned', () => {
     mockAnalyticsSummary()
     mockOrchestrationHealth({

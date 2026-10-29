@@ -103,6 +103,7 @@ services:
       - "5100:5100"
     volumes:
       - ./llm-proxy/app.py:/app/app.py
+      - ./llm-proxy/usage.py:/app/usage.py
     networks:
       - factory-network
     depends_on:

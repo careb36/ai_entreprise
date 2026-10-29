@@ -215,3 +215,42 @@ def test_nebius_models_need_the_key(proxy, client):
 
     assert resp.status_code == 200
     assert not [m for m in resp.get_json()["models"] if m["provider"] == "nebius"]
+
+
+# ── How a call's token count is known ────────────────────────────────────────
+
+
+def test_a_reported_count_is_usage(client, upstream):
+    upstream.set("deepseek", openai_ok())
+    body = client.post("/v1/chat/completions", json={"model": "deepseek-flash", "messages": [{"role": "user", "content": "hi"}]}).get_json()
+    assert body["usage"]["total_tokens"] == 12
+    assert body["usage_status"] == "reported"
+    assert "usage_estimate" not in body
+
+
+def test_a_missing_count_is_estimated_apart_and_never_shown_as_usage(client, upstream, proxy, monkeypatch):
+    charged = []
+    monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
+    upstream.set("deepseek", FakeResponse(200, {"choices": [{"message": {"role": "assistant", "content": "hello"}}]}))
+    body = client.post("/v1/chat/completions", json={"model": "deepseek-flash", "messages": [{"role": "user", "content": "hi"}]}).get_json()
+    assert "usage" not in body
+    assert body["usage_status"] == "estimated"
+    # The quota is still charged, with the estimate, so a budget cannot leak.
+    assert charged == [body["usage_estimate"]] and body["usage_estimate"] > 0
+
+
+def test_gemini_reports_its_own_count_or_the_estimate_stays_apart(client, upstream):
+    upstream.set(
+        "gemini",
+        FakeResponse(
+            200,
+            {"candidates": [{"content": {"parts": [{"text": "hello"}]}}], "usageMetadata": {"totalTokenCount": 33}},
+        ),
+    )
+    reported = client.post("/v1/chat/completions", json={"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "hi"}]}).get_json()
+    assert (reported["usage"]["total_tokens"], reported["usage_status"]) == (33, "reported")
+
+    upstream.set("gemini", gemini_ok())
+    estimated = client.post("/v1/chat/completions", json={"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "hi"}]}).get_json()
+    assert "usage" not in estimated
+    assert estimated["usage_status"] == "estimated"

@@ -21,7 +21,7 @@ RUN poetry config virtualenvs.create false \
 # Install runtime helpers required by gunicorn and OpenTelemetry instrumentation.
 RUN pip install --no-cache-dir gunicorn 'setuptools<81'
 
-COPY app.py /app/
+COPY app.py usage.py /app/
 
 EXPOSE 5100
 

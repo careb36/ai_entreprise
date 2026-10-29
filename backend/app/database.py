@@ -110,6 +110,11 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
+        # audit_log — a hash chain per company (audit_chain.py)
+        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS chain_seq INTEGER",
+        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS prev_hash VARCHAR",
+        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS chain_hash VARCHAR",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_audit_log_company_chain_seq ON audit_log (company_id, chain_seq)",
         """
         UPDATE audit_log AS a SET company_id = c.id
         FROM companies AS c
