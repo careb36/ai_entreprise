@@ -24,8 +24,8 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 | Security | Threat model, secrets, dependency & data-handling review | Yes (security-sensitive) |
 | Developers | Implementation, tests, observability | Yes (own area, after review) |
 | QA | Verification against acceptance criteria | No |
-| AI agents | Draft specs, implement, review, verify — per `AGENTS.md` | Yes (own PR, head green only) |
-| Human Owner | Final authority on `main` | Yes |
+| AI agents | Draft specs, implement, review, verify, merge — per `AGENTS.md` | Yes (any PR, head green only) |
+| Human Owner | Ownership, escalation, final call | Yes |
 
 ---
 
@@ -37,11 +37,11 @@ merging changes** — for humans and for AI agents. If you are an agent, read
    third-party tools without Security sign-off. No new dependency without §7.4.
 3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
 4. **Every change traces to an issue.** PRs without a linked issue are closed.
-5. **Agents merge their own pull request**, once every required check on the
-   head commit is green and no other check on that commit is failing or still
-   running. An agent never merges someone else's PR, never merges a head that
-   moved after it was verified, and never weakens branch protection to get a
-   merge through. A human can veto any PR, before or after the merge.
+5. **Agents merge pull requests** — their own and each other's — once every
+   check on the head commit is green. No PR waits for a human signature. What
+   still does not happen: merging a red or still-running head, merging a head
+   that moved after it was verified, or weakening branch protection to force a
+   merge through.
 6. **Tests and observability ship with the change**, not after it (§12).
 
 ### Licensing of contributions
