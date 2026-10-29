@@ -75,15 +75,23 @@ jobs:
           pg_port="$(docker port "pg-e2e-$GITHUB_RUN_ID" 5432/tcp | head -1 | sed 's/.*://')"
           nats_port="$(docker port "nats-e2e-$GITHUB_RUN_ID" 4222/tcp | head -1 | sed 's/.*://')"
 
+          # TCP, not the Unix socket: the image starts a temporary server that
+          # listens on the socket alone while it runs the init scripts, so
+          # `pg_isready` with no -h answers "accepting" seconds before the real
+          # postmaster is up, the loop breaks on that false positive, and the
+          # next check lands in the gap and exits 1. The backend also connects
+          # over TCP on the mapped port, so that is what has to answer.
           for _ in $(seq 1 60); do
-            docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory >/dev/null 2>&1 && break
+            docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1 >/dev/null 2>&1 && break
             sleep 1
           done
           for _ in $(seq 1 30); do
             (echo > /dev/tcp/127.0.0.1/"$nats_port") 2>/dev/null && break
             sleep 1
           done
-          docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory
+          # A ready socket is not a ready port, and the port is what the e2e
+          # talks to. Fail here, loudly, instead of inside the run.
+          docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1
 
           {
             echo "E2E_POSTGRES_HOST=127.0.0.1"
