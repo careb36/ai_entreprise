@@ -166,3 +166,52 @@ def test_upstream_timeout_defaults_to_110_seconds(client, upstream, proxy):
 
     assert upstream.calls[0]["timeout"] == 110
     assert proxy.LLM_UPSTREAM_TIMEOUT_SECONDS == 110
+
+
+def test_nemotron_routes_to_nebius_token_factory(nebius, client, upstream):
+    upstream.set("nebius", openai_ok("from nemotron"))
+
+    resp = _chat(client, "nvidia/Llama-3.1-Nemotron-70B-Instruct")
+
+    assert resp.status_code == 200
+    assert upstream.providers_called() == ["nebius"]
+    assert upstream.calls[0]["url"] == (
+        "https://api.tokenfactory.nebius.com/v1/chat/completions"
+    )
+    body = resp.get_json()
+    assert body.get("provider") == "nebius"
+    assert body.get("served_model") == "nvidia/Llama-3.1-Nemotron-70B-Instruct"
+    assert body["choices"][0]["message"]["content"] == "from nemotron"
+
+
+def test_nebius_reports_a_provider_error_with_its_status(nebius, client, upstream):
+    # 400 is not retriable, so no cross-provider fallback masks the answer.
+    upstream.set("nebius", FakeResponse(400, {"error": {"message": "model is not available"}}))
+
+    resp = _chat(client, "nvidia/Llama-3.1-Nemotron-70B-Instruct")
+
+    assert resp.status_code >= 400
+    body = resp.get_json()
+    assert body.get("provider") == "nebius"
+    assert "model is not available" in (body.get("detail") or body.get("message") or str(body))
+    assert upstream.providers_called() == ["nebius"]
+
+
+def test_nebius_models_are_listed_with_a_tier(nebius, client):
+    resp = client.get("/v1/models")
+
+    assert resp.status_code == 200
+    listed = {m["id"]: m for m in resp.get_json()["models"] if m["provider"] == "nebius"}
+    assert set(listed) == {
+        "nvidia/Llama-3.1-Nemotron-70B-Instruct",
+        "nvidia/Nemotron-Nano-9B",
+    }
+    assert listed["nvidia/Nemotron-Nano-9B"]["tier"] == "fast"
+
+
+def test_nebius_models_need_the_key(proxy, client):
+    # The shared fixture sets no NEBIUS_API_KEY, so nothing from Nebius is listed.
+    resp = client.get("/v1/models")
+
+    assert resp.status_code == 200
+    assert not [m for m in resp.get_json()["models"] if m["provider"] == "nebius"]

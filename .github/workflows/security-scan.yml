@@ -28,15 +28,19 @@ jobs:
           echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          # v0.36.0 defaults to the v0.70.0 engine, while the previously used
+          # @master defaults to v0.76.1. Pin the engine so this change only
+          # fixes the action reference and leaves scan results identical.
+          version: 'v0.76.1'
           scan-type: 'fs'
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         continue-on-error: true
         with:
