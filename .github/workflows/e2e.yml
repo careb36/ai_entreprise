@@ -133,7 +133,7 @@ jobs:
           docker rm -f "pg-e2e-$GITHUB_RUN_ID" "nats-e2e-$GITHUB_RUN_ID" || true
 
       - name: Keep the logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-logs
