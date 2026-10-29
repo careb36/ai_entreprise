@@ -17,6 +17,12 @@ jobs:
     # que nadie se enterara (el default son 6 horas). El job entero tarda ~5
     # minutos, así que cortar a los 20 convierte un cuelgue en un fallo visible.
     timeout-minutes: 20
+    env:
+      # A nivel de job, no de paso: si solo lo tiene `poetry install`, el paso
+      # de tests resuelve otro directorio, no encuentra el venv recién creado y
+      # hace uno vacío ("Creating virtualenv ...n9PHBxPn" -> "Command not found:
+      # pytest"). Con el mismo path, los dos pasos hablan del mismo venv.
+      POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
     steps:
       - uses: actions/checkout@v4
 
@@ -30,13 +36,6 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./backend
-        env:
-          # Poetry must own its virtualenv. With POETRY_VIRTUALENVS_CREATE=false
-          # it resolves the *base* interpreter of the uv venv (the uv-managed
-          # CPython), then runs `pip uninstall` against it and dies with
-          # externally-managed-environment. A Poetry-created venv is a real
-          # virtualenv and the install stays inside it.
-          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
         run: |
           # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
           # este runner encuentra /home/caro/Dev/.venv (Python 3.14, del host).
