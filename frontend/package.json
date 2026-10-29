@@ -33,7 +33,7 @@
     "lucide-react": "^0.303.0",
     "moment": "^2.31.0",
     "postcss": "^8.5.32",
-    "react": "^18.2.0",
+    "react": "^19.3.1",
     "react-big-calendar": "^1.20.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^17.1.9",
@@ -44,7 +44,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
-    "@types/react": "^18.2.45",
+    "@types/react": "^19.3.0",
     "@types/react-big-calendar": "^1.16.3",
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
