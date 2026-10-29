@@ -240,6 +240,9 @@ class OrchestrationHealthWeek(BaseModel):
     avg_developer_tokens: float  # Mean tokens consumed by Developer agent
     architect_consult_count: int  # Number of ARCHITECT_CONSULTED comments
     task_count: int  # Total QA audit rows in the week
+    # Developer turns whose token usage the proxy did not report: left out of
+    # avg_developer_tokens rather than averaged in as zero.
+    developer_turns_without_tokens: int = 0
     post_batch1: bool  # True when the week falls after 2026-05-02
 
 

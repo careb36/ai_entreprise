@@ -3,7 +3,8 @@ Inbox router — what the company needs a person for.
 
 ``GET /v1/inbox`` lists, for one company, the decisions only a person can
 take: tasks blocked until someone acts (with the ScrumMaster's triage of each,
-when it answered the escalation), procedure proposals waiting for a Manager,
+when it answered the escalation; ``risk_hold`` marks an approved high-risk
+delivery waiting for a person to accept it), procedure proposals waiting for a Manager,
 and the agent runs of other producers nobody has approved or rejected (the
 company's own task worker and kickoff runs are decided by the review loop).
 The agents do the rest on their own, so this is the whole of a person's
@@ -16,7 +17,11 @@ from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from services import scrum_master
-from services.board import block_reason, blocked_item_next_step
+from services.board import (
+    awaits_risk_acceptance,
+    block_reason,
+    blocked_item_next_step,
+)
 from services.carry_over import carried_over
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -68,6 +73,9 @@ async def inbox(
                 # person to weigh: another attempt (with a brief) or a person.
                 "triage": triages.get(item.id),
                 "frozen": next_step == "frozen",
+                # Approved by QA, but high risk (services/risk.py): a person
+                # accepts it (marks it done) or sends it back to work.
+                "risk_hold": awaits_risk_acceptance(item.comments),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )

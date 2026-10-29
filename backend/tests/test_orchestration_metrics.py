@@ -25,6 +25,7 @@ from app.services.orchestration_metrics import (
     is_architect_consult_comment,
     record_agent_turn,
     should_consult_architect,
+    usage_status,
 )
 
 
@@ -69,6 +70,45 @@ def test_extract_usage_tokens_prefers_total_then_sums_split():
     assert extract_usage_tokens({"usage": {"total_tokens": "oops"}}) == 0
     assert extract_usage_tokens({}) == 0
     assert extract_usage_tokens(None) == 0
+
+
+def test_usage_status_tells_an_unknown_count_from_a_zero():
+    assert usage_status({"usage": {"total_tokens": 0}}) == "reported"
+    assert usage_status({"usage": {"prompt_tokens": 10}}) == "reported"
+    assert usage_status({"usage": {"total_tokens": "oops"}}) == "unavailable"
+    assert usage_status({"usage": {}}) == "unavailable"
+    assert usage_status({}) == "unavailable"
+    assert usage_status(None) == "unavailable"
+
+
+def test_an_estimate_from_the_proxy_is_never_taken_for_a_reported_count():
+    estimated = {"usage_status": "estimated", "usage_estimate": 40}
+    assert usage_status(estimated) == "estimated"
+    assert extract_usage_tokens(estimated) == 0
+
+
+def test_record_agent_turn_marks_whether_tokens_were_reported(audit_session):
+    reported = record_agent_turn(
+        agent={"role": "Developer", "name": "dev"},
+        llm_result={"usage": {"total_tokens": 12}},
+        company_id=1,
+        sprint_id=1,
+        backlog_item_id=1,
+        action="task.execute",
+        session=audit_session,
+    )
+    unknown = record_agent_turn(
+        agent={"role": "Developer", "name": "dev"},
+        llm_result={"text": "no usage block"},
+        company_id=1,
+        sprint_id=1,
+        backlog_item_id=2,
+        action="task.execute",
+        session=audit_session,
+    )
+    assert (reported.details["tokens"], reported.cost_tokens) == ("reported", 12)
+    # The stored count is still 0, but the row says it is unknown, not zero.
+    assert (unknown.details["tokens"], unknown.cost_tokens) == ("unavailable", 0)
 
 
 def test_classify_review_result():

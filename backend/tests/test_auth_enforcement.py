@@ -298,6 +298,7 @@ def test_flag_off_init_creates_no_membership(
         ("POST", "/v1/memory/store?content=test"),
         ("GET", "/v1/memory/search?query=test"),
         ("GET", "/v1/audit/verify?interaction_id=test"),
+        ("GET", "/v1/audit/chain?company_id=1"),
         ("GET", "/v1/messages?company_id=1"),
         ("GET", "/v1/procedures?company_id=1"),
         ("POST", "/v1/procedures"),
@@ -671,3 +672,15 @@ def test_memory_store_rejects_foreign_interaction(
         headers=identity[2],
     )
     assert response.status_code == 403
+
+
+def test_audit_chain_is_read_by_a_member_of_the_company_only(
+    test_client, sqlite_session, identity
+):
+    params = {"company_id": identity[1].id}
+    response = test_client.get("/v1/audit/chain", params=params, headers=identity[2])
+    assert response.status_code == 403
+    _member(sqlite_session, identity, "Viewer")
+    response = test_client.get("/v1/audit/chain", params=params, headers=identity[2])
+    assert response.status_code == 200
+    assert response.json()["company_id"] == identity[1].id

@@ -52,6 +52,12 @@ BRIEF_PREFIX = "Brief for the next attempt: "
 # advised on a task. Their advice is context, never evidence; whether it helps
 # is counted from the boards.
 CONSOLE_ADVICE_PREFIX = "External assistant context used for this task:"
+# The worker's note when QA approved a delivery whose risk tier is high
+# (services/risk.py): the task waits for a person to accept it, at every
+# autonomy level. A person accepts it by marking it done, or sends it back.
+RISK_HOLD_PREFIX = (
+    "High-risk delivery approved by QA, waiting for a person to accept it"
+)
 
 
 def comment_list(comments: Any) -> list[dict[str, Any]]:
@@ -238,6 +244,7 @@ def is_explicit_block_reason(text: str) -> bool:
             "missing deliverable",
             "freeze after",
             "sleep-induced churn",
+            RISK_HOLD_PREFIX.lower(),
         )
     )
 
@@ -285,6 +292,7 @@ def blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | No
             and "manual triage" in _text(c).lower()
         )
         or (_author(c) == "system" and "qa quality gate failed" in _text(c).lower())
+        or is_risk_hold_note(c)
         or is_rework_request(c)
         for c in comments
     )
@@ -311,6 +319,31 @@ def blocked_item_next_step(comments: Any, assignee_role: str | None) -> str | No
         1 for c in comments if _author(c) == "system" and "retry" in _text(c).lower()
     )
     return None if retry_count >= 1 else "retry"
+
+
+def is_risk_hold_note(comment: dict[str, Any]) -> bool:
+    """The worker's note holding an approved high-risk delivery for a person."""
+    return _author(comment) == "system" and _text(comment).startswith(RISK_HOLD_PREFIX)
+
+
+def awaits_risk_acceptance(comments: Any) -> bool:
+    """The task's latest verdict is a high-risk hold: approved, waiting for a person.
+
+    Not a failure: the sprint's blocked share and the procedures' numbers
+    leave it out, and it is never carried into another sprint on the
+    company's own.
+    """
+    for comment in reversed(verdict_comments(comments)):
+        text = _text(comment)
+        author = _author(comment)
+        if text and (
+            author == "system"
+            or author in GATE_AUTHORS_LOWER
+            or is_rework_request(comment)
+            or is_send_back(comment)
+        ):
+            return is_risk_hold_note(comment)
+    return False
 
 
 def block_reason(comments: Any) -> str:

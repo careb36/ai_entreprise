@@ -26,6 +26,7 @@ from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
     SCRUM_MASTER_ROLE,
+    awaits_risk_acceptance,
     block_reason,
     blocked_item_next_step,
     comment_list,
@@ -226,6 +227,8 @@ def carry_over_on_the_companys_own(
         and not carried_over(item)
         and not is_carry_over(item)
         and not _left_for_a_person(triages.get(item.id))
+        # Approved, waiting for a person to accept it: not another attempt.
+        and not awaits_risk_acceptance(item.comments)
     ][:room]
     if not ids:
         return []
