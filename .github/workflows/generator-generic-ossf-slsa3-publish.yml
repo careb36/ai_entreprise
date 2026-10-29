@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      contents: read
     name: Build & hash Docker images
     runs-on: ubuntu-latest
     outputs:
