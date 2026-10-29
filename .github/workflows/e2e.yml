@@ -45,6 +45,12 @@ jobs:
       # `runner.temp` no vale aquí: el contexto `runner` no existe en un `env`
       # de job y deja el workflow inválido.
       POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
+      # Poetry consulta el keyring en cada operación. En un runner sin sesión
+      # de escritorio completa, secretstorage abre DBus, no recibe respuesta y
+      # aborta el `poetry install` ("Cannot install greenlet"). No hay ningún
+      # secreto que buscar aquí: la clave se lee del entorno.
+      POETRY_NO_INTERACTION: "1"
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
     steps:
       - uses: actions/checkout@v5
 
