@@ -9,6 +9,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir nats-py==2.3.1
 
-COPY daemon.py /app/daemon.py
+COPY daemon.py nats_scope.py /app/
 
 CMD ["python", "/app/daemon.py"]

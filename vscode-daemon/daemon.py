@@ -39,6 +39,8 @@ from urllib.parse import urlsplit
 import nats
 from nats.errors import TimeoutError as NATSTimeoutError
 
+import nats_scope
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -61,48 +63,9 @@ ASSISTANT_FALLBACK_PATHS = {
 QUEUE_GROUP = "workspace-daemon"
 
 # JetStream streams for deliveries queued while no daemon was connected.  The
-# backend declares the same streams (backend/app/nats_client.py).
-DELIVER_SUBJECT = "workspace.deliver"
-DELIVERED_SUBJECT = "workspace.delivered"
+# backend declares the same streams (backend/app/nats_client.py); nats_scope
+# applies NATS_NAMESPACE to both so two stacks on one broker stay apart.
 
-
-def _scoped(name: str) -> str:
-    """
-    Prefix JetStream names with ``NATS_NAMESPACE`` when it is set.
-
-    The backend builds the same names (``backend/app/nats_client.py``). Streams
-    use work-queue retention, so a daemon sharing the broker with another stack
-    and the same consumer name takes that stack's deliveries and never returns
-    them. The namespace keeps the two apart.
-    """
-    raw = os.getenv("NATS_NAMESPACE", "").strip()
-    if not raw:
-        return name
-    namespace = re.sub(r"[^A-Za-z0-9_-]", "_", raw).strip("_")
-    return f"{namespace}_{name}" if namespace else name
-
-
-def _scoped_subject(subject: str) -> str:
-    """
-    Namespace a durable subject the way the backend does.
-
-    Names alone are not enough: two work-queue streams bound to one subject each
-    store every message, so both stacks would still process it.
-    """
-    raw = os.getenv("NATS_NAMESPACE", "").strip()
-    if not raw:
-        return subject
-    namespace = re.sub(r"[^A-Za-z0-9_-]", "_", raw).strip("_")
-    return f"{namespace}.{subject}" if namespace else subject
-
-
-DELIVERY_STREAMS = {
-    _scoped("FABRIQUE_DELIVERIES"): _scoped_subject(DELIVER_SUBJECT),
-    _scoped("FABRIQUE_DELIVERY_RESULTS"): _scoped_subject(DELIVERED_SUBJECT),
-}
-DELIVERY_CONSUMER = _scoped("workspace-daemon")
-STREAM_MAX_AGE_SECONDS = 7 * 24 * 3600
-STREAM_DUPLICATE_WINDOW_SECONDS = 15 * 60
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -785,7 +748,7 @@ async def ensure_delivery_streams(js) -> None:
     from nats.js import api
     from nats.js.errors import NotFoundError
 
-    for name, subject in DELIVERY_STREAMS.items():
+    for name, subject in nats_scope.DELIVERY_STREAMS.items():
         try:
             await js.stream_info(name)
         except NotFoundError:
@@ -794,8 +757,8 @@ async def ensure_delivery_streams(js) -> None:
                 subjects=[subject],
                 retention=api.RetentionPolicy.WORK_QUEUE,
                 storage=api.StorageType.FILE,
-                max_age=STREAM_MAX_AGE_SECONDS,
-                duplicate_window=STREAM_DUPLICATE_WINDOW_SECONDS,
+                max_age=nats_scope.STREAM_MAX_AGE_SECONDS,
+                duplicate_window=nats_scope.STREAM_DUPLICATE_WINDOW_SECONDS,
             ))
 
 
@@ -819,7 +782,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
     }
     try:
         await js.publish(
-            _scoped_subject(DELIVERED_SUBJECT),
+            nats_scope.DELIVERY_RESULT_SUBJECT,
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
@@ -837,16 +800,16 @@ async def consume_queued_deliveries(nc, js) -> None:
     from nats.js import api
 
     psub = await js.pull_subscribe(
-        _scoped_subject(DELIVER_SUBJECT),
-        durable=DELIVERY_CONSUMER,
-        stream=_scoped("FABRIQUE_DELIVERIES"),
+        nats_scope.DELIVERY_SUBJECT,
+        durable=nats_scope.DELIVERY_CONSUMER,
+        stream=nats_scope.DELIVERY_STREAM,
         config=api.ConsumerConfig(
-            durable_name=DELIVERY_CONSUMER,
+            durable_name=nats_scope.DELIVERY_CONSUMER,
             deliver_policy=api.DeliverPolicy.ALL,
             ack_policy=api.AckPolicy.EXPLICIT,
             ack_wait=120,
             max_deliver=10,
-            filter_subject=_scoped_subject(DELIVER_SUBJECT),
+            filter_subject=nats_scope.DELIVERY_SUBJECT,
         ),
     )
     while True:

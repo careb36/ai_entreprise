@@ -95,6 +95,14 @@ jobs:
           docker run --rm --entrypoint python "fabrique-${{ matrix.name }}:ci" \
             -c "import app.main; print('imports OK')"
 
+      # Este Dockerfile copiaba un solo archivo, así que un módulo nuevo al lado
+      # de daemon.py se quedaba fuera de la imagen. Importarlo lo detecta.
+      - name: Smoke test vscode-daemon (imports resolve)
+        if: matrix.name == 'vscode-daemon'
+        run: |
+          docker run --rm --entrypoint python "fabrique-${{ matrix.name }}:ci" \
+            -c "import daemon; print('daemon imports OK')"
+
       - name: Clean up ${{ matrix.name }}
         if: always()
         env:
