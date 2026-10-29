@@ -160,10 +160,10 @@ venv's interpreter.
   `claude/…`), commit subjects are written in Spanish and often carry a
   Conventional Commits prefix (`docs: …`, `ci: …`, sometimes none). Fill in
   `.github/PULL_REQUEST_TEMPLATE.md` (it carries the backend and
-  frontend checklists) and reference an issue. Agents may merge their own pull
-  request once every check on the head commit is green — all of the checks that
-  ran, not only the ones branch protection requires. A human reviews and decides
-  otherwise.
+  frontend checklists) and reference an issue. Agents merge pull requests, their
+  own and each other's, once every check on the head commit is green — all of
+  the checks that ran, not only the ones branch protection requires. No PR waits
+  for a human signature.
 - **Secrets.** Keys (`JWT_SECRET_KEY`, `FERNET_SECRET_KEY`,
   `AUDIT_SIGNING_KEY`, provider API keys) come from `.env`, which is
   git-ignored; only `.env.example` is committed. `SECURITY.md` outranks
