@@ -46,7 +46,10 @@ jobs:
         working-directory: ./backend
         run: |
           pip install mypy
-          mypy app --ignore-missing-imports || true
+          # `app` has no __init__.py and imports itself both as `config` and
+          # `app.config`, so mypy finds every file twice and aborts before it
+          # checks anything. explicit-package-bases keeps it to one module name.
+          mypy app --ignore-missing-imports --explicit-package-bases || true
 
       - name: Run tests
         working-directory: ./backend
