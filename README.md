@@ -10,7 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-**AI-powered autonomous software development platform**
+**A verification and evidence layer for AI-generated code**
 
 > **Languages:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
@@ -20,14 +20,44 @@
 
 ## About
 
-La Fabrique is a multi-agent platform that orchestrates AI agents through a structured sprint lifecycle. Work is organized into **AI Sprints** — units of bounded, verifiable scope rather than fixed durations.
+La Fabrique answers one question about work that an AI agent produced:
 
-The platform provides:
-- **Multi-agent orchestration** via LangGraph workflows
-- **Real-time observability** through the GlassRoom SSE stream
-- **Knowledge graph memory** with Neo4j Engram nodes
-- **Vector semantic search** via pgvector
-- **Enterprise governance** with RBAC, token budgets, and audit trails
+> Did this agent actually do what it says it did?
+
+Generated code is abundant and cheap. What is scarce is a trustworthy answer to
+that question, and an evidentiary record that survives an audit. La Fabrique
+ingests agent work, checks it deterministically against what is on disk and what
+CI reports, and stores the result as evidence — separately from the agent's own
+claims.
+
+The agents are interchangeable and are not the product. Any producer can feed
+the layer: the bundled LangGraph roles (PO, Architect, ScrumMaster, Developer,
+QA, SecOps, TechWriter), an external coding agent, or a human. What the layer
+adds is the same in every case.
+
+**What it records:**
+
+- **Claims and observations stay in separate fields.** "The agent asserted X; we
+  observed Y" is the whole point, and merging them destroys it.
+- **Three verdicts, not two.** `verified`, `refuted`, and `unverifiable`.
+  `unverifiable` is a real outcome: most honest answers about third-party agent
+  work are exactly that, and a system that cannot say so will lie to stay
+  useful.
+- **No model decides whether a claim holds.** Verification is deterministic —
+  files on disk, exit statuses, CI check-runs. A model may summarise a
+  refutation for a human afterwards; it never adjudicates one.
+- **Refutation is load-bearing.** The path that fails a run is built first;
+  see `backend/app/services/verification.py`.
+
+Work is organised into **AI Sprints** — units of bounded, verifiable scope
+rather than fixed durations. Around the evidence layer, the platform provides
+RBAC and `company_id` scoping, per-company token budgets at a single proxy
+chokepoint, an append-only audit log, and Neo4j Engram nodes for per-decision
+lineage.
+
+> **Why the position above.** The reasoning, the history that motivates it, and
+> the design rules that constrain new work are in
+> [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 > **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
 
@@ -55,7 +85,7 @@ The platform provides:
 
 ## System Overview
 
-La Fabrique is a multi-agent platform that orchestrates AI agents through a structured sprint lifecycle. Work is organized into **AI Sprints** — units of bounded, verifiable scope rather than fixed durations.
+Work is organized into **AI Sprints** — units of bounded, verifiable scope rather than fixed durations. Each backlog item becomes an `AgentRun`: the agent's claim about what it did, plus the observations the platform gathers independently. A run is settled only when verification has produced a verdict for it.
 
 **Sprint scope tiers:**
 

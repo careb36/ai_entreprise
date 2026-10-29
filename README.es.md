@@ -10,7 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-**Plataforma autónoma de desarrollo de software impulsada por IA**
+**Una capa de verificación y evidencia para código generado por IA**
 
 > **Idiomas:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
@@ -20,14 +20,45 @@
 
 ## Acerca de
 
-La Fabrique es una plataforma multiagente que orquesta equipos de IA a través de un ciclo de vida de sprint estructurado. El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija.
+La Fabrique responde una sola pregunta sobre el trabajo que produjo un agente:
 
-La plataforma proporciona:
-- **Orquestación multiagente** mediante workflows de LangGraph
-- **Observabilidad en tiempo real** a través del stream SSE del GlassRoom
-- **Memoria en grafo de conocimiento** con nodos Engram de Neo4j
-- **Búsqueda semántica vectorial** mediante pgvector
-- **Gobernanza enterprise** con RBAC, presupuestos de tokens y auditoría
+> ¿De verdad hizo lo que dice que hizo?
+
+El código generado es abundante y barato. Lo escaso es una respuesta confiable a
+esa pregunta, y un registro de evidencia que resista una auditoría. La Fabrique
+ingiere el trabajo del agente, lo contrasta de forma determinista contra lo que
+hay en disco y lo que reporta CI, y guarda el resultado como evidencia —
+separado de lo que el agente afirma.
+
+Los agentes son intercambiables y no son el producto. Cualquier productor puede
+alimentar la capa: los roles de LangGraph incluidos (PO, Architect, ScrumMaster,
+Developer, QA, SecOps, TechWriter), un agente de código externo, o una persona.
+Lo que la capa aporta es lo mismo en todos los casos.
+
+**Qué registra:**
+
+- **Afirmaciones y observaciones nunca comparten campo.** "El agente afirmó X;
+  nosotros observamos Y" es justamente el punto, y fusionarlos lo destruye.
+- **Tres veredictos, no dos.** `verified`, `refuted` y `unverifiable`.
+  `unverifiable` es un resultado real: la respuesta honesta sobre trabajo de
+  agentes de terceros casi siempre es esa, y un sistema que no puede decirlo
+  miente para seguir siendo útil.
+- **Ningún modelo decide si una afirmación se sostiene.** La verificación es
+  determinista: ficheros en disco, códigos de salida, check-runs de CI. Un
+  modelo puede resumir una refutación para una persona después; nunca la
+  adjudica.
+- **La refutación es estructural.** El camino que hace fallar una corrida se
+  construye primero; ver `backend/app/services/verification.py`.
+
+El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y
+verificable, no de duración fija. Alrededor de la capa de evidencia, la
+plataforma aporta RBAC y alcance por `company_id`, presupuestos de tokens por
+empresa en un único punto de control, un log de auditoría de solo agregado, y
+nodos Engram de Neo4j para el linaje de cada decisión.
+
+> **Por qué esa postura.** El razonamiento, la historia que la motiva y las
+> reglas de diseño que restringen el trabajo nuevo están en
+> [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 > **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
 
@@ -54,7 +85,7 @@ La plataforma proporciona:
 
 ## Descripción General
 
-La Fabrique es una plataforma multiagente que orquesta equipos de IA a través de un ciclo de vida de sprint estructurado. El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija.
+El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y verificable, no de duración fija. Cada ítem del backlog se convierte en un `AgentRun`: la afirmación del agente sobre lo que hizo, más las observaciones que la plataforma reúne por su cuenta. Una corrida solo queda cerrada cuando la verificación le produjo un veredicto.
 
 **Niveles de alcance por sprint:**
 
