@@ -137,6 +137,7 @@ services:
       SUPPORT_ADMIN_EMAILS: ${SUPPORT_ADMIN_EMAILS:-}
       SUPPORT_AGENT_ENABLED: ${SUPPORT_AGENT_ENABLED:-false}
       NATS_URL: nats://nats:4222
+      NATS_NAMESPACE: ${NATS_NAMESPACE:-}
       LLM_PROXY_URL: http://llm-proxy:5100
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
@@ -185,6 +186,7 @@ services:
     profiles: ["docker-daemon"]
     environment:
       NATS_URL: nats://nats:4222
+      NATS_NAMESPACE: ${NATS_NAMESPACE:-}
       WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     working_dir: /app

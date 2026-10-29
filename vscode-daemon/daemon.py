@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import stat
 import string
@@ -37,6 +38,8 @@ from urllib.parse import urlsplit
 
 import nats
 from nats.errors import TimeoutError as NATSTimeoutError
+
+import nats_scope
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,16 +63,9 @@ ASSISTANT_FALLBACK_PATHS = {
 QUEUE_GROUP = "workspace-daemon"
 
 # JetStream streams for deliveries queued while no daemon was connected.  The
-# backend declares the same streams (backend/app/nats_client.py).
-DELIVER_SUBJECT = "workspace.deliver"
-DELIVERED_SUBJECT = "workspace.delivered"
-DELIVERY_STREAMS = {
-    "FABRIQUE_DELIVERIES": DELIVER_SUBJECT,
-    "FABRIQUE_DELIVERY_RESULTS": DELIVERED_SUBJECT,
-}
-DELIVERY_CONSUMER = "workspace-daemon"
-STREAM_MAX_AGE_SECONDS = 7 * 24 * 3600
-STREAM_DUPLICATE_WINDOW_SECONDS = 15 * 60
+# backend declares the same streams (backend/app/nats_client.py); nats_scope
+# applies NATS_NAMESPACE to both so two stacks on one broker stay apart.
+
 
 def compute_prompt_hash(prompt: str) -> str:
     """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
@@ -752,7 +748,7 @@ async def ensure_delivery_streams(js) -> None:
     from nats.js import api
     from nats.js.errors import NotFoundError
 
-    for name, subject in DELIVERY_STREAMS.items():
+    for name, subject in nats_scope.DELIVERY_STREAMS.items():
         try:
             await js.stream_info(name)
         except NotFoundError:
@@ -761,8 +757,8 @@ async def ensure_delivery_streams(js) -> None:
                 subjects=[subject],
                 retention=api.RetentionPolicy.WORK_QUEUE,
                 storage=api.StorageType.FILE,
-                max_age=STREAM_MAX_AGE_SECONDS,
-                duplicate_window=STREAM_DUPLICATE_WINDOW_SECONDS,
+                max_age=nats_scope.STREAM_MAX_AGE_SECONDS,
+                duplicate_window=nats_scope.STREAM_DUPLICATE_WINDOW_SECONDS,
             ))
 
 
@@ -786,7 +782,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
     }
     try:
         await js.publish(
-            DELIVERED_SUBJECT,
+            nats_scope.DELIVERY_RESULT_SUBJECT,
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
@@ -804,16 +800,16 @@ async def consume_queued_deliveries(nc, js) -> None:
     from nats.js import api
 
     psub = await js.pull_subscribe(
-        DELIVER_SUBJECT,
-        durable=DELIVERY_CONSUMER,
-        stream="FABRIQUE_DELIVERIES",
+        nats_scope.DELIVERY_SUBJECT,
+        durable=nats_scope.DELIVERY_CONSUMER,
+        stream=nats_scope.DELIVERY_STREAM,
         config=api.ConsumerConfig(
-            durable_name=DELIVERY_CONSUMER,
+            durable_name=nats_scope.DELIVERY_CONSUMER,
             deliver_policy=api.DeliverPolicy.ALL,
             ack_policy=api.AckPolicy.EXPLICIT,
             ack_wait=120,
             max_deliver=10,
-            filter_subject=DELIVER_SUBJECT,
+            filter_subject=nats_scope.DELIVERY_SUBJECT,
         ),
     )
     while True:
