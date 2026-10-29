@@ -17,6 +17,9 @@ import math
 from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
+import upstream
+from catalogue import fetch_model_ids
+from provider_keys import validate_api_keys
 from usage import estimated_usage, openai_reported_count, openai_text, reported_count, with_usage
 
 # --- OpenTelemetry ---
@@ -87,79 +90,22 @@ else:
 
 # --- API Key Validation ---
 def _validate_api_keys():
-    """Validate API keys at startup and log warnings for invalid/missing keys."""
-    errors = []
-    if DEEPSEEK_API_KEY:
-        try:
-            resp = requests.post(
-                f"{DEEPSEEK_PROXY_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
-                json={"model": "deepseek-flash", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
-                timeout=10,
-            )
-            if resp.status_code == 401 or resp.status_code == 403:
-                errors.append("DEEPSEEK_API_KEY is invalid")
-            else:
-                logger.info("DeepSeek API key validated successfully")
-        except Exception as e:
-            logger.warning(f"Could not validate DeepSeek API key: {e}")
-    else:
-        logger.warning("DEEPSEEK_API_KEY is not set")
+    """Ask each provider to authenticate, so a bad key fails loudly at startup."""
+    return validate_api_keys(
+        {
+            "gemini": GEMINI_API_KEY,
+            "deepseek": DEEPSEEK_API_KEY,
+            "qwen": QWEN_API_KEY,
+            "nebius": NEBIUS_API_KEY,
+        },
+        {
+            "gemini": GEMINI_PROXY_URL,
+            "deepseek": DEEPSEEK_PROXY_URL,
+            "qwen": QWEN_PROXY_URL,
+            "nebius": NEBIUS_PROXY_URL,
+        },
+    )
 
-
-    if GEMINI_API_KEY:
-        try:
-            resp = requests.get(
-                f"{GEMINI_PROXY_URL}/models",
-                headers={"x-goog-api-key": GEMINI_API_KEY},
-                timeout=10,
-            )
-            if resp.status_code in (401, 403):
-                errors.append("GEMINI_API_KEY is invalid")
-            else:
-                logger.info("Gemini API key validated successfully")
-        except Exception as e:
-            logger.warning(f"Could not validate Gemini API key: {e}")
-    else:
-        logger.warning("GEMINI_API_KEY is not set")
-
-    if QWEN_API_KEY:
-        try:
-            resp = requests.post(
-                f"{QWEN_PROXY_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
-                json={"model": "qwen3.6-flash", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1},
-                timeout=10,
-            )
-            if resp.status_code == 401 or resp.status_code == 403 or "invalid_api_key" in resp.text:
-                errors.append("QWEN_API_KEY is invalid")
-            else:
-                logger.info("Qwen API key validated successfully")
-        except Exception as e:
-            logger.warning(f"Could not validate Qwen API key: {e}")
-    else:
-        logger.warning("QWEN_API_KEY is not set")
-
-    if NEBIUS_API_KEY:
-        try:
-            resp = requests.get(
-                f"{NEBIUS_PROXY_URL}/models",
-                headers={"Authorization": f"Bearer {NEBIUS_API_KEY}"},
-                timeout=10,
-            )
-            if resp.status_code in (401, 403):
-                errors.append("NEBIUS_API_KEY is invalid")
-            else:
-                logger.info("Nebius Token Factory API key validated successfully")
-        except Exception as e:
-            logger.warning(f"Could not validate Nebius API key: {e}")
-    else:
-        logger.warning("NEBIUS_API_KEY is not set")
-
-    if errors:
-        for err in errors:
-            logger.error(f"API KEY VALIDATION FAILED: {err}")
-        logger.error("Some API keys are invalid. Agent tasks will fail until keys are corrected.")
 
 _validate_api_keys()
 
@@ -229,99 +175,41 @@ def _classify_model(model_id: str) -> tuple[str, str]:
 
 def _refresh_gemini_models():
     global _available_models, _last_refresh
-    if not GEMINI_API_KEY:
-        return
-    try:
-        resp = requests.get(
-            f"{GEMINI_PROXY_URL}/models",
-            headers={"x-goog-api-key": GEMINI_API_KEY},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        ids = {
-            m["name"].split("/")[-1]
-            for m in resp.json().get("models", [])
-            if "generateContent" in m.get("supportedGenerationMethods", [])
-        }
-        with _model_refresh_lock:
-            _available_models = ids
-            _last_refresh = time.time()
-        logger.info(f"Models refreshed: {sorted(ids)}")
-    except Exception as e:
-        logger.warning(f"Model refresh failed: {e}")
-
+    _available_models, _last_refresh = _refresh("gemini", GEMINI_API_KEY, GEMINI_PROXY_URL,
+                                                _available_models, _last_refresh)
 
 
 def _refresh_deepseek_models():
     global _available_deepseek_models, _deepseek_last_refresh
-    if not DEEPSEEK_API_KEY:
-        return
-    try:
-        resp = requests.get(
-            f"{DEEPSEEK_PROXY_URL}/models",
-            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        ids = {m.get("id") for m in resp.json().get("data", []) if m.get("id")}
-        with _model_refresh_lock:
-            _available_deepseek_models = ids
-            _deepseek_last_refresh = time.time()
-        logger.info(f"DeepSeek models refreshed: {sorted(ids)}")
-    except Exception as e:
-        logger.warning(f"DeepSeek model refresh failed: {e}")
+    _available_deepseek_models, _deepseek_last_refresh = _refresh(
+        "deepseek", DEEPSEEK_API_KEY, DEEPSEEK_PROXY_URL,
+        _available_deepseek_models, _deepseek_last_refresh)
 
 
 def _refresh_qwen_models():
     global _available_qwen_models, _qwen_last_refresh
-    if not QWEN_API_KEY:
-        return
-    try:
-        resp = requests.get(
-            f"{QWEN_PROXY_URL}/models",
-            headers={"Authorization": f"Bearer {QWEN_API_KEY}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        # Keep only chat-capable LLMs (exclude image/audio/video/tts/realtime/wan).
-        skip = ("image", "audio", "video", "tts", "realtime", "wan", "embedding")
-        ids = {
-            m.get("id")
-            for m in resp.json().get("data", [])
-            if m.get("id") and not any(k in m.get("id", "").lower() for k in skip)
-        }
-        with _model_refresh_lock:
-            _available_qwen_models = ids
-            _qwen_last_refresh = time.time()
-        logger.info(f"Qwen models refreshed: {sorted(ids)}")
-    except Exception as e:
-        logger.warning(f"Qwen model refresh failed: {e}")
+    _available_qwen_models, _qwen_last_refresh = _refresh(
+        "qwen", QWEN_API_KEY, QWEN_PROXY_URL, _available_qwen_models, _qwen_last_refresh)
 
 
 def _refresh_nebius_models():
-    """Fetch the Token Factory catalogue: the served NVIDIA open models."""
     global _available_nebius_models, _nebius_last_refresh
-    if not NEBIUS_API_KEY:
-        return
+    _available_nebius_models, _nebius_last_refresh = _refresh(
+        "nebius", NEBIUS_API_KEY, NEBIUS_PROXY_URL,
+        _available_nebius_models, _nebius_last_refresh)
+
+
+def _refresh(provider, key, base_url, current, last_refresh):
+    """Fetch one provider's catalogue. A failure keeps the previous one."""
+    if not key:
+        return current, last_refresh
     try:
-        resp = requests.get(
-            f"{NEBIUS_PROXY_URL}/models",
-            headers={"Authorization": f"Bearer {NEBIUS_API_KEY}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        skip = ("embedding", "rerank")
-        ids = {
-            m.get("id")
-            for m in resp.json().get("data", [])
-            if m.get("id") and not any(k in m.get("id", "").lower() for k in skip)
-        }
-        with _model_refresh_lock:
-            _available_nebius_models = ids
-            _nebius_last_refresh = time.time()
-        logger.info(f"Nebius models refreshed: {sorted(ids)}")
+        ids = fetch_model_ids(provider, key, base_url)
     except Exception as e:
-        logger.warning(f"Nebius model refresh failed: {e}")
+        logger.warning(f"{provider} model refresh failed: {e}")
+        return current, last_refresh
+    logger.info(f"{provider} models refreshed: {sorted(ids)}")
+    return ids, time.time()
 
 
 # Deprecated Gemini ids mapped to their working equivalents.
@@ -593,70 +481,9 @@ def _pick_orchestrator(models: list[dict]) -> str:
     return models[0]["id"] if models else "gemini-flash-latest"
 
 
-class UpstreamError(Exception):
-    """A provider call that produced no usable answer."""
-
-    def __init__(
-        self,
-        provider: str,
-        model: str,
-        status: int | None,
-        message: str,
-        retriable: bool | None = None,
-    ):
-        super().__init__(f"{provider} {status} {message}")
-        self.provider = provider
-        self.model = model
-        self.status = status
-        self.message = message
-        self.attempts: list[dict] = []
-        # 429 and 5xx may succeed elsewhere; so may a refused connection.
-        if retriable is None:
-            retriable = status is None or status == 429 or status >= 500
-        self.retriable = retriable
-
-    def as_dict(self) -> dict:
-        return {"provider": self.provider, "model": self.model, "status": self.status, "message": self.message}
-
-
-def _upstream_message(resp) -> str:
-    """The provider's own error text, or the start of the body."""
-    try:
-        body = resp.json()
-    except ValueError:
-        body = None
-    if isinstance(body, dict):
-        err = body.get("error")
-        if isinstance(err, dict) and err.get("message"):
-            return str(err["message"])
-        if isinstance(err, str) and err:
-            return err
-        if body.get("message"):
-            return str(body["message"])
-    text_body = (getattr(resp, "text", "") or "").strip()
-    return text_body[:300] or f"HTTP {resp.status_code}"
-
-
-def _post_upstream(provider: str, model: str, url: str, headers: dict, payload: dict, timeout: float):
-    """POST to a provider; any non-2xx or unreadable body becomes an ``UpstreamError``."""
-    try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
-    except requests.Timeout:
-        # Not retried elsewhere: the time budget is already spent.
-        raise UpstreamError(provider, model, None, f"timed out after {timeout:.0f}s", retriable=False)
-    except requests.RequestException as exc:
-        raise UpstreamError(provider, model, None, f"request failed: {exc}")
-    if not 200 <= resp.status_code < 300:
-        raise UpstreamError(provider, model, resp.status_code, _upstream_message(resp))
-    try:
-        body = resp.json()
-    except ValueError:
-        raise UpstreamError(provider, model, resp.status_code, "response body is not JSON", retriable=False)
-    if not isinstance(body, dict):
-        raise UpstreamError(provider, model, resp.status_code, "response body is not a JSON object", retriable=False)
-    if body.get("error"):
-        raise UpstreamError(provider, model, resp.status_code, _upstream_message(resp), retriable=False)
-    return resp.status_code, body
+UpstreamError = upstream.UpstreamError
+_upstream_message = upstream.upstream_message
+_post_upstream = upstream.post_upstream
 
 
 _OPENAI_COMPATIBLE_BASE_URLS = {
