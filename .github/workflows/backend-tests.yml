@@ -19,6 +19,11 @@ concurrency:
 
 jobs:
   test:
+    # upload-artifact needs to write to the run's artifact store; a bare
+    # `contents: read` would make the keep-the-logs step fail.
+    permissions:
+      contents: read
+      actions: write
     runs-on: [self-hosted, linux, x64, lafabrique]
     # Un cuelgue de red en `poetry install` dejó este job 40 minutos parado sin
     # que nadie se enterara (el default son 6 horas). El job entero tarda ~5

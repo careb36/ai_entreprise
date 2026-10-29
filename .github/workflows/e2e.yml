@@ -26,6 +26,11 @@ concurrency:
 
 jobs:
   e2e:
+    # upload-artifact needs to write to the run's artifact store; a bare
+    # `contents: read` would make the keep-the-logs step fail.
+    permissions:
+      contents: read
+      actions: write
     # Runs on the self-hosted runner like every other workflow: hosted runners
     # are blocked by the account's spending limit, so a job on ubuntu-latest
     # never starts and reports a failure it never produced.
