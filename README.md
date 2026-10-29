@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/react-%2320232b.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License: Proprietary](https://img.shields.io/badge/license-Proprietary-red.svg?style=for-the-badge)](LICENSE.md)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
 **AI-powered autonomous software development platform**
 
@@ -42,6 +42,7 @@ The platform provides:
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Agent Orchestration](#agent-orchestration)
+- [Model Providers (Nebius / NVIDIA Nemotron)](#model-providers-nebius--nvidia-nemotron)
 - [GlassRoom](#glassroom)
 - [Project Structure](#project-structure)
 - [API Reference](#api-reference)
@@ -135,7 +136,7 @@ sequenceDiagram
 | **Vector Memory** | PostgreSQL 15 + pgvector |
 | **Knowledge Graph** | Neo4j 5.15 Enterprise + APOC |
 | **Message Broker** | NATS JetStream |
-| **AI Models** | Gemini (via Google AI Studio) + DeepSeek |
+| **AI Models** | NVIDIA Nemotron on Nebius Token Factory + Gemini + DeepSeek + Qwen |
 | **Infrastructure** | Docker Compose (8 services), VS Code CLI |
 
 [⬆ Back to Top](#la-fabrique)
@@ -147,7 +148,7 @@ sequenceDiagram
 - **Docker** 24.0+ with Docker Compose v2
 - **Python** 3.12+ (for local development)
 - **Node.js** 20+ (for frontend development)
-- **API Keys:** Google AI Studio (Gemini), DeepSeek
+- **API Keys:** Nebius Token Factory (NVIDIA Nemotron), Google AI Studio (Gemini), DeepSeek, Qwen
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -274,6 +275,69 @@ flowchart LR
 **Error handling:** Any node failure sets `last_error` and short-circuits to `burn`. `GraphRecursionError` is caught explicitly at the workflow level. Either way the kickoff has failed, but the sprint stays `active`: the agent worker publishes `Kickoff failed: <reason>; tasks continue` to the Glassroom, and backlog tasks keep running in the task worker. Only an explicit split decision marks a sprint `needs_split`.
 
 **Model routing:** `ModelFactory.ROLE_MODEL_MAP` resolves each role to a specific LLM via the proxy — swap models per role in configuration without code changes.
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Model Providers (Nebius / NVIDIA Nemotron)
+
+Every model call goes through `llm-proxy/`, which routes each request by the
+model id's prefix and only sends a request for an id that is in that provider's
+fetched catalogue. Four providers are wired today:
+
+| Provider | Model id prefix | Endpoint |
+|---|---|---|
+| `nebius` | `nvidia/`, `meta-llama/`, `mistralai/`, `deepseek-ai/`, `qwen/`, `google/` | `https://api.tokenfactory.nebius.com/v1` (Nebius Token Factory) |
+| `gemini` | `gemini-`, `gemma-` | Google Generative Language API |
+| `deepseek` | `deepseek-` | `https://api.deepseek.com/v1` |
+| `qwen` | `qwen`, `qwq-`, `qvq-` | Qwen Cloud compatible mode |
+
+**Nebius Token Factory serves the NVIDIA open models.** Set `NEBIUS_API_KEY` and
+the proxy fetches the live catalogue at startup (and hourly), lists what it
+found on `GET /v1/models`, and routes Nemotron ids to Token Factory over the
+OpenAI-compatible chat endpoint:
+
+```bash
+curl -s localhost:5100/v1/models | jq '.models[] | select(.provider=="nebius")'
+curl -s localhost:5100/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/Llama-3.1-Nemotron-70B-Instruct",
+       "messages":[{"role":"user","content":"Explain the outbox pattern"}]}'
+```
+
+Nothing about Nebius is hardcoded: the model list comes from Token Factory, so
+new Nemotron releases appear without a code change. `NEBIUS_PROXY_URL` points
+the provider at your own Nebius Serverless Endpoint instead of Token Factory.
+
+Model ids above are examples — the ids Token Factory serves change, and the
+proxy rejects anything not in the catalogue it fetched, so read the real list
+before pinning one:
+
+```bash
+curl -s localhost:5100/v1/models | jq -r '.models[] | select(.provider=="nebius") | .id'
+```
+
+### Giving agent roles an NVIDIA model
+
+The role defaults in `backend/llm/model_factory.py` are Qwen and DeepSeek. To
+run specific roles on Nemotron, opt them in — unset means nothing changes:
+
+```bash
+# Comma-separated role names (case-insensitive).
+NEMOTRON_ROLES=PO,Architect,SecOps,Developer,QA,TechWriter
+
+# The model those roles get. The _STRATEGIC and _FAST variants override it
+# per role: PO, Architect and SecOps read _STRATEGIC; TechWriter reads _FAST.
+NEMOTRON_MODEL=nvidia/Llama-3.1-Nemotron-70B-Instruct
+NEMOTRON_MODEL_STRATEGIC=nvidia/Llama-3.1-Nemotron-70B-Instruct
+NEMOTRON_MODEL_FAST=nvidia/Nemotron-Nano-9B
+```
+
+`ModelFactory.model_for_role()` resolves this, and `get_model()` uses it, so
+the choice reaches every LangGraph node. Requests still carry
+`X-Agent-Role` and `X-Business-Unit-ID`, so per-role and per-company token
+budgets apply to Nemotron calls exactly as they do to the others.
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -451,10 +515,8 @@ See [SECURITY.md](SECURITY.md) for the security policy and vulnerability reporti
 
 ## License
 
-**Proprietary Software.** All rights reserved.  
+**Apache License 2.0.** See [LICENSE](LICENSE).  
 Copyright © 2026 Carolina Pereira.
-
-Unauthorized copying, distribution, or commercial use of this system, via any medium, is strictly prohibited without explicit written permission from the owner.
 
 [⬆ Back to Top](#la-fabrique)
 
