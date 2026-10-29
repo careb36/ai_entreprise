@@ -85,7 +85,12 @@ jobs:
           E2E_NATS_URL: nats://127.0.0.1:4223
           E2E_WORKDIR: ${{ runner.temp }}/e2e
         run: |
-          E2E_PYTHON="$(command -v python)" bash scripts/e2e/run.sh
+          # Not `command -v python`: with POETRY_VIRTUALENVS_CREATE=false that
+          # is the bare uv venv, while `poetry install` put the backend's
+          # dependencies somewhere else, so the script's psycopg2 import
+          # failed. Ask Poetry which interpreter actually has them.
+          E2E_PYTHON="$(cd backend && poetry run python -c 'import sys; print(sys.executable)')" \
+            bash scripts/e2e/run.sh
 
       - name: Stop NATS
         if: always()
