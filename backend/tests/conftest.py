@@ -62,6 +62,17 @@ def disable_auth_for_legacy_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_nats_namespace(monkeypatch):
+    """Tests assert on the plain subjects, so they must not inherit a prefix.
+
+    ``NATS_NAMESPACE`` is read at publish/consume time; a developer who exported
+    it for an e2e run would otherwise see every durable-subject assertion fail
+    with a namespaced subject.
+    """
+    monkeypatch.delenv("NATS_NAMESPACE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def no_scrum_master_proxy(monkeypatch):
     """The ScrumMaster's triage of a blocked task never reaches a real proxy.
 
