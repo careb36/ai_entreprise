@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import stat
 import string
@@ -63,11 +64,43 @@ QUEUE_GROUP = "workspace-daemon"
 # backend declares the same streams (backend/app/nats_client.py).
 DELIVER_SUBJECT = "workspace.deliver"
 DELIVERED_SUBJECT = "workspace.delivered"
+
+
+def _scoped(name: str) -> str:
+    """
+    Prefix JetStream names with ``NATS_NAMESPACE`` when it is set.
+
+    The backend builds the same names (``backend/app/nats_client.py``). Streams
+    use work-queue retention, so a daemon sharing the broker with another stack
+    and the same consumer name takes that stack's deliveries and never returns
+    them. The namespace keeps the two apart.
+    """
+    raw = os.getenv("NATS_NAMESPACE", "").strip()
+    if not raw:
+        return name
+    namespace = re.sub(r"[^A-Za-z0-9_-]", "_", raw).strip("_")
+    return f"{namespace}_{name}" if namespace else name
+
+
+def _scoped_subject(subject: str) -> str:
+    """
+    Namespace a durable subject the way the backend does.
+
+    Names alone are not enough: two work-queue streams bound to one subject each
+    store every message, so both stacks would still process it.
+    """
+    raw = os.getenv("NATS_NAMESPACE", "").strip()
+    if not raw:
+        return subject
+    namespace = re.sub(r"[^A-Za-z0-9_-]", "_", raw).strip("_")
+    return f"{namespace}.{subject}" if namespace else subject
+
+
 DELIVERY_STREAMS = {
-    "FABRIQUE_DELIVERIES": DELIVER_SUBJECT,
-    "FABRIQUE_DELIVERY_RESULTS": DELIVERED_SUBJECT,
+    _scoped("FABRIQUE_DELIVERIES"): _scoped_subject(DELIVER_SUBJECT),
+    _scoped("FABRIQUE_DELIVERY_RESULTS"): _scoped_subject(DELIVERED_SUBJECT),
 }
-DELIVERY_CONSUMER = "workspace-daemon"
+DELIVERY_CONSUMER = _scoped("workspace-daemon")
 STREAM_MAX_AGE_SECONDS = 7 * 24 * 3600
 STREAM_DUPLICATE_WINDOW_SECONDS = 15 * 60
 
@@ -786,7 +819,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
     }
     try:
         await js.publish(
-            DELIVERED_SUBJECT,
+            _scoped_subject(DELIVERED_SUBJECT),
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
@@ -804,16 +837,16 @@ async def consume_queued_deliveries(nc, js) -> None:
     from nats.js import api
 
     psub = await js.pull_subscribe(
-        DELIVER_SUBJECT,
+        _scoped_subject(DELIVER_SUBJECT),
         durable=DELIVERY_CONSUMER,
-        stream="FABRIQUE_DELIVERIES",
+        stream=_scoped("FABRIQUE_DELIVERIES"),
         config=api.ConsumerConfig(
             durable_name=DELIVERY_CONSUMER,
             deliver_policy=api.DeliverPolicy.ALL,
             ack_policy=api.AckPolicy.EXPLICIT,
             ack_wait=120,
             max_deliver=10,
-            filter_subject=DELIVER_SUBJECT,
+            filter_subject=_scoped_subject(DELIVER_SUBJECT),
         ),
     )
     while True:
