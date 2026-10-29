@@ -56,18 +56,24 @@ jobs:
 
       - name: Start Postgres, NATS and pick free ports
         run: |
-          pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
-          pg_port="$(pick_port)"
-          nats_port="$(pick_port)"
-
+          # Docker itself picks the port (empty host side of -p), then the
+          # mapping is read back. Binding an ephemeral port in Python and
+          # passing it to Docker loses a race: this host runs several
+          # self-hosted agents against one Docker daemon, so two concurrent
+          # e2e runs get the same free port and the second container cannot
+          # bind it ("pg_isready: rejecting connections" for a minute).
+          #
           # A service container cannot be given arguments and the stock NATS
           # image starts without JetStream, which the backend needs for the
           # durable task queue the loop relies on.
           docker run -d --name "pg-e2e-$GITHUB_RUN_ID" \
             -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
-            -p "127.0.0.1:$pg_port:5432" pgvector/pgvector:pg15
+            -p "127.0.0.1::5432" pgvector/pgvector:pg15
           docker run -d --name "nats-e2e-$GITHUB_RUN_ID" \
-            -p "127.0.0.1:$nats_port:4222" nats:2.10 -js
+            -p "127.0.0.1::4222" nats:2.10 -js
+
+          pg_port="$(docker port "pg-e2e-$GITHUB_RUN_ID" 5432/tcp | head -1 | sed 's/.*://')"
+          nats_port="$(docker port "nats-e2e-$GITHUB_RUN_ID" 4222/tcp | head -1 | sed 's/.*://')"
 
           for _ in $(seq 1 60); do
             docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory >/dev/null 2>&1 && break
