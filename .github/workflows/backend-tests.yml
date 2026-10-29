@@ -67,13 +67,13 @@ jobs:
           POETRY_VIRTUALENVS_CREATE: "true"
           POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-llm
         run: |
-          # Un registro de PyPI que no responde dejaba el step colgado hasta que
-          # expiraba el job entero, sin decir cuál de los comandos fue. Y todo
-          # va por `poetry run`: `poetry env info --path` puede resolver a otro
-          # venv (basta un VIRTUAL_ENV heredado del runner) distinto del que
-          # `poetry install` acaba de llenar.
-          timeout 600 poetry run --directory llm-proxy pip --version >/dev/null 2>&1 \
-            || timeout 600 bash -c 'cd llm-proxy && poetry install --no-interaction --no-root'
+          # `timeout` para que un registro de PyPI que no responde falle con el
+          # comando a la vista en vez de colgar el job entero. El install va
+          # siempre: es idempotente y sale del caché en segundos, y una guarda
+          # del tipo "¿existe pip?" da por bueno un venv vacío.
+          # Todo por `poetry run`: `poetry env info --path` puede resolver a otro
+          # venv del que `poetry install` acaba de llenar.
+          timeout 900 bash -c 'cd llm-proxy && poetry install --no-interaction --no-root'
           timeout 300 poetry run --directory llm-proxy pip install -r requirements-dev.txt
           poetry run --directory llm-proxy python -m pytest -q
 
