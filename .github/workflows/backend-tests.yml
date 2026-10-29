@@ -13,6 +13,10 @@ on:
 jobs:
   test:
     runs-on: [self-hosted, linux, x64, lafabrique]
+    # Un cuelgue de red en `poetry install` dejó este job 40 minutos parado sin
+    # que nadie se enterara (el default son 6 horas). El job entero tarda ~5
+    # minutos, así que cortar a los 20 convierte un cuelgue en un fallo visible.
+    timeout-minutes: 20
     env:
       # Usar el venv de uv del job; el caché global de Poetry puede apuntar a una Python rota.
       POETRY_VIRTUALENVS_CREATE: "false"
@@ -63,10 +67,15 @@ jobs:
           POETRY_VIRTUALENVS_CREATE: "true"
           POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-llm
         run: |
-          (cd llm-proxy && poetry install --no-interaction --no-root)
-          PROXY_PYTHON="$(cd llm-proxy && poetry env info --path)/bin/python"
-          "$PROXY_PYTHON" -m pip install -r llm-proxy/requirements-dev.txt
-          "$PROXY_PYTHON" -m pytest llm-proxy/tests -q
+          # Un registro de PyPI que no responde dejaba el step colgado hasta que
+          # expiraba el job entero, sin decir cuál de los comandos fue. Y todo
+          # va por `poetry run`: `poetry env info --path` puede resolver a otro
+          # venv (basta un VIRTUAL_ENV heredado del runner) distinto del que
+          # `poetry install` acaba de llenar.
+          timeout 600 poetry run --directory llm-proxy pip --version >/dev/null 2>&1 \
+            || timeout 600 bash -c 'cd llm-proxy && poetry install --no-interaction --no-root'
+          timeout 300 poetry run --directory llm-proxy pip install -r requirements-dev.txt
+          poetry run --directory llm-proxy python -m pytest -q
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
