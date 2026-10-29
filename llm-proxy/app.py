@@ -126,8 +126,8 @@ def _build_database_url() -> str:
     user = os.getenv("POSTGRES_USER", "factory")
     password = os.getenv("POSTGRES_PASSWORD", "")
     db = os.getenv("POSTGRES_DB", "factory")
-    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
-
+    # 2.1 defaults to psycopg3; this image ships psycopg2.
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
 engine = create_engine(_build_database_url(), pool_pre_ping=True)
 
 # --- Dynamic Model Catalogue ---

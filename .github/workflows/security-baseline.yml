@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -64,7 +64,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install uv (pinned + checksum)
         run: |
@@ -91,7 +91,7 @@ jobs:
 
       - name: Upload Semgrep SARIF
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: security-baseline-semgrep
           path: semgrep.sarif
@@ -104,7 +104,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Scan filesystem for known vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -121,7 +121,7 @@ jobs:
 
       - name: Upload Trivy SARIF
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: security-baseline-trivy
           path: trivy.sarif
