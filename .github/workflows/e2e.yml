@@ -34,6 +34,13 @@ jobs:
     # in eleven seconds with "port is already allocated" whenever anything else
     # on the runner (another e2e run, a leftover container, a local
     # `docker compose up`) held 5433 or 4223.
+    env:
+      # A nivel de job: el venv se crea en el paso de install y lo consume el
+      # paso del e2e, que corre en otra shell. Si solo lo tuviera el primero,
+      # el segundo resolvería otro directorio y crearía un venv vacío.
+      # `runner.temp` no vale aquí: el contexto `runner` no existe en un `env`
+      # de job y deja el workflow inválido.
+      POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
     steps:
       - uses: actions/checkout@v5
 
@@ -81,13 +88,6 @@ jobs:
 
       - name: Install the backend
         working-directory: ./backend
-        env:
-          # Poetry must own its virtualenv. With POETRY_VIRTUALENVS_CREATE=false
-          # it resolves the *base* interpreter of the uv venv (the uv-managed
-          # CPython), then runs `pip uninstall` against it and dies with
-          # externally-managed-environment. A Poetry-created venv is a real
-          # virtualenv and the install stays inside it.
-          POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
         run: |
           # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
           # este runner encuentra /home/caro/Dev/.venv (Python 3.14, del host).

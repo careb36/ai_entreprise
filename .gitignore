@@ -52,6 +52,9 @@ coverage.xml
 htmlcov/
 coverage/
 .venv/
+# venv de Poetry en CI cuando se fija en el workspace
+.poetry-backend/
+.poetry-llm/
 venv/
 ENV/
 *.egg-info/
