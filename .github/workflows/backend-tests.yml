@@ -38,7 +38,11 @@ jobs:
           # virtualenv and the install stays inside it.
           POETRY_VIRTUALENVS_PATH: ${{ runner.temp }}/poetry-backend
         run: |
-          ~/.local/bin/uv pip install poetry >/dev/null
+          # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
+          # este runner encuentra /home/caro/Dev/.venv (Python 3.14, del host).
+          # Instalaba Poetry ahí, fuera del PATH, y el siguiente paso moría con
+          # `poetry: command not found`.
+          ~/.local/bin/uv pip install --python "$RUNNER_TEMP/venv-3.12/bin/python" poetry >/dev/null
           poetry env use python
           poetry install --no-interaction
 
