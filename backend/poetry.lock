@@ -1684,23 +1684,24 @@ nkeys = ["nkeys"]
 
 [[package]]
 name = "neo4j"
-version = "5.28.3"
+version = "6.4.1"
 description = "Neo4j Bolt driver for Python"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "neo4j-5.28.3-py3-none-any.whl", hash = "sha256:dbf6d9211b861bc3dd62dccbf8a74d1e33e0c602084dd123b753edf46e1fdfad"},
-    {file = "neo4j-5.28.3.tar.gz", hash = "sha256:0625aaaf0963bc99a7231e946952f579792c3be22687192b20e0b74aa1233a2b"},
+    {file = "neo4j-6.4.1-py3-none-any.whl", hash = "sha256:f56a281c74355522fc2642df8919bec450115431531b8f3f6fe1cc17acb57a27"},
+    {file = "neo4j-6.4.1.tar.gz", hash = "sha256:fac99b7cb9679b93ef97dc23f22a3f0e7c3feb2db223eddfd2521f27005cfeaf"},
 ]
 
 [package.dependencies]
 pytz = "*"
 
 [package.extras]
-numpy = ["numpy (>=1.7.0,<3.0.0)"]
-pandas = ["numpy (>=1.7.0,<3.0.0)", "pandas (>=1.1.0,<3.0.0)"]
-pyarrow = ["pyarrow (>=1.0.0)"]
+http = ["aiohttp[speedups] (>=3.12.15,<4.0.0)", "urllib3 (>=2.0.0,<3.0.0)"]
+numpy = ["numpy (>=1.21.2,<3.0.0)"]
+pandas = ["numpy (>=1.21.2,<3.0.0)", "pandas[timezone] (>=1.1.0,<4.0.0)"]
+pyarrow = ["pyarrow (>=6.0.0,<26.0.0)"]
 
 [[package]]
 name = "openai"
@@ -3910,4 +3911,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "1dfd49c5f5f28ffc4aaf80cea9cca6a9f1f115b99d7e1de20bb3d4d860f897e4"
+content-hash = "4fe1fac370160c4c5ad86e3154f00c50b4071d0740f7d391c4a27f05e7ad5834"
