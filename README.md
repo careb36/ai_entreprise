@@ -3,6 +3,7 @@
 
 # La Fabrique
 
+[![CI](https://github.com/careb36/la-fabrique/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/careb36/la-fabrique/actions/workflows/backend-tests.yml)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -61,10 +62,25 @@ lineage.
 
 > **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
 
+## Screenshots
+
+The evidence page is where any review starts: every run lands with one of three
+verdicts, produced deterministically — not by a model — and distinguishable at a
+glance.
+
+![Evidence overview: three runs, one per verdict — verified, refuted and unverifiable — with the verdict filters at the top](docs/img/evidence-overview.png)
+
+![A single refuted run: the agent's claim on one side, the independent observations on the other, and the verdict that follows from them](docs/img/evidence-detail.png)
+
+These screenshots show a seeded demo (one run per verdict, no API keys). To
+reproduce them, run `scripts/seed_demo_evidence.py` against a running stack and
+open `/evidence` — see [DEMO](docs/DEMO.md).
+
 ---
 
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [System Overview](#system-overview)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
@@ -79,6 +95,9 @@ lineage.
 - [Testing](#testing)
 - [Contributing](#contributing)
 - [Security](#security)
+- [Responsible use](#responsible-use)
+- [Roadmap](#roadmap)
+- [Documentation](#documentation)
 - [License](#license)
 
 ---
@@ -567,6 +586,51 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development standards, branch strateg
 See [SECURITY.md](SECURITY.md) for the security policy and vulnerability reporting process.
 
 [⬆ Back to Top](#la-fabrique)
+
+---
+
+## Responsible use
+
+La Fabrique's agents write files and run commands on the computer where the
+**workspace daemon** runs — like an IDE would. Point the daemon only at folders
+you own or are authorised to modify, and only connect a repository you have the
+right to change. Model output is an aid for a person, not a determination:
+verification is deterministic, but the decision to approve, carry over or reject
+a task is always a person's. See [SECURITY.md](SECURITY.md).
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Roadmap
+
+| Item | Status |
+| --- | --- |
+| Deterministic verification (claims vs. observations) | Done |
+| Append-only, signed audit chain | Done |
+| Per-company token budgets at a single LLM proxy | Done |
+| Nebius Token Factory / NVIDIA Nemotron routing | Done |
+| Sprint orchestration with carry-over and ScrumMaster escalation | Done |
+| Evidence page with per-verdict summary | Done |
+| Reviewer agent that suggests (never decides) on other producers' runs | Done |
+| Qualification of relationships between entities in the engram graph | Planned |
+| Per-source data-quality indicators | Planned |
+| Deterministic procedures measured against their own adoption | Planned |
+
+[⬆ Back to Top](#la-fabrique)
+
+---
+
+## Documentation
+
+[Architecture](ARCHITECTURE.md) · [Positioning](docs/POSITIONING.md) ·
+[API reference](docs/API.md) · [Demo](docs/DEMO.md) ·
+[Verifier sandbox](docs/verificador-sandbox.md) · [Threat model](docs/threat_model.md) ·
+[User guide](USER_GUIDE.md) · [Runbook](runbook.md) ·
+[Testing strategy](TESTING_STRATEGY.md) · [Contributing](CONTRIBUTING.md) ·
+[Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) ·
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
+[All docs](docs/README.md)
 
 ---
 

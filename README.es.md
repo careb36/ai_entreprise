@@ -3,6 +3,7 @@
 
 # La Fabrique
 
+[![CI](https://github.com/careb36/la-fabrique/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/careb36/la-fabrique/actions/workflows/backend-tests.yml)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -61,6 +62,20 @@ nodos Engram de Neo4j para el linaje de cada decisión.
 > [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 > **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
+
+## Capturas de pantalla
+
+La página de evidencia es donde empieza cualquier revisión: cada ejecución llega
+con uno de tres veredictos, producidos de forma determinista — nunca por un
+modelo — y distinguibles de un vistazo.
+
+![Vista general de evidencia: tres ejecuciones, una por veredicto — verificado, refutado e inverificable — con los filtros de veredicto arriba](docs/img/evidence-overview.png)
+
+![Una ejecución refutada: la afirmación del agente a un lado, las observaciones independientes al otro, y el veredicto que se desprende de ellas](docs/img/evidence-detail.png)
+
+Estas capturas muestran una demo sembrada (una ejecución por veredicto, sin
+claves de API). Para reproducirlas, ejecuta `scripts/seed_demo_evidence.py`
+contra un stack en marcha y abre `/evidence` — consulta [DEMO](docs/DEMO.md).
 
 ---
 
@@ -424,6 +439,52 @@ Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para estándares de desarrollo, estr
 Consulta [SECURITY.md](SECURITY.md) para la política de seguridad y el proceso de reporte de vulnerabilidades.
 
 [⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Uso responsable
+
+Los agentes de La Fabrique escriben archivos y ejecutan comandos en el equipo
+donde corre el **daemon del espacio de trabajo** — igual que haría un IDE.
+Apúntalo solo a carpetas que poseas o estés autorizado a modificar, y conecta
+únicamente repositorios que tengas derecho a cambiar. La salida del modelo es una
+ayuda para una persona, no una determinación: la verificación es determinista,
+pero la decisión de aprobar, reintentar o rechazar una tarea siempre es de una
+persona. Ver [SECURITY.md](SECURITY.md).
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Hoja de ruta
+
+| Ítem | Estado |
+| --- | --- |
+| Verificación determinista (afirmaciones vs. observaciones) | Hecho |
+| Cadena de auditoría firmada y de solo anexado | Hecho |
+| Presupuestos de tokens por empresa en un único proxy de LLM | Hecho |
+| Enrutado a Nebius Token Factory / NVIDIA Nemotron | Hecho |
+| Orquestación de sprints con reintento y escalado del ScrumMaster | Hecho |
+| Página de evidencia con resumen por veredicto | Hecho |
+| Agente revisor que sugiere (nunca decide) sobre ejecuciones de otros productores | Hecho |
+| Cualificación de relaciones entre entidades en el grafo engram | Planificado |
+| Indicadores de calidad de datos por fuente | Planificado |
+| Procedimientos deterministas medidos contra su propia adopción | Planificado |
+
+[⬆ Volver al inicio](#la-fabrique)
+
+---
+
+## Documentación
+
+[Arquitectura](ARCHITECTURE.md) · [Posicionamiento](docs/POSITIONING.md) ·
+[Referencia de la API](docs/API.md) · [Demo](docs/DEMO.md) ·
+[Sandbox del verificador](docs/verificador-sandbox.md) · [Modelo de amenazas](docs/threat_model.md) ·
+[Guía de usuario](USER_GUIDE.es.md) · [Runbook](runbook.es.md) ·
+[Estrategia de pruebas](TESTING_STRATEGY.md) · [Contribuir](CONTRIBUTING.md) ·
+[Seguridad](SECURITY.md) · [Código de conducta](CODE_OF_CONDUCT.md) ·
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
+[Toda la documentación](docs/README.md)
 
 ---
 
