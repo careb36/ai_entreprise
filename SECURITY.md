@@ -128,6 +128,56 @@ Reference frameworks:
 - Build from pinned, minimal base images. Do not pull `latest` base images.
 - Restrict CI/CD pipeline permissions. Approval required for changes to `.github/workflows` or deploy files.
 
+### 5.4 Open advisories and their triage
+
+Dependabot reports 64 open alerts on `main`. That number mixes what reaches a
+browser with what only runs on a build machine, so it is worth separating:
+
+| Surface | Advisories | Manifest |
+|---|---|---|
+| Shipped to the browser | 1 (`react-router`, moderate) | `frontend/package-lock.json` |
+| Build and test only | 62 — 2 critical, 15 high, 35 medium, 10 low | `frontend/package-lock.json` |
+| Test tooling | 1 (`pytest`, medium) | `backend/poetry.lock` |
+
+`npm audit --omit=dev`, which is the surface a user actually receives, returns
+two entries for a single advisory.
+
+**Build-only.** `vitest` and its worker pool `tinypool` (the two criticals),
+`vite`, `esbuild`, `electron` and `extract-zip` do not appear in the `dist/`
+bundle: the frontend is a Vite SPA built to static assets. The `frontend`
+service in `docker-compose.yml` runs the Vite dev server with bind mounts — it
+is a development container, not a deployment artifact, and it is the only place
+where these packages execute. They matter for a compromised build agent, not for
+a visitor.
+
+**`react-router` — GHSA-wrjc-x8rr-h8h6 (open redirect via a backslash in
+`<Link>` / `useNavigate`) and GHSA-337j-9hxr-rhxg (constructor injection in
+`deserializeErrors()`).** Neither is fixed inside v6; both are patched in
+`react-router-dom` 7.18.5, a major migration.
+
+- The `deserializeErrors()` advisory requires **SSR hydration**. This frontend
+  mounts with `createRoot`; there is no `hydrateRoot` and no `renderToString`,
+  so the vulnerable path does not exist here.
+- The open-redirect advisory needs a user-controlled destination reaching
+  `<Link>` or `useNavigate`. Every such call site — `Login`, `Register`,
+  `CompanySelect` — passes through `safeReturnPath()` in
+  `frontend/src/lib/returnPath.ts`, which accepts only a path starting with a
+  single `/` and rejects `//`, `/\`, any backslash, control characters, their
+  percent-encoded forms, and the auth-loop paths. Ten unit tests cover it, and
+  the advisory's own vector, a backslash, is one of the rejected cases.
+
+That is a compensating control, not a fix: the v7 migration stays on the
+roadmap.
+
+**`pytest` — GHSA-6w46-j5rx-g56g (temporary directory handling).** Patched in
+9.0.3, and the pin is `^8.1.1`. This one is worth taking: it is test tooling
+only.
+
+**Why the majors are not taken blind.** `vite` 5→8, `vitest` 3→5, `electron`
+→45 and `react-router` 6→7 each change APIs the build depends on. Each `ignore`
+in `.github/dependabot.yml` carries its reason next to it, so an upgrade is a
+planned piece of work with its own tests instead of a red PR every Monday.
+
 ---
 
 ## 6. Container and Kubernetes Hardening
