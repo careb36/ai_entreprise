@@ -34,6 +34,10 @@ opentelemetry-instrumentation-requests = "^0.66b1"
 opentelemetry-instrumentation-httpx = "^0.66b1"
 langchain-openai = "^1.1.12"
 pyjwt = ">=2.8,<3"
+# Tope en 5: bcrypt 5.0 dejo de truncar y lanza ValueError por encima de 72
+# bytes, y passlib 1.7.4 sondea el backend con un vector de 255 bytes al
+# cargarlo. Con bcrypt 5 el sondeo falla y no queda backend: revienta todo
+# hash y todo verify. Migrar de passlib a bcrypt directo antes de subir.
 bcrypt = "<5"
 slowapi = "^0.1.10"
 prometheus-client = "^0.26.0"
