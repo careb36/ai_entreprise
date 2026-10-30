@@ -14,7 +14,10 @@ from services.orchestration_metrics import (
 )
 
 _PATH_PATTERN = re.compile(
-    r"[A-Za-z0-9_./-]+\.(?:py|ts|tsx|js|jsx|json|ya?ml|md|toml|lock|txt|sql|css|html)"
+    # Longest extension first, and no continuation after it, so `a.tsx` is not
+    # read as `a.ts` followed by a stray `x`.
+    r"[A-Za-z0-9_./-]+\.(?:json|toml|lock|html|yaml|yml|tsx|jsx|py|ts|js|md|sql|css|txt)"
+    r"(?![A-Za-z0-9_])"
 )
 _URL_PATTERN = re.compile(r"https?://\S+", re.IGNORECASE)
 _TEST_PATTERNS = (
