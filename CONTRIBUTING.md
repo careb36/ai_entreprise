@@ -65,12 +65,13 @@ section is.
 
 | Branch | What it is | Who merges into it |
 |--------|-----------|--------------------|
-| `develop` | Where web-product pull requests land | An agent or a person, with the pipeline green |
-| `main` | The released web product | A person, through a release pull request from `develop` (rule 5 above) |
-| `develop_meta`, `main_meta` | The Glassroom VR entry for the Meta VR Start Developer Competition, the same pair for `vr/` | As for `develop` and `main` |
+| `main` | The web product, and the default branch | An agent or a person, with the head green (rule 5) |
+| `main_meta`, `develop_meta` | The Glassroom VR entry for the Meta VR Start Developer Competition (`vr/`) | As for `main` |
 | `archive/*` | Old lines of work kept for reference; nothing merges into them | Nobody |
 
-A release pull request is merged with a merge commit, not a squash, so the
-next release stays a fast-forward. `main` and `develop` carry none of `vr/`.
-`archive/develop-2026-05-02` holds the `develop` of May 2026, whose useful
-work `main` had already rewritten.
+Work is trunk-based: one branch cut from `main`, one pull request into `main`,
+merged with a merge commit rather than a squash so the history keeps its shape.
+There is no `develop` integration branch — it only ever mirrored `main`, and it
+was retired on 2026-10-29 along with the release pull request it existed for.
+`archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work
+`main` had already rewritten. `main` carries none of `vr/`.

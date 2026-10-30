@@ -397,7 +397,7 @@ Run it with the backend's interpreter (`E2E_PYTHON` pointing at the venv's
 only when every check passed and leaves the logs in `E2E_WORKDIR`. CI runs it
 too (`.github/workflows/e2e.yml`) on every pull request that touches
 `backend/`, `vscode-daemon/`, `scripts/e2e/` or the workflow itself, and on
-pushes to `main` and `develop`, against a `pgvector/pgvector:pg15` service and
+pushes to `main`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
 artifact.
 
@@ -421,7 +421,7 @@ runner keeps its state between jobs, so a job cleans up what it starts (the
 e2e removes its NATS container) and avoids the ports a local stack uses.
 
 CI runs this suite on every pull request that touches `backend/` or the
-workflow itself, and on pushes to `main` and `develop`
+workflow itself, and on pushes to `main`
 (`.github/workflows/backend-tests.yml`), installing dependencies with Poetry
 from `backend/poetry.lock`. The lint step runs the ruff version the workflow
 pins (`pip install "ruff==0.17.1"`); lint locally with that same version, since
@@ -432,7 +432,7 @@ the `poetry check --lock` step.
 
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
-`frontend/` or the workflow itself, and on pushes to `main` and `develop`.
+`frontend/` or the workflow itself, and on pushes to `main`.
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
 and `npm run build` from the `frontend/` directory, using
 `frontend/package-lock.json` as the cache key.
@@ -502,7 +502,7 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 ## Documentation
 
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
-- Branches: pull requests for the web product land on `develop`; a release pull request promotes `develop` to `main`, and a person merges it (`CONTRIBUTING.md`, Branches).
+- Branches: trunk-based. Each change is a branch cut from `main` with one pull request into `main`, merged once the head is green (`CONTRIBUTING.md`, Branches). There is no `develop` integration branch.
 - The Glassroom VR entry for the Meta VR Start Developer Competition lives on
   the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
