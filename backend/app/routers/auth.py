@@ -7,7 +7,7 @@ Endpoints:
 - ``GET /v1/auth/me``         — return the authenticated user's profile.
 - ``POST /v1/company/invite`` — invite an existing user to collaborate on a company.
 
-Passwords are hashed with bcrypt via ``passlib`` before storage.
+Passwords are hashed with bcrypt directly (``app.passwords``) before storage.
 Sensitive-route enforcement is gated by AUTH_REQUIRED.
 """
 
@@ -20,15 +20,11 @@ from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, User
-from passlib.context import CryptContext
+from passwords import hash_password, needs_rehash, rehash_password, verify_password
 from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
-
-# bcrypt context — "deprecated='auto'" automatically re-hashes old entries
-# when a stronger algorithm becomes the default in future passlib releases.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.post("/auth/register")
@@ -50,7 +46,7 @@ async def register_user(
     user = User(
         email=req.email,
         full_name=req.full_name,
-        password_hash=pwd_context.hash(req.password),
+        password_hash=hash_password(req.password),
     )
     session.add(user)
     session.commit()
@@ -65,8 +61,15 @@ async def login(req: LoginRequest, session: Session = Depends(get_session)):  # 
         raise HTTPException(status_code=503, detail="Authentication is not configured")
 
     user = session.exec(select(User).where(User.email == req.email)).first()
-    if user is None or not pwd_context.verify(req.password, user.password_hash):
+    if user is None or not verify_password(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Upgrade a hash written with a lower cost, now that the password is known
+    # to be right. Replaces what passlib's deprecated="auto" did.
+    if needs_rehash(user.password_hash):
+        user.password_hash = rehash_password(req.password)
+        session.add(user)
+        session.commit()
 
     expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = auth_tokens.create_access_token(

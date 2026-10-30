@@ -30,7 +30,7 @@ cuando el componente no existe en la arquitectura.
 |---|---|---|
 | AA03, AA04, AC17, AC18 | Mitigado | JWT HS256 firmado con `JWT_SECRET_KEY`, expiración de 60 minutos (`ACCESS_TOKEN_EXPIRE_MINUTES`) y resolución del usuario en cada request. |
 | AC21 | Mitigado | La API usa bearer token en cabecera `Authorization`; no hay cookies de sesión para el backend. |
-| CR03 | Mitigado | Contraseñas con bcrypt (`passlib`), rate limiting global y por endpoint con `slowapi`. |
+| CR03 | Mitigado | Contraseñas con bcrypt directo (`app/passwords.py`), rate limiting global y por endpoint con `slowapi`. |
 | CR01, CR02, CR06 | Parcial | En producción el TLS lo termina un proxy externo; el compose de desarrollo habla HTTP. No se publica el backend directamente. |
 | AC24 | Mitigado | Las claves se leen del entorno; no hay credenciales hardcodeadas en el código. `FERNET_SECRET_KEY` y `JWT_SECRET_KEY` son obligatorias en producción. |
 

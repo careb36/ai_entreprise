@@ -22,15 +22,6 @@ updates:
     ignore:
       - dependency-name: "sqlmodel"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
-      # bcrypt 5.0 dejo de truncar en silencio y ahora lanza ValueError por
-      # encima de 72 bytes. passlib 1.7.4 (sin release desde 2020) sondea el
-      # backend con un vector de 255 bytes al cargarlo: el sondeo falla, el
-      # backend no queda registrado y TODA operacion de hash o verify revienta,
-      # tambien con un password de 10 caracteres. Verificado: con bcrypt 4.3.0
-      # funciona todo; con 5.0.0 no funciona nada. Hace falta migrar de passlib
-      # a bcrypt directo antes de subir de major.
-      - dependency-name: "bcrypt"
-        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-patch:
         applies-to: version-updates

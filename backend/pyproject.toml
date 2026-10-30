@@ -18,7 +18,6 @@ nats-py = "^2.16.0"
 langgraph = "^1.1.6"
 langchain = "^1.2.15"
 langchain-core = "^1.3.3"
-passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 httpx = "^0.28.1"
 requests = "^2.33.1"
 cryptography = "^50.0.1"
@@ -34,11 +33,9 @@ opentelemetry-instrumentation-requests = "^0.66b1"
 opentelemetry-instrumentation-httpx = "^0.66b1"
 langchain-openai = "^1.1.12"
 pyjwt = ">=2.8,<3"
-# Tope en 5: bcrypt 5.0 dejo de truncar y lanza ValueError por encima de 72
-# bytes, y passlib 1.7.4 sondea el backend con un vector de 255 bytes al
-# cargarlo. Con bcrypt 5 el sondeo falla y no queda backend: revienta todo
-# hash y todo verify. Migrar de passlib a bcrypt directo antes de subir.
-bcrypt = "<5"
+# Hash de contrasenas directo, sin passlib: el sondeo de passlib al importar
+# rompia con bcrypt 5, y por eso hubo un tope en 4. Ver app/passwords.py.
+bcrypt = "<6"
 slowapi = "^0.1.10"
 prometheus-client = "^0.26.0"
 starlette = "^1.3.1"
