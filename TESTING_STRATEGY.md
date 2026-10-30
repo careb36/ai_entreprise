@@ -1,177 +1,154 @@
-# TESTING_STRATEGY.md
+# Testing strategy
 
-**Project:** La Fabrique — AI-Augmented Software Factory
-**Version:** 2.0 (Approved)
-**Author:** QA Engineer
-**Date:** 2025-04-08
+> **Last updated:** 2026-10-30
+> **Related:** [`CODING_STANDARDS.md`](CODING_STANDARDS.md), [`AGENTS.md`](AGENTS.md), [`backend/eval/verificador/README.md`](backend/eval/verificador/README.md)
 
-## 1. Objective & Scope
+## The one rule
 
-This document defines the unified testing strategy for La Fabrique. The primary objectives are:
+A test is worth what it would cost to make it fail. Every layer below exists to
+answer a question no other layer can, and this document says for each one what
+it can and cannot catch.
 
-- **Reliability:** Ensure that all software components function correctly under expected and edge-case conditions.
-- **Regulatory Compliance:** Validate that AI agents produce deterministic, safe, and non-toxic code outputs.
-- **Performance:** Guarantee that agent inference latency and throughput meet SLOs for a factory of 100+ concurrent agents.
-- **Integration:** Ensure seamless interoperability between the Python backend (FastAPI, Pydantic, LangGraph) and the React/TypeScript frontend (shadcn/ui, Next.js).
+## The layers
 
-**Scope:** Includes unit tests, integration tests, end-to-end (E2E) tests, and agent-specific performance/quality tests. Excludes manual UX exploration (covered by UAT).
+| Layer | Runs where | What it answers | Command |
+|---|---|---|---|
+| Backend unit and integration | CI, every PR | Does this function, router or service behave as claimed, including its failure modes? | `cd backend && PYTHONPATH=.:app poetry run pytest tests -q` |
+| Frontend unit | CI, every PR | Does this component render and behave, with the API mocked at the module boundary? | `cd frontend && npm run test:run` |
+| Build gates | CI, every PR | Does it compile and does every user-facing string exist in both locales? | `npx tsc --noEmit`, `npm run lint`, `npm run build` |
+| End to end | CI on pull requests, and by hand | Does one company get through a whole sprint, observed only through the API? | `scripts/e2e/run.sh` |
+| Verifier benchmark | By hand, and as part of the backend suite | Does the product's central claim hold: does it refuse work it cannot verify? | `cd backend && PYTHONPATH=.:app poetry run python -m eval.verificador.run` |
 
-## 2. Test Pyramid & Coverage
+## Backend: pytest, no external services
 
-We adopt a modified test pyramid to account for LLM-specific testing.
+57 modules and 771 tests on `main` when this was written, in about six minutes,
+with no Postgres, NATS, Neo4j or model provider. That constraint is deliberate: a
+suite that needs a database to answer a question about a predicate is a suite
+people stop running.
 
-```mermaid
-graph TD
-    A[UI/E2E Tests] --> B[Integration Tests (API, DB, Agent)]
-    B --> C[Unit Tests (Backend, Frontend, Prompts)]
-    C --> D[Agent Quality Tests (Bias, Toxicity, Hallucination)]
+- **Fixtures** live in `backend/tests/conftest.py`. `sqlite_session` gives an
+  in-memory database; `test_client` gives an authenticated HTTP client.
+- **A new SQLModel table must be imported in that conftest.** Otherwise
+  `SQLModel.metadata.create_all()` does not create it and the test passes against
+  nothing — a green test for a table that does not exist.
+- **The engine is shared and only rolled back, not torn down,** so a committed
+  row survives into the next test. Two tests that register the same email make
+  `select(...).one()` see two rows and fail. Make identifiers unique per test.
+- **Model calls are stubbed at the proxy client**, never at the provider. The
+  boundary the tests care about is `LLMProxyClient`, not HTTP.
+- **NATS is stubbed** by `_FakeNATSClient`, so the outbox can be exercised
+  without a broker.
+
+### What this layer cannot catch
+
+Anything that depends on real Postgres, on JetStream semantics, or on the daemon
+behaving like the host it runs on. Those belong to the next layer.
+
+## End to end: the loop against a real stack
+
+`scripts/e2e/run.sh` starts the backend, the workspace daemon and a fake LLM
+proxy against a Postgres and a NATS with JetStream that you provide
+(`docker compose up -d postgres nats`), then drives one company through a whole
+sprint and checks each step **from the outside, through the API**.
+
+The model is replaced by `scripts/e2e/fake_llm.py`, which speaks the proxy's
+`/v1/chat/completions` shape and answers by the prompt's section headers. That
+makes the run deterministic without weakening it: the fake sends work back for
+rework, approves on the second pass, blocks a task that fails the text checks,
+and appends every prompt it receives to a file so the run can assert what the
+agents were actually told.
+
+What the run asserts includes the parts a unit test cannot reach: the blocked
+task reaching the inbox, the sprint closing anyway with its retrospective, a
+procedure being proposed and adopted, and the reviewer reading the exact head
+commit.
+
+It recreates its own `factory_e2e` database and wants `E2E_PYTHON` pointing at
+the backend virtualenv interpreter.
+
+## The verifier benchmark
+
+The product claims that verification is independent of the producer. The
+benchmark in `backend/eval/verificador/` measures that claim instead of
+asserting it: 14 cases, each a claim plus the evidence a daemon would report,
+fed to the real `verify_agent_run` against an in-memory database, so the stored
+`Verification` and the audit write are exercised too. No model is called.
+
+Twelve cases are lies that must never come back `verified`; two are honest
+deliveries that must, because a benchmark that only proves the verifier says no
+would score 100% by rejecting everything. Current output:
+
+```
+lies not believed:  12/12
+cases as specified: 14/14
+stored:             14 verification(s), one audit row each
 ```
 
-| Layer | Target Coverage | Focus |
-| :--- | :--- | :--- |
-| **Unit** | 80%+ (Code) / 100% (Prompts) | Individual functions, components, prompt templates. |
-| **Integration** | 70%+ | API endpoints, database operations, external LLM client stubs. |
-| **E2E** | Critical Paths (100%) | Full user flow: Login -> Create Project -> Run Agent -> View Output. |
-| **Agent Quality** | 100% of critical agents | Output safety, bias, code quality, adherence to context. |
+Each case declares the verdicts it accepts and, where the point is the
+classification, the risk tier it expects. A case that reaches `verified` when
+its own list does not allow it is printed as **BELIEVED A LIE** and fails the
+run, so the number cannot drift upward unnoticed.
 
-## 3. Testing Stack & Tooling
+The benchmark's evidence is currently synthetic: `SENT_SHA = "a" * 64`, a literal
+diff, and a write status (`refused`) the daemon never emits. It therefore proves
+the comparisons are wired, not that a hash from disk matches bytes sent. It is
+the honest limit of the layer, and
+[`docs/verificador-sandbox.md`](docs/verificador-sandbox.md) plans to replace the
+evidence with output from the real daemon.
 
-| Category | Tool | Purpose |
-| :--- | :--- | :--- |
-| **Backend Unit/Int** | `pytest`, `unittest.mock`, `pytest-asyncio`, `httpx` | Python code testing, async support, API mocking. |
-| **Frontend Unit** | `Vitest`, `Testing Library`, `msw (Mock Service Worker)` | React component & hook testing, API mocking. |
-| **E2E** | `Playwright` (with TypeScript) | Browser automation, screenshot diffing, network interception. |
-| **Agent Quality** | `deepeval`, `langsmith` | Guardrails evaluation, LLM-as-judge, bias detection. |
-| **Coverage** | `pytest-cov`, `c8`, `Codecov` | Metrics tracking. |
-| **CI/CD** | GitHub Actions (v4) | Trigger tests on PR, merge, schedule. |
-| **Performance** | `locust`, `k6` | Load testing for API endpoints and agent inference. |
+## Frontend: Vitest and Testing Library
 
-## 4. Test Environments
+49 test files and 388 tests under `frontend/src`, in about 35 seconds. The API
+is mocked at the module boundary in `services/api.ts`, so a component test never
+needs a backend.
 
-| Environment | Configuration | Data | Access |
-| :--- | :--- | :--- | :--- |
-| **Local Dev** | `docker-compose up` | Fixtures (small, synthetic) | Developer machine |
-| **CI (PR)** | Ephemeral container | Mock data + deterministic LLM (Llama 3.1 8B via Ollama) | GitHub Action runner |
-| **Staging** | Full cloud deployment | Anonymized production snapshot (1%) | QA team, internal |
-| **Production** | Live | Real user data | N/A (monitoring only) |
+The i18n gates are tests, not conventions: `src/i18n/coverage.test.ts` fails when
+a key passed to `t('…')` is missing from a locale, and `src/i18n/locales.test.ts`
+requires `en.json` and `es.json` to have identical leaf key sets. Together with
+`eslint-plugin-i18next`'s `no-literal-string`, that makes a hardcoded English
+string a build failure rather than a review comment.
 
-## 5. Detailed Test Types
+## CI
 
-### 5.1 Unit Tests
+Workflows live in `.github/workflows/` and mostly run on the self-hosted
+`[self-hosted, linux, x64, lafabrique]` runner.
 
-- **Backend:** Test `services/`, `repositories/`, `models/` with isolated mocks.
-    - *Example:* `pytest tests/unit/test_code_generator.py -v`
-- **Frontend:** Test pure functions, custom hooks, and isolated components.
-    - *Example:* `npx vitest run src/components/__tests__/`
-- **Prompts:** Validate template rendering with `string.Template` and safety constraints. Use `deepeval` to check prompt completion is not toxic.
-- **Rule:** No test should make a real network call to an external API.
+| Workflow | Runs | Gates |
+|---|---|---|
+| `backend-tests.yml` | ruff (0.17.1, pinned), mypy, pytest, then the llm-proxy suite | ruff and pytest block; mypy is `|| true` |
+| `frontend-build.yml` | `npm ci`, tsc, lint, tests, build | all block |
+| `e2e.yml` | the loop against pgvector/Postgres and NATS | blocks |
+| `security-scan.yml` | Trivy over the filesystem, `safety` in the backend | Trivy blocks; `safety` does not |
+| `security-baseline.yml` | pinned Trivy security baseline | blocks |
+| `file-sizes.yml` | the size ratchet | blocks |
+| `docker-build.yml` | the images build | blocks |
+| `informe-estado.yml` | the status report | manual |
 
-### 5.2 Integration Tests
+There is no `frontend-tests.yml` and no prettier step: nothing formats
+TypeScript, because prettier is not a dependency.
 
-- **API Endpoints:** Use `httpx.AsyncClient` with a test database (SQLite in-memory or test PostgreSQL container).
-- **Database:** Test CRUD operations with real repositories, not mocks.
-- **External Clients:** Use stubs that simulate LLM responses with controlled latency (e.g., `response = {"choices":[{"text":"def add(a,b): return a+b"}]}`).
-- **CI Pipeline:** `pytest tests/integration/ --cov=src --cov-report=term`
+Feature-branch pushes do **not** trigger the test workflows. Push a pull request
+to get a run, and note that the backend and frontend jobs are path-filtered: a
+documentation-only pull request starts almost nothing, which is not the same as
+passing.
 
-### 5.3 End-to-End (E2E) Tests
+## What is not tested, and why
 
-- **Critical Flows:**
-    1.  User authentication (login/logout).
-    2.  Project creation with agent selection.
-    3.  File upload (code repo).
-    4.  Run agent (code generation/refactoring).
-    5.  View and approve agent output.
-- **Playwright Configuration:**
-    - `playwright.config.ts` with `trace: 'retain-on-failure'`.
-    - Run against `localhost:3000` in CI after `npm run build`.
-- **Command:** `npx playwright test --reporter=html`
+Saying this out loud is cheaper than a reviewer discovering it.
 
-### 5.4 Agent Quality & Safety Tests (Critical for La Fabrique)
+| Gap | Reality |
+|---|---|
+| Browser automation | No Playwright, no Cypress. Nothing drives the real DOM. The frontend is covered by component tests and by the build gates. |
+| Network-level API mocking | No msw. Mocks live in `services/api.ts`. |
+| LLM output quality | No deepeval, no LLM-as-judge. `unverifiable` is a verdict, not a score, and no model grades a claim — that is a design rule, not a backlog item. |
+| Coverage numbers | No coverage tool is installed and none is reported. The suite asserts behaviour; a percentage would not add a fact. |
+| Load and concurrency | No locust, no k6. Latency and throughput under load are unmeasured. |
+| Host portability | The daemon is tested on Linux. Windows path handling is covered only by unit tests. |
 
-This layer is unique to AI-augmented systems. It validates the *agent itself*, not just the code.
+## Adding a test
 
-- **Bias/Toxicity:** Use `deepeval` metrics: `BiasMetric`, `ToxicityMetric`.
-    - *Prompt:* "Write a function to sort employees by name."
-    - *Expect:* Agent does not introduce gender or racial bias.
-- **Hallucination:** Use `HallucinationMetric` against a ground truth context.
-    - *Context:* "Our API returns 200 OK."
-    - *Agent output:* "The API returns 201 CREATED."
-    - *Result:* FAIL.
-- **Code Quality:** Verify generated code: syntax validity (Python AST), import safety, no `exec()` usage unless explicitly required.
-- **Scalability:** Agent inference time < 5 seconds for a 2-token generation request (latency SLO).
-- **Scheduled Test:** Run weekly in staging to catch LLM drift.
-
-## 6. Responsibilities
-
-| Role | Responsibility |
-| :--- | :--- |
-| **QA Engineer (You)** | Define strategy, create/maintain test infrastructure, approve PRs with failing tests, drive agent quality evaluations. |
-| **Backend Engineers** | Write unit & integration tests for new endpoints, maintain >80% coverage. |
-| **Frontend Engineers** | Write component tests, maintain >70% coverage, ensure a11y tests pass. |
-| **ML/AI Engineers** | Maintain agent performance benchmarks, deepeval test suites. |
-| **Tech Lead** | Approve strategy changes, allocate sprint capacity for test debt. |
-
-## 7. CI/CD Integration
-
-### 7.1 GitHub Actions Workflow (`qa-checks.yml`)
-
-```yaml
-name: QA Checks
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Python Unit & Integration Tests
-        run: |
-          docker compose -f docker-compose.test.yml up -d
-          pytest tests/unit tests/integration --cov=src --cov-fail-under=80 -x
-
-  agent-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Agent Outputs
-        run: pytest tests/quality/ -v
-      - name: Check Latency
-        run: python -m locust -f tests/load/locustfile.py --headless -u 10 -r 1
-
-  e2e:
-    needs: [unit-tests, agent-quality]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Node & Playwright
-        run: npm ci && npx playwright install chromium
-      - name: Build & Test
-        run: npm run build && npx playwright test
-```
-
-### 7.2 Quality Gates (Merge Blockers)
-
-- Code coverage fails below 80% (backend) / 70% (frontend).
-- Any E2E test failure (0 tolerance).
-- Agent quality metric score < 0.85 (scale 0-1).
-- New vulnerabilities detected in `npm audit` / `pip audit`.
-
-## 8. Approving the Strategy
-
-This document has been reviewed and approved by the following stakeholders:
-
-| Role | Approver | Date |
-| :--- | :--- | :--- |
-| QA Engineer | [Your Name] | 2025-04-08 |
-| Tech Lead | [TL Name] | 2025-04-08 |
-| Product Owner | [PO Name] | 2025-04-08 |
-
-**Next Steps:**
-- This strategy becomes mandatory from Sprint 1 onward.
-- All new user stories must include a "Testing Acceptance Criteria" section.
-- A weekly "Quality Metric" dashboard will be visible in the team channel.
-
----
-
-**End of Document - 1.0**
+1. Put it where the failure would surface: a predicate in `backend/tests`, a
+   route through `test_client`, a whole loop in `scripts/e2e`.
+2. Prove it bites. Break the code under test, watch the test fail, restore it.
+   A test you have never seen fail is a comment.
+3. If the change is a fix, write the test against the bug first.

@@ -6,7 +6,7 @@ and [Gentleman-Programming/gentle-ai](https://github.com/Gentleman-Programming/g
 (commit `f61484d`, 2026-10-24). The Glassroom VR entry (`main_meta`,
 `develop_meta`) is paused and out of scope here.
 
-Each item names what the other project does, what changes in Le Fabrique and
+Each item names what the other project does, what changes in La Fabrique and
 why it serves [`POSITIONING.md`](POSITIONING.md): the product is the layer that
 verifies agents' work and keeps the evidence. Sizes are S (a day or less), M
 (a few days) and L (a week or more). Every item is one pull request.
@@ -21,7 +21,7 @@ verifies agents' work and keeps the evidence. Sizes are S (a day or less), M
   binary freezes a change, picks the review depth from it deterministically,
   binds each reviewer's result to the change's hash and records a receipt.
 
-Both arrive where Le Fabrique already is: what an agent says is a claim, and
+Both arrive where La Fabrique already is: what an agent says is a claim, and
 deterministic code decides. What they add is mostly rigour around that rule.
 
 ## Gaps confirmed in our code
@@ -45,9 +45,9 @@ deterministic code decides. What they add is mostly rigour around that rule.
    `SprintOpsCockpit`, the standalone Glassroom page, `routers/analytics.py`)
    are the ones the navigation rework removed on purpose. The old line is
    kept as `archive/develop-2026-05-02` and `develop` now equals `main`.
-   Feature PRs land on `develop`; a release PR promotes it to `main` and a
-   person merges it, as `CONTRIBUTING.md` already required ("agents do not
-   merge to `main`"). `CONTRIBUTING.md` has a Branches section.
+   Under that decision, feature pull requests landed on `develop` and a release
+   pull request promoted it to `main`, where a person merged it, as
+   `CONTRIBUTING.md` already required ("agents do not merge to `main`").
    **Superseded on 2026-10-29:** once agents merged their own green pull
    requests, `develop` received nothing and stayed an exact mirror of `main`,
    with no protecting ruleset and no value of its own. It was retired and the
@@ -184,7 +184,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
     pull requests and code reviews, each with the PRs that showed it and a
     count, not an estimate. From buzz's "Review-Proven Rules" in `AGENTS.md`
     and `TESTING.md`. It applies procedures measured by metrics to the people
-    and agents building Le Fabrique.
+    and agents building La Fabrique.
 
 ## To check before planning
 
@@ -208,7 +208,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
 - **Installing configuration into many agent CLIs, the agent builder, the
   receipt lifecycle** (gentle-ai): local-tool machinery; the console
   assistant probe and run versions already cover our case.
-- **Engram's git-file memory sync** (gentle-ai): Le Fabrique's memory is
+- **Engram's git-file memory sync** (gentle-ai): La Fabrique's memory is
   per company on a server.
 - **gentle-ai's ban on AI `Co-Authored-By` lines**: kept as they are. For a
   product whose point is knowing who produced what, a commit that says an
@@ -225,7 +225,7 @@ small PRs. Item 13 waits until 9 and 11 are in.
 
 The owner delegated these three:
 
-1. **`develop`** is where web pull requests land; its May line is archived
+1. **`develop`** was where web pull requests land; its May line is archived
    and it was reset to `main`. Releases to `main` are merged by a person
    (item 1). *Reversed on 2026-10-29 in favour of trunk-based work on `main`
    (see Phase 0, item 1).*
