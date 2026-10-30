@@ -30,6 +30,27 @@ certs/
 secrets/
 password.txt
 
+# --- Credential helpers & store (never commit) ---
+.netrc
+.git-credentials
+
+# --- Cloud credentials (defensive: never commit) ---
+.aws/
+.gcloud/
+.azure/
+*.service-account*.json
+gcp-*.json
+google-credentials*.json
+
+# --- AI assistant tool state (AGENTS.md / CLAUDE.md are the versioned instructions) ---
+.claude/
+.cursor/
+.windsurf/
+.continue/
+.agent/
+.qwen/
+.copilot/
+
 # --- Logs ---
 *.log
 logs/
