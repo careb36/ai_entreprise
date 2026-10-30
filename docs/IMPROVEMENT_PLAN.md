@@ -1,4 +1,4 @@
-# Improvement plan for the web product (main, develop)
+# Improvement plan for the web product (main)
 
 Written 2026-10-25 after reading two open-source projects again for ideas:
 [block/buzz](https://github.com/block/buzz) (commit `9e8c9fc`, 2026-10-23)
@@ -34,7 +34,7 @@ deterministic code decides. What they add is mostly rigour around that rule.
 | The task worker keeps growing | `services/task_worker.py`, 3,545 lines |
 | Glassroom events are mostly untyped `status` messages | 31 `publish_glassroom` calls in `task_worker.py` |
 | CLAUDE.md still calls `main.py` the file with all routes; it is 116 lines and the routes live in `routers/` | `CLAUDE.md` |
-| `develop` is 263 commits behind `main` and holds 33 commits from May that `main` lacks | branches |
+| ~~`develop` is 263 commits behind `main` and holds 33 commits from May that `main` lacks~~ — resolved: the branch was retired on 2026-10-29 | branches |
 
 ## Phase 0: housekeeping (all S)
 
