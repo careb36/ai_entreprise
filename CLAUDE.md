@@ -146,9 +146,9 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
-**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. Use `model_preference="fast"` (flash models) or `"powerful"` (pro models).
+**`backend/app/llm_proxy_client.py`** — Thin HTTP client wrapping the LLM proxy for token-budget-aware requests. `chat()` / `chat_async()` take a `model` id (default `"gemini-pro"`), a `role`, and an optional `bu_id`.
 
-**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes to Gemini or DeepSeek based on the model name prefix, and refreshes available Gemini models hourly. Each answer says how its token count is known (`llm-proxy/usage.py`): `usage_status: reported` with the provider's figure in `usage`, or `estimated` with a characters/4 estimate apart in `usage_estimate` (charged to the quota, never shown as usage); the backend's `usage_status` keeps estimates out of the KPI averages.
+**`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes by model-id prefix to the wired providers (Nebius Token Factory, Gemini, DeepSeek, Qwen), and refreshes each provider's catalogue hourly. Each answer says how its token count is known (`llm-proxy/usage.py`): `usage_status: reported` with the provider's figure in `usage`, or `estimated` with a characters/4 estimate apart in `usage_estimate` (charged to the quota, never shown as usage); the backend's `usage_status` keeps estimates out of the KPI averages.
 
 **`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
 
@@ -427,8 +427,8 @@ from `backend/poetry.lock`. The lint step runs the ruff version the workflow
 pins (`pip install "ruff==0.17.1"`); lint locally with that same version, since
 ruff's default rule set moves between releases. Feature-branch pushes do not trigger it; open a
 pull request to get a run. Add new backend dependencies to
-`backend/pyproject.toml` and commit the refreshed lock file, or CI will fail
-the `poetry check --lock` step.
+`backend/pyproject.toml` and commit the refreshed lock file; CI installs from
+`backend/poetry.lock`.
 
 Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
@@ -493,11 +493,14 @@ Use the `useTranslation` hook from i18next; never hardcode English strings in JS
 
 ## LLM Proxy Model Routing
 
-When adding new LLM calls in agents, pass `model_preference` to the proxy client:
-- `"fast"` → Gemini Flash or DeepSeek V2 (default for most agent nodes)
-- `"powerful"` → Gemini Pro (reserved for Architect and high-stakes reasoning)
+Every LLM call goes through the proxy client (`backend/app/llm_proxy_client.py`).
+`LLMProxyClient.chat()` / `chat_async()` take a `model` id (default
+`"gemini-pro"`), a `role`, and an optional `bu_id`. There is no
+`model_preference` parameter: the `fast` / `powerful` tiers are an internal
+fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
+`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
 
-Token budgets are enforced per company at the proxy layer — the backend never calls Gemini/DeepSeek directly.
+Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 
 ## Documentation
 
