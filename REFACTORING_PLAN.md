@@ -1,71 +1,68 @@
-# 🚀 Plan Maestro: La Fabrique Enterprise v2.0
+# Estado de la refactorización
 
-Este documento contiene la estrategia de refactorización y mejora para el ecosistema de La Fabrique. 
-Sigue las fases en orden para garantizar la estabilidad del sistema.
+Registro de lo que se propuso, lo que se hizo y dónde vive hoy. No es una hoja de
+ruta: lo que falta de verdad está en [`docs/IMPROVEMENT_PLAN.md`](docs/IMPROVEMENT_PLAN.md)
+y en los issues abiertos.
 
----
+Última revisión: 2026-10-30, contra `main`.
 
-## 🏛️ Fase 1: Cimientos de Acero (Backend Refactor) — ✅ COMPLETADO
-**Objetivo:** Salir del `main.py` gigante y pasar a una arquitectura modular y tipada.
+## 1. Backend modular — hecho
 
-1.  **Migración a SQLModel:** ✅ Reemplazado `psycopg2` por **SQLModel**.
-    *   Modelos creados para: `Company`, `Agent`, `Sprint`, `BacklogItem`, `AuditLog`, `BusinessUnit`.
-2.  **Modularización por Routers:** ✅ `main.py` dividido en `backend/app/routers/`:
-    *   `auth.py`, `enterprise.py`, `sprint.py`, `agents.py`, `support.py`.
-3.  **Capa de Servicios:** ✅ Lógica de negocio movida a `backend/app/services/`:
-    *   `outbox_service.py`, `agent_service.py`, `discovery_service.py`, `task_worker.py`.
+- `psycopg2` fuera; **SQLModel** para todas las tablas.
+- `main.py` ya no contiene rutas: solo monta routers, CORS y el ciclo de vida
+  (121 líneas). La lógica HTTP vive en `backend/app/routers/`, once módulos:
+  `auth`, `enterprise`, `sprint`, `agents`, `agent_runs`, `support`, `github`,
+  `inbox`, `messages`, `procedures`, `workspace`.
+- La lógica de negocio está en `backend/app/services/`: `outbox_service`,
+  `agent_service`, `discovery_service`, `task_worker`, `verification`,
+  `reviewer_agent`, `board`, `risk`.
+- Un router no toca la base de datos: recibe `get_session` y
+  `auth_deps.get_current_user` inyectados.
 
----
+## 2. Bucle de agentes — hecho
 
-## 🧠 Fase 2: Inteligencia Auto-Sanable (LangGraph Evolution) — ✅ COMPLETADO
-**Objetivo:** Agentes con bucles de retroalimentación y memoria persistente.
+- El bucle de corrección existe: `real_execution_node` valida y reintenta con el
+  error concreto.
+- La validación de salida existe: `validate_design_node` rechaza diagramas
+  Mermaid vacíos o mal formados.
+- RAG sobre grafo: `EngramProcessor` combina búsqueda semántica en pgvector con
+  búsqueda estructural en Neo4j.
 
-1.  **Bucle de Feedback (Self-Correction):** ✅ `real_execution_node` ahora realiza validación sintáctica (compile) y reintenta con feedback específico.
-2.  **Validación de Salida (Guardrails):** ✅ `validate_design_node` asegura diagramas Mermaid no vacíos y bien formateados.
-3.  **RAG sobre Grafos (Neo4j):** ✅ `EngramProcessor` integra búsqueda semántica (pgvector) con búsqueda estructural (Neo4j) para un contexto RAG superior.
+## 3. Frontend — hecho
 
----
+- Estado con **Zustand** (`agentStore.ts`, `toastStore.ts`).
+- Llamadas a la API con **TanStack Query**, centralizadas en
+  `frontend/src/hooks/useQueries.ts`.
+- Componentes de board, panel de control, gobierno, analítica y generación
+  consumen esos hooks en lugar de llamar a la API a mano.
 
-## 🎨 Fase 3: Frontend de Alta Performance (React Upgrade) — ✅ COMPLETADO
-**Objetivo:** UI reactiva, liviana y con mejor manejo de estado.
+## 4. Gobierno y observabilidad — hecho
 
-1.  **Zustand Store:** ✅ Migración completa a Zustand (`useAppStore.ts` y `agentStore.ts`).
-2.  **TanStack Query (React Query):** ✅ Implementados hooks personalizados en `useQueries.ts` para todas las operaciones de API.
-3.  **Refactor de Componentes:** ✅ `CompanyNew`, `ControlPanel`, `KanbanBoard`, `Generate`, `GovernancePanel` y `AnalyticsDashboard` refactorizados para usar hooks de Query/Mutation.
+Lo que este documento daba como pendiente ya está en `main`:
 
----
+- **Cuotas por Business Unit en tiempo real.** `llm-proxy/app.py` aplica
+  `enforce_business_unit_quota` antes de cada llamada al modelo y actualiza el
+  consumo después; añade una cabecera de aviso al acercarse al límite.
+- **Trazas OpenTelemetry.** `opentelemetry-api`, `-sdk` y `-exporter-otlp` son
+  dependencias del backend, y el cliente del proxy emite spans. Jaeger está en
+  `docker-compose.yml` (`:16686`) y los servicios aparecen como `fabrique-api`,
+  `agent-worker` y `llm-proxy`.
+- **Feedback humano.** El endpoint antiguo `POST /v1/approve_task` está retirado
+  y responde 410 indicando el reemplazo. El reemplazo es
+  `POST /v1/agent_runs/{run_id}/approve`, que guarda un `AgentRunApproval` con
+  `decision`, `feedback` y `rejection_category`, firmado en el registro de
+  auditoría. El agente recibe ese texto como corrección.
 
-## 🛡️ Fase 4: Governance y Observabilidad — 🚧 PRÓXIMAMENTE
-**Objetivo:** Control de costos y trazabilidad total.
+## 5. Lo que este plan pedía y ya no aplica
 
-1.  **Cuotas en Tiempo Real:** 
-    *   Validar `token_quota` en cada llamada al LLM Proxy. Frenar la ejecución si se supera el límite de la Business Unit.
-2.  **OpenTelemetry Tracing:** 
-    *   Instrumentar los nodos de LangGraph para ver la latencia y fallos en Jaeger/SigNoz.
-3.  **Human-in-the-Loop:** 
-    *   Mejorar el endpoint `/approve_task` para permitir feedback textual del PO humano que el Agente deba procesar.
+- «Cada cambio en una rama `feature/` o `bugfix/`»: hoy las ramas son tipadas
+  (`fix/`, `docs/`, `ci/`, `chore/`) y salen siempre de `main`. La convención
+  vigente está en [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- «Lee `CONTRIBUTING.md` para las convenciones»: sigue siendo cierto, y ahora
+  también [`CODING_STANDARDS.md`](CODING_STANDARDS.md), que tiene los comandos.
 
----
+## 6. Lo que queda de verdad
 
-## 🏗️ Estándares de Ingeniería y Git Strategy
-**Objetivo:** Mantener el orden y la disciplina del repositorio.
-
-1.  **Ramas cortas desde `main`:**
-    *   No trabajar directamente sobre `main`: cada cambio va en su propia rama y entra por PR.
-    *   Cada cambio debe ir en su propia rama `feature/` o `bugfix/`.
-2.  **Conventional Commits:**
-    *   Usar prefijos: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
-3.  **Código Tipado:**
-    *   Usar `typing` de Python en todo el backend.
-    *   Usar interfaces y tipos estrictos en el frontend (TypeScript).
-4.  **Cero Acoplamiento:**
-    *   No mezclar lógica de base de datos con controladores de FastAPI.
-    *   Inyectar dependencias siempre que sea posible.
-
-## 🛠️ Instrucciones para Copilot / AI Assistant
-- **Principio de Atomicidad:** No intentes aplicar todo el plan de una vez. Trabaja fase por fase.
-- **Ramas:** Al iniciar una tarea, pregunta por el nombre de la rama siguiendo la convención.
-- **Commits:** Sugiere commits siguiendo la convención de Conventional Commits.
-- **Documentación:** Lee el archivo `CONTRIBUTING.md` para más detalles sobre las convenciones.
-- **Seguridad:** No modifiques las variables de entorno ni las claves de acceso.
-- **Convenciones:** Mantén el estilo de código existente (FastAPI + Pydantic v2).
+Nada de esta lista. El trabajo pendiente de saneamiento y las mejoras de
+producto viven en issues y en `docs/IMPROVEMENT_PLAN.md`, no aquí: mantener dos
+hojas de ruta es cómo una de las dos se queda mintiendo.

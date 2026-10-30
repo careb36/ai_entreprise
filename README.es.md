@@ -170,7 +170,7 @@ sequenceDiagram
 
 - **Docker** 24.0+ con Docker Compose v2
 - **Python** 3.12+ (para desarrollo local)
-- **Node.js** 20+ (para desarrollo frontend)
+- **Node.js** 24+ (para desarrollo frontend) — `engines.node >=24` y CI usa Node 24
 - **API Keys:** Google AI Studio (Gemini), DeepSeek
 
 [⬆ Volver al inicio](#la-fabrique)

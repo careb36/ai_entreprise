@@ -1,7 +1,7 @@
 # AGENTS.md
 
-Read this first. `CLAUDE.md` has the long-form architecture notes (some of it
-stale — see "Docs that mislead"); `docs/POSITIONING.md` carries the project
+Read this first. `CLAUDE.md` has the long-form architecture notes (partly
+historical — see "Docs"); `docs/POSITIONING.md` carries the project
 direction and the design rules that constrain new work.
 
 ## What this repository is
@@ -17,7 +17,7 @@ product is the layer that verifies their work and records evidence.
 | `backend/app/` | FastAPI app. `main.py` only wires routers, CORS, lifecycle; `routers/` hold HTTP endpoints, `services/` the logic, `models/` the SQLModel tables |
 | `backend/agents/`, `backend/llm/`, `backend/memory/` | optional LangGraph producer, role→model map, engram processing |
 | `backend/janitor/` | daily cleanup/reindex container |
-| `backend/tests/` | pytest suite, 50 modules |
+| `backend/tests/` | pytest suite, 57 modules |
 | `frontend/` | React 18 + Vite + TypeScript + Tailwind; `electron/` for the desktop build |
 | `llm-proxy/` | Flask gateway (per-company token budgets, model routing) with its own tests |
 | `vscode-daemon/` | host-side NATS consumer that writes files and runs commands |
@@ -37,7 +37,7 @@ All of these were run green on `main`; the exceptions are called out below.
 ```bash
 # Backend — no Postgres, NATS, Neo4j or LLM needed (in-memory SQLite + mocks)
 cd backend && poetry install
-cd backend && PYTHONPATH=.:app poetry run pytest tests -q        # ~50s, 665 tests
+cd backend && PYTHONPATH=.:app poetry run pytest tests -q        # ~6 min, 771 tests
 cd backend && PYTHONPATH=.:app poetry run pytest tests/test_board.py -q
 cd backend && ruff check app tests && ruff format --check app tests   # ruff==0.17.1, as CI pins it
 
@@ -188,7 +188,7 @@ not just the log. Two infrastructure failures look identical to test failures in
 the UI and in `--log-failed`:
 
 - *"The self-hosted runner lost communication with the server"* — the tests had
-  already passed (`665 passed`) when the runner dropped; it is the runner host,
+  already passed (the whole suite) when the runner dropped; it is the runner host,
   not the change.
 - *"The job was not started because recent account payments have failed or your
   spending limit needs to be increased"* — a job on a hosted runner. Every
@@ -197,18 +197,28 @@ the UI and in `--log-failed`:
 The `Run tests` step also reports `conclusion: null` in that first case, which
 is the tell.
 
-## Docs that mislead
+## Docs
 
-Several top-level documents stop mid-section or describe tooling that is not
-here. Trust the code and the workflows over them:
+The documents were revised on 2026-10-30 against `main`. What is known to be
+wrong now:
 
-- `CONTRIBUTING.md` ends at "## 3. Local setup" and `CODING_STANDARDS.md` at
-  "### 3.1 Monorepo layout" — the rules survive, the details do not.
-- `TESTING_STRATEGY.md` describes Playwright, msw and deepeval; none are
-  installed.
-- `CLAUDE.md` still says `backend/app/main.py` holds every route and that CI
-  runs `poetry check --lock`. Neither is true: routes live in
-  `backend/app/routers/`, and the backend job runs ruff, mypy and pytest.
-- No workflow scans for secrets; `security-scan.yml` only looks at
-  dependencies (Trivy over the filesystem, `safety` in the backend, and that one
-  is non-failing). Do not rely on CI to catch a committed key.
+- **No workflow scans for secrets.** `security-scan.yml` only looks at
+  dependencies: Trivy over the filesystem, and `safety` in the backend, which is
+  non-failing. Do not rely on CI to catch a committed key.
+- **`docs/front-coverage.md` is a dated snapshot.** Its "57 operations" is what
+  `app.openapi()` returned at `93c24f5`; the app now has 72 route entries (68
+  OpenAPI operations, since `/health` also answers `HEAD`). It is
+  honest about its commit, but do not read the counts as current.
+- **`docs/threat_model.md` is generated.** Its 113 STRIDE entries come from a
+  pytm model, including generic web threats for components that do not exist
+  here. `docs/threat_triage.md` is the list that matters.
+
+The rest — `ARCHITECTURE.md`, `CODING_STANDARDS.md`, `TESTING_STRATEGY.md`,
+`docs/API.md`, `USER_GUIDE.md`, `USER_GUIDE.es.md`, `README.md` and
+`README.es.md` — was rewritten or corrected on that date and its commands were
+run. The user guides describe what the dashboard does and, in a section of its
+own, what the product does not do; keep that section honest. If one of them
+drifts again, fix it in the same pull request that made it drift.
+
+`CLAUDE.md` is long and partly historical: it is a narrative of decisions, not a
+map of the code. When it disagrees with `backend/app/`, the code wins.
