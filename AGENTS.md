@@ -205,15 +205,11 @@ wrong now:
 - **No workflow scans for secrets.** `security-scan.yml` only looks at
   dependencies: Trivy over the filesystem, and `safety` in the backend, which is
   non-failing. Do not rely on CI to catch a committed key.
-- **`docs/front-coverage.md` is a dated snapshot.** Its "57 operations" is what
-  `app.openapi()` returned at `93c24f5`; the app now has 72 route entries (68
-  OpenAPI operations, since `/health` also answers `HEAD`). It is
-  honest about its commit, but do not read the counts as current.
 - **`docs/threat_model.md` is generated.** Its 113 STRIDE entries come from a
   pytm model, including generic web threats for components that do not exist
-  here. `docs/threat_triage.md` is the list that matters.
+  here. Residual risks are documented in `SECURITY.md`.
 
-The rest — `ARCHITECTURE.md`, `CODING_STANDARDS.md`, `TESTING_STRATEGY.md`,
+The rest — `ARCHITECTURE.md`, `CODING_STANDARDS.md`,
 `docs/API.md`, `USER_GUIDE.md`, `USER_GUIDE.es.md`, `README.md` and
 `README.es.md` — was rewritten or corrected on that date and its commands were
 run. The user guides describe what the dashboard does and, in a section of its
