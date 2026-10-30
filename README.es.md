@@ -299,7 +299,7 @@ flowchart LR
 | Nodo | Agente | Responsabilidad |
 |------|--------|----------------|
 | `kickoff` | Sistema | Valida el brief del sprint, extrae ítems del backlog, emite evento de estado inicial |
-| `po` | Product Owner | Crea work package en OpenProject, prioriza el backlog, identifica el ítem de mayor riesgo |
+| `po` | Product Owner | Prioriza el backlog (OpenProject opcional), identifica el ítem de mayor riesgo |
 | `scrum_master` | Scrum Master | Secuencia el trabajo, detecta bloqueos, asigna el primer movimiento al Developer |
 | `developer` | Developer | Toma el primer ítem accionable, detalla el plan de implementación, señala dependencias |
 | `po_wrap` | Product Owner | Cierra el kickoff con resumen de 3 puntos: prioridad · dueño · próxima acción |

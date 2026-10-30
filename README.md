@@ -324,7 +324,7 @@ flowchart LR
 | Node | Agent | Responsibility |
 |------|-------|----------------|
 | `kickoff` | System | Validates sprint brief, extracts backlog items, emits opening status event |
-| `po` | Product Owner | Creates OpenProject work package, prioritizes backlog, identifies riskiest item |
+| `po` | Product Owner | Prioritizes backlog (OpenProject optional), identifies riskiest item |
 | `scrum_master` | Scrum Master | Sequences work, surfaces blockers, assigns first execution move to Developer |
 | `developer` | Developer | Claims first actionable item, states implementation plan, flags dependencies |
 | `po_wrap` | Product Owner | Closes kickoff with 3-bullet summary: priority · owner · next action |
