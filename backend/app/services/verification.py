@@ -232,29 +232,59 @@ def check_tests_run(evidence: dict) -> dict:
     """
     The project's tests as run by the workspace daemon after delivery.
 
-    Exit 0 passes, any other exit code refutes, and a run that did not happen
-    (no test command, daemon silent, command error) is unverifiable — the
-    code was not shown to work, which is different from it failing.
+    Exit 0 passes, any other exit code refutes. A command that hung refutes too,
+    and says so: it was asked to finish and did not. Only a run that never
+    happened (no test command, daemon silent, command error) is unverifiable —
+    the code was not shown to work, which is different from it failing.
+
+    When the daemon had to cut the output, the observation says it, so a
+    truncated tail is never read as the whole story.
     """
     run = evidence.get("test_run") or {}
     command = run.get("command")
+    target = f"`{command}`" if command else "tests"
+    truncated = ""
+    if run.get("output_truncated"):
+        total = run.get("output_bytes")
+        limit = run.get("output_limit")
+        truncated = (
+            f" [output truncated to the last {limit} bytes of {total}]"
+            if isinstance(total, int) and isinstance(limit, int)
+            else " [output truncated]"
+        )
+    if run.get("timed_out"):
+        timeout = run.get("timeout_seconds")
+        if isinstance(timeout, (int, float)) and not isinstance(timeout, bool):
+            return {
+                "name": "tests_run",
+                "outcome": VERDICT_REFUTED,
+                "observation": (
+                    f"{target} did not finish within {timeout:g}s "
+                    f"(timed out, killed){truncated}"
+                ),
+            }
+        return {
+            "name": "tests_run",
+            "outcome": VERDICT_REFUTED,
+            "observation": f"{target} timed out and was killed{truncated}",
+        }
     exit_code = run.get("exit_code")
     if isinstance(exit_code, int) and not isinstance(exit_code, bool):
         if exit_code == 0:
             return {
                 "name": "tests_run",
                 "outcome": "pass",
-                "observation": f"`{command}` passed",
+                "observation": f"{target} passed{truncated}",
             }
         tail = (run.get("output_tail") or "").strip()[-400:]
         return {
             "name": "tests_run",
             "outcome": VERDICT_REFUTED,
-            "observation": f"`{command}` exited {exit_code}"
-            + (f": {tail}" if tail else ""),
+            "observation": f"{target} exited {exit_code}"
+            + (f": {tail}" if tail else "")
+            + truncated,
         }
     reason = run.get("reason") or "no exit status reported"
-    target = f"`{command}`" if command else "tests"
     return {
         "name": "tests_run",
         "outcome": VERDICT_UNVERIFIABLE,
@@ -311,7 +341,13 @@ def verify_agent_run(
         check_claimed_files_present(run),
         check_claimed_tests_evidenced(run, evidence),
     ]
-    if evidence and "workspace_writes" in evidence:
+    # A claim that files were written is only settleable against a daemon
+    # report. Running the check on the claim alone (not on the presence of the
+    # evidence key) means "no report" reads as unverifiable instead of as
+    # "nothing to check" — a caller that posts evidence without the daemon's
+    # per-file results must not get a verified run out of the omission.
+    claimed_files = (run.claims or {}).get("files") or []
+    if claimed_files or (evidence and "workspace_writes" in evidence):
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))

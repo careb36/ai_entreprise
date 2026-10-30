@@ -37,6 +37,13 @@ from urllib.parse import urlsplit
 
 import nats
 import nats_scope
+import shell_exec
+from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
+
+# The old private names stay so the handlers read as they did; the logic lives
+# in shell_exec so it can be tested and linted on its own.
+_build_command_env = shell_exec.build_command_env
+_build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(
@@ -210,44 +217,6 @@ async def _publish_glassroom_status(nc, sprint_id, content: str) -> None:
     }).encode())
 
 
-def _build_command_env() -> Dict[str, str]:
-    """Provide a stable host-like environment for assistant CLI execution."""
-    env = os.environ.copy()
-    home = env.get("HOME") or str(Path.home())
-    env["HOME"] = home
-    if IS_WINDOWS:
-        return env
-
-    nvm_root = Path(home) / ".nvm" / "versions" / "node"
-    nvm_bins = sorted(nvm_root.glob("*/bin"), reverse=True) if nvm_root.exists() else []
-
-    path_entries = [
-        *(str(path) for path in nvm_bins),
-        os.path.join(home, ".local", "bin"),
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        env.get("PATH", ""),
-    ]
-    env["PATH"] = os.pathsep.join(entry for entry in path_entries if entry)
-    return env
-
-
-def _build_shell_command(command: str) -> list[str]:
-    """Run commands through the user's shell when available instead of bare /bin/sh."""
-    configured_shell = os.getenv("FABRIQUE_EXEC_SHELL")
-    if IS_WINDOWS:
-        shell_path = configured_shell or os.environ.get("COMSPEC", "cmd.exe")
-        if Path(shell_path).stem.lower() in {"powershell", "pwsh"}:
-            return [shell_path, "-NoProfile", "-NonInteractive", "-Command", command]
-        return [shell_path, "/d", "/s", "/c", command]
-    shell_path = configured_shell or ("/bin/zsh" if Path("/bin/zsh").exists() else "/bin/sh")
-    if shell_path.endswith("zsh"):
-        return [shell_path, "-dfc", command]
-    if shell_path.endswith("bash"):
-        return [shell_path, "--noprofile", "--norc", "-c", command]
-    return [shell_path, "-c", command]
-
-
 def _is_assistant_command(command: str) -> bool:
     normalized = (command or "").lower()
     return "copilot" in normalized or "claude" in normalized
@@ -266,41 +235,6 @@ def _summarize_command_result(command: str, result: Dict[str, Any]) -> str:
         return f"Workspace command failed (exit {exit_code}): {output_preview}"
 
     return f"Workspace command failed (exit {exit_code}): {command_preview}"
-
-def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
-    """
-    Execute a shell command synchronously and capture all output.
-
-    Inspired by OpenHands' real-execution model: runs the command with a
-    120-second timeout, captures both stdout and stderr, and returns the
-    exit code so the caller can decide whether execution succeeded.
-
-    Args:
-        command: Shell command string (passed to ``shell=True``).
-        cwd:     Working directory for the command.
-
-    Returns:
-        Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
-        ``exit_code`` — or ``{"success": False, "error": ...}`` on exception.
-    """
-    logger.info(f"Executing: {command} in {cwd}")
-    try:
-        result = subprocess.run(
-            _build_shell_command(command),
-            cwd=cwd,
-            env=_build_command_env(),
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        return {
-            "success": result.returncode == 0,
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "exit_code": result.returncode
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 
 async def handle_msg(nc, msg):
     """
