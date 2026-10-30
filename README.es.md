@@ -73,6 +73,14 @@ modelo — y distinguibles de un vistazo.
 
 ![Una ejecución refutada: la afirmación del agente a un lado, las observaciones independientes al otro, y el veredicto que se desprende de ellas](docs/img/evidence-detail.png)
 
+Un sprint es un tablero Kanban, una Glassroom en vivo y un panel de analítica:
+
+![Tablero de sprint: columnas por estado — pendiente, en curso, en revisión, hecho, bloqueado](docs/img/sprint-board.png)
+
+![Glassroom en vivo: la vista en tres columnas con el roster de agentes y el flujo de mensajes](docs/img/sprint-live.png)
+
+![Analítica del sprint: los KPIs que una empresa lee al cerrar un sprint](docs/img/sprint-analytics.png)
+
 Estas capturas muestran una demo sembrada (una ejecución por veredicto, sin
 claves de API). Para reproducirlas, ejecuta `scripts/seed_demo_evidence.py`
 contra un stack en marcha y abre `/evidence` — consulta [DEMO](docs/DEMO.md).
@@ -480,11 +488,9 @@ persona. Ver [SECURITY.md](SECURITY.md).
 [Arquitectura](ARCHITECTURE.md) · [Posicionamiento](docs/POSITIONING.md) ·
 [Referencia de la API](docs/API.md) · [Demo](docs/DEMO.md) ·
 [Sandbox del verificador](docs/verificador-sandbox.md) · [Modelo de amenazas](docs/threat_model.md) ·
-[Guía de usuario](USER_GUIDE.es.md) · [Runbook](runbook.es.md) ·
-[Estrategia de pruebas](TESTING_STRATEGY.md) · [Contribuir](CONTRIBUTING.md) ·
+[Guía de usuario](USER_GUIDE.es.md) · [Contribuir](CONTRIBUTING.md) ·
 [Seguridad](SECURITY.md) · [Código de conducta](CODE_OF_CONDUCT.md) ·
-[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
-[Toda la documentación](docs/README.md)
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
 
 ---
 

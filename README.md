@@ -72,6 +72,14 @@ glance.
 
 ![A single refuted run: the agent's claim on one side, the independent observations on the other, and the verdict that follows from them](docs/img/evidence-detail.png)
 
+A sprint is a Kanban board, a live Glassroom and an analytics dashboard:
+
+![Sprint board: backlog columns by status — todo, in progress, in review, done, blocked](docs/img/sprint-board.png)
+
+![Glassroom live: the three-column real-time view with the agent roster and the message feed](docs/img/sprint-live.png)
+
+![Sprint analytics: the KPIs a company reads after a sprint](docs/img/sprint-analytics.png)
+
 These screenshots show a seeded demo (one run per verdict, no API keys). To
 reproduce them, run `scripts/seed_demo_evidence.py` against a running stack and
 open `/evidence` — see [DEMO](docs/DEMO.md).
@@ -166,7 +174,7 @@ sequenceDiagram
     D-->>TW: sha256 of each file read back (observation)
     TW->>DB: AgentRun + Verification (claims kept apart from observations)
     TW->>LLM: QA review (only APPROVED: closes the task)
-    TW->>DB: done / rework / blocked for a person; AgentMessages at each hand-over
+    TW->>DB: done, rework or blocked for a person, AgentMessages at each hand-over
     TW->>LLM: ScrumMaster triage of a blocked task, shown how earlier second attempts went (another attempt with a brief, or a person)
     TW->>DB: sprint closes when every task is settled → retrospective, procedures measured and proposed knowing what earlier ones did
     BE-->>U: GET /v1/inbox: what needs a person
@@ -183,7 +191,7 @@ sequenceDiagram
 | **Backend** | Python 3.12, FastAPI, LangGraph, SQLModel |
 | **Frontend** | React 18, TypeScript, TailwindCSS, Vite, Zustand |
 | **Vector Memory** | PostgreSQL 15 + pgvector |
-| **Knowledge Graph** | Neo4j 5.15 Enterprise + APOC |
+| **Knowledge Graph** | Neo4j 5.25 Enterprise + APOC |
 | **Message Broker** | NATS JetStream |
 | **AI Models** | NVIDIA Nemotron on Nebius Token Factory + Gemini + DeepSeek + Qwen |
 | **Infrastructure** | Docker Compose (8 services), VS Code CLI |
@@ -218,7 +226,7 @@ cp .env.example .env
 ./reset_infra.sh
 ```
 
-The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `up -d` → health-check wait → `ps`. After it completes:
+The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `up -d` → 5-second wait → `ps`. After it completes:
 
 - **Frontend:** `http://localhost:5173`
 - **Backend API + Swagger:** `http://localhost:8000/docs`
@@ -626,11 +634,9 @@ a task is always a person's. See [SECURITY.md](SECURITY.md).
 [Architecture](ARCHITECTURE.md) · [Positioning](docs/POSITIONING.md) ·
 [API reference](docs/API.md) · [Demo](docs/DEMO.md) ·
 [Verifier sandbox](docs/verificador-sandbox.md) · [Threat model](docs/threat_model.md) ·
-[User guide](USER_GUIDE.md) · [Runbook](runbook.md) ·
-[Testing strategy](TESTING_STRATEGY.md) · [Contributing](CONTRIBUTING.md) ·
+[User guide](USER_GUIDE.md) · [Contributing](CONTRIBUTING.md) ·
 [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) ·
-[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
-[All docs](docs/README.md)
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
 
 ---
 

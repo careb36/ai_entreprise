@@ -165,5 +165,4 @@ The claim the project makes is verified in code, not asserted in a slide.
 - [`docs/API.md`](docs/API.md) — the endpoints a client needs
 - [`SECURITY.md`](SECURITY.md) — trust boundaries and threat model
 - [`docs/threat_model.md`](docs/threat_model.md) — STRIDE inventory
-- [`runbook.md`](runbook.md) — hardening and operations
 - [`AGENTS.md`](AGENTS.md) — how to work in this repository
