@@ -34,7 +34,8 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 1. **No secrets in the repo.** Ever. Use the secret manager. No workflow scans
    for secrets, so nothing will catch a committed key: check before you commit.
 2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
-   third-party tools without Security sign-off. No new dependency without §7.4.
+   third-party tools without Security sign-off. No new dependency without
+   Security review.
 3. **`main` is always releasable.** Nothing merges to `main` with a red pipeline.
 4. **Every change traces to an issue.** PRs without a linked issue are closed.
 5. **Agents merge pull requests** — their own and each other's — once every
@@ -42,7 +43,7 @@ merging changes** — for humans and for AI agents. If you are an agent, read
    still does not happen: merging a red or still-running head, merging a head
    that moved after it was verified, or weakening branch protection to force a
    merge through.
-6. **Tests and observability ship with the change**, not after it (§12).
+6. **Tests and observability ship with the change**, not after it.
 
 ### Licensing of contributions
 
@@ -56,8 +57,9 @@ Apache 2.0, and keep third-party notices intact.
 
 ## 3. Local setup
 
-Not written yet: setup lives in `README.md` and `CLAUDE.md` until this
-section is.
+See [`README.md`](README.md) — Installation for the full stack and the
+workspace daemon. Per-project commands (backend tests, frontend gates, lint)
+are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) and [`AGENTS.md`](AGENTS.md).
 
 ---
 
