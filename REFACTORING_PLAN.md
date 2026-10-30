@@ -50,7 +50,7 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 ## 🏗️ Estándares de Ingeniería y Git Strategy
 **Objetivo:** Mantener el orden y la disciplina del repositorio.
 
-1.  **Git Flow Disciplinado:**
+1.  **Ramas cortas desde `main`:**
     *   No trabajar directamente sobre `main`: cada cambio va en su propia rama y entra por PR.
     *   Cada cambio debe ir en su propia rama `feature/` o `bugfix/`.
 2.  **Conventional Commits:**
@@ -64,7 +64,7 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 
 ## 🛠️ Instrucciones para Copilot / AI Assistant
 - **Principio de Atomicidad:** No intentes aplicar todo el plan de una vez. Trabaja fase por fase.
-- **Git Flow:** Al iniciar una tarea, pregunta por el nombre de la rama siguiendo la convención.
+- **Ramas:** Al iniciar una tarea, pregunta por el nombre de la rama siguiendo la convención.
 - **Commits:** Sugiere commits siguiendo la convención de Conventional Commits.
 - **Documentación:** Lee el archivo `CONTRIBUTING.md` para más detalles sobre las convenciones.
 - **Seguridad:** No modifiques las variables de entorno ni las claves de acceso.
