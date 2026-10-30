@@ -2007,14 +2007,25 @@ async def _run_delivery_tests(
         return
     result = result if isinstance(result, dict) else {}
     exit_code = result.get("exit_code")
+    timed_out = bool(result.get("timed_out"))
     output = f"{result.get('stdout') or ''}{result.get('stderr') or ''}"
     evidence["test_run"] = {
         "command": command,
         "exit_code": exit_code,
         "output_tail": output[-2000:],
+        "output_bytes": len(output),
+        "output_truncated": len(output) > 2000,
+        "timed_out": timed_out,
         "reason": result.get("error"),
     }
-    if isinstance(exit_code, int):
+    if timed_out:
+        evidence["test_run"]["timeout_seconds"] = result.get("timeout_seconds")
+        evidence["ci"] = {
+            "source": "workspace daemon",
+            "ref": command,
+            "conclusion": "timed_out",
+        }
+    elif isinstance(exit_code, int):
         evidence["ci"] = {
             "source": "workspace daemon",
             "ref": command,

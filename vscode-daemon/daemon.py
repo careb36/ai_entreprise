@@ -59,6 +59,10 @@ ASSISTANT_FALLBACK_PATHS = {
 }
 # Every daemon instance answers in this queue group, so a request is handled once.
 QUEUE_GROUP = "workspace-daemon"
+# Wall clock before a workspace command is killed. Kept under the backend's
+# DELIVERY_TEST_TIMEOUT_SECONDS (130s) so the daemon, not the NATS client,
+# reports the timeout and the caller learns the command hung.
+COMMAND_TIMEOUT_SECONDS = 120
 
 # JetStream streams for deliveries queued while no daemon was connected.  The
 # backend declares the same streams (backend/app/nats_client.py); nats_scope
@@ -282,6 +286,9 @@ def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
     Returns:
         Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
         ``exit_code`` — or ``{"success": False, "error": ...}`` on exception.
+        A command killed by the timeout keeps ``timed_out: True`` and the
+        output captured before the kill, so the caller can tell "hung" from
+        "ran and failed".
     """
     logger.info(f"Executing: {command} in {cwd}")
     try:
@@ -291,13 +298,22 @@ def execute_shell_command(command: str, cwd: str) -> Dict[str, Any]:
             env=_build_command_env(),
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=COMMAND_TIMEOUT_SECONDS
         )
         return {
             "success": result.returncode == 0,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "exit_code": result.returncode
+        }
+    except subprocess.TimeoutExpired as e:
+        return {
+            "success": False,
+            "stdout": e.output or "",
+            "stderr": e.stderr or "",
+            "timed_out": True,
+            "timeout_seconds": COMMAND_TIMEOUT_SECONDS,
+            "error": f"command timed out after {COMMAND_TIMEOUT_SECONDS}s"
         }
     except Exception as e:
         return {"success": False, "error": str(e)}

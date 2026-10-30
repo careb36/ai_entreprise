@@ -266,14 +266,58 @@ Core rules:
 - For tools that modify state, require idempotency keys and maintain an audit trail.
 - Never expose raw database connection or Kubernetes API as a tool.
 
-### 8.3 LangGraph-Specific
+### 8.3 Workspace Command Execution — a Known Limitation
+
+`vscode-daemon/daemon.py` runs workspace commands through the host shell
+(`subprocess.run(_build_shell_command(command), shell=...)`, `daemon.py:270`).
+There is **no sandbox** and **no command blocklist** under it.
+
+The missing blocklist is deliberate. A blocklist screens a string; it cannot
+fence a process. `rm -rf` and `rm  -rf` (two spaces), `rm -r -f` (split flags)
+and `rm --recursive --force` are the same intent with different spellings, so
+any list that catches the first three misses the fourth, while blocking the
+benign `touch rm-rf-notes.txt`. DeepCode reached the same conclusion and wrote
+it down in `core/harness/command_guard.py`:
+
+> A blocklist can never be a security boundary; the sandbox is. But if we keep a
+> blocklist at all, it should honestly catch what it *claims* to, rather than
+> offering a false sense of coverage.
+
+That project ships a sandbox (seatbelt on macOS, bwrap on Linux) as the actual
+boundary and keeps its screened blocklist as a shallow first pass in front of
+it. **We have neither.** Adding the blocklist without the sandbox would buy the
+false sense of coverage and nothing else, so the gap stays visible here instead.
+
+What this means today, and what it does not:
+
+- The daemon is **host-side, by design** (`./scripts/start-daemon.sh`, not in
+  Docker), so a workspace command runs with the privileges of the developer who
+  started it. An agent that emits `curl … | sh` gets a shell on that machine.
+- The commands the pipeline runs on its own are **not** model output:
+  `_detect_test_command` in `backend/app/services/task_worker.py:1901` derives
+  the test command from repository markers (`package.json`, `pytest.ini`,
+  `pyproject.toml`, a `tests/` folder) or from `DELIVERY_TEST_COMMAND`. No LLM
+  picks it, so prompt injection cannot reach that string.
+- The exposure is a **human or agent** invoking `workspace.execute` with an
+  arbitrary command, and the mitigations are the ones already in place: the
+  daemon listens on NATS with a scoped namespace, and the subjects it accepts
+  are a fixed list.
+
+Tracked as a limitation, not a fixed issue. Closing it means running the
+workspace inside a container or a kernel sandbox with the project bind-mounted
+and egress restricted — a change to how the daemon is deployed, not a check
+added to it. Until then, treat `workspace.execute` as privileged: connect the
+daemon to brokers you trust, and do not point it at a workspace whose commands
+you would not run yourself.
+
+### 8.4 LangGraph-Specific
 
 - Validate all **state** passed between nodes. Do not assume earlier nodes sanitized data.
 - Keep agent graphs deterministic where possible; constrain branching based on fixed logic, not LLM output, for security-critical branches.
 - Use structured output parsing for security decisions. Never rely on free-text model response to determine authorization.
 - Restrict LangGraph tool nodes to a pre-registered set. Implement a registry of allowed tools with permissions.
 
-### 8.4 Model Output Handling
+### 8.5 Model Output Handling
 
 - **Encode output** before rendering in frontend to prevent XSS.
 - Sanitize any model output inserted into SQL, Cypher, JSON, HTML, or logs.
