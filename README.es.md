@@ -83,7 +83,7 @@ Un sprint es un tablero Kanban, una Glassroom en vivo y un panel de analítica:
 
 Estas capturas muestran una demo sembrada (una ejecución por veredicto, sin
 claves de API). Para reproducirlas, ejecuta `scripts/seed_demo_evidence.py`
-contra un stack en marcha y abre `/evidence` — consulta [DEMO](docs/DEMO.md).
+contra un stack en marcha y abre `/evidence`.
 
 ---
 
@@ -486,8 +486,7 @@ persona. Ver [SECURITY.md](SECURITY.md).
 ## Documentación
 
 [Arquitectura](ARCHITECTURE.md) · [Posicionamiento](docs/POSITIONING.md) ·
-[Referencia de la API](docs/API.md) · [Demo](docs/DEMO.md) ·
-[Sandbox del verificador](docs/verificador-sandbox.md) · [Modelo de amenazas](docs/threat_model.md) ·
+[Referencia de la API](docs/API.md) · [Modelo de amenazas](docs/threat_model.md) ·
 [Guía de usuario](USER_GUIDE.es.md) · [Contribuir](CONTRIBUTING.md) ·
 [Seguridad](SECURITY.md) · [Código de conducta](CODE_OF_CONDUCT.md) ·
 [Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)

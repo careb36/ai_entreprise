@@ -157,7 +157,6 @@ The claim the project makes is verified in code, not asserted in a slide.
 | Review loop | `backend/app/services/reviewer_agent.py` |
 | Board state machine | `backend/app/services/board.py` |
 | Benchmark of the verifier itself | `backend/eval/verificador/` |
-| Plan to make that benchmark use real evidence | [`docs/verificador-sandbox.md`](docs/verificador-sandbox.md) |
 
 ## Related documents
 

@@ -10,8 +10,6 @@ quickstart; the files below go deeper, each with a single job.
 | [`POSITIONING.md`](POSITIONING.md) | Why the evidence layer is the product, and the design rules that follow from that position. |
 | [`ARCHITECTURE.md`](../ARCHITECTURE.md) | How the pieces fit: FastAPI, NATS, the daemon, the proxy, the engram graph. |
 | [`API.md`](API.md) | Every HTTP route, generated and verified against the running app. |
-| [`DEMO.md`](DEMO.md) | The scripted demo: seed one run per verdict and show the screen that distinguishes them. |
-| [`verificador-sandbox.md`](verificador-sandbox.md) | How the verifier is sandboxed so a submission cannot game its own verdict. |
 
 ## Operating
 
