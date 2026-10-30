@@ -27,7 +27,7 @@ permissions:
 # runs of the commit it replaces instead of queueing behind them.
 concurrency:
   group: workflows-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   lint:

@@ -13,7 +13,7 @@ on:
 # se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
 concurrency:
   group: security-scan-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   security:

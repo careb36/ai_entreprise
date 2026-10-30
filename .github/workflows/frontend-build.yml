@@ -22,7 +22,7 @@ on:
 
 concurrency:
   group: frontend-build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read

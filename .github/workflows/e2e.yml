@@ -22,7 +22,7 @@ on:
 # se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
 concurrency:
   group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   e2e:
