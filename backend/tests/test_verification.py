@@ -367,6 +367,18 @@ def test_claimed_path_extraction_walks_nested_claims_and_ignores_urls():
     ]
 
 
+def test_claimed_path_extraction_keeps_jsx_and_tsx_extensions_whole():
+    claims = {
+        "body": "Touched frontend/src/Login.tsx and src/App.jsx, plus src/vite.config.ts."
+    }
+
+    assert extract_claimed_paths(claims) == [
+        "frontend/src/Login.tsx",
+        "src/App.jsx",
+        "src/vite.config.ts",
+    ]
+
+
 def test_test_claim_extraction_matches_claims_without_keyword_false_positives():
     claims = {
         "one": "75 passed",
