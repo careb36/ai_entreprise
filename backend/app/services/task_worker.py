@@ -93,6 +93,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
+from services.workspace_daemon import record_test_run
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -2005,32 +2006,7 @@ async def _run_delivery_tests(
             "reason": f"the workspace daemon did not reply ({type(e).__name__})",
         }
         return
-    result = result if isinstance(result, dict) else {}
-    exit_code = result.get("exit_code")
-    timed_out = bool(result.get("timed_out"))
-    output = f"{result.get('stdout') or ''}{result.get('stderr') or ''}"
-    evidence["test_run"] = {
-        "command": command,
-        "exit_code": exit_code,
-        "output_tail": output[-2000:],
-        "output_bytes": len(output),
-        "output_truncated": len(output) > 2000,
-        "timed_out": timed_out,
-        "reason": result.get("error"),
-    }
-    if timed_out:
-        evidence["test_run"]["timeout_seconds"] = result.get("timeout_seconds")
-        evidence["ci"] = {
-            "source": "workspace daemon",
-            "ref": command,
-            "conclusion": "timed_out",
-        }
-    elif isinstance(exit_code, int):
-        evidence["ci"] = {
-            "source": "workspace daemon",
-            "ref": command,
-            "conclusion": "success" if exit_code == 0 else "failure",
-        }
+    record_test_run(evidence, command, result)
 
 
 def _plan_queued_delivery(
