@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Documentation overhaul.** README.md, README.es.md, CONTRIBUTING.md, and CLAUDE.md restructured following industry best practices. Added SECURITY.md, CODE_OF_CONDUCT.md, and GitHub issue/PR templates.
 * **Architect consultation step.** Before a Developer starts a high-priority, design-sensitive, or QA-reworked task, the worker asks the company's Architect agent for a short technical brief, appends it to the card as an `ARCHITECT_CONSULTED:` comment (feeding the *Architect Consult Frequency* KPI), streams it to the Glassroom, and injects it into the Developer prompt. At most one consultation per implementation attempt. Disable with `ARCHITECT_CONSULT_ENABLED=false`.
 * Backend tests for the KPI emitters and their contract with the analytics queries (`backend/tests/test_orchestration_metrics.py`).
+* **Competition-ready documentation.** Repo description and topics, evidence-page screenshots, a `docs/README.md` index and a `docs/HACKATHON.md` entry page for the Nebius × NVIDIA Global AI Hackathon, plus a Roadmap and Responsible-use section in the README.
 
 ### Fixed
 
@@ -21,16 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0] - 2023-10-27
+## Versioning
 
-### Added
+There is no tagged release yet: the project has not been versioned since the
+original scaffold, and `main` is the web product. The changes above are the
+accumulated work between the initial scaffold and the current head.
 
-* **Project Initialization:** Established the initial project structure, including the core application scaffolding, configuration files, and directory layout for the La Fabrique platform.
-* **Core Agent Service:** Implemented the foundational agent orchestration service. This service is responsible for receiving high-level development tasks, decomposing them into sub-tasks, and managing the execution lifecycle.
-* **Tooling Integration Framework (Alpha):** Created the basic infrastructure for integrating external developer tools. This initial version includes placeholder interfaces for linters, compilers, and version control systems.
-* **Prompt Engineering Library:** Seeded the initial library of system prompts and templates for core tasks like code generation, debugging, and test creation. This provides a baseline for the AI's operational capabilities.
-* **CI/CD Pipeline Foundation:** Set up the initial continuous integration and deployment pipeline using GitHub Actions. The pipeline currently handles automated builds and runs placeholder unit tests on every commit to the `main` branch.
-* **Core Documentation:** Created essential project documentation including `README.md`, `CONTRIBUTING.md`, and this `CHANGELOG.md` to establish development standards and provide a baseline for future contributors.
-
-[unreleased]: https://github.com/careb36/la-fabrique/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/careb36/la-fabrique/releases/tag/v0.1.0
+[unreleased]: https://github.com/careb36/la-fabrique/commits/main
