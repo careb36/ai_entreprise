@@ -18,9 +18,6 @@ quickstart; the files below go deeper, each with a single job.
 | Document | What it answers |
 | --- | --- |
 | [`../USER_GUIDE.md`](../USER_GUIDE.md) | The manager's guide: what the factory does and how to run a company through it. |
-| [`../runbook.md`](../runbook.md) | Day-to-day operation: start, reset, diagnose, recover. |
-| [`factory-smoke-test.md`](factory-smoke-test.md) | The one-command check that the whole stack still works. |
-| [`alerting-rules.yml`](alerting-rules.yml) | Prometheus alerting rules for the stack. |
 
 ## Security and quality
 
@@ -28,23 +25,12 @@ quickstart; the files below go deeper, each with a single job.
 | --- | --- |
 | [`../SECURITY.md`](../SECURITY.md) | The security policy and how to report a vulnerability. |
 | [`threat_model.md`](threat_model.md) | What can go wrong, what the system does about it, and what it assumes. |
-| [`threat_triage.md`](threat_triage.md) | How a reported finding is triaged. |
-| [`../TESTING_STRATEGY.md`](../TESTING_STRATEGY.md) | What is tested, where, and how CI runs it. |
-| [`front-coverage.md`](front-coverage.md) | Frontend test coverage, by page and component. |
 
-## Planning and history
+## History and contribution
 
 | Document | What it answers |
 | --- | --- |
 | [`HACKATHON.md`](HACKATHON.md) | The competition context, the pitch, and the judge-facing demo path. |
-| [`IMPROVEMENT_PLAN.md`](IMPROVEMENT_PLAN.md) | Open improvements and the order they are intended to land in. |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | What changed, release by release. |
 | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | How to contribute: branches, commits, review. |
 | [`../CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) | The rules for participating. |
-
-## For AI agents working in this repo
-
-- [`../AGENTS.md`](../AGENTS.md) — the instructions any agent must read first.
-- [`../CLAUDE.md`](../CLAUDE.md) — long-form architecture notes (some stale; see
-  the "Docs that mislead" section in `AGENTS.md`).
-- [`../CODING_STANDARDS.md`](../CODING_STANDARDS.md) — layout and style rules.

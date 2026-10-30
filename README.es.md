@@ -480,11 +480,9 @@ persona. Ver [SECURITY.md](SECURITY.md).
 [Arquitectura](ARCHITECTURE.md) · [Posicionamiento](docs/POSITIONING.md) ·
 [Referencia de la API](docs/API.md) · [Demo](docs/DEMO.md) ·
 [Sandbox del verificador](docs/verificador-sandbox.md) · [Modelo de amenazas](docs/threat_model.md) ·
-[Guía de usuario](USER_GUIDE.es.md) · [Runbook](runbook.es.md) ·
-[Estrategia de pruebas](TESTING_STRATEGY.md) · [Contribuir](CONTRIBUTING.md) ·
+[Guía de usuario](USER_GUIDE.es.md) · [Contribuir](CONTRIBUTING.md) ·
 [Seguridad](SECURITY.md) · [Código de conducta](CODE_OF_CONDUCT.md) ·
-[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
-[Toda la documentación](docs/README.md)
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
 
 ---
 

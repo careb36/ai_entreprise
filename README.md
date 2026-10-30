@@ -626,11 +626,9 @@ a task is always a person's. See [SECURITY.md](SECURITY.md).
 [Architecture](ARCHITECTURE.md) · [Positioning](docs/POSITIONING.md) ·
 [API reference](docs/API.md) · [Demo](docs/DEMO.md) ·
 [Verifier sandbox](docs/verificador-sandbox.md) · [Threat model](docs/threat_model.md) ·
-[User guide](USER_GUIDE.md) · [Runbook](runbook.md) ·
-[Testing strategy](TESTING_STRATEGY.md) · [Contributing](CONTRIBUTING.md) ·
+[User guide](USER_GUIDE.md) · [Contributing](CONTRIBUTING.md) ·
 [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) ·
-[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md) ·
-[All docs](docs/README.md)
+[Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
 
 ---
 
