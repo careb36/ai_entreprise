@@ -177,7 +177,8 @@ sequenceDiagram
 
 - **Docker** 24.0+ with Docker Compose v2
 - **Python** 3.12+ (for local development)
-- **Node.js** 20+ (for frontend development)
+- **Node.js** 24+ (for frontend development; `frontend/package.json` sets
+  `engines.node >=24` and CI runs Node 24)
 - **API Keys:** Nebius Token Factory (NVIDIA Nemotron), Google AI Studio (Gemini), DeepSeek, Qwen
 
 [⬆ Back to Top](#la-fabrique)
