@@ -51,7 +51,7 @@ Sigue las fases en orden para garantizar la estabilidad del sistema.
 **Objetivo:** Mantener el orden y la disciplina del repositorio.
 
 1.  **Git Flow Disciplinado:**
-    *   No trabajar directamente sobre `main` ni `develop`.
+    *   No trabajar directamente sobre `main`: cada cambio va en su propia rama y entra por PR.
     *   Cada cambio debe ir en su propia rama `feature/` o `bugfix/`.
 2.  **Conventional Commits:**
     *   Usar prefijos: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.

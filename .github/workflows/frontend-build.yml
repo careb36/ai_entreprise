@@ -1,5 +1,5 @@
 # Frontend build — runs typecheck, tests, and build on every pull request that touches
-# frontend code or this workflow, and on pushes to the main and develop
+# frontend code or this workflow, and on pushes to the main branch
 # branches. Pushes to other branches do not trigger it; open a pull request for
 # a run.
 #
@@ -10,7 +10,7 @@ name: Frontend Build
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-build.yml'

@@ -48,6 +48,11 @@ deterministic code decides. What they add is mostly rigour around that rule.
    Feature PRs land on `develop`; a release PR promotes it to `main` and a
    person merges it, as `CONTRIBUTING.md` already required ("agents do not
    merge to `main`"). `CONTRIBUTING.md` has a Branches section.
+   **Superseded on 2026-10-29:** once agents merged their own green pull
+   requests, `develop` received nothing and stayed an exact mirror of `main`,
+   with no protecting ruleset and no value of its own. It was retired and the
+   work is trunk-based: branches off `main`, pull requests into `main`, merge
+   commit. The May line survives as `archive/develop-2026-05-02`.
 2. **Pin CI actions by commit SHA** (done 2026-10-25) with the version in a comment, and add
    Renovate (or Dependabot; Dependabot was chosen, `.github/dependabot.yml`) with digest pinning, a few days' delay after a
    release and no auto-merge of major updates. From buzz
@@ -222,7 +227,8 @@ The owner delegated these three:
 
 1. **`develop`** is where web pull requests land; its May line is archived
    and it was reset to `main`. Releases to `main` are merged by a person
-   (item 1).
+   (item 1). *Reversed on 2026-10-29 in favour of trunk-based work on `main`
+   (see Phase 0, item 1).*
 2. **A high risk tier needs a person at every autonomy level**, level 3
    included (item 9).
 3. **AI co-author lines stay** in commits (see "Considered and left out").
