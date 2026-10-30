@@ -191,7 +191,7 @@ sequenceDiagram
 | **Backend** | Python 3.12, FastAPI, LangGraph, SQLModel |
 | **Frontend** | React 18, TypeScript, TailwindCSS, Vite, Zustand |
 | **Vector Memory** | PostgreSQL 15 + pgvector |
-| **Knowledge Graph** | Neo4j 5.15 Enterprise + APOC |
+| **Knowledge Graph** | Neo4j 5.25 Enterprise + APOC |
 | **Message Broker** | NATS JetStream |
 | **AI Models** | NVIDIA Nemotron on Nebius Token Factory + Gemini + DeepSeek + Qwen |
 | **Infrastructure** | Docker Compose (8 services), VS Code CLI |
@@ -226,7 +226,7 @@ cp .env.example .env
 ./reset_infra.sh
 ```
 
-The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `up -d` → health-check wait → `ps`. After it completes:
+The script runs 6 steps: `down -v` → Docker prune → `build --no-cache` → `up -d` → 5-second wait → `ps`. After it completes:
 
 - **Frontend:** `http://localhost:5173`
 - **Backend API + Swagger:** `http://localhost:8000/docs`
