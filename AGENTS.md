@@ -57,10 +57,11 @@ make dev-frontend           # Vite alone; `make dev-llm-proxy` too
 ./scripts/start-daemon.sh   # workspace daemon, on the host, not in Docker
 ```
 
-`make dev-backend` does **not** work: it runs `poetry run uvicorn app.main:app`
-without `PYTHONPATH`, so the top-level imports fail on startup with
-`ModuleNotFoundError: No module named 'config'`. Run the backend with that
-variable, or through Docker (the image sets `PYTHONPATH=/app:/app/app`):
+The backend needs `PYTHONPATH=.:app` for its top-level imports (`from config
+import settings`, `from models.sprint import BacklogItem`). `make dev-backend`
+already sets it, and so does the Docker image (`PYTHONPATH=/app:/app/app`);
+running uvicorn by hand without it fails at startup with
+`ModuleNotFoundError: No module named 'config'`:
 
 ```bash
 cd backend && PYTHONPATH=.:app poetry run uvicorn app.main:app --reload --port 8000
@@ -211,5 +212,3 @@ here. Trust the code and the workflows over them:
 - No workflow scans for secrets; `security-scan.yml` only looks at
   dependencies (Trivy over the filesystem, `safety` in the backend, and that one
   is non-failing). Do not rely on CI to catch a committed key.
-- `README.md` asks for Node 20+, but `frontend/package.json` sets
-  `"engines": { "node": ">=24" }`, and CI and the `Makefile` use Node 24.
