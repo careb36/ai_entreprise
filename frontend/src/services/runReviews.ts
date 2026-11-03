@@ -4,7 +4,7 @@
  * (`/v1/agent_runs/{id}/reviews`). Viewers read them; Managers write them.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from './api'
+import { api, fetchApi } from './api'
 import { QUERY_KEYS } from '../hooks/useQueries'
 
 export type CommentSide = 'new' | 'old'
@@ -34,6 +34,24 @@ export interface RunReview {
   created_at: string
 }
 
+export type PublishHow = 'gh' | 'glab' | 'compare'
+
+/** A run's branch pushed to its platform, and the request opened for it (`how`). */
+export interface RunPublication {
+  id: number
+  agent_run_id: number
+  provider: string | null
+  branch: string
+  base: string
+  commit: string
+  url: string | null
+  how: PublishHow
+  /** The request was already open: its description was brought up to date. */
+  updated: boolean
+  published_by: string
+  created_at: string
+}
+
 export interface NewComment {
   path: string | null
   line: number | null
@@ -52,10 +70,16 @@ export const reviewsApi = {
     api.get<{ reviews: RunReview[] }>(`/v1/agent_runs/${runId}/reviews`, { company_id: companyId }),
   submit: (companyId: number, runId: number, event: ReviewEvent, body: string) =>
     api.post<RunReview>(`/v1/agent_runs/${runId}/reviews`, { company_id: companyId, event, body: body || null }),
+  publications: (companyId: number, runId: number) =>
+    api.get<{ publications: RunPublication[] }>(`/v1/agent_runs/${runId}/publications`, { company_id: companyId }),
+  /** A push and the platform's CLI on the person's machine: sent once, never retried, waited on past the backend's 150 s. */
+  publish: (companyId: number, runId: number) =>
+    fetchApi<RunPublication>(`/v1/agent_runs/${runId}/publish?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 180_000 }),
 }
 
 const commentsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'comments'] as const
 const reviewsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'reviews'] as const
+const publicationsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'publications'] as const
 
 export function useReviewComments(companyId: number, runId: number) {
   return useQuery({ queryKey: commentsKey(companyId, runId), queryFn: () => reviewsApi.comments(companyId, runId) })
@@ -91,5 +115,18 @@ export function useSubmitReview(companyId: number, runId: number) {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.inbox(companyId) })
       queryClient.invalidateQueries({ queryKey: ['sprint'] })
     },
+  })
+}
+
+export function useRunPublications(companyId: number, runId: number) {
+  return useQuery({ queryKey: publicationsKey(companyId, runId), queryFn: () => reviewsApi.publications(companyId, runId) })
+}
+
+/** Push the run's task branch and open its pull or merge request (Managers). */
+export function usePublishRun(companyId: number, runId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => reviewsApi.publish(companyId, runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: publicationsKey(companyId, runId) }),
   })
 }

@@ -51,3 +51,32 @@ class ReviewComment(SQLModel, table=True):
     review_id: int | None = Field(default=None, foreign_key="run_reviews.id")
     created_at: datetime = Field(default_factory=_utcnow)
     resolved_at: datetime | None = None
+
+
+class RunPublication(SQLModel, table=True):
+    """A run's branch pushed to its platform, and the request opened for it.
+
+    What the workspace daemon answered: the branch, the base and the commit
+    git pushed, and the pull request (GitHub) or merge request (GitLab) the
+    platform's CLI opened, or the page where a person opens one (``how`` is
+    ``gh``, ``glab`` or ``compare``).
+    A request already open for the branch has its description updated.
+    """
+
+    __tablename__ = "run_publications"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    agent_run_id: int = Field(foreign_key="agent_runs.id", index=True)
+    provider: str | None = None
+    branch: str
+    base: str
+    commit: str
+    url: str | None = None
+    how: str
+    # The request already existed: its description was brought up to date.
+    updated: bool = False
+    published_by: str
+    published_by_user_id: int | None = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")

@@ -11,6 +11,7 @@ import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, FileDiff, Plus } from 'lucide-react'
 import { patchRows, type PatchRow } from '../lib/patch'
+import { PublishBranch } from './PublishBranch'
 import { CommentForm, CommentThread, LineReviewProvider, rowTarget, targetKey, useFileComments } from './LineComments'
 import { type FileChange, type RunChanges, useRunChanges } from '../services/reviewChanges'
 
@@ -212,6 +213,9 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
         </p>
         <Source changes={changes} />
       </div>
+      {changes.git && (
+        <PublishBranch companyId={companyId} runId={runId} branch={changes.git.branch} canPublish={canComment} />
+      )}
       {declaredOnly}
       {changes.files.length > 1 && (
         <nav aria-label={t('review.fileList')} className="card p-3">

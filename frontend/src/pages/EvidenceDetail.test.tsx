@@ -27,6 +27,8 @@ vi.mock('../services/runReviews', () => {
     useAddReviewComment: vi.fn(idle),
     useResolveReviewComment: vi.fn(idle),
     useSubmitReview: vi.fn(idle),
+    useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
+    usePublishRun: vi.fn(idle),
   }
 })
 

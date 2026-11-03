@@ -1631,6 +1631,20 @@
       "approval_recorded": "La decisión quedó registrada en el run."
     },
     "gitCommit": "En la rama {{branch}}, commit {{commit}} (sobre {{parent}})",
-    "gitNoCommit": "En la rama {{branch}}: sin commit nuevo, no cambió nada"
+    "gitNoCommit": "En la rama {{branch}}: sin commit nuevo, no cambió nada",
+    "publish": {
+      "title": "Publicar la rama",
+      "button": "Publicar como pull request",
+      "again": "Publicar de nuevo",
+      "hint": "Sube {{branch}} a origin con las credenciales de Git de esta computadora y abre una pull request (gh) o merge request (glab) en borrador; sin ellas, da la página para abrirla. La descripción lleva la evidencia de esta ejecución.",
+      "pushed": "{{name}} subió {{commit}} en {{branch}} → {{base}}",
+      "how": {
+        "gh": "Pull request en borrador",
+        "glab": "Merge request en borrador",
+        "compare": "Abrir la solicitud"
+      },
+      "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud",
+      "updated": "descripción actualizada con esta ejecución"
+    }
   }
 }
