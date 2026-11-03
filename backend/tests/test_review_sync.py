@@ -8,7 +8,7 @@ These tests put a fake ``gh`` and ``glab`` on the PATH.
 """
 
 import json
-import os
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -28,9 +28,11 @@ MR_URL = "https://gitlab.com/team/app/-/merge_requests/4"
 
 @pytest.fixture
 def bin_dir(tmp_path, monkeypatch):
+    """A PATH with the fakes and ``cat`` only: a real gh or glab on the machine is never reached."""
     path = tmp_path / "bin"
     path.mkdir()
-    monkeypatch.setenv("PATH", f"{path}{os.pathsep}/usr/bin:/bin")
+    (path / "cat").symlink_to(shutil.which("cat"))
+    monkeypatch.setenv("PATH", str(path))
     return path
 
 
