@@ -112,6 +112,12 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_reason TEXT",
         "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(100)",
         "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        # review_comments — comments brought from the pull or merge request
+        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS source VARCHAR",
+        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_id VARCHAR",
+        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_url VARCHAR",
+        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_state VARCHAR",
+        "CREATE INDEX IF NOT EXISTS ix_review_comments_external_id ON review_comments (external_id)",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         # audit_log — a hash chain per company (audit_chain.py)

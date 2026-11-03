@@ -1602,7 +1602,17 @@
       "resolved": "Resuelto",
       "resolve": "Resolver",
       "inReview": "En la revisión #{{id}}",
-      "elsewhere": "Comentarios en líneas que este diff no muestra"
+      "elsewhere": "Comentarios en líneas que este diff no muestra",
+      "on": {
+        "github": "en GitHub",
+        "gitlab": "en GitLab"
+      },
+      "state": {
+        "CHANGES_REQUESTED": "Pidió cambios",
+        "APPROVED": "Aprobó",
+        "COMMENTED": "Comentó",
+        "DISMISSED": "Descartada"
+      }
     },
     "panel": {
       "title": "Revisión",
@@ -1644,7 +1654,11 @@
         "compare": "Abrir la solicitud"
       },
       "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud",
-      "updated": "descripción actualizada con esta ejecución"
+      "updated": "descripción actualizada con esta ejecución",
+      "sync": "Traer comentarios",
+      "synced": "{{added}} nuevos, {{updated}} actualizados",
+      "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
+      "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
     }
   }
 }

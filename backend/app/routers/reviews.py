@@ -17,6 +17,7 @@ from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication, RunReview
 from schemas import ReviewCommentCreate, RunReviewCreate
 from services.git_publish import PublishRefused, publish_spec, record_publication
+from services.review_sync import SyncRefused, import_comments, sync_spec
 from services.run_review import ReviewRefused, check_comment_target, submit_review
 from services.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
@@ -30,6 +31,8 @@ router = APIRouter(prefix="/v1/agent_runs", tags=["Reviews"])
 
 # A push and the platform's CLI run on the person's machine; give them time.
 PUBLISH_TIMEOUT_SECONDS = 150.0
+# Three paginated API reads (line comments, reviews, conversation) on GitHub.
+SYNC_TIMEOUT_SECONDS = 200.0
 
 
 def _run(session: Session, run_id: int, company_id: int) -> AgentRun:
@@ -217,6 +220,45 @@ async def publish_run(
             published_by_user_id=author_id,
         )
     except PublishRefused as refused:
+        session.rollback()
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
+    except DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from exc
+    except DaemonError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message) from exc
+
+
+@router.post("/{run_id}/publications/{publication_id}/sync")
+async def sync_publication_comments(
+    run_id: int,
+    publication_id: int,
+    request: Request,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Bring the comments of the run's pull or merge request here (``services/review_sync``)."""
+    require_company_role(session, user, company_id, "Manager")
+    run = _run(session, run_id, company_id)
+    publication = session.get(RunPublication, publication_id)
+    if (
+        publication is None
+        or publication.agent_run_id != run.id
+        or publication.company_id != company_id
+    ):
+        raise HTTPException(status_code=404, detail="Publication not found")
+    try:
+        spec = sync_spec(session, run, publication)
+        reply = await daemon_request(
+            getattr(request.app.state, "nats_client", None),
+            "workspace.git.reviews",
+            spec,
+            timeout=SYNC_TIMEOUT_SECONDS,
+        )
+        return import_comments(session, run, publication, reply)
+    except SyncRefused as refused:
         session.rollback()
         raise HTTPException(
             status_code=refused.status, detail=refused.detail

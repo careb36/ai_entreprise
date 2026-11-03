@@ -14,11 +14,11 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
+- workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
                           the result goes to workspace.delivered
 
-Start it with scripts/start-daemon.sh (macOS/Linux) or scripts/start-daemon.ps1
-(Windows); it reconnects to NATS on its own.
+Start it with scripts/start-daemon.sh (macOS/Linux) or .ps1 (Windows); it reconnects to NATS on its own.
 """
 
 import asyncio
@@ -41,11 +41,11 @@ import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats
 import nats_scope
+import platform_reviews
 import shell_exec
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
 
-# The old private names stay so the handlers read as they did; the logic lives
-# in shell_exec so it can be tested and linted on its own.
+# Old private names kept so the handlers read as before; the logic is in shell_exec.
 _build_command_env = shell_exec.build_command_env
 _build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -681,8 +681,7 @@ async def main():
         logger.warning("JetStream unavailable (%s); queued deliveries are not processed", e)
 
     def bound(handler, *extra):
-        async def callback(msg):
-            await handler(nc, msg, *extra)
+        async def callback(msg): await handler(nc, msg, *extra)  # noqa: E704 - one line per handler.
         return callback
 
     for subject, callback in (
@@ -693,6 +692,7 @@ async def main():
         ("workspace.browse", bound(handle_browse)),
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
+        ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 

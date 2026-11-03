@@ -139,12 +139,22 @@ def _where(comment: ReviewComment) -> str:
     return f"{comment.path}:{comment.line}{side}"
 
 
+def _said_on(comment: ReviewComment) -> str:
+    """Who wrote a comment brought from the pull or merge request, and where."""
+    if not comment.source:
+        return ""
+    platform = {"github": "GitHub", "gitlab": "GitLab"}.get(
+        comment.source, comment.source
+    )
+    return f" ({comment.author_name} on {platform})"
+
+
 def feedback_text(author: str, body: str | None, comments: list[ReviewComment]) -> str:
     """The review as one ``NEEDS WORK:`` request: what to change, file by line."""
     lines = [
         f"NEEDS WORK: review by {author}: {body or 'see the comments on the lines below.'}"
     ]
-    lines += [f"- {_where(c)}: {c.body}" for c in comments]
+    lines += [f"- {_where(c)}{_said_on(c)}: {c.body}" for c in comments]
     return "\n".join(lines)
 
 

@@ -29,6 +29,7 @@ vi.mock('../services/runReviews', () => {
     useSubmitReview: vi.fn(idle),
     useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
     usePublishRun: vi.fn(idle),
+    useSyncComments: vi.fn(idle),
   }
 })
 
