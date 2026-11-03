@@ -346,6 +346,13 @@ Cada página de run tiene una pestaña **Archivos modificados** armada como GitH
 
 Lo que el productor declaró pero ninguna observación cubre aparece aparte, así la revisión ve el hueco en vez de una afirmación mostrada como cambio. `GET /v1/agent_runs/{id}/changes` devuelve los mismos archivos a cualquier cliente.
 
+Un Manager revisa como se revisa un pull request: pasá el mouse por una línea y tocá **+** para comentarla (una línea borrada se comenta en su lado viejo), **Resolvé** un comentario que ya no aplica y después **Enviá la revisión** con *Comentar*, *Aprobar* o *Pedir cambios*. La revisión lleva los comentarios abiertos. Lo que hace depende de quién produjo el run:
+
+- en una tarea que entregaron los agentes de la compañía, sigue decidiendo el ciclo de revisión (QA, el Verifier), así que la revisión de una persona actúa solo donde el ciclo espera a una persona: **Pedir cambios** devuelve al trabajo una tarea bloqueada para una persona, con la revisión y sus comentarios, archivo por línea, como el `NEEDS WORK:` que recibe el próximo intento del Developer; **Aprobar** acepta una entrega que QA aprobó y que espera a una persona (una retención por alto riesgo, o cualquier aprobación con autonomía 1); una tarea en la que los agentes siguen trabajando, o cuyo sprint está cerrado, se rechaza con el motivo;
+- en el run de cualquier otro productor, la revisión registra la aprobación o el rechazo, con los comentarios como su devolución.
+
+Las revisiones y los comentarios son palabras de una persona, nunca evidencia: quedan auditados y el veredicto sigue siendo del Verifier (`/v1/agent_runs/{id}/comments`, `/v1/agent_runs/{id}/reviews`).
+
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
