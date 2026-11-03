@@ -49,6 +49,9 @@ function Publication({ publication, companyId, runId, canPublish }: {
       {sync.isSuccess && (
         <span role="status">{t('review.publish.synced', { added: sync.data.added, updated: sync.data.updated })}</span>
       )}
+      {sync.isSuccess && sync.data.truncated && (
+        <span role="note" className="text-amber-300">{t('review.publish.truncated')}</span>
+      )}
       {sync.isError && <span role="alert" className="text-red-300">{errorDetail(sync.error)}</span>}
     </li>
   )

@@ -72,6 +72,9 @@ def import_comments(
     items = reply.get("comments")
     if not reply.get("ok") or not isinstance(items, list):
         raise SyncRefused(502, "The workspace daemon sent an unreadable answer")
+    # Two syncs of one run at once (two replicas, two clicks) would both miss
+    # an id and insert it twice: the run's row is locked until the commit.
+    session.exec(select(AgentRun).where(AgentRun.id == run.id).with_for_update()).one()
     existing = {
         c.external_id: c
         for c in session.exec(

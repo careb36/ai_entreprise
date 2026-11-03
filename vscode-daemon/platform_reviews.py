@@ -169,6 +169,29 @@ def fetch(workspace_root: str, spec: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "url": url, "comments": items[:MAX_ITEMS], "truncated": len(items) > MAX_ITEMS}
 
 
+def fit(body: dict[str, Any], max_bytes: int) -> dict[str, Any]:
+    """*body* with as many comments as fit in one NATS message of *max_bytes*.
+
+    A reply over the server's payload limit is never delivered, and the
+    backend would only see a daemon that did not answer; the comments left
+    out are marked as ``truncated``, like those past ``MAX_ITEMS``.
+    """
+    def size(b: dict[str, Any]) -> int:
+        return len(json.dumps(b).encode())
+
+    if max_bytes <= 0 or size(body) <= max_bytes:
+        return body
+    comments = list(body.get("comments") or [])
+    low, high = 0, len(comments)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if size({**body, "comments": comments[:middle], "truncated": True}) <= max_bytes:
+            low = middle
+        else:
+            high = middle - 1
+    return {**body, "comments": comments[:low], "truncated": True}
+
+
 async def handle_reviews(nc, msg, reply, request_body) -> None:
     """``workspace.git.reviews`` → the request's comments, or ``{"error": {status, message}}``."""
     import asyncio
@@ -178,4 +201,6 @@ async def handle_reviews(nc, msg, reply, request_body) -> None:
         body = await asyncio.to_thread(fetch, str(data.get("workspace_root") or ""), data)
     except ReviewsError as e:
         body = {"error": {"status": e.status, "message": e.message}}
+    else:
+        body = fit(body, int(getattr(nc, "max_payload", 0) or 0))
     await reply(nc, msg, body)

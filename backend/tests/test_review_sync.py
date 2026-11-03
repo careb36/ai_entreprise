@@ -199,6 +199,20 @@ def test_what_cannot_be_read_is_an_error_with_its_reason(bin_dir, tmp_path):
         platform_reviews.fetch(str(tmp_path), {"provider": "github", "url": PR_URL})
 
 
+def test_a_reply_too_big_for_one_message_keeps_what_fits_and_says_so():
+    comments = [
+        {"external_id": f"github:issue_comment:{i}", "body": "x" * 1000}
+        for i in range(50)
+    ]
+    body = {"ok": True, "url": PR_URL, "comments": comments, "truncated": False}
+    fitted = platform_reviews.fit(body, 10_000)
+    assert len(json.dumps(fitted).encode()) <= 10_000
+    assert 0 < len(fitted["comments"]) < 50 and fitted["truncated"] is True
+    assert fitted["comments"] == comments[: len(fitted["comments"])]
+    assert platform_reviews.fit(body, 0) is body
+    assert platform_reviews.fit(body, 10**7) is body
+
+
 # --- the backend -------------------------------------------------------------
 
 

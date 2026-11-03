@@ -86,6 +86,11 @@ describe('publishing a run branch', () => {
     expect(screen.getByRole('status')).toHaveTextContent(i18n.t('review.publish.synced', { added: 2, updated: 1 }))
   })
 
+  it('warns when only part of the comments came', () => {
+    setup({ publications: [PULL_REQUEST], syncState: { isSuccess: true, data: { added: 500, updated: 0, truncated: true } } })
+    expect(screen.getByRole('note')).toHaveTextContent(i18n.t('review.publish.truncated'))
+  })
+
   it('offers no comments to bring for a compare page, nor to a Viewer', () => {
     setup({ publications: [{ ...PULL_REQUEST, how: 'compare' }] })
     expect(screen.queryByRole('button', { name: i18n.t('review.publish.sync') })).not.toBeInTheDocument()

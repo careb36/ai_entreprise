@@ -229,7 +229,7 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
       <LineReviewProvider companyId={companyId} runId={runId} canComment={canComment}>
         {changes.git && (
           <PublishBranch companyId={companyId} runId={runId} branch={changes.git.branch} canPublish={canComment}
-            shownPaths={changes.files.map(file => file.path)} />
+            shownPaths={changes.files.filter(file => patchRows(file.patch).length > 0).map(file => file.path)} />
         )}
         {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
       </LineReviewProvider>

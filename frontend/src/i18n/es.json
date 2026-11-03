@@ -1657,6 +1657,7 @@
       "updated": "descripción actualizada con esta ejecución",
       "sync": "Traer comentarios",
       "synced": "{{added}} nuevos, {{updated}} actualizados",
+      "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
       "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
     }
   }

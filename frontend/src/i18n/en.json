@@ -1657,6 +1657,7 @@
       "updated": "description updated with this run",
       "sync": "Bring comments",
       "synced": "{{added}} new, {{updated}} updated",
+      "truncated": "Only part of the comments came: open the request on the platform for the rest",
       "fromPlatform": "Comments from the request that are not on a line shown here"
     }
   }
