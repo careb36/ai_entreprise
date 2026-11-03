@@ -1591,6 +1591,42 @@
       "unchanged": "Unchanged",
       "not_written": "Not written",
       "unknown": "Written"
+    },
+    "comment": {
+      "add": "Comment on line {{line}}",
+      "label": "Your comment on line {{line}}",
+      "submit": "Comment",
+      "pending": "Waits for the review",
+      "resolved": "Resolved",
+      "resolve": "Resolve",
+      "inReview": "In review #{{id}}",
+      "elsewhere": "Comments on lines this diff does not show"
+    },
+    "panel": {
+      "title": "Review",
+      "history": "Reviews submitted",
+      "bodyLabel": "Leave a comment for the whole review",
+      "decision": "Decision",
+      "submit": "Submit review",
+      "pendingComments_one": "{{count}} line comment goes with this review",
+      "pendingComments_other": "{{count}} line comments go with this review",
+      "none": "No review yet.",
+      "hint": {
+        "comment": "Records the review and its comments; nothing else changes.",
+        "approve": "For a task the agents delivered: accepts a delivery QA approved that waits for a person. For another producer's run: records the approval.",
+        "request_changes": "For a task the agents delivered: sends it back to work, with this text and the line comments as what to change. For another producer's run: records the rejection."
+      }
+    },
+    "event": {
+      "comment": "Comment",
+      "approve": "Approve",
+      "request_changes": "Request changes"
+    },
+    "outcome": {
+      "recorded": "Recorded.",
+      "sent_back": "The task went back to work with the comments.",
+      "accepted": "The delivery was accepted and the task is done.",
+      "approval_recorded": "The decision was recorded on the run."
     }
   }
 }

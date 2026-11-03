@@ -1591,6 +1591,42 @@
       "unchanged": "Sin cambios",
       "not_written": "No escrito",
       "unknown": "Escrito"
+    },
+    "comment": {
+      "add": "Comentar la línea {{line}}",
+      "label": "Tu comentario en la línea {{line}}",
+      "submit": "Comentar",
+      "pending": "Espera la revisión",
+      "resolved": "Resuelto",
+      "resolve": "Resolver",
+      "inReview": "En la revisión #{{id}}",
+      "elsewhere": "Comentarios en líneas que este diff no muestra"
+    },
+    "panel": {
+      "title": "Revisión",
+      "history": "Revisiones enviadas",
+      "bodyLabel": "Dejá un comentario para toda la revisión",
+      "decision": "Decisión",
+      "submit": "Enviar revisión",
+      "pendingComments_one": "{{count}} comentario de línea va con esta revisión",
+      "pendingComments_other": "{{count}} comentarios de línea van con esta revisión",
+      "none": "Todavía no hay revisiones.",
+      "hint": {
+        "comment": "Registra la revisión y sus comentarios; no cambia nada más.",
+        "approve": "En una tarea que entregaron los agentes: acepta una entrega que QA aprobó y que espera a una persona. En el run de otro productor: registra la aprobación.",
+        "request_changes": "En una tarea que entregaron los agentes: la devuelve al trabajo, con este texto y los comentarios de línea como lo que hay que cambiar. En el run de otro productor: registra el rechazo."
+      }
+    },
+    "event": {
+      "comment": "Comentar",
+      "approve": "Aprobar",
+      "request_changes": "Pedir cambios"
+    },
+    "outcome": {
+      "recorded": "Registrada.",
+      "sent_back": "La tarea volvió al trabajo con los comentarios.",
+      "accepted": "La entrega quedó aceptada y la tarea, terminada.",
+      "approval_recorded": "La decisión quedó registrada en el run."
     }
   }
 }

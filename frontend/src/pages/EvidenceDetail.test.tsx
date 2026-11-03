@@ -19,12 +19,24 @@ vi.mock('../services/reviewChanges', () => ({
   useRunChanges: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
 }))
 
+vi.mock('../services/runReviews', () => {
+  const idle = () => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false })
+  return {
+    useReviewComments: vi.fn(() => ({ data: { comments: [] } })),
+    useRunReviews: vi.fn(() => ({ data: { reviews: [] } })),
+    useAddReviewComment: vi.fn(idle),
+    useResolveReviewComment: vi.fn(idle),
+    useSubmitReview: vi.fn(idle),
+  }
+})
+
 vi.mock('../hooks/useQueries', () => ({
   useAgentRun: vi.fn(),
   useAgentRunApprovals: vi.fn(),
   useAgentRunVerifications: vi.fn(),
   useApproveAgentRun: vi.fn(),
   useAuditVerification: vi.fn(),
+  useCurrentRole: vi.fn(() => 'Manager'),
   useVerifyAgentRun: vi.fn(),
 }))
 
@@ -277,6 +289,7 @@ describe('Evidence detail', () => {
 
     fireEvent.click(filesTab)
     expect(screen.getByRole('article', { name: 'backend/app/crypto.py' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: i18n.t('review.panel.submit') })).toBeInTheDocument()
     expect(screen.queryByText(i18n.t('evidence.claimVsObservation'))).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: i18n.t('review.tabs.overview') }))
