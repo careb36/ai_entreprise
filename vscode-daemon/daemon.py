@@ -13,6 +13,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.status:       which machine this is (hostname, platform, home)
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
+- workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
                           the result goes to workspace.delivered
 
@@ -679,28 +680,19 @@ async def main():
     except Exception as e:  # noqa: BLE001 - Without JetStream only live requests are served.
         logger.warning("JetStream unavailable (%s); queued deliveries are not processed", e)
 
-    async def _callback(msg):
-        await handle_msg(nc, msg)
-
-    async def _capabilities_callback(msg):
-        await handle_capabilities(nc, msg)
-
-    async def _status_callback(msg):
-        await handle_status(nc, msg, jetstream)
-
-    async def _browse_callback(msg):
-        await handle_browse(nc, msg)
-
-    async def _inspect_callback(msg):
-        await handle_inspect(nc, msg)
+    def bound(handler, *extra):
+        async def callback(msg):
+            await handler(nc, msg, *extra)
+        return callback
 
     for subject, callback in (
-        ("workspace.generate", _callback),
-        ("workspace.execute", _callback),
-        ("workspace.capabilities", _capabilities_callback),
-        ("workspace.status", _status_callback),
-        ("workspace.browse", _browse_callback),
-        ("workspace.inspect", _inspect_callback),
+        ("workspace.generate", bound(handle_msg)),
+        ("workspace.execute", bound(handle_msg)),
+        ("workspace.capabilities", bound(handle_capabilities)),
+        ("workspace.status", bound(handle_status, jetstream)),
+        ("workspace.browse", bound(handle_browse)),
+        ("workspace.inspect", bound(handle_inspect)),
+        ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 
