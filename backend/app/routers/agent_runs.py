@@ -16,6 +16,7 @@ from models.agent_run import (
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.agent_service import AgentService
+from services.review_changes import run_changes
 from services.reviewer_agent import track_record as reviewer_track_record
 from services.verification import verify_agent_run
 from sqlalchemy import String, cast
@@ -155,6 +156,26 @@ def get_agent_run(
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")
     return run
+
+
+@router.get("/{run_id}/changes")
+def get_agent_run_changes(
+    run_id: int,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The files the run changed, as a code review shows them (``services/review_changes``)."""
+    require_company_role(session, user, company_id, "Viewer")
+    run = session.exec(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.company_id == company_id,
+        )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    return run_changes(session, run)
 
 
 @router.post("/{run_id}/verify", status_code=201)
