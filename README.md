@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-**A verification and evidence layer for AI-generated code**
+### Proof, not promises, for every line of code an AI agent writes
 
 > **Languages:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
@@ -19,76 +19,135 @@
 
 ---
 
-## About
+AI agents write code faster than any team can read it. Speed is no longer the
+bottleneck. What teams lack is a trustworthy answer to one question:
 
-La Fabrique answers one question about work that an AI agent produced:
+> **Did the agent actually do what it says it did?**
 
-> Did this agent actually do what it says it did?
+La Fabrique answers it with evidence. Every delivery an agent makes is checked
+against what is really on disk, what the tests really returned and what the CI
+really reported. The agent's account of its own work is kept apart and never
+counts as proof. Then the work reaches your team the way your team already
+works: as a branch, a diff and a pull request on GitHub or GitLab, with the
+evidence in its description.
 
-Generated code is abundant and cheap. What is scarce is a trustworthy answer to
-that question, and an evidentiary record that survives an audit. La Fabrique
-ingests agent work, checks it deterministically against what is on disk and what
-CI reports, and stores the result as evidence — separately from the agent's own
-claims.
+<div align="center">
 
-The agents are interchangeable and are not the product. Any producer can feed
-the layer: the bundled LangGraph roles (PO, Architect, ScrumMaster, Developer,
-QA, SecOps, TechWriter), an external coding agent, or a human. What the layer
-adds is the same in every case.
+![Evidence overview: runs with their verdicts, verified, refuted and unverifiable](docs/img/evidence-overview.png)
 
-**What it records:**
+</div>
 
-- **Claims and observations stay in separate fields.** "The agent asserted X; we
-  observed Y" is the whole point, and merging them destroys it.
-- **Three verdicts, not two.** `verified`, `refuted`, and `unverifiable`.
-  `unverifiable` is a real outcome: most honest answers about third-party agent
-  work are exactly that, and a system that cannot say so will lie to stay
-  useful.
-- **No model decides whether a claim holds.** Verification is deterministic —
-  files on disk, exit statuses, CI check-runs. A model may summarise a
-  refutation for a human afterwards; it never adjudicates one.
-- **Refutation is load-bearing.** The path that fails a run is built first;
-  see `backend/app/services/verification.py`.
+## Why La Fabrique
 
-Work is organised into **AI Sprints** — units of bounded, verifiable scope
-rather than fixed durations. Around the evidence layer, the platform provides
-RBAC and `company_id` scoping, per-company token budgets at a single proxy
-chokepoint, an append-only audit log, and Neo4j Engram nodes for per-decision
-lineage.
+| | Without it | With La Fabrique |
+|---|---|---|
+| **Trust** | The agent says "done, tests pass" and someone has to believe it | Each run gets a verdict, `verified`, `refuted` or `unverifiable`, computed from files, hashes and exit codes, never by a model |
+| **Review** | Reviewers get a wall of generated text | A **Files changed** view like a pull request: line numbers, line comments, Approve or Request changes |
+| **Git** | Generated files land in your working copy | One branch per task, one commit per delivery, in a separate worktree; your checkout is never touched |
+| **Hand-off** | Copy, paste, open the pull request by hand | **Publish as pull request**: the branch is pushed with your own credentials and a draft PR (GitHub) or MR (GitLab) opens with the evidence |
+| **Learning** | The same mistakes, sprint after sprint | Retrospectives propose procedures; the numbers keep them or revert them |
+| **Control** | All or nothing | Autonomy levels, a review inbox, and risk tiers that always stop authentication, secrets, payments and CI changes for a person |
+| **Audit** | Logs anyone can edit | A per-company hash chain, optionally HMAC-signed, that shows where a row was deleted, altered or reordered |
 
-> **Why the position above.** The reasoning, the history that motivates it, and
-> the design rules that constrain new work are in
-> [`docs/POSITIONING.md`](docs/POSITIONING.md).
+## What it does
 
-> **Not a developer or technical user?** Please read the [**Manager's Business Guide**](USER_GUIDE.md) to understand how to use La Fabrique to automate your company's engineering.
+**🔍 Verifies every delivery.** The workspace daemon writes the agent's files
+and reads them back; the sha256 it reports, not the agent's word, decides
+whether the files exist. When delivery tests are enabled, it also runs the
+project's suite and records the exit status. A delivery that cannot be
+confirmed is sent back for rework without asking any model.
+
+**🧑‍⚖️ Puts people where they matter.** QA has to write an explicit
+`APPROVED:` before a task closes. High-risk changes wait for a Manager at every
+autonomy level. The **Review** inbox lists exactly what needs a person: blocked
+tasks, procedure proposals, outside runs nobody has decided on.
+
+**🌿 Works like GitHub and GitLab.** Branch per task, commit per delivery,
+diffs observed on disk, comments on lines, reviews that send work back with
+the comments as feedback. One click publishes the branch as a draft pull
+request or merge request; publishing again updates the open one, and a branch
+that has moved past the run's commit is refused.
+
+**🏭 Runs a company of agents.** PO, Architect, ScrumMaster, Developer, QA,
+SecOps and TechWriter hand work to each other and record each hand-off as a
+message. The ScrumMaster triages every blocked task and decides between
+another attempt with a brief and leaving it to a person. Every role can call
+the MCP tools you connect.
+
+**📈 Learns, measurably.** Each closed sprint produces a retrospective. The
+ScrumMaster proposes procedures in a fixed format, and two sprints later each
+one is kept or reverted on rework per task and blocked share. The Sprints page
+answers "is the company learning?" with numbers, not adjectives.
+
+**🔐 Built for audits.** Every table is scoped by company and role
+(Owner, Manager, Viewer). Claims and observations live in separate fields.
+Token budgets are enforced at one proxy. The audit log is a hash chain per
+company.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Backlog] --> B[Agent writes the task]
+    B --> C[Daemon writes files<br/>on your machine]
+    C --> D{Verifier<br/>sha256 · tests · risk}
+    D -- refuted / unconfirmed --> B
+    D -- verified --> E[QA review]
+    E -- NEEDS WORK --> B
+    E -- APPROVED --> F[Files changed<br/>line comments · review]
+    F --> G[Draft PR / MR<br/>with the evidence]
+```
+
+1. **Plan** a sprint with S, M or L scope. Each task becomes an assignment on a durable queue.
+2. **Produce.** The assigned agent writes the task. The daemon writes it on your machine, as a commit on `fabrique/task-<id>` when the company works on Git branches.
+3. **Verify.** Deterministic checks decide `verified`, `refuted` or `unverifiable`, and set the risk tier.
+4. **Review.** QA and, when it matters, a person review the diff the daemon observed.
+5. **Ship.** Publish the branch as a pull request or merge request, with the evidence in the description.
+6. **Learn.** The sprint closes, the retrospective runs and procedures are measured.
+
+## Quality you can check
+
+- About 900 backend tests and 430 frontend tests run on every pull request, with no external services needed.
+- An end-to-end run in CI drives a whole company through three sprints against real PostgreSQL and NATS JetStream, then has an independent checker reject any illegal task history.
+- A file-size ratchet, a pinned linter and an i18n rule that fails the build on untranslated text keep the code base honest as it grows.
+- The interface is fully bilingual, English and Spanish.
+
+## Quick start
+
+```bash
+cp .env.example .env          # fill in the database passwords, JWT_SECRET_KEY and one model provider key
+docker compose up -d          # backend :8000 · frontend :5173 · LLM proxy :5100
+./scripts/start-daemon.sh     # on the computer that holds your projects (.\scripts\start-daemon.ps1 on Windows)
+```
+
+Open `http://localhost:5173`, create a company, point it at a project folder and
+plan your first sprint. Try it without API keys: `scripts/seed_demo_evidence.py`
+seeds one run per verdict.
+
+> **Not a developer?** The [**Manager's Business Guide**](USER_GUIDE.md) explains La Fabrique without code.
+>
+> **Why it is built this way:** the reasoning and the design rules are in [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 ## Screenshots
 
-The evidence page is where any review starts: every run lands with one of three
-verdicts, produced deterministically — not by a model — and distinguishable at a
-glance.
+![A refuted run: the agent's claim on one side, the independent observations on the other, and the verdict that follows](docs/img/evidence-detail.png)
 
-![Evidence overview: three runs, one per verdict — verified, refuted and unverifiable — with the verdict filters at the top](docs/img/evidence-overview.png)
+![Review inbox: what the company needs a person for](docs/img/governance.png)
 
-![A single refuted run: the agent's claim on one side, the independent observations on the other, and the verdict that follows from them](docs/img/evidence-detail.png)
+![Sprint board: backlog columns by status](docs/img/sprint-board.png)
 
-A sprint is a Kanban board, a live Glassroom and an analytics dashboard:
+![Sprints list: rework and blocked share per sprint, the learning trend](docs/img/sprints-list.png)
 
-![Sprint board: backlog columns by status — todo, in progress, in review, done, blocked](docs/img/sprint-board.png)
-
-![Glassroom live: the three-column real-time view with the agent roster and the message feed](docs/img/sprint-live.png)
-
-![Sprint analytics: the KPIs a company reads after a sprint](docs/img/sprint-analytics.png)
-
-These screenshots show a seeded demo (one run per verdict, no API keys). To
-reproduce them, run `scripts/seed_demo_evidence.py` against a running stack and
-open `/evidence`.
+![Glassroom live: the agent roster and the message feed in real time](docs/img/sprint-live.png)
 
 ---
 
 ## Table of Contents
 
-- [Screenshots](#screenshots)
+- [Why La Fabrique](#why-la-fabrique)
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Quick start](#quick-start)
 - [System Overview](#system-overview)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
