@@ -334,6 +334,29 @@ flowchart LR
 
 **Model routing:** `ModelFactory.ROLE_MODEL_MAP` resolves each role to a specific LLM via the proxy — swap models per role in configuration without code changes.
 
+### MCP tools
+
+Agents can use tools from any [Model Context Protocol](https://modelcontextprotocol.io) server. A Manager configures a company's servers with the same `mcpServers` map other MCP clients read:
+
+```bash
+curl -X POST http://localhost:8000/v1/mcp/servers \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "company_id": 1,
+    "mcpServers": {
+      "docs":   {"url": "https://docs.example.com/mcp", "headers": {"Authorization": "Bearer ..."}},
+      "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
+                 "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "..."}, "roles": ["Developer"]}
+    }
+  }'
+```
+
+- `url` is a streamable HTTP server (`"type": "sse"` for the older transport); `command` is a stdio server, started inside the backend container, so its runtime (`npx`, `uvx`, …) must be in that image.
+- `env` and `headers` are secrets: stored Fernet-encrypted (`FERNET_SECRET_KEY`), listed by name only (`GET /v1/mcp/servers`), masked out of the results the model sees.
+- `roles` limits a server to some agent roles; without it every role that executes tasks may use it. `PATCH /v1/mcp/servers/{id}` disables a server or changes its roles; `GET /v1/mcp/servers/{id}/tools` connects now and lists what it advertises.
+
+When a task runs, the model sees the tools as `<server>__<tool>` and may call them for at most `MCP_MAX_TOOL_ROUNDS` rounds before it must deliver. Every call is **an observation the backend made** — server, tool, arguments, whether it erred, duration, sha256 of the result — recorded on the run's evidence and shown by the Verifier as `tools_used`, apart from what the model claims it learned. A tool its server does not mark read-only raises the delivery's risk tier, so an approved task that used one waits for a person at the same points a sensitive file would.
+
 [⬆ Back to Top](#la-fabrique)
 
 ---

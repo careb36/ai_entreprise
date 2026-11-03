@@ -176,5 +176,37 @@ def classify(paths: Iterable[str], declared_risk: Any = None) -> dict[str, Any]:
     return {"tier": tier, "reasons": reasons}
 
 
+def raise_for_tool_calls(result: dict[str, Any], tool_calls: Any) -> dict[str, Any]:
+    """At least ``medium`` when an MCP tool ran without a read-only annotation.
+
+    The backend made the calls (``services/mcp_tools.py``), so they are
+    observations; a tool its server does not mark read-only may have changed
+    something outside the project, which is not routine. The tier never goes
+    down here.
+    """
+    if not isinstance(tool_calls, list):
+        return result
+    writers = sorted(
+        {
+            f"{call.get('server')}.{call.get('tool')}"
+            for call in tool_calls
+            if isinstance(call, dict)
+            and not call.get("read_only")
+            and not call.get("is_error")
+        }
+    )
+    if not writers:
+        return result
+    tier = result["tier"]
+    if _RANK[RISK_MEDIUM] > _RANK[tier]:
+        tier = RISK_MEDIUM
+    reasons = list(result["reasons"])
+    if len(reasons) < _MAX_REASONS:
+        reasons.append(
+            "MCP tools without a read-only annotation ran: " + ", ".join(writers[:5])
+        )
+    return {"tier": tier, "reasons": reasons}
+
+
 def is_high(tier: str | None) -> bool:
     return tier == RISK_HIGH

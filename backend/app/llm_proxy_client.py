@@ -68,12 +68,18 @@ class LLMProxyClient:
         model: str = "gemini-pro",
         role: str = "Developer",
         bu_id: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
+
+        ``tools`` is the OpenAI ``tools`` list; the answer may then carry
+        ``tool_calls`` in its message instead of content.
         """
         headers = self._get_headers(role, bu_id)
-        payload = {"messages": messages, "model": model}
+        payload: dict[str, Any] = {"messages": messages, "model": model}
+        if tools:
+            payload["tools"] = tools
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -141,12 +147,15 @@ class LLMProxyClient:
         model: str = "gemini-pro",
         role: str = "Developer",
         bu_id: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Async variant of ``chat()`` used by LangGraph async nodes.
         """
         headers = self._get_headers(role, bu_id)
-        payload = {"messages": messages, "model": model}
+        payload: dict[str, Any] = {"messages": messages, "model": model}
+        if tools:
+            payload["tools"] = tools
 
         for attempt in range(self.max_retries + 1):
             try:

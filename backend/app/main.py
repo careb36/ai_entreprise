@@ -25,6 +25,7 @@ from routers import (
     enterprise_router,
     github_router,
     inbox_router,
+    mcp_router,
     messages_router,
     procedures_router,
     sprint_router,
@@ -96,6 +97,7 @@ app.include_router(inbox_router)
 app.include_router(messages_router)
 app.include_router(procedures_router)
 app.include_router(workspace_router)
+app.include_router(mcp_router)
 
 # Register exception handlers
 register_exception_handlers(app)

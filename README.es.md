@@ -309,6 +309,29 @@ flowchart LR
 
 **Enrutamiento de modelos:** `ModelFactory.ROLE_MODEL_MAP` resuelve cada rol hacia un LLM específico vía el proxy — se cambia el modelo por rol en configuración sin tocar el código.
 
+### Herramientas MCP
+
+Los agentes pueden usar herramientas de cualquier servidor [Model Context Protocol](https://modelcontextprotocol.io). Un Manager configura los servidores de la compañía con el mismo mapa `mcpServers` que leen los demás clientes MCP:
+
+```bash
+curl -X POST http://localhost:8000/v1/mcp/servers \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "company_id": 1,
+    "mcpServers": {
+      "docs":   {"url": "https://docs.example.com/mcp", "headers": {"Authorization": "Bearer ..."}},
+      "github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
+                 "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "..."}, "roles": ["Developer"]}
+    }
+  }'
+```
+
+- `url` es un servidor streamable HTTP (`"type": "sse"` para el transporte anterior); `command` es un servidor stdio, que arranca dentro del contenedor del backend, así que su runtime (`npx`, `uvx`, …) tiene que estar en esa imagen.
+- `env` y `headers` son secretos: se guardan cifrados con Fernet (`FERNET_SECRET_KEY`), la API lista solo sus nombres (`GET /v1/mcp/servers`) y se enmascaran en los resultados que ve el modelo.
+- `roles` limita un servidor a algunos roles de agente; sin él, lo puede usar cualquier rol que ejecute tareas. `PATCH /v1/mcp/servers/{id}` desactiva un servidor o cambia sus roles; `GET /v1/mcp/servers/{id}/tools` se conecta en el momento y lista lo que anuncia.
+
+Cuando corre una tarea, el modelo ve las herramientas como `<servidor>__<herramienta>` y puede llamarlas durante como mucho `MCP_MAX_TOOL_ROUNDS` rondas antes de entregar. Cada llamada es **una observación que hizo el backend** — servidor, herramienta, argumentos, si falló, duración, sha256 del resultado — registrada en la evidencia del run y mostrada por el Verifier como `tools_used`, aparte de lo que el modelo afirma haber aprendido. Una herramienta que su servidor no marca como de solo lectura sube el nivel de riesgo de la entrega, así que una tarea aprobada que la usó espera a una persona en los mismos puntos que lo haría un archivo sensible.
+
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
