@@ -15,7 +15,7 @@ const publish = vi.fn()
 const PULL_REQUEST: RunPublication = {
   id: 1, agent_run_id: 7, provider: 'github', branch: 'fabrique/task-7', base: 'main',
   commit: 'abcdef0123456789', url: 'https://github.com/ana/app/pull/12', how: 'gh',
-  published_by: 'Ana', created_at: '',
+  published_by: 'Ana', created_at: '', updated: false,
 }
 
 function setup({ publications = [] as RunPublication[], mutation = {} as Record<string, unknown>, canPublish = true } = {}) {
@@ -41,6 +41,11 @@ describe('publishing a run branch', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(screen.getByText(i18n.t('review.publish.pushed', { name: 'Ana', commit: 'abcdef0', branch: 'fabrique/task-7', base: 'main' }))).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('says when an open request had its description updated', () => {
+    setup({ publications: [{ ...PULL_REQUEST, updated: true }] })
+    expect(screen.getByText(i18n.t('review.publish.updated'))).toBeInTheDocument()
   })
 
   it('says a remote without a web page was still pushed', () => {

@@ -132,9 +132,16 @@ def publish_spec(session: Session, run: AgentRun) -> dict[str, Any]:
     if not git.get("branch") or not git.get("repository"):
         raise PublishRefused(409, "This run was not delivered on a Git branch")
     base = git.get("base") or ""
+    # The commit this run's evidence covers: its own, or the branch as it was
+    # when a delivery changed nothing. The daemon refuses a branch that has
+    # moved past it, so a later delivery is never published as this run.
+    commit = git.get("commit") or git.get("parent")
+    if not commit:
+        raise PublishRefused(409, "This run's delivery names no commit to publish")
     return {
         "workspace_root": git["repository"],
         "branch": git["branch"],
+        "commit": commit,
         # A branch started from the checked-out commit is proposed to the
         # remote's default branch, which the daemon reads.
         "base": "" if base == "HEAD" else base,
@@ -165,6 +172,7 @@ def record_publication(
         commit=str(reply["commit"]),
         url=url if isinstance(url, str) and url.startswith("https://") else None,
         how=how,
+        updated=bool(reply.get("updated")),
         published_by=published_by,
         published_by_user_id=published_by_user_id,
     )
@@ -188,6 +196,7 @@ def record_publication(
             "commit": publication.commit,
             "url": publication.url,
             "how": publication.how,
+            "updated": publication.updated,
         },
         decision_signature=None,
         cost_tokens=0,

@@ -198,8 +198,13 @@ def compare_url(provider: Optional[str], web_url: Optional[str], base: str, bran
     return None
 
 
-def _cli(args: list[str], cwd: Path, body: str) -> Optional[str]:
-    """Run ``gh`` or ``glab`` as the person is logged in; the URL it printed, or ``None``."""
+# What a request's page looks like, so a diagnostic or help link is never taken for one.
+REQUEST_URL = {"github": r"https://\S+/pull/\d+", "gitlab": r"https://\S+/-/merge_requests/\d+"}
+_SHA = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+
+
+def _cli(args: list[str], cwd: Path, body: str = "") -> Optional[str]:
+    """Run ``gh`` or ``glab`` as the person is logged in: its output when it succeeded, else ``None``."""
     if shutil.which(args[0]) is None:
         return None
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"}
@@ -209,18 +214,44 @@ def _cli(args: list[str], cwd: Path, body: str) -> Optional[str]:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    urls = re.findall(r"https://\S+", f"{result.stdout}\n{result.stderr}")
-    # "already exists" still names the open one.
-    return urls[-1].rstrip(".,") if urls else None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _request_url(output: Optional[str], provider: str) -> Optional[str]:
+    found = re.search(REQUEST_URL[provider], output or "")
+    return found.group(0) if found else None
+
+
+def _open_request(provider: str, root: Path, branch: str, base: str, title: str, body: str) -> tuple:
+    """``(url, updated)``: the open request's description brought up to date, else a new draft."""
+    if provider == "github":
+        existing = _request_url(_cli(["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "url",
+                                      "--jq", ".[0].url"], root), provider)
+        if existing:
+            done = _cli(["gh", "pr", "edit", existing, "--title", title, "--body-file", "-"], root, body)
+            return (existing, True) if done is not None else (None, False)
+        created = _cli(["gh", "pr", "create", "--draft", "--head", branch, "--base", base, "--title", title,
+                        "--body-file", "-"], root, body)
+        return _request_url(created, provider), False
+    # glab updates the merge request of a branch by its name, and fails when there is none.
+    updated = _request_url(_cli(["glab", "mr", "update", branch, "--title", title, "--description", body], root), provider)
+    if updated:
+        return updated, True
+    created = _cli(["glab", "mr", "create", "--draft", "--yes", "--source-branch", branch, "--target-branch", base,
+                    "--title", title, "--description", body], root)
+    return _request_url(created, provider), False
 
 
 def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     """Push the task's branch to ``origin`` and open its pull request or merge request.
 
-    The push uses the person's own Git credentials on this machine. With
-    ``gh`` (GitHub) or ``glab`` (GitLab) installed and logged in, the request
-    is opened as a draft carrying *spec*'s ``title`` and ``body``; without
-    them, the answer is the page where the person opens it by hand.
+    The push uses the person's own Git credentials on this machine. *spec*'s
+    ``commit`` pins what is pushed: the commit the run's evidence covers; a
+    branch that has moved past it (a later delivery) is refused rather than
+    published under this run's evidence. With ``gh`` (GitHub) or ``glab``
+    (GitLab) installed and logged in, the open request's description is
+    updated, or a draft is opened, with *spec*'s ``title`` and ``body``;
+    without them, the answer is the page where the person opens it by hand.
     """
     branch = str(spec.get("branch") or "")
     if not (valid_branch(branch) and branch.startswith(TASK_BRANCH_PREFIX)):
@@ -232,26 +263,28 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     base = str(spec.get("base") or "") or default_branch(root)
     if not valid_branch(base):
         raise GitError(f"not a branch to open a request against: {base!r}")
-    run_git(["push", "--set-upstream", "origin", f"refs/heads/{branch}:refs/heads/{branch}"], root)
+    tip = _out(["rev-parse", f"refs/heads/{branch}"], root)
+    pinned = str(spec.get("commit") or "")
+    if pinned and not _SHA.match(pinned):
+        raise GitError(f"not a commit: {pinned!r}")
+    if pinned and pinned != tip:
+        raise GitError(f"{branch} has moved on to {tip[:7]} since this run's commit {pinned[:7]}: publish the task's latest run")
+    run_git(["push", "--set-upstream", "origin", f"{tip}:refs/heads/{branch}"], root)
     provider, web_url = remote_web_url(_strip_credentials(remote_url))
     title = str(spec.get("title") or branch)[:250]
     body = str(spec.get("body") or "")
-    url, how = None, "compare"
-    if provider == "github":
-        url = _cli(["gh", "pr", "create", "--draft", "--head", branch, "--base", base, "--title", title, "--body-file", "-"], root, body)
-        how = "gh" if url else how
-    elif provider == "gitlab":
-        url = _cli(["glab", "mr", "create", "--draft", "--yes", "--source-branch", branch, "--target-branch", base,
-                    "--title", title, "--description", body], root, "")
-        how = "glab" if url else how
+    url, updated = (None, False)
+    if provider in REQUEST_URL:
+        url, updated = _open_request(provider, root, branch, base, title, body)
     return {
         "ok": True,
         "provider": provider,
         "branch": branch,
         "base": base,
-        "commit": _out(["rev-parse", f"refs/heads/{branch}"], root),
+        "commit": tip,
         "url": url or compare_url(provider, web_url, base, branch),
-        "how": how,
+        "how": ("gh" if provider == "github" else "glab") if url else "compare",
+        "updated": updated,
     }
 
 

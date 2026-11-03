@@ -1643,7 +1643,8 @@
         "glab": "Draft merge request",
         "compare": "Open the request"
       },
-      "noUrl": "Pushed; this remote has no web page to open a request"
+      "noUrl": "Pushed; this remote has no web page to open a request",
+      "updated": "description updated with this run"
     }
   }
 }

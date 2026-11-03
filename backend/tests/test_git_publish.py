@@ -79,6 +79,7 @@ def test_without_gh_the_branch_is_pushed_and_the_answer_is_the_compare_page(
         "commit": commit,
         "url": "https://github.com/ana/app/compare/main...fabrique%2Ftask-7?expand=1",
         "how": "compare",
+        "updated": False,
     }
     assert git(remote, "rev-parse", "refs/heads/fabrique/task-7") == commit
     assert "token" not in reply["url"]
@@ -93,7 +94,8 @@ def test_with_gh_a_draft_pull_request_is_opened_with_the_evidence(
     _fake_cli(
         bin_dir,
         "gh",
-        f'printf "%s\\n" "$@" > {seen}; cat > {seen}.body; echo https://github.com/ana/app/pull/12',
+        f'[ "$2" = list ] && exit 0; printf "%s\\n" "$@" > {seen}; cat > {seen}.body; '
+        "echo https://github.com/ana/app/pull/12",
     )
 
     reply = git_workspace.publish(str(root), {**PUBLISH, "base": "main"})
@@ -109,12 +111,63 @@ def test_with_gh_a_draft_pull_request_is_opened_with_the_evidence(
 def test_a_gh_that_fails_still_leaves_the_compare_page(published_repo):
     root, _, bin_dir = published_repo
     daemon.deliver_files(str(root), [{"path": "a.py", "content": "a = 1\n"}], SPEC)
-    _fake_cli(bin_dir, "gh", "echo 'not logged in' >&2; exit 1")
+    # A diagnostic with a link is not a pull request.
+    _fake_cli(
+        bin_dir,
+        "gh",
+        "echo 'see https://github.com/ana/app/pull/1 or https://cli.github.com'; exit 1",
+    )
 
     reply = git_workspace.publish(str(root), PUBLISH)
 
     assert reply["how"] == "compare"
     assert reply["url"].startswith("https://github.com/ana/app/compare/")
+
+
+def test_an_open_pull_request_gets_this_runs_evidence(published_repo, tmp_path):
+    root, _, bin_dir = published_repo
+    daemon.deliver_files(str(root), [{"path": "a.py", "content": "a = 1\n"}], SPEC)
+    seen = tmp_path / "gh-args"
+    _fake_cli(
+        bin_dir,
+        "gh",
+        '[ "$2" = list ] && echo https://github.com/ana/app/pull/9 && exit 0; '
+        f'[ "$2" = edit ] && printf "%s\\n" "$@" > {seen} && cat > {seen}.body && exit 0; exit 3',
+    )
+
+    reply = git_workspace.publish(str(root), {**PUBLISH, "body": "Second run"})
+
+    assert (reply["how"], reply["url"], reply["updated"]) == (
+        "gh",
+        "https://github.com/ana/app/pull/9",
+        True,
+    )
+    assert seen.read_text().splitlines()[:3] == [
+        "pr",
+        "edit",
+        "https://github.com/ana/app/pull/9",
+    ]
+    assert Path(f"{seen}.body").read_text() == "Second run"
+
+
+def test_a_branch_moved_past_the_runs_commit_is_not_published(published_repo):
+    root, remote, _ = published_repo
+    first = daemon.deliver_files(
+        str(root), [{"path": "a.py", "content": "a = 1\n"}], SPEC
+    )["git"]["commit"]
+    daemon.deliver_files(str(root), [{"path": "a.py", "content": "a = 2\n"}], SPEC)
+
+    with pytest.raises(git_workspace.GitError, match="moved on"):
+        git_workspace.publish(str(root), {**PUBLISH, "commit": first})
+    pushed = subprocess.run(
+        ["git", "rev-parse", "--verify", "-q", "refs/heads/fabrique/task-7"],
+        cwd=remote,
+        capture_output=True,
+        check=False,
+    )
+    assert pushed.returncode != 0  # nothing was pushed
+    with pytest.raises(git_workspace.GitError, match="not a commit"):
+        git_workspace.publish(str(root), {**PUBLISH, "commit": "HEAD~1"})
 
 
 def test_what_cannot_be_published_is_refused(published_repo, tmp_path):
@@ -262,6 +315,7 @@ def test_a_manager_publishes_a_run_with_its_evidence_and_a_viewer_reads_it(
     subject, spec = nats.requests[0]
     assert subject == "workspace.git.publish"
     assert spec["base"] == ""  # started from the checkout: the remote's default branch
+    assert spec["commit"] == info["commit"]  # pinned to what this run's evidence covers
     assert "**Verdict:** verified" in spec["body"]
     assert "| files_written | pass | 1 of 1 file read back |" in spec["body"]
     assert "- `a.py` added (+1 −0)" in spec["body"]

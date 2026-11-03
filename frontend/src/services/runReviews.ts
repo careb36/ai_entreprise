@@ -4,7 +4,7 @@
  * (`/v1/agent_runs/{id}/reviews`). Viewers read them; Managers write them.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from './api'
+import { api, fetchApi } from './api'
 import { QUERY_KEYS } from '../hooks/useQueries'
 
 export type CommentSide = 'new' | 'old'
@@ -46,6 +46,8 @@ export interface RunPublication {
   commit: string
   url: string | null
   how: PublishHow
+  /** The request was already open: its description was brought up to date. */
+  updated: boolean
   published_by: string
   created_at: string
 }
@@ -70,8 +72,9 @@ export const reviewsApi = {
     api.post<RunReview>(`/v1/agent_runs/${runId}/reviews`, { company_id: companyId, event, body: body || null }),
   publications: (companyId: number, runId: number) =>
     api.get<{ publications: RunPublication[] }>(`/v1/agent_runs/${runId}/publications`, { company_id: companyId }),
+  /** A push and the platform's CLI on the person's machine: sent once, never retried, waited on past the backend's 150 s. */
   publish: (companyId: number, runId: number) =>
-    api.post<RunPublication>(`/v1/agent_runs/${runId}/publish?company_id=${companyId}`, {}),
+    fetchApi<RunPublication>(`/v1/agent_runs/${runId}/publish?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 180_000 }),
 }
 
 const commentsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'comments'] as const

@@ -668,7 +668,7 @@ interface FetchOptions extends RequestInit {
   params?: Record<string, string | number>
   /** Retry 5xx responses (default true). A 503 that means "not connected" should not. */
   retryServerErrors?: boolean
-  _attempt?: number
+  once?: boolean; timeoutMs?: number; _attempt?: number // once: never resent (not idempotent)
 }
 
 let onUnauthorized: (() => void) | null = null
@@ -677,8 +677,9 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler
 }
 
-async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, _attempt = 0, auth = true, retryServerErrors = true, ...fetchOptions } = options
+export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  const { params, _attempt = 0, auth = true, once = false, timeoutMs = TIMEOUT_MS, ...rest } = options
+  const { retryServerErrors = !once, ...fetchOptions } = rest
 
   let url = `${API_BASE}${endpoint}`
   if (params) {
@@ -689,7 +690,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const token = auth ? useAuthStore.getState().getValidToken() : null
@@ -729,10 +730,10 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
     clearTimeout(timer)
     if (err instanceof ApiError) throw err
     if ((err as Error).name === 'AbortError') {
-      if (_attempt < MAX_RETRIES) return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
+      if (!once && _attempt < MAX_RETRIES) return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
       throw new ApiError(0, 'Request timed out. Please check your connection.')
     }
-    if (_attempt < MAX_RETRIES) {
+    if (!once && _attempt < MAX_RETRIES) {
       await delay(600 * (_attempt + 1))
       return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
     }
@@ -770,7 +771,6 @@ async function readDetail(response: Response): Promise<string | undefined> {
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
-
 
 export interface AgentActivity {
   total_tasks: number

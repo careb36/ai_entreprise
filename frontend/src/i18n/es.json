@@ -1643,7 +1643,8 @@
         "glab": "Merge request en borrador",
         "compare": "Abrir la solicitud"
       },
-      "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud"
+      "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud",
+      "updated": "descripción actualizada con esta ejecución"
     }
   }
 }

@@ -60,6 +60,7 @@ class RunPublication(SQLModel, table=True):
     git pushed, and the pull request (GitHub) or merge request (GitLab) the
     platform's CLI opened, or the page where a person opens one (``how`` is
     ``gh``, ``glab`` or ``compare``).
+    A request already open for the branch has its description updated.
     """
 
     __tablename__ = "run_publications"
@@ -73,6 +74,8 @@ class RunPublication(SQLModel, table=True):
     commit: str
     url: str | None = None
     how: str
+    # The request already existed: its description was brought up to date.
+    updated: bool = False
     published_by: str
     published_by_user_id: int | None = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=_utcnow)

@@ -31,6 +31,7 @@ function Publication({ publication }: { publication: RunPublication }) {
       ) : (
         <span>{t('review.publish.noUrl')}</span>
       )}
+      {publication.url && publication.updated && <span>{t('review.publish.updated')}</span>}
     </li>
   )
 }
