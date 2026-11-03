@@ -23,7 +23,7 @@ from .company import (
 from .github import GitHubRepoBinding
 from .mcp import McpServer
 from .procedure import Procedure
-from .review import ReviewComment, RunReview
+from .review import ReviewComment, RunPublication, RunReview
 from .runtime import AssistantRuntimeState
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .support import BugReport
@@ -47,6 +47,7 @@ __all__ = [
     "ProjectCredential",
     "ProjectDiscovery",
     "ReviewComment",
+    "RunPublication",
     "RunReview",
     "Sprint",
     "User",
