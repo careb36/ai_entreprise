@@ -13,6 +13,8 @@ vi.mock('../services/runReviews', () => ({
   useReviewComments: vi.fn(() => ({ data: { comments: [] } })),
   useAddReviewComment: vi.fn(() => ({ mutate: addComment, isPending: false, isError: false })),
   useResolveReviewComment: vi.fn(() => ({ mutate: resolveComment, isPending: false })),
+  useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
+  usePublishRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
 }))
 
 const refetch = vi.fn()
