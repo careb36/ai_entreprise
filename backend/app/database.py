@@ -70,6 +70,8 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS token_budget INTEGER DEFAULT 500000",
         # sprints — scope replaces duration_days
         "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS scope_size VARCHAR DEFAULT 'M'",
+        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_workflow BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_base_branch VARCHAR",
         "ALTER TABLE IF EXISTS sprints ALTER COLUMN duration_days DROP NOT NULL",
         # sprints — why the worker paused one (no credit at a provider)
         "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS pause_reason TEXT",

@@ -157,6 +157,8 @@ def run_changes(session: Session, run: AgentRun) -> dict[str, Any]:
     observed_by: dict[str, Any] | None = None
     reason: str | None = None
     files: list[dict[str, Any]] = []
+    # The branch and commit the delivery landed on, with the Git workflow.
+    git: dict[str, Any] | None = None
     report = None
     if (run.subject or {}).get("pr_url"):
         source = "pull_request"
@@ -178,6 +180,7 @@ def run_changes(session: Session, run: AgentRun) -> dict[str, Any]:
         }
         writes = (report.evidence or {}).get("workspace_writes") or []
         files = [_workspace_file(w) for w in writes if isinstance(w, dict)]
+        git = (report.evidence or {}).get("git")
     hidden = max(0, len(files) - MAX_FILES)
     files = files[:MAX_FILES]
     observed_paths = {f["path"] for f in files} | {
@@ -188,6 +191,7 @@ def run_changes(session: Session, run: AgentRun) -> dict[str, Any]:
         "run_id": run.id,
         "source": source,
         "observed_by": observed_by,
+        "git": git if isinstance(git, dict) else None,
         "reason": reason,
         "files": files,
         "files_not_shown": hidden,

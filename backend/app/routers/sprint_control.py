@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import sprint_control
+from services import git_workflow, sprint_control
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -171,3 +171,57 @@ async def set_autonomy(
     session.add(company)
     session.commit()
     return {"company_id": company_id, "autonomy_level": company.autonomy_level}
+
+
+class GitWorkflowRequest(BaseModel):
+    git_workflow: bool
+    # Where a task's branch starts; empty: what the repository has checked out.
+    git_base_branch: str | None = Field(default=None, max_length=200)
+
+
+def _git_payload(company: Company) -> dict:
+    return {
+        "company_id": company.id,
+        "git_workflow": company.git_workflow,
+        "git_base_branch": company.git_base_branch,
+    }
+
+
+@router.get("/companies/{company_id}/git")
+async def get_git_workflow(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Whether the company's deliveries are commits on a branch per task (Viewer)."""
+    require_company_role(session, user, company_id, "Viewer")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return _git_payload(company)
+
+
+@router.put("/companies/{company_id}/git")
+async def set_git_workflow(
+    company_id: int,
+    req: GitWorkflowRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Turn the Git workflow on or off, and name its base branch (Manager).
+
+    On: each task's deliveries are commits on ``fabrique/task-<id>``, in a
+    worktree, never in the person's checkout (``services/git_workflow.py``).
+    """
+    require_company_role(session, user, company_id, "Manager")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    base = (req.git_base_branch or "").strip() or None
+    if not git_workflow.valid_base(base):
+        raise HTTPException(status_code=422, detail=f"not a branch name: {base}")
+    company.git_workflow = req.git_workflow
+    company.git_base_branch = base
+    session.add(company)
+    session.commit()
+    return _git_payload(company)
