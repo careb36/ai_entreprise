@@ -128,6 +128,45 @@ class DiscoveryRequest(BaseModel):
     company_id: int | None = None  # Optional for pre-creation discovery
 
 
+class ReviewCommentCreate(BaseModel):
+    """Payload for ``POST /v1/agent_runs/{id}/comments``: a note on a line of a changed file."""
+
+    company_id: int
+    path: str | None = Field(default=None, max_length=1000)
+    line: int | None = Field(default=None, ge=1)
+    side: str = "new"
+    body: str = Field(min_length=1, max_length=4000)
+    # Only when authentication is off: who wrote it.
+    author_name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def side_and_body(self) -> "ReviewCommentCreate":
+        if self.side not in {"new", "old"}:
+            raise ValueError("side must be 'new' or 'old'")
+        if self.line is not None and not self.path:
+            raise ValueError("a line needs the path of its file")
+        self.body = self.body.strip()
+        if not self.body:
+            raise ValueError("body must not be blank")
+        return self
+
+
+class RunReviewCreate(BaseModel):
+    """Payload for ``POST /v1/agent_runs/{id}/reviews``: a submitted review."""
+
+    company_id: int
+    event: str
+    body: str | None = Field(default=None, max_length=8000)
+    author_name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def known_event(self) -> "RunReviewCreate":
+        if self.event not in {"comment", "approve", "request_changes"}:
+            raise ValueError("event must be 'comment', 'approve' or 'request_changes'")
+        self.body = (self.body or "").strip() or None
+        return self
+
+
 class AgentRunApprovalRequest(BaseModel):
     """Payload for ``POST /v1/agent_runs/{id}/approve`` — human governance action."""
 

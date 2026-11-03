@@ -15,9 +15,9 @@ from models.agent_run import (
 )
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
 from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
-from services.agent_service import AgentService
 from services.review_changes import run_changes
 from services.reviewer_agent import track_record as reviewer_track_record
+from services.run_review import record_approval
 from services.verification import verify_agent_run
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
@@ -242,26 +242,14 @@ def approve_run(
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")
 
-    approval = AgentRunApproval(agent_run_id=run.id, **payload.model_dump())
-    session.add(approval)
-    audit_log = AgentService().audit_interaction(
-        session=session,
-        company_id=run.company_id,
-        interaction_id=f"agent-run:{run.external_ref}",
-        agent_id=f"human:{approval.approver_name}",
-        action=f"agent_run_{approval.decision}",
-        details={
-            "company_id": str(run.company_id),
-            "agent_run_id": run.id,
-            "version": run.version,
-            "rejection_category": approval.rejection_category,
-        },
-        result={"decision": approval.decision, "feedback": approval.feedback},
-        decision_signature=None,
-        cost_tokens=0,
+    approval = record_approval(
+        session,
+        run,
+        approver_name=payload.approver_name,
+        decision=payload.decision,
+        feedback=payload.feedback,
+        rejection_category=payload.rejection_category,
     )
-    approval.audit_log_id = audit_log.id
-    session.add(approval)
     session.commit()
     session.refresh(approval)
     return approval

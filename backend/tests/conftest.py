@@ -46,6 +46,7 @@ from models.company import (
 from models.github import GitHubRepoBinding
 from models.mcp import McpServer
 from models.procedure import Procedure
+from models.review import ReviewComment, RunReview
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
 from sqlalchemy.pool import StaticPool
@@ -122,6 +123,8 @@ SQLModel.metadata.create_all(
         AgentMessage.__table__,
         Procedure.__table__,
         McpServer.__table__,
+        RunReview.__table__,
+        ReviewComment.__table__,
     ],
 )
 
