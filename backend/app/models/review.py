@@ -2,7 +2,8 @@
 
 ``ReviewComment`` is a note on one line of a changed file (``path`` and
 ``line``, on the ``new`` or ``old`` side), or on the run as a whole (no
-``path``). ``RunReview`` is a submitted review, ``comment``, ``approve`` or
+``path``), written here or brought from the pull or merge request the run
+was published as (``source``). ``RunReview`` is a submitted review, ``comment``, ``approve`` or
 ``request_changes``, with what it did (``outcome``). Both are a person's
 words: they decide what happens next and are never evidence.
 """
@@ -51,6 +52,13 @@ class ReviewComment(SQLModel, table=True):
     review_id: int | None = Field(default=None, foreign_key="run_reviews.id")
     created_at: datetime = Field(default_factory=_utcnow)
     resolved_at: datetime | None = None
+    # Written on the platform the run was published to (``github`` or
+    # ``gitlab``) and brought here by ``services/review_sync.py``: its id
+    # there, its page, and, for a submitted review, its state there.
+    source: str | None = None
+    external_id: str | None = Field(default=None, index=True)
+    external_url: str | None = None
+    external_state: str | None = None
 
 
 class RunPublication(SQLModel, table=True):
