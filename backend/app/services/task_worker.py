@@ -99,6 +99,11 @@ logger = setup_logger("fabrique-task-worker")
 
 MAX_QA_REVIEW_FAILURES = 3
 MAX_QA_REWORK_CYCLES = 2
+# Output budgets for the short answers: a review is two or three sentences, a
+# brief a few paragraphs. The Developer's deliverable has none, since every
+# file goes in full; a cut-off one is named by ``_gate_reason`` instead.
+REVIEW_MAX_TOKENS = 600
+BRIEF_MAX_TOKENS = 1024
 MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
@@ -449,6 +454,25 @@ def _llm_content(result: dict[str, Any]) -> str:
     return (content if isinstance(content, str) else str(content)).strip()
 
 
+def _llm_finish_reason(result: dict[str, Any]) -> str | None:
+    """Why the model stopped, as the proxy reports it (``length`` when cut at the limit)."""
+    choices = result.get("choices") or [{}]
+    reason = (choices[0] or {}).get("finish_reason")
+    return str(reason) if reason else None
+
+
+# What the gate says when the text checks fail on an answer the model could
+# not finish: asking for "the complete result again" would cut it again.
+CUT_OFF_REASON = (
+    "Output cut off at the model's length limit, so the deliverable is "
+    "incomplete; deliver fewer or smaller files, or split the task"
+)
+
+
+def _gate_reason(validation_reason: str, finish_reason: str | None) -> str:
+    return CUT_OFF_REASON if finish_reason == "length" else validation_reason
+
+
 def _llm_failure(result: dict[str, Any], model: str) -> str | None:
     """
     Describe why *result* carries no usable answer, or return ``None``.
@@ -502,7 +526,6 @@ def _execute_task(
     """
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
-    client.timeout = 120  # Agent tasks may produce long outputs
 
     system_prompt = agent.get("system_prompt") or (
         f"You are a {agent.get('seniority', 'Senior')} {agent.get('role', 'Developer')} "
@@ -599,6 +622,7 @@ def _execute_task(
 
     content = _llm_content(result)
     agent["served_model"] = result.get("served_model") or None
+    agent["finish_reason"] = _llm_finish_reason(result)
 
     if company_id is not None:
         record_agent_turn(
@@ -679,7 +703,7 @@ def _consult_architect(
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
-    client.timeout = 90
+    client.max_tokens = BRIEF_MAX_TOKENS
     try:
         result = client.chat(
             messages=[
@@ -2673,7 +2697,12 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             )
             if not is_valid:
                 await _send_back_from_quality_gate(
-                    nats_client, item, agent, sprint, deliverable, validation_reason
+                    nats_client,
+                    item,
+                    agent,
+                    sprint,
+                    deliverable,
+                    _gate_reason(validation_reason, agent.get("finish_reason")),
                 )
                 return
 
@@ -3048,6 +3077,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 f"--- DELIVERABLE ---\n{deliverable[:3000]}\n--- END ---\n\n"
                 "Provide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
                 "If not, start with 'NEEDS WORK:' and explain what's missing."
+                + _review_format_reminder(qa_review_failures)
                 # A second attempt is judged against what blocked the first and
                 # the ScrumMaster's brief for it, the same context the agent had.
                 + previous_attempt_context(item)
@@ -3492,6 +3522,21 @@ async def _review_cycle(nats_client: NATSClient) -> None:
     await _dispatch_todo_items(nats_client)
 
 
+def _review_format_reminder(earlier_failures: int) -> str:
+    """What the review prompt adds once an answer came back without a verdict.
+
+    Sending the same prompt again after a formless answer mostly buys the same
+    answer; naming the miss is what changes it.
+    """
+    if earlier_failures <= 0:
+        return ""
+    return (
+        f"\n\nYour previous {'answer' if earlier_failures == 1 else 'answers'} to this "
+        "review could not be used because the first word was not 'APPROVED:' or "
+        "'NEEDS WORK:'. Begin with one of those two, then the review."
+    )
+
+
 def _call_llm_for_review(
     agent: dict[str, Any],
     prompt: str,
@@ -3507,6 +3552,7 @@ def _call_llm_for_review(
     reads from the audit trail instead of its comment-scan fallback.
     """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens = REVIEW_MAX_TOKENS
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
