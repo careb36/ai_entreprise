@@ -6,7 +6,8 @@ where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
 - workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
-                          and the diff against what was there, file_diff.py)
+                          and the diff against what was there, file_diff.py); with a
+                          `git` spec, as a commit on the task's branch (git_workspace.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
@@ -20,7 +21,6 @@ Start it with scripts/start-daemon.sh (macOS/Linux) or scripts/start-daemon.ps1
 """
 
 import asyncio
-import configparser
 import hashlib
 import json
 import logging
@@ -34,9 +34,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlsplit
 
 import file_diff
+import git_workspace
+from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats
 import nats_scope
 import shell_exec
@@ -162,16 +163,18 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     return file_diff.cap_reply(results)
 
 
-def deliver_files(workspace_path: str, files: list) -> Dict[str, Any]:
-    """``write_files`` wrapped in the reply shape the backend reads."""
+def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """``write_files`` wrapped in the reply shape the backend reads; a commit on the task's branch when *git* names it."""
     try:
+        if git:
+            return git_workspace.deliver(workspace_path, git, files, write_files)
         write_results = write_files(workspace_path, files)
         return {
             "ok": all(r["status"] == "written" for r in write_results),
             "workspace_root": workspace_path,
             "files": write_results,
         }
-    except OSError as e:
+    except (OSError, git_workspace.GitError) as e:
         logger.error("Writing files under %s failed: %s", workspace_path, e)
         return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
 
@@ -244,7 +247,7 @@ async def handle_msg(nc, msg):
             # Sprint kickoff stories also travel on this subject; they are for
             # the backend's agent graph, not for this daemon.
             return
-        response = await asyncio.to_thread(deliver_files, workspace_path, files)
+        response = await asyncio.to_thread(deliver_files, workspace_path, files, data.get("git"))
         if reply_to:
             await nc.publish(reply_to, json.dumps(response).encode())
 
@@ -432,103 +435,6 @@ def browse(path: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def _git_dir(root: Path) -> Optional[Path]:
-    """The repository's git directory: ``.git`` itself, or where a ``.git`` file points."""
-    dot_git = root / ".git"
-    if dot_git.is_dir():
-        return dot_git
-    if dot_git.is_file():
-        try:
-            line = dot_git.read_text(encoding="utf-8", errors="ignore").strip()
-        except OSError:
-            return None
-        if line.startswith("gitdir:"):
-            git_dir = Path(line[len("gitdir:"):].strip())
-            return git_dir if git_dir.is_absolute() else (root / git_dir).resolve()
-    return None
-
-
-def _strip_credentials(url: str) -> str:
-    """Drop a password or token embedded in a remote URL (``https://TOKEN@host/...``)."""
-    if "://" not in url:
-        return url
-    parts = urlsplit(url)
-    if "@" not in parts.netloc:
-        return url
-    userinfo, host_port = parts.netloc.rsplit("@", 1)
-    if ":" in userinfo or parts.scheme in {"http", "https"}:
-        return parts._replace(netloc=host_port).geturl()
-    # ssh://git@host/... names the login user, not a secret.
-    return url
-
-
-def remote_web_url(remote_url: Optional[str]) -> tuple:
-    """``(provider, web_url)`` for a git remote: github, gitlab, bitbucket or other."""
-    if not remote_url:
-        return None, None
-    url = remote_url.strip()
-    if "://" in url:
-        parts = urlsplit(url)
-        host, path = parts.hostname or "", parts.path
-    elif ":" in url:
-        # scp-like syntax: git@github.com:owner/repo.git
-        host, path = url.split(":", 1)
-        host = host.split("@")[-1]
-    else:
-        return "other", None
-    path = path.strip("/")
-    if path.endswith(".git"):
-        path = path[: -len(".git")]
-    host = host.lower()
-    if host == "github.com" or host.endswith(".github.com"):
-        provider = "github"
-    elif "gitlab" in host:
-        provider = "gitlab"
-    elif "bitbucket" in host:
-        provider = "bitbucket"
-    else:
-        provider = "other"
-    return provider, (f"https://{host}/{path}" if host and path else None)
-
-
-def git_info(root: Path) -> Dict[str, Any]:
-    """Branch and origin of the repository at *root*, read from its git files."""
-    info: Dict[str, Any] = {
-        "is_repo": False, "branch": None, "remote_url": None, "provider": None, "web_url": None,
-    }
-    git_dir = _git_dir(root)
-    if git_dir is None:
-        return info
-    info["is_repo"] = True
-    try:
-        head = (git_dir / "HEAD").read_text(encoding="utf-8", errors="ignore").strip()
-        if head.startswith("ref: refs/heads/"):
-            info["branch"] = head[len("ref: refs/heads/"):]
-    except OSError:
-        pass
-    # Linked worktrees keep the shared config in the main repository.
-    common_dir = git_dir
-    commondir_file = git_dir / "commondir"
-    if commondir_file.is_file():
-        try:
-            common = Path(commondir_file.read_text(encoding="utf-8").strip())
-            common_dir = common if common.is_absolute() else (git_dir / common).resolve()
-        except OSError:
-            pass
-    config = configparser.ConfigParser(strict=False, interpolation=None)
-    try:
-        config.read(common_dir / "config", encoding="utf-8")
-    except (configparser.Error, OSError):
-        return info
-    remotes = [section for section in config.sections() if section.startswith('remote "')]
-    preferred = 'remote "origin"' if 'remote "origin"' in remotes else (remotes[0] if remotes else None)
-    if preferred and config.has_option(preferred, "url"):
-        remote = _strip_credentials(config.get(preferred, "url"))
-        info["remote_url"] = remote
-        info["provider"], info["web_url"] = remote_web_url(remote)
-    return info
-
-
 # What the backend's stack detection reads.  Paths are listed for every file;
 # contents only for these build/config files.  ``.env`` is never sent.
 SNAPSHOT_SKIP_DIRS = {
@@ -682,7 +588,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
         await msg.term()
         return
     workspace_path = job.get("workspace_root") or ""
-    response = await asyncio.to_thread(deliver_files, workspace_path, job.get("files") or [])
+    response = await asyncio.to_thread(deliver_files, workspace_path, job.get("files") or [], job.get("git"))
     result = {
         **response,
         "job_id": job.get("job_id"),
