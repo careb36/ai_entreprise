@@ -406,6 +406,33 @@ def has_console_advice(comments: Any) -> bool:
     return any(is_console_advice_note(comment) for comment in comment_list(comments))
 
 
+def usage_comment(sources: list[dict[str, str]]) -> str:
+    """The worker's note quoting the console assistants: one line per assistant."""
+    if not sources:
+        return ""
+    lines = [CONSOLE_ADVICE_PREFIX]
+    for source in sources:
+        label = source.get("label", "Assistant")
+        purpose = source.get("purpose", "advice")
+        excerpt = (source.get("excerpt") or "").strip().replace("\n", " ")
+        lines.append(f"- {label} ({purpose}): {excerpt}")
+    return "\n".join(lines)[:1800]
+
+
+def earlier_advice(comments: Any) -> str:
+    """The advice note a first attempt left, to quote back on a rework.
+
+    The assistants' prompt carries no review feedback, so running them again
+    on the same task gives the same answer at the same cost (the Claude CLI
+    reads the whole repository each time). The note holds the excerpts the
+    worker kept, the prefix stripped; empty when no attempt was advised.
+    """
+    for comment in reversed(comment_list(comments)):
+        if is_console_advice_note(comment):
+            return _text(comment)[len(CONSOLE_ADVICE_PREFIX) :].strip()
+    return ""
+
+
 def no_console_advice() -> dict[str, dict[str, int]]:
     """An empty tally: tasks that got advice and tasks that did not."""
     return {

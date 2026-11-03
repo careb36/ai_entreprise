@@ -16,10 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from llm_proxy_client import LLMProxyClient
-
-# A plan is a JSON list of a handful of tasks; this covers the largest scope.
-PLAN_MAX_TOKENS = 4096
 from logging_config import logger
+
+# A plan is a JSON list of a handful of tasks. One attempt: the template stands in.
+PLAN_MAX_TOKENS = 4096
+
 
 # ---------------------------------------------------------------------------
 # Prompt template — the PO agent plans the foundation sprint
@@ -546,8 +547,8 @@ def plan_foundation_sprint(
             "tasks": _filter_fallback_tasks(agents),
         }
 
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
 
     stack_summary = _build_stack_summary(detected_stack)
     file_listing = (
@@ -566,7 +567,6 @@ def plan_foundation_sprint(
 
     logger.info(f"PO planning foundation sprint with model={po_model}")
 
-    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -658,11 +658,8 @@ def plan_execution_sprint(
         logger.info("No planning model available — using execution fallback")
         return _build_execution_fallback(objective, team, normalized_scope)
 
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
-    # The client's default wait covers the proxy's budget: a 12 s one threw
-    # away a plan the provider had already billed. One attempt, no retries.
-    client.max_retries = 0
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
 
     prompt = _EXECUTION_PROMPT.format(
         agent_name=po.get("name") or "PO",
@@ -684,7 +681,6 @@ def plan_execution_sprint(
         normalized_scope,
     )
 
-    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -771,11 +767,8 @@ def plan_self_improvement_sprint(
         logger.info("No planning model available — using self-improvement fallback")
         return _build_self_improvement_fallback(company_name, team, normalized_scope)
 
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
-    # The client's default wait covers the proxy's budget: a 12 s one threw
-    # away a plan the provider had already billed. One attempt, no retries.
-    client.max_retries = 0
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
 
     prompt = _SELF_IMPROVEMENT_PROMPT.format(
         agent_name=po.get("name") or "PO",
@@ -797,7 +790,6 @@ def plan_self_improvement_sprint(
         normalized_scope,
     )
 
-    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],

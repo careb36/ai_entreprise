@@ -19,6 +19,7 @@ import requests
 from sqlalchemy import create_engine, text
 import upstream
 from catalogue import fetch_model_ids
+from gemini import call_gemini
 from provider_keys import validate_api_keys
 from usage import estimated_usage, openai_reported_count, openai_text, reported_count, with_usage
 
@@ -509,45 +510,8 @@ def _call_openai_compatible(provider: str, model: str, data: dict, timeout: floa
 
 
 def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
-    messages = data.get("messages", [])
-    contents = [
-        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
-        for m in messages
-        if m["role"] != "system"
-    ]
-    system = next((m["content"] for m in messages if m["role"] == "system"), None)
-    generation: dict = {"temperature": data.get("temperature", 0.7)}
-    if data.get("max_tokens"):
-        # The OpenAI-compatible providers read max_tokens from the body as is;
-        # Gemini wants it here, or the answer runs to the model's own limit.
-        generation["maxOutputTokens"] = int(data["max_tokens"])
-    payload = {"contents": contents, "generationConfig": generation}
-    if system:
-        payload["system_instruction"] = {"parts": [{"text": system}]}
-    status, res = _post_upstream(
-        "gemini",
-        model,
-        f"{GEMINI_PROXY_URL}/models/{model}:generateContent",
-        {"x-goog-api-key": GEMINI_API_KEY},
-        payload,
-        timeout,
-    )
-    try:
-        text_out = res["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError, TypeError):
-        reason = (res.get("promptFeedback") or {}).get("blockReason") or "no candidates"
-        raise UpstreamError("gemini", model, status, f"response had no text ({reason})", retriable=False)
-    # The same finish_reason the OpenAI-compatible answers carry, so a caller
-    # can tell an answer cut at the limit ("length") from a complete one.
-    finish = {"MAX_TOKENS": "length", "STOP": "stop"}.get(
-        str(res["candidates"][0].get("finishReason") or "").upper(), "other"
-    )
-    result = {
-        "choices": [{"message": {"role": "assistant", "content": text_out}, "finish_reason": finish}],
-        "model": model,
-    }
-    reported = reported_count((res.get("usageMetadata") or {}).get("totalTokenCount"))
-    return with_usage(result, reported, messages, text_out)
+    # The key and URL are read here, at call time, so a test can replace them.
+    return call_gemini(model, data, timeout, post=_post_upstream, base_url=GEMINI_PROXY_URL, api_key=GEMINI_API_KEY)
 
 
 def _call_provider(provider: str, model: str, data: dict, timeout: float) -> tuple[dict, int]:

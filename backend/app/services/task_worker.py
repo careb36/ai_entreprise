@@ -53,6 +53,25 @@ from services import (
     scrum_master,
     workspace_daemon,
 )
+from services.answers import (
+    BRIEF_MAX_TOKENS,
+    REVIEW_MAX_TOKENS,
+)
+from services.answers import (
+    gate_reason as _gate_reason,
+)
+from services.answers import (
+    llm_content as _llm_content,
+)
+from services.answers import (
+    llm_failure as _llm_failure,
+)
+from services.answers import (
+    llm_finish_reason as _llm_finish_reason,
+)
+from services.answers import (
+    review_format_reminder as _review_format_reminder,
+)
 from services.architect import track_record as architect_track_record
 from services.architect import track_record_context as architect_record_context
 from services.board import (
@@ -99,11 +118,6 @@ logger = setup_logger("fabrique-task-worker")
 
 MAX_QA_REVIEW_FAILURES = 3
 MAX_QA_REWORK_CYCLES = 2
-# Output budgets for the short answers: a review is two or three sentences, a
-# brief a few paragraphs. The Developer's deliverable has none, since every
-# file goes in full; a cut-off one is named by ``_gate_reason`` instead.
-REVIEW_MAX_TOKENS = 600
-BRIEF_MAX_TOKENS = 1024
 MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
 AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
@@ -445,56 +459,6 @@ def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> st
     """The agent's configured model, or its role's default from model_factory."""
     configured = (agent.get("model") or "").strip()
     return configured or default_model_for_role(agent.get("role") or default_role)
-
-
-def _llm_content(result: dict[str, Any]) -> str:
-    choices = result.get("choices") or [{}]
-    message = (choices[0] or {}).get("message") or {}
-    content = message.get("content") or ""
-    return (content if isinstance(content, str) else str(content)).strip()
-
-
-def _llm_finish_reason(result: dict[str, Any]) -> str | None:
-    """Why the model stopped, as the proxy reports it (``length`` when cut at the limit)."""
-    choices = result.get("choices") or [{}]
-    reason = (choices[0] or {}).get("finish_reason")
-    return str(reason) if reason else None
-
-
-# What the gate says when the text checks fail on an answer the model could
-# not finish: asking for "the complete result again" would cut it again.
-CUT_OFF_REASON = (
-    "Output cut off at the model's length limit, so the deliverable is "
-    "incomplete; deliver fewer or smaller files, or split the task"
-)
-
-
-def _gate_reason(validation_reason: str, finish_reason: str | None) -> str:
-    return CUT_OFF_REASON if finish_reason == "length" else validation_reason
-
-
-def _llm_failure(result: dict[str, Any], model: str) -> str | None:
-    """
-    Describe why *result* carries no usable answer, or return ``None``.
-
-    The text reads ``LLM call failed: <provider> <status> <message>``.  The
-    proxy reports provider errors as ``{"provider", "status", "message"}``;
-    errors of the proxy itself (unknown model, quota) name ``llm-proxy`` and
-    the HTTP status.  A 2xx answer with empty content is a failure too, so it
-    never reaches the word-count gate as an empty deliverable.
-    """
-    if result.get("error"):
-        detail = result.get("detail")
-        detail = detail if isinstance(detail, dict) else {}
-        provider = detail.get("provider") or "llm-proxy"
-        status = detail.get("status") or result.get("status_code") or "unreachable"
-        message = detail.get("message") or detail.get("error") or result["error"]
-        return f"LLM call failed: {provider} {status} {message}"
-    if not _llm_content(result):
-        provider = result.get("provider") or "llm-proxy"
-        served = result.get("served_model") or model
-        return f"LLM call failed: {provider} 200 empty response from {served}"
-    return None
 
 
 def _execute_task(
@@ -2696,13 +2660,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 item, deliverable
             )
             if not is_valid:
+                reason = _gate_reason(validation_reason, agent.get("finish_reason"))
                 await _send_back_from_quality_gate(
-                    nats_client,
-                    item,
-                    agent,
-                    sprint,
-                    deliverable,
-                    _gate_reason(validation_reason, agent.get("finish_reason")),
+                    nats_client, item, agent, sprint, deliverable, reason
                 )
                 return
 
@@ -3520,21 +3480,6 @@ async def _review_cycle(nats_client: NATSClient) -> None:
 
     # Re-dispatch any items that just went back to todo
     await _dispatch_todo_items(nats_client)
-
-
-def _review_format_reminder(earlier_failures: int) -> str:
-    """What the review prompt adds once an answer came back without a verdict.
-
-    Sending the same prompt again after a formless answer mostly buys the same
-    answer; naming the miss is what changes it.
-    """
-    if earlier_failures <= 0:
-        return ""
-    return (
-        f"\n\nYour previous {'answer' if earlier_failures == 1 else 'answers'} to this "
-        "review could not be used because the first word was not 'APPROVED:' or "
-        "'NEEDS WORK:'. Begin with one of those two, then the review."
-    )
 
 
 def _call_llm_for_review(
