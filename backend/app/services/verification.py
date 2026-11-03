@@ -4,7 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import risk
+from services import mcp_tools, risk
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -315,6 +315,7 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
     result = risk.classify(
         [*written, *declared, *extract_claimed_paths(claims)], claims.get("risk")
     )
+    result = risk.raise_for_tool_calls(result, (evidence or {}).get("tool_calls"))
     observation = result["tier"]
     if result["reasons"]:
         observation += " — " + "; ".join(result["reasons"])
@@ -324,6 +325,24 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
         "observation": observation,
         "tier": result["tier"],
         "reasons": result["reasons"],
+    }
+
+
+def check_tools_used(evidence: dict) -> dict:
+    """
+    The MCP tool calls the backend made for the producer (``mcp_tools``).
+
+    A record, not a verdict: the outcome is always ``pass``. Each call in
+    ``evidence["tool_calls"]`` names the server and tool, its arguments,
+    whether it erred and the sha256 of what came back; the producer's account
+    of what the tools told it stays in its claims.
+    """
+    calls = [c for c in evidence.get("tool_calls") or [] if isinstance(c, dict)]
+    return {
+        "name": "tools_used",
+        "outcome": "pass",
+        "observation": mcp_tools.summarize(calls),
+        "calls": calls,
     }
 
 
@@ -354,6 +373,8 @@ def verify_agent_run(
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))
+    if evidence and "tool_calls" in evidence:
+        checks.append(check_tools_used(evidence))
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(

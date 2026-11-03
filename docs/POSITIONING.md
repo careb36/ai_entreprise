@@ -297,3 +297,28 @@ work takes. Roles return as an **organisation**: who does what, under which
 procedure, talking to whom. They do not return as a claim that personas add
 capability. Whether that organisation helps is measurable in the same table
 and under the same verification as everything else.
+
+### Amendment (2026-11-03): tools through MCP
+
+The thesis says the systems that work are an agent with good tool access and
+a feedback loop against reality. The tool access now exists: a company's
+Manager configures MCP servers, and the task worker lets a producer call
+their tools before it delivers. The rules above decide how:
+
+- **The backend makes the call, so the call is an observation.** Which tool,
+  with which arguments, whether it erred, how long it took and the sha256 of
+  what came back are recorded by the loop (`services/mcp_tools.py`) on the
+  Verifier's evidence, never on the claims. What the model says it learned
+  from the result stays a claim (rule 1).
+- **A tool that may change the world is not routine.** A tool its server does
+  not mark read-only raises the delivery's risk tier to at least medium, so
+  autonomy decides less for it (the same reasoning as the risk tier on paths).
+- **The loop is bounded.** A fixed number of rounds, then one request without
+  tools: a task always ends in a deliverable the Verifier can judge, and a
+  server that cannot be reached is named and left out rather than retried.
+- **Secrets stay in the backend.** Stored encrypted, listed by name only, and
+  masked out of the results the model is shown.
+- Nothing here is a persona: a tool is offered to whichever role the Manager
+  allows, and whether tools help is measurable in the same tables as the
+  rest (tasks with and without tool calls, by the board's numbers) — the
+  next step, not this one.

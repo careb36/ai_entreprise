@@ -44,6 +44,7 @@ from models.company import (
     User,
 )
 from models.github import GitHubRepoBinding
+from models.mcp import McpServer
 from models.procedure import Procedure
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
@@ -120,6 +121,7 @@ SQLModel.metadata.create_all(
         BugReport.__table__,
         AgentMessage.__table__,
         Procedure.__table__,
+        McpServer.__table__,
     ],
 )
 

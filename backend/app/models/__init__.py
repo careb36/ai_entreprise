@@ -21,6 +21,7 @@ from .company import (
     User,
 )
 from .github import GitHubRepoBinding
+from .mcp import McpServer
 from .procedure import Procedure
 from .runtime import AssistantRuntimeState
 from .sprint import BacklogItem, OutboxEvent, Sprint
@@ -39,6 +40,7 @@ __all__ = [
     "Company",
     "CompanyMember",
     "GitHubRepoBinding",
+    "McpServer",
     "OutboxEvent",
     "Procedure",
     "ProjectCredential",

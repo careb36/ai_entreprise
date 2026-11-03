@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     REVIEWER_AGENT_INTERVAL_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
+    # MCP tools (``services/mcp_tools.py``): how many rounds of tool calls a
+    # task may make before the model must answer, how long one call and one
+    # connection may take, and how much of a result the model is shown.
+    MCP_MAX_TOOL_ROUNDS: int = 6
+    MCP_TOOL_TIMEOUT_SECONDS: float = 60.0
+    MCP_CONNECT_TIMEOUT_SECONDS: float = 20.0
+    MCP_RESULT_MAX_CHARS: int = 4000
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True

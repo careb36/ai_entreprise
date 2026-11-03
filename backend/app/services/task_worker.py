@@ -48,6 +48,7 @@ from llm.model_factory import default_model_for_role
 from services import (
     agent_run_service,
     console_assistants,
+    mcp_tools,
     procedures,
     risk,
     scrum_master,
@@ -112,7 +113,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
-from services.workspace_daemon import record_test_run
+from services.workspace_daemon import detect_test_command, record_test_run
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -571,14 +572,39 @@ def _execute_task(
         model,
     )
 
-    result = client.chat(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        model=model,
-        role=role,
-    )
+    def record(llm_result: dict[str, Any], preview: str) -> None:
+        if company_id is not None:
+            record_agent_turn(
+                company_id=company_id,
+                sprint_id=sprint_id,
+                backlog_item_id=item.get("id"),
+                agent={**agent, "model": llm_result.get("served_model") or model},
+                action=ACTION_EXECUTE_TASK,
+                llm_result=llm_result,
+                result_preview=preview,
+            )
+
+    # The company's MCP servers for this role, if any: the model may call
+    # their tools before answering, each call recorded as an observation.
+    toolbox = mcp_tools.Toolbox.load(company_id, role, engine=engine)
+    try:
+        result, tool_calls = mcp_tools.chat_with_tools(
+            client,
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            model,
+            role,
+            toolbox,
+            on_round=lambda r, calls: record(
+                r, "tool calls: " + mcp_tools.summarize(calls)
+            ),
+        )
+    finally:
+        if toolbox is not None:
+            toolbox.close()
+    agent["tool_calls"] = tool_calls
 
     failure = _llm_failure(result, model)
     if failure:
@@ -587,17 +613,7 @@ def _execute_task(
     content = _llm_content(result)
     agent["served_model"] = result.get("served_model") or None
     agent["finish_reason"] = _llm_finish_reason(result)
-
-    if company_id is not None:
-        record_agent_turn(
-            company_id=company_id,
-            sprint_id=sprint_id,
-            backlog_item_id=item.get("id"),
-            agent={**agent, "model": agent["served_model"] or model},
-            action=ACTION_EXECUTE_TASK,
-            llm_result=result,
-            result_preview=content,
-        )
+    record(result, content)
     return content
 
 
@@ -1855,6 +1871,10 @@ def _record_task_run(
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
     )
+    # The MCP tool calls the backend made for the producer are observations
+    # too; they go with the daemon's report, never with the claims.
+    if agent.get("tool_calls"):
+        evidence = {**(evidence or {}), "tool_calls": agent["tool_calls"]}
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)
@@ -1884,53 +1904,8 @@ def _delivery_comment(
     return f"Delivery unconfirmed: {observation}{run_note}"
 
 
-_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
-
-
-def _detect_test_command(workspace_root: str) -> str | None:
-    """
-    The command that runs this project's tests, or ``None``.
-
-    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
-    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
-    folder with ``test_*.py`` files means ``python -m pytest``.
-    """
-    if settings.DELIVERY_TEST_COMMAND.strip():
-        return settings.DELIVERY_TEST_COMMAND.strip()
-    root = os.path.abspath(workspace_root)
-    package_json = os.path.join(root, "package.json")
-    if os.path.isfile(package_json):
-        try:
-            with open(package_json, encoding="utf-8") as fh:
-                script = (json.load(fh).get("scripts") or {}).get("test")
-        except (OSError, ValueError, AttributeError):
-            script = None
-        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
-            return "npm test --silent"
-    for name, marker in (
-        ("pytest.ini", None),
-        ("pyproject.toml", "[tool.pytest"),
-        ("setup.cfg", "[tool:pytest"),
-    ):
-        path = os.path.join(root, name)
-        if not os.path.isfile(path):
-            continue
-        if marker is None:
-            return "python -m pytest -q"
-        try:
-            with open(path, encoding="utf-8") as fh:
-                if marker in fh.read():
-                    return "python -m pytest -q"
-        except OSError:
-            continue
-    tests_dir = os.path.join(root, "tests")
-    if os.path.isdir(tests_dir) and any(
-        name.startswith("test_") and name.endswith(".py")
-        for _dir, _subdirs, names in os.walk(tests_dir)
-        for name in names
-    ):
-        return "python -m pytest -q"
-    return None
+# The project's test command is detected in services/workspace_daemon.
+_detect_test_command = detect_test_command
 
 
 async def _detect_project_test_command(

@@ -9,11 +9,14 @@ through as opaque strings: the backend never resolves them locally.
 """
 
 import contextlib
+import json
 import os
 import tempfile
 from collections.abc import Iterator
 from pathlib import PurePosixPath
 from typing import Any
+
+from config import settings
 
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
@@ -209,3 +212,52 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
         "ref": command,
         "conclusion": conclusion,
     }
+
+
+_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+
+
+def detect_test_command(workspace_root: str) -> str | None:
+    """
+    The command that runs this project's tests, or ``None``.
+
+    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
+    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
+    folder with ``test_*.py`` files means ``python -m pytest``.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    root = os.path.abspath(workspace_root)
+    package_json = os.path.join(root, "package.json")
+    if os.path.isfile(package_json):
+        try:
+            with open(package_json, encoding="utf-8") as fh:
+                script = (json.load(fh).get("scripts") or {}).get("test")
+        except (OSError, ValueError, AttributeError):
+            script = None
+        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
+            return "npm test --silent"
+    for name, marker in (
+        ("pytest.ini", None),
+        ("pyproject.toml", "[tool.pytest"),
+        ("setup.cfg", "[tool:pytest"),
+    ):
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        if marker is None:
+            return "python -m pytest -q"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if marker in fh.read():
+                    return "python -m pytest -q"
+        except OSError:
+            continue
+    tests_dir = os.path.join(root, "tests")
+    if os.path.isdir(tests_dir) and any(
+        name.startswith("test_") and name.endswith(".py")
+        for _dir, _subdirs, names in os.walk(tests_dir)
+        for name in names
+    ):
+        return "python -m pytest -q"
+    return None

@@ -38,10 +38,14 @@ def _json_body(response: Any) -> dict[str, Any] | None:
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110")) + 10
 
 
-def _payload(messages: list, model: str, max_tokens: int | None) -> dict[str, Any]:
+def _payload(
+    messages: list, model: str, max_tokens: int | None, tools: list | None = None
+) -> dict[str, Any]:
     payload: dict[str, Any] = {"messages": messages, "model": model}
     if max_tokens:
         payload["max_tokens"] = int(max_tokens)
+    if tools:
+        payload["tools"] = tools
     return payload
 
 
@@ -85,17 +89,20 @@ class LLMProxyClient:
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
 
         ``max_tokens`` caps the answer; without it the provider's own limit
-        applies. Only a request that never reached the proxy is retried: an
-        error the proxy answered has already cost its upstream call (and the
-        proxy's own fallbacks), so sending it again would bill it again.
+        applies. ``tools`` is the OpenAI ``tools`` list; the answer may then
+        carry ``tool_calls`` in its message instead of content. Only a request
+        that never reached the proxy is retried: an error the proxy answered
+        has already cost its upstream call (and the proxy's own fallbacks), so
+        sending it again would bill it again.
         """
         headers = self._get_headers(role, bu_id)
-        payload = _payload(messages, model, max_tokens or self.max_tokens)
+        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -149,12 +156,13 @@ class LLMProxyClient:
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Async variant of ``chat()`` used by LangGraph async nodes.
         """
         headers = self._get_headers(role, bu_id)
-        payload = _payload(messages, model, max_tokens or self.max_tokens)
+        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
             try:
