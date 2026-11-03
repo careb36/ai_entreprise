@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from llm_proxy_client import LLMProxyClient
+
+# A plan is a JSON list of a handful of tasks; this covers the largest scope.
+PLAN_MAX_TOKENS = 4096
 from logging_config import logger
 
 # ---------------------------------------------------------------------------
@@ -563,6 +566,7 @@ def plan_foundation_sprint(
 
     logger.info(f"PO planning foundation sprint with model={po_model}")
 
+    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -656,7 +660,8 @@ def plan_execution_sprint(
 
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
-    client.timeout = 12
+    # The client's default wait covers the proxy's budget: a 12 s one threw
+    # away a plan the provider had already billed. One attempt, no retries.
     client.max_retries = 0
 
     prompt = _EXECUTION_PROMPT.format(
@@ -679,6 +684,7 @@ def plan_execution_sprint(
         normalized_scope,
     )
 
+    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -767,7 +773,8 @@ def plan_self_improvement_sprint(
 
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
-    client.timeout = 12
+    # The client's default wait covers the proxy's budget: a 12 s one threw
+    # away a plan the provider had already billed. One attempt, no retries.
     client.max_retries = 0
 
     prompt = _SELF_IMPROVEMENT_PROMPT.format(
@@ -790,6 +797,7 @@ def plan_self_improvement_sprint(
         normalized_scope,
     )
 
+    client.max_tokens = PLAN_MAX_TOKENS
     try:
         result = client.chat(
             messages=[{"role": "user", "content": prompt}],

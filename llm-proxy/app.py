@@ -516,7 +516,12 @@ def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
         if m["role"] != "system"
     ]
     system = next((m["content"] for m in messages if m["role"] == "system"), None)
-    payload = {"contents": contents, "generationConfig": {"temperature": data.get("temperature", 0.7)}}
+    generation: dict = {"temperature": data.get("temperature", 0.7)}
+    if data.get("max_tokens"):
+        # The OpenAI-compatible providers read max_tokens from the body as is;
+        # Gemini wants it here, or the answer runs to the model's own limit.
+        generation["maxOutputTokens"] = int(data["max_tokens"])
+    payload = {"contents": contents, "generationConfig": generation}
     if system:
         payload["system_instruction"] = {"parts": [{"text": system}]}
     status, res = _post_upstream(
@@ -532,7 +537,15 @@ def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
     except (KeyError, IndexError, TypeError):
         reason = (res.get("promptFeedback") or {}).get("blockReason") or "no candidates"
         raise UpstreamError("gemini", model, status, f"response had no text ({reason})", retriable=False)
-    result = {"choices": [{"message": {"role": "assistant", "content": text_out}}], "model": model}
+    # The same finish_reason the OpenAI-compatible answers carry, so a caller
+    # can tell an answer cut at the limit ("length") from a complete one.
+    finish = {"MAX_TOKENS": "length", "STOP": "stop"}.get(
+        str(res["candidates"][0].get("finishReason") or "").upper(), "other"
+    )
+    result = {
+        "choices": [{"message": {"role": "assistant", "content": text_out}, "finish_reason": finish}],
+        "model": model,
+    }
     reported = reported_count((res.get("usageMetadata") or {}).get("totalTokenCount"))
     return with_usage(result, reported, messages, text_out)
 
