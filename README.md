@@ -43,10 +43,10 @@ evidence in its description.
 |---|---|---|
 | **Trust** | The agent says "done, tests pass" and someone has to believe it | Each run gets a verdict, `verified`, `refuted` or `unverifiable`, computed from files, hashes and exit codes, never by a model |
 | **Review** | Reviewers get a wall of generated text | A **Files changed** view like a pull request: line numbers, line comments, Approve or Request changes |
-| **Git** | Generated files land in your working copy | One branch per task, one commit per delivery, in a separate worktree; your checkout is never touched |
+| **Git** | Generated files land in your working copy | With **Git branch per task** on: one branch per task, one commit per delivery, in a separate worktree, and your checkout is never touched |
 | **Hand-off** | Copy, paste, open the pull request by hand | **Publish as pull request**: the branch is pushed with your own credentials and a draft PR (GitHub) or MR (GitLab) opens with the evidence |
 | **Learning** | The same mistakes, sprint after sprint | Retrospectives propose procedures; the numbers keep them or revert them |
-| **Control** | All or nothing | Autonomy levels, a review inbox, and risk tiers that always stop authentication, secrets, payments and CI changes for a person |
+| **Control** | All or nothing | Autonomy levels, a review inbox, and risk tiers: a delivery whose file paths mark authentication, secrets, payments or the CI pipeline always waits for a person |
 | **Audit** | Logs anyone can edit | A per-company hash chain, optionally HMAC-signed, that shows where a row was deleted, altered or reordered |
 
 ## What it does
@@ -58,14 +58,16 @@ project's suite and records the exit status. A delivery that cannot be
 confirmed is sent back for rework without asking any model.
 
 **🧑‍⚖️ Puts people where they matter.** QA has to write an explicit
-`APPROVED:` before a task closes. High-risk changes wait for a Manager at every
-autonomy level. The **Review** inbox lists exactly what needs a person: blocked
+`APPROVED:` before a task closes. A delivery classified as high risk by the
+paths it writes (authentication, secrets, payments, the CI pipeline) waits for
+a Manager at every autonomy level. The **Review** inbox lists exactly what needs a person: blocked
 tasks, procedure proposals, outside runs nobody has decided on.
 
-**🌿 Works like GitHub and GitLab.** Branch per task, commit per delivery,
-diffs observed on disk, comments on lines, reviews that send work back with
-the comments as feedback. One click publishes the branch as a draft pull
-request or merge request; publishing again updates the open one, and a branch
+**🌿 Works like GitHub and GitLab.** Diffs observed on disk, comments on
+lines, reviews that send work back with the comments as feedback. Turn on
+**Git branch per task** and each task gets its own branch and each delivery a
+commit, in a worktree apart from your checkout. One click publishes the branch
+as a draft pull request or merge request; publishing again updates the open one, and a branch
 that has moved past the run's commit is refused.
 
 **🏭 Runs a company of agents.** PO, Architect, ScrumMaster, Developer, QA,
@@ -101,7 +103,7 @@ flowchart LR
 1. **Plan** a sprint with S, M or L scope. Each task becomes an assignment on a durable queue.
 2. **Produce.** The assigned agent writes the task. The daemon writes it on your machine, as a commit on `fabrique/task-<id>` when the company works on Git branches.
 3. **Verify.** Deterministic checks decide `verified`, `refuted` or `unverifiable`, and set the risk tier.
-4. **Review.** QA and, when it matters, a person review the diff the daemon observed.
+4. **Review.** QA reviews a digest of the files written. When it matters, a person reviews the diff the daemon observed, in **Files changed**.
 5. **Ship.** Publish the branch as a pull request or merge request, with the evidence in the description.
 6. **Learn.** The sprint closes, the retrospective runs and procedures are measured.
 
@@ -115,10 +117,15 @@ flowchart LR
 ## Quick start
 
 ```bash
-cp .env.example .env          # fill in the database passwords, JWT_SECRET_KEY and one model provider key
+cp .env.example .env          # database passwords, JWT_SECRET_KEY, QWEN_API_KEY, DEEPSEEK_API_KEY
 docker compose up -d          # backend :8000 · frontend :5173 · LLM proxy :5100
 ./scripts/start-daemon.sh     # on the computer that holds your projects (.\scripts\start-daemon.ps1 on Windows)
 ```
+
+The default team runs on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
+and DeepSeek (Developer, QA), so it needs both keys. Each agent's model can be
+changed on the **Agents** page, and `NEMOTRON_ROLES` moves roles to NVIDIA
+Nemotron on Nebius (see [Model Providers](#model-providers-nebius--nvidia-nemotron)).
 
 Open `http://localhost:5173`, create a company, point it at a project folder and
 plan your first sprint. Try it without API keys: `scripts/seed_demo_evidence.py`

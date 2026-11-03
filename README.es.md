@@ -44,10 +44,10 @@ GitLab, con la evidencia en la descripción.
 |---|---|---|
 | **Confianza** | El agente dice "listo, los tests pasan" y alguien tiene que creerle | Cada ejecución recibe un veredicto, `verified`, `refuted` o `unverifiable`, calculado a partir de archivos, hashes y códigos de salida; nunca lo decide un modelo |
 | **Revisión** | Quien revisa recibe una pared de texto generado | Una vista de **Archivos modificados** como la de una pull request: números de línea, comentarios por línea, Aprobar o Pedir cambios |
-| **Git** | Los archivos generados caen en tu copia de trabajo | Una rama por tarea y un commit por entrega, en un worktree aparte; tu checkout nunca se toca |
+| **Git** | Los archivos generados caen en tu copia de trabajo | Con **Rama de Git por tarea** activada: una rama por tarea y un commit por entrega, en un worktree aparte, sin tocar nunca tu checkout |
 | **Entrega** | Copiar, pegar y abrir la pull request a mano | **Publicar como pull request**: la rama se sube con tus propias credenciales y se abre una PR (GitHub) o MR (GitLab) en borrador con la evidencia |
 | **Aprendizaje** | Los mismos errores, sprint tras sprint | Las retrospectivas proponen procedimientos y los números deciden si se quedan o se revierten |
-| **Control** | Todo o nada | Niveles de autonomía, una bandeja de revisión y niveles de riesgo que siempre frenan para una persona los cambios de autenticación, secretos, pagos y CI |
+| **Control** | Todo o nada | Niveles de autonomía, una bandeja de revisión y niveles de riesgo: una entrega cuyas rutas de archivo marcan autenticación, secretos, pagos o el pipeline de CI siempre espera a una persona |
 | **Auditoría** | Logs que cualquiera puede editar | Una cadena de hashes por empresa, con firma HMAC opcional, que muestra dónde se borró, alteró o reordenó una fila |
 
 ## Qué hace
@@ -60,14 +60,16 @@ Una entrega que no se puede confirmar vuelve a rehacerse sin consultar a
 ningún modelo.
 
 **🧑‍⚖️ Pone a las personas donde importan.** QA tiene que escribir un
-`APPROVED:` explícito para cerrar una tarea. Los cambios de alto riesgo esperan
-a un Manager en cualquier nivel de autonomía. La bandeja de **Revisión** lista
+`APPROVED:` explícito para cerrar una tarea. Una entrega que se clasifica como
+de alto riesgo por las rutas que escribe (autenticación, secretos, pagos, el
+pipeline de CI) espera a un Manager en cualquier nivel de autonomía. La bandeja de **Revisión** lista
 exactamente lo que necesita a una persona: tareas bloqueadas, propuestas de
 procedimiento y ejecuciones externas que nadie decidió todavía.
 
-**🌿 Trabaja como GitHub y GitLab.** Rama por tarea, commit por entrega, diffs
-observados en disco, comentarios por línea y revisiones que devuelven el
-trabajo con los comentarios como feedback. Con un clic, la rama se publica
+**🌿 Trabaja como GitHub y GitLab.** Diffs observados en disco, comentarios
+por línea y revisiones que devuelven el trabajo con los comentarios como
+feedback. Con **Rama de Git por tarea** activada, cada tarea tiene su rama y
+cada entrega es un commit, en un worktree aparte de tu checkout. Con un clic, la rama se publica
 como pull request o merge request en borrador. Si ya hay una abierta, se
 actualiza su descripción; si la rama avanzó más allá del commit de la
 ejecución, la publicación se rechaza.
@@ -106,7 +108,7 @@ flowchart LR
 1. **Planificación.** Se arma un sprint de alcance S, M o L y cada tarea entra en una cola durable.
 2. **Producción.** El agente asignado escribe la tarea. El daemon la escribe en tu máquina, como un commit en `fabrique/task-<id>` cuando la empresa trabaja con ramas de Git.
 3. **Verificación.** Controles deterministas deciden `verified`, `refuted` o `unverifiable` y fijan el nivel de riesgo.
-4. **Revisión.** QA y, cuando corresponde, una persona revisan el diff que observó el daemon.
+4. **Revisión.** QA revisa un extracto de los archivos escritos. Cuando corresponde, una persona revisa en **Archivos modificados** el diff que observó el daemon.
 5. **Entrega.** La rama se publica como pull request o merge request, con la evidencia en la descripción.
 6. **Aprendizaje.** El sprint se cierra, corre la retrospectiva y se miden los procedimientos.
 
@@ -120,10 +122,15 @@ flowchart LR
 ## Inicio rápido
 
 ```bash
-cp .env.example .env          # completá las contraseñas de las bases, JWT_SECRET_KEY y la clave de un proveedor de modelos
+cp .env.example .env          # contraseñas de las bases, JWT_SECRET_KEY, QWEN_API_KEY y DEEPSEEK_API_KEY
 docker compose up -d          # backend :8000 · frontend :5173 · proxy de LLM :5100
 ./scripts/start-daemon.sh     # en la computadora donde están tus proyectos (.\scripts\start-daemon.ps1 en Windows)
 ```
+
+El equipo por defecto usa Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
+y DeepSeek (Developer, QA), así que necesita las dos claves. El modelo de cada
+agente se cambia en la página **Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
+Nemotron en Nebius (ver *Model Providers* en el [README en inglés](README.md#model-providers-nebius--nvidia-nemotron)).
 
 Abrí `http://localhost:5173`, creá una empresa, apuntala a la carpeta de un
 proyecto y planificá tu primer sprint. Para probarla sin claves de API,
