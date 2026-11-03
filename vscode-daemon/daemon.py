@@ -5,7 +5,8 @@ Runs natively on the developer's machine (macOS, Linux or Windows) — the one
 where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
-- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk)
+- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
+                          and the diff against what was there, file_diff.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
@@ -35,6 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
+import file_diff
 import nats
 import nats_scope
 import shell_exec
@@ -71,31 +73,6 @@ QUEUE_GROUP = "workspace-daemon"
 # backend declares the same streams (backend/app/nats_client.py); nats_scope
 # applies NATS_NAMESPACE to both so two stacks on one broker stay apart.
 
-
-def compute_prompt_hash(prompt: str) -> str:
-    """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
-    return hashlib.sha256(prompt.encode()).hexdigest()
-
-
-def create_commit_message(
-    interaction_id: str,
-    agent_id: str,
-    prompt_hash: str,
-    decision_signature: Optional[str] = None,
-) -> str:
-    """
-    Build a structured git commit message that embeds governance metadata.
-
-    The ``interaction_id`` and ``prompt_hash`` fields allow full traceability
-    from a git commit back to the originating API call and decision record.
-    """
-    sig = decision_signature or "placeholder_signature"
-    return f"""feat: AI generated code
-
-interaction_id: {interaction_id}
-agent_id: {agent_id}
-prompt_hash: {prompt_hash}
-decision_signature: {sig}"""
 
 def confirm_workspace_path() -> str:
     """Ensure the default workspace root directory exists and return its path."""
@@ -169,6 +146,7 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             continue
 
         os.makedirs(target_path.parent, exist_ok=True)
+        before = file_diff.read_previous(target_path)
         with open(target_path, "w", encoding="utf-8", newline="") as f:
             f.write(content)
         on_disk = target_path.read_bytes()
@@ -178,9 +156,10 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             "absolute_path": str(target_path),
             "bytes": len(on_disk),
             "sha256": hashlib.sha256(on_disk).hexdigest(),
+            **file_diff.describe_change(requested, before, on_disk),
         })
         logger.info(f"File written: {target_path}")
-    return results
+    return file_diff.cap_reply(results)
 
 
 def deliver_files(workspace_path: str, files: list) -> Dict[str, Any]:
