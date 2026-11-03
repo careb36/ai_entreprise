@@ -27,13 +27,18 @@ from typing import Any
 
 from models import BacklogItem
 
-from services.orchestration_metrics import is_architect_consult_comment
+from services import orchestration_metrics as _metrics
+from services.orchestration_metrics import (
+    GATE_AUTHORS_LOWER,
+    is_architect_consult_comment,
+)
 
 # Who signs the text checks a deliverable passes before anyone reviews it, and
-# who signs the delivery evidence check; neither ever writes a deliverable.
-QUALITY_GATE_AUTHOR = "Quality gate"
-DELIVERY_GATE_AUTHOR = "Verifier"
-GATE_AUTHORS_LOWER = {QUALITY_GATE_AUTHOR.lower(), DELIVERY_GATE_AUTHOR.lower()}
+# who signs the delivery evidence check; neither ever writes a deliverable. The
+# names live beside the counters that must leave them out.
+QUALITY_GATE_AUTHOR = _metrics.QUALITY_GATE_AUTHOR
+DELIVERY_GATE_AUTHOR = _metrics.DELIVERY_GATE_AUTHOR
+
 # Who writes the phrases that keep a task blocked ("manual triage", "agent
 # error:"): the system, the gates and a person, never a deliverable's author.
 BLOCK_VERDICT_AUTHORS = {"system", "user"} | GATE_AUTHORS_LOWER
