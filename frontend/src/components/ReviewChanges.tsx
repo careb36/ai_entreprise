@@ -213,9 +213,6 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
         </p>
         <Source changes={changes} />
       </div>
-      {changes.git && (
-        <PublishBranch companyId={companyId} runId={runId} branch={changes.git.branch} canPublish={canComment} />
-      )}
       {declaredOnly}
       {changes.files.length > 1 && (
         <nav aria-label={t('review.fileList')} className="card p-3">
@@ -230,6 +227,10 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
         </nav>
       )}
       <LineReviewProvider companyId={companyId} runId={runId} canComment={canComment}>
+        {changes.git && (
+          <PublishBranch companyId={companyId} runId={runId} branch={changes.git.branch} canPublish={canComment}
+            shownPaths={changes.files.map(file => file.path)} />
+        )}
         {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
       </LineReviewProvider>
       {changes.files_not_shown > 0 && (

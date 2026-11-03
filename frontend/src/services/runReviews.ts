@@ -22,6 +22,20 @@ export interface ReviewComment {
   review_id: number | null
   created_at: string
   resolved_at: string | null
+  /** Brought from the pull or merge request the run was published as. */
+  source: 'github' | 'gitlab' | null
+  external_id: string | null
+  external_url: string | null
+  /** A review submitted there: `CHANGES_REQUESTED`, `APPROVED`, `COMMENTED`. */
+  external_state: string | null
+}
+
+export interface SyncResult {
+  publication_id: number
+  read: number
+  added: number
+  updated: number
+  truncated: boolean
 }
 
 export interface RunReview {
@@ -75,6 +89,9 @@ export const reviewsApi = {
   /** A push and the platform's CLI on the person's machine: sent once, never retried, waited on past the backend's 150 s. */
   publish: (companyId: number, runId: number) =>
     fetchApi<RunPublication>(`/v1/agent_runs/${runId}/publish?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 180_000 }),
+  /** Reads the request's comments on the platform through the daemon: a few paginated calls. */
+  syncComments: (companyId: number, runId: number, publicationId: number) =>
+    fetchApi<SyncResult>(`/v1/agent_runs/${runId}/publications/${publicationId}/sync?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 240_000 }),
 }
 
 const commentsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'comments'] as const
@@ -128,5 +145,14 @@ export function usePublishRun(companyId: number, runId: number) {
   return useMutation({
     mutationFn: () => reviewsApi.publish(companyId, runId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: publicationsKey(companyId, runId) }),
+  })
+}
+
+/** Bring the comments people left on the pull or merge request to the run (Managers). */
+export function useSyncComments(companyId: number, runId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (publicationId: number) => reviewsApi.syncComments(companyId, runId, publicationId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: commentsKey(companyId, runId) }),
   })
 }

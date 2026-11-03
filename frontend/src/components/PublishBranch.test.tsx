@@ -3,14 +3,24 @@ import i18n from 'i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PublishBranch } from './PublishBranch'
 import { ApiError } from '../services/api'
-import { type RunPublication, usePublishRun, useRunPublications } from '../services/runReviews'
+import { type ReviewComment, type RunPublication, usePublishRun, useReviewComments, useRunPublications, useSyncComments } from '../services/runReviews'
 
 vi.mock('../services/runReviews', () => ({
   usePublishRun: vi.fn(),
   useRunPublications: vi.fn(),
+  useReviewComments: vi.fn(),
+  useSyncComments: vi.fn(),
+  useResolveReviewComment: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 
 const publish = vi.fn()
+const sync = vi.fn()
+
+const FROM_GITHUB: ReviewComment = {
+  id: 9, agent_run_id: 7, path: null, line: null, side: 'new', body: 'Needs tests.', author_name: 'ana',
+  review_id: null, created_at: '', resolved_at: null, source: 'github', external_id: 'github:review:10',
+  external_url: 'https://github.com/ana/app/pull/12#pullrequestreview-10', external_state: 'CHANGES_REQUESTED',
+}
 
 const PULL_REQUEST: RunPublication = {
   id: 1, agent_run_id: 7, provider: 'github', branch: 'fabrique/task-7', base: 'main',
@@ -18,10 +28,15 @@ const PULL_REQUEST: RunPublication = {
   published_by: 'Ana', created_at: '', updated: false,
 }
 
-function setup({ publications = [] as RunPublication[], mutation = {} as Record<string, unknown>, canPublish = true } = {}) {
+function setup({
+  publications = [] as RunPublication[], mutation = {} as Record<string, unknown>, canPublish = true,
+  comments = [] as ReviewComment[], syncState = {} as Record<string, unknown>, shownPaths = [] as string[],
+} = {}) {
   vi.mocked(useRunPublications).mockReturnValue({ data: { publications } } as never)
   vi.mocked(usePublishRun).mockReturnValue({ mutate: publish, isPending: false, isError: false, ...mutation } as never)
-  return render(<PublishBranch companyId={42} runId={7} branch="fabrique/task-7" canPublish={canPublish} />)
+  vi.mocked(useReviewComments).mockReturnValue({ data: { comments } } as never)
+  vi.mocked(useSyncComments).mockReturnValue({ mutate: sync, isPending: false, isError: false, isSuccess: false, ...syncState } as never)
+  return render(<PublishBranch companyId={42} runId={7} branch="fabrique/task-7" canPublish={canPublish} shownPaths={shownPaths} />)
 }
 
 describe('publishing a run branch', () => {
@@ -62,5 +77,28 @@ describe('publishing a run branch', () => {
   it('says why the daemon refused', () => {
     setup({ mutation: { isError: true, error: new ApiError(409, 'the repository has no origin to push to', 'the repository has no origin to push to') } })
     expect(screen.getByRole('alert')).toHaveTextContent('no origin')
+  })
+
+  it('lets a Manager bring the comments of an opened request, and says what came', () => {
+    setup({ publications: [PULL_REQUEST], syncState: { isSuccess: true, data: { added: 2, updated: 1 } } })
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('review.publish.sync') }))
+    expect(sync).toHaveBeenCalledWith(1)
+    expect(screen.getByRole('status')).toHaveTextContent(i18n.t('review.publish.synced', { added: 2, updated: 1 }))
+  })
+
+  it('offers no comments to bring for a compare page, nor to a Viewer', () => {
+    setup({ publications: [{ ...PULL_REQUEST, how: 'compare' }] })
+    expect(screen.queryByRole('button', { name: i18n.t('review.publish.sync') })).not.toBeInTheDocument()
+    setup({ publications: [PULL_REQUEST], canPublish: false })
+    expect(screen.queryByRole('button', { name: i18n.t('review.publish.sync') })).not.toBeInTheDocument()
+  })
+
+  it('shows the comments from the request that are on no line shown, linked to the platform', () => {
+    const onShownLine = { ...FROM_GITHUB, id: 10, path: 'a.py', line: 3, body: 'On a line.' }
+    setup({ publications: [PULL_REQUEST], comments: [FROM_GITHUB, onShownLine], shownPaths: ['a.py'] })
+    expect(screen.getByText('Needs tests.')).toBeInTheDocument()
+    expect(screen.queryByText('On a line.')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: i18n.t('review.comment.on.github') })).toHaveAttribute('href', FROM_GITHUB.external_url)
+    expect(screen.getByText(i18n.t('review.comment.state.CHANGES_REQUESTED'))).toBeInTheDocument()
   })
 })

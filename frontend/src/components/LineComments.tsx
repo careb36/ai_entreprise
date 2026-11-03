@@ -6,7 +6,7 @@
  */
 import { createContext, useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import type { PatchRow } from '../lib/patch'
 import {
@@ -56,6 +56,23 @@ export function useFileComments(path: string): { canComment: boolean; byLine: Ma
   return { canComment: review?.canComment ?? false, byLine }
 }
 
+/** Where a comment was written, when it was not here: a link to it on its platform. */
+function PlatformBadge({ comment }: { comment: ReviewComment }) {
+  const { t } = useTranslation()
+  const label = t(`review.comment.on.${comment.source}`)
+  return (
+    <span className="flex items-center gap-1">
+      {comment.external_url ? (
+        <a href={comment.external_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-brand-300 hover:underline">
+          {label}
+          <ExternalLink size={11} aria-hidden="true" />
+        </a>
+      ) : label}
+      {comment.external_state && <span className="badge bg-gray-800 text-gray-300">{t(`review.comment.state.${comment.external_state}`, { defaultValue: comment.external_state })}</span>}
+    </span>
+  )
+}
+
 export function CommentThread({ comments }: { comments: ReviewComment[] }) {
   const { t } = useTranslation()
   const review = useContext(LineReviewContext)
@@ -66,6 +83,7 @@ export function CommentThread({ comments }: { comments: ReviewComment[] }) {
         <li key={comment.id} className={`rounded border border-surface-700 bg-surface-800 p-2 font-sans text-sm ${comment.resolved_at ? 'opacity-60' : ''}`}>
           <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
             <span className="font-semibold text-gray-200">{comment.author_name}</span>
+            {comment.source && <PlatformBadge comment={comment} />}
             {comment.review_id !== null && <span>{t('review.comment.inReview', { id: comment.review_id })}</span>}
             {comment.review_id === null && !comment.resolved_at && <span className="text-amber-300">{t('review.comment.pending')}</span>}
             {comment.resolved_at && <span>{t('review.comment.resolved')}</span>}

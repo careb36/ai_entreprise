@@ -1602,7 +1602,17 @@
       "resolved": "Resolved",
       "resolve": "Resolve",
       "inReview": "In review #{{id}}",
-      "elsewhere": "Comments on lines this diff does not show"
+      "elsewhere": "Comments on lines this diff does not show",
+      "on": {
+        "github": "on GitHub",
+        "gitlab": "on GitLab"
+      },
+      "state": {
+        "CHANGES_REQUESTED": "Changes requested",
+        "APPROVED": "Approved",
+        "COMMENTED": "Commented",
+        "DISMISSED": "Dismissed"
+      }
     },
     "panel": {
       "title": "Review",
@@ -1644,7 +1654,10 @@
         "compare": "Open the request"
       },
       "noUrl": "Pushed; this remote has no web page to open a request",
-      "updated": "description updated with this run"
+      "updated": "description updated with this run",
+      "sync": "Bring comments",
+      "synced": "{{added}} new, {{updated}} updated",
+      "fromPlatform": "Comments from the request that are not on a line shown here"
     }
   }
 }

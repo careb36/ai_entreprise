@@ -15,6 +15,7 @@ vi.mock('../services/runReviews', () => ({
   useResolveReviewComment: vi.fn(() => ({ mutate: resolveComment, isPending: false })),
   useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
   usePublishRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  useSyncComments: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false })),
 }))
 
 const refetch = vi.fn()
@@ -128,6 +129,7 @@ describe('files changed', () => {
     const comment: ReviewComment = {
       id: 5, agent_run_id: 7, path: 'src/app.py', line: 2, side: 'new', body: 'Name it better.',
       author_name: 'Ana', review_id: null, created_at: '2026-11-03T10:00:00Z', resolved_at: null,
+      source: null, external_id: null, external_url: null, external_state: null,
     }
     vi.mocked(useReviewComments).mockReturnValue({ data: { comments: [comment] } } as never)
     render(<ReviewChanges companyId={42} runId={7} canComment />)
