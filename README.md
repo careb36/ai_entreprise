@@ -361,6 +361,10 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
 
 When a task runs, the model sees the tools as `<server>__<tool>` and may call them for at most `MCP_MAX_TOOL_ROUNDS` rounds before it must deliver. Every call is **an observation the backend made** — server, tool, arguments, whether it erred, duration, sha256 of the result — recorded on the run's evidence and shown by the Verifier as `tools_used`, apart from what the model claims it learned. A tool its server does not mark read-only raises the delivery's risk tier, so an approved task that used one waits for a person at the same points a sensitive file would.
 
+### Working on Git branches
+
+With **Git branch per task** on (Board tab, a Manager; `PUT /v1/companies/{id}/git`), the agents work on a Git repository the way people do on GitHub and GitLab: a delivery never lands in your checkout. Each task gets its own branch, `fabrique/task-<id>`, started from the base you name (`git_base_branch`) or from the commit your repository has checked out; every delivery is one commit on it, authored *La Fabrique* with `Fabrique-Task:` and `Fabrique-Sprint:` trailers, written in a worktree under the repository's git directory (`.git/fabrique-worktrees/`). Your working tree, index and branch are never touched. The commit, its parent and the branch are what git said, kept on the run's evidence; the tests the daemon runs after a delivery run in that worktree; the run's **Files changed** name the branch and the commit. To try a task's work, `git checkout fabrique/task-<id>` (or open the worktree); merging it is your call.
+
 ### Reviewing a run like a pull request
 
 Every run page has a **Files changed** tab laid out the way GitHub and GitLab show a pull request: the files with their additions and deletions, then each file's hunks with the old and new line numbers, a **Viewed** box that folds a file, and long files shown in part until you ask for the rest. The changes are an observation, never the agent's account of them:

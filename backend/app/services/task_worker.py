@@ -48,6 +48,7 @@ from llm.model_factory import default_model_for_role
 from services import (
     agent_run_service,
     console_assistants,
+    git_workflow,
     mcp_tools,
     procedures,
     retrospective,
@@ -1873,14 +1874,9 @@ async def _detect_project_test_command(
 async def _run_delivery_tests(
     nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
 ) -> None:
-    """
-    Run the project's tests through the daemon and add the result to *evidence*.
-
-    ``test_run`` keeps the command, exit code and output tail; ``ci`` restates
-    the conclusion in the shape ``check_claimed_tests_evidenced`` reads, so an
-    agent's "tests pass" is judged against this run.  The exit status comes
-    from the daemon, never from the agent.
-    """
+    """Run the project's tests through the daemon and add the result to *evidence*:
+    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
+    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
     workspace_root = evidence["workspace_root"]
     command = await _detect_project_test_command(nats_client, workspace_root)
     if not command:
@@ -1912,13 +1908,10 @@ def _plan_queued_delivery(
     targets: list[dict[str, str]],
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    The ``workspace.deliver`` job that keeps the files for an offline daemon.
+    """The ``workspace.deliver`` job that keeps the files for an offline daemon.
 
-    Marks *evidence* as waiting for the job, so the recorded verification makes
-    the delivery gate hold the task.  The job is published only after that
-    record exists: a daemon that is just connecting can report back within
-    milliseconds, and its report must find the run waiting for it.
+    Marks *evidence* as waiting for it, so the delivery gate holds the task; the
+    job is published only once that record exists, for a daemon reporting at once.
     """
     job_id = str(uuid4())
     evidence["delivery_queued"] = {"job_id": job_id}
@@ -2033,6 +2026,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         evidence["reason"] = data.get("error") or (
             "the workspace daemon sent no per-file results"
         )
+    git_workflow.record_reply(evidence, data)
     evidence["delivered_after_queue"] = True
 
     written, _ = evaluate_workspace_writes(files, evidence)
@@ -2090,6 +2084,9 @@ async def _deliver_artifacts(
         workspace_root = await asyncio.to_thread(
             _resolve_workspace_root, sprint["company_id"]
         )
+        git_spec = await asyncio.to_thread(
+            git_workflow.delivery_spec, engine, sprint, item
+        )
         evidence = {
             "workspace_root": workspace_root,
             "expected": {t["path"]: _sha256_text(t["content"]) for t in targets},
@@ -2106,6 +2103,7 @@ async def _deliver_artifacts(
                         "files": targets,
                         "interaction_id": f"task-{item['id']}",
                         "sprint_id": sprint["id"],
+                        **({"git": git_spec} if git_spec else {}),
                     },
                     timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
                 )
@@ -2115,6 +2113,7 @@ async def _deliver_artifacts(
                 )
                 if evidence["workspace_writes"] is None:
                     evidence["reason"] = "the workspace daemon sent no per-file results"
+                git_workflow.record_reply(evidence, reply)
             except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
                 evidence["reason"] = (
                     f"the workspace daemon did not reply ({type(e).__name__})"
@@ -2125,7 +2124,7 @@ async def _deliver_artifacts(
                 if nats_client.jetstream_enabled:
                     queued_job = _plan_queued_delivery(
                         item, sprint, workspace_root, targets, evidence
-                    )
+                    ) | ({"git": git_spec} if git_spec else {})
 
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":

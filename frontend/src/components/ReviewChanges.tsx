@@ -154,7 +154,18 @@ function FileCard({ file }: { file: FileChange }) {
 function Source({ changes }: { changes: RunChanges }) {
   const { t } = useTranslation()
   if (changes.source === 'workspace') {
-    return <p className="text-xs text-gray-500">{t('review.sourceWorkspace', { id: changes.observed_by?.verification_id ?? '' })}</p>
+    return (
+      <div className="text-right text-xs text-gray-500">
+        <p>{t('review.sourceWorkspace', { id: changes.observed_by?.verification_id ?? '' })}</p>
+        {changes.git && (
+          <p className="font-mono" data-testid="git-branch">
+            {changes.git.commit
+              ? t('review.gitCommit', { branch: changes.git.branch, commit: changes.git.commit.slice(0, 7), parent: changes.git.parent.slice(0, 7) })
+              : t('review.gitNoCommit', { branch: changes.git.branch })}
+          </p>
+        )}
+      </div>
+    )
   }
   if (changes.source === 'artifact') {
     return <p className="text-xs text-amber-300">{t('review.sourceArtifact')}</p>

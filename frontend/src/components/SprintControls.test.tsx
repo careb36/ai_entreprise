@@ -26,6 +26,7 @@ describe('sprint work controls', () => {
     useAppStore.setState({ companyId: 1 })
     asRole('Manager')
     vi.spyOn(workControlApi, 'getAutonomy').mockResolvedValue({ company_id: 1, autonomy_level: 2 })
+    vi.spyOn(workControlApi, 'getGit').mockResolvedValue({ company_id: 1, git_workflow: false, git_base_branch: null })
   })
   afterEach(() => {
     queryClient.clear()
@@ -83,6 +84,15 @@ describe('sprint work controls', () => {
     asRole('Viewer')
     wrap(<SprintControls sprint={sprint} />)
     expect(await screen.findByRole('combobox')).toBeDisabled()
+  })
+
+  it('lets a Manager put each task on its own Git branch', async () => {
+    const set = vi.spyOn(workControlApi, 'setGit').mockResolvedValue({ company_id: 1, git_workflow: true, git_base_branch: null })
+    wrap(<SprintControls sprint={sprint} />)
+    const toggle = await screen.findByRole('checkbox', { name: 'Git branch per task' })
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(set).toHaveBeenCalledWith(1, { git_workflow: true, git_base_branch: null }))
   })
 
   it('in the wizard, level 1 never starts on its own', () => {

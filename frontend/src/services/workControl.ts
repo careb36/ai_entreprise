@@ -21,6 +21,15 @@ export const workControlApi = {
     api.put<{ company_id: number; autonomy_level: number }>(`/v1/companies/${companyId}/autonomy`, {
       autonomy_level: autonomyLevel,
     }),
+  getGit: (companyId: number) => api.get<GitWorkflow>(`/v1/companies/${companyId}/git`),
+  setGit: (companyId: number, git: Omit<GitWorkflow, 'company_id'>) => api.put<GitWorkflow>(`/v1/companies/${companyId}/git`, git),
+}
+
+/** Each task's deliveries as commits on its own branch, never in the person's checkout. */
+export interface GitWorkflow {
+  company_id: number
+  git_workflow: boolean
+  git_base_branch: string | null
 }
 
 const autonomyKey = (companyId: number) => ['company', companyId, 'autonomy'] as const
@@ -51,5 +60,23 @@ export function useSetAutonomy(companyId: number) {
   return useMutation({
     mutationFn: (level: number) => workControlApi.setAutonomy(companyId, level),
     onSuccess: data => queryClient.setQueryData(autonomyKey(companyId), data),
+  })
+}
+
+const gitKey = (companyId: number) => ['company', companyId, 'git'] as const
+
+export function useGitWorkflow(companyId: number | null | undefined) {
+  return useQuery({
+    queryKey: gitKey(companyId ?? 0),
+    queryFn: () => workControlApi.getGit(companyId as number),
+    enabled: Boolean(companyId),
+  })
+}
+
+export function useSetGitWorkflow(companyId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (git: Omit<GitWorkflow, 'company_id'>) => workControlApi.setGit(companyId, git),
+    onSuccess: data => queryClient.setQueryData(gitKey(companyId), data),
   })
 }

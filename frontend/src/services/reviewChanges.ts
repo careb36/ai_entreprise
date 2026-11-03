@@ -29,6 +29,8 @@ export interface RunChanges {
   /** `artifact`: a diff the producer sent, with no observation of a disk. */
   source: 'workspace' | 'pull_request' | 'artifact' | null
   observed_by: { verification_id: number; observed_at: string } | null
+  /** With the Git workflow: the branch and commit the delivery landed on, as the daemon's git said. */
+  git?: { branch: string; base: string; commit: string | null; parent: string; worktree: string; repository: string } | null
   reason: string | null
   files: FileChange[]
   files_not_shown: number

@@ -1549,7 +1549,9 @@
     },
     "startNow": "Iniciar el Sprint 0 apenas se cree la compañía",
     "startNowHint": "Dejalo sin marcar para revisar el plan primero e iniciarlo desde la página del sprint.",
-    "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos."
+    "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos.",
+    "git": "Rama de Git por tarea",
+    "gitHint": "Las entregas de cada tarea son commits en su propia rama, fabrique/task-<id>, en un worktree: tu checkout, tu índice y tu rama nunca se tocan."
   },
   "review": {
     "tabs": {
@@ -1627,6 +1629,8 @@
       "sent_back": "La tarea volvió al trabajo con los comentarios.",
       "accepted": "La entrega quedó aceptada y la tarea, terminada.",
       "approval_recorded": "La decisión quedó registrada en el run."
-    }
+    },
+    "gitCommit": "En la rama {{branch}}, commit {{commit}} (sobre {{parent}})",
+    "gitNoCommit": "En la rama {{branch}}: sin commit nuevo, no cambió nada"
   }
 }
