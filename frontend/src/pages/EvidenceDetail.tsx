@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -14,6 +14,8 @@ import {
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { Verdict } from '../components/Verdict'
+import { ReviewChanges } from '../components/ReviewChanges'
+import { useRunChanges } from '../services/reviewChanges'
 import { parseRouteId } from '../lib/routeId'
 import { taskOfRun } from '../lib/taskEvidence'
 
@@ -49,6 +51,9 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   const [feedback, setFeedback] = useState('')
   const [category, setCategory] = useState('')
   const [formError, setFormError] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') === 'files' ? 'files' : 'overview'
+  const changedFiles = useRunChanges(companyId, runId).data?.totals.files
 
   const verifications = verificationsQuery.data?.verifications ?? []
   const latestVerification = verifications[verifications.length - 1]
@@ -112,6 +117,18 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
         </div>
       </header>
 
+      <div role="tablist" aria-label={t('review.tabs.label')} className="flex gap-1 border-b border-surface-700">
+        {RUN_TABS.map(name => (
+          <button key={name} type="button" role="tab" aria-selected={tab === name}
+            onClick={() => setSearchParams(name === 'files' ? { tab: 'files' } : {}, { replace: true })}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === name ? 'border-brand-400 text-white' : 'border-transparent text-gray-400 hover:text-gray-200'}`}>
+            {t(`review.tabs.${name}`)}
+            {name === 'files' && changedFiles !== undefined && <span className="ml-1.5 rounded-full bg-surface-700 px-1.5 text-xs">{changedFiles}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'files' ? <ReviewChanges companyId={companyId} runId={runId} /> : <>
       <section aria-labelledby="claim-observation-title">
         <h2 id="claim-observation-title" className="mb-3 text-lg font-semibold text-white">{t('evidence.claimVsObservation')}</h2>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -322,12 +339,15 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
             ? ` · ${t('evidence.latestVerificationAuditId')}: ${latestVerification.audit_log_id}` : ''}
         </p>
       </section>
+      </>}
     </div>
   )
 }
 
 
 const REJECTION_CATEGORIES = ['scope', 'quality', 'security', 'other'] as const
+/** The run page's tabs: the evidence, and the files changed as a code review shows them. */
+const RUN_TABS = ['overview', 'files'] as const
 const SIGNATURE_STATUSES = ['valid', 'invalid', 'unsigned', 'legacy'] as const
 
 export default function EvidenceDetail() {

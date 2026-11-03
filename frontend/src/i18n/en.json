@@ -1550,5 +1550,47 @@
     "startNow": "Start Sprint 0 as soon as the company is created",
     "startNowHint": "Leave it unchecked to review the plan first and start it from the sprint page.",
     "startNowHumanLed": "At level 1 you always start it yourself."
+  },
+  "review": {
+    "tabs": {
+      "overview": "Overview",
+      "files": "Files changed",
+      "label": "Run sections"
+    },
+    "loading": "Loading the files changed",
+    "loadError": "Could not load the files this run changed.",
+    "summary_one": "{{count}} file changed",
+    "summary_other": "{{count}} files changed",
+    "sourceWorkspace": "Observed by the workspace daemon when it wrote the files (verification #{{id}}): the bytes before and after, never the agent's account.",
+    "sourcePullRequest": "The pull request's diff, as GitHub returned it.",
+    "sourceArtifact": "The diff the producer sent as its artifact: what it proposes, not a change observed on a disk.",
+    "nothingObserved": "No change was observed for this run.",
+    "declaredNotObserved": "Declared by the producer, but no observation covers it: {{files}}",
+    "fileList": "Files in this review",
+    "filesNotShown_one": "{{count}} more file is not shown.",
+    "filesNotShown_other": "{{count}} more files are not shown.",
+    "viewed": "Viewed",
+    "expand": "Show the file's changes",
+    "collapse": "Hide the file's changes",
+    "showAllLines_one": "Show all {{count}} line",
+    "showAllLines_other": "Show all {{count}} lines",
+    "unchanged": "No change: the file already had these exact bytes.",
+    "notWritten": "Not written ({{status}}).",
+    "noHunks": "No line changed.",
+    "omitted": {
+      "binary": "Binary file: no diff shown.",
+      "too_large": "The file is too large to show its diff.",
+      "reply_size": "The diff was left out to keep the daemon's reply within its size limit; the counts are still the daemon's.",
+      "not_recorded": "Delivered before the daemon reported diffs: the file was written, but what changed was not recorded."
+    },
+    "change": {
+      "added": "Added",
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "unchanged": "Unchanged",
+      "not_written": "Not written",
+      "unknown": "Written"
+    }
   }
 }

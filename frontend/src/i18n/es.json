@@ -1550,5 +1550,47 @@
     "startNow": "Iniciar el Sprint 0 apenas se cree la compañía",
     "startNowHint": "Dejalo sin marcar para revisar el plan primero e iniciarlo desde la página del sprint.",
     "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos."
+  },
+  "review": {
+    "tabs": {
+      "overview": "Resumen",
+      "files": "Archivos modificados",
+      "label": "Secciones de la corrida"
+    },
+    "loading": "Cargando los archivos modificados",
+    "loadError": "No se pudieron cargar los archivos que cambió esta corrida.",
+    "summary_one": "{{count}} archivo modificado",
+    "summary_other": "{{count}} archivos modificados",
+    "sourceWorkspace": "Observado por el daemon del workspace al escribir los archivos (verificación #{{id}}): los bytes de antes y de después, nunca lo que cuenta el agente.",
+    "sourcePullRequest": "El diff del pull request, tal como lo devolvió GitHub.",
+    "sourceArtifact": "El diff que el productor mandó como artefacto: lo que propone, no un cambio observado en un disco.",
+    "nothingObserved": "No se observó ningún cambio en esta corrida.",
+    "declaredNotObserved": "Declarado por el productor, pero ninguna observación lo cubre: {{files}}",
+    "fileList": "Archivos de esta revisión",
+    "filesNotShown_one": "No se muestra {{count}} archivo más.",
+    "filesNotShown_other": "No se muestran {{count}} archivos más.",
+    "viewed": "Visto",
+    "expand": "Mostrar los cambios del archivo",
+    "collapse": "Ocultar los cambios del archivo",
+    "showAllLines_one": "Mostrar la {{count}} línea",
+    "showAllLines_other": "Mostrar las {{count}} líneas",
+    "unchanged": "Sin cambios: el archivo ya tenía exactamente estos bytes.",
+    "notWritten": "No se escribió ({{status}}).",
+    "noHunks": "No cambió ninguna línea.",
+    "omitted": {
+      "binary": "Archivo binario: no se muestra el diff.",
+      "too_large": "El archivo es demasiado grande para mostrar su diff.",
+      "reply_size": "El diff quedó afuera para que la respuesta del daemon no pase su límite de tamaño; los conteos son igualmente del daemon.",
+      "not_recorded": "Entregado antes de que el daemon informara diffs: el archivo se escribió, pero no quedó registrado qué cambió."
+    },
+    "change": {
+      "added": "Agregado",
+      "modified": "Modificado",
+      "deleted": "Eliminado",
+      "renamed": "Renombrado",
+      "unchanged": "Sin cambios",
+      "not_written": "No escrito",
+      "unknown": "Escrito"
+    }
   }
 }

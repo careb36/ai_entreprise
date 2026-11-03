@@ -13,6 +13,11 @@ import {
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { ApiError } from '../services/api'
+import { useRunChanges } from '../services/reviewChanges'
+
+vi.mock('../services/reviewChanges', () => ({
+  useRunChanges: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+}))
 
 vi.mock('../hooks/useQueries', () => ({
   useAgentRun: vi.fn(),
@@ -254,6 +259,28 @@ describe('Evidence detail', () => {
     setup()
     expect(screen.queryByRole('link', { name: 'Encrypt credentials' })).not.toBeInTheDocument()
     expect(document.querySelector('a[href^="/sprints/"]')).toBeNull()
+  })
+
+  it('opens the files changed as a tab with their count, and back to the overview', () => {
+    vi.mocked(useRunChanges).mockReturnValue({
+      data: {
+        run_id: 7, source: 'workspace', observed_by: { verification_id: 3, observed_at: '' }, reason: null,
+        files: [{ path: 'backend/app/crypto.py', old_path: null, change: 'added', additions: 2, deletions: 0, patch: '@@ -0,0 +1,2 @@\n+a\n+b', omitted: null }],
+        files_not_shown: 0, totals: { files: 1, additions: 2, deletions: 0 }, declared_not_observed: [],
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    setup()
+    const filesTab = screen.getByRole('tab', { name: `${i18n.t('review.tabs.files')}1` })
+    expect(screen.getByRole('tab', { name: i18n.t('review.tabs.overview') })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(filesTab)
+    expect(screen.getByRole('article', { name: 'backend/app/crypto.py' })).toBeInTheDocument()
+    expect(screen.queryByText(i18n.t('evidence.claimVsObservation'))).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: i18n.t('review.tabs.overview') }))
+    expect(screen.getByText(i18n.t('evidence.claimVsObservation'))).toBeInTheDocument()
   })
 
   it('submits the exact rejection body when feedback is provided', () => {
