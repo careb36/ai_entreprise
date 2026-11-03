@@ -1549,7 +1549,9 @@
     },
     "startNow": "Start Sprint 0 as soon as the company is created",
     "startNowHint": "Leave it unchecked to review the plan first and start it from the sprint page.",
-    "startNowHumanLed": "At level 1 you always start it yourself."
+    "startNowHumanLed": "At level 1 you always start it yourself.",
+    "git": "Git branch per task",
+    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched."
   },
   "review": {
     "tabs": {
@@ -1627,6 +1629,8 @@
       "sent_back": "The task went back to work with the comments.",
       "accepted": "The delivery was accepted and the task is done.",
       "approval_recorded": "The decision was recorded on the run."
-    }
+    },
+    "gitCommit": "On branch {{branch}}, commit {{commit}} (on top of {{parent}})",
+    "gitNoCommit": "On branch {{branch}}: no new commit, nothing changed"
   }
 }

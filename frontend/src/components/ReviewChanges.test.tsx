@@ -103,6 +103,12 @@ describe('files changed', () => {
     expect(screen.getByRole('note')).toHaveTextContent('app.py')
   })
 
+  it('names the branch and the commit a delivery landed on', () => {
+    answer({ data: changes({ git: { branch: 'fabrique/task-41', base: '', commit: 'abc1234def', parent: '9876543210', worktree: '/r/.git/fabrique-worktrees/x', repository: '/r' } }) })
+    render(<ReviewChanges companyId={42} runId={7} />)
+    expect(screen.getByTestId('git-branch')).toHaveTextContent(i18n.t('review.gitCommit', { branch: 'fabrique/task-41', commit: 'abc1234', parent: '9876543' }))
+  })
+
   it('names the pull request as the source of its diff', () => {
     answer({ data: changes({ source: 'pull_request', observed_by: null }) })
     render(<ReviewChanges companyId={42} runId={7} />)
