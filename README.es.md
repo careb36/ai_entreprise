@@ -11,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/typescript-%23007acc?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
 
-**Una capa de verificación y evidencia para código generado por IA**
+### Pruebas, no promesas, para cada línea de código que escribe un agente de IA
 
 > **Idiomas:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
@@ -19,76 +19,147 @@
 
 ---
 
-## Acerca de
+Los agentes de IA escriben código más rápido de lo que cualquier equipo puede
+leerlo. La velocidad ya no es el cuello de botella. Lo que falta es una
+respuesta confiable a una sola pregunta:
 
-La Fabrique responde una sola pregunta sobre el trabajo que produjo un agente:
+> **¿El agente hizo de verdad lo que dice que hizo?**
 
-> ¿De verdad hizo lo que dice que hizo?
+La Fabrique la responde con evidencia. Cada entrega de un agente se contrasta
+con lo que hay realmente en disco, con lo que devolvieron los tests y con lo
+que informó el CI. Lo que el agente cuenta de su propio trabajo se guarda
+aparte y nunca cuenta como prueba. Después, el trabajo le llega a tu equipo
+como tu equipo ya trabaja: una rama, un diff y una pull request en GitHub o
+GitLab, con la evidencia en la descripción.
 
-El código generado es abundante y barato. Lo escaso es una respuesta confiable a
-esa pregunta, y un registro de evidencia que resista una auditoría. La Fabrique
-ingiere el trabajo del agente, lo contrasta de forma determinista contra lo que
-hay en disco y lo que reporta CI, y guarda el resultado como evidencia —
-separado de lo que el agente afirma.
+<div align="center">
 
-Los agentes son intercambiables y no son el producto. Cualquier productor puede
-alimentar la capa: los roles de LangGraph incluidos (PO, Architect, ScrumMaster,
-Developer, QA, SecOps, TechWriter), un agente de código externo, o una persona.
-Lo que la capa aporta es lo mismo en todos los casos.
+![Vista de evidencia: ejecuciones con su veredicto, verificado, refutado e inverificable](docs/img/evidence-overview.png)
 
-**Qué registra:**
+</div>
 
-- **Afirmaciones y observaciones nunca comparten campo.** "El agente afirmó X;
-  nosotros observamos Y" es justamente el punto, y fusionarlos lo destruye.
-- **Tres veredictos, no dos.** `verified`, `refuted` y `unverifiable`.
-  `unverifiable` es un resultado real: la respuesta honesta sobre trabajo de
-  agentes de terceros casi siempre es esa, y un sistema que no puede decirlo
-  miente para seguir siendo útil.
-- **Ningún modelo decide si una afirmación se sostiene.** La verificación es
-  determinista: ficheros en disco, códigos de salida, check-runs de CI. Un
-  modelo puede resumir una refutación para una persona después; nunca la
-  adjudica.
-- **La refutación es estructural.** El camino que hace fallar una corrida se
-  construye primero; ver `backend/app/services/verification.py`.
+## Por qué La Fabrique
 
-El trabajo se organiza en **AI Sprints** — unidades de alcance acotado y
-verificable, no de duración fija. Alrededor de la capa de evidencia, la
-plataforma aporta RBAC y alcance por `company_id`, presupuestos de tokens por
-empresa en un único punto de control, un log de auditoría de solo agregado, y
-nodos Engram de Neo4j para el linaje de cada decisión.
+| | Sin La Fabrique | Con La Fabrique |
+|---|---|---|
+| **Confianza** | El agente dice "listo, los tests pasan" y alguien tiene que creerle | Cada ejecución recibe un veredicto, `verified`, `refuted` o `unverifiable`, calculado a partir de archivos, hashes y códigos de salida; nunca lo decide un modelo |
+| **Revisión** | Quien revisa recibe una pared de texto generado | Una vista de **Archivos modificados** como la de una pull request: números de línea, comentarios por línea, Aprobar o Pedir cambios |
+| **Git** | Los archivos generados caen en tu copia de trabajo | Con **Rama de Git por tarea** activada: una rama por tarea y un commit por entrega, en un worktree aparte, sin tocar nunca tu checkout |
+| **Entrega** | Copiar, pegar y abrir la pull request a mano | **Publicar como pull request**: la rama se sube con tus propias credenciales y se abre una PR (GitHub) o MR (GitLab) en borrador con la evidencia |
+| **Aprendizaje** | Los mismos errores, sprint tras sprint | Las retrospectivas proponen procedimientos y los números deciden si se quedan o se revierten |
+| **Control** | Todo o nada | Niveles de autonomía, una bandeja de revisión y niveles de riesgo: una entrega cuyas rutas de archivo marcan autenticación, secretos, pagos o el pipeline de CI siempre espera a una persona |
+| **Auditoría** | Logs que cualquiera puede editar | Una cadena de hashes por empresa, con firma HMAC opcional, que muestra dónde se borró, alteró o reordenó una fila |
 
-> **Por qué esa postura.** El razonamiento, la historia que la motiva y las
-> reglas de diseño que restringen el trabajo nuevo están en
-> [`docs/POSITIONING.md`](docs/POSITIONING.md).
+## Qué hace
 
-> **¿No eres desarrollador o usuario técnico?** Lee la [**Guía de Negocio para Managers**](USER_GUIDE.es.md) para entender cómo usar La Fabrique para automatizar la ingeniería de tu empresa.
+**🔍 Verifica cada entrega.** El daemon del workspace escribe los archivos del
+agente y los vuelve a leer. Lo que decide si un archivo existe es el sha256
+que informa el daemon, no la palabra del agente. Con los tests de entrega
+activados, también corre la suite del proyecto y registra el código de salida.
+Una entrega que no se puede confirmar vuelve a rehacerse sin consultar a
+ningún modelo.
+
+**🧑‍⚖️ Pone a las personas donde importan.** QA tiene que escribir un
+`APPROVED:` explícito para cerrar una tarea. Una entrega que se clasifica como
+de alto riesgo por las rutas que escribe (autenticación, secretos, pagos, el
+pipeline de CI) espera a un Manager en cualquier nivel de autonomía. La bandeja de **Revisión** lista
+exactamente lo que necesita a una persona: tareas bloqueadas, propuestas de
+procedimiento y ejecuciones externas que nadie decidió todavía.
+
+**🌿 Trabaja como GitHub y GitLab.** Diffs observados en disco, comentarios
+por línea y revisiones que devuelven el trabajo con los comentarios como
+feedback. Con **Rama de Git por tarea** activada, cada tarea tiene su rama y
+cada entrega es un commit, en un worktree aparte de tu checkout. Con un clic, la rama se publica
+como pull request o merge request en borrador. Si ya hay una abierta, se
+actualiza su descripción; si la rama avanzó más allá del commit de la
+ejecución, la publicación se rechaza.
+
+**🏭 Gestiona una empresa de agentes.** PO, Architect, ScrumMaster, Developer,
+QA, SecOps y TechWriter se pasan el trabajo y cada traspaso queda registrado
+como mensaje. El ScrumMaster analiza cada tarea bloqueada y decide entre otro
+intento, con una indicación para hacerlo, o dejarla en manos de una persona.
+Todos los roles pueden usar las herramientas MCP que conectes.
+
+**📈 Aprende, y se puede medir.** Cada sprint cerrado produce una
+retrospectiva. El ScrumMaster propone procedimientos en un formato fijo y, dos
+sprints después, cada uno se mantiene o se revierte según el retrabajo por
+tarea y la proporción de tareas bloqueadas. La página de Sprints responde con
+números, no con adjetivos, si la empresa está aprendiendo.
+
+**🔐 Preparada para auditorías.** Cada tabla está acotada por empresa y por rol
+(Owner, Manager, Viewer). Las afirmaciones y las observaciones viven en campos
+separados. Los presupuestos de tokens se controlan en un único proxy. El log
+de auditoría es una cadena de hashes por empresa.
+
+## Cómo funciona
+
+```mermaid
+flowchart LR
+    A[Backlog] --> B[El agente escribe la tarea]
+    B --> C[El daemon escribe los archivos<br/>en tu máquina]
+    C --> D{Verificador<br/>sha256 · tests · riesgo}
+    D -- refutada / sin confirmar --> B
+    D -- verificada --> E[Revisión de QA]
+    E -- NEEDS WORK --> B
+    E -- APPROVED --> F[Archivos modificados<br/>comentarios · revisión]
+    F --> G[PR / MR en borrador<br/>con la evidencia]
+```
+
+1. **Planificación.** Se arma un sprint de alcance S, M o L y cada tarea entra en una cola durable.
+2. **Producción.** El agente asignado escribe la tarea. El daemon la escribe en tu máquina, como un commit en `fabrique/task-<id>` cuando la empresa trabaja con ramas de Git.
+3. **Verificación.** Controles deterministas deciden `verified`, `refuted` o `unverifiable` y fijan el nivel de riesgo.
+4. **Revisión.** QA revisa un extracto de los archivos escritos. Cuando corresponde, una persona revisa en **Archivos modificados** el diff que observó el daemon.
+5. **Entrega.** La rama se publica como pull request o merge request, con la evidencia en la descripción.
+6. **Aprendizaje.** El sprint se cierra, corre la retrospectiva y se miden los procedimientos.
+
+## Calidad comprobable
+
+- Unos 900 tests de backend y 430 de frontend corren en cada pull request, sin necesidad de servicios externos.
+- Una prueba de punta a punta en el CI lleva una empresa entera por tres sprints contra PostgreSQL y NATS JetStream reales; al final, un verificador independiente rechaza cualquier historial de tarea ilegal.
+- Un límite de tamaño por archivo, un linter con versión fija y una regla de i18n que rompe el build ante texto sin traducir mantienen el código en orden a medida que crece.
+- La interfaz es completamente bilingüe, en inglés y en español.
+
+## Inicio rápido
+
+```bash
+cp .env.example .env          # contraseñas de las bases, JWT_SECRET_KEY, QWEN_API_KEY y DEEPSEEK_API_KEY
+docker compose up -d          # backend :8000 · frontend :5173 · proxy de LLM :5100
+./scripts/start-daemon.sh     # en la computadora donde están tus proyectos (.\scripts\start-daemon.ps1 en Windows)
+```
+
+El equipo por defecto usa Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
+y DeepSeek (Developer, QA), así que necesita las dos claves. El modelo de cada
+agente se cambia en la página **Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
+Nemotron en Nebius (ver *Model Providers* en el [README en inglés](README.md#model-providers-nebius--nvidia-nemotron)).
+
+Abrí `http://localhost:5173`, creá una empresa, apuntala a la carpeta de un
+proyecto y planificá tu primer sprint. Para probarla sin claves de API,
+`scripts/seed_demo_evidence.py` carga una ejecución por veredicto.
+
+> **¿No sos del área técnica?** La [**Guía de Negocio para Managers**](USER_GUIDE.es.md) explica La Fabrique sin código.
+>
+> **Por qué está construida así:** el razonamiento y las reglas de diseño están en [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 ## Capturas de pantalla
 
-La página de evidencia es donde empieza cualquier revisión: cada ejecución llega
-con uno de tres veredictos, producidos de forma determinista — nunca por un
-modelo — y distinguibles de un vistazo.
+![Una ejecución refutada: la afirmación del agente a un lado, las observaciones independientes al otro y el veredicto que se desprende de ellas](docs/img/evidence-detail.png)
 
-![Vista general de evidencia: tres ejecuciones, una por veredicto — verificado, refutado e inverificable — con los filtros de veredicto arriba](docs/img/evidence-overview.png)
+![Bandeja de revisión: lo que la empresa necesita de una persona](docs/img/governance.png)
 
-![Una ejecución refutada: la afirmación del agente a un lado, las observaciones independientes al otro, y el veredicto que se desprende de ellas](docs/img/evidence-detail.png)
+![Tablero del sprint: columnas del backlog por estado](docs/img/sprint-board.png)
 
-Un sprint es un tablero Kanban, una Glassroom en vivo y un panel de analítica:
+![Lista de sprints: retrabajo y proporción de bloqueadas por sprint, la tendencia de aprendizaje](docs/img/sprints-list.png)
 
-![Tablero de sprint: columnas por estado — pendiente, en curso, en revisión, hecho, bloqueado](docs/img/sprint-board.png)
-
-![Glassroom en vivo: la vista en tres columnas con el roster de agentes y el flujo de mensajes](docs/img/sprint-live.png)
-
-![Analítica del sprint: los KPIs que una empresa lee al cerrar un sprint](docs/img/sprint-analytics.png)
-
-Estas capturas muestran una demo sembrada (una ejecución por veredicto, sin
-claves de API). Para reproducirlas, ejecuta `scripts/seed_demo_evidence.py`
-contra un stack en marcha y abre `/evidence`.
+![Glassroom en vivo: los agentes y el flujo de mensajes en tiempo real](docs/img/sprint-live.png)
 
 ---
 
 ## Índice
 
+- [Por qué La Fabrique](#por-qué-la-fabrique)
+- [Qué hace](#qué-hace)
+- [Cómo funciona](#cómo-funciona)
+- [Inicio rápido](#inicio-rápido)
 - [Descripción General](#descripción-general)
 - [Arquitectura](#arquitectura)
 - [Stack Tecnológico](#stack-tecnológico)
@@ -102,6 +173,9 @@ contra un stack en marcha y abre `/evidence`.
 - [Pruebas](#pruebas)
 - [Contribuir](#contribuir)
 - [Seguridad](#seguridad)
+- [Uso responsable](#uso-responsable)
+- [Hoja de ruta](#hoja-de-ruta)
+- [Documentación](#documentación)
 - [Licencia](#licencia)
 
 ---
