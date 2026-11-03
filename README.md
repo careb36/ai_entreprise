@@ -361,6 +361,16 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
 
 When a task runs, the model sees the tools as `<server>__<tool>` and may call them for at most `MCP_MAX_TOOL_ROUNDS` rounds before it must deliver. Every call is **an observation the backend made** — server, tool, arguments, whether it erred, duration, sha256 of the result — recorded on the run's evidence and shown by the Verifier as `tools_used`, apart from what the model claims it learned. A tool its server does not mark read-only raises the delivery's risk tier, so an approved task that used one waits for a person at the same points a sensitive file would.
 
+### Reviewing a run like a pull request
+
+Every run page has a **Files changed** tab laid out the way GitHub and GitLab show a pull request: the files with their additions and deletions, then each file's hunks with the old and new line numbers, a **Viewed** box that folds a file, and long files shown in part until you ask for the rest. The changes are an observation, never the agent's account of them:
+
+- for a task the agents delivered, the workspace daemon reads each file just before writing it and reads it back after, and reports the diff between those bytes (`vscode-daemon/file_diff.py`) beside the sha256 it already reported; a binary or oversized file is listed with its counts and no diff;
+- for a pull request ingested from GitHub, the diff GitHub returned for it;
+- for a producer that sent a diff as its artifact and nothing was observed on a disk, that diff, labelled as what the producer proposes.
+
+What the producer declared but no observation covers is listed apart, so a review sees the gap instead of a claim shown as a change. `GET /v1/agent_runs/{id}/changes` returns the same files to any client.
+
 [⬆ Back to Top](#la-fabrique)
 
 ---

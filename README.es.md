@@ -336,6 +336,16 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
 
 Cuando corre una tarea, el modelo ve las herramientas como `<servidor>__<herramienta>` y puede llamarlas durante como mucho `MCP_MAX_TOOL_ROUNDS` rondas antes de entregar. Cada llamada es **una observación que hizo el backend** — servidor, herramienta, argumentos, si falló, duración, sha256 del resultado — registrada en la evidencia del run y mostrada por el Verifier como `tools_used`, aparte de lo que el modelo afirma haber aprendido. Una herramienta que su servidor no marca como de solo lectura sube el nivel de riesgo de la entrega, así que una tarea aprobada que la usó espera a una persona en los mismos puntos que lo haría un archivo sensible.
 
+### Revisar un run como un pull request
+
+Cada página de run tiene una pestaña **Archivos modificados** armada como GitHub y GitLab muestran un pull request: los archivos con sus líneas agregadas y quitadas, y después los fragmentos de cada archivo con el número de línea viejo y el nuevo, una casilla **Visto** que pliega un archivo, y los archivos largos mostrados en parte hasta que pedís el resto. Los cambios son una observación, nunca el relato del agente:
+
+- en una tarea que entregaron los agentes, el daemon del workspace lee cada archivo justo antes de escribirlo y lo vuelve a leer después, e informa el diff entre esos bytes (`vscode-daemon/file_diff.py`) junto al sha256 que ya informaba; un archivo binario o demasiado grande aparece con sus conteos y sin diff;
+- en un pull request ingerido desde GitHub, el diff que devolvió GitHub;
+- en un productor que mandó un diff como artefacto sin que se observara nada en un disco, ese diff, rotulado como lo que el productor propone.
+
+Lo que el productor declaró pero ninguna observación cubre aparece aparte, así la revisión ve el hueco en vez de una afirmación mostrada como cambio. `GET /v1/agent_runs/{id}/changes` devuelve los mismos archivos a cualquier cliente.
+
 [⬆ Volver al inicio](#la-fabrique)
 
 ---
