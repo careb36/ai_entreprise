@@ -10,11 +10,13 @@ import {
   useAgentRunVerifications,
   useApproveAgentRun,
   useAuditVerification,
+  useCurrentRole,
   useVerifyAgentRun,
 } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { Verdict } from '../components/Verdict'
 import { ReviewChanges } from '../components/ReviewChanges'
+import { ReviewPanel } from '../components/ReviewPanel'
 import { useRunChanges } from '../services/reviewChanges'
 import { parseRouteId } from '../lib/routeId'
 import { taskOfRun } from '../lib/taskEvidence'
@@ -54,6 +56,8 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'files' ? 'files' : 'overview'
   const changedFiles = useRunChanges(companyId, runId).data?.totals.files
+  const role = useCurrentRole()
+  const canReview = role === 'Owner' || role === 'Manager'
 
   const verifications = verificationsQuery.data?.verifications ?? []
   const latestVerification = verifications[verifications.length - 1]
@@ -128,7 +132,12 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
         ))}
       </div>
 
-      {tab === 'files' ? <ReviewChanges companyId={companyId} runId={runId} /> : <>
+      {tab === 'files' ? (
+        <div className="space-y-4">
+          <ReviewPanel companyId={companyId} runId={runId} canReview={canReview} />
+          <ReviewChanges companyId={companyId} runId={runId} canComment={canReview} />
+        </div>
+      ) : <>
       <section aria-labelledby="claim-observation-title">
         <h2 id="claim-observation-title" className="mb-3 text-lg font-semibold text-white">{t('evidence.claimVsObservation')}</h2>
         <div className="grid gap-4 lg:grid-cols-2">

@@ -7,10 +7,11 @@
  * from disk, or the pull request's diff); what the producer only declared is
  * listed apart, never shown as a change.
  */
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, FileDiff } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileDiff, Plus } from 'lucide-react'
 import { patchRows, type PatchRow } from '../lib/patch'
+import { CommentForm, CommentThread, LineReviewProvider, rowTarget, targetKey, useFileComments } from './LineComments'
 import { type FileChange, type RunChanges, useRunChanges } from '../services/reviewChanges'
 
 /** Past this many rows a file shows a button for the rest, as GitHub does. */
@@ -58,28 +59,64 @@ function FileNotice({ file }: { file: FileChange }) {
   return <p className="p-4 text-sm text-gray-400">{t('review.noHunks')}</p>
 }
 
-function FileDiffTable({ rows }: { rows: PatchRow[] }) {
+function FileDiffTable({ path, rows }: { path: string; rows: PatchRow[] }) {
   const { t } = useTranslation()
   const [showAll, setShowAll] = useState(false)
+  const [commenting, setCommenting] = useState<string | null>(null)
+  const { canComment, byLine } = useFileComments(path)
   const shown = showAll ? rows : rows.slice(0, ROWS_SHOWN)
+  const shownKeys = new Set(shown.map(row => rowTarget(row)).filter(target => target !== null).map(target => targetKey(target)))
+  const elsewhere = [...byLine.entries()].filter(([key]) => !shownKeys.has(key)).flatMap(([, comments]) => comments)
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse font-mono text-xs leading-5">
         <tbody>
-          {shown.map((row, index) => (
-            <tr key={index} className={ROW_STYLES[row.kind]} data-kind={row.kind}>
-              <td className="w-12 select-none border-r border-surface-700 px-2 text-right text-gray-500">{row.oldLine ?? ''}</td>
-              <td className="w-12 select-none border-r border-surface-700 px-2 text-right text-gray-500">{row.newLine ?? ''}</td>
-              <td className="w-4 select-none pl-2 text-gray-500">{MARKERS[row.kind]}</td>
-              <td className="whitespace-pre pr-4">{row.text}</td>
-            </tr>
-          ))}
+          {shown.map((row, index) => {
+            const target = rowTarget(row)
+            const key = target ? targetKey(target) : null
+            const thread = key ? byLine.get(key) ?? [] : []
+            return (
+              <Fragment key={index}>
+                <tr className={`group ${ROW_STYLES[row.kind]}`} data-kind={row.kind}>
+                  <td className="w-12 select-none border-r border-surface-700 px-2 text-right text-gray-500">{row.oldLine ?? ''}</td>
+                  <td className="w-12 select-none border-r border-surface-700 px-2 text-right text-gray-500">{row.newLine ?? ''}</td>
+                  <td className="relative w-4 select-none pl-2 text-gray-500">
+                    {MARKERS[row.kind]}
+                    {canComment && target && (
+                      <button type="button" onClick={() => setCommenting(key)}
+                        aria-label={t('review.comment.add', { line: target.line })}
+                        className="absolute -left-2 top-0.5 rounded bg-brand-600 text-white opacity-0 focus:opacity-100 group-hover:opacity-100">
+                        <Plus size={14} aria-hidden="true" />
+                      </button>
+                    )}
+                  </td>
+                  <td className="whitespace-pre pr-4">{row.text}</td>
+                </tr>
+                {target && (thread.length > 0 || commenting === key) && (
+                  <tr data-kind="comments">
+                    <td colSpan={4} className="space-y-2 border-y border-surface-700 bg-surface-900 p-3">
+                      {thread.length > 0 && <CommentThread comments={thread} />}
+                      {commenting === key && (
+                        <CommentForm path={path} side={target.side} line={target.line} onDone={() => setCommenting(null)} />
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+          })}
         </tbody>
       </table>
       {rows.length > shown.length && (
         <button type="button" onClick={() => setShowAll(true)} className="btn btn-ghost btn-sm m-2">
           {t('review.showAllLines', { count: rows.length })}
         </button>
+      )}
+      {elsewhere.length > 0 && (
+        <div className="space-y-2 border-t border-surface-700 p-3">
+          <p className="text-xs text-gray-400">{t('review.comment.elsewhere')}</p>
+          <CommentThread comments={elsewhere} />
+        </div>
       )}
     </div>
   )
@@ -109,7 +146,7 @@ function FileCard({ file }: { file: FileChange }) {
           {t('review.viewed')}
         </label>
       </header>
-      {expanded && (rows.length > 0 ? <FileDiffTable rows={rows} /> : <FileNotice file={file} />)}
+      {expanded && (rows.length > 0 ? <FileDiffTable path={file.path} rows={rows} /> : <FileNotice file={file} />)}
     </article>
   )
 }
@@ -125,7 +162,7 @@ function Source({ changes }: { changes: RunChanges }) {
   return <p className="text-xs text-gray-500">{t('review.sourcePullRequest')}</p>
 }
 
-export function ReviewChanges({ companyId, runId }: { companyId: number; runId: number }) {
+export function ReviewChanges({ companyId, runId, canComment = false }: { companyId: number; runId: number; canComment?: boolean }) {
   const { t } = useTranslation()
   const query = useRunChanges(companyId, runId)
   if (query.isLoading) return <div role="status" className="skeleton h-40 rounded-lg" aria-label={t('review.loading')} />
@@ -177,7 +214,9 @@ export function ReviewChanges({ companyId, runId }: { companyId: number; runId: 
           </ul>
         </nav>
       )}
-      {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
+      <LineReviewProvider companyId={companyId} runId={runId} canComment={canComment}>
+        {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
+      </LineReviewProvider>
       {changes.files_not_shown > 0 && (
         <p className="text-sm text-gray-400">{t('review.filesNotShown', { count: changes.files_not_shown })}</p>
       )}

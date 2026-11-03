@@ -371,6 +371,13 @@ Every run page has a **Files changed** tab laid out the way GitHub and GitLab sh
 
 What the producer declared but no observation covers is listed apart, so a review sees the gap instead of a claim shown as a change. `GET /v1/agent_runs/{id}/changes` returns the same files to any client.
 
+A Manager reviews the way a pull request is reviewed: hover a line and press **+** to comment on it (a deleted line is commented on its old side), **Resolve** a comment that no longer applies, then **Submit review** with *Comment*, *Approve* or *Request changes*. The review carries the open comments. What it does depends on who produced the run:
+
+- for a task the company's agents delivered, the review loop (QA, the Verifier) still decides, so a person's review acts only where the loop waits for a person: **Request changes** sends a task blocked for a person back to work, with the review and its comments, file by line, as the `NEEDS WORK:` feedback the Developer's next attempt receives; **Approve** accepts a delivery QA approved that waits for a person (a high-risk hold, or any approval at autonomy level 1); a task the agents are still working on, or whose sprint is closed, is refused with the reason;
+- for any other producer's run, the review records the approval or the rejection, with the comments as its feedback.
+
+Reviews and comments are a person's words, never evidence: they are audited, and the verdict stays the Verifier's (`/v1/agent_runs/{id}/comments`, `/v1/agent_runs/{id}/reviews`).
+
 [⬆ Back to Top](#la-fabrique)
 
 ---

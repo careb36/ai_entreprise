@@ -3,8 +3,17 @@ import i18n from 'i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReviewChanges, ROWS_SHOWN } from './ReviewChanges'
 import { type FileChange, type RunChanges, useRunChanges } from '../services/reviewChanges'
+import { type ReviewComment, useReviewComments } from '../services/runReviews'
 
 vi.mock('../services/reviewChanges', () => ({ useRunChanges: vi.fn() }))
+
+const addComment = vi.fn()
+const resolveComment = vi.fn()
+vi.mock('../services/runReviews', () => ({
+  useReviewComments: vi.fn(() => ({ data: { comments: [] } })),
+  useAddReviewComment: vi.fn(() => ({ mutate: addComment, isPending: false, isError: false })),
+  useResolveReviewComment: vi.fn(() => ({ mutate: resolveComment, isPending: false })),
+}))
 
 const refetch = vi.fn()
 
@@ -104,6 +113,34 @@ describe('files changed', () => {
     answer({ data: changes({ source: 'artifact', observed_by: null }) })
     render(<ReviewChanges companyId={42} runId={7} />)
     expect(screen.getByText(i18n.t('review.sourceArtifact'))).toBeInTheDocument()
+  })
+
+  it('lets a Manager comment on a line, and shows the thread under it', () => {
+    answer({ data: changes() })
+    const comment: ReviewComment = {
+      id: 5, agent_run_id: 7, path: 'src/app.py', line: 2, side: 'new', body: 'Name it better.',
+      author_name: 'Ana', review_id: null, created_at: '2026-11-03T10:00:00Z', resolved_at: null,
+    }
+    vi.mocked(useReviewComments).mockReturnValue({ data: { comments: [comment] } } as never)
+    render(<ReviewChanges companyId={42} runId={7} canComment />)
+
+    expect(screen.getByText('Name it better.')).toBeInTheDocument()
+    expect(screen.getByText(i18n.t('review.comment.pending'))).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('review.comment.resolve') }))
+    expect(resolveComment).toHaveBeenCalledWith(5)
+
+    // The deleted line is commented on its old side.
+    fireEvent.click(within(document.querySelector('tr[data-kind="del"]') as HTMLElement).getByRole('button', { name: i18n.t('review.comment.add', { line: 2 }) }))
+    fireEvent.change(screen.getByLabelText(i18n.t('review.comment.label', { line: 2 })), { target: { value: ' Why? ' } })
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('review.comment.submit') }))
+    expect(addComment).toHaveBeenCalledWith({ path: 'src/app.py', side: 'old', line: 2, body: 'Why?' }, expect.anything())
+  })
+
+  it('offers a Viewer no comment button', () => {
+    answer({ data: changes() })
+    vi.mocked(useReviewComments).mockReturnValue({ data: { comments: [] } } as never)
+    render(<ReviewChanges companyId={42} runId={7} />)
+    expect(screen.queryByRole('button', { name: i18n.t('review.comment.add', { line: 1 }) })).not.toBeInTheDocument()
   })
 
   it('offers a retry when the changes could not be loaded', () => {
