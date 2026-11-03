@@ -15,7 +15,30 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
     monkeypatch.setattr(settings, "PUBLIC_API_URL", None)
     monkeypatch.setattr(settings, "SUPPORT_AGENT_ENABLED", False)
-    monkeypatch.setattr(app.state, "memory_client", None, raising=False)
+
+
+@pytest.fixture
+def memory_client():
+    """Sets ``app.state.memory_client`` for a test and puts the old value back.
+
+    Not through monkeypatch: since pytest 9.2 it records an instance attribute
+    from ``__dict__``, and starlette's ``State`` keeps its values elsewhere, so
+    the undo deletes the attribute once per ``setattr`` and the second delete
+    raises ``KeyError``.
+    """
+    missing = object()
+    previous = getattr(app.state, "memory_client", missing)
+
+    def set_client(value):
+        app.state.memory_client = value
+
+    set_client(None)
+    yield set_client
+    if previous is missing:
+        if hasattr(app.state, "memory_client"):
+            del app.state.memory_client
+    else:
+        app.state.memory_client = previous
 
 
 def test_default_capabilities(test_client, default_settings):
@@ -41,11 +64,11 @@ def test_agent_graph_enabled(test_client, default_settings, monkeypatch):
     assert response.json()["agent_graph"] is True
 
 
-def test_memory_follows_memory_client(test_client, default_settings, monkeypatch):
-    monkeypatch.setattr(app.state, "memory_client", MagicMock())
+def test_memory_follows_memory_client(test_client, default_settings, memory_client):
+    memory_client(MagicMock())
     assert test_client.get("/v1/capabilities").json()["memory"] is True
 
-    monkeypatch.setattr(app.state, "memory_client", None)
+    memory_client(None)
     assert test_client.get("/v1/capabilities").json()["memory"] is False
 
 
