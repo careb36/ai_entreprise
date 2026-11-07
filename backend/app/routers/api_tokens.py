@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from services import api_tokens
 from sqlmodel import Session
 
-router = APIRouter(prefix="/v1/api-tokens", tags=["Company"])
+router = APIRouter(prefix="/v1/auth/tokens", tags=["Company"])
 
 
 class CreateTokenRequest(BaseModel):
