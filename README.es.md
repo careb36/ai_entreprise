@@ -138,8 +138,11 @@ docker compose up -d          # backend :8000 · frontend :5173 · proxy de LLM 
 ```
 
 El equipo por defecto usa Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
-y DeepSeek (Developer, QA), así que necesita las dos claves. El modelo de cada
-agente se cambia en la página **Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
+y DeepSeek (Developer, QA), así que necesita las dos claves. `AGENT_MODEL` pone
+a todo el equipo en un solo modelo (`AGENT_MODEL=deepseek-v4-pro` necesita solo
+`DEEPSEEK_API_KEY`), y `AGENT_MODEL_<ROL>` (`AGENT_MODEL_SCRUM_MASTER`, …) fija
+el de un rol. El modelo de cada agente también se cambia en la página
+**Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
 Nemotron en Nebius (ver *Model Providers* en el [README en inglés](README.md#model-providers-nebius--nvidia-nemotron)).
 
 Abrí `http://localhost:5173`, creá una empresa, apuntala a la carpeta de un

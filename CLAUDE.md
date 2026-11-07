@@ -642,7 +642,11 @@ Every LLM call goes through the proxy client (`backend/app/llm_proxy_client.py`)
 `"gemini-pro"`), a `role`, and an optional `bu_id`. There is no
 `model_preference` parameter: the `fast` / `powerful` tiers are an internal
 fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
-`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
+`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`); every caller
+reads them through `default_model_for_role` → `ModelFactory.model_for_role`,
+which applies, most specific first, `AGENT_MODEL_<ROLE>`, `NEMOTRON_ROLES`,
+`AGENT_MODEL` (one model for the whole team, e.g. DeepSeek alone), then the
+map. An agent's own `model` (the Agents page) wins over all of them.
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 
