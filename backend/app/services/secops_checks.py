@@ -20,7 +20,9 @@ from typing import Any
 CHECK_NAME = "secops"
 
 
-def _vulns(evidence: dict[str, Any] | None, key: str, field: str) -> list[dict[str, Any]]:
+def _vulns(
+    evidence: dict[str, Any] | None, key: str, field: str
+) -> list[dict[str, Any]]:
     block = (evidence or {}).get(key)
     if not isinstance(block, dict):
         return []
@@ -32,7 +34,9 @@ def check_dependencies(evidence: dict[str, Any] | None) -> dict[str, Any] | None
     if (evidence or {}).get("dependency_audit") is None:
         return None
     vulns = _vulns(evidence, "dependency_audit", "vulnerabilities")
-    tool = ((evidence or {}).get("dependency_audit") or {}).get("tool") or "dependency audit"
+    tool = ((evidence or {}).get("dependency_audit") or {}).get(
+        "tool"
+    ) or "dependency audit"
     if not vulns:
         return {
             "name": CHECK_NAME,
