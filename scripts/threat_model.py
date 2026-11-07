@@ -33,6 +33,20 @@ except ImportError as exc:  # pragma: no cover - depende del entorno de modelado
     raise SystemExit(2) from exc
 
 
+SANDBOX_SECTION = """## Ejecución del código que escriben los agentes
+
+Con `DELIVERY_TESTS_ENABLED`, el daemon de workspace ejecuta pruebas escritas por un modelo. Dónde corren lo decide `DELIVERY_SANDBOX`, o el modo de cada compañía, y el daemon informa lo que aplicó como evidencia.
+
+| Modo | Protege contra | No protege contra |
+|------|----------------|-------------------|
+| `host` | Nada: el comando corre con el usuario, los archivos, la red y las variables de entorno del daemon | Lectura de secretos del usuario (`~/.ssh`, tokens en el entorno), exfiltración por red, borrado de archivos fuera del proyecto, procesos que agotan la máquina |
+| `container` | Acceso a archivos fuera del worktree, salida a la red (apagada por defecto), variables de entorno no listadas, agotamiento de CPU, memoria y procesos, escalada de privilegios dentro del contenedor (sin capabilities, `no-new-privileges`) | Una vulnerabilidad del kernel o del runtime de contenedores, el contenido del propio worktree (el código puede modificarlo), una imagen comprometida, la red cuando la compañía la abre |
+| `bwrap` | Acceso de escritura fuera del worktree, la red (namespace propio, salvo que se abra), variables de entorno no listadas | Lectura de los directorios del sistema montados en solo lectura, agotamiento de CPU o memoria (sin límites), una vulnerabilidad del kernel |
+
+Un modo que no puede correr en la máquina del daemon hace fallar la corrida, nunca la pasa al host. Quien corre el daemon puede exigir aislamiento para todo con `FABRIQUE_SANDBOX_REQUIRED`. El Verificador registra el modo como la comprobación `sandbox`, y una corrida en el host queda marcada como hallazgo.
+"""
+
+
 def build() -> TM:
     """Construye el modelo de amenazas de La Fabrique."""
     tm = TM("La Fabrique")
@@ -192,6 +206,7 @@ def main() -> int:
          "revisión humana ni las pruebas de seguridad. Los riesgos residuales se "
          "documentan en `SECURITY.md`."),
         "",
+        SANDBOX_SECTION,
     ]
     for severity in ("Critical", "Very High", "High", "Medium", "Low", "Very Low"):
         selected = por_sev.get(severity, [])

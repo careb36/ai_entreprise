@@ -460,6 +460,117 @@ def test_a_revision_is_a_new_version_that_supersedes_the_approved_one(
     assert statuses == {v1["id"]: "superseded", v2["id"]: "approved"}
 
 
+# --- diff and impact of a revision -----------------------------------------
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_specification_diff_and_impact_report_changed_criteria(
+    sqlite_session, test_client
+):
+    company = _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    v1 = test_client.post(
+        "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
+    ).json()
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+
+    # A revision that rewords one criterion and drops a requirement.
+    import copy
+
+    revised_good = copy.deepcopy(GOOD)
+    revised_good["requirements"] = [copy.deepcopy(GOOD["requirements"][0])]
+    revised_good["requirements"][0]["criteria"][0]["then"] = (
+        "the list has two rows per task"
+    )
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
+    test_client.put(
+        f"/v1/specifications/{v2['id']}", json=revised_good, headers=manager
+    )
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+
+    diff = test_client.get(
+        f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=manager
+    ).json()
+    assert diff["from_version"] == 1 and diff["to_version"] == 2
+    d = diff["diff"]
+    # The "Move a task" requirement was removed.
+    assert "REQ-2" in d["requirements"]["removed"]
+    # The reworded criterion is reported as changed.
+    assert "REQ-1.1" in d["changed_criterion_ids"]
+
+    # Impact lists no tasks (none planned yet) but reports the changed criteria.
+    impact = test_client.get(
+        f"/v1/specifications/{v2['id']}/impact", headers=manager
+    ).json()
+    assert impact["previous_id"] == v1["id"]
+    assert "REQ-1.1" in impact["changed_criterion_ids"]
+    assert "REQ-2" in impact["changed_requirement_ids"]
+
+
+# --- HTTP: diff endpoint ----------------------------------------------------
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_diff_endpoint_http(sqlite_session, test_client):
+    company = _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    v1 = test_client.post(
+        "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
+    ).json()
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
+    test_client.put(
+        f"/v1/specifications/{v2['id']}",
+        json={**GOOD, "title": "Task board v2"},
+        headers=manager,
+    )
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+
+    r = test_client.get(
+        f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=manager
+    )
+    assert r.status_code == 200
+    assert r.json()["from_version"] == 1
+    assert r.json()["to_version"] == 2
+
+    # Viewer can read.
+    viewer = _member(sqlite_session, company.id, "Viewer")
+    r2 = test_client.get(
+        f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=viewer
+    )
+    assert r2.status_code == 200
+
+
+# --- HTTP: impact endpoint --------------------------------------------------
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_impact_endpoint_http(sqlite_session, test_client):
+    company = _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    v1 = test_client.post(
+        "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
+    ).json()
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
+    test_client.put(
+        f"/v1/specifications/{v2['id']}",
+        json={**GOOD, "title": "Task board v2"},
+        headers=manager,
+    )
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+
+    r = test_client.get(f"/v1/specifications/{v2['id']}/impact", headers=manager)
+    assert r.status_code == 200
+    assert "changed_criterion_ids" in r.json()
+
+
 # --- planning from it, and what the tasks cover ------------------------------
 
 

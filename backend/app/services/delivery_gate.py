@@ -30,6 +30,7 @@ _GATE_PROBLEMS = {
     criteria_tests.CHECK_CRITERIA: "acceptance tests failed",
     criteria_tests.CHECK_UNTOUCHED: "acceptance test edited",
     standards.CHECK_NAME: "standards violated",
+    "secops": "security scan failed",
 }
 
 
