@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import SpecificationDetail from './SpecificationDetail'
+import { DRAFT_ARCHITECTURE } from '../test/architectureFixtures'
 import { APPROVED, DRAFT } from '../test/specificationFixtures'
 import { queryClient } from '../lib/queryClient'
 import type { Specification } from '../services/specifications'
@@ -28,6 +29,7 @@ function stubApi(specification: Specification, overrides: Record<string, () => R
     const key = `${init.method ?? 'GET'} ${pathname}`
     if (overrides[key]) return overrides[key]()
     if (key === `GET /v1/specifications/${specification.id}`) return response(200, specification)
+    if (key === 'GET /v1/architectures') return response(200, { architectures: [] })
     return response(404, { detail: 'Specification not found' })
   })
   vi.stubGlobal('fetch', fetch)
@@ -169,12 +171,25 @@ describe('SpecificationDetail', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('shows the architecture of an approved specification, and none for a draft', async () => {
+    const fetch = stubApi(APPROVED, { 'GET /v1/architectures': () => response(200, { architectures: [DRAFT_ARCHITECTURE] }) })
+    renderAs('Manager', 3)
+
+    const section = await screen.findByRole('region', { name: 'Architecture' })
+    expect(await within(section).findByRole('link', { name: 'Login design' })).toHaveAttribute('href', '/company/specifications/3/architectures/21')
+    expect(section).toHaveTextContent('1 blocking · 1 warnings')
+    expect(new URL(fetch.mock.calls.find(([url]) => new URL(url).pathname === '/v1/architectures')![0]).searchParams.get('specification_id')).toBe('3')
+    expect(within(section).queryByRole('button', { name: 'Ask the Architect for a design' })).not.toBeInTheDocument()
+  })
+
   it('reads only, for a Viewer', async () => {
     stubApi(READY)
     renderAs('Viewer')
     expect(await screen.findByRole('heading', { level: 1, name: 'Checkout' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit answer' })).not.toBeInTheDocument()
+    // A draft specification has no architecture section.
+    expect(screen.queryByRole('region', { name: 'Architecture' })).not.toBeInTheDocument()
   })
 
   it('offers a retry when loading fails', async () => {
