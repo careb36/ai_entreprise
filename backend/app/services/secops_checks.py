@@ -1,17 +1,4 @@
-"""SecOps as verification: dependency, secret and SAST scans that can block.
-
-The daemon (or a CI step) runs the scans on the delivered files and records
-their result in the run's evidence; here the Verifier turns that result into
-a check. A clean scan passes; a finding refutes the run, the same way a
-secret in the deliverable does. Nothing is asked of a model, and the scans
-are never run by the backend itself.
-
-The evidence keys are:
-- ``dependency_audit``: ``{"tool": ..., "vulnerabilities": [{"id", "package",
-  "severity", "summary"}]}``
-- ``secret_scan``: ``{"tool": ..., "findings": [{"path", "rule", "line"}]}``
-- ``sast``: ``{"tool": ..., "findings": [{"path", "rule", "severity", "line"}]}``
-"""
+"""SecOps as verification: dependency, secret and SAST scans that can block."""
 
 from __future__ import annotations
 
@@ -20,23 +7,47 @@ from typing import Any
 CHECK_NAME = "secops"
 
 
-def _vulns(
-    evidence: dict[str, Any] | None, key: str, field: str
-) -> list[dict[str, Any]]:
+def _block(evidence: dict[str, Any] | None, key: str) -> dict[str, Any] | None:
     block = (evidence or {}).get(key)
+    if block is None:
+        return None
     if not isinstance(block, dict):
+        return {"_malformed": True}
+    if "error" in block:
+        return {"_error": block.get("error")}
+    return block
+
+
+def _findings(block: dict[str, Any] | None, field: str) -> list[dict[str, Any]]:
+    if block is None:
         return []
+    if block.get("_malformed") or block.get("_error"):
+        return [
+            {
+                "id": "malformed",
+                "summary": str(block.get("_error") or "malformed result"),
+            }
+        ]
     items = block.get(field)
     return [i for i in items if isinstance(i, dict)] if isinstance(items, list) else []
 
 
 def check_dependencies(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
-    if (evidence or {}).get("dependency_audit") is None:
+    block = _block(evidence, "dependency_audit")
+    if block is None:
         return None
-    vulns = _vulns(evidence, "dependency_audit", "vulnerabilities")
-    tool = ((evidence or {}).get("dependency_audit") or {}).get(
-        "tool"
+    vulns = _findings(block, "vulnerabilities")
+    tool = (
+        block.get("tool") if isinstance(block.get("tool"), str) else None
     ) or "dependency audit"
+    if block.get("_malformed") or block.get("_error"):
+        return {
+            "name": CHECK_NAME,
+            "outcome": "refuted",
+            "observation": f"{tool}: malformed result",
+            "scan": "dependencies",
+            "findings": vulns,
+        }
     if not vulns:
         return {
             "name": CHECK_NAME,
@@ -56,10 +67,21 @@ def check_dependencies(evidence: dict[str, Any] | None) -> dict[str, Any] | None
 
 
 def check_secrets_scan(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
-    if (evidence or {}).get("secret_scan") is None:
+    block = _block(evidence, "secret_scan")
+    if block is None:
         return None
-    findings = _vulns(evidence, "secret_scan", "findings")
-    tool = ((evidence or {}).get("secret_scan") or {}).get("tool") or "secret scan"
+    findings = _findings(block, "findings")
+    tool = (
+        block.get("tool") if isinstance(block.get("tool"), str) else None
+    ) or "secret scan"
+    if block.get("_malformed") or block.get("_error"):
+        return {
+            "name": CHECK_NAME,
+            "outcome": "refuted",
+            "observation": f"{tool}: malformed result",
+            "scan": "secrets",
+            "findings": findings,
+        }
     if not findings:
         return {
             "name": CHECK_NAME,
@@ -79,10 +101,19 @@ def check_secrets_scan(evidence: dict[str, Any] | None) -> dict[str, Any] | None
 
 
 def check_sast(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
-    if (evidence or {}).get("sast") is None:
+    block = _block(evidence, "sast")
+    if block is None:
         return None
-    findings = _vulns(evidence, "sast", "findings")
-    tool = ((evidence or {}).get("sast") or {}).get("tool") or "sast"
+    findings = _findings(block, "findings")
+    tool = (block.get("tool") if isinstance(block.get("tool"), str) else None) or "sast"
+    if block.get("_malformed") or block.get("_error"):
+        return {
+            "name": CHECK_NAME,
+            "outcome": "refuted",
+            "observation": f"{tool}: malformed result",
+            "scan": "sast",
+            "findings": findings,
+        }
     if not findings:
         return {
             "name": CHECK_NAME,
@@ -102,7 +133,6 @@ def check_sast(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def check_all(evidence: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Run every scan that reported a result; skip the ones that did not."""
     out = []
     for fn in (check_dependencies, check_secrets_scan, check_sast):
         r = fn(evidence)
