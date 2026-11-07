@@ -362,10 +362,34 @@ class LLMCallError(RuntimeError):
         self.credit_provider = credit_provider
 
 
-def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
-    """The agent's configured model, or its role's default from model_factory."""
+def _resolve_agent_model(
+    agent: dict[str, Any],
+    default_role: str = "Dev",
+    item: dict[str, Any] | None = None,
+    rework: bool = False,
+) -> str:
+    """The agent's configured model, or its role's default from model_factory.
+
+    When a routing policy is configured, the model may be chosen by the task's
+    estimated difficulty instead of the role default.
+    """
     configured = (agent.get("model") or "").strip()
-    return configured or default_model_for_role(agent.get("role") or default_role)
+    if configured:
+        return configured
+    role = agent.get("role") or default_role
+    base = default_model_for_role(role)
+    if item is None:
+        return base
+    try:
+        from services import model_routing
+
+        difficulty = model_routing.estimate_difficulty(item, rework=rework)
+        routed = model_routing.model_for(role, difficulty)
+        if routed:
+            return routed
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("model routing skipped: %s", exc)
+    return base
 
 
 def _execute_task(
@@ -468,7 +492,7 @@ def _execute_task(
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
 
-    model = _resolve_agent_model(agent)
+    model = _resolve_agent_model(agent, item=item, rework=bool(rework_feedback))
     role = agent.get("role", "Dev")
 
     who = agent.get("name") or role
@@ -1325,9 +1349,8 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                "model": _resolve_agent_model(
-                    {"model": agent_row.model, "role": agent_row.role}
-                ),
+                # Keep the configured model raw so difficulty routing can apply.
+                "model": (agent_row.model or "").strip(),
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
@@ -1337,7 +1360,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": default_model_for_role(item.assignee or "Dev"),
+                "model": "",
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -1352,6 +1375,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 "assignee": item.assignee,
                 "status": item.status,
                 "comments": item.comments or [],
+                "covers": item.covers if isinstance(item.covers, list) else [],
             },
             "sprint": {
                 "id": sprint.id,
