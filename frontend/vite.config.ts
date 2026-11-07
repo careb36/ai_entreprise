@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // Hooks run in the order they were registered, so the setup file's
+    // afterEach unmounts what a test rendered before the test file's own
+    // afterEach clears the shared query client; otherwise the still-mounted
+    // components refetch into the next test's fetch stub.
+    sequence: { hooks: 'list' },
   },
   build: {
     outDir: 'dist',
