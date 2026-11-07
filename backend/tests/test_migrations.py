@@ -113,3 +113,34 @@ def test_the_migration_scripts_have_one_head_and_the_ini_points_at_them():
     assert (
         migrations.BACKEND_DIR / "alembic" / "versions" / "0001_baseline.py"
     ).is_file()
+
+
+def test_the_baseline_is_frozen_a_later_model_change_does_not_leak_into_it(
+    db_file, monkeypatch
+):
+    # A table and a column the models gain after 0001 must come from their
+    # own migration, never from the baseline; otherwise that migration would
+    # fail on a fresh database where 0001 had already created them.
+    import sqlalchemy as sa
+
+    extra = sa.Table(
+        "later_table", SQLModel.metadata, sa.Column("id", sa.Integer, primary_key=True)
+    )
+    later_column = sa.Column("later_column", sa.String, nullable=True)
+    SQLModel.metadata.tables["companies"].append_column(later_column)
+    try:
+        migrations.upgrade_to_head(db_file)
+    finally:
+        SQLModel.metadata.remove(extra)
+        companies = SQLModel.metadata.tables["companies"]
+        companies._columns.remove(later_column)
+    inspector = inspect(db_file)
+    assert "later_table" not in inspector.get_table_names()
+    assert "later_column" not in {c["name"] for c in inspector.get_columns("companies")}
+    source = (
+        migrations.BACKEND_DIR / "alembic" / "versions" / "0001_baseline.py"
+    ).read_text()
+    imports = [
+        line for line in source.splitlines() if line.startswith(("import ", "from "))
+    ]
+    assert not any("models" in line or "sqlmodel" in line for line in imports), imports
