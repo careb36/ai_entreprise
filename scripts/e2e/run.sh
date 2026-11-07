@@ -341,6 +341,18 @@ check "and QA judged the deliverable against the same criteria" test "$(prompt_s
 check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no
 check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
 check "and every criterion verified by its test passing in an observed run" test "$(spec_field "$SPEC_ID" "d['coverage']['verified'], [(c['id'], c['last_result']) for c in d['coverage']['criteria']]")" = "3 [('REQ-1.1', 'pass'), ('REQ-1.2', 'pass'), ('REQ-2.1', 'pass')]"
+# The Developer's workspace tools (services/developer_tools.py): the counter's
+# Developer reads the greeting's module through the real daemon before each
+# delivery; the read is evidence with the file's hash, and the Verifier says
+# which modified files it had read first.
+COUNTER_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][3]")
+COUNTER_RUNS=$(api "$API/v1/agent_runs?company_id=$CID&external_ref=task-$COUNTER_ID" | json "' '.join(str(r['id']) for r in sorted(d['agent_runs'], key=lambda r: r['id']))")
+counter_check() {  # counter_check <run id> <check name> <python expression over c, the check>
+  api "$API/v1/agent_runs/$1/verifications?company_id=$CID" | json "(lambda c: ($3))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$2'))"; }
+COUNTER_FIRST=${COUNTER_RUNS%% *}; COUNTER_LAST=${COUNTER_RUNS##* }
+check "the counter's Developer read the greeting's module through the daemon before delivering, and the read is evidence with the file's hash" test "$(counter_check "$COUNTER_LAST" tools_used "c['calls'][0]['tool'], c['calls'][0]['path'], c['calls'][0]['sha256']")" = "('read', 'src/add_greeting.py', '$(sha256sum "$WORK/project/src/add_greeting.py" | cut -d' ' -f1)')"
+check "its prompt opened with the repository map, naming that module" test "$(prompt_seen "## Task: Add greeting counter.*## Repository.*src/add_greeting.py")" = yes
+check "the Verifier said the first delivery rewrote QA's test without reading it, and the second changed no existing file" test "$(counter_check "$COUNTER_FIRST" context_read "c['read'], c['modified_unread']")" = "(['src/add_greeting.py'], ['tests/test_req_2.py'])" -a "$(counter_check "$COUNTER_LAST" context_read "c['modified_unread'], c['observation']")" = "([], 'read 1 file(s); no existing file was changed')"
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.

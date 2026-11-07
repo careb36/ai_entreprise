@@ -624,10 +624,15 @@ def test_a_criterion_verified_without_an_observed_run_is_illegal():
             evidence={"test_run": {"exit_code": 1}},
         )
     )
-    assert facts == {"verified_criteria": ["REQ-1.1"], "observed_test_run": True}
+    assert facts == {
+        "verified_criteria": ["REQ-1.1"],
+        "observed_test_run": True,
+        "reads_without_hash": [],
+    }
     assert history_check._run_facts(None) == {
         "verified_criteria": [],
         "observed_test_run": False,
+        "reads_without_hash": [],
     }
     # An exit status that travelled as text still counts; a key that is not
     # text is read as text.
@@ -640,7 +645,11 @@ def test_a_criterion_verified_without_an_observed_run_is_illegal():
             evidence={"test_run": {"exit_code": "0"}},
         )
     )
-    assert odd == {"verified_criteria": ["7"], "observed_test_run": True}
+    assert odd == {
+        "verified_criteria": ["7"],
+        "observed_test_run": True,
+        "reads_without_hash": [],
+    }
     assert (
         history_check._run_facts(
             Verification(

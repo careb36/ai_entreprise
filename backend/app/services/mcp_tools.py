@@ -230,7 +230,7 @@ def chat_with_tools(
     messages: list[dict[str, Any]],
     model: str,
     role: str,
-    toolbox: Toolbox | None,
+    toolbox: Any,
     *,
     max_rounds: int | None = None,
     on_round: Callable[[dict[str, Any], list[dict[str, Any]]], None] | None = None,
@@ -244,7 +244,11 @@ def chat_with_tools(
     schemas = toolbox.schemas() if toolbox is not None else []
     if not schemas:
         return client.chat(messages=messages, model=model, role=role), []
-    rounds = max_rounds or settings.MCP_MAX_TOOL_ROUNDS
+    rounds = (
+        max_rounds
+        or getattr(toolbox, "max_rounds", None)
+        or settings.MCP_MAX_TOOL_ROUNDS
+    )
     observations: list[dict[str, Any]] = []
     history = list(messages)
     for round_no in range(1, rounds + 1):

@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     MCP_TOOL_TIMEOUT_SECONDS: float = 60.0
     MCP_CONNECT_TIMEOUT_SECONDS: float = 20.0
     MCP_RESULT_MAX_CHARS: int = 4000
+    # The Developer's workspace tools (``services/developer_tools.py``): read
+    # the project through the daemon (list, read, search) and run its tests
+    # before delivering, for at most this many rounds. ``run_tests`` is offered
+    # only with ``DELIVERY_TESTS_ENABLED``.
+    DEVELOPER_TOOLS_ENABLED: bool = True
+    DEVELOPER_TOOL_ROUNDS: int = 8
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True

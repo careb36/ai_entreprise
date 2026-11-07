@@ -18,7 +18,9 @@ prompt's section headers, so one run exercises the whole loop:
   counter after the greeting;
 - the Architect designs it: two modules, an interface, a decision and a
   convention (with one open question the first time, answered before the
-  revision).
+  revision);
+- the Developer of the counter reads the greeting's module through the
+  workspace tools before delivering (one ``workspace__read`` call).
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -238,6 +240,29 @@ def answer(prompt: str) -> str:
     return "Keep the implementation minimal and covered by a unit test."
 
 
+# The task whose Developer reads the project before delivering: the counter
+# depends on the greeting, so the greeting's module is on disk by then.
+READS_FIRST = "Add greeting counter"
+READS_PATH = "src/add_greeting.py"
+
+
+def tool_call_for(prompt: str, messages: list, tools: list) -> dict | None:
+    """One ``workspace__read`` call before the counter's delivery, when the
+    backend offered the workspace tools and no tool has answered yet; the
+    fake then delivers as usual, so the run's evidence carries the read."""
+    offered = {t.get("function", {}).get("name") for t in tools if isinstance(t, dict)}
+    if "workspace__read" not in offered or any(m.get("role") == "tool" for m in messages):
+        return None
+    task = re.search(r"## Task: (.+)", prompt)
+    if not task or task.group(1).strip() != READS_FIRST:
+        return None
+    return {
+        "id": "call_read_greeting",
+        "type": "function",
+        "function": {"name": "workspace__read", "arguments": json.dumps({"path": READS_PATH})},
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status, body):
         data = json.dumps(body).encode()
@@ -262,13 +287,20 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
         if self.path.startswith("/v1/chat/completions"):
-            prompt = (body.get("messages") or [{}])[-1].get("content", "")
+            messages = body.get("messages") or [{}]
+            prompt = next(
+                (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+                "",
+            )
+            tool_call = tool_call_for(prompt, messages, body.get("tools") or [])
+            if tool_call:
+                message = {"role": "assistant", "content": None, "tool_calls": [tool_call]}
+            else:
+                message = {"role": "assistant", "content": answer(prompt)}
             return self._send(
                 200,
                 {
-                    "choices": [
-                        {"message": {"role": "assistant", "content": answer(prompt)}}
-                    ],
+                    "choices": [{"message": message}],
                     "usage": {
                         "prompt_tokens": 10,
                         "completion_tokens": 50,

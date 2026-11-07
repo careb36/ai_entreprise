@@ -14,6 +14,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
 - workspace.hash:         sha256 of named files as they are on disk (file_hash.py)
+- workspace.list / read / search: the Developer's read-only tools on the project (workspace_read.py)
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
@@ -45,6 +46,7 @@ import nats
 import nats_scope
 import platform_reviews
 import shell_exec
+import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
 
 # Old private names kept so the handlers read as before; the logic is in shell_exec.
@@ -198,25 +200,6 @@ async def _publish_glassroom_status(nc, sprint_id, content: str) -> None:
     }).encode())
 
 
-def _is_assistant_command(command: str) -> bool:
-    normalized = (command or "").lower()
-    return "copilot" in normalized or "claude" in normalized
-
-
-def _summarize_command_result(command: str, result: Dict[str, Any]) -> str:
-    command_preview = " ".join((command or "").strip().split())[:180]
-    exit_code = result.get("exit_code", -1)
-    output = (result.get("stdout") or result.get("stderr") or result.get("error") or "").strip()
-    output_preview = output[:240]
-
-    if result.get("success"):
-        return f"Workspace command finished successfully (exit {exit_code}): {command_preview}"
-
-    if output_preview:
-        return f"Workspace command failed (exit {exit_code}): {output_preview}"
-
-    return f"Workspace command failed (exit {exit_code}): {command_preview}"
-
 async def handle_msg(nc, msg):
     """
     Unified NATS message handler for ``workspace.generate`` and ``workspace.execute``.
@@ -259,8 +242,8 @@ async def handle_msg(nc, msg):
         result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path)
 
         sprint_id = data.get("sprint_id", "1")
-        if not _is_assistant_command(cmd):
-            await _publish_glassroom_status(nc, sprint_id, _summarize_command_result(cmd, result))
+        if not shell_exec.is_assistant_command(cmd):
+            await _publish_glassroom_status(nc, sprint_id, shell_exec.summarize_command_result(cmd, result))
 
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
@@ -690,6 +673,7 @@ async def main():
         ("workspace.browse", bound(handle_browse)),
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in workspace_read.HANDLERS),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
     ):

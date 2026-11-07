@@ -176,6 +176,26 @@ def classify(paths: Iterable[str], declared_risk: Any = None) -> dict[str, Any]:
     return {"tier": tier, "reasons": reasons}
 
 
+def raise_for_unread_changes(
+    result: dict[str, Any], context: dict[str, Any] | None
+) -> dict[str, Any]:
+    """At least ``medium`` when the delivery modified a file the Developer
+    never read (``developer_tools.check_context_read``): a change decided
+    without looking at the code it replaces is not routine. Only when the
+    workspace tools were in use at all: a producer without them is classified
+    by its paths alone. The tier never goes down here."""
+    if not context or not context.get("read") or not context.get("modified_unread"):
+        return result
+    tier = result["tier"]
+    if _RANK[RISK_MEDIUM] > _RANK[tier]:
+        tier = RISK_MEDIUM
+    reasons = list(result["reasons"])
+    if len(reasons) < _MAX_REASONS:
+        unread = [str(p) for p in context["modified_unread"]]
+        reasons.append("modified without reading first: " + ", ".join(unread[:5]))
+    return {"tier": tier, "reasons": reasons}
+
+
 def raise_for_tool_calls(result: dict[str, Any], tool_calls: Any) -> dict[str, Any]:
     """At least ``medium`` when an MCP tool ran without a read-only annotation.
 
