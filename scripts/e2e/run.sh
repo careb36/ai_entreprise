@@ -130,6 +130,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
+    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider" \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
@@ -316,22 +317,29 @@ check "it is written to the repository, and the daemon's hash of the file is kep
 check "the document names the modules and the decision" test "$(grep -c '### MOD-2: Counter\|### ADR-1: Standard library only' "$WORK/project/docs/ARCHITECTURE.md")" = 2
 PLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"scope_size\": \"S\", \"specification_id\": $SPEC_ID}")
 check "the planning prompt carried the approved architecture" test "$(prompt_seen "the PO. Plan a sprint from the specification below.*Architecture (approved).*MOD-1: Greeter")" = yes
-check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
-check "and the counter after the greeting, by position" test "$(echo "$PLAN" | json "[t['depends_on'] for t in d['tasks']]")" = "[[], [0]]"
+check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks'] if not t['kind']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
+check "QA's test-writing task of each requirement comes first, and each implementation waits for its tests" test "$(echo "$PLAN" | json "[(t['kind'], t['assignee'], t['depends_on']) for t in d['tasks']]")" = "[('acceptance_tests', 'QA', []), ('acceptance_tests', 'QA', []), (None, 'Developer', [0]), (None, 'Developer', [1, 2])]"
+check "and the counter after the greeting, by position" test "$(echo "$PLAN" | json "d['tasks'][3]['depends_on'][-1]")" = 2
 NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
   \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
   \"backlog_items\": $(echo "$PLAN" | json "json.dumps(d['tasks'])")}")
 S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
 check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
-GREETING_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][0]")
-check "the counter waits for the greeting on the board" test "$(api "$API/v1/sprints/$S4/board" | json "next((i['depends_on'], i['waiting_for']) for c in d['columns'].values() for i in c if i['title'] == 'Add greeting counter')")" = "([$GREETING_ID], [$GREETING_ID])"
+TESTS2_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][1]")
+GREETING_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][2]")
+check "the counter waits for its tests and for the greeting on the board" test "$(api "$API/v1/sprints/$S4/board" | json "next((i['depends_on'], i['waiting_for'], i['kind']) for c in d['columns'].values() for i in c if i['title'] == 'Add greeting counter')")" = "([$TESTS2_ID, $GREETING_ID], [$TESTS2_ID, $GREETING_ID], None)"
 check "Greeting 1 closes" wait_sprint "$S4"
-check "both tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Add greeting counter=done', 'Add greeting=done']"
+check "the four tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Acceptance tests for REQ-1: Greet by name=done', 'Acceptance tests for REQ-2: Count the greetings=done', 'Add greeting counter=done', 'Add greeting=done']"
+check "QA wrote the acceptance tests first, one per criterion, named after it" test "$(grep -c 'def test_req_1_[12]_holds' "$WORK/project/tests/test_req_1.py")" = 2 -a "$(grep -n '## Task: Acceptance tests for REQ-1' "$PROMPTS" | head -1 | cut -d: -f1)" -lt "$(grep -n '## Task: Add greeting' "$PROMPTS" | grep -v counter | head -1 | cut -d: -f1)"
+check "the Developer's prompt named the tests to make pass" test "$(prompt_seen "## Task: Add greeting counter.*Acceptance tests to make pass.*tests/test_req_2.py.*REQ-2.1: a test named test_req_2_1_")" = yes
+check "the delivery that rewrote an acceptance test was refuted, never silently accepted" test "$(api "$API/v1/sprints/$S4/board" | json "sum(1 for c in d['columns'].values() for i in c for m in i['comments'] if 'edits the acceptance test tests/test_req_2.py' in m['text'])")" -ge 1
+check "the acceptance test QA wrote is the one on disk: the rewrite was restored from QA's delivery" test "$(grep -c 'from src.add_greeting_counter import add_greeting_counter' "$WORK/project/tests/test_req_2.py")" = 1 -a "$(api "$API/v1/sprints/$S4/board" | json "sum(1 for c in d['columns'].values() for i in c for m in i['comments'] if 'restored from QA' in m['text'])")" -ge 1
 check "the counter was worked on only after the greeting was done" test "$(grep -n '## Task: Add greeting counter' "$PROMPTS" | head -1 | cut -d: -f1)" -gt "$(grep -n "reviewing the following deliverable for the task: 'Add greeting'" "$PROMPTS" | tail -1 | cut -d: -f1)"
 check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
 check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
 check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no
 check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
+check "and every criterion verified by its test passing in an observed run" test "$(spec_field "$SPEC_ID" "d['coverage']['verified'], [(c['id'], c['last_result']) for c in d['coverage']['criteria']]")" = "3 [('REQ-1.1', 'pass'), ('REQ-1.2', 'pass'), ('REQ-2.1', 'pass')]"
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.

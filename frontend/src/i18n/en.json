@@ -581,7 +581,8 @@
     "qaFailuresTitle": "QA failures: {{count}}/{{limit}}",
     "qaFailures": "QA fail {{count}}/{{limit}}",
     "waitsFor_one": "Waits for {{count}} task",
-    "waitsFor_other": "Waits for {{count}} tasks"
+    "waitsFor_other": "Waits for {{count}} tasks",
+    "acceptanceTests": "Acceptance tests"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -1532,7 +1533,16 @@
       "blocked": "Blocked",
       "done": "Done",
       "summary": "{{covered}} of {{total}} criteria covered, {{done}} done",
-      "task": "task #{{id}}"
+      "task": "task #{{id}}",
+      "verified": "Verified",
+      "verifiedSummary": "{{verified}} of {{total}} verified by a passing test",
+      "testPlanned": "Test planned",
+      "testTask": "tests #{{id}}",
+      "testResult": {
+        "pass": "Test passed",
+        "fail": "Test failing",
+        "missing": "Test not run"
+      }
     },
     "quality": {
       "title": "Quality attributes",

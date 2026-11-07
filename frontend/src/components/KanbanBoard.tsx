@@ -148,6 +148,9 @@ function ItemCard({
         {item.assignee && (
           <span className="badge bg-brand-900/50 text-brand-300 border-brand-700/40">{item.assignee}</span>
         )}
+        {item.kind === 'acceptance_tests' && (
+          <span className="badge border bg-violet-900/40 text-violet-300 border-violet-700/40">{t('kanban.acceptanceTests')}</span>
+        )}
         {qaMetrics.reworks > 0 && (
           <span
             className={`badge border ${metricBadgeClass(qaMetrics.reworks, QA_REWORK_LIMIT)}`}

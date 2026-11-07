@@ -4,7 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import mcp_tools, risk
+from services import criteria_tests, mcp_tools, risk
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -279,6 +279,19 @@ def check_tests_run(evidence: dict) -> dict:
                 "outcome": "pass",
                 "observation": f"{target} passed{truncated}",
             }
+        all_excused, excused = criteria_tests.excused_failures(evidence)
+        if all_excused:
+            # An acceptance test fails before its implementation, by design;
+            # only those failed here (``services.acceptance``).
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": (
+                    f"{target} exited {exit_code}: only the acceptance tests of "
+                    f"criteria not implemented yet failed ({', '.join(excused)})"
+                    f"{truncated}"
+                ),
+            }
         tail = (run.get("output_tail") or "").strip()[-400:]
         return {
             "name": "tests_run",
@@ -373,6 +386,18 @@ def verify_agent_run(
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))
+    if evidence and evidence.get("acceptance"):
+        # The acceptance tests per criterion (``services.acceptance``): what the
+        # observed run said of this task's criteria, and that an implementation
+        # task left the test files alone.
+        for check in (
+            criteria_tests.check_criteria(evidence),
+            criteria_tests.check_untouched(
+                [p for p in claimed_files if isinstance(p, str)], evidence
+            ),
+        ):
+            if check:
+                checks.append(check)
     if evidence and "tool_calls" in evidence:
         checks.append(check_tools_used(evidence))
     checks.append(check_risk_tier(run, evidence))

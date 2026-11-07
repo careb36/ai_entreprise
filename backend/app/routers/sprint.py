@@ -35,7 +35,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import dependencies, spec_check, spec_planning
+from services import acceptance, dependencies, spec_check, spec_planning
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -251,6 +251,9 @@ async def start_sprint(
             priority=item.get("priority", "medium"),
             assignee=item.get("assignee", "PO"),
             covers=_refused(spec_planning.checked_covers, item, known),
+            kind=acceptance.ACCEPTANCE_KIND
+            if item.get("kind") == acceptance.ACCEPTANCE_KIND
+            else None,
         )
         session.add(backlog_item)
         session.flush()
@@ -498,6 +501,7 @@ async def get_sprint_board(
             "assignee": i.assignee,
             "comments": i.comments or [],
             "covers": spec_planning.covers_of(i),
+            "kind": i.kind,
             "depends_on": dependencies.depends_on_of(i),
             "waiting_for": dependencies.waiting_for(by_id, i),
             "created_at": str(i.created_at),

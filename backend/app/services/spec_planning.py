@@ -21,7 +21,7 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import dependencies, spec_author, spec_check
+from services import acceptance, dependencies, spec_author, spec_check
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -201,7 +201,12 @@ def _validate_tasks(
 
 def uncovered(spec: dict[str, Any], tasks: list[dict[str, Any]]) -> list[str]:
     """The criteria of *spec* no task in *tasks* covers, in the specification's order."""
-    covered = {c for task in tasks for c in task.get("covers") or []}
+    covered = {
+        c
+        for task in tasks
+        if not acceptance.is_acceptance_task(task)
+        for c in task.get("covers") or []
+    }
     return [cid for cid in spec_check.criterion_ids(spec) if cid not in covered]
 
 
@@ -221,6 +226,7 @@ def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
         }
         for index, r in enumerate(spec.get("requirements") or [])
     ][:item_limit]
+    tasks = acceptance.with_test_tasks(tasks, spec, item_limit)
     return {
         "sprint_name": f"Sprint - {spec.get('title', '')[:40]}".strip(),
         "goal": (spec.get("summary") or spec.get("title") or "")[:140],
@@ -274,6 +280,7 @@ def plan(
     )
     if not tasks:
         return plan_fallback(content, item_limit)
+    tasks = acceptance.with_test_tasks(tasks, content, item_limit)
     return {
         "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {spec.title[:40]}")[
             :70
@@ -333,9 +340,11 @@ def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     spec = session.get(Specification, sprint.specification_id)
     if spec is None:
         return ""
-    return requirements_section(
-        spec_content(spec), covers_of(item)
-    ) + arch_author.context_for(session, sprint, item)
+    return (
+        requirements_section(spec_content(spec), covers_of(item))
+        + arch_author.context_for(session, sprint, item)
+        + acceptance.section(session, sprint, item)
+    )
 
 
 def requirements_context(engine: Engine, item_id: int) -> str:
@@ -357,6 +366,10 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
     A criterion is ``done`` when one of its tasks got done; otherwise its
     latest task decides (a retry carried into a later sprint supersedes the
     blocked attempt): ``blocked``, or ``planned``; with no task, ``uncovered``.
+    The test-writing tasks (``services.acceptance``) are listed apart as
+    ``tests`` and decide nothing here; ``verified`` is whether the
+    criterion's acceptance test passed in an observed run of an
+    implementation task, with that run's ``last_result`` and ``test`` name.
     """
     rows = session.exec(
         select(BacklogItem, Sprint.id)
@@ -365,9 +378,13 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
         .order_by(BacklogItem.id)
     ).all()
     by_criterion: dict[str, list[dict[str, Any]]] = {}
+    tests_by_criterion: dict[str, list[dict[str, Any]]] = {}
     for item, sprint_id in rows:
+        target = (
+            tests_by_criterion if acceptance.is_acceptance_task(item) else by_criterion
+        )
         for cid in covers_of(item):
-            by_criterion.setdefault(cid, []).append(
+            target.setdefault(cid, []).append(
                 {
                     "id": item.id,
                     "sprint_id": sprint_id,
@@ -375,10 +392,12 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
                     "status": item.status,
                 }
             )
+    observed = acceptance.verified_criteria(session, spec)
     criteria = []
     for r in spec.requirements or []:
         for c in r.get("criteria") or []:
             tasks = by_criterion.get(c["id"], [])
+            seen = observed.get(c["id"]) or {}
             if any(t["status"] == "done" for t in tasks):
                 status = "done"
             elif tasks:
@@ -390,7 +409,11 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
                     "id": c["id"],
                     "requirement_id": r["id"],
                     "tasks": tasks,
+                    "tests": tests_by_criterion.get(c["id"], []),
                     "status": status,
+                    "test": f"test_{acceptance.token(c['id'])}_…",
+                    "verified": bool(seen.get("verified")),
+                    "last_result": seen.get("result"),
                 }
             )
     return {
@@ -398,4 +421,33 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
         "total": len(criteria),
         "covered": sum(1 for c in criteria if c["status"] != "uncovered"),
         "done": sum(1 for c in criteria if c["status"] == "done"),
+        "verified": sum(1 for c in criteria if c["verified"]),
     }
+
+
+def acceptance_summary(session: Session, item: Any) -> str:
+    """One line for a publication: how many criteria of the task's
+    specification are verified by an observed passing test. Empty when the
+    sprint was not planned from a specification."""
+    if item is None:
+        return ""
+    sprint = session.get(Sprint, item.sprint_id)
+    if sprint is None or sprint.specification_id is None:
+        return ""
+    spec = session.get(Specification, sprint.specification_id)
+    if spec is None:
+        return ""
+    cov = coverage(session, spec)
+    if not cov["total"]:
+        return ""
+    own = [c for c in cov["criteria"] if c["id"] in set(covers_of(item))]
+    mine = (
+        f"; this task's: {sum(1 for c in own if c['verified'])} of {len(own)}"
+        if own
+        else ""
+    )
+    return (
+        f"**Acceptance:** {cov['verified']} of {cov['total']} criteria of "
+        f'"{spec.title}" verified by a passing test in an observed run '
+        f"({round(100 * cov['verified'] / cov['total'])} %){mine}."
+    )

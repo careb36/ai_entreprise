@@ -228,13 +228,18 @@ def test_a_manager_writes_a_draft_a_viewer_reads_it_and_nobody_else(
                 "id": c,
                 "requirement_id": c.split(".")[0],
                 "tasks": [],
+                "tests": [],
                 "status": "uncovered",
+                "test": f"test_{c.lower().replace('-', '_').replace('.', '_')}_…",
+                "verified": False,
+                "last_result": None,
             }
             for c in ("REQ-1.1", "REQ-1.2", "REQ-2.1")
         ],
         "total": 3,
         "covered": 0,
         "done": 0,
+        "verified": 0,
     }
     listed = test_client.get(
         f"/v1/specifications?company_id={company.id}", headers=viewer
@@ -516,8 +521,19 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
     )
     plan = planned.json()
     assert plan["specification_id"] == spec.id and plan["sprint_name"] == "Board 1"
-    assert [t["covers"] for t in plan["tasks"]] == [["REQ-1.1", "REQ-1.2"], ["REQ-1.1"]]
-    assert plan["tasks"][1]["assignee"] == "Developer"
+    # QA's test-writing task of REQ-1 comes first; the implementation tasks
+    # depend on it (``services.acceptance``).
+    assert [t["covers"] for t in plan["tasks"]] == [
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-1.1"],
+    ]
+    assert [(t["kind"], t["assignee"]) for t in plan["tasks"]] == [
+        ("acceptance_tests", "QA"),
+        (None, "Developer"),
+        (None, "Developer"),
+    ]
+    assert [t["depends_on"] for t in plan["tasks"]] == [[], [0], [0]]
     assert plan["uncovered"] == ["REQ-2.1"]
     assert (
         test_client.post(
@@ -550,10 +566,14 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
         "/v1/plan_sprint",
         json={"company_id": company.id, "scope_size": "S", "specification_id": spec.id},
     ).json()
+    # One task per requirement, each after its test-writing task.
     assert [t["covers"] for t in fallback["tasks"]] == [
         ["REQ-1.1", "REQ-1.2"],
         ["REQ-2.1"],
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-2.1"],
     ]
+    assert [t["depends_on"] for t in fallback["tasks"]] == [[], [], [0], [1]]
     assert fallback["uncovered"] == []
 
 

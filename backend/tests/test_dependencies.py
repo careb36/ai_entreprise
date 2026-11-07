@@ -112,7 +112,15 @@ def test_the_po_names_dependencies_by_title_and_the_plan_carries_positions(
         "/v1/plan_sprint",
         json={"company_id": company.id, "scope_size": "S", "specification_id": spec.id},
     ).json()
-    assert [t["depends_on"] for t in plan["tasks"]] == [[], [0], [1]]
+    # The test-writing task of REQ-1 comes first (position 0); "List
+    # endpoint" waits for it and for "Store"; "Board page" does not fit scope
+    # S with the test task of REQ-2, so both are left out.
+    assert [t["title"][:20] for t in plan["tasks"]] == [
+        "Acceptance tests for",
+        "Store",
+        "List endpoint",
+    ]
+    assert [t["depends_on"] for t in plan["tasks"]] == [[], [0], [0, 1]]
 
     monkeypatch.setattr(
         spec_author,

@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, CircleCheck, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
+import { Check, CircleCheck, FlaskConical, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
 import { ArchitectureSummary } from '../components/ArchitectureSummary'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
@@ -17,7 +17,7 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
 import { errorDetail } from '../services/api'
 import {
-  type Coverage, type CoverageStatus, type Specification, type SpecificationBody, SpecificationConflict,
+  type Coverage, type CoverageCriterion, type CoverageStatus, type Specification, type SpecificationBody, SpecificationConflict,
   useAnswerQuestion, useApproveSpecification, useDraftSpecification, useReviseSpecification, useSpecification, useUpdateSpecification,
 } from '../services/specifications'
 import { useAppStore } from '../store/useAppStore'
@@ -113,6 +113,34 @@ function CoverageBadge({ status }: { status: CoverageStatus }) {
   return <span className={`badge ${COVERAGE_TONE[status]}`}>{t(`specifications.coverage.${status}`, { defaultValue: status })}</span>
 }
 
+/** The criterion's acceptance test, as the latest observed run saw it: verified only when it passed. */
+function TestBadge({ criterion }: { criterion: CoverageCriterion }) {
+  const { t } = useTranslation()
+  const tests = criterion.tests ?? []
+  if (!criterion.last_result && tests.length === 0) return null
+  const result = criterion.last_result
+  const tone = criterion.verified
+    ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700/40'
+    : result === 'fail' ? 'bg-red-900/40 text-red-300 border-red-700/40' : 'bg-gray-800 text-gray-400 border-gray-700/40'
+  const label = criterion.verified
+    ? t('specifications.coverage.verified')
+    : result
+      ? t(`specifications.coverage.testResult.${result}`, { defaultValue: result })
+      : t('specifications.coverage.testPlanned')
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <span className={`badge border inline-flex items-center gap-1 ${tone}`} title={criterion.test}>
+        <FlaskConical size={10} aria-hidden="true" />{label}
+      </span>
+      {tests.map(task => (
+        <Link key={task.id} to={`/sprints/${task.sprint_id}/tasks/${task.id}`} className="text-brand-300 hover:underline" title={task.title}>
+          {t('specifications.coverage.testTask', { id: task.id })}
+        </Link>
+      ))}
+    </span>
+  )
+}
+
 function Requirements({ specification, coverage }: { specification: Specification; coverage: Coverage | undefined }) {
   const { t } = useTranslation()
   const byCriterion = new Map((coverage?.criteria ?? []).map(c => [c.id, c]))
@@ -122,6 +150,8 @@ function Requirements({ specification, coverage }: { specification: Specificatio
       {coverage && (
         <p className="text-xs text-gray-400">
           {t('specifications.coverage.summary', { covered: coverage.covered, total: coverage.total, done: coverage.done })}
+          {' · '}
+          {t('specifications.coverage.verifiedSummary', { verified: coverage.verified ?? 0, total: coverage.total })}
         </p>
       )}
       {specification.requirements.length === 0 && <p className="text-sm text-gray-500">{t('specifications.requirements.none')}</p>}
@@ -152,6 +182,7 @@ function Requirements({ specification, coverage }: { specification: Specificatio
                             {t('specifications.coverage.task', { id: task.id })}
                           </Link>
                         ))}
+                        <TestBadge criterion={covered} />
                       </span>
                     )}
                   </li>

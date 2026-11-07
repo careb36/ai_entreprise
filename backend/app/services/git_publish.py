@@ -26,6 +26,7 @@ from sqlmodel import Session, select
 from services.agent_service import AgentService
 from services.review_changes import run_changes
 from services.run_review import task_of
+from services.spec_planning import acceptance_summary
 
 PUBLISH_HOW = ("gh", "glab", "compare")
 # GitHub refuses a description over 65,536 characters; GitLab's limit is higher.
@@ -85,6 +86,9 @@ def request_body(session: Session, run: AgentRun, changes: dict[str, Any]) -> st
                 f"| {_cell(c.get('name'))} | {_cell(c.get('outcome'))} | {_cell(c.get('observation'))} |"
                 for c in checks
             ]
+    acceptance = acceptance_summary(session, task_of(session, run))
+    if acceptance:
+        lines += ["", acceptance]
     files = changes.get("files") or []
     if files:
         totals = changes.get("totals") or {}

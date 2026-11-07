@@ -18,8 +18,13 @@ const READY: Specification = {
   ...DRAFT, questions: [{ question: 'Which currencies?', answer: 'USD only' }],
   check: { ok: true, blocking: 0, warnings: 1, findings: [{ severity: 'warning', where: 'NFR-1', code: 'vague_target', message: 'The target has no number' }] },
   coverage: {
-    criteria: [{ id: 'REQ-1.1', requirement_id: 'REQ-1', status: 'done', tasks: [{ id: 12, sprint_id: 9, title: 'Cart listing', status: 'done' }] }],
-    total: 1, covered: 1, done: 1,
+    criteria: [{
+      id: 'REQ-1.1', requirement_id: 'REQ-1', status: 'done',
+      tasks: [{ id: 12, sprint_id: 9, title: 'Cart listing', status: 'done' }],
+      tests: [{ id: 11, sprint_id: 9, title: 'Acceptance tests for REQ-1', status: 'done' }],
+      test: 'test_req_1_1_…', verified: true, last_result: 'pass',
+    }],
+    total: 1, covered: 1, done: 1, verified: 1,
   },
 }
 
@@ -114,10 +119,13 @@ describe('SpecificationDetail', () => {
     const fetch = stubApi(READY, { 'POST /v1/specifications/5/approve': () => response(200, { ...READY, status: 'approved', approved_by: 'ana@acme.test', approved_at: '2026-10-02T12:00:00Z' }) })
     renderAs('Owner')
 
-    expect(await screen.findByText('1 of 1 criteria covered, 1 done')).toBeInTheDocument()
+    expect(await screen.findByText('1 of 1 criteria covered, 1 done · 1 of 1 verified by a passing test')).toBeInTheDocument()
     const criteria = screen.getByRole('list', { name: 'Acceptance criteria of REQ-1' })
     expect(within(criteria).getByText('Done')).toBeInTheDocument()
     expect(within(criteria).getByRole('link', { name: 'task #12' })).toHaveAttribute('href', '/sprints/9/tasks/12')
+    // The criterion's acceptance test passed in an observed run; the test-writing task is linked.
+    expect(within(criteria).getByText('Verified')).toHaveAttribute('title', 'test_req_1_1_…')
+    expect(within(criteria).getByRole('link', { name: 'tests #11' })).toHaveAttribute('href', '/sprints/9/tasks/11')
     expect(screen.getByRole('region', { name: 'Check' })).toHaveTextContent('Nothing blocks this specification: it is ready to approve.')
 
     const approve = screen.getByRole('button', { name: 'Approve' })
@@ -126,6 +134,22 @@ describe('SpecificationDetail', () => {
     expect(await screen.findByText('Approved')).toBeInTheDocument()
     expect(posted(fetch, '/v1/specifications/5/approve')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Revise' })).toBeInTheDocument()
+  })
+
+  it('shows a failing or missing acceptance test as not verified', async () => {
+    const criterion = READY.coverage!.criteria[0]
+    stubApi({
+      ...READY,
+      coverage: {
+        ...READY.coverage!,
+        verified: 0,
+        criteria: [{ ...criterion, verified: false, last_result: 'fail' }],
+      },
+    })
+    renderAs('Viewer')
+    expect(await screen.findByText('1 of 1 criteria covered, 1 done · 0 of 1 verified by a passing test')).toBeInTheDocument()
+    expect(screen.getByText('Test failing')).toBeInTheDocument()
+    expect(screen.queryByText('Verified')).not.toBeInTheDocument()
   })
 
   it('shows the findings of a refused approval', async () => {

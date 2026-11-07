@@ -78,6 +78,9 @@ class BacklogItemIn(BaseModel):
     assignee: str = "PO"
     covers: list[str] = []
     depends_on: list[int] = []
+    # ``acceptance_tests`` for a QA task that writes a requirement's acceptance
+    # tests (``services.acceptance``); anything else is an ordinary task.
+    kind: str | None = None
 
 
 class SprintStartRequest(BaseModel):

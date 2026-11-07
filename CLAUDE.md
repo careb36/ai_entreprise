@@ -122,6 +122,10 @@ Copy `.env.example` to `.env` and fill in:
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
   `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
   sends the task back for rework. It executes agent-written code on the daemon's machine.
+  In a sprint planned from a specification it also decides the **acceptance
+  tests per criterion** (`services/acceptance.py`): the runner's per-test lines
+  are read back into criterion ids (pytest gets `-v`; name a verbose command
+  here for another runner, e.g. `jest --verbose`, `vitest --reporter=verbose`).
 - `MCP_MAX_TOOL_ROUNDS` (6), `MCP_TOOL_TIMEOUT_SECONDS` (60),
   `MCP_CONNECT_TIMEOUT_SECONDS` (20), `MCP_RESULT_MAX_CHARS` (4000) — the
   MCP tool loop (`services/mcp_tools.py`): how many rounds of tool calls a
@@ -156,7 +160,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 **`llm-proxy/app.py`** — Flask gateway that enforces per-company token budgets, routes by model-id prefix to the wired providers (Nebius Token Factory, Gemini, DeepSeek, Qwen), and refreshes each provider's catalogue hourly. Each answer says how its token count is known (`llm-proxy/usage.py`): `usage_status: reported` with the provider's figure in `usage`, or `estimated` with a characters/4 estimate apart in `usage_estimate` (charged to the quota, never shown as usage); the backend's `usage_status` keeps estimates out of the KPI averages.
 
-**`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk and the diff against the bytes that were there, `file_diff.py`; with a `git` spec, as a commit on the task's branch in a worktree, `git_workspace.py`), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), `workspace.git.publish` (push a `fabrique/` task branch to `origin` with the person's credentials and open a draft pull or merge request with `gh` / `glab`, else the compare page), `workspace.git.reviews` (the comments people left on that request, read with `gh api` / `glab api`, `platform_reviews.py`), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
+**`vscode-daemon/daemon.py`** — The workspace daemon: a Python process that runs natively on the user's macOS, Linux or Windows machine (started by `scripts/start-daemon.*`, reconnects to NATS on its own). It answers `workspace.generate` (write files, reply with the sha256 read back from disk and the diff against the bytes that were there, `file_diff.py`; with a `git` spec, as a commit on the task's branch in a worktree, `git_workspace.py`), `workspace.execute` (run a command), `workspace.capabilities`, `workspace.status`, `workspace.browse` (folder picker) and `workspace.inspect` (canonical path, git remote/branch, file snapshot for stack detection), `workspace.hash` (the sha256 of named files as they are on disk, `file_hash.py`; the backend keeps QA's acceptance tests intact with it), `workspace.git.publish` (push a `fabrique/` task branch to `origin` with the person's credentials and open a draft pull or merge request with `gh` / `glab`, else the compare page), `workspace.git.reviews` (the comments people left on that request, read with `gh api` / `glab api`, `platform_reviews.py`), and consumes the JetStream queue `workspace.deliver` for files queued while it was offline, reporting on `workspace.delivered`. Its `requirements.txt` is `nats-py` only.
 
 **`backend/app/routers/workspace.py`** / **`services/workspace_daemon.py`** — `GET /v1/workspace/{status,browse,inspect}` relay the picker and project check to the daemon (503 with start instructions when none is connected). `status` reports `state`: `connected`, `absent` (NATS says nothing listens) or `unknown` (NATS unreachable, no answer in time, or an error reply), with a `reason`; unknown is never shown as stopped. `POST /v1/discover_team` inspects the folder through the daemon and runs stack detection on its file snapshot (`materialized_snapshot`), recording the host path.
 
@@ -217,7 +221,32 @@ the LangGraph graph is only an optional kickoff conversation.
    them and reports on `workspace.delivered`, and the run is re-verified against
    the hashes the backend recorded (`_on_delivery_result`).
 4. Optionally (`DELIVERY_TESTS_ENABLED`) the daemon runs the project's tests via
-   `workspace.execute` and returns the exit status.
+   `workspace.execute` and returns the exit status. In a sprint planned from a
+   specification, the plan puts a **test-writing task per requirement**
+   (`BacklogItem.kind == "acceptance_tests"`, assigned to QA) before the
+   implementation tasks, which depend on it: one test per acceptance criterion,
+   named after its id (`REQ-1.2` → `test_req_1_2_…`), importing the code under
+   test inside the test so a missing module fails that test and not the file.
+   `services/acceptance.py` reads the runner's per-test lines back into
+   criterion ids (`pass`, `fail`, `missing`; an observation, from the daemon's
+   output) and the Verifier records them as `criteria_tests`: for the test task,
+   every criterion must have run (failing is expected); for an implementation
+   task, its own criteria must pass. `tests_run` excuses only the failing
+   acceptance tests of criteria whose implementation is not done yet, never
+   another failure; an implementation task that writes an acceptance test file
+   is refuted (`acceptance_tests_untouched`) and sent back. Before its tests
+   run, `acceptance.guard_test_files` asks the daemon for the sha256 of the
+   acceptance test files on disk (`workspace.hash`) against what QA's delivery
+   wrote; a file that differs or is missing is restored from QA's deliverable
+   (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
+   criterion is judged against a weakened test. `services/criteria_tests.py`
+   holds the reading of the runner's output and the two checks. The Developer's
+   prompt names the test files and test names to make pass
+   (`acceptance.section`), the specification's coverage says per criterion
+   `verified` (its test passed in an observed run of an implementation task)
+   with `last_result`, the publication's description carries how many criteria
+   are verified, and `history_check.py` refuses a criterion marked passed with
+   no observed test run.
 5. The deliverable is ingested as an `AgentRun` (`producer: le-fabrique-task-worker`,
    `external_ref: task-<id>`) and verified deterministically (`files_written`,
    `tests_run`, …). Claims (declared files, the agent's summary) and observations
@@ -346,6 +375,7 @@ Test files:
 | `test_git_publish.py` | Real git against a bare remote in `tmp_path`: the task branch is pushed and the answer is the compare page without `gh`, a fake `gh` opens a draft with the title and the evidence as body, a failing `gh` still leaves the compare page, a non-`fabrique/` branch, an undelivered one or no origin is refused, compare pages per platform; a Manager publishes with the evidence in the body and the claims apart, a Viewer reads the publications, 409 without a branch, 503 without a daemon, 404 from another company |
 | `test_specifications.py` | The specification: ids assigned in order by the check, never by a draft; what blocks approval (no criterion, an empty step, a target without a number, an open question) and what only warns (a promise without a number, in English and Spanish); the PO's draft read from the fixed shape and nothing else, a revision prompt with the answers; a Manager writes, a Viewer reads, outsiders refused; the PO drafts, asks, a person answers, the revision passes the check and is approved; an unusable answer leaves the draft as it was; a revision supersedes the approved version on approval; the PO plans tasks with `covers` (unknown ids dropped, the uncovered listed, a draft refused, one task per requirement without a model); a sprint keeps what each task covers and refuses an unknown id; coverage per criterion from the boards; the prompts carry only the covered requirements; a carried task keeps its `covers` |
 | `test_architectures.py` | The architecture: ids assigned in order and a draft's names mapped onto them; what blocks approval (an unknown module or requirement, a cycle named along its path, a decision without its decision, an open question) and what warns (an uncovered requirement, no path, no contract, no overview); the prompt section carries a task's modules and their dependencies, never the rest, plus every decision and convention; the Markdown document; the Architect's draft read from the fixed shape, the prompt with the specification, the stack and the answers; a Manager writes, a Viewer reads, outsiders refused; the Architect drafts from an approved specification only, asks, a person answers, the revision passes and is approved; a revision supersedes the approved version and the prompts follow it; without an approved architecture the prompts carry the requirements alone; writing to the repository keeps the daemon's hash, refuses a draft, reports a rejected write and a missing daemon |
+| `test_acceptance.py` | An acceptance test per criterion: criterion ids as test-name tokens, the per-test lines of pytest, jest, go and cargo read back per criterion, pytest made verbose; the plan puts QA's test task per requirement first and re-points dependencies within the scope; through the real daemon, QA's failing tests are expected and every criterion must run, an implementation that leaves its criterion failing is refuted, the one that makes it pass verifies the criteria on the specification (with REQ-2's tests still failing, excused) and in the publication line, an implementation that edits an acceptance test, or a test changed behind the loop's back, is refuted and the test restored from QA's delivery before the run, nothing changes without a specification; the daemon hashes files as they are on disk; the history check refuses a criterion verified without an observed run |
 | `test_dependencies.py` | Positions checked (unknown, self, a cycle named along its path), edges that close a cycle dropped one at a time; the PO names dependencies by title and the plan carries positions, a cyclic answer broken; a sprint keeps them, queues only the tasks that can start and the board shows `depends_on` and `waiting_for`; dispatch and the worker's gate queue a task once its dependencies are done; a task waiting on one left for a person is blocked with the reason, transitively, settles the sprint, is not blocked by one the worker still retries, and is released when the dependency gets done; a closed sprint is left alone; a carried task keeps a dependency carried with it; the history check refuses a task worked before its dependency |
 | `test_review_sync.py` | Fake `gh` and `glab`: line comments (an outdated one keeps its line), reviews (pending and empty ones left out) and conversation from GitHub across pages, GitLab notes without system ones, a missing or failing CLI and a page that is not a request refused with the reason; a Manager brings them once (a Viewer cannot), reading again adds nothing and an edit there updates a comment still waiting, one a review carried keeps what it said, the feedback names who wrote it and where, a compare page or another company's publication refused |
 | `test_git_workflow.py` | Real git in `tmp_path`: a delivery is a commit on `fabrique/task-<id>` in a worktree with the task's trailers and La Fabrique as author, the person's checkout, index and branch untouched; another attempt is another commit, the same bytes none; a named base starts the branch there; a bad branch name or a folder that is not a repository is an error the backend reads; the spec only with the workflow on; a task delivered with it is verified with the commit on its evidence; Viewer reads and Manager sets the workflow; the changes name the branch and commit |
