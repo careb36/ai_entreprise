@@ -545,6 +545,32 @@ def test_diff_endpoint_http(sqlite_session, test_client):
     assert r2.status_code == 200
 
 
+# --- HTTP: impact endpoint --------------------------------------------------
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_impact_endpoint_http(sqlite_session, test_client):
+    company = _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    v1 = test_client.post(
+        "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
+    ).json()
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
+    test_client.put(
+        f"/v1/specifications/{v2['id']}",
+        json={**GOOD, "title": "Task board v2"},
+        headers=manager,
+    )
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+
+    r = test_client.get(f"/v1/specifications/{v2['id']}/impact", headers=manager)
+    assert r.status_code == 200
+    assert "changed_criterion_ids" in r.json()
+
+
 # --- planning from it, and what the tasks cover ------------------------------
 
 
