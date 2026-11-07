@@ -25,6 +25,8 @@ vi.mock('../hooks/useQueries', () => ({
   useQuotas: vi.fn(() => ({ data: [] })),
   useSprints: vi.fn(),
 }))
+// The planner lists the company's approved specifications; none here.
+vi.mock('../services/specifications', () => ({ useSpecifications: vi.fn(() => ({ data: undefined })) }))
 
 const plan: SprintPlanResponse = {
   sprint_name: 'External sprint name',
