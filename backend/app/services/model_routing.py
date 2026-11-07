@@ -16,7 +16,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import logging
+
 from config import settings
+
+logger = logging.getLogger("fabrique-task-worker")
 
 
 def estimate_difficulty(
@@ -81,3 +85,25 @@ def model_for(
         except (ValueError, AttributeError):
             continue
     return None
+
+
+def resolve_agent_model(
+    agent: dict[str, Any],
+    default_role: str = "Dev",
+    item: dict[str, Any] | None = None,
+    rework: bool = False,
+) -> str:
+    from llm.model_factory import default_model_for_role
+
+    configured = (agent.get("model") or "").strip()
+    if configured:
+        return configured
+    role = agent.get("role") or default_role
+    base = default_model_for_role(role)
+    if item is None:
+        return base
+    difficulty = estimate_difficulty(item, rework=rework)
+    routed = model_for(role, difficulty)
+    if routed:
+        return routed
+    return base

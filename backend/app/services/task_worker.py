@@ -44,7 +44,6 @@ from nats_client import NATSClient
 from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
 
-from llm.model_factory import default_model_for_role
 from services import (
     acceptance,
     agent_run_service,
@@ -54,6 +53,7 @@ from services import (
     developer_tools,
     git_workflow,
     mcp_tools,
+    model_routing,
     procedures,
     retrospective,
     review_digest,
@@ -362,36 +362,6 @@ class LLMCallError(RuntimeError):
         self.credit_provider = credit_provider
 
 
-def _resolve_agent_model(
-    agent: dict[str, Any],
-    default_role: str = "Dev",
-    item: dict[str, Any] | None = None,
-    rework: bool = False,
-) -> str:
-    """The agent's configured model, or its role's default from model_factory.
-
-    When a routing policy is configured, the model may be chosen by the task's
-    estimated difficulty instead of the role default.
-    """
-    configured = (agent.get("model") or "").strip()
-    if configured:
-        return configured
-    role = agent.get("role") or default_role
-    base = default_model_for_role(role)
-    if item is None:
-        return base
-    try:
-        from services import model_routing
-
-        difficulty = model_routing.estimate_difficulty(item, rework=rework)
-        routed = model_routing.model_for(role, difficulty)
-        if routed:
-            return routed
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("model routing skipped: %s", exc)
-    return base
-
-
 def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -492,7 +462,9 @@ def _execute_task(
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
 
-    model = _resolve_agent_model(agent, item=item, rework=bool(rework_feedback))
+    model = model_routing.resolve_agent_model(
+        agent, item=item, rework=bool(rework_feedback)
+    )
     role = agent.get("role", "Dev")
 
     who = agent.get("name") or role
@@ -593,7 +565,7 @@ def _consult_architect(
     architect = {
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": _resolve_agent_model(
+        "model": model_routing.resolve_agent_model(
             {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
         ),
         "seniority": architect_row.seniority,
@@ -2675,7 +2647,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
-                "model": _resolve_agent_model(
+                "model": model_routing.resolve_agent_model(
                     {"model": reviewer.model if reviewer else None, "role": "QA"}
                 ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
@@ -3337,7 +3309,7 @@ def _call_llm_for_review(
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
-    model = _resolve_agent_model(agent, default_role="QA")
+    model = model_routing.resolve_agent_model(agent, default_role="QA")
     result = client.chat(
         model=model,
         messages=messages,
