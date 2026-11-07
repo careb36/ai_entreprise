@@ -240,8 +240,17 @@ def test_the_evidence_keeps_the_daemons_report_and_the_verifier_records_it():
         and host["finding"] is True
         and "unisolated" in host["observation"]
     )
+    # A run without the daemon's report: where it ran is unknown, not "host".
     old = sandbox.check_sandbox({"test_run": {"command": "pytest", "exit_code": 0}})
-    assert old["finding"] is True and "older daemon" in old["observation"]
+    assert old["finding"] is True and old["isolated"] is None
+    assert "unknown" in old["observation"] and "host" not in old["observation"]
+    # Nothing ran (no reply, runtime unavailable): nothing to report.
+    assert (
+        sandbox.check_sandbox(
+            {"test_run": {"command": "pytest", "reason": "sandbox unavailable"}}
+        )
+        is None
+    )
     assert sandbox.check_sandbox({"test_run": {"command": None}}) is None
     assert sandbox.check_sandbox({}) is None
     # The Verifier carries it beside tests_run, never as the verdict.
@@ -349,3 +358,94 @@ def test_the_delivery_test_run_sends_the_companys_sandbox(sqlite_session, monkey
     )
     assert _Nats.payload["sandbox"]["mode"] == "container"
     assert evidence["test_run"]["sandbox"] == {"mode": "container", "isolated": True}
+
+
+def test_a_policy_that_cannot_be_read_runs_nothing(monkeypatch):
+    class _Broken:
+        def connect(self, *a, **k):
+            raise RuntimeError("database down")
+
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "host")
+    with pytest.raises(sandbox.PolicyUnavailable, match="could not be read"):
+        sandbox.request_for_company_id(1, _Broken())
+    with pytest.raises(sandbox.PolicyUnavailable, match="could not be read"):
+        sandbox.request_for_sprint({"id": 1}, _Broken())
+    # No company at all is the deployment's default, as before.
+    assert sandbox.request_for_company_id(None)["mode"] == "host"
+
+    def broken(sprint, engine=None):
+        raise sandbox.PolicyUnavailable("the sprint's company could not be read (X)")
+
+    monkeypatch.setattr(sandbox, "request_for_sprint", broken)
+    monkeypatch.setattr(settings, "DELIVERY_TEST_COMMAND", "pytest -q")
+
+    subjects: list[str] = []
+
+    class _Nats:
+        async def request(self, subject, payload, timeout=5.0):
+            subjects.append(subject)
+            return {"exit_code": 0}
+
+    import asyncio
+
+    evidence = {"workspace_root": "/w"}
+    asyncio.run(workspace_daemon.run_delivery_tests(_Nats(), {"id": 1}, evidence))
+    assert "workspace.execute" not in subjects
+    assert evidence["test_run"]["reason"].startswith("the sprint's company")
+    assert evidence["test_run"].get("exit_code") is None
+
+    sent = []
+    box = developer_tools.WorkspaceToolbox(
+        lambda subject, payload, timeout: sent.append(payload) or {"exit_code": 0},
+        "/w",
+        test_command="pytest -q",
+        sandbox_error="the company's sandbox could not be read (X)",
+    )
+    _, text = box.call(
+        {"function": {"name": "workspace__run_tests", "arguments": "{}"}}, 1
+    )
+    assert sent == [] and "could not be read" in text
+
+
+def test_sandboxed_output_is_bounded_and_decoded(fake_runtime, tmp_path, monkeypatch):
+    monkeypatch.setattr(daemon_sandbox, "MAX_OUTPUT_BYTES", 1000)
+    result = daemon_sandbox.run_sandboxed(
+        "yes x | head -c 50000; printf END", str(tmp_path), {"mode": "container"}, 30
+    )
+    assert result["exit_code"] == 0 and result["output_truncated"] is True
+    assert len(result["stdout"]) == 1000 and result["stdout"].endswith("END")
+    # Output printed before a timeout comes back as text, ready for JSON.
+    hung = daemon_sandbox.run_sandboxed(
+        "printf before; sleep 5", str(tmp_path), {"mode": "container"}, 1
+    )
+    assert hung["timed_out"] is True and hung["stdout"] == "before"
+    import json
+
+    json.dumps(hung)
+
+
+def test_a_container_that_could_not_start_is_unavailable_not_a_test_result(
+    fake_runtime, tmp_path
+):
+    result = shell_exec.execute_shell_command(
+        "echo 'Cannot connect to the Docker daemon' >&2; exit 125",
+        str(tmp_path),
+        {"mode": "container"},
+    )
+    assert "exit_code" not in result and "sandbox" not in result
+    assert result["success"] is False
+    assert result["error"].startswith("sandbox unavailable: docker could not start")
+    assert "Cannot connect" in result["error"]
+
+
+def test_rootless_podman_keeps_the_persons_uid(monkeypatch):
+    box = daemon_sandbox.normalize({"mode": "container"})
+    monkeypatch.setattr(daemon_sandbox.os, "getuid", lambda: 1000)
+    podman = daemon_sandbox.container_command("/usr/bin/podman", box, "true", "/w", "n")
+    assert "--userns" in podman and podman[podman.index("--userns") + 1] == "keep-id"
+    assert "--user" not in podman
+    docker = daemon_sandbox.container_command("/usr/bin/docker", box, "true", "/w", "n")
+    assert docker[docker.index("--user") + 1].startswith("1000:")
+    monkeypatch.setattr(daemon_sandbox.os, "getuid", lambda: 0)
+    rootful = daemon_sandbox.container_command("podman", box, "true", "/w", "n")
+    assert "--userns" not in rootful and "--user" in rootful

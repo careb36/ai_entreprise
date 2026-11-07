@@ -105,12 +105,15 @@ class WorkspaceToolbox:
         test_command: str | None = None,
         result_max_chars: int | None = None,
         sandbox: dict[str, Any] | None = None,
+        sandbox_error: str | None = None,
     ) -> None:
         self.requester = requester
         self.workspace_root = workspace_root
         self.test_command = test_command
         # Where its test runs execute (services/sandbox.py): agent code.
         self.sandbox = sandbox
+        # The company's sandbox could not be read: its test runs are refused.
+        self.sandbox_error = sandbox_error
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
@@ -237,6 +240,8 @@ class WorkspaceToolbox:
         if tool == RUN_TESTS:
             command = self._test_command(arguments.get("command"))
             extra["command"] = command
+            if self.sandbox_error:
+                raise RuntimeError(f"tests not run: {self.sandbox_error}")
             request: dict[str, Any] = {"workspace_root": root, "command": command}
             if self.sandbox is not None:
                 request["sandbox"] = self.sandbox
@@ -459,11 +464,17 @@ def toolbox_for(
     if company_id is not None and offered_to(role) and "nats" in _bridge:
         root = tool_root(company_id, item_id, engine=engine)
         if root:
+            box, box_error = None, None
+            try:
+                box = sandbox.request_for_company_id(company_id, engine)
+            except sandbox.PolicyUnavailable as e:
+                box_error = str(e)
             workspace = WorkspaceToolbox(
                 _request_from_thread,
                 root,
                 test_command=_detect_test_command(root),
-                sandbox=sandbox.request_for_company_id(company_id, engine),
+                sandbox=box,
+                sandbox_error=box_error,
             )
     # The research tools for the roles that decide (``services/research_tools.py``).
     research = research_tools.toolbox_for(company_id, role, engine=engine)
