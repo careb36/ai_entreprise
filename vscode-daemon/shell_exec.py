@@ -85,7 +85,9 @@ def summarize_command_result(command: str, result: dict[str, Any]) -> str:
     return f"Workspace command failed (exit {exit_code}): {command_preview}"
 
 
-def execute_shell_command(command: str, cwd: str = ".") -> dict[str, Any]:
+def execute_shell_command(
+    command: str, cwd: str = ".", sandbox: Any = None
+) -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 
     Args:
@@ -99,6 +101,23 @@ def execute_shell_command(command: str, cwd: str = ".") -> dict[str, Any]:
         captured before the kill, so the caller can tell "hung" from "ran and
         failed".
     """
+    if sandbox is not None:
+        # Agent-written code: run it as the request's sandbox says
+        # (``sandbox.py``), and report what was applied. A mode that cannot
+        # run is an error, never a quiet run on the host.
+        import sandbox as sandbox_runner
+
+        try:
+            box = sandbox_runner.normalize(sandbox)
+            if box["mode"] != "host":
+                return sandbox_runner.run_sandboxed(
+                    command, cwd, sandbox, COMMAND_TIMEOUT_SECONDS
+                )
+        except sandbox_runner.SandboxUnavailable as exc:
+            return {"success": False, "error": f"sandbox unavailable: {exc}"}
+        result = execute_shell_command(command, cwd)
+        result["sandbox"] = sandbox_runner.report(box)
+        return result
     logger.info(f"Executing: {command} in {cwd}")
     try:
         result = subprocess.run(

@@ -42,7 +42,13 @@ from typing import Any
 
 from config import settings
 
-from services import context_read, developer_tool_schemas, mcp_tools, research_tools
+from services import (
+    context_read,
+    developer_tool_schemas,
+    mcp_tools,
+    research_tools,
+    sandbox,
+)
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -98,10 +104,13 @@ class WorkspaceToolbox:
         *,
         test_command: str | None = None,
         result_max_chars: int | None = None,
+        sandbox: dict[str, Any] | None = None,
     ) -> None:
         self.requester = requester
         self.workspace_root = workspace_root
         self.test_command = test_command
+        # Where its test runs execute (services/sandbox.py): agent code.
+        self.sandbox = sandbox
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
@@ -228,13 +237,16 @@ class WorkspaceToolbox:
         if tool == RUN_TESTS:
             command = self._test_command(arguments.get("command"))
             extra["command"] = command
+            request: dict[str, Any] = {"workspace_root": root, "command": command}
+            if self.sandbox is not None:
+                request["sandbox"] = self.sandbox
             reply = self.requester(
-                "workspace.execute",
-                {"workspace_root": root, "command": command},
-                settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+                "workspace.execute", request, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
             exit_code = reply.get("exit_code")
             extra["exit_code"] = exit_code
+            if isinstance(reply.get("sandbox"), dict):
+                extra["sandbox"] = reply["sandbox"]
             extra["timed_out"] = bool(reply.get("timed_out"))
             output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
             if reply.get("timed_out"):
@@ -448,7 +460,10 @@ def toolbox_for(
         root = tool_root(company_id, item_id, engine=engine)
         if root:
             workspace = WorkspaceToolbox(
-                _request_from_thread, root, test_command=_detect_test_command(root)
+                _request_from_thread,
+                root,
+                test_command=_detect_test_command(root),
+                sandbox=sandbox.request_for_company_id(company_id, engine),
             )
     # The research tools for the roles that decide (``services/research_tools.py``).
     research = research_tools.toolbox_for(company_id, role, engine=engine)

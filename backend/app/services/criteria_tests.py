@@ -121,6 +121,13 @@ def verbose_command(command: str) -> str:
         return (
             stripped if re.search(r"(?<=\s)-v+(?=\s|$)", stripped) else f"{stripped} -v"
         )
+    if "go test" in command and "-v" not in command.split():
+        # -v must precede the package pattern.
+        return (
+            command.replace("go test ", "go test -v ", 1)
+            if "go test " in command
+            else "go test -v"
+        )
     return command
 
 

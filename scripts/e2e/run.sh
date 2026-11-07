@@ -70,6 +70,21 @@ WORK=${E2E_WORKDIR:-$(mktemp -d -t fabrique-e2e-XXXXXX)}
 mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
 API=http://127.0.0.1:$BACKEND_PORT
+# Where agent-written code runs (DELIVERY_SANDBOX): on the host, or with
+# E2E_SANDBOX=container in an ephemeral container per run, from a small image
+# with pytest built here (the project's tests need it; the network is off at
+# run time).
+SANDBOX=${E2E_SANDBOX:-host}
+SANDBOX_IMAGE=fabrique-e2e-sandbox:1
+if [ "$SANDBOX" = "container" ]; then
+  docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 \
+    || printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n' \
+      | docker build -q -t "$SANDBOX_IMAGE" - >/dev/null \
+    || { echo "could not build the sandbox image"; exit 2; }
+  TEST_COMMAND="python -m pytest -q -p no:cacheprovider"
+else
+  TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
+fi
 PROMPTS=$WORK/fake_llm.prompts.log
 VIOLATIONS=$WORK/fake_llm.violations.log
 : > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
@@ -137,7 +152,8 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
-    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider" \
+    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
+    DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
     RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
@@ -360,6 +376,7 @@ COUNTER_RUNS=$(api "$API/v1/agent_runs?company_id=$CID&external_ref=task-$COUNTE
 counter_check() {  # counter_check <run id> <check name> <python expression over c, the check>
   api "$API/v1/agent_runs/$1/verifications?company_id=$CID" | json "(lambda c: ($3))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$2'))"; }
 COUNTER_FIRST=${COUNTER_RUNS%% *}; COUNTER_LAST=${COUNTER_RUNS##* }
+check "the delivery's tests ran where DELIVERY_SANDBOX says ($SANDBOX), and the Verifier recorded the daemon's own report" test "$(counter_check "$COUNTER_LAST" sandbox "c['sandbox']['mode'], c['isolated']")" = "('$SANDBOX', $([ "$SANDBOX" = host ] && echo False || echo True))"
 check "the counter's Developer read the greeting's module through the daemon before delivering, and the read is evidence with the file's hash" test "$(counter_check "$COUNTER_LAST" tools_used "c['calls'][0]['tool'], c['calls'][0]['path'], c['calls'][0]['sha256']")" = "('read', 'src/add_greeting.py', '$(sha256sum "$WORK/project/src/add_greeting.py" | cut -d' ' -f1)')"
 check "its prompt opened with the repository map, naming that module" test "$(prompt_seen "## Task: Add greeting counter.*## Repository.*src/add_greeting.py")" = yes
 check "the Verifier said the first delivery rewrote QA's test without reading it, and the second changed no existing file" test "$(counter_check "$COUNTER_FIRST" context_read "c['read'], c['modified_unread']")" = "(['src/add_greeting.py'], ['tests/test_req_2.py'])" -a "$(counter_check "$COUNTER_LAST" context_read "c['modified_unread'], c['observation']")" = "([], 'read 1 file(s); no existing file was changed')"

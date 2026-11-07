@@ -10,6 +10,8 @@ from services import (
     mcp_tools,
     research_tools,
     risk,
+    sandbox,
+    secops_checks,
     standards,
 )
 from services.agent_service import AgentService
@@ -402,6 +404,11 @@ def verify_agent_run(
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))
+        # Where the tests ran, as the daemon reported it (services/sandbox.py);
+        # a record, never the verdict.
+        sandbox_check = sandbox.check_sandbox(evidence)
+        if sandbox_check:
+            checks.append(sandbox_check)
     if evidence and evidence.get("acceptance"):
         # The acceptance tests per criterion (``services.acceptance``): what the
         # observed run said of this task's criteria, and that an implementation
@@ -433,6 +440,12 @@ def verify_agent_run(
     standards_check = standards.check_delivery(run.artifact_text)
     if standards_check:
         checks.append(standards_check)
+    # SecOps scans (``services/secops_checks``): dependency audit, secret scan,
+    # SAST. Only the ones that reported a result become checks.
+    if evidence and any(
+        k in evidence for k in ("dependency_audit", "secret_scan", "sast")
+    ):
+        checks.extend(secops_checks.check_all(evidence))
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(

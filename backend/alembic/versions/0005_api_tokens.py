@@ -1,7 +1,7 @@
 """Add api_tokens table for external callers.
 
-Revision ID: 0003
-Revises: 0002
+Revision ID: 0005
+Revises: 0004
 Create Date: 2026-11-07 21:05:00 UTC
 """
 
@@ -12,8 +12,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0003"
-down_revision = "0002"
+revision = "0005"
+down_revision = "0004"
 branch_labels = None
 depends_on = None
 
@@ -22,7 +22,9 @@ def upgrade() -> None:
     op.create_table(
         "api_tokens",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
-        sa.Column("company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False),
+        sa.Column(
+            "company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False
+        ),
         sa.Column("name", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("token_hash", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("created_by", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
