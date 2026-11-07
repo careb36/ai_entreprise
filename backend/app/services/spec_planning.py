@@ -157,9 +157,11 @@ def _validate_tasks(
 ) -> list[dict[str, Any]]:
     validated = []
     named: list[list[str]] = []
+    originals: list[str] = []  # the PO's titles as given, for its dependencies by title
     for task in tasks if isinstance(tasks, list) else []:
         if not isinstance(task, dict) or not task.get("title"):
             continue
+        originals.append(str(task["title"]).strip())
         covers = task.get("covers") if isinstance(task.get("covers"), list) else []
         assignee = str(task.get("assignee") or "Developer")
         raw = task.get("depends_on")
@@ -180,9 +182,13 @@ def _validate_tasks(
             }
         )
     validated, named = validated[:item_limit], named[:item_limit]
-    # Dependencies by title, or by position: unknown ones and self dropped,
-    # a cycle broken at the edge that closes it. Positions in the answer.
-    position_of = {t["title"].casefold(): i for i, t in enumerate(validated)}
+    # Dependencies by title (as the PO wrote it, or as shown once cut to
+    # TASK_TITLE_LIMIT), or by position: unknown ones and self dropped, a
+    # cycle broken at the edge that closes it. Positions in the answer.
+    position_of: dict[str, int] = {}
+    for i, t in enumerate(validated):
+        position_of.setdefault(originals[i].casefold(), i)
+        position_of.setdefault(t["title"].casefold(), i)
     graph = {
         i: list(
             dict.fromkeys(

@@ -91,12 +91,17 @@ def test_the_po_names_dependencies_by_title_and_the_plan_carries_positions(
                 "sprint_name": "B",
                 "goal": "g",
                 "tasks": [
-                    {"title": "Store", "description": "d", "covers": ["REQ-1.1"]},
+                    {
+                        "title": "Store " + "x" * 90,
+                        "description": "d",
+                        "covers": ["REQ-1.1"],
+                    },
                     {
                         "title": "List endpoint",
                         "description": "d",
                         "covers": ["REQ-1.2"],
-                        "depends_on": ["store", "Nobody", "List endpoint"],
+                        # The first title as the PO wrote it, longer than what is shown.
+                        "depends_on": ["store " + "x" * 90, "Nobody", "List endpoint"],
                     },
                     {
                         "title": "Board page",
@@ -117,9 +122,10 @@ def test_the_po_names_dependencies_by_title_and_the_plan_carries_positions(
     # S with the test task of REQ-2, so both are left out.
     assert [t["title"][:20] for t in plan["tasks"]] == [
         "Acceptance tests for",
-        "Store",
+        "Store xxxxxxxxxxxxxx",
         "List endpoint",
     ]
+    assert len(plan["tasks"][1]["title"]) == 80
     assert [t["depends_on"] for t in plan["tasks"]] == [[], [0], [0, 1]]
 
     monkeypatch.setattr(
@@ -298,7 +304,7 @@ def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_
     sqlite_session.commit()
     assert dependencies.settle_active(sqlite_session.get_bind()) == {
         "blocked": [],
-        "released": [endpoint.id],
+        "released": [endpoint.id, page.id],
     }
     sqlite_session.refresh(endpoint)
     sqlite_session.refresh(page)
@@ -306,13 +312,103 @@ def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_
         endpoint.status == "todo"
         and endpoint.comments[-1]["text"] == "Released: task it waited for got done."
     )
-    assert page.status == "blocked"
+    # The one behind it is back in todo too: nothing it waits for is stuck
+    # any more, and the worker queues it once the endpoint is done.
+    assert page.status == "todo"
+    assert page.comments[-1]["text"] == (
+        "Released: task it waited for are back in work; "
+        f'Waits for task {endpoint.id} ("Endpoint") to be done first.'
+    )
+    assert not dependencies.is_ready(sqlite_session, page)
     endpoint.status = "done"
     sqlite_session.add(endpoint)
     sqlite_session.commit()
-    assert dependencies.settle_active(sqlite_session.get_bind())["released"] == [
-        page.id
+    assert dependencies.settle_active(sqlite_session.get_bind()) == {
+        "blocked": [],
+        "released": [],
+    }
+    assert dependencies.is_ready(sqlite_session, page)
+
+
+def test_a_comment_anyone_appends_does_not_hide_the_hold_and_a_send_back_is_held_again(
+    sqlite_session,
+):
+    company = _company(sqlite_session)
+    sprint = _sprint(sqlite_session, company)
+    gate = [
+        {
+            "author": "Quality gate",
+            "text": "Pre-review quality gate failed",
+            "created_at": "",
+        }
     ]
+    root = _task(sqlite_session, sprint, "Root", status="blocked", comments=gate)
+    middle = _task(sqlite_session, sprint, "Middle", depends_on=[root.id])
+    leaf = _task(sqlite_session, sprint, "Leaf", depends_on=[middle.id])
+    assert dependencies.settle_active(sqlite_session.get_bind())["blocked"] == [
+        middle.id,
+        leaf.id,
+    ]
+    # A person comments on the held task: the hold is still the System's last word.
+    sqlite_session.refresh(middle)
+    middle.comments = [
+        *middle.comments,
+        {"author": "user", "text": "Looking into it", "created_at": ""},
+    ]
+    sqlite_session.add(middle)
+    # A person sends the leaf back to work while the root is still stuck.
+    sqlite_session.refresh(leaf)
+    leaf.status = "todo"
+    sqlite_session.add(leaf)
+    sqlite_session.commit()
+    assert dependencies.settle_active(sqlite_session.get_bind()) == {
+        "blocked": [leaf.id],
+        "released": [],
+    }
+    # The root gets done: the whole chain is released, the comment notwithstanding.
+    root.status = "done"
+    sqlite_session.add(root)
+    sqlite_session.commit()
+    assert dependencies.settle_active(sqlite_session.get_bind())["released"] == [
+        middle.id,
+        leaf.id,
+    ]
+    sqlite_session.refresh(middle)
+    assert middle.status == "todo"
+
+
+def test_a_sprint_reconciles_its_holds_before_it_counts_as_settled(
+    sqlite_session, monkeypatch
+):
+    from services import task_worker
+
+    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    company = _company(sqlite_session)
+    sprint = _sprint(sqlite_session, company)
+    gate = [
+        {
+            "author": "Quality gate",
+            "text": "Pre-review quality gate failed",
+            "created_at": "",
+        }
+    ]
+    root = _task(sqlite_session, sprint, "Root", status="blocked", comments=gate)
+    held = _task(sqlite_session, sprint, "Held", depends_on=[root.id])
+    assert dependencies.settle_active(sqlite_session.get_bind())["blocked"] == [held.id]
+    assert dependencies.sprint_settled(sqlite_session, sprint.id)
+    # The root is accepted (done) and the completion check runs before any
+    # settlement pass: the hold is released first, so the sprint stays open.
+    root.status = "done"
+    sqlite_session.add(root)
+    sqlite_session.commit()
+    assert not dependencies.sprint_settled(sqlite_session, sprint.id)
+    sqlite_session.refresh(held)
+    assert held.status == "todo"
+    assert not dependencies.sprint_settled(sqlite_session, 999999)
+    assert (
+        task_worker._complete_sprint_and_plan_follow_up(sprint.id)["reason"]
+        == "not_all_done"
+    )
 
 
 def test_a_closed_sprint_is_left_alone(sqlite_session):
@@ -397,6 +493,63 @@ def test_the_history_check_refuses_a_task_worked_before_its_dependency():
         "comments": [{"author": "user", "text": "accepted", "created_at": ""}],
         "depends_on": [1, 3],
     }
+    # Timing: the dependency closed after this task's first deliverable.
+    delivered = {
+        "id": 2,
+        "status": "in_review",
+        "depends_on": [1],
+        "comments": [
+            {
+                "author": "Developer",
+                "text": "Implemented it.",
+                "created_at": "2026-11-07T10:00:00",
+            },
+            {
+                "author": "QA",
+                "text": "APPROVED: fine",
+                "created_at": "2026-11-07T10:30:00",
+            },
+        ],
+    }
+    closed_late = {
+        "status": "done",
+        "comments": [
+            {
+                "author": "Developer",
+                "text": "Did it.",
+                "created_at": "2026-11-07T09:00:00",
+            },
+            {
+                "author": "QA",
+                "text": "APPROVED: ok",
+                "created_at": "2026-11-07T10:10:00+00:00",
+            },
+        ],
+    }
+    closed_early = {
+        **closed_late,
+        "comments": [
+            {**closed_late["comments"][0]},
+            {**closed_late["comments"][1], "created_at": "2026-11-07T09:50:00Z"},
+        ],
+    }
+    assert history_check.check_task(delivered, [], [], {1: closed_late}) == [
+        (
+            "worked_before_dependency: task 1 got done at 2026-11-07T10:10:00, "
+            "after this task delivered at 2026-11-07T10:00:00"
+        )
+    ]
+    assert history_check.check_task(delivered, [], [], {1: closed_early}) == []
+    # A task sent back to todo after delivering early is still caught.
+    assert (
+        history_check.check_task(
+            {**delivered, "status": "todo"}, [], [], {1: closed_late}
+        )
+        != []
+    )
+    assert history_check.check_task(
+        {**delivered, "status": "todo"}, [], [], {1: "in_progress"}
+    ) == ["worked_before_dependency: task 1 is in_progress, not done"]
     assert history_check.check_task(task, [], [], {1: "done", 3: "blocked"}) == [
         "worked_before_dependency: task 3 is blocked, not done"
     ]

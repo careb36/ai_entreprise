@@ -113,7 +113,10 @@ def deliver(
     """Write *files* on the task's branch, in its worktree, and commit them.
 
     *spec*: ``branch`` (the task's), ``base`` (where it starts: a branch or a
-    commit; empty for what the repository has checked out) and ``message``.
+    commit; empty for what the repository has checked out), ``message`` and
+    ``merge`` (branches of the tasks this one depends on, merged into the
+    worktree first so the task builds on their files; one that does not exist
+    or is already in is skipped, one that conflicts is an error).
     """
     branch = str(spec.get("branch") or "")
     if not valid_branch(branch):
@@ -131,6 +134,7 @@ def deliver(
     root = Path(_out(["rev-parse", "--show-toplevel"], folder))
     base = str(spec.get("base") or "HEAD")
     worktree = worktree_for(root, branch, base)
+    merged = merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
     parent = _out(["rev-parse", "HEAD"], worktree)
     results = write_files(str(worktree), files)
     written = [r["path"] for r in results if r.get("status") == "written"]
@@ -171,8 +175,34 @@ def deliver(
             "parent": parent,
             # None: nothing changed, so there is no new commit.
             "commit": commit,
+            # The prerequisites' branches merged into the worktree this time.
+            "merged": merged,
         },
     }
+
+
+def merge_branches(root: Path, worktree: Path, branches: list) -> list:
+    """Merge each of *branches* (La Fabrique's own) into *worktree*; the ones merged now."""
+    merged = []
+    name, email = COMMITTER
+    for ref in branches:
+        if not valid_branch(ref) or not ref.startswith(TASK_BRANCH_PREFIX):
+            continue
+        if run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{ref}"], root, check=False).returncode != 0:
+            continue
+        if run_git(["merge-base", "--is-ancestor", ref, "HEAD"], worktree, check=False).returncode == 0:
+            continue
+        result = run_git(
+            ["-c", f"user.name={name}", "-c", f"user.email={email}", "-c", "commit.gpgsign=false",
+             "merge", "--no-ff", "--no-edit", "--no-verify", "-m", f"Merge {ref} (a task this one depends on)", ref],
+            worktree,
+            check=False,
+        )
+        if result.returncode != 0:
+            run_git(["merge", "--abort"], worktree, check=False)
+            raise GitError(f"could not merge {ref} into the task's worktree: {(result.stderr or result.stdout).strip()}")
+        merged.append(ref)
+    return merged
 
 
 

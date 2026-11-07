@@ -13,6 +13,9 @@ and reports histories the loop must never produce:
 - ``high_risk_done_without_person``: a high-risk hold closed with no note
   from a person after it;
 - ``carried_twice``: one task carried into another sprint more than once;
+- ``worked_before_dependency``: a task that delivered before every task it
+  depends on was done: the dependency is not done, or it closed (its last
+  approval or person's note) after this task's first deliverable;
 - ``decision_without_escalation``: a ScrumMaster decision that names an
   escalation the task never had;
 - ``criteria_verified_without_run``: a run whose Verifier marked a criterion's
@@ -33,6 +36,7 @@ which prints every violation and exits 1 when there is one.
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from typing import Any
 
 # Restated on purpose; see the module docstring.
@@ -77,11 +81,35 @@ def _answered(body: str) -> int | None:
     return None
 
 
+def _when(comment: dict[str, Any]) -> datetime | None:
+    raw = str(comment.get("created_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return (
+        parsed if parsed.tzinfo is None else parsed.astimezone(UTC).replace(tzinfo=None)
+    )
+
+
+def _started_at(comments: list[dict[str, Any]]) -> datetime | None:
+    """When the task's first deliverable was posted."""
+    return next((_when(c) for c in comments if _is_deliverable(c)), None)
+
+
+def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
+    """When the task was closed: its last approval or person's note."""
+    closing = [c for c in comments if _is_approval(c) or _author(c) == _PERSON]
+    return _when(closing[-1]) if closing else None
+
+
 def check_task(
     task: dict[str, Any],
     runs: list[dict[str, Any]],
     messages: list[dict[str, Any]],
-    statuses: dict[int, str] | None = None,
+    others: dict[int, Any] | None = None,
 ) -> list[str]:
     """The violations in one task's history, as ``"<rule>: <detail>"`` lines.
 
@@ -91,8 +119,8 @@ def check_task(
     passed) and ``observed_test_run`` (whether that verification's evidence
     holds an exit status from the daemon);
     *messages* are the company's messages about it with ``id``, ``kind``
-    and ``body``; *statuses* maps the ids of the tasks it depends on to
-    their status.
+    and ``body``; *others* maps the ids of the tasks it depends on to their
+    ``status`` and ``comments`` (a bare status string is accepted).
     """
     comments = [c for c in task.get("comments") or [] if isinstance(c, dict)]
     status = task.get("status")
@@ -128,13 +156,26 @@ def check_task(
         if holds and not any(i > holds[-1] for i in person_notes):
             violations.append("high_risk_done_without_person")
 
-    if status in ("done", "in_progress", "in_review"):
-        for dep in task.get("depends_on") or []:
-            if (statuses or {}).get(dep) != "done":
-                violations.append(
-                    f"worked_before_dependency: task {dep} is "
-                    f"{(statuses or {}).get(dep, 'missing')}, not done"
-                )
+    started = _started_at(comments)
+    worked = started is not None or status in ("done", "in_progress", "in_review")
+    for dep in task.get("depends_on") or [] if worked else []:
+        other = (others or {}).get(dep)
+        if isinstance(other, str):
+            other = {"status": other, "comments": []}
+        dep_status = (other or {}).get("status", "missing")
+        if dep_status != "done":
+            violations.append(
+                f"worked_before_dependency: task {dep} is {dep_status}, not done"
+            )
+            continue
+        closed = _closed_at(
+            [c for c in (other or {}).get("comments") or [] if isinstance(c, dict)]
+        )
+        if started is not None and closed is not None and started < closed:
+            violations.append(
+                f"worked_before_dependency: task {dep} got done at "
+                f"{closed.isoformat()}, after this task delivered at {started.isoformat()}"
+            )
 
     for run in runs:
         if run.get("verified_criteria") and not run.get("observed_test_run"):
@@ -219,7 +260,10 @@ def check_database() -> list[str]:
                     {"id": message.id, "kind": message.kind, "body": message.body}
                 )
         items = session.exec(select(BacklogItem)).all()
-        statuses = {item.id: item.status for item in items}
+        others = {
+            item.id: {"status": item.status, "comments": item.comments or []}
+            for item in items
+        }
         for item in items:
             task = {
                 "id": item.id,
@@ -233,7 +277,7 @@ def check_database() -> list[str]:
                 task,
                 runs_by_ref.get(f"task-{item.id}", []),
                 messages_by_task.get(item.id, []),
-                statuses,
+                others,
             ):
                 found.append(f"task {item.id} ({item.title}): {violation}")
     return found

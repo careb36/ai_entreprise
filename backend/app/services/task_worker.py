@@ -93,7 +93,6 @@ from services.board import (
     completed_tasks_context,
     extract_latest_reviewable_comment,
     has_manual_freeze_marker,
-    item_is_settled,
     pending_rework_feedback,
     rework_requests_by,
 )
@@ -944,10 +943,9 @@ def _complete_sprint_and_plan_follow_up(
         if not sprint or sprint.status != "active":
             return {"completed": False, "auto_opened": False, "reason": "not_active"}
 
-        items = session.exec(
-            select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
-        ).all()
-        if not items or not all(item_is_settled(item) for item in items):
+        # The dependency holds are reconciled first (``dependencies.sprint_settled``).
+        if not dependencies.sprint_settled(session, completed_sprint_id):
+            session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
         sprint.status = "completed"
@@ -3342,13 +3340,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 if settled_sprint_ids
                 else []
             )
-            if all(
-                item_is_settled(item)
-                for item in session.exec(
-                    select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
-                ).all()
-            )
+            if dependencies.sprint_settled(session, sprint_id)
         ]
+        session.commit()
 
     # A sprint whose last open task just got blocked for a person closes now,
     # with its retrospective; approvals close theirs on the spot.
