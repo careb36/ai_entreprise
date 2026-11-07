@@ -313,7 +313,10 @@ def detect_test_command(workspace_root: str) -> str | None:
 
 
 async def run_delivery_tests(
-    nats_client: Any, sprint: dict[str, Any], evidence: dict[str, Any]
+    nats_client: Any,
+    sprint: dict[str, Any],
+    evidence: dict[str, Any],
+    engine: Any = None,
 ) -> None:
     """Run the project's tests through the daemon and add the result to *evidence*:
     ``test_run`` (command, exit code, output tail) and ``ci``, the shape
@@ -328,7 +331,12 @@ async def run_delivery_tests(
         command = criteria_tests.verbose_command(command)
     from services import sandbox
 
-    box = await asyncio.to_thread(sandbox.request_for_sprint, sprint)
+    try:
+        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, engine)
+    except sandbox.PolicyUnavailable as e:
+        # Never run agent code under a guessed sandbox: the tests stay unverified.
+        evidence["test_run"] = {"command": command, "reason": str(e)}
+        return
     try:
         result = await nats_client.request(
             "workspace.execute",

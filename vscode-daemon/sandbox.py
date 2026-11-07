@@ -35,6 +35,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import uuid
 from typing import Any
 
@@ -54,6 +55,12 @@ BASE_ENV = {
     "PYTHONDONTWRITEBYTECODE": "1",
     "CI": "true",
 }
+# What the daemon keeps of each stream: the tail, read while the command runs,
+# so a command that prints without end cannot fill the daemon's memory.
+MAX_OUTPUT_BYTES = 1024 * 1024
+# ``docker run`` / ``podman run`` exit with this when the runtime itself
+# failed (no daemon, no image, a bad flag): the command never started.
+RUNTIME_FAILURE_EXIT = 125
 _BWRAP_RO = ("/usr", "/bin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/sbin")
 
 
@@ -133,7 +140,12 @@ def container_command(runtime: str, box: dict[str, Any], command: str, cwd: str,
         "-w", CONTAINER_WORKDIR,
     ]
     if hasattr(os, "getuid"):
-        args += ["--user", f"{os.getuid()}:{os.getgid()}"]
+        if os.path.basename(runtime).startswith("podman") and os.getuid() != 0:
+            # Rootless Podman maps --user to a subordinate uid that cannot
+            # write the person's worktree; keep-id keeps their own uid/gid.
+            args += ["--userns", "keep-id"]
+        else:
+            args += ["--user", f"{os.getuid()}:{os.getgid()}"]
     for key, value in sandbox_env(box["env"]).items():
         args += ["-e", f"{key}={value}"]
     return [*args, box["image"], "/bin/sh", "-c", command]
@@ -187,9 +199,59 @@ def report(box: dict[str, Any], runtime: str | None = None) -> dict[str, Any]:
     return out
 
 
+class _Tail:
+    """The last ``limit`` bytes of a stream, drained by a thread."""
+
+    def __init__(self, stream: Any, limit: int) -> None:
+        self.data = bytearray()
+        self.total = 0
+        self._limit = limit
+        self._thread = threading.Thread(target=self._drain, args=(stream,), daemon=True)
+        self._thread.start()
+
+    def _drain(self, stream: Any) -> None:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            self.total += len(chunk)
+            self.data += chunk
+            if len(self.data) > self._limit:
+                del self.data[: len(self.data) - self._limit]
+
+    def text(self) -> str:
+        self._thread.join(timeout=5)
+        return bytes(self.data).decode("utf-8", errors="replace")
+
+
+def run_bounded(argv: list[str], timeout: int) -> dict[str, Any]:
+    """Run *argv*, keeping at most ``MAX_OUTPUT_BYTES`` of each stream's tail.
+    Returns ``exit_code`` (``None`` when killed at *timeout*), the decoded
+    ``stdout`` / ``stderr``, ``timed_out`` and ``output_truncated``."""
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out = _Tail(process.stdout, MAX_OUTPUT_BYTES)
+    err = _Tail(process.stderr, MAX_OUTPUT_BYTES)
+    timed_out = False
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        process.kill()
+        process.wait()
+    stdout, stderr = out.text(), err.text()
+    return {
+        "exit_code": None if timed_out else process.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+        "timed_out": timed_out,
+        "output_truncated": out.total > MAX_OUTPUT_BYTES or err.total > MAX_OUTPUT_BYTES,
+    }
+
+
 def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[str, Any]:
     """Run *command* in *cwd* as the request's sandbox says; the result carries
-    ``sandbox`` (what was applied). Host mode is the caller's own runner."""
+    ``sandbox`` (what was applied). Host mode is the caller's own runner.
+
+    Raises ``SandboxUnavailable`` when the container runtime could not start
+    the container: nothing ran, so there is no exit status and no sandbox to
+    report."""
     box = normalize(request)
     if box["mode"] == "host":
         raise ValueError("host mode is run by the caller")
@@ -202,24 +264,30 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
     )
     applied = report(box, runtime)
     logger.info("Sandboxed (%s): %s in %s", box["mode"], command, cwd)
-    try:
-        result = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
-    except subprocess.TimeoutExpired as e:
+    run = run_bounded(argv, timeout)
+    if run["timed_out"]:
         if runtime:
             subprocess.run([runtime, "kill", name], capture_output=True, check=False)
         return {
             "success": False,
-            "stdout": e.output or "",
-            "stderr": e.stderr or "",
+            "stdout": run["stdout"],
+            "stderr": run["stderr"],
+            "output_truncated": run["output_truncated"],
             "timed_out": True,
             "timeout_seconds": timeout,
             "error": f"command timed out after {timeout}s",
             "sandbox": applied,
         }
+    if runtime and run["exit_code"] == RUNTIME_FAILURE_EXIT:
+        raise SandboxUnavailable(
+            f"{os.path.basename(runtime)} could not start the container: "
+            f"{run['stderr'].strip()[-500:] or 'no message'}"
+        )
     return {
-        "success": result.returncode == 0,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "exit_code": result.returncode,
+        "success": run["exit_code"] == 0,
+        "stdout": run["stdout"],
+        "stderr": run["stderr"],
+        "output_truncated": run["output_truncated"],
+        "exit_code": run["exit_code"],
         "sandbox": applied,
     }

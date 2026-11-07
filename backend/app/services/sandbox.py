@@ -21,6 +21,12 @@ from config import settings
 MODES = ("host", "container", "bwrap")
 
 
+class PolicyUnavailable(RuntimeError):
+    """The company's sandbox could not be read. Agent code is then not run at
+    all: the deployment's default (often ``host``) must never stand in for a
+    company that asked for isolation."""
+
+
 def mode_for(company: Any) -> str:
     """The company's mode, else the deployment's; ``host`` when unknown."""
     own = str(getattr(company, "delivery_sandbox", None) or "").strip().lower()
@@ -48,7 +54,8 @@ def request_for_company_id(
     company_id: int | None, engine: Any = None
 ) -> dict[str, Any]:
     """``request_for`` with the company read from *engine* (the deployment's
-    default when there is no company or no engine)."""
+    default when there is no company). Raises ``PolicyUnavailable`` when the
+    company cannot be read."""
     company = None
     if company_id is not None:
         try:
@@ -58,8 +65,10 @@ def request_for_company_id(
 
             with Session(engine or default_engine) as session:
                 company = session.get(Company, company_id)
-        except Exception:  # noqa: BLE001 - The deployment's default still applies.
-            company = None
+        except Exception as e:  # Fail closed, with the reason.
+            raise PolicyUnavailable(
+                f"the company's sandbox could not be read ({type(e).__name__})"
+            ) from e
     return request_for(company)
 
 
@@ -67,7 +76,7 @@ def request_for_sprint(
     sprint: dict[str, Any] | None, engine: Any = None
 ) -> dict[str, Any]:
     """``request_for`` for the company of *sprint* (its ``company_id``, else
-    the sprint row's)."""
+    the sprint row's). Raises ``PolicyUnavailable`` when it cannot be read."""
     sprint = sprint or {}
     company_id = sprint.get("company_id")
     if company_id is None and sprint.get("id") is not None:
@@ -79,8 +88,10 @@ def request_for_sprint(
             with Session(engine or default_engine) as session:
                 row = session.get(Sprint, sprint["id"])
                 company_id = row.company_id if row is not None else None
-        except Exception:  # noqa: BLE001 - The deployment's default still applies.
-            company_id = None
+        except Exception as e:  # Fail closed, with the reason.
+            raise PolicyUnavailable(
+                f"the sprint's company could not be read ({type(e).__name__})"
+            ) from e
     return request_for_company_id(company_id, engine)
 
 
@@ -96,15 +107,21 @@ def check_sandbox(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     if not run.get("command"):
         return None
     applied = run.get("sandbox")
+    if (
+        run.get("exit_code") is None
+        and not run.get("timed_out")
+        and not isinstance(applied, dict)
+    ):
+        return None  # Nothing ran: tests_run says why, there is nowhere to report.
     if not isinstance(applied, dict):
         return {
             "name": "sandbox",
             "outcome": "pass",
-            "isolated": False,
+            "isolated": None,
             "finding": True,
             "observation": (
-                "the daemon reported no sandbox: an older daemon, so the tests "
-                "ran on the host, unisolated"
+                "the daemon reported no sandbox, so where the tests ran and "
+                "whether they were isolated is unknown"
             ),
         }
     mode = applied.get("mode")

@@ -1883,7 +1883,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         await acceptance.guard_test_files(
             nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
         )
-        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
+        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
@@ -1986,7 +1986,7 @@ async def _deliver_artifacts(
             await acceptance.guard_test_files(
                 nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
-            await _run_delivery_tests(nats_client, sprint, evidence)
+            await _run_delivery_tests(nats_client, sprint, evidence, engine)
 
     recorded = await asyncio.to_thread(
         _record_task_run, item, agent, sprint, deliverable, targets, evidence
