@@ -1596,6 +1596,120 @@
       "uncovered_other": "{{count}} criteria stay uncovered: {{ids}}. The sprint can still start."
     }
   },
+  "architectures": {
+    "title": "Architecture",
+    "loading": "Loading the architecture…",
+    "loadError": "Could not load the architecture: {{message}}",
+    "loadingOne": "Loading the architecture…",
+    "loadOneError": "Could not load the architecture: {{message}}",
+    "invalidId": "Invalid architecture ID: {{id}}",
+    "back": "Back to the specification",
+    "managerOnly": "Only a Manager writes an architecture.",
+    "noneHint": "No architecture yet. Ask the Architect for a design from this specification, or write one yourself.",
+    "noneViewer": "No architecture yet. A Manager asks the Architect for a design, or writes one.",
+    "askArchitect": "Ask the Architect for a design",
+    "writeYourself": "Write it yourself",
+    "drafting": "The Architect is designing…",
+    "draftError": "The Architect could not design it: {{message}}",
+    "overview": "Overview",
+    "writtenTo": "Written to {{path}} on {{date}}, sha256 {{hash}}",
+    "check": {
+      "ok": "Nothing blocks this architecture: it is ready to approve."
+    },
+    "questions": {
+      "none": "The Architect left no questions."
+    },
+    "kinds": {
+      "http": "HTTP",
+      "function": "Function",
+      "event": "Event",
+      "cli": "CLI",
+      "schema": "Schema",
+      "other": "Other"
+    },
+    "modules": {
+      "title": "Modules",
+      "none": "No modules.",
+      "dependsOn": "Depends on",
+      "covers": "Covers"
+    },
+    "interfaces": {
+      "title": "Interfaces",
+      "none": "No interfaces.",
+      "providedBy": "Provided by",
+      "consumers": "Consumed by"
+    },
+    "decisions": {
+      "title": "Decisions",
+      "none": "No decisions.",
+      "context": "Context",
+      "decision": "Decision",
+      "consequences": "Consequences"
+    },
+    "conventions": {
+      "title": "Conventions",
+      "none": "No conventions."
+    },
+    "markdown": {
+      "title": "Document",
+      "view": "View as Markdown",
+      "loading": "Loading the document…",
+      "error": "Could not load the document: {{message}}"
+    },
+    "actions": {
+      "reviseArchitect": "Ask the Architect to revise",
+      "reviseHint": "A new draft version; this one stays approved until the new one is.",
+      "write": "Write to the repository",
+      "writing": "Writing…",
+      "written": "Written to {{path}}, sha256 {{hash}}",
+      "writeError": "Could not write it: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Architecture editor",
+      "newTitle": "New architecture",
+      "idsNote": "Ids (MOD-1, IF-1, ADR-1) are assigned when you save; modules are named here and the names map to ids.",
+      "title": "Title",
+      "overview": "Overview",
+      "module": "Module {{n}}",
+      "moduleName": "Name",
+      "moduleNameOf": "Name of module {{n}}",
+      "modulePath": "Path",
+      "modulePathOf": "Path of module {{n}}",
+      "responsibility": "Responsibility",
+      "responsibilityOf": "Responsibility of module {{n}}",
+      "dependsOn": "Depends on",
+      "dependsOnItem": "Module {{n}} depends on {{name}}",
+      "covers": "Covers",
+      "coversItem": "Module {{n}} covers {{id}}",
+      "addModule": "Add a module",
+      "removeModule": "Remove module {{n}}",
+      "nothingToPick": "Nothing to pick from yet.",
+      "interface": "Interface {{n}}",
+      "interfaceName": "Name",
+      "interfaceNameOf": "Name of interface {{n}}",
+      "kind": "Kind",
+      "kindOf": "Kind of interface {{n}}",
+      "providedBy": "Provided by",
+      "providedByOf": "Module providing interface {{n}}",
+      "pickModule": "Pick a module…",
+      "contract": "Contract",
+      "contractOf": "Contract of interface {{n}}",
+      "consumers": "Consumed by",
+      "consumersItem": "Interface {{n}} consumed by {{name}}",
+      "addInterface": "Add an interface",
+      "removeInterface": "Remove interface {{n}}",
+      "decision": "Decision {{n}}",
+      "decisionTitle": "Title",
+      "decisionTitleOf": "Title of decision {{n}}",
+      "decisionField": "{{field}} of decision {{n}}",
+      "addDecision": "Add a decision",
+      "removeDecision": "Remove decision {{n}}",
+      "conventionOf": "Convention {{n}}",
+      "addConvention": "Add a convention",
+      "removeConvention": "Remove convention {{n}}",
+      "incomplete": "Every module needs a name and a path, every interface a name and its module, every decision a title."
+    }
+  },
   "procedures": {
     "title": "Procedures",
     "subtitle": "The rules each role follows. The ScrumMaster proposes them after a sprint with rework; the board's numbers keep or revert them.",
