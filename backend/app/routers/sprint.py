@@ -12,6 +12,7 @@ an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -136,8 +137,15 @@ async def plan_sprint(
 
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
-        plan = spec_planning.plan(
-            session, spec, scope_size, SCOPE_LIMITS[scope_size], agent_dicts
+        # The PO's call waits on the proxy: off the event loop.
+        plan = await asyncio.to_thread(
+            spec_planning.plan,
+            session,
+            spec,
+            scope_size,
+            SCOPE_LIMITS[scope_size],
+            agent_dicts,
+            req.prompt,
         )
         plan["specification_id"] = spec.id
         return _serialize_plan_response(
@@ -223,7 +231,8 @@ async def start_sprint(
 
     item_limit = SCOPE_LIMITS[scope_size]
     carry_over_ids = list(dict.fromkeys(req.carry_over_ids))
-    item_count = len(req.backlog_items) + len(carry_over_ids)
+    backlog_items = [item.model_dump() for item in req.backlog_items]
+    item_count = len(backlog_items) + len(carry_over_ids)
     if item_count > SCOPE_HARD_MAX:
         raise HTTPException(
             status_code=422,
@@ -259,7 +268,7 @@ async def start_sprint(
     session.flush()  # Obtain sprint.id before processing backlog items
 
     item_ids = []
-    for item in req.backlog_items:
+    for item in backlog_items:
         backlog_item = BacklogItem(
             sprint_id=sprint.id,
             title=item.get("title", ""),
@@ -306,14 +315,14 @@ async def start_sprint(
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
         item_ids.extend(item.id for item in carried)
         story_items = [
-            *req.backlog_items,
+            *backlog_items,
             *(
                 {"title": item.title, "description": item.description or ""}
                 for item in carried
             ),
         ]
     else:
-        story_items = list(req.backlog_items)
+        story_items = list(backlog_items)
 
     kickoff_story = "\n".join(
         [

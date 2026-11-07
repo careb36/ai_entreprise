@@ -10,7 +10,7 @@ export class ApiError extends Error {
   /** The server's own `detail` message, when the error body carried one. */
   public detail?: string
 
-  constructor(public status: number, message: string, detail?: string) {
+  constructor(public status: number, message: string, detail?: string, public data?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.detail = detail
@@ -729,7 +729,7 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
         await delay(600 * (_attempt + 1))
         return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
       }
-      throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
+      throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
     }
 
     if (response.status === 204) return undefined as unknown as T
@@ -757,23 +757,23 @@ async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filename: stri
   if (token) headers.set('Authorization', ['Bearer', token].join(' '))
   const response = await fetch(`${API_BASE}${endpoint}`, { headers })
   if (!response.ok) {
-    throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
+    throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
   }
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename="?([^";]+)"?/.exec(disposition)
   return { blob: await response.blob(), filename: match ? match[1] : null }
 }
 
-async function readDetail(response: Response): Promise<string | undefined> {
+/** The body's `detail` as a message and as sent (an object carries more, e.g. a 409's findings). */
+async function readDetail(response: Response): Promise<[string | undefined, unknown]> {
   try {
-    const body = await response.json()
-    const detail = body?.detail
-    if (typeof detail === 'string' && detail) return detail
+    const detail = (await response.json())?.detail
+    if (typeof detail === 'string' && detail) return [detail, detail]
     // Some endpoints answer with {message, ...} (e.g. GitHub rate limits).
-    if (detail && typeof detail === 'object' && typeof detail.message === 'string') return detail.message
-    return undefined
+    if (detail && typeof detail === 'object' && typeof detail.message === 'string') return [detail.message, detail]
+    return [undefined, detail]
   } catch {
-    return undefined
+    return [undefined, undefined]
   }
 }
 

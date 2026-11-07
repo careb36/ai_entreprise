@@ -121,7 +121,12 @@ def carry_over(
             priority=item.priority,
             assignee=item.assignee,
             status="todo",
-            covers=list(item.covers) if isinstance(item.covers, list) else None,
+            # Criteria ids mean something only against the same specification.
+            covers=list(item.covers)
+            if isinstance(item.covers, list)
+            and new_sprint.specification_id is not None
+            and new_sprint.specification_id == sprint.specification_id
+            else None,
             comments=[
                 {
                     "author": "System",

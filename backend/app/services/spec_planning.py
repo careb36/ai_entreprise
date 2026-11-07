@@ -98,7 +98,13 @@ def plan_prompt(
     item_limit: int,
     roster: str,
     roles: list[str],
+    note: str = "",
 ) -> str:
+    note_section = (
+        f"## Note from the person planning\n{note.strip()[:2000]}\n\n"
+        if note.strip()
+        else ""
+    )
     return (
         f"You are {po_name}, the PO. Plan a sprint from the specification below: "
         "split the work into tasks a single agent can deliver, and say for each task "
@@ -107,6 +113,7 @@ def plan_prompt(
         "ones first.\n\n"
         f"## Specification: {spec.get('title')}\n{spec.get('summary')}\n\n"
         f"{spec_check.as_prompt(spec)}\n\n"
+        f"{note_section}"
         f"## Team\n{roster}\n\n"
         f"Scope {scope_size}: at most {item_limit} tasks. Assignee is one of: {', '.join(roles)}.\n\n"
         "Answer with one JSON object and nothing else:\n"
@@ -179,10 +186,12 @@ def plan(
     scope_size: str,
     item_limit: int,
     agents: list[dict[str, Any]],
+    note: str = "",
 ) -> dict[str, Any]:
     """The PO's split of *spec* into tasks with ``covers``, and what stays uncovered.
 
-    A failed or unusable answer falls back to one task per requirement.
+    *note* is what the person planning added for the PO. A failed or
+    unusable answer falls back to one task per requirement.
     """
     content = spec_content(spec)
     team = _ensure_execution_team(agents)
@@ -190,11 +199,15 @@ def plan(
     model, system_prompt, po_name = spec_author.po_profile(session, spec.company_id)
     po_name = _find_po_agent(team).get("name") or po_name
     prompt = plan_prompt(
-        po_name, content, scope_size, item_limit, _build_team_roster(team), roles
+        po_name, content, scope_size, item_limit, _build_team_roster(team), roles, note
     )
     try:
         answer = spec_author.ask(
-            model, system_prompt, prompt, max_tokens=PLAN_MAX_TOKENS
+            model,
+            system_prompt,
+            prompt,
+            max_tokens=PLAN_MAX_TOKENS,
+            bu_id=spec_author.business_unit_id(session, spec.company_id),
         )
         parsed = json.loads(spec_author._strip_fences(answer))
         if not isinstance(parsed, dict):
@@ -234,12 +247,20 @@ def covers_of(item: Any) -> list[str]:
 
 
 def requirements_section(spec: dict[str, Any], covers: list[str]) -> str:
-    """The prompt section for a task covering *covers*; empty when it covers nothing."""
-    if not covers:
-        return ""
+    """The prompt section for a task covering *covers*.
+
+    A task that covers no criterion still gets the quality attributes and
+    the constraints, which hold for every task of the specification.
+    """
     body = spec_check.as_prompt(spec, set(covers))
     if not body:
         return ""
+    if not covers:
+        return (
+            "\n\n## Specification rules for every task\n"
+            "From the approved specification: the quality attributes and constraints "
+            "every task follows, this one included.\n\n" + body
+        )
     return (
         "\n\n## Requirements this task covers\n"
         "From the approved specification. Each criterion below must hold when the "
@@ -250,7 +271,7 @@ def requirements_section(spec: dict[str, Any], covers: list[str]) -> str:
 
 def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     """The requirements section for *item* of *sprint*; empty without a specification."""
-    if sprint is None or sprint.specification_id is None or not covers_of(item):
+    if sprint is None or sprint.specification_id is None:
         return ""
     spec = session.get(Specification, sprint.specification_id)
     return requirements_section(spec_content(spec), covers_of(item)) if spec else ""

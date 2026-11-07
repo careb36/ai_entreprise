@@ -19,7 +19,7 @@ from typing import Any
 
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
-from models import Agent
+from models import Agent, BusinessUnit
 from models.specification import Specification
 from sqlmodel import Session, select
 
@@ -55,6 +55,14 @@ def _stack(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) and value else None
 
 
+def business_unit_id(session: Session, company_id: int) -> int | None:
+    """The company's business unit the proxy bills, or ``None`` when it has none."""
+    unit = session.exec(
+        select(BusinessUnit).where(BusinessUnit.company_id == company_id)
+    ).first()
+    return unit.id if unit else None
+
+
 def po_profile(session: Session, company_id: int) -> tuple[str, str | None, str]:
     """The company's PO agent: its model (or the role's default), system prompt and name."""
     from llm.model_factory import default_model_for_role
@@ -77,8 +85,13 @@ def ask(
     *,
     max_tokens: int = DRAFT_MAX_TOKENS,
     timeout: float = DRAFT_TIMEOUT_SECONDS,
+    bu_id: int | None = None,
 ) -> str:
-    """One question to the PO through the proxy; no database involved."""
+    """One question to the PO through the proxy; no database involved.
+
+    *bu_id* is the company's business unit: the proxy enforces the budget
+    and accounts the usage by it.
+    """
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
@@ -86,7 +99,7 @@ def ask(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
-    result = client.chat(messages=messages, model=model, role=PO_ROLE)
+    result = client.chat(messages=messages, model=model, role=PO_ROLE, bu_id=bu_id)
     if not isinstance(result, dict) or result.get("error"):
         raise SpecAuthorError(f"LLM call failed: {result!r}"[:500])
     choices = result.get("choices") or [{}]
@@ -141,10 +154,9 @@ def draft_prompt(
             "nothing else about the product, and every criterion you write becomes a test."
         ),
         "",
-        "## Brief from the person asking",
-        brief.strip()[:BRIEF_LIMIT],
-        "",
     ]
+    if brief.strip():
+        lines += ["## Brief from the person asking", brief.strip()[:BRIEF_LIMIT], ""]
     if stack := _stack(detected_stack):
         lines += ["## Detected stack of the project", _build_stack_summary(stack), ""]
     if existing:
@@ -236,7 +248,9 @@ def draft(
     logger.info(
         "PO drafting a specification for company=%s model=%s", company_id, model
     )
-    answer = ask(model, system_prompt, prompt)
+    answer = ask(
+        model, system_prompt, prompt, bu_id=business_unit_id(session, company_id)
+    )
     spec = parse_draft(answer)
     if spec is None:
         raise SpecAuthorError(

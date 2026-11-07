@@ -14,6 +14,7 @@ The ids of requirements and criteria come from ``services.spec_check``,
 never from a request or a model; the check decides what can be approved.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -42,7 +43,8 @@ class SpecificationCreate(SpecificationBody):
 
 class DraftRequest(BaseModel):
     company_id: int
-    brief: str = Field(min_length=1, max_length=spec_author.BRIEF_LIMIT)
+    # Empty on a revision: the answered questions are what the PO works from.
+    brief: str = Field(default="", max_length=spec_author.BRIEF_LIMIT)
     # A draft to revise with its answered questions; omitted, a new one.
     specification_id: int | None = None
 
@@ -89,7 +91,12 @@ def serialize(spec: Specification, session: Session | None = None) -> dict[str, 
 def _load(
     session: Session, user: User | None, spec_id: int, role: str
 ) -> Specification:
-    spec = session.get(Specification, spec_id)
+    query = select(Specification).where(Specification.id == spec_id)
+    if role == "Manager":
+        # A Manager's operation checks the status it then changes: the row is
+        # locked until the commit, so two replicas cannot approve and edit at once.
+        query = query.with_for_update()
+    spec = session.exec(query).first()
     if spec is None:
         raise HTTPException(status_code=404, detail="Specification not found")
     require_company_role(session, user, spec.company_id, role)
@@ -187,6 +194,10 @@ async def draft_specification(
     it. 502 when the PO gave nothing usable; the draft named is left as it was.
     """
     require_company_role(session, user, req.company_id, "Manager")
+    if not req.brief.strip() and req.specification_id is None:
+        raise HTTPException(
+            status_code=422, detail="A brief is required for a new draft"
+        )
     existing = None
     if req.specification_id is not None:
         existing = _load(session, user, req.specification_id, "Manager")
@@ -199,7 +210,9 @@ async def draft_specification(
         .order_by(text("created_at DESC"))
     ).first()
     try:
-        content = spec_author.draft(
+        # The PO's call waits on the proxy: off the event loop.
+        content = await asyncio.to_thread(
+            spec_author.draft,
             session,
             req.company_id,
             req.brief,
