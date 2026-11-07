@@ -385,12 +385,11 @@ def _execute_task(
     """
     Call the LLM to produce a deliverable for the given backlog item.
 
-    Runs synchronously (called via ``asyncio.to_thread``). Returns the LLM
-    response text. An empty agent model resolves to the role's default from
-    ``llm.model_factory``; the model the proxy reports as having answered is
-    stored as ``agent["served_model"]``. Raises ``LLMCallError`` when the
-    call fails or returns no content. With ``company_id`` the turn is also
-    written to ``audit_log`` (role, company, token cost) for the KPIs.
+    Runs synchronously (``asyncio.to_thread``). Returns the LLM's text. An
+    empty agent model resolves to the role's default; the model the proxy
+    reports is stored as ``agent["served_model"]``. Raises ``LLMCallError``
+    on a failed or empty call. With ``company_id`` the turn goes to
+    ``audit_log`` (role, company, token cost) for the KPIs.
     """
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
@@ -402,11 +401,9 @@ def _execute_task(
     )
 
     # Sections run from the most stable to the most variable, so the providers'
-    # prefix cache (DeepSeek, Gemini) bills the shared start of the prompt at
-    # the cached rate: the output format, the role's procedures and the
-    # company's lessons are the same for every task of a sprint; the task, its
-    # memory and its history come next; what changes between attempts (the
-    # Architect's brief, the review feedback) goes last.
+    # prefix cache bills the shared start of the prompt at the cached rate:
+    # format, procedures and lessons first; the task and its history next;
+    # what changes between attempts (the brief, the review feedback) last.
     user_prompt = FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (procedures_context or "")
     if lessons_context:
         user_prompt += (
@@ -424,7 +421,9 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
     ) + (requirements_context or "")
-    user_prompt += developer_tools.repository_section(company_id, agent.get("role"))
+    user_prompt += developer_tools.repository_section(
+        company_id, agent.get("role"), item.get("id"), engine=engine
+    )
 
     if memory_context:
         user_prompt += (
@@ -489,9 +488,10 @@ def _execute_task(
                 result_preview=preview,
             )
 
-    # The workspace tools and the company's MCP servers for this role: the
-    # model may call them before answering, each call an observation.
-    toolbox = developer_tools.toolbox_for(company_id, role, engine=engine)
+    # The workspace and MCP tools for this role: each call an observation.
+    toolbox = developer_tools.toolbox_for(
+        company_id, role, engine=engine, item_id=item.get("id")
+    )
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
             client,

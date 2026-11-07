@@ -22,7 +22,7 @@ import workspace_read  # the daemon's module, on sys.path via conftest
 from config import settings
 from models.agent_run import AgentRun
 from models.company import Company
-from services import developer_tools, mcp_tools, risk
+from services import context_read, developer_tools, mcp_config, mcp_tools, risk
 from services import task_worker as tw
 from services.verification import check_risk_tier, verify_agent_run
 
@@ -452,7 +452,7 @@ class _FakeMcp:
         self.closed = True
 
 
-def test_the_combined_toolbox_dispatches_by_prefix_and_caps_the_rounds(
+def test_the_combined_toolbox_dispatches_by_name_and_caps_the_rounds(
     project, monkeypatch
 ):
     monkeypatch.setattr(settings, "DEVELOPER_TOOL_ROUNDS", 2)
@@ -483,8 +483,14 @@ def test_the_combined_toolbox_dispatches_by_prefix_and_caps_the_rounds(
     assert [o["server"] for o in observations] == ["workspace", "tracker"] * 2
     assert [r["tools"] is not None for r in model.requests] == [True, True, False]
     assert len(mcp.calls) == 2
+    # A name that is not a built-in tool goes to the MCP side, whatever its prefix.
+    box.call(_call("workspace__other", x=1), 3)
+    assert len(mcp.calls) == 3
     box.close()
     assert mcp.closed
+    # The built-in namespace is reserved: no MCP server may take the name.
+    with pytest.raises(mcp_config.McpConfigError, match="reserved"):
+        mcp_config.normalize_server("workspace", {"url": "https://x.example/mcp"})
 
 
 def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
@@ -589,8 +595,8 @@ def test_the_verifier_says_which_modified_files_were_read_first_and_the_tier_fol
         {"path": "src/b.py", "status": "written", "change": "modified"},
         {"path": "src/new.py", "status": "written", "change": "added"},
     ]
-    assert developer_tools.files_read(calls) == {"src/a.py": "aa"}
-    check = developer_tools.check_context_read(
+    assert context_read.files_read(calls) == {"src/a.py": "aa"}
+    check = context_read.check_context_read(
         {"tool_calls": calls, "workspace_writes": writes}
     )
     assert check["name"] == "context_read" and check["outcome"] == "pass"
@@ -622,18 +628,18 @@ def test_the_verifier_says_which_modified_files_were_read_first_and_the_tier_fol
         == "low"
     )
     assert (
-        developer_tools.check_context_read(
+        context_read.check_context_read(
             {"tool_calls": all_read, "workspace_writes": writes}
         )["observation"]
         == "every modified file was read first (2)"
     )
-    only_new = developer_tools.check_context_read(
+    only_new = context_read.check_context_read(
         {"tool_calls": calls, "workspace_writes": writes[2:]}
     )
     assert only_new["observation"] == "read 1 file(s); no existing file was changed"
     # No workspace tools in use: a producer without them is classified by its paths alone.
     assert (
-        developer_tools.check_context_read({"tool_calls": [], "workspace_writes": []})
+        context_read.check_context_read({"tool_calls": [], "workspace_writes": []})
         is None
     )
     no_tools = check_risk_tier(_run(), {"tool_calls": [], "workspace_writes": writes})
@@ -764,3 +770,242 @@ def test_the_history_check_refuses_a_read_recorded_without_a_hash(sqlite_session
     )
     assert _run_facts(verification)["reads_without_hash"] == ["src/b.py"]
     assert _run_facts(None)["reads_without_hash"] == []
+
+
+# --- the review's findings ----------------------------------------------------
+
+
+def test_a_narrower_test_command_must_be_the_same_runner_exactly(project):
+    daemon = _load_daemon()
+    requester = _Requester(
+        daemon,
+        {"python -m pytest -q": {"exit_code": 0, "stdout": "ok\n", "stderr": ""}},
+    )
+    box = developer_tools.WorkspaceToolbox(
+        requester, str(project), test_command="python -m pytest -q"
+    )
+    for wanted in (
+        "python -m pytest_custom",
+        "python -m pytestx tests",
+        "python -m pytest\ttests",
+    ):
+        observation, _text = box.call(_call("workspace__run_tests", command=wanted), 1)
+        assert observation["command"] == "python -m pytest -q", wanted
+    exact, _text = box.call(
+        _call("workspace__run_tests", command="python -m pytest"), 1
+    )
+    assert exact["command"] == "python -m pytest"
+    assert developer_tools._runs_with("npx vitest run x", "npx vitest")
+    assert not developer_tools._runs_with("npx vitest-custom run", "npx vitest")
+
+
+def test_files_that_may_hold_secrets_are_never_read_nor_searched(project):
+    daemon = _load_daemon()
+    (project / ".env").write_text(
+        "OPENAI_API_KEY=sk-live-abcdefghijklmnopqrstuvwxyz123456\n"
+    )
+    (project / "deploy.pem").write_text(
+        "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n"
+    )
+    (project / ".ssh").mkdir()
+    (project / ".ssh" / "config").write_text("Host x\n")
+    (project / "config").mkdir()
+    (project / "config" / "secrets.yaml").write_text("token: abc\n")
+    for name in (".env", "deploy.pem", ".ssh/config", "config/secrets.yaml"):
+        with pytest.raises(workspace_read.ReadError) as refused:
+            workspace_read.read_file(
+                str(project), name, None, daemon._resolve_target_path
+            )
+        assert refused.value.status == 403, name
+    found = workspace_read.search(
+        str(project), "PRIVATE KEY|OPENAI|token", None, daemon._resolve_target_path
+    )
+    assert found["matches"] == []
+    # An explicit search on the file itself is refused the same way: nothing is opened.
+    direct = workspace_read.search(
+        str(project), "KEY", "deploy.pem", daemon._resolve_target_path
+    )
+    assert direct["matches"] == [] and direct["files_scanned"] == 0
+
+
+def test_a_secret_looking_line_in_a_readable_file_is_redacted_for_the_model(project):
+    daemon = _load_daemon()
+    (project / "src" / "settings.py").write_text(
+        "DEBUG = True\nAWS_KEY = 'AKIAABCDEFGHIJKLMNOP'\nNAME = 'x'\n"
+    )
+    box = developer_tools.WorkspaceToolbox(_Requester(daemon), str(project))
+    observation, text = box.call(_call("workspace__read", path="src/settings.py"), 1)
+    assert (
+        "AKIAABCDEFGHIJKLMNOP" not in text
+        and "[line redacted: it looks like a secret]" in text
+    )
+    assert "DEBUG = True" in text and observation["sha256"]
+    _search, text = box.call(_call("workspace__search", pattern="AKIA"), 1)
+    assert "AKIAABCDEFGHIJKLMNOP" not in text and "redacted" in text
+    assert context_read.redact_secrets("a.py", "x = 1\ny = 2") == "x = 1\ny = 2"
+
+
+def test_a_symlink_that_leads_out_of_the_project_is_never_opened(project, tmp_path):
+    daemon = _load_daemon()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("the secret word is pelican\n")
+    (project / "src" / "link.txt").symlink_to(outside)
+    found = workspace_read.search(
+        str(project), "pelican", None, daemon._resolve_target_path
+    )
+    assert found["matches"] == []
+    with pytest.raises(workspace_read.ReadError) as refused:
+        workspace_read.read_file(
+            str(project), "src/link.txt", None, daemon._resolve_target_path
+        )
+    assert refused.value.status == 400
+    # A symlink inside the project is fine.
+    (project / "src" / "alias.py").symlink_to(project / "src" / "greet.py")
+    read = workspace_read.read_file(
+        str(project), "src/alias.py", None, daemon._resolve_target_path
+    )
+    assert read["text"].startswith("    1| def greet")
+
+
+def test_a_large_file_is_hashed_whole_but_only_its_head_is_read(project, monkeypatch):
+    daemon = _load_daemon()
+    monkeypatch.setattr(workspace_read, "READ_SCAN_BYTES", 64)
+    body = "".join(f"line {i}\n" for i in range(100))
+    (project / "src" / "big.txt").write_text(body)
+    read = workspace_read.read_file(
+        str(project), "src/big.txt", None, daemon._resolve_target_path
+    )
+    assert read["sha256"] == hashlib.sha256(body.encode()).hexdigest() and read[
+        "bytes"
+    ] == len(body)
+    assert read["truncated"] is True and read["lines_indexed_to_byte"] == 64
+    assert len(read["text"].splitlines()) <= 10
+    beyond = workspace_read.read_file(
+        str(project), "src/big.txt", 90, daemon._resolve_target_path
+    )
+    assert beyond["text"] == "" and beyond["truncated"] is True
+
+
+def test_a_search_that_backtracks_forever_is_stopped_at_the_deadline(project):
+    daemon = _load_daemon()
+    (project / "src" / "evil.txt").write_text("a" * 40 + "b\n")
+    with pytest.raises(workspace_read.ReadError) as stopped:
+        workspace_read.search_bounded(
+            str(project), r"(a+)+$", None, daemon._resolve_target_path, timeout=1.5
+        )
+    assert stopped.value.status == 408 and "stopped" in stopped.value.message
+    # A sane search through the same path answers.
+    found = workspace_read.search_bounded(
+        str(project), "def greet", None, daemon._resolve_target_path
+    )
+    assert found["matches"] == ["src/greet.py:1: def greet(name):"]
+    with pytest.raises(workspace_read.ReadError) as bad:
+        workspace_read.search_bounded(
+            str(project), "(", None, daemon._resolve_target_path
+        )
+    assert bad.value.status == 400
+
+
+def test_a_search_over_more_files_than_the_bound_still_scans_the_bound(
+    project, monkeypatch
+):
+    daemon = _load_daemon()
+    # Three files within the bound: README.md, the binary logo (skipped) and
+    # src/count.py; the walk found more, so the answer says so.
+    monkeypatch.setattr(workspace_read, "SEARCH_MAX_FILES", 3)
+    found = workspace_read.search(
+        str(project), "greet|COUNT|Proj", None, daemon._resolve_target_path
+    )
+    assert found["truncated"] is True and found["files_scanned"] == 2
+    assert found["matches"] == ["README.md:1: # Proj", "src/count.py:1: COUNT = 0"]
+
+
+def test_the_daemon_reports_a_test_run_with_no_sprint_to_nobody(project):
+    import asyncio
+
+    daemon = _load_daemon()
+    published = []
+
+    class _NC:
+        async def publish(self, subject, payload):
+            published.append(subject)
+
+    class _Msg:
+        def __init__(self, body):
+            self.data = json.dumps(body).encode()
+            self.subject = "workspace.execute"
+            self.reply = "inbox"
+
+    asyncio.run(
+        daemon.handle_msg(
+            _NC(), _Msg({"command": "echo hi", "workspace_root": str(project)})
+        )
+    )
+    assert published == ["inbox"]
+    asyncio.run(
+        daemon.handle_msg(
+            _NC(),
+            _Msg(
+                {"command": "echo hi", "workspace_root": str(project), "sprint_id": 4}
+            ),
+        )
+    )
+    assert published == ["inbox", "glassroom.4", "inbox"]
+
+
+def test_the_tools_look_at_the_task_s_worktree_once_it_delivered_there(
+    project, sqlite_session, monkeypatch
+):
+    from models.agent_run import Verification
+
+    company = Company(company_name="Worktree Co")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    run = AgentRun(
+        company_id=company.id,
+        external_ref="task-9",
+        producer="le-fabrique-task-worker",
+        artifact_digest="d",
+        artifact_size=1,
+        claims={},
+    )
+    sqlite_session.add(run)
+    sqlite_session.commit()
+    developer_tools.bind(object(), object(), lambda company_id: str(project))
+    try:
+        engine = sqlite_session.get_bind()
+        assert developer_tools.tool_root(company.id, 9, engine=engine) == str(project)
+        sqlite_session.add(
+            Verification(
+                company_id=company.id,
+                agent_run_id=run.id,
+                verdict="verified",
+                checks=[],
+                evidence={
+                    "git": {"branch": "fabrique/task-9"},
+                    "workspace_root": "/repo/.git/fabrique-worktrees/task-9",
+                },
+            )
+        )
+        sqlite_session.commit()
+        assert (
+            developer_tools.tool_root(company.id, 9, engine=engine)
+            == "/repo/.git/fabrique-worktrees/task-9"
+        )
+        # Without the Git workflow the evidence names the project itself.
+        sqlite_session.add(
+            Verification(
+                company_id=company.id,
+                agent_run_id=run.id,
+                verdict="verified",
+                checks=[],
+                evidence={"workspace_root": "/elsewhere"},
+            )
+        )
+        sqlite_session.commit()
+        assert developer_tools.tool_root(company.id, 9, engine=engine) == str(project)
+        assert developer_tools.tool_root(company.id, None, engine=engine) == str(
+            project
+        )
+    finally:
+        developer_tools.unbind()
