@@ -20,10 +20,10 @@ from typing import Any
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ProjectDiscovery, Specification, User
 from pydantic import BaseModel, Field
-from services import spec_author, spec_check, spec_planning
+from services import spec_author, spec_check, spec_diff, spec_impact, spec_planning
 from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1/specifications", tags=["Core"])
@@ -296,6 +296,53 @@ async def approve_specification(
     session.commit()
     session.refresh(spec)
     return serialize(spec, session)
+
+
+@router.get("/{spec_id}/diff")
+async def diff_specification(
+    spec_id: int,
+    against: int | None = Query(default=None),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Deterministic diff between *spec_id* and another version.
+
+    ``against`` is the other specification's id; when omitted, the version
+    this one supersedes (its previous approved version) is used.
+    """
+    spec = _load(session, user, spec_id, "Viewer")
+    other_id = against if against is not None else spec.supersedes_id
+    if other_id is None:
+        raise HTTPException(
+            status_code=409, detail="No previous version to diff against"
+        )
+    other = session.get(Specification, other_id)
+    if other is None:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    require_company_role(session, user, other.company_id, "Viewer")
+    # Diff the older version against the newer one: older -> newer.
+    if (other.version or 0) <= (spec.version or 0):
+        d = spec_diff.diff_specs(other, spec)
+    else:
+        d = spec_diff.diff_specs(spec, other)
+    return {
+        "specification_id": spec.id,
+        "against_id": other.id,
+        "from_version": other.version,
+        "to_version": spec.version,
+        "diff": d,
+    }
+
+
+@router.get("/{spec_id}/impact")
+async def specification_impact(
+    spec_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The tasks and modules affected by this revision's approval."""
+    spec = _load(session, user, spec_id, "Viewer")
+    return spec_impact.impact(session, spec)
 
 
 @router.post("/{spec_id}/revise", status_code=201)

@@ -87,6 +87,47 @@ export interface Coverage {
   verified?: number
 }
 
+export interface SpecificationDiffResult {
+  from_version: number | null
+  to_version: number | null
+  requirements: { added: string[]; removed: string[]; changed: unknown[] }
+  quality: { added: string[]; removed: string[]; changed: unknown[] }
+  constraints: { added: string[]; removed: string[] }
+  changed_criterion_ids: string[]
+  changed_requirement_ids: string[]
+}
+
+export interface SpecificationDiff {
+  specification_id: number
+  against_id: number
+  from_version: number
+  to_version: number
+  diff: SpecificationDiffResult
+}
+
+export interface SpecificationImpact {
+  specification_id: number
+  previous_id: number | null
+  changed_criterion_ids: string[]
+  changed_requirement_ids: string[]
+  affected_tasks: Array<{
+    id: number
+    title: string
+    status: string
+    sprint_id: number
+    sprint_name: string
+    sprint_status: string
+    changed_criteria: string[]
+  }>
+  flagged_modules: Array<{
+    architecture_id: number
+    architecture_status: string
+    module_id: string | null
+    module_name: string | null
+    changed_requirements: string[]
+  }>
+}
+
 export interface Specification {
   id: number
   company_id: number
@@ -168,6 +209,9 @@ export const specificationsApi = {
     api.post<Specification>(`/v1/specifications/${id}/questions/${index}`, { answer }),
   approve: (id: number) => postDecision<Specification>(`/v1/specifications/${id}/approve`),
   revise: (id: number) => postDecision<Specification>(`/v1/specifications/${id}/revise`),
+  diff: (id: number, against: number) =>
+    api.get<SpecificationDiff>(`/v1/specifications/${id}/diff`, { against }),
+  impact: (id: number) => api.get<SpecificationImpact>(`/v1/specifications/${id}/impact`),
 }
 
 export const specificationsKey = (companyId: number) => ['specifications', companyId] as const
@@ -236,4 +280,20 @@ export function useApproveSpecification() {
 export function useReviseSpecification() {
   const settle = useSettle()
   return useMutation({ mutationFn: (id: number) => specificationsApi.revise(id), onSuccess: settle })
+}
+
+export function useSpecificationDiff(id: number | null, against: number | null) {
+  return useQuery({
+    queryKey: ['specification-diff', id, against],
+    queryFn: () => specificationsApi.diff(id!, against!),
+    enabled: id !== null && against !== null,
+  })
+}
+
+export function useSpecificationImpact(id: number | null) {
+  return useQuery({
+    queryKey: ['specification-impact', id],
+    queryFn: () => specificationsApi.impact(id!),
+    enabled: id !== null,
+  })
 }
