@@ -10,6 +10,7 @@ from services import (
     mcp_tools,
     research_tools,
     risk,
+    secops_checks,
     standards,
 )
 from services.agent_service import AgentService
@@ -433,6 +434,12 @@ def verify_agent_run(
     standards_check = standards.check_delivery(run.artifact_text)
     if standards_check:
         checks.append(standards_check)
+    # SecOps scans (``services/secops_checks``): dependency audit, secret scan,
+    # SAST. Only the ones that reported a result become checks.
+    if evidence and any(
+        k in evidence for k in ("dependency_audit", "secret_scan", "sast")
+    ):
+        checks.extend(secops_checks.check_all(evidence))
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(
