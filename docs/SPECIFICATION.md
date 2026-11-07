@@ -20,7 +20,7 @@ layer that verifies their work and records evidence.
   written and the test run, then the Verifier records a verdict (verified /
   refuted / unverifiable) and the evidence behind it.
 
-### REQ-2 Record evidence, never claims
+### REQ-2 Record claims and observations separately
 - **Criterion REQ-2.1**: given an agent run, when it is ingested, then its
   claims and the daemon's observations are stored in separate fields.
 
@@ -30,8 +30,8 @@ layer that verifies their work and records evidence.
   the person's checkout is untouched.
 
 ## Quality
-- NFR-1: backend tests pass on SQLite without external services.
-- NFR-2: every user-facing string is translated (en + es).
+- NFR-1: backend tests pass on SQLite without external services (>= 700 tests).
+- NFR-2: every user-facing string is translated (en + es), 100% key parity.
 
 ## Constraints
 - Python 3.11+, Node 24, no Alembic until #326 lands.
