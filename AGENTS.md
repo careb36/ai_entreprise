@@ -64,8 +64,12 @@ running uvicorn by hand without it fails at startup with
 `ModuleNotFoundError: No module named 'config'`:
 
 ```bash
+cd backend && PYTHONPATH=.:app poetry run alembic upgrade head   # the schema, versioned (CONTRIBUTING.md §5)
 cd backend && PYTHONPATH=.:app poetry run uvicorn app.main:app --reload --port 8000
 ```
+
+The backend refuses to start on a database behind the migrations' head
+(`DB_AUTO_UPGRADE=true` runs them at startup instead).
 
 The Vite dev server proxies `/v1` to `http://localhost:8000`, so running
 `make dev-frontend` alone still needs the backend up.
