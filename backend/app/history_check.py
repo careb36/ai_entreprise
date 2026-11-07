@@ -78,12 +78,15 @@ def check_task(
     task: dict[str, Any],
     runs: list[dict[str, Any]],
     messages: list[dict[str, Any]],
+    statuses: dict[int, str] | None = None,
 ) -> list[str]:
     """The violations in one task's history, as ``"<rule>: <detail>"`` lines.
 
-    *task* has ``id``, ``status`` and ``comments``; *runs* are the task
-    worker's runs of it with ``version`` and ``status``; *messages* are the
-    company's messages about it with ``id``, ``kind`` and ``body``.
+    *task* has ``id``, ``status``, ``comments`` and ``depends_on``; *runs*
+    are the task worker's runs of it with ``version`` and ``status``;
+    *messages* are the company's messages about it with ``id``, ``kind``
+    and ``body``; *statuses* maps the ids of the tasks it depends on to
+    their status.
     """
     comments = [c for c in task.get("comments") or [] if isinstance(c, dict)]
     status = task.get("status")
@@ -118,6 +121,14 @@ def check_task(
         ]
         if holds and not any(i > holds[-1] for i in person_notes):
             violations.append("high_risk_done_without_person")
+
+    if status in ("done", "in_progress", "in_review"):
+        for dep in task.get("depends_on") or []:
+            if (statuses or {}).get(dep) != "done":
+                violations.append(
+                    f"worked_before_dependency: task {dep} is "
+                    f"{(statuses or {}).get(dep, 'missing')}, not done"
+                )
 
     carried = sum(1 for c in comments if _text(c).startswith(_CARRIED_TO))
     if carried > 1:
@@ -165,12 +176,22 @@ def check_database() -> list[str]:
                 messages_by_task.setdefault(message.backlog_item_id, []).append(
                     {"id": message.id, "kind": message.kind, "body": message.body}
                 )
-        for item in session.exec(select(BacklogItem)).all():
-            task = {"id": item.id, "status": item.status, "comments": item.comments}
+        items = session.exec(select(BacklogItem)).all()
+        statuses = {item.id: item.status for item in items}
+        for item in items:
+            task = {
+                "id": item.id,
+                "status": item.status,
+                "comments": item.comments,
+                "depends_on": item.depends_on
+                if isinstance(item.depends_on, list)
+                else [],
+            }
             for violation in check_task(
                 task,
                 runs_by_ref.get(f"task-{item.id}", []),
                 messages_by_task.get(item.id, []),
+                statuses,
             ):
                 found.append(f"task {item.id} ({item.title}): {violation}")
     return found

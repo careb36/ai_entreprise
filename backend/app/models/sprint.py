@@ -84,6 +84,9 @@ class BacklogItem(SQLModel, table=True):
     # The specification's criteria ids this task covers (``REQ-1.2``), when
     # the sprint was planned from one; ``services.spec_planning`` reads them.
     covers: Any | None = Field(default=None, sa_column=Column(JSON))
+    # Ids of tasks in the same sprint that must be done first
+    # (``services.dependencies``); the worker waits for them.
+    depends_on: Any | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 

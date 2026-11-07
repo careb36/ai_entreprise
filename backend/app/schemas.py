@@ -77,7 +77,9 @@ class SprintStartRequest(BaseModel):
     goal: str | None = None
     duration_days: int | None = None  # deprecated
     # Each item has at least "title" and "description"; with a specification,
-    # "covers" lists the criteria ids (``REQ-1.2``) the task covers.
+    # "covers" lists the criteria ids (``REQ-1.2``) the task covers;
+    # "depends_on" lists the positions, in this list, of the tasks that must
+    # be done first (``services.dependencies``).
     backlog_items: list[dict[str, Any]]
     # Blocked tasks of earlier sprints to try again in this one (they count
     # towards the scope). Each gets a fresh task carrying what blocked it.

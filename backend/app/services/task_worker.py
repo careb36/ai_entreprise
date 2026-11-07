@@ -48,6 +48,7 @@ from llm.model_factory import default_model_for_role
 from services import (
     agent_run_service,
     console_assistants,
+    dependencies,
     git_workflow,
     mcp_tools,
     procedures,
@@ -1428,12 +1429,7 @@ def _update_item_status(
         item.updated_at = datetime.now(UTC)
 
         if comment_text and comment_author:
-            existing = item.comments or []
-            if isinstance(existing, str):
-                try:
-                    existing = json.loads(existing)
-                except (json.JSONDecodeError, TypeError):
-                    existing = []
+            existing = comment_list(item.comments)
             existing.append(
                 {
                     "author": comment_author,
@@ -2284,6 +2280,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
+            # A task that waits for others is queued once they are done.
+            if not await asyncio.to_thread(dependencies.ready, engine, item["id"]):
+                return
             # Guard against duplicate task.assign events for the same item.
             if item.get("status") != "todo":
                 logger.info(
@@ -3468,6 +3467,9 @@ def _call_llm_for_review(
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:
     """Find todo items and publish task.assign events for them."""
+    # Tasks waiting on one a person must act on are blocked with the reason;
+    # those whose wait ended come back to todo, and are queued below.
+    await asyncio.to_thread(dependencies.settle_active, engine)
     with Session(engine) as session:
         todo_items = session.exec(
             select(BacklogItem).where(BacklogItem.status == "todo")
@@ -3476,13 +3478,10 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             item_sprint = session.get(Sprint, item.sprint_id)
             if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
                 continue
+            if not dependencies.is_ready(session, item):
+                continue
             dispatch_time = datetime.now(UTC)
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
+            comments = comment_list(item.comments)
 
             if has_manual_freeze_marker(comments):
                 item.status = "blocked"
@@ -3531,8 +3530,6 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "Skipping duplicate autonomous queue publish for item=%s", item.id
                 )
                 continue
-
-            from uuid import uuid4
 
             # Durable: one stored assignment per todo state of the item, even
             # though this runs every review cycle while the worker is busy.

@@ -250,6 +250,8 @@ def is_explicit_block_reason(text: str) -> bool:
             "freeze after",
             "sleep-induced churn",
             RISK_HOLD_PREFIX.lower(),
+            # A task held by a dependency a person must act on (services/dependencies.py).
+            "blocked: waits for task",
         )
     )
 

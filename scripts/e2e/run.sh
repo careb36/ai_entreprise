@@ -317,13 +317,17 @@ check "the document names the modules and the decision" test "$(grep -c '### MOD
 PLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"scope_size\": \"S\", \"specification_id\": $SPEC_ID}")
 check "the planning prompt carried the approved architecture" test "$(prompt_seen "the PO. Plan a sprint from the specification below.*Architecture (approved).*MOD-1: Greeter")" = yes
 check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
+check "and the counter after the greeting, by position" test "$(echo "$PLAN" | json "[t['depends_on'] for t in d['tasks']]")" = "[[], [0]]"
 NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
   \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
   \"backlog_items\": $(echo "$PLAN" | json "json.dumps(d['tasks'])")}")
 S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
 check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
+GREETING_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][0]")
+check "the counter waits for the greeting on the board" test "$(api "$API/v1/sprints/$S4/board" | json "next((i['depends_on'], i['waiting_for']) for c in d['columns'].values() for i in c if i['title'] == 'Add greeting counter')")" = "([$GREETING_ID], [$GREETING_ID])"
 check "Greeting 1 closes" wait_sprint "$S4"
 check "both tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Add greeting counter=done', 'Add greeting=done']"
+check "the counter was worked on only after the greeting was done" test "$(grep -n '## Task: Add greeting counter' "$PROMPTS" | head -1 | cut -d: -f1)" -gt "$(grep -n "reviewing the following deliverable for the task: 'Add greeting'" "$PROMPTS" | tail -1 | cut -d: -f1)"
 check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
 check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
 check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no

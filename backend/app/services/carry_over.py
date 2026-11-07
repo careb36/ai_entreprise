@@ -21,7 +21,7 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
-from services import scrum_master
+from services import dependencies, scrum_master
 from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
@@ -111,6 +111,11 @@ def carry_over(
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
     triages = scrum_master.triages_for(session, [item for item, _ in originals])
+    # A dependency between carried tasks is kept between their new attempts;
+    # one on a task not carried is dropped (it is done, or a person's).
+    carried_ids = {item.id for item, _ in originals}
+    clones_by_original: dict[int, BacklogItem] = {}
+    held: dict[int, list[int]] = {}
     for item, sprint in originals:
         reason = block_reason(item.comments)[:REASON_LIMIT]
         brief = (triages.get(item.id) or {}).get("brief") or ""
@@ -136,6 +141,10 @@ def carry_over(
         )
         session.add(clone)
         session.flush()
+        clones_by_original[item.id] = clone
+        held[clone.id] = [
+            d for d in dependencies.depends_on_of(item) if d in carried_ids
+        ]
         created.append(clone)
 
         item.comments = [
@@ -149,22 +158,23 @@ def carry_over(
         item.updated_at = now
         session.add(item)
 
-        session.add(
-            OutboxEvent(
-                aggregate_type="backlog_item",
-                aggregate_id=str(clone.id),
-                event_type="nats_publish",
-                payload={
-                    "subject": "task.assign",
-                    "message": {
-                        "backlog_item_id": clone.id,
-                        "interaction_id": str(uuid4()),
-                        "agent": clone.assignee or "PO",
-                        "sprint_id": new_sprint.id,
+        if not held[clone.id]:
+            session.add(
+                OutboxEvent(
+                    aggregate_type="backlog_item",
+                    aggregate_id=str(clone.id),
+                    event_type="nats_publish",
+                    payload={
+                        "subject": "task.assign",
+                        "message": {
+                            "backlog_item_id": clone.id,
+                            "interaction_id": str(uuid4()),
+                            "agent": clone.assignee or "PO",
+                            "sprint_id": new_sprint.id,
+                        },
                     },
-                },
+                )
             )
-        )
         session.add(
             AgentMessage(
                 company_id=company_id,
@@ -181,6 +191,17 @@ def carry_over(
                 ),
             )
         )
+    for clone in created:
+        if held[clone.id]:
+            # The worker queues it once its new dependencies are done.
+            clone.depends_on = [clones_by_original[d].id for d in held[clone.id]]
+            dependencies.note(
+                clone,
+                dependencies.waiting_note(
+                    [clones_by_original[d] for d in held[clone.id]]
+                ),
+            )
+            session.add(clone)
     return created
 
 

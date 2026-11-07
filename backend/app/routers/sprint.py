@@ -37,7 +37,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import spec_check, spec_planning
+from services import dependencies, spec_check, spec_planning
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -92,17 +92,15 @@ def _load_planning_context(session: Session, company_id: int):
 
 
 def _refused(call, *args):
-    """Call into ``spec_planning``; its refusal is the response's status."""
+    """Call into ``spec_planning`` or ``dependencies``; a refusal is the response's status."""
     try:
         return call(*args)
-    except spec_planning.PlanRefused as exc:
+    except (spec_planning.PlanRefused, dependencies.DependencyError) as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
-def _specification(session: Session, company_id: int, specification_id: int):
-    return _refused(
-        spec_planning.approved_specification, session, company_id, specification_id
-    )
+def _specification(session: Session, company_id: int, spec_id: int):
+    return _refused(spec_planning.approved_specification, session, company_id, spec_id)
 
 
 def _serialize_plan_response(
@@ -258,7 +256,9 @@ async def start_sprint(
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
 
+    positions = _refused(dependencies.check_positions, req.backlog_items)
     item_ids = []
+    rows: list[BacklogItem] = []
     for item in req.backlog_items:
         backlog_item = BacklogItem(
             sprint_id=sprint.id,
@@ -271,23 +271,29 @@ async def start_sprint(
         session.add(backlog_item)
         session.flush()
         item_ids.append(backlog_item.id)
-
+        rows.append(backlog_item)
+    for row, deps in zip(rows, positions, strict=True):
+        if deps:
+            # It waits for those tasks; the worker queues it once they are done.
+            row.depends_on = [rows[position].id for position in deps]
+            dependencies.note(row, dependencies.waiting_note([rows[p] for p in deps]))
+            session.add(row)
+            continue
         # Outbox entry — delivered to NATS by the process_outbox background worker.
-        nats_payload = {
-            "subject": "task.assign",
-            "message": {
-                "backlog_item_id": backlog_item.id,
-                "interaction_id": str(uuid4()),
-                "agent": item.get("assignee", "PO"),
-                "sprint_id": sprint.id,
-            },
-        }
         session.add(
             OutboxEvent(
                 aggregate_type="backlog_item",
-                aggregate_id=str(backlog_item.id),
+                aggregate_id=str(row.id),
                 event_type="nats_publish",
-                payload=nats_payload,
+                payload={
+                    "subject": "task.assign",
+                    "message": {
+                        "backlog_item_id": row.id,
+                        "interaction_id": str(uuid4()),
+                        "agent": row.assignee or "PO",
+                        "sprint_id": sprint.id,
+                    },
+                },
             )
         )
 
@@ -496,6 +502,7 @@ async def get_sprint_board(
     items_db = session.exec(
         select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
     ).all()
+    by_id = {i.id: i for i in items_db}
 
     items = [
         {
@@ -507,6 +514,8 @@ async def get_sprint_board(
             "assignee": i.assignee,
             "comments": i.comments or [],
             "covers": spec_planning.covers_of(i),
+            "depends_on": dependencies.depends_on_of(i),
+            "waiting_for": dependencies.waiting_for(by_id, i),
             "created_at": str(i.created_at),
             "updated_at": str(i.updated_at),
         }

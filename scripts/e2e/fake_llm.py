@@ -14,7 +14,8 @@ prompt's section headers, so one run exercises the whole loop:
 - the Support agent triages every ticket as a high-severity bug;
 - the PO drafts a specification (with a quality target without a number
   and one open question the first time, both fixed on the revision) and
-  plans a sprint from it, one task per requirement with its criteria;
+  plans a sprint from it, one task per requirement with its criteria, the
+  counter after the greeting;
 - the Architect designs it: two modules, an interface, a decision and a
   convention (with one open question the first time, answered before the
   revision).
@@ -139,7 +140,7 @@ def answer(prompt: str) -> str:
                 "goal": "Greet and count",
                 "tasks": [
                     {"title": "Add greeting", "description": "greet(name) with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
-                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"]},
+                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"], "depends_on": ["Add greeting"]},
                 ],
             }
         )

@@ -21,7 +21,7 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from services import spec_author, spec_check
+from services import dependencies, spec_author, spec_check
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -102,9 +102,10 @@ def plan_prompt(
     return (
         f"You are {po_name}, the PO. Plan a sprint from the specification below: "
         "split the work into tasks a single agent can deliver, and say for each task "
-        "which acceptance criteria it covers, by id. Every criterion must be covered "
-        "by at least one task of this sprint or a later one; cover the most valuable "
-        "ones first.\n\n"
+        "which acceptance criteria it covers, by id, and which other tasks of this "
+        "plan must be done before it starts (by their exact title; a task that can "
+        "start at once names none). Every criterion must be covered by at least one "
+        "task of this sprint or a later one; cover the most valuable ones first.\n\n"
         f"## Specification: {spec.get('title')}\n{spec.get('summary')}\n\n"
         f"{spec_check.as_prompt(spec)}\n\n"
         f"## Team\n{roster}\n\n"
@@ -113,7 +114,7 @@ def plan_prompt(
         '{"sprint_name": "...", "goal": "...", "tasks": [{"title": "...", '
         '"description": "what to build and how it will be checked", '
         '"priority": "critical|high|medium|low", "assignee": "Developer", '
-        '"covers": ["REQ-1.1", "REQ-1.2"]}]}'
+        '"covers": ["REQ-1.1", "REQ-1.2"], "depends_on": ["title of a task done first"]}]}'
     )
 
 
@@ -121,11 +122,14 @@ def _validate_tasks(
     tasks: Any, known: set[str], roles: set[str], item_limit: int
 ) -> list[dict[str, Any]]:
     validated = []
+    named: list[list[str]] = []
     for task in tasks if isinstance(tasks, list) else []:
         if not isinstance(task, dict) or not task.get("title"):
             continue
         covers = task.get("covers") if isinstance(task.get("covers"), list) else []
         assignee = str(task.get("assignee") or "Developer")
+        raw = task.get("depends_on")
+        named.append([str(d).strip() for d in raw] if isinstance(raw, list) else [])
         validated.append(
             {
                 "title": str(task["title"])[:TASK_TITLE_LIMIT],
@@ -141,7 +145,24 @@ def _validate_tasks(
                 ),
             }
         )
-    return validated[:item_limit]
+    validated, named = validated[:item_limit], named[:item_limit]
+    # Dependencies by title, or by position: unknown ones and self dropped,
+    # a cycle broken at the edge that closes it. Positions in the answer.
+    position_of = {t["title"].casefold(): i for i, t in enumerate(validated)}
+    graph = {
+        i: list(
+            dict.fromkeys(
+                p
+                for d in deps
+                for p in [position_of.get(d.casefold(), int(d) if d.isdigit() else -1)]
+                if 0 <= p < len(validated) and p != i
+            )
+        )
+        for i, deps in enumerate(named)
+    }
+    for i, deps in dependencies.without_cycles(graph).items():
+        validated[i]["depends_on"] = deps
+    return validated
 
 
 def uncovered(spec: dict[str, Any], tasks: list[dict[str, Any]]) -> list[str]:
@@ -162,6 +183,7 @@ def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
             "priority": "high" if index < 3 else "medium",
             "assignee": "Developer",
             "covers": [c["id"] for c in r.get("criteria") or []],
+            "depends_on": [],
         }
         for index, r in enumerate(spec.get("requirements") or [])
     ][:item_limit]
