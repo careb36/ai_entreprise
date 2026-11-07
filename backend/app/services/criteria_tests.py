@@ -121,6 +121,8 @@ def verbose_command(command: str) -> str:
         return (
             stripped if re.search(r"(?<=\s)-v+(?=\s|$)", stripped) else f"{stripped} -v"
         )
+    if "go test" in command and "-v" not in command.split():
+        return command + " -v"
     return command
 
 
