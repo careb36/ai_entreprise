@@ -69,9 +69,10 @@ def prepare_database() -> None:
     behind head stops the start with both versions in the error, instead of
     being patched in place as the old startup did.
     """
+    from config import settings
     from migrations import require_schema_at_head, upgrade_to_head
 
-    if os.getenv("DB_AUTO_UPGRADE", "false").strip().lower() in ("1", "true", "yes"):
+    if settings.DB_AUTO_UPGRADE:
         logger.info("DB_AUTO_UPGRADE: running the migrations to head")
         upgrade_to_head(engine)
     head = require_schema_at_head(engine)

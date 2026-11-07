@@ -98,7 +98,9 @@ To change the schema:
    first migration is the baseline every database converges to). Read the
    generated file: autogenerate misses renames and data moves, and a column
    added `NOT NULL` to a table with rows needs a default or a backfill.
-3. Write the `downgrade` too; a migration that cannot be undone says so and why.
+3. Write the `downgrade` too; a migration that cannot be undone says so and
+   why, and raises (the baseline, `0001`, does: there is no schema before it,
+   so going back means restoring a backup).
 4. Check that the models and the migrations agree: `alembic upgrade head &&
    alembic check` on a fresh database. CI runs this on a SQLite file
    (`backend-tests.yml`) and the e2e on Postgres; both fail on a difference.
