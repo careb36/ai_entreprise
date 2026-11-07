@@ -130,7 +130,7 @@ describe('ArchitectureDetail', () => {
   })
 
   it('writes an approved architecture to the repository and shows the path and hash', async () => {
-    const written = { ...APPROVED_ARCHITECTURE, written_path: 'docs/ARCHITECTURE.md', written_sha256: 'abcdef0123456789deadbeef', written_at: '2026-10-04T00:00:00Z' }
+    const written = { ...APPROVED_ARCHITECTURE, written_path: 'docs/ARCHITECTURE.md', written_sha256: 'abcdef0123456789deadbeef', written_at: '2026-10-04T12:00:00Z' }
     const fetch = stubApi(APPROVED_ARCHITECTURE, { 'POST /v1/architectures/22/write': () => response(200, written) })
     renderAs('Owner', 22)
 
