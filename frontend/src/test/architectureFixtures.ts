@@ -29,6 +29,6 @@ export const DRAFT_ARCHITECTURE: Architecture = {
 
 export const APPROVED_ARCHITECTURE: Architecture = {
   ...DRAFT_ARCHITECTURE, id: 22, status: 'approved', version: 2, supersedes_id: 21, questions: [],
-  drafted_by: 'ana@acme.test', approved_by: 'ana@acme.test', approved_at: '2026-10-03T00:00:00Z',
+  drafted_by: 'ana@acme.test', approved_by: 'ana@acme.test', approved_at: '2026-10-03T12:00:00Z',
   check: { ok: true, blocking: 0, warnings: 0, findings: [] },
 }
