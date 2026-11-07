@@ -55,6 +55,7 @@ from services import (
     review_digest,
     risk,
     scrum_master,
+    spec_planning,
     sprint_control,
     workspace_daemon,
 )
@@ -339,14 +340,8 @@ def _load_sprint_completed_tasks(
                 "Completed tasks in this sprint (build on this work, avoid duplication):"
             ]
             for it in done_items[:limit]:
-                comments = it.comments or []
-                if isinstance(comments, str):
-                    try:
-                        comments = json.loads(comments)
-                    except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                        comments = []
                 deliverable_excerpt = extract_latest_reviewable_comment(
-                    comments, assignee_role=it.assignee
+                    comment_list(it.comments), assignee_role=it.assignee
                 )
                 excerpt = (
                     deliverable_excerpt[:280].replace("\n", " ")
@@ -410,6 +405,7 @@ def _execute_task(
     sprint_id: int | None = None,
     lessons_context: str | None = None,
     procedures_context: str | None = None,
+    requirements_context: str | None = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -456,7 +452,7 @@ def _execute_task(
         f"Priority: {item.get('priority', 'medium')}\n\n"
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
-    )
+    ) + (requirements_context or "")
 
     if memory_context:
         user_prompt += (
@@ -1553,16 +1549,7 @@ def _handoff_body(title: str, deliverable: str) -> str:
 
 def _load_procedures_context(company_id: int | None, role: str | None) -> str:
     """The company's active procedures for *role*, as a prompt section."""
-    if company_id is None:
-        return ""
-    try:
-        with Session(engine) as session:
-            return procedures.procedures_prompt(
-                procedures.active_procedures(session, company_id, role)
-            )
-    except Exception as exc:  # noqa: BLE001 - Procedures are context; the task goes on without them.
-        logger.debug("Procedures fetch failed for company=%s: %s", company_id, exc)
-        return ""
+    return procedures.prompt_context(engine, company_id, role)
 
 
 def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
@@ -2349,6 +2336,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 lessons_ctx,
                 procedures_ctx,
                 completed_ctx,
+                requirements_ctx,
                 assistant_context,
             ) = await asyncio.gather(
                 asyncio.to_thread(
@@ -2362,6 +2350,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 ),
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
+                ),
+                asyncio.to_thread(
+                    spec_planning.requirements_context, engine, item["id"]
                 ),
                 console_assistants.collect_advice(
                     nats_client, item, agent, sprint, _resolve_workspace_root
@@ -2521,6 +2512,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 sprint["id"],
                 lessons_ctx or None,
                 procedures_ctx or None,
+                requirements_ctx or None,
             )
             deliverable = await asyncio.to_thread(
                 _sanitize_deliverable_text, deliverable
@@ -2965,6 +2957,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 # A second attempt is judged against what blocked the first and
                 # the ScrumMaster's brief for it, the same context the agent had.
                 + previous_attempt_context(item)
+                + spec_planning.requirements_for(session, sprint, item)
             ) + procedures.procedures_prompt(
                 procedures.active_procedures(
                     session, sprint.company_id, reviewer_dict["role"]

@@ -47,6 +47,7 @@ from models.github import GitHubRepoBinding
 from models.mcp import McpServer
 from models.procedure import Procedure
 from models.review import ReviewComment, RunPublication, RunReview
+from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
 from sqlalchemy.pool import StaticPool
@@ -126,6 +127,7 @@ SQLModel.metadata.create_all(
         RunReview.__table__,
         ReviewComment.__table__,
         RunPublication.__table__,
+        Specification.__table__,
     ],
 )
 

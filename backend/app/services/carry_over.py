@@ -121,6 +121,7 @@ def carry_over(
             priority=item.priority,
             assignee=item.assignee,
             status="todo",
+            covers=list(item.covers) if isinstance(item.covers, list) else None,
             comments=[
                 {
                     "author": "System",

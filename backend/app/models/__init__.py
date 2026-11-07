@@ -25,6 +25,7 @@ from .mcp import McpServer
 from .procedure import Procedure
 from .review import ReviewComment, RunPublication, RunReview
 from .runtime import AssistantRuntimeState
+from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .support import BugReport
 
@@ -49,6 +50,7 @@ __all__ = [
     "ReviewComment",
     "RunPublication",
     "RunReview",
+    "Specification",
     "Sprint",
     "User",
     "Verification",

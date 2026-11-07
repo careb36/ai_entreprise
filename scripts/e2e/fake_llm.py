@@ -11,7 +11,10 @@ prompt's section headers, so one run exercises the whole loop:
 - the ScrumMaster answers an escalation with "retry" and a brief, and
   proposes one procedure in the fixed format;
 - the Architect answers every consultation with the same short brief;
-- the Support agent triages every ticket as a high-severity bug.
+- the Support agent triages every ticket as a high-severity bug;
+- the PO drafts a specification (with a quality target without a number
+  and one open question the first time, both fixed on the revision) and
+  plans a sprint from it, one task per requirement with its criteria.
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -76,6 +79,47 @@ def answer(prompt: str) -> str:
     with open(PROMPT_LOG, "a") as log:
         # Long enough for a task prompt with every section the checks read.
         log.write(prompt.replace("\n", " ")[:20000] + "\n")
+    if ", the PO of an AI software factory. Write the specification" in prompt:
+        revision = "## Answers to your questions" in prompt
+        return json.dumps(
+            {
+                "title": "Greeting service",
+                "summary": "A tiny service that greets people by name, for the e2e run.",
+                "requirements": [
+                    {
+                        "title": "Greet by name",
+                        "description": "The service answers a greeting that carries the caller's name.",
+                        "criteria": [
+                            {"given": "a name", "when": "greet is called with it", "then": "the answer contains the name"},
+                            {"given": "an empty name", "when": "greet is called", "then": "the answer greets the world"},
+                        ],
+                    },
+                    {
+                        "title": "Count the greetings",
+                        "description": "The service counts how many greetings it answered since it started.",
+                        "criteria": [
+                            {"given": "two greetings answered", "when": "the count is read", "then": "it reads 2"},
+                        ],
+                    },
+                ],
+                "quality": [
+                    {"attribute": "performance", "target": "a greeting answers in under 50 ms" if revision else "fast"}
+                ],
+                "constraints": ["Python, standard library only"],
+                "questions": [] if revision else ["Should the greeting be localized?"],
+            }
+        )
+    if ", the PO. Plan a sprint from the specification below" in prompt:
+        return json.dumps(
+            {
+                "sprint_name": "Greeting 1",
+                "goal": "Greet and count",
+                "tasks": [
+                    {"title": "Add greeting", "description": "greet(name) with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
+                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"]},
+                ],
+            }
+        )
     if "You are the ScrumMaster. A task was blocked" in prompt:
         return (
             "DECISION: retry\n"

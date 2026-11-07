@@ -76,20 +76,26 @@ class SprintStartRequest(BaseModel):
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
     goal: str | None = None
     duration_days: int | None = None  # deprecated
-    backlog_items: list[
-        dict[str, str]
-    ]  # Each item has at least "title" and "description"
+    # Each item has at least "title" and "description"; with a specification,
+    # "covers" lists the criteria ids (``REQ-1.2``) the task covers.
+    backlog_items: list[dict[str, Any]]
     # Blocked tasks of earlier sprints to try again in this one (they count
     # towards the scope). Each gets a fresh task carrying what blocked it.
     carry_over_ids: list[int] = []
+    # The approved specification the sprint is planned from; its criteria
+    # are the only ones a task may cover.
+    specification_id: int | None = None
 
 
 class SprintPlanRequest(BaseModel):
     """Payload for ``POST /v1/plan_sprint`` — turns a strategic prompt into a sprint backlog."""
 
     company_id: int
-    prompt: str
+    prompt: str = ""
     scope_size: str = "M"
+    # Plan from an approved specification instead of a prompt: the PO splits
+    # it into tasks that name the criteria they cover.
+    specification_id: int | None = None
 
 
 class SelfImprovementSprintRequest(BaseModel):

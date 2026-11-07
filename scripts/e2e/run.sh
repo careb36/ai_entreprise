@@ -290,14 +290,40 @@ check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?compan
 ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
 check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
 
-echo "9. every task's history, read independently"
+echo "9. a specification: drafted by the PO, checked, approved, covered by a sprint"
+spec_field() { api "$API/v1/specifications/$1?company_id=$CID" | json "$2"; }
+SPEC=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"brief\": \"A greeting service for the e2e run.\"}")
+SPEC_ID=$(echo "$SPEC" | json "d.get('id', '')")
+check "the PO drafted it from the brief, numbered by the backend" test "$(echo "$SPEC" | json "d['drafted_by'], [c['id'] for r in d['requirements'] for c in r['criteria']]")" = "PO ['REQ-1.1', 'REQ-1.2', 'REQ-2.1']"
+check "the check blocks it: a target without a number and an open question" test "$(echo "$SPEC" | json "sorted((f['where'], f['code']) for f in d['check']['findings'] if f['severity'] == 'blocking')")" = "[('NFR-1', 'no_number'), ('Q1', 'open_question')]"
+check "approval is refused while it blocks" test "$(api -o /dev/null -w '%{http_code}' -X POST "$API/v1/specifications/$SPEC_ID/approve")" = 409
+ANSWERED=$(api -X POST "$API/v1/specifications/$SPEC_ID/questions/0" -H 'Content-Type: application/json' -d '{"answer": "No, English only."}' | json "d['questions'][0]['answer']")
+check "a person answers the PO's question" test "$ANSWERED" = "No, English only."
+REVISED=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"brief\": \"A greeting service for the e2e run.\", \"specification_id\": $SPEC_ID}")
+check "the PO revised it from the answer, and the check passes" test "$(echo "$REVISED" | json "d['id'] == $SPEC_ID, d['check']['ok'], d['questions'][0]['answer']")" = "True True No, English only."
+check "the revision prompt carried the answer" test "$(prompt_seen "A: No, English only.")" = yes
+check "a person approves it" test "$(api -X POST "$API/v1/specifications/$SPEC_ID/approve" | json "d['status']")" = approved
+PLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"scope_size\": \"S\", \"specification_id\": $SPEC_ID}")
+check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
+NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
+  \"backlog_items\": $(echo "$PLAN" | json "json.dumps(d['tasks'])")}")
+S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
+check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
+check "Greeting 1 closes" wait_sprint "$S4"
+check "both tasks got done" test "$(board "$S4")" = "Add greeting=done Add greeting counter=done"
+check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
+check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
+check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
+
+echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.
 HISTORY=$(cd "$REPO/backend" && POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER \
   POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB PYTHONPATH=.:app "$PY" app/history_check.py 2>&1)
 check "no illegal history (done without approval or verified delivery, carried twice, stray decision)" test "$(echo "$HISTORY" | tail -1)" = "0 illegal history(ies)"
 echo "$HISTORY" | grep -v "illegal history" | sed 's/^/       /'
 
-echo "10. the loop's order, seen from the model"
+echo "11. the loop's order, seen from the model"
 check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
 [ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 
