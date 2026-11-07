@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import git_workflow, research_tools, sprint_control
+from services import git_workflow, research_tools, sandbox, sprint_control
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -243,6 +243,72 @@ async def set_research_hosts(
     session.add(company)
     session.commit()
     return _research_payload(company)
+
+
+class SandboxRequest(BaseModel):
+    # host, container or bwrap; empty: the deployment's DELIVERY_SANDBOX.
+    mode: str | None = Field(default=None, max_length=20)
+    # Environment variables a sandboxed run may see, by name.
+    env: list[str] = Field(default_factory=list, max_length=50)
+
+
+def _sandbox_payload(company: Company) -> dict:
+    request = sandbox.request_for(company)
+    return {
+        "company_id": company.id,
+        "mode": company.delivery_sandbox,
+        "effective_mode": request["mode"],
+        "default_mode": sandbox.mode_for(None),
+        "env": [str(n) for n in (company.sandbox_env or [])],
+        "limits": {
+            k: request[k]
+            for k in ("image", "network", "cpus", "memory_mb", "pids_limit")
+        },
+    }
+
+
+@router.get("/companies/{company_id}/sandbox")
+async def get_sandbox(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Where the company's agent-written code runs (Viewer)."""
+    require_company_role(session, user, company_id, "Viewer")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return _sandbox_payload(company)
+
+
+@router.put("/companies/{company_id}/sandbox")
+async def set_sandbox(
+    company_id: int,
+    req: SandboxRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Set where the company's agent-written code runs, and which environment
+    variables (by name) a sandboxed run may see (Manager)."""
+    require_company_role(session, user, company_id, "Manager")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    mode = (req.mode or "").strip().lower() or None
+    if mode is not None and mode not in sandbox.MODES:
+        raise HTTPException(status_code=422, detail=f"not a sandbox mode: {req.mode}")
+    names: list[str] = []
+    for raw in req.env:
+        name = raw.strip()
+        if not sandbox.valid_env_name(name):
+            raise HTTPException(status_code=422, detail=f"not a variable name: {raw}")
+        if name not in names:
+            names.append(name)
+    company.delivery_sandbox = mode
+    company.sandbox_env = names
+    session.add(company)
+    session.commit()
+    return _sandbox_payload(company)
 
 
 @router.get("/companies/{company_id}/git")
