@@ -67,6 +67,19 @@ SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
 SCOPE_HARD_MAX = 12
 
 
+class BacklogItemIn(BaseModel):
+    """One task of ``POST /v1/start_sprint``; fields it does not know are kept."""
+
+    model_config = ConfigDict(extra="allow")
+
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    assignee: str = "PO"
+    covers: list[str] = []
+    depends_on: list[int] = []
+
+
 class SprintStartRequest(BaseModel):
     """Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."""
 
@@ -76,11 +89,10 @@ class SprintStartRequest(BaseModel):
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
     goal: str | None = None
     duration_days: int | None = None  # deprecated
-    # Each item has at least "title" and "description"; with a specification,
-    # "covers" lists the criteria ids (``REQ-1.2``) the task covers;
-    # "depends_on" lists the positions, in this list, of the tasks that must
-    # be done first (``services.dependencies``).
-    backlog_items: list[dict[str, Any]]
+    # With a specification, "covers" lists the criteria ids (``REQ-1.2``)
+    # the task covers; "depends_on" lists the positions, in this list, of
+    # the tasks that must be done first (``services.dependencies``).
+    backlog_items: list[BacklogItemIn]
     # Blocked tasks of earlier sprints to try again in this one (they count
     # towards the scope). Each gets a fresh task carrying what blocked it.
     carry_over_ids: list[int] = []

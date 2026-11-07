@@ -88,6 +88,7 @@ from services.board import (
     SCRUM_MASTER_ROLE,
     blocked_item_next_step,
     comment_list,
+    completed_tasks_context,
     extract_latest_reviewable_comment,
     has_manual_freeze_marker,
     item_is_settled,
@@ -325,37 +326,8 @@ def _load_recent_lessons(company_id: int | None, current_sprint_id: int) -> str:
 def _load_sprint_completed_tasks(
     sprint_id: int, exclude_item_id: int, limit: int = 5
 ) -> str:
-    """Return a brief summary of done tasks in the same sprint for cross-task context."""
-    try:
-        with Session(engine) as session:
-            done_items = session.exec(
-                select(BacklogItem).where(
-                    BacklogItem.sprint_id == sprint_id,
-                    BacklogItem.id != exclude_item_id,
-                    BacklogItem.status == "done",
-                )
-            ).all()
-            if not done_items:
-                return ""
-            lines = [
-                "Completed tasks in this sprint (build on this work, avoid duplication):"
-            ]
-            for it in done_items[:limit]:
-                deliverable_excerpt = extract_latest_reviewable_comment(
-                    comment_list(it.comments), assignee_role=it.assignee
-                )
-                excerpt = (
-                    deliverable_excerpt[:280].replace("\n", " ")
-                    if deliverable_excerpt
-                    else "(no deliverable)"
-                )
-                lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
-            return "\n".join(lines)
-    except Exception as exc:  # noqa: BLE001 - Completed-task context is best-effort.
-        logger.debug(
-            "Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc
-        )
-        return ""
+    """A brief summary of done tasks in the same sprint, for cross-task context."""
+    return completed_tasks_context(engine, sprint_id, exclude_item_id, limit)
 
 
 # ---------------------------------------------------------------------------
@@ -1071,6 +1043,7 @@ def _complete_sprint_and_plan_follow_up(
             scope_size=scope_size,
             status="active",
             goal=plan.get("goal") or objective,
+            specification_id=sprint.specification_id,
         )
         session.add(next_sprint)
         session.flush()

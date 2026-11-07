@@ -16,6 +16,7 @@ The ids of modules, interfaces and decisions come from ``services.arch_check``,
 never from a request or a model; the check decides what can be approved.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -238,7 +239,8 @@ async def draft_architecture(
             raise HTTPException(status_code=404, detail="Architecture not found")
         _only_draft(existing)
     try:
-        content = arch_author.draft(session, spec, existing)
+        # The Architect's call waits on the proxy: off the event loop.
+        content = await asyncio.to_thread(arch_author.draft, session, spec, existing)
     except arch_author.ArchAuthorError as exc:
         raise HTTPException(
             status_code=502, detail=f"The Architect gave no usable draft: {exc}"

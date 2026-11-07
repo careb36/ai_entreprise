@@ -26,9 +26,11 @@ from datetime import datetime
 from typing import Any
 
 from models import BacklogItem
+from sqlmodel import Session, select
 
 from services import orchestration_metrics as _metrics
 from services.orchestration_metrics import (
+from logging_config import logger
     GATE_AUTHORS_LOWER,
     is_architect_consult_comment,
 )
@@ -488,3 +490,42 @@ def count_architect_advice(
     the rework before the brief is not the brief's doing.
     """
     _count_advice(tally, status, comments, is_architect_consult_comment)
+
+
+def completed_tasks_context(
+    engine: Any, sprint_id: int, exclude_item_id: int, limit: int = 5
+) -> str:
+    """A brief summary of the done tasks of a sprint, read with *engine*, for cross-task context.
+
+    Best-effort: a failed read logs and returns nothing.
+    """
+    try:
+        with Session(engine) as session:
+            done_items = session.exec(
+                select(BacklogItem).where(
+                    BacklogItem.sprint_id == sprint_id,
+                    BacklogItem.id != exclude_item_id,
+                    BacklogItem.status == "done",
+                )
+            ).all()
+            if not done_items:
+                return ""
+            lines = [
+                "Completed tasks in this sprint (build on this work, avoid duplication):"
+            ]
+            for it in done_items[:limit]:
+                deliverable_excerpt = extract_latest_reviewable_comment(
+                    comment_list(it.comments), assignee_role=it.assignee
+                )
+                excerpt = (
+                    deliverable_excerpt[:280].replace("\n", " ")
+                    if deliverable_excerpt
+                    else "(no deliverable)"
+                )
+                lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
+            return "\n".join(lines)
+    except Exception as exc:  # noqa: BLE001 - Completed-task context is best-effort.
+        logger.debug(
+            "Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc
+        )
+        return ""

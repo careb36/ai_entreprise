@@ -16,10 +16,10 @@ import json
 from typing import Any
 
 from logging_config import logger
-from models import BacklogItem, Sprint
+from models import Agent, BacklogItem, Company, ProjectDiscovery, Sprint
 from models.specification import Specification
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 
 from services import dependencies, spec_author, spec_check
 from services.sprint_planner import (
@@ -67,6 +67,33 @@ def approved_specification(
     return spec
 
 
+def planning_context_of(
+    session: Session, company_id: int
+) -> tuple[Company, list[dict[str, Any]], ProjectDiscovery | None]:
+    """The company, its agents as dicts and its latest discovery, for the planners."""
+    company = session.get(Company, company_id)
+    if not company:
+        raise PlanRefused(404, "Company not found")
+    agents = [
+        {
+            "role": agent.role,
+            "name": agent.name,
+            "model": agent.model,
+            "seniority": agent.seniority,
+            "specialty": agent.specialty,
+        }
+        for agent in session.exec(
+            select(Agent).where(Agent.company_id == company_id)
+        ).all()
+    ]
+    discovery = session.exec(
+        select(ProjectDiscovery)
+        .where(ProjectDiscovery.company_id == company_id)
+        .order_by(text("created_at DESC"))
+    ).first()
+    return company, agents, discovery
+
+
 def checked_covers(item: dict[str, Any], known: set[str] | None) -> list[str] | None:
     """A task's ``covers`` checked against the specification's criteria ids."""
     covers = item.get("covers")
@@ -98,7 +125,13 @@ def plan_prompt(
     item_limit: int,
     roster: str,
     roles: list[str],
+    note: str = "",
 ) -> str:
+    note_section = (
+        f"## Note from the person planning\n{note.strip()[:2000]}\n\n"
+        if note.strip()
+        else ""
+    )
     return (
         f"You are {po_name}, the PO. Plan a sprint from the specification below: "
         "split the work into tasks a single agent can deliver, and say for each task "
@@ -108,6 +141,7 @@ def plan_prompt(
         "task of this sprint or a later one; cover the most valuable ones first.\n\n"
         f"## Specification: {spec.get('title')}\n{spec.get('summary')}\n\n"
         f"{spec_check.as_prompt(spec)}\n\n"
+        f"{note_section}"
         f"## Team\n{roster}\n\n"
         f"Scope {scope_size}: at most {item_limit} tasks. Assignee is one of: {', '.join(roles)}.\n\n"
         "Answer with one JSON object and nothing else:\n"
@@ -201,10 +235,12 @@ def plan(
     scope_size: str,
     item_limit: int,
     agents: list[dict[str, Any]],
+    note: str = "",
 ) -> dict[str, Any]:
     """The PO's split of *spec* into tasks with ``covers``, and what stays uncovered.
 
-    A failed or unusable answer falls back to one task per requirement.
+    *note* is what the person planning added for the PO. A failed or
+    unusable answer falls back to one task per requirement.
     """
     content = spec_content(spec)
     team = _ensure_execution_team(agents)
@@ -214,11 +250,15 @@ def plan(
     from services import arch_author
 
     prompt = plan_prompt(
-        po_name, content, scope_size, item_limit, _build_team_roster(team), roles
+        po_name, content, scope_size, item_limit, _build_team_roster(team), roles, note
     ) + arch_author.planning_context(session, spec.id)
     try:
         answer = spec_author.ask(
-            model, system_prompt, prompt, max_tokens=PLAN_MAX_TOKENS
+            model,
+            system_prompt,
+            prompt,
+            max_tokens=PLAN_MAX_TOKENS,
+            bu_id=spec_author.business_unit_id(session, spec.company_id),
         )
         parsed = json.loads(spec_author._strip_fences(answer))
         if not isinstance(parsed, dict):
@@ -258,12 +298,20 @@ def covers_of(item: Any) -> list[str]:
 
 
 def requirements_section(spec: dict[str, Any], covers: list[str]) -> str:
-    """The prompt section for a task covering *covers*; empty when it covers nothing."""
-    if not covers:
-        return ""
+    """The prompt section for a task covering *covers*.
+
+    A task that covers no criterion still gets the quality attributes and
+    the constraints, which hold for every task of the specification.
+    """
     body = spec_check.as_prompt(spec, set(covers))
     if not body:
         return ""
+    if not covers:
+        return (
+            "\n\n## Specification rules for every task\n"
+            "From the approved specification: the quality attributes and constraints "
+            "every task follows, this one included.\n\n" + body
+        )
     return (
         "\n\n## Requirements this task covers\n"
         "From the approved specification. Each criterion below must hold when the "
@@ -280,7 +328,7 @@ def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     """
     from services import arch_author
 
-    if sprint is None or sprint.specification_id is None or not covers_of(item):
+    if sprint is None or sprint.specification_id is None:
         return ""
     spec = session.get(Specification, sprint.specification_id)
     if spec is None:

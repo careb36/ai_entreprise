@@ -183,7 +183,8 @@ def test_the_prompt_section_carries_the_modules_of_the_task_and_what_every_task_
     assert "MOD-3: Web client" not in section
     assert "IF-1: Tasks HTTP API (http, provided by MOD-1, used by MOD-3)" in section
     assert "ADR-1: SQLite for the store" in section and "Tests live beside" in section
-    assert arch_author.section(arch, []) == ""
+    rules = arch_author.section(arch, [])
+    assert "ADR-1: SQLite for the store" in rules and "MOD-" not in rules
     assert "MOD-3: Web client" in arch_check.as_prompt(arch)
 
 

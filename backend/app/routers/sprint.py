@@ -12,6 +12,7 @@ an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -20,12 +21,9 @@ from auth_tokens import STREAM_TICKET_MINUTES, create_stream_ticket
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
-    Agent,
     BacklogItem,
     BusinessUnit,
-    Company,
     OutboxEvent,
-    ProjectDiscovery,
     Sprint,
     User,
 )
@@ -56,39 +54,13 @@ from services.sprint_planner import (
     plan_self_improvement_sprint as build_self_improvement_plan,
 )
 from sqlalchemy import case, func
-from sqlmodel import Session, select, text
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 # Allowed values for validation; rejected values return HTTP 422.
 VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
-
-
-def _load_planning_context(session: Session, company_id: int):
-    company = session.get(Company, company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    agents = session.exec(select(Agent).where(Agent.company_id == company_id)).all()
-    agent_dicts = [
-        {
-            "role": agent.role,
-            "name": agent.name,
-            "model": agent.model,
-            "seniority": agent.seniority,
-            "specialty": agent.specialty,
-        }
-        for agent in agents
-    ]
-
-    discovery = session.exec(
-        select(ProjectDiscovery)
-        .where(ProjectDiscovery.company_id == company_id)
-        .order_by(text("created_at DESC"))
-    ).first()
-
-    return company, agent_dicts, discovery
 
 
 def _refused(call, *args):
@@ -130,12 +102,21 @@ async def plan_sprint(
         raise HTTPException(
             status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
         )
-    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+    company, agent_dicts, discovery = _refused(
+        spec_planning.planning_context_of, session, req.company_id
+    )
 
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
-        plan = spec_planning.plan(
-            session, spec, scope_size, SCOPE_LIMITS[scope_size], agent_dicts
+        # The PO's call waits on the proxy: off the event loop.
+        plan = await asyncio.to_thread(
+            spec_planning.plan,
+            session,
+            spec,
+            scope_size,
+            SCOPE_LIMITS[scope_size],
+            agent_dicts,
+            req.prompt,
         )
         plan["specification_id"] = spec.id
         return _serialize_plan_response(
@@ -175,7 +156,9 @@ async def plan_self_improvement_sprint(
             status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
         )
 
-    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+    company, agent_dicts, discovery = _refused(
+        spec_planning.planning_context_of, session, req.company_id
+    )
     objective = build_self_improvement_objective(
         company_name=company.company_name,
         detected_stack=discovery.detected_stack if discovery else None,
@@ -221,7 +204,8 @@ async def start_sprint(
 
     item_limit = SCOPE_LIMITS[scope_size]
     carry_over_ids = list(dict.fromkeys(req.carry_over_ids))
-    item_count = len(req.backlog_items) + len(carry_over_ids)
+    backlog_items = [item.model_dump() for item in req.backlog_items]
+    item_count = len(backlog_items) + len(carry_over_ids)
     if item_count > SCOPE_HARD_MAX:
         raise HTTPException(
             status_code=422,
@@ -256,10 +240,10 @@ async def start_sprint(
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
 
-    positions = _refused(dependencies.check_positions, req.backlog_items)
+    positions = _refused(dependencies.check_positions, backlog_items)
     item_ids = []
     rows: list[BacklogItem] = []
-    for item in req.backlog_items:
+    for item in backlog_items:
         backlog_item = BacklogItem(
             sprint_id=sprint.id,
             title=item.get("title", ""),
@@ -312,14 +296,14 @@ async def start_sprint(
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
         item_ids.extend(item.id for item in carried)
         story_items = [
-            *req.backlog_items,
+            *backlog_items,
             *(
                 {"title": item.title, "description": item.description or ""}
                 for item in carried
             ),
         ]
     else:
-        story_items = list(req.backlog_items)
+        story_items = list(backlog_items)
 
     kickoff_story = "\n".join(
         [
