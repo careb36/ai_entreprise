@@ -241,8 +241,8 @@ async def handle_msg(nc, msg):
         cmd = data.get("command")
         result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path)
 
-        sprint_id = data.get("sprint_id", "1")
-        if not shell_exec.is_assistant_command(cmd):
+        sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
+        if sprint_id is not None and not shell_exec.is_assistant_command(cmd):
             await _publish_glassroom_status(nc, sprint_id, shell_exec.summarize_command_result(cmd, result))
 
         if reply_to:

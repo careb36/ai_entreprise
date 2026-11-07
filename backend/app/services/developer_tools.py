@@ -42,14 +42,14 @@ from typing import Any
 
 from config import settings
 
-from services import mcp_tools
+from services import context_read, developer_tool_schemas, mcp_tools
 
 logger = logging.getLogger("fabrique-task-worker")
 
-SERVER = "workspace"
+SERVER = developer_tool_schemas.SERVER
 TOOL_ROLES = {"developer", "dev", "qa", "tester"}
 READ_TOOLS = ("list", "read", "search")
-RUN_TESTS = "run_tests"
+RUN_TESTS = developer_tool_schemas.RUN_TESTS
 LIST_TIMEOUT_SECONDS = 20.0
 READ_TIMEOUT_SECONDS = 20.0
 SEARCH_TIMEOUT_SECONDS = 40.0
@@ -68,104 +68,15 @@ RUNNERS = (
 
 Requester = Callable[[str, dict[str, Any], float], dict[str, Any]]
 
-_SCHEMAS: list[dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}list",
-            "description": (
-                "List the files and folders of the project under a path "
-                "(default: the root), two levels deep unless `depth` says "
-                "otherwise; folders end in `/`. Bounded; `truncated` says when."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "A folder, relative to the project root.",
-                    },
-                    "depth": {
-                        "type": "integer",
-                        "description": "Levels to descend, 1 to 6 (default 2).",
-                    },
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}read",
-            "description": (
-                "Read a file of the project as it is on disk, with line numbers, "
-                "at most 400 lines from `start_line`. Read a file before you change it."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The file, relative to the project root.",
-                    },
-                    "start_line": {
-                        "type": "integer",
-                        "description": "First line to show (default 1).",
-                    },
-                },
-                "required": ["path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}search",
-            "description": (
-                "Find the lines matching a regular expression (case-insensitive) "
-                "in the project or under a path: `file:line: text`, at most 60 matches."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "A regular expression.",
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": "A folder or file to search in (default: the root).",
-                    },
-                },
-                "required": ["pattern"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{RUN_TESTS}",
-            "description": (
-                "Run the project's tests as they are on disk now (your delivery "
-                "is not written yet) and see the output. `command` may narrow "
-                "the run within the same runner, e.g. `python -m pytest tests/test_x.py`."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "A narrower test command with the project's runner (optional).",
-                    },
-                },
-            },
-        },
-    },
-]
-
 
 def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _runs_with(command: str, runner: str) -> bool:
+    """Whether *command* is *runner* itself or *runner* followed by arguments:
+    ``python -m pytest_custom`` is not ``python -m pytest``."""
+    return command == runner or command.startswith(runner + " ")
 
 
 def offered_to(role: str | None) -> bool:
@@ -204,8 +115,12 @@ class WorkspaceToolbox:
 
     def schemas(self) -> list[dict[str, Any]]:
         if self.test_command:
-            return list(_SCHEMAS)
-        return [s for s in _SCHEMAS if not s["function"]["name"].endswith(RUN_TESTS)]
+            return list(developer_tool_schemas.SCHEMAS)
+        return [
+            s
+            for s in developer_tool_schemas.SCHEMAS
+            if not s["function"]["name"].endswith(RUN_TESTS)
+        ]
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -286,7 +201,9 @@ class WorkspaceToolbox:
             )
             if reply.get("binary"):
                 return f"(binary file, {reply.get('bytes')} bytes)"
-            text = str(reply.get("text") or "")
+            text = context_read.redact_secrets(
+                str(arguments.get("path") or ""), str(reply.get("text") or "")
+            )
             if reply.get("truncated"):
                 text += f"\n[{reply.get('lines')} lines in the file; read on with start_line]"
             return text or "(empty file)"
@@ -300,7 +217,10 @@ class WorkspaceToolbox:
                 },
                 SEARCH_TIMEOUT_SECONDS,
             )
-            lines = list(reply.get("matches") or [])
+            lines = [
+                context_read.redact_secrets(m.split(":", 1)[0], m)
+                for m in reply.get("matches") or []
+            ]
             extra["files_scanned"] = reply.get("files_scanned")
             if reply.get("truncated"):
                 lines.append("[more matches not shown]")
@@ -330,10 +250,10 @@ class WorkspaceToolbox:
         wanted = str(requested or "").strip()
         if not wanted:
             return base
-        runner = next((r for r in RUNNERS if base.startswith(r)), None)
+        runner = next((r for r in RUNNERS if _runs_with(base, r)), None)
         if (
             runner
-            and wanted.startswith(runner)
+            and _runs_with(wanted, runner)
             and all(ch not in wanted for ch in ";&|`$><\n")
         ):
             return wanted
@@ -390,7 +310,10 @@ class CombinedToolbox:
         self, tool_call: dict[str, Any], round_no: int
     ) -> tuple[dict[str, Any], str]:
         name = str(((tool_call.get("function") or {}).get("name")) or "")
-        if name.startswith(f"{SERVER}{mcp_tools.TOOL_NAME_SEP}") or self.mcp is None:
+        # The built-in tools by their exact names; everything else, the MCP
+        # servers' (an MCP server cannot be named ``workspace``: the name is
+        # reserved in ``mcp_config``, so nothing is shadowed).
+        if name in self.workspace.tools or self.mcp is None:
             return self.workspace.call(tool_call, round_no)
         return self.mcp.call(tool_call, round_no)
 
@@ -470,20 +393,48 @@ def _detect_test_command(workspace_root: str) -> str | None:
         return None
 
 
-def toolbox_for(company_id: int | None, role: str | None, *, engine: Any = None) -> Any:
-    """The toolbox for a task: the company's MCP tools, plus the workspace
-    tools for a role that delivers files when a project path is known.
-    Returns ``None`` when there is nothing to offer, as the MCP loader does."""
-    mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
-    if company_id is None or not offered_to(role) or "nats" not in _bridge:
-        return mcp
+def tool_root(
+    company_id: int, item_id: int | None = None, *, engine: Any = None
+) -> str | None:
+    """Where the tools look: the task's own worktree once it has delivered
+    there (the Git workflow; ``git_workflow.record_reply`` keeps it on the
+    evidence), else the company's project. On rework the reads and the test
+    run then see the previous delivery and the merged dependencies."""
     try:
         root = _bridge["resolve_root"](company_id)
     except Exception as exc:  # noqa: BLE001 - No project path, no workspace tools.
         logger.warning(
             "Could not resolve the project path for company=%s: %s", company_id, exc
         )
-        root = None
+        return None
+    if not root or item_id is None or engine is None:
+        return root
+    try:
+        from services import delivery_gate
+
+        verification = delivery_gate.latest_verification(engine, company_id, item_id)
+    except Exception as exc:  # noqa: BLE001 - The project root is the fallback.
+        logger.warning("Could not read the task's last delivery: %s", exc)
+        return root
+    evidence = (verification.evidence if verification is not None else None) or {}
+    worktree = evidence.get("workspace_root") if evidence.get("git") else None
+    return worktree if isinstance(worktree, str) and worktree else root
+
+
+def toolbox_for(
+    company_id: int | None,
+    role: str | None,
+    *,
+    engine: Any = None,
+    item_id: int | None = None,
+) -> Any:
+    """The toolbox for a task: the company's MCP tools, plus the workspace
+    tools for a role that delivers files when a project path is known.
+    Returns ``None`` when there is nothing to offer, as the MCP loader does."""
+    mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
+    if company_id is None or not offered_to(role) or "nats" not in _bridge:
+        return mcp
+    root = tool_root(company_id, item_id, engine=engine)
     if not root:
         return mcp
     workspace = WorkspaceToolbox(
@@ -492,14 +443,20 @@ def toolbox_for(company_id: int | None, role: str | None, *, engine: Any = None)
     return CombinedToolbox(workspace, mcp)
 
 
-def repository_section(company_id: int | None, role: str | None) -> str:
+def repository_section(
+    company_id: int | None,
+    role: str | None,
+    item_id: int | None = None,
+    *,
+    engine: Any = None,
+) -> str:
     """The prompt's "## Repository" section: the top of the project's tree,
     bounded, with a word on the tools. Empty when the tools are not offered
     or the project cannot be listed."""
     if company_id is None or not offered_to(role) or "nats" not in _bridge:
         return ""
     try:
-        root = _bridge["resolve_root"](company_id)
+        root = tool_root(company_id, item_id, engine=engine)
         if not root:
             return ""
         reply = _request_from_thread(
@@ -526,53 +483,3 @@ def repository_section(company_id: int | None, role: str | None) -> str:
         "a file you deliver replaces the one on disk whole, so deliver it complete.\n\n"
         f"{listing}"
     )
-
-
-def files_read(tool_calls: Any) -> dict[str, str | None]:
-    """The files the workspace tools read in a run, with the sha256 the daemon
-    reported for each (the latest read of a file wins)."""
-    read: dict[str, str | None] = {}
-    for call in tool_calls or []:
-        if (
-            isinstance(call, dict)
-            and call.get("server") == SERVER
-            and call.get("tool") == "read"
-            and not call.get("is_error")
-            and isinstance(call.get("path"), str)
-        ):
-            read[call["path"]] = call.get("sha256")
-    return read
-
-
-def check_context_read(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
-    """The Verifier's ``context_read`` check: of the files the delivery
-    modified (the daemon says which existed before), which the Developer had
-    read first and which it had not. Informational, never the verdict; absent
-    when the workspace tools were not used and nothing was modified."""
-    evidence = evidence or {}
-    read = files_read(evidence.get("tool_calls"))
-    modified = sorted(
-        w["path"]
-        for w in evidence.get("workspace_writes") or []
-        if isinstance(w, dict)
-        and w.get("status") == "written"
-        and w.get("change") == "modified"
-    )
-    if not read and not modified:
-        return None
-    unread = [p for p in modified if p not in read]
-    seen = [p for p in modified if p in read]
-    if not modified:
-        observation = f"read {len(read)} file(s); no existing file was changed"
-    elif not unread:
-        observation = f"every modified file was read first ({len(seen)})"
-    else:
-        observation = f"modified without reading first: {', '.join(unread[:5])}"
-    return {
-        "name": "context_read",
-        "outcome": "pass",
-        "observation": observation,
-        "read": sorted(read),
-        "modified_read": seen,
-        "modified_unread": unread,
-    }

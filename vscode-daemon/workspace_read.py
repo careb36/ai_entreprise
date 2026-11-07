@@ -7,12 +7,21 @@ observation of the disk this daemon made: the sha256 of the bytes a read
 returned, how many entries a listing holds, how many matches a search found,
 and where a bound cut the answer. The model's reading of what came back stays
 a claim. Nothing here writes, and a path outside the workspace is rejected.
+
+Bounds that hold before anything is loaded: a read hashes the file in chunks
+and indexes only its first ``READ_SCAN_BYTES``; a search opens only files
+inside the project (a symlink that leads out is skipped), never a file that
+may hold secrets (``SENSITIVE_NAMES``), and runs in a child process it kills
+at ``SEARCH_TIMEOUT_SECONDS``, so a pattern that backtracks forever costs
+that much and no more.
 """
 
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import hashlib
+import multiprocessing
 import os
 import re
 from pathlib import Path
@@ -25,14 +34,26 @@ SKIP_DIRS = {
     "dist", "build", ".next", ".nuxt", "target", ".gradle", ".idea", ".vscode",
     "coverage", ".pytest_cache", ".mypy_cache", ".ruff_cache", "vendor",
 }
+# Files that may hold secrets: never read, never searched, whatever the
+# request names. Folders whose every file is such.
+SENSITIVE_NAMES = (
+    ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.keystore",
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".npmrc", ".pypirc",
+    ".git-credentials", "credentials", "credentials.json", "secrets.*", "*.secret",
+    "secrets.yaml", "secrets.yml", "service-account*.json",
+)
+SENSITIVE_DIRS = {".ssh", ".aws", ".gnupg", ".git", ".docker", ".kube"}
 LIST_MAX_ENTRIES = 400
 LIST_MAX_DEPTH = 6
 READ_MAX_BYTES = 64 * 1024
 READ_MAX_LINES = 400
+# How much of a file is read into memory to index its lines; the rest is only hashed.
+READ_SCAN_BYTES = 1024 * 1024
 SEARCH_MAX_MATCHES = 60
 SEARCH_MAX_FILE_BYTES = 512 * 1024
 SEARCH_MAX_FILES = 5000
 SEARCH_LINE_CHARS = 240
+SEARCH_TIMEOUT_SECONDS = 20.0
 
 
 class ReadError(Exception):
@@ -51,13 +72,35 @@ def _root(workspace_path: str) -> Path:
     return root.resolve()
 
 
+def _inside(root: Path, candidate: Path) -> Optional[Path]:
+    """*candidate* resolved, when it stays under *root* (symlinks followed); else ``None``."""
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
 def _target(root: Path, relative: Any, resolve: Callable[[str, str], Optional[Path]]) -> Path:
     if not isinstance(relative, str):
         raise ReadError(400, "A path is required.")
     target = resolve(str(root), relative)
-    if target is None:
+    if target is None or _inside(root, target) is None:
         raise ReadError(400, f"Not a path inside the project: {relative}")
     return target
+
+
+def is_sensitive(root: Path, path: Path) -> bool:
+    """Whether *path* (under *root*) may hold secrets, by its name or folder."""
+    try:
+        parts = path.relative_to(root).parts
+    except ValueError:
+        return True
+    if any(part in SENSITIVE_DIRS for part in parts[:-1]):
+        return True
+    name = parts[-1] if parts else ""
+    return any(fnmatch.fnmatch(name, pattern) for pattern in SENSITIVE_NAMES)
 
 
 def list_tree(workspace_path: str, path: Any, depth: Any, resolve) -> Dict[str, Any]:
@@ -93,42 +136,59 @@ def list_tree(workspace_path: str, path: Any, depth: Any, resolve) -> Dict[str, 
     return {"path": start.relative_to(root).as_posix() if start != root else ".", "entries": entries, "truncated": truncated}
 
 
+def _hash_and_head(target: Path) -> tuple:
+    """The sha256 of the whole file, streamed, and its first ``READ_SCAN_BYTES``."""
+    digest = hashlib.sha256()
+    head = b""
+    size = 0
+    with target.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+            size += len(chunk)
+            if len(head) < READ_SCAN_BYTES:
+                head += chunk[: READ_SCAN_BYTES - len(head)]
+    return digest.hexdigest(), head, size
+
+
 def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[str, Any]:
     """A text file as it is on disk: its lines numbered from ``start_line``
     (default 1), at most ``READ_MAX_LINES`` lines and ``READ_MAX_BYTES`` bytes,
-    with the sha256 and size of the whole file."""
+    with the sha256 and size of the whole file (hashed in chunks; only the
+    first ``READ_SCAN_BYTES`` are read into memory)."""
     root = _root(workspace_path)
     target = _target(root, path, resolve)
     if not target.is_file():
         raise ReadError(404, f"No such file: {path}")
-    raw = target.read_bytes()
-    digest = hashlib.sha256(raw).hexdigest()
-    if b"\0" in raw[:8192]:
-        return {"path": path, "sha256": digest, "bytes": len(raw), "binary": True, "text": "", "lines": 0, "truncated": False}
-    text = raw.decode("utf-8", errors="replace")
-    lines = text.splitlines()
+    if is_sensitive(root, target):
+        raise ReadError(403, f"A file that may hold secrets is never shown: {path}")
+    digest, head, size = _hash_and_head(target)
+    if b"\0" in head[:8192]:
+        return {"path": path, "sha256": digest, "bytes": size, "binary": True, "text": "", "lines": 0, "truncated": False}
+    lines = head.decode("utf-8", errors="replace").splitlines()
+    beyond_scan = size > len(head)
     try:
         first = max(1, int(start_line or 1))
     except (TypeError, ValueError):
         first = 1
     chosen = lines[first - 1 : first - 1 + READ_MAX_LINES]
     numbered: List[str] = []
-    size = 0
-    truncated = len(lines) > first - 1 + len(chosen)
+    out = 0
+    truncated = beyond_scan or len(lines) > first - 1 + len(chosen)
     for offset, line in enumerate(chosen):
         row = f"{first + offset:5d}| {line}"
-        size += len(row) + 1
-        if size > READ_MAX_BYTES:
+        out += len(row) + 1
+        if out > READ_MAX_BYTES:
             truncated = True
             break
         numbered.append(row)
     return {
         "path": path,
         "sha256": digest,
-        "bytes": len(raw),
+        "bytes": size,
         "binary": False,
         "text": "\n".join(numbered),
         "lines": len(lines),
+        "lines_indexed_to_byte": len(head) if beyond_scan else None,
         "first_line": first,
         "truncated": truncated,
     }
@@ -137,7 +197,8 @@ def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[
 def search(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, Any]:
     """The lines matching *pattern* (a regular expression, case-insensitive)
     under *path* (default: the root): ``file:line: text``, at most
-    ``SEARCH_MAX_MATCHES`` of them."""
+    ``SEARCH_MAX_MATCHES`` of them. Files that may hold secrets and files
+    that resolve outside the project are never opened."""
     root = _root(workspace_path)
     if not isinstance(pattern, str) or not pattern.strip():
         raise ReadError(400, "A pattern is required.")
@@ -151,19 +212,23 @@ def search(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, A
     files = [start] if start.is_file() else []
     matches: List[str] = []
     scanned = 0
-    truncated = False
+    files_truncated = False
+    matches_truncated = False
     if start.is_dir():
         for dirpath, dirnames, filenames in os.walk(start):
             dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
             files.extend(Path(dirpath) / n for n in sorted(filenames) if not n.startswith("."))
             if len(files) > SEARCH_MAX_FILES:
-                truncated = True
+                files_truncated = True
                 break
     for file in files[:SEARCH_MAX_FILES]:
+        contained = _inside(root, file)
+        if contained is None or is_sensitive(root, contained):
+            continue
         try:
-            if file.stat().st_size > SEARCH_MAX_FILE_BYTES:
+            if contained.stat().st_size > SEARCH_MAX_FILE_BYTES:
                 continue
-            raw = file.read_bytes()
+            raw = contained.read_bytes()
         except OSError:
             continue
         if b"\0" in raw[:8192]:
@@ -173,12 +238,72 @@ def search(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, A
         for number, line in enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1):
             if regex.search(line):
                 if len(matches) >= SEARCH_MAX_MATCHES:
-                    truncated = True
+                    matches_truncated = True
                     break
                 matches.append(f"{relative}:{number}: {line.strip()[:SEARCH_LINE_CHARS]}")
-        if truncated:
+        if matches_truncated:
             break
-    return {"pattern": pattern, "matches": matches, "files_scanned": scanned, "truncated": truncated}
+    return {
+        "pattern": pattern,
+        "matches": matches,
+        "files_scanned": scanned,
+        "truncated": files_truncated or matches_truncated,
+    }
+
+
+def _resolve_inside(workspace_path: str, relative: str) -> Optional[Path]:
+    """The daemon's path resolution, for the search child process."""
+    root = Path(workspace_path).resolve()
+    candidate = (root / (relative or "")).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate
+
+
+def _search_job(workspace_path: str, pattern: str, path: Any, queue) -> None:
+    try:
+        queue.put(("ok", search(workspace_path, pattern, path, _resolve_inside)))
+    except ReadError as exc:
+        queue.put(("error", exc.status, exc.message))
+    except Exception as exc:  # noqa: BLE001 - The parent reports it as a 500.
+        queue.put(("error", 500, f"{type(exc).__name__}: {exc}"))
+
+
+def search_bounded(
+    workspace_path: str, pattern: Any, path: Any, resolve, timeout: float = SEARCH_TIMEOUT_SECONDS
+) -> Dict[str, Any]:
+    """``search`` in a child process killed at *timeout*: a pattern that
+    backtracks without end (``(a+)+$`` on a line of ``a``) costs that much
+    and no more. The pattern and the path are checked here first, so a bad
+    request is refused without a process."""
+    root = _root(workspace_path)
+    if not isinstance(pattern, str) or not pattern.strip():
+        raise ReadError(400, "A pattern is required.")
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ReadError(400, f"Not a valid pattern: {exc}") from exc
+    _target(root, path or ".", resolve)
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    worker = context.Process(target=_search_job, args=(str(root), pattern, path, queue), daemon=True)
+    worker.start()
+    try:
+        outcome = queue.get(timeout=timeout)
+    except Exception:  # noqa: BLE001 - queue.Empty, or a dead child: the deadline is the result.
+        outcome = None
+    finally:
+        worker.join(timeout=1)
+        if worker.is_alive():
+            worker.kill()
+            worker.join(timeout=5)
+    if outcome is None:
+        raise ReadError(408, f"The search ran past {timeout:g} s and was stopped; narrow the pattern or the path.")
+    if outcome[0] == "error":
+        raise ReadError(outcome[1], outcome[2])
+    return outcome[1]
 
 
 async def _serve(nc, msg, reply, request_body, resolve, handler) -> None:
@@ -207,8 +332,8 @@ async def handle_read(nc, msg, reply, request_body, resolve) -> None:
 
 
 async def handle_search(nc, msg, reply, request_body, resolve) -> None:
-    """``workspace.search`` → the matching lines."""
-    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: search(r, d.get("pattern"), d.get("path"), s))
+    """``workspace.search`` → the matching lines, within the deadline."""
+    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: search_bounded(r, d.get("pattern"), d.get("path"), s))
 
 
 # (subject, handler) for the daemon's subscription loop.

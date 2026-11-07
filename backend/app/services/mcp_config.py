@@ -24,6 +24,8 @@ from models.mcp import MCP_TRANSPORTS, McpServer
 from sqlmodel import Session, select
 
 NAME_LIMIT = 64
+# Names the built-in toolboxes use for their tools (``<name>__<tool>``).
+RESERVED_SERVER_NAMES = {"workspace"}
 _TRANSPORT_ALIASES = {
     "streamable-http": "http",
     "streamable_http": "http",
@@ -59,6 +61,9 @@ def normalize_server(name: str, raw: Any) -> dict[str, Any]:
         raise McpConfigError(
             f"server name {name!r} must be 1-{NAME_LIMIT} characters without '__'"
         )
+    if name.lower() in RESERVED_SERVER_NAMES:
+        # The built-in toolboxes (``services/developer_tools.py``) own it.
+        raise McpConfigError(f"server name {name!r} is reserved for a built-in toolbox")
     if not isinstance(raw, Mapping):
         raise McpConfigError(f"{name}: a server is an object")
     declared = raw.get("transport", raw.get("type"))
