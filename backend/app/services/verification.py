@@ -4,7 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import criteria_tests, mcp_tools, risk
+from services import criteria_tests, mcp_tools, risk, standards
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -400,6 +400,11 @@ def verify_agent_run(
                 checks.append(check)
     if evidence and "tool_calls" in evidence:
         checks.append(check_tools_used(evidence))
+    # The factory's standards over the files the deliverable declares
+    # (``services.standards``): a secret refutes, the rest is for the reviewer.
+    standards_check = standards.check_delivery(run.artifact_text)
+    if standards_check:
+        checks.append(standards_check)
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(

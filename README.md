@@ -121,6 +121,7 @@ flowchart LR
 - An end-to-end run in CI drives a whole company through three sprints against real PostgreSQL and NATS JetStream, then has an independent checker reject any illegal task history.
 - A file-size ratchet, a pinned linter and an i18n rule that fails the build on untranslated text keep the code base honest as it grows.
 - The interface is fully bilingual, English and Spanish.
+- Every project is held to the same **quality standards** ([`docs/STANDARDS.md`](docs/STANDARDS.md)): architecture, development, QA, security, evidence and audit, documentation, operations. They go into every agent's prompt by role, a company procedure can add to them but never relax them, and the ones that can be checked without a model are: a secret in a delivered file refutes the delivery, code without a test or an unpinned dependency is a finding the reviewer sees, a specification that says nothing about security, performance, reliability or accessibility is warned.
 
 ## Quick start
 
@@ -677,6 +678,7 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `GET`  | `/v1/inbox` | What needs a person: blocked tasks (with the ScrumMaster's triage of each), procedure proposals, undecided runs of other producers |
 | `GET`  | `/v1/messages` | The conversation between roles (filters: sprint, task, kind) |
 | `GET` · `POST` | `/v1/procedures` (+ `/adopt`, `/reject`, `/retire`) | The rules each role follows, proposed by the ScrumMaster and measured by the board |
+| `GET` | `/v1/standards` | The factory's quality standards, the same for every company, with what the loop checks without a model |
 | `GET` · `POST` | `/v1/agent_runs` (+ `/verify`, `/approve`, `/verifications`) | Evidence: runs, deterministic verifications, human decisions |
 | `GET`  | `/v1/agent_runs/reviewer_record` | How often the Reviewer agent's suggestions matched the decisions people recorded, beside the Verifier's verdict alone (`REVIEWER_AGENT_ENABLED`) |
 | `POST` | `/v1/integrations/github/bindings` · `/webhook` · `/backfill` | Record a repository's pull requests as runs |

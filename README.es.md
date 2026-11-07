@@ -127,6 +127,7 @@ flowchart LR
 - Una prueba de punta a punta en el CI lleva una empresa entera por tres sprints contra PostgreSQL y NATS JetStream reales; al final, un verificador independiente rechaza cualquier historial de tarea ilegal.
 - Un límite de tamaño por archivo, un linter con versión fija y una regla de i18n que rompe el build ante texto sin traducir mantienen el código en orden a medida que crece.
 - La interfaz es completamente bilingüe, en inglés y en español.
+- Todos los proyectos se atienen a los mismos **estándares de calidad** ([`docs/STANDARDS.md`](docs/STANDARDS.md)): arquitectura, desarrollo, QA, seguridad, evidencia y auditoría, documentación, operaciones. Van en el prompt de cada agente según su rol, un procedimiento de la empresa puede ampliarlos pero nunca relajarlos, y los que se pueden verificar sin un modelo se verifican: un secreto en un archivo entregado refuta la entrega, código sin test o una dependencia sin versión fija es un hallazgo que ve quien revisa, y una especificación que no dice nada de seguridad, rendimiento, confiabilidad o accesibilidad recibe un aviso.
 
 ## Inicio rápido
 

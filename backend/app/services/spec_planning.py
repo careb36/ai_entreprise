@@ -21,7 +21,7 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import acceptance, dependencies, spec_author, spec_check
+from services import acceptance, dependencies, spec_author, spec_check, standards
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -279,7 +279,8 @@ def prepare_plan(
             roles,
             note,
         )
-        + arch_author.planning_context(session, spec.id),
+        + arch_author.planning_context(session, spec.id)
+        + standards.prompt_section(spec_author.PO_ROLE),
         "bu_id": spec_author.business_unit_id(session, spec.company_id),
     }
 

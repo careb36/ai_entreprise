@@ -49,7 +49,7 @@ from services import (
     acceptance,
     agent_run_service,
     console_assistants,
-    criteria_tests,
+    delivery_gate,
     dependencies,
     git_workflow,
     mcp_tools,
@@ -60,6 +60,7 @@ from services import (
     scrum_master,
     spec_planning,
     sprint_control,
+    standards,
     workspace_daemon,
 )
 from services.answers import (
@@ -107,7 +108,6 @@ from services.orchestration_metrics import (
     KPI_ROLE_ARCHITECT,
     RESULT_NEEDS_WORK,
     VERDICT_REFUTED,
-    VERDICT_UNVERIFIABLE,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -1517,8 +1517,10 @@ def _handoff_body(title: str, deliverable: str) -> str:
 
 
 def _load_procedures_context(company_id: int | None, role: str | None) -> str:
-    """The company's active procedures for *role*, as a prompt section."""
-    return procedures.prompt_context(engine, company_id, role)
+    """The factory's standards for *role*, then the company's active procedures, as prompt sections."""
+    return standards.prompt_section(role) + procedures.prompt_context(
+        engine, company_id, role
+    )
 
 
 def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
@@ -1641,7 +1643,7 @@ def _propose_procedures(
 # ---------------------------------------------------------------------------
 
 
-DELIVERY_QUEUED = "delivery queued"
+DELIVERY_QUEUED = delivery_gate.DELIVERY_QUEUED
 TASK_ASSIGN_CONSUMER = "task-worker"
 DELIVERY_RESULTS_CONSUMER = "delivery-results"
 # A task can take several LLM calls, console assistants and a test run; the
@@ -1650,77 +1652,17 @@ DELIVERY_RESULTS_CONSUMER = "delivery-results"
 TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
 
 
+# The gate before QA, the risk tier and the latest verification: services/delivery_gate.
 def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
-    """
-    ``(problem, observation)`` when the task's latest delivery must not reach QA.
-
-    Gates on a refuted delivery (files missing, rejected or different on disk),
-    an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
-    test run that failed.  A delivery queued for an offline daemon returns
-    ``DELIVERY_QUEUED``: the task waits, neither reviewed nor reworked, until
-    the daemon reports what it wrote.  Other checks — an unevidenced "tests pass" claim, a
-    test run that could not happen — are left to the evidence page, so an
-    honest claim never forces a rework.
-
-    Scoped to the task's company: ``POST /v1/agent_runs`` lets any company
-    ingest a run with any producer and reference, so a run is only trusted
-    when it belongs to the same company as the task.
-    """
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    if (verification.evidence or {}).get("delivery_queued"):
-        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
-    checks = list(verification.checks or [])
-    # An edited acceptance test is the reason to give first: the tests that
-    # then fail are QA's, restored.
-    checks.sort(key=lambda c: c.get("name") != criteria_tests.CHECK_UNTOUCHED)
-    for check in checks:
-        name, outcome = check.get("name"), check.get("outcome")
-        if name == "files_written" and outcome == VERDICT_REFUTED:
-            return "delivery refuted", check.get("observation", "")
-        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
-            return "delivery unconfirmed", check.get("observation", "")
-        if name == "tests_run" and outcome == VERDICT_REFUTED:
-            return "tests failed", check.get("observation", "")
-        if name == criteria_tests.CHECK_CRITERIA and outcome == VERDICT_REFUTED:
-            return "acceptance tests failed", check.get("observation", "")
-        if name == criteria_tests.CHECK_UNTOUCHED and outcome == VERDICT_REFUTED:
-            return "acceptance test edited", check.get("observation", "")
-    return None
+    return delivery_gate.gate(engine, company_id, item_id)
 
 
 def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
-    """The Verifier's ``risk_tier`` check on the task's latest delivery, if any."""
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    for check in verification.checks or []:
-        if check.get("name") == "risk_tier":
-            return check
-    return None
+    return delivery_gate.risk(engine, company_id, item_id)
 
 
 def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
-    """The latest verification of the task worker's run for this task, in its company."""
-    with Session(engine) as session:
-        run = session.exec(
-            select(AgentRun)
-            .where(
-                AgentRun.company_id == company_id,
-                AgentRun.external_ref == f"task-{item_id}",
-                AgentRun.producer == TASK_WORKER_PRODUCER,
-            )
-            .order_by(AgentRun.version.desc())
-        ).first()
-        if run is None:
-            return None
-        verification = session.exec(
-            select(Verification)
-            .where(Verification.agent_run_id == run.id)
-            .order_by(Verification.id.desc())
-        ).first()
-    return verification
+    return delivery_gate.latest_verification(engine, company_id, item_id)
 
 
 def _sha256_text(content: str) -> str:
@@ -2895,6 +2837,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 # the ScrumMaster's brief for it, the same context the agent had.
                 + previous_attempt_context(item)
                 + spec_planning.requirements_for(session, sprint, item)
+                + standards.prompt_section(reviewer_dict["role"])
             ) + procedures.procedures_prompt(
                 procedures.active_procedures(
                     session, sprint.company_id, reviewer_dict["role"]

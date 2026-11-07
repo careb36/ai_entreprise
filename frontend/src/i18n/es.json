@@ -1925,5 +1925,23 @@
       "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
       "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
     }
+  },
+  "standards": {
+    "title": "Estándares de calidad",
+    "subtitle": "A qué se atiene la fábrica en cada proyecto, por disciplina. Obligan a todos los roles antes de cualquier tarea; un procedimiento los amplía, nunca los relaja. Los marcados como verificados se comprueban sin un modelo.",
+    "loading": "Cargando los estándares…",
+    "loadError": "No se pudieron cargar los estándares: {{message}}",
+    "checked": "Verificado",
+    "checkedBy": "Verificado: {{how}}.",
+    "areas": {
+      "architecture": "Arquitectura",
+      "development": "Desarrollo",
+      "qa": "QA",
+      "security": "Seguridad",
+      "audit": "Evidencia y auditoría",
+      "documentation": "Documentación",
+      "operations": "Operaciones",
+      "product": "Producto"
+    }
   }
 }

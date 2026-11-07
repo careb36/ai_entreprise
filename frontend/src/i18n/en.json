@@ -1925,5 +1925,23 @@
       "truncated": "Only part of the comments came: open the request on the platform for the rest",
       "fromPlatform": "Comments from the request that are not on a line shown here"
     }
+  },
+  "standards": {
+    "title": "Quality standards",
+    "subtitle": "What the factory holds every project to, by discipline. They bind every role before any task; a procedure adds to them, never relaxes them. The ones marked as checked are verified without a model.",
+    "loading": "Loading the standards…",
+    "loadError": "Could not load the standards: {{message}}",
+    "checked": "Checked",
+    "checkedBy": "Checked: {{how}}.",
+    "areas": {
+      "architecture": "Architecture",
+      "development": "Development",
+      "qa": "QA",
+      "security": "Security",
+      "audit": "Evidence and audit",
+      "documentation": "Documentation",
+      "operations": "Operations",
+      "product": "Product"
+    }
   }
 }

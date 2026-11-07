@@ -23,7 +23,7 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import arch_check, spec_author, spec_check, spec_planning
+from services import arch_check, spec_author, spec_check, spec_planning, standards
 from services.sprint_planner import _build_stack_summary, _list_root_files
 
 ARCHITECT_ROLE = "Architect"
@@ -212,7 +212,7 @@ def prepare(
         "specification_id": spec.id,
         "model": model,
         "system_prompt": system_prompt,
-        "prompt": prompt,
+        "prompt": prompt + standards.prompt_section(ARCHITECT_ROLE),
         "bu_id": spec_author.business_unit_id(session, spec.company_id),
         "questions": (existing.questions if existing is not None else []) or [],
     }

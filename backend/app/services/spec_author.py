@@ -23,7 +23,7 @@ from models import Agent, BusinessUnit
 from models.specification import Specification
 from sqlmodel import Session, select
 
-from services import spec_check
+from services import spec_check, standards
 from services.sprint_planner import _build_stack_summary
 
 PO_ROLE = "PO"
@@ -246,7 +246,8 @@ def prepare(
         "company_id": company_id,
         "model": model,
         "system_prompt": system_prompt,
-        "prompt": draft_prompt(po_name, brief, detected_stack, current),
+        "prompt": draft_prompt(po_name, brief, detected_stack, current)
+        + standards.prompt_section(PO_ROLE),
         "bu_id": business_unit_id(session, company_id),
         "questions": (existing.questions if existing is not None else []) or [],
     }

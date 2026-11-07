@@ -200,6 +200,7 @@ echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
 check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
 check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
+check "the factory's standards bind the Developer before the task, and QA's review" test "$(prompt_seen "## Quality standards.*STD-SEC-1 No secret in the repository, ever \[checked\].*## Task: Add parser")" = yes -a "$(prompt_seen "reviewing the following deliverable for the task: 'Add parser'.*## Quality standards.*STD-QA-2 Review against the criteria")" = yes
 check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
 check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes
 check "the sprint list counts it as a briefed second attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S1)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"

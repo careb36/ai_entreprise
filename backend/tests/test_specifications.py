@@ -77,12 +77,15 @@ def test_normalize_numbers_requirements_criteria_and_quality_in_order():
     ]
     assert spec["quality"][0]["id"] == "NFR-1"
     assert spec_check.criterion_ids(spec) == ["REQ-1.1", "REQ-1.2", "REQ-2.1"]
-    assert spec_check.check(spec) == {
-        "ok": True,
-        "blocking": 0,
-        "warnings": 0,
-        "findings": [],
-    }
+    result = spec_check.check(spec)
+    # Nothing blocks; the standards (STD-PO-1) warn on the quality areas the
+    # specification says nothing about (it names performance only).
+    assert (result["ok"], result["blocking"], result["warnings"]) == (True, 0, 3)
+    assert [f["message"] for f in result["findings"]] == [
+        f"No quality attribute says what is expected of {area}."
+        for area in ("security", "reliability", "accessibility")
+    ]
+    assert {f["code"] for f in result["findings"]} == {"quality_area_missing"}
 
 
 def test_the_check_blocks_what_cannot_be_tested_and_warns_about_promises():
