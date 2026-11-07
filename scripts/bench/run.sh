@@ -8,6 +8,7 @@ SPEC_DIR=""
 OUT_DIR="bench/scorecards"
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --out=*) OUT_DIR="${1#--out=}"; shift ;;
         --out) OUT_DIR="$2"; shift 2 ;;
         *) if [[ -z "$SPEC_DIR" ]]; then SPEC_DIR="$1"; fi; shift ;;
     esac
