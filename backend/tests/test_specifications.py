@@ -509,6 +509,42 @@ def test_specification_diff_and_impact_report_changed_criteria(
     assert "REQ-2" in impact["changed_requirement_ids"]
 
 
+# --- HTTP: diff endpoint ----------------------------------------------------
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_diff_endpoint_http(sqlite_session, test_client):
+    company = _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    v1 = test_client.post(
+        "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
+    ).json()
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
+    test_client.put(
+        f"/v1/specifications/{v2['id']}",
+        json={**GOOD, "title": "Task board v2"},
+        headers=manager,
+    )
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+
+    r = test_client.get(
+        f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=manager
+    )
+    assert r.status_code == 200
+    assert r.json()["from_version"] == 1
+    assert r.json()["to_version"] == 2
+
+    # Viewer can read.
+    viewer = _member(sqlite_session, company.id, "Viewer")
+    r2 = test_client.get(
+        f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=viewer
+    )
+    assert r2.status_code == 200
+
+
 # --- planning from it, and what the tasks cover ------------------------------
 
 
