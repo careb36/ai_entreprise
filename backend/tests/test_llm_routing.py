@@ -158,7 +158,9 @@ def test_task_context_resolves_an_empty_model(db, agent_model):
 
     ctx = task_worker._load_task_context(item.id)
 
-    assert ctx["agent"]["model"] == _role_default(AgentRole.QA)
+    # The context keeps the stored model raw; _resolve_agent_model applies the
+    # role default (and any routing policy) when the task runs.
+    assert ctx["agent"]["model"] == (agent_model or "")
 
 
 # ---------------------------------------------------------------------------
