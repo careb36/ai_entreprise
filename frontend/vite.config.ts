@@ -19,6 +19,10 @@ export default defineConfig(({ mode }) => ({
     // afterEach clears the shared query client; otherwise the still-mounted
     // components refetch into the next test's fetch stub.
     sequence: { hooks: 'list' },
+    // The self-hosted runner shares its machine with the e2e job and a second
+    // runner: a form test that takes 0.6 s here took over 5 s there and timed
+    // out. A real hang still fails, 20 s later.
+    testTimeout: 20000,
   },
   build: {
     outDir: 'dist',

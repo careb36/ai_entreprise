@@ -3,8 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { ArchitectureEditor } from './ArchitectureEditor'
 import { APPROVED } from '../test/specificationFixtures'
 
+// Label queries, not role queries: a role query walks every element of the
+// form for its computed role and accessible name, and this form grows to a
+// few dozen fields; on a loaded CI runner the role queries alone took the
+// test past its timeout.
 function fill(scope: HTMLElement, name: string, value: string) {
-  fireEvent.change(within(scope).getByRole('textbox', { name }), { target: { value } })
+  fireEvent.change(within(scope).getByLabelText(name), { target: { value } })
 }
 
 describe('ArchitectureEditor', () => {
