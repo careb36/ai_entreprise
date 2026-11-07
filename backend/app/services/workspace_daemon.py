@@ -287,6 +287,25 @@ def detect_test_command(workspace_root: str) -> str | None:
         for name in names
     ):
         return "python -m pytest -q"
+
+    # Go.
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go test ./..."
+    # Rust.
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo test"
+    # Java (Maven / Gradle).
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q test"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle test"
+    # Ruby.
+    if os.path.isfile(os.path.join(root, "Gemfile")) and os.path.isdir(
+        os.path.join(root, "spec")
+    ):
+        return "bundle exec rspec"
     return None
 
 
