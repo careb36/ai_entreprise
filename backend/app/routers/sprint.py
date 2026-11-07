@@ -35,7 +35,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import acceptance, dependencies, events, spec_check, spec_planning
+from services import acceptance, dependencies, spec_check, spec_planning
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -580,30 +580,4 @@ async def update_backlog_item(
         "priority": item.priority,
         "assignee": item.assignee,
         "comments": item.comments,
-    }
-
-
-@router.get("/sprints/{sprint_id}/events")
-async def sprint_events(
-    sprint_id: int,
-    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
-):
-    sprint = session.get(Sprint, sprint_id)
-    if sprint is None:
-        raise HTTPException(status_code=404, detail="Sprint not found")
-    require_company_role(session, user, sprint.company_id, "Viewer")
-    rows = events.list_for_sprint(session, sprint_id)
-    return {
-        "sprint_id": sprint_id,
-        "events": [
-            {
-                "id": e.id,
-                "task_id": e.task_id,
-                "event_type": e.event_type,
-                "payload": e.payload,
-                "created_at": e.created_at.isoformat() if e.created_at else None,
-            }
-            for e in rows
-        ],
     }
