@@ -67,6 +67,24 @@ def build_shell_command(command: str) -> list[str]:
     return [shell_path, "-c", command]
 
 
+def is_assistant_command(command: str) -> bool:
+    """A console assistant's run: its output is advice, not a status line."""
+    normalized = (command or "").lower()
+    return "copilot" in normalized or "claude" in normalized
+
+
+def summarize_command_result(command: str, result: dict[str, Any]) -> str:
+    """One Glassroom line for a finished workspace command."""
+    command_preview = " ".join((command or "").strip().split())[:180]
+    exit_code = result.get("exit_code", -1)
+    output = (result.get("stdout") or result.get("stderr") or result.get("error") or "").strip()
+    if result.get("success"):
+        return f"Workspace command finished successfully (exit {exit_code}): {command_preview}"
+    if output:
+        return f"Workspace command failed (exit {exit_code}): {output[:240]}"
+    return f"Workspace command failed (exit {exit_code}): {command_preview}"
+
+
 def execute_shell_command(command: str, cwd: str = ".") -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 

@@ -118,7 +118,8 @@ def check_task(
     ``verified_criteria`` (the criteria its latest verification marked as
     passed) and ``observed_test_run`` (whether that verification's evidence
     holds an exit status from the daemon);
-    *messages* are the company's messages about it with ``id``, ``kind``
+    ``reads_without_hash`` (the files a workspace read recorded with no
+    sha256); *messages* are the company's messages about it with ``id``, ``kind``
     and ``body``; *others* maps the ids of the tasks it depends on to their
     ``status`` and ``comments`` (a bare status string is accepted).
     """
@@ -183,6 +184,13 @@ def check_task(
                 f"criteria_verified_without_run: run v{run.get('version')} marks "
                 f"{', '.join(str(c) for c in run['verified_criteria'])} as passed with no test run observed"
             )
+        # A file the Developer read is evidence only with the hash the daemon
+        # reported; a read without one is a claim dressed as an observation.
+        if run.get("reads_without_hash"):
+            violations.append(
+                f"read_without_hash: run v{run.get('version')} records a read of "
+                f"{', '.join(str(p) for p in run['reads_without_hash'])} with no sha256"
+            )
 
     carried = sum(1 for c in comments if _text(c).startswith(_CARRIED_TO))
     if carried > 1:
@@ -213,7 +221,11 @@ def _run_facts(verification: Any) -> dict[str, Any]:
     """What a verification row says: the criteria its ``criteria_tests`` check
     marked as passed, and whether its evidence holds an observed test run."""
     if verification is None:
-        return {"verified_criteria": [], "observed_test_run": False}
+        return {
+            "verified_criteria": [],
+            "observed_test_run": False,
+            "reads_without_hash": [],
+        }
     passed = [
         str(cid)
         for check in verification.checks or []
@@ -226,7 +238,20 @@ def _run_facts(verification: Any) -> dict[str, Any]:
     observed = (isinstance(exit_code, int) and not isinstance(exit_code, bool)) or (
         isinstance(exit_code, str) and exit_code.strip().lstrip("-").isdigit()
     )
-    return {"verified_criteria": passed, "observed_test_run": observed}
+    reads_without_hash = [
+        str(call.get("path") or "?")
+        for call in (verification.evidence or {}).get("tool_calls") or []
+        if isinstance(call, dict)
+        and call.get("server") == "workspace"
+        and call.get("tool") == "read"
+        and not call.get("is_error")
+        and not call.get("sha256")
+    ]
+    return {
+        "verified_criteria": passed,
+        "observed_test_run": observed,
+        "reads_without_hash": reads_without_hash,
+    }
 
 
 def check_database() -> list[str]:

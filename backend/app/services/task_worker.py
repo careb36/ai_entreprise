@@ -51,6 +51,7 @@ from services import (
     console_assistants,
     delivery_gate,
     dependencies,
+    developer_tools,
     git_workflow,
     mcp_tools,
     procedures,
@@ -384,16 +385,12 @@ def _execute_task(
     """
     Call the LLM to produce a deliverable for the given backlog item.
 
-    Runs synchronously (called via ``asyncio.to_thread``).
-    Returns the LLM response text.  An empty agent model resolves to the
-    role's default from ``llm.model_factory``.  The model the proxy reports
-    as having answered is stored as ``agent["served_model"]`` (``None`` when
-    not reported) so the AgentRun records it.  Raises ``LLMCallError`` when
-    the call fails or returns no content.
-
-    When ``company_id`` is provided the turn is also written to ``audit_log``
-    (role, company, token cost) so ``GET /v1/analytics/orchestration_health``
-    can compute the Developer token KPI.
+    Runs synchronously (called via ``asyncio.to_thread``). Returns the LLM
+    response text. An empty agent model resolves to the role's default from
+    ``llm.model_factory``; the model the proxy reports as having answered is
+    stored as ``agent["served_model"]``. Raises ``LLMCallError`` when the
+    call fails or returns no content. With ``company_id`` the turn is also
+    written to ``audit_log`` (role, company, token cost) for the KPIs.
     """
     llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     client = LLMProxyClient(base_url=llm_url)
@@ -427,6 +424,7 @@ def _execute_task(
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
     ) + (requirements_context or "")
+    user_prompt += developer_tools.repository_section(company_id, agent.get("role"))
 
     if memory_context:
         user_prompt += (
@@ -474,12 +472,9 @@ def _execute_task(
     model = _resolve_agent_model(agent)
     role = agent.get("role", "Dev")
 
+    who = agent.get("name") or role
     logger.info(
-        "Agent %s (%s) working on: %s [model=%s]",
-        agent.get("name") or role,
-        role,
-        item["title"],
-        model,
+        "Agent %s (%s) working on: %s [model=%s]", who, role, item["title"], model
     )
 
     def record(llm_result: dict[str, Any], preview: str) -> None:
@@ -494,9 +489,9 @@ def _execute_task(
                 result_preview=preview,
             )
 
-    # The company's MCP servers for this role, if any: the model may call
-    # their tools before answering, each call recorded as an observation.
-    toolbox = mcp_tools.Toolbox.load(company_id, role, engine=engine)
+    # The workspace tools and the company's MCP servers for this role: the
+    # model may call them before answering, each call an observation.
+    toolbox = developer_tools.toolbox_for(company_id, role, engine=engine)
     try:
         result, tool_calls = mcp_tools.chat_with_tools(
             client,
@@ -2574,6 +2569,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     # Durable: assignments published while this worker was down are processed
     # when it starts.  The handler records its own failures on the board, so a
     # message is acknowledged once the handler returns.
+    developer_tools.bind(
+        nats_client, asyncio.get_running_loop(), _resolve_workspace_root
+    )
     await nats_client.consume(
         "task.assign",
         TASK_ASSIGN_CONSUMER,

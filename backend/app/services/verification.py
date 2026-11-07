@@ -4,7 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import criteria_tests, mcp_tools, risk, standards
+from services import criteria_tests, developer_tools, mcp_tools, risk, standards
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -329,6 +329,9 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
         [*written, *declared, *extract_claimed_paths(claims)], claims.get("risk")
     )
     result = risk.raise_for_tool_calls(result, (evidence or {}).get("tool_calls"))
+    result = risk.raise_for_unread_changes(
+        result, developer_tools.check_context_read(evidence)
+    )
     observation = result["tier"]
     if result["reasons"]:
         observation += " — " + "; ".join(result["reasons"])
@@ -400,6 +403,11 @@ def verify_agent_run(
                 checks.append(check)
     if evidence and "tool_calls" in evidence:
         checks.append(check_tools_used(evidence))
+        # Which of the files the delivery modified the Developer read first
+        # (``services/developer_tools.py``); a record, never the verdict.
+        context = developer_tools.check_context_read(evidence)
+        if context:
+            checks.append(context)
     # The factory's standards over the files the deliverable declares
     # (``services.standards``): a secret refutes, the rest is for the reviewer.
     standards_check = standards.check_delivery(run.artifact_text)
