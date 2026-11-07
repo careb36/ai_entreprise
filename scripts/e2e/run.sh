@@ -311,7 +311,7 @@ NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d
 S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
 check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
 check "Greeting 1 closes" wait_sprint "$S4"
-check "both tasks got done" test "$(board "$S4")" = "Add greeting=done Add greeting counter=done"
+check "both tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Add greeting counter=done', 'Add greeting=done']"
 check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
 check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
 check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
