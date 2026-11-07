@@ -144,7 +144,10 @@ def test_the_prompt_section_carries_only_the_covered_criteria():
     )
     assert "REQ-1" not in section
     assert "NFR-1: performance" in section and "TypeScript and React" in section
-    assert spec_planning.requirements_section(spec, []) == ""
+    # A task covering no criterion still gets what holds for every task.
+    rules = spec_planning.requirements_section(spec, [])
+    assert "## Specification rules for every task" in rules
+    assert "NFR-1: performance" in rules and "REQ-" not in rules
 
 
 # --- the PO's draft ----------------------------------------------------------
@@ -319,17 +322,23 @@ def test_the_po_drafts_from_a_brief_asks_and_a_person_answers_and_approves(
         == 404
     )
 
+    assert (
+        test_client.post(
+            "/v1/specifications/draft",
+            json={"company_id": company.id, "brief": "  "},
+            headers=manager,
+        ).status_code
+        == 422
+    )
+    # A revision needs no new brief: the answers are what the PO works from.
     revised = test_client.post(
         "/v1/specifications/draft",
-        json={
-            "company_id": company.id,
-            "brief": "A task board for small teams.",
-            "specification_id": spec["id"],
-        },
+        json={"company_id": company.id, "specification_id": spec["id"]},
         headers=manager,
     ).json()
     assert revised["id"] == spec["id"]
     assert "A: todo, doing, done" in prompts[1]
+    assert "## Brief from the person asking" not in prompts[1]
     assert revised["questions"] == [
         {
             "question": "Which columns does the board have?",
@@ -463,10 +472,11 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
     draft = Specification(company_id=company.id, **spec_check.normalize(GOOD))
     sqlite_session.add(draft)
     sqlite_session.commit()
-    monkeypatch.setattr(
-        spec_author,
-        "ask",
-        lambda *a, **k: json.dumps(
+    prompts = []
+
+    def planning(model, system_prompt, prompt, **kwargs):
+        prompts.append(prompt)
+        return json.dumps(
             {
                 "sprint_name": "Board 1",
                 "goal": "List tasks",
@@ -487,13 +497,23 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
                     {"description": "no title"},
                 ],
             }
-        ),
-    )
+        )
+
+    monkeypatch.setattr(spec_author, "ask", planning)
     planned = test_client.post(
         "/v1/plan_sprint",
-        json={"company_id": company.id, "scope_size": "S", "specification_id": spec.id},
+        json={
+            "company_id": company.id,
+            "scope_size": "S",
+            "specification_id": spec.id,
+            "prompt": "Focus this sprint on the board page.",
+        },
     )
     assert planned.status_code == 200, planned.text
+    assert (
+        "## Note from the person planning\nFocus this sprint on the board page."
+        in prompts[-1]
+    )
     plan = planned.json()
     assert plan["specification_id"] == spec.id and plan["sprint_name"] == "Board 1"
     assert [t["covers"] for t in plan["tasks"]] == [["REQ-1.1", "REQ-1.2"], ["REQ-1.1"]]
@@ -548,6 +568,11 @@ def test_a_sprint_planned_from_a_specification_keeps_what_each_task_covers(
         "start_date": "2026-11-07",
         "scope_size": "S",
     }
+    typed = test_client.post(
+        "/v1/start_sprint",
+        json={**base, "backlog_items": [{"title": 123, "description": "x"}]},
+    )
+    assert typed.status_code == 422
     unknown = test_client.post(
         "/v1/start_sprint",
         json={
@@ -644,7 +669,11 @@ def test_the_prompts_carry_the_requirements_a_task_covers_and_nothing_more(
         in section
     )
     assert "REQ-1" not in section
-    assert spec_planning.requirements_context(engine, bare.id) == ""
+    bare_context = spec_planning.requirements_context(engine, bare.id)
+    assert (
+        "Specification rules for every task" in bare_context
+        and "REQ-" not in bare_context
+    )
     assert spec_planning.requirements_context(engine, elsewhere.id) == ""
     assert spec_planning.requirements_context(engine, 999999) == ""
     assert spec_planning.requirements_for(sqlite_session, sprint, covered) == section
@@ -682,6 +711,27 @@ def test_a_carried_task_keeps_what_it_covers(sqlite_session, test_client):
     )
     sqlite_session.commit()
     assert clone.covers == ["REQ-2.1"]
+    # Into a sprint planned from nothing, or from another specification, the
+    # criteria ids mean nothing: they are dropped.
+    other_blocked = BacklogItem(
+        sprint_id=old.id,
+        title="List",
+        status="blocked",
+        covers=["REQ-1.1"],
+        comments=[
+            {"author": "Quality gate", "text": "Blocked: too short", "created_at": ""}
+        ],
+    )
+    sqlite_session.add(other_blocked)
+    sqlite_session.commit()
+    plain = Sprint(company_id=company.id, sprint_name="S3")
+    sqlite_session.add(plain)
+    sqlite_session.commit()
+    [dropped] = carry_over(
+        sqlite_session, company.id, [other_blocked.id], plain, "ana", "Manager"
+    )
+    sqlite_session.commit()
+    assert dropped.covers is None
     assert {
         c["id"]: c["status"]
         for c in spec_planning.coverage(sqlite_session, spec)["criteria"]

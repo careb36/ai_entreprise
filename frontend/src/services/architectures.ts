@@ -110,27 +110,22 @@ function authHeaders(contentType?: string) {
   return headers
 }
 
-/** A decision POST whose refusal is structured: `fetchApi` keeps only `detail.message`, so this reads the rest. */
+/** A decision POST through the shared client (its 401 handling included); a structured refusal becomes an `ArchitectureConflict`. */
 async function postDecision<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, { method: 'POST', headers: authHeaders('application/json'), body: '{}' })
-  if (response.ok) return response.json() as Promise<T>
-  let detail: unknown
   try {
-    detail = (await response.json())?.detail
-  } catch {
-    detail = undefined
+    return await api.post<T>(endpoint, {})
+  } catch (error) {
+    if (error instanceof ApiError && error.data && typeof error.data === 'object') {
+      const structured = error.data as { message?: string; findings?: Finding[]; architecture_id?: number }
+      throw new ArchitectureConflict(
+        error.status,
+        structured.message ?? error.message,
+        Array.isArray(structured.findings) ? structured.findings : [],
+        typeof structured.architecture_id === 'number' ? structured.architecture_id : null,
+      )
+    }
+    throw error
   }
-  if (detail && typeof detail === 'object') {
-    const structured = detail as { message?: string; findings?: Finding[]; architecture_id?: number }
-    throw new ArchitectureConflict(
-      response.status,
-      structured.message ?? `HTTP ${response.status}`,
-      Array.isArray(structured.findings) ? structured.findings : [],
-      typeof structured.architecture_id === 'number' ? structured.architecture_id : null,
-    )
-  }
-  const message = typeof detail === 'string' && detail ? detail : `HTTP ${response.status}`
-  throw new ApiError(response.status, message, typeof detail === 'string' ? detail : undefined)
 }
 
 /** The Markdown document as the repository gets it: text, with the token (an `<a href>` could not send it). */

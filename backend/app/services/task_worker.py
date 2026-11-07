@@ -1070,6 +1070,7 @@ def _complete_sprint_and_plan_follow_up(
             scope_size=scope_size,
             status="active",
             goal=plan.get("goal") or objective,
+            specification_id=sprint.specification_id,
         )
         session.add(next_sprint)
         session.flush()
@@ -1428,12 +1429,7 @@ def _update_item_status(
         item.updated_at = datetime.now(UTC)
 
         if comment_text and comment_author:
-            existing = item.comments or []
-            if isinstance(existing, str):
-                try:
-                    existing = json.loads(existing)
-                except (json.JSONDecodeError, TypeError):
-                    existing = []
+            existing = comment_list(item.comments)
             existing.append(
                 {
                     "author": comment_author,

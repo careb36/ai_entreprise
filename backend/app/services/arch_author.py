@@ -218,6 +218,7 @@ def draft(
             prompt,
             max_tokens=DRAFT_MAX_TOKENS,
             role=ARCHITECT_ROLE,
+            bu_id=spec_author.business_unit_id(session, spec.company_id),
         )
     except spec_author.SpecAuthorError as exc:
         raise ArchAuthorError(str(exc)) from exc
@@ -250,9 +251,12 @@ def approved_for(session: Session, specification_id: int) -> Architecture | None
 
 
 def section(arch: dict[str, Any], covers: list[str]) -> str:
-    """The prompt section for a task covering the criteria *covers*; empty when none apply."""
-    requirements = {c.split(".")[0] for c in covers}
-    body = arch_check.as_prompt(arch, requirements) if requirements else ""
+    """The prompt section for a task covering the criteria *covers*.
+
+    A task covering no criterion still gets the decisions and conventions,
+    which hold for every task.
+    """
+    body = arch_check.as_prompt(arch, {c.split(".")[0] for c in covers})
     if not body:
         return ""
     return (
@@ -268,11 +272,8 @@ def context_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     """The architecture section for *item* of *sprint*; empty without an approved one."""
     if sprint is None or sprint.specification_id is None:
         return ""
-    covers = spec_planning.covers_of(item)
-    if not covers:
-        return ""
     arch = approved_for(session, sprint.specification_id)
-    return section(content_of(arch), covers) if arch is not None else ""
+    return section(content_of(arch), spec_planning.covers_of(item)) if arch else ""
 
 
 def planning_context(session: Session, specification_id: int) -> str:

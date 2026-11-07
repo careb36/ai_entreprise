@@ -183,7 +183,9 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         goal: plannedSprint.goal,
         backlog_items: plannedSprint.tasks,
         ...(carryOver.length > 0 ? { carry_over_ids: carryOver } : {}),
-        ...(specificationId !== null ? { specification_id: specificationId } : {}),
+        // The plan shown, not the selector: a selector changed after planning
+        // (or an autonomous plan) must not link unrelated tasks to a specification.
+        ...(plannedSprint.specification_id ? { specification_id: plannedSprint.specification_id } : {}),
       })
 
       onSuccess(sprint.sprint_id)
