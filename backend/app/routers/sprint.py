@@ -12,6 +12,7 @@ an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -37,6 +38,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
+from services import spec_check, spec_planning
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -90,6 +92,20 @@ def _load_planning_context(session: Session, company_id: int):
     return company, agent_dicts, discovery
 
 
+def _refused(call, *args):
+    """Call into ``spec_planning``; its refusal is the response's status."""
+    try:
+        return call(*args)
+    except spec_planning.PlanRefused as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+def _specification(session: Session, company_id: int, specification_id: int):
+    return _refused(
+        spec_planning.approved_specification, session, company_id, specification_id
+    )
+
+
 def _serialize_plan_response(
     plan: dict, scope_size: str, fallback_name: str, fallback_goal: str
 ):
@@ -98,6 +114,9 @@ def _serialize_plan_response(
         "goal": plan.get("goal", fallback_goal),
         "scope_size": scope_size,
         "tasks": plan.get("tasks", []),
+        # Criteria of the specification no task covers (planned from one).
+        "uncovered": plan.get("uncovered", []),
+        "specification_id": plan.get("specification_id"),
     }
 
 
@@ -114,10 +133,26 @@ async def plan_sprint(
         raise HTTPException(
             status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
         )
+    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+
+    if req.specification_id is not None:
+        spec = _specification(session, req.company_id, req.specification_id)
+        # The PO's call waits on the proxy: off the event loop.
+        plan = await asyncio.to_thread(
+            spec_planning.plan,
+            session,
+            spec,
+            scope_size,
+            SCOPE_LIMITS[scope_size],
+            agent_dicts,
+            req.prompt,
+        )
+        plan["specification_id"] = spec.id
+        return _serialize_plan_response(
+            plan, scope_size, f"Sprint - {spec.title[:40]}", spec.summary or spec.title
+        )
     if not req.prompt.strip():
         raise HTTPException(status_code=422, detail="Prompt is required")
-
-    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
 
     plan = plan_execution_sprint(
         company_name=company.company_name,
@@ -196,7 +231,8 @@ async def start_sprint(
 
     item_limit = SCOPE_LIMITS[scope_size]
     carry_over_ids = list(dict.fromkeys(req.carry_over_ids))
-    item_count = len(req.backlog_items) + len(carry_over_ids)
+    backlog_items = [item.model_dump() for item in req.backlog_items]
+    item_count = len(backlog_items) + len(carry_over_ids)
     if item_count > SCOPE_HARD_MAX:
         raise HTTPException(
             status_code=422,
@@ -208,12 +244,18 @@ async def start_sprint(
             detail=f"Scope '{scope_size}' allows up to {item_limit} items, got {item_count}. Use scope 'L' or split this sprint.",
         )
 
+    known: set[str] | None = None
+    if req.specification_id is not None:
+        spec = _specification(session, req.company_id, req.specification_id)
+        known = set(spec_check.criterion_ids(spec_planning.spec_content(spec)))
+
     sprint = Sprint(
         company_id=req.company_id,
         sprint_name=req.sprint_name,
         start_date=req.start_date,
         scope_size=scope_size,
         goal=req.goal,
+        specification_id=req.specification_id,
     )
 
     # Resolve the company's default business unit for quota tracking.
@@ -226,13 +268,14 @@ async def start_sprint(
     session.flush()  # Obtain sprint.id before processing backlog items
 
     item_ids = []
-    for item in req.backlog_items:
+    for item in backlog_items:
         backlog_item = BacklogItem(
             sprint_id=sprint.id,
             title=item.get("title", ""),
             description=item.get("description", ""),
             priority=item.get("priority", "medium"),
             assignee=item.get("assignee", "PO"),
+            covers=_refused(spec_planning.checked_covers, item, known),
         )
         session.add(backlog_item)
         session.flush()
@@ -272,14 +315,14 @@ async def start_sprint(
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
         item_ids.extend(item.id for item in carried)
         story_items = [
-            *req.backlog_items,
+            *backlog_items,
             *(
                 {"title": item.title, "description": item.description or ""}
                 for item in carried
             ),
         ]
     else:
-        story_items = list(req.backlog_items)
+        story_items = list(backlog_items)
 
     kickoff_story = "\n".join(
         [
@@ -392,6 +435,7 @@ async def list_sprints(
             "goal": s.goal,
             "start_date": s.start_date,
             "scope_size": s.scope_size,
+            "specification_id": s.specification_id,
             "total": counts.get(s.id, (0, 0, 0))[0],
             "done": counts.get(s.id, (0, 0, 0))[1],
             "blocked": counts.get(s.id, (0, 0, 0))[2],
@@ -455,6 +499,7 @@ async def get_sprint_board(
         "status": sprint.status,
         "pause_reason": sprint.pause_reason,
         "goal": sprint.goal,
+        "specification_id": sprint.specification_id,
     }
 
     items_db = session.exec(
@@ -470,6 +515,7 @@ async def get_sprint_board(
             "priority": i.priority,
             "assignee": i.assignee,
             "comments": i.comments or [],
+            "covers": spec_planning.covers_of(i),
             "created_at": str(i.created_at),
             "updated_at": str(i.updated_at),
         }

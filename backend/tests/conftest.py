@@ -27,6 +27,7 @@ from config import settings
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.architecture import Architecture
 from models.audit import AuditLog
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,7 @@ from models.github import GitHubRepoBinding
 from models.mcp import McpServer
 from models.procedure import Procedure
 from models.review import ReviewComment, RunPublication, RunReview
+from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
 from sqlalchemy.pool import StaticPool
@@ -126,6 +128,8 @@ SQLModel.metadata.create_all(
         RunReview.__table__,
         ReviewComment.__table__,
         RunPublication.__table__,
+        Specification.__table__,
+        Architecture.__table__,
     ],
 )
 

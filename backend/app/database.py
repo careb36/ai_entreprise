@@ -118,6 +118,9 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_url VARCHAR",
         "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_state VARCHAR",
         "CREATE INDEX IF NOT EXISTS ix_review_comments_external_id ON review_comments (external_id)",
+        # sprints and backlog_items — planned from a specification, covering its criteria
+        "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS specification_id INTEGER REFERENCES specifications(id)",
+        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS covers JSON",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         # audit_log — a hash chain per company (audit_chain.py)

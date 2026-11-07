@@ -51,6 +51,14 @@ evidence in its description.
 
 ## What it does
 
+**📋 Starts from a specification.** Give the PO a brief and get numbered
+requirements with acceptance criteria written as *given / when / then*,
+quality targets with a number, constraints, and the questions the PO could
+not decide. A deterministic check blocks approval while a requirement has no
+testable criterion or a question has no answer; you answer, edit and approve.
+Each task then names the criteria it covers, works and is reviewed against
+them alone, and the specification shows which criteria got done.
+
 **🔍 Verifies every delivery.** The workspace daemon writes the agent's files
 and reads them back; the sha256 it reports, not the agent's word, decides
 whether the files exist. When delivery tests are enabled, it also runs the
@@ -427,6 +435,18 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
 
 When a task runs, the model sees the tools as `<server>__<tool>` and may call them for at most `MCP_MAX_TOOL_ROUNDS` rounds before it must deliver. Every call is **an observation the backend made** — server, tool, arguments, whether it erred, duration, sha256 of the result — recorded on the run's evidence and shown by the Verifier as `tools_used`, apart from what the model claims it learned. A tool its server does not mark read-only raises the delivery's risk tier, so an approved task that used one waits for a person at the same points a sensitive file would.
 
+### Starting from a specification
+
+A Manager opens **Specifications** (company menu), writes a brief — a few sentences on what is wanted and for whom — and asks the PO for a draft. The PO answers in a fixed shape the backend checks: requirements, each with acceptance criteria as *given / when / then*; quality attributes, each with a number to measure it by; constraints; and the questions it could not decide from the brief. The backend numbers everything (`REQ-1`, `REQ-1.2`, `NFR-1`), never the model, and runs a deterministic check: a requirement without a criterion, a criterion with an empty step, a quality target without a number or an unanswered question **blocks** the approval; a promise without a number ("fast", "easy", "rápido") is a warning to look at. You answer the questions, ask the PO for a revision (your answers go into its prompt), edit in a structured form, or write the whole specification yourself, and approve it. An approved version is never edited: **Revise** opens the next version as a draft, which supersedes it on approval.
+
+Planning a sprint **from a specification** has the PO split it into tasks that each name the criteria they cover; the plan lists the criteria no task covers, so nothing is dropped silently, and the sprint keeps the link. Each task's prompt carries only the requirements it covers, QA reviews the deliverable against the same criteria, and the specification page shows, per criterion, whether a task got done, is blocked, is planned or does not exist yet (`/v1/specifications`, `POST /v1/plan_sprint` and `POST /v1/start_sprint` with `specification_id`).
+
+### The architecture, as data
+
+Once a specification is approved, a Manager asks the Architect for a design, or writes one: the **modules** (what each is responsible for, where it lives in the repository, what it depends on, which requirements it covers), the **interfaces** between them with a contract a test can hold them to, the **decisions** a developer would otherwise take alone, with their consequences, and the **conventions** every task follows. The backend numbers everything (`MOD-1`, `IF-1`, `ADR-1`) and maps the Architect's names onto the ids; a deterministic check blocks approval on an unknown module or requirement, a dependency cycle, a decision without its decision or an unanswered question, and warns when a requirement is covered by no module. You answer the Architect's questions, ask for a revision, edit and approve; **Write to the repository** puts it in `docs/ARCHITECTURE.md` through the workspace daemon, whose sha256 of the file is what La Fabrique keeps.
+
+From then on the PO plans along the modules, and each task's prompt and QA's review carry the modules its requirements map to, with their interfaces, plus the decisions and conventions every task follows — a change to them is the Architect's call, not a task's (`/v1/architectures`).
+
 ### Working on Git branches
 
 With **Git branch per task** on (Board tab, a Manager; `PUT /v1/companies/{id}/git`), the agents work on a Git repository the way people do on GitHub and GitLab: a delivery never lands in your checkout. Each task gets its own branch, `fabrique/task-<id>`, started from the base you name (`git_base_branch`) or from the commit your repository has checked out; every delivery is one commit on it, authored *La Fabrique* with `Fabrique-Task:` and `Fabrique-Sprint:` trailers, written in a worktree under the repository's git directory (`.git/fabrique-worktrees/`). Your working tree, index and branch are never touched. The commit, its parent and the branch are what git said, kept on the run's evidence; the tests the daemon runs after a delivery run in that worktree; the run's **Files changed** name the branch and the commit. To try a task's work, `git checkout fabrique/task-<id>` (or open the worktree); merging it is your call.
@@ -644,8 +664,10 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `POST` | `/v1/init_company` | Create a company, its agents and the foundation sprint |
 | `POST` | `/v1/discover_team` | Inspect a project folder through the daemon and suggest a team |
 | `GET` · `POST` · `PATCH` · `DELETE` | `/v1/agents` | The company's agents and their models (Viewer reads; Manager creates, changes, deletes) |
-| `POST` | `/v1/plan_sprint` · `/v1/plan_self_improvement_sprint` | Turn a goal, or the repository, into a backlog |
-| `POST` | `/v1/start_sprint` | Start a sprint; validates the scope; `carry_over_ids` retries blocked tasks |
+| `GET` · `POST` · `PUT` | `/v1/specifications` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`) | The specification: numbered requirements with given / when / then criteria, checked deterministically; the PO drafts and revises from a brief, a person answers, edits and approves; coverage per criterion from the boards |
+| `GET` · `POST` · `PUT` | `/v1/architectures` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`, `/{id}/write`, `/{id}/document`) | The architecture of an approved specification: modules, interfaces, decisions and conventions, checked deterministically; the Architect drafts and revises, a person approves; written to the repository through the daemon with its hash kept |
+| `POST` | `/v1/plan_sprint` · `/v1/plan_self_improvement_sprint` | Turn a goal, an approved specification (`specification_id`: tasks name the criteria they cover, `uncovered` lists the rest), or the repository, into a backlog |
+| `POST` | `/v1/start_sprint` | Start a sprint; validates the scope; `carry_over_ids` retries blocked tasks; `specification_id` and each task's `covers` keep the link to the specification |
 | `GET`  | `/v1/sprints` | The company's sprints with done, blocked and rework counts, and their second attempts: tasks carried over, how many got done, with and without the ScrumMaster's brief; and tasks with and without console-assistant advice, and with and without the Architect's brief, done and rework per group |
 | `GET`  | `/v1/sprints/{id}/board` | The Kanban board of a sprint |
 | `POST` | `/v1/sprints/{id}/pause` · `/resume` · `/dispatch` | Hold, resume or re-queue a sprint's tasks |

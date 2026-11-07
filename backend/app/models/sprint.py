@@ -56,6 +56,8 @@ class Sprint(SQLModel, table=True):
     goal: str | None = None  # Sprint goal statement for the team
     # Why the sprint is paused, when the worker paused it (e.g. no credit).
     pause_reason: str | None = None
+    # The approved specification this sprint was planned from, if any.
+    specification_id: int | None = Field(default=None, foreign_key="specifications.id")
 
 
 class BacklogItem(SQLModel, table=True):
@@ -79,6 +81,9 @@ class BacklogItem(SQLModel, table=True):
     comments: Any | None = Field(
         default=None, sa_column=Column(CommentList.as_mutable(JSON))
     )
+    # The specification's criteria ids this task covers (``REQ-1.2``), when
+    # the sprint was planned from one; ``services.spec_planning`` reads them.
+    covers: Any | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
 

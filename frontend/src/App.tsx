@@ -27,6 +27,9 @@ import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
+import Specifications from './pages/Specifications'
+import SpecificationDetail from './pages/SpecificationDetail'
+import ArchitectureDetail from './pages/ArchitectureDetail'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastContainer } from './components/Toast'
 import {
@@ -326,6 +329,7 @@ function NavBar() {
                   <Link role="menuitem" to="/agents" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.agents', { defaultValue: 'Agents' })}</Link>
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
+                  <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
@@ -434,6 +438,10 @@ function AppContent() {
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
               <Route path="/company/members" element={<CompanyMembers />} />
               <Route path="/company/procedures" element={<Procedures />} />
+              <Route path="/company/specifications" element={<Specifications />} />
+              <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
+              <Route path="/company/specifications/:specId/architecture/new" element={<ArchitectureDetail />} />
+              <Route path="/company/specifications/:specId/architectures/:id" element={<ArchitectureDetail />} />
               <Route path="/company/github" element={<GitHubIntegration />} />
               <Route path="/support" element={<HelpDesk />} />
               <Route path="/agents" element={<AgentSettings />} />

@@ -52,6 +52,15 @@ GitLab, con la evidencia en la descripción.
 
 ## Qué hace
 
+**📋 Arranca desde una especificación.** Dale un brief al PO y recibí
+requisitos numerados con criterios de aceptación escritos como *dado / cuando /
+entonces*, metas de calidad con número, restricciones y las preguntas que el PO
+no pudo resolver. Un chequeo determinístico bloquea la aprobación mientras un
+requisito no tenga un criterio que se pueda probar o una pregunta siga sin
+respuesta; vos respondés, editás y aprobás. Después cada tarea nombra los
+criterios que cubre, trabaja y se revisa solo contra ellos, y la
+especificación muestra qué criterios quedaron hechos.
+
 **🔍 Verifica cada entrega.** El daemon del workspace escribe los archivos del
 agente y los vuelve a leer. Lo que decide si un archivo existe es el sha256
 que informa el daemon, no la palabra del agente. Con los tests de entrega
@@ -410,6 +419,18 @@ curl -X POST http://localhost:8000/v1/mcp/servers \
 
 Cuando corre una tarea, el modelo ve las herramientas como `<servidor>__<herramienta>` y puede llamarlas durante como mucho `MCP_MAX_TOOL_ROUNDS` rondas antes de entregar. Cada llamada es **una observación que hizo el backend** — servidor, herramienta, argumentos, si falló, duración, sha256 del resultado — registrada en la evidencia del run y mostrada por el Verifier como `tools_used`, aparte de lo que el modelo afirma haber aprendido. Una herramienta que su servidor no marca como de solo lectura sube el nivel de riesgo de la entrega, así que una tarea aprobada que la usó espera a una persona en los mismos puntos que lo haría un archivo sensible.
 
+### Arrancar desde una especificación
+
+Un Manager abre **Especificaciones** (menú de la empresa), escribe un brief — unas pocas oraciones sobre qué se quiere y para quién — y le pide un borrador al PO. El PO contesta en una forma fija que el backend revisa: requisitos, cada uno con criterios de aceptación escritos como *dado / cuando / entonces*; atributos de calidad, cada uno con un número para medirlo; restricciones; y las preguntas que no pudo resolver con el brief. El backend numera todo (`REQ-1`, `REQ-1.2`, `NFR-1`), nunca el modelo, y corre un chequeo determinístico: un requisito sin criterio, un criterio con un paso vacío, una meta de calidad sin número o una pregunta sin responder **bloquean** la aprobación; una promesa sin número ("rápido", "fácil", "fast") es un aviso para mirar. Vos respondés las preguntas, le pedís al PO una revisión (tus respuestas van a su prompt), editás en un formulario con estructura, o escribís la especificación entera, y la aprobás. Una versión aprobada nunca se edita: **Revisar** abre la siguiente versión como borrador, que la reemplaza cuando se aprueba.
+
+Planificar un sprint **desde una especificación** hace que el PO la divida en tareas que nombran los criterios que cubre cada una; el plan lista los criterios que ninguna tarea cubre, así nada se pierde en silencio, y el sprint conserva el vínculo. El prompt de cada tarea lleva solo los requisitos que cubre, QA revisa la entrega contra esos mismos criterios, y la página de la especificación muestra, por criterio, si una tarea quedó hecha, bloqueada, planificada o todavía no existe (`/v1/specifications`, `POST /v1/plan_sprint` y `POST /v1/start_sprint` con `specification_id`).
+
+### La arquitectura, como dato
+
+Con la especificación aprobada, un Manager le pide al Architect un diseño, o lo escribe: los **módulos** (de qué se encarga cada uno, dónde vive en el repositorio, de qué depende, qué requisitos cubre), las **interfaces** entre ellos con un contrato que un test pueda exigir, las **decisiones** que un desarrollador tomaría solo si nadie las tomara antes, con sus consecuencias, y las **convenciones** que sigue cada tarea. El backend numera todo (`MOD-1`, `IF-1`, `ADR-1`) y traduce los nombres que usó el Architect a esos ids; un chequeo determinístico bloquea la aprobación ante un módulo o requisito inexistente, un ciclo de dependencias, una decisión sin lo decidido o una pregunta sin responder, y avisa cuando ningún módulo cubre un requisito. Vos respondés las preguntas del Architect, pedís una revisión, editás y aprobás; **Escribir en el repositorio** lo deja en `docs/ARCHITECTURE.md` a través del daemon del workspace, y el sha256 que el daemon lee del archivo es lo que La Fabrique guarda.
+
+Desde ahí el PO planifica siguiendo los módulos, y el prompt de cada tarea y la revisión de QA llevan los módulos a los que apuntan sus requisitos, con sus interfaces, más las decisiones y convenciones que sigue cada tarea: cambiarlas es decisión del Architect, no de una tarea (`/v1/architectures`).
+
 ### Trabajar en ramas de Git
 
 Con **Rama de Git por tarea** activado (pestaña Board, un Manager; `PUT /v1/companies/{id}/git`), los agentes trabajan sobre un repositorio Git como trabaja la gente en GitHub y GitLab: una entrega nunca cae en tu checkout. Cada tarea tiene su rama, `fabrique/task-<id>`, que arranca de la base que nombres (`git_base_branch`) o del commit que tu repositorio tiene en el checkout; cada entrega es un commit en ella, de autor *La Fabrique* con los trailers `Fabrique-Task:` y `Fabrique-Sprint:`, escrito en un worktree dentro del directorio git del repositorio (`.git/fabrique-worktrees/`). Tu árbol de trabajo, tu índice y tu rama nunca se tocan. El commit, su padre y la rama son lo que dijo git, guardado en la evidencia del run; los tests que corre el daemon después de una entrega corren en ese worktree; los **Archivos modificados** del run nombran la rama y el commit. Para probar el trabajo de una tarea, `git checkout fabrique/task-<id>` (o abrí el worktree); hacer el merge lo decidís vos.
@@ -521,7 +542,10 @@ Documentación interactiva disponible en `http://localhost:8000/docs` con el ent
 |--------|------|-------------|
 | `GET`  | `/health` | Health check del servicio |
 | `POST` | `/v1/init_company` | Crear empresa con tamaño de alcance por defecto (S/M/L) |
-| `POST` | `/v1/start_sprint` | Iniciar sprint; valida restricción de alcance y cantidad de ítems |
+| `GET` · `POST` · `PUT` | `/v1/specifications` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`) | La especificación: requisitos numerados con criterios dado / cuando / entonces, chequeada de forma determinística; el PO la redacta y revisa desde un brief, una persona responde, edita y aprueba; cobertura por criterio leída de los tableros |
+| `GET` · `POST` · `PUT` | `/v1/architectures` (+ `/draft`, `/{id}/questions/{i}`, `/{id}/approve`, `/{id}/revise`, `/{id}/write`, `/{id}/document`) | La arquitectura de una especificación aprobada: módulos, interfaces, decisiones y convenciones, chequeada de forma determinística; el Architect la redacta y revisa, una persona aprueba; escrita en el repositorio por el daemon, con su hash guardado |
+| `POST` | `/v1/plan_sprint` | Armar el backlog desde un objetivo o desde una especificación aprobada (`specification_id`: las tareas nombran los criterios que cubren, `uncovered` lista el resto) |
+| `POST` | `/v1/start_sprint` | Iniciar sprint; valida restricción de alcance y cantidad de ítems; `specification_id` y el `covers` de cada tarea conservan el vínculo con la especificación |
 | `POST` | `/v1/generate` | Disparar workflow LangGraph vía NATS |
 | `GET`  | `/v1/glassroom/stream` | Stream SSE de eventos de agentes en tiempo real |
 | `POST` | `/v1/audit` | Registrar entrada de auditoría estructurada |
