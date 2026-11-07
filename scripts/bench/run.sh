@@ -4,8 +4,14 @@
 #   scripts/bench/run.sh <spec-dir> [--out <dir>]
 set -euo pipefail
 
-SPEC_DIR="${1:-}"
-OUT_DIR="${2:-bench/scorecards}"
+SPEC_DIR=""
+OUT_DIR="bench/scorecards"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --out) OUT_DIR="$2"; shift 2 ;;
+        *) if [[ -z "$SPEC_DIR" ]]; then SPEC_DIR="$1"; fi; shift ;;
+    esac
+done
 if [[ -z "$SPEC_DIR" ]]; then
     echo "usage: $0 <spec-dir> [--out <dir>]" >&2
     exit 2
@@ -29,8 +35,8 @@ cat > "$SCORECARD" <<JSON
   "stamp": "$STAMP",
   "factory_url": "$FACTORY_URL",
   "commit": "$(git rev-parse HEAD 2>/dev/null || echo unknown)",
-  "criteria_verified": 0,
-  "criteria_total": 0,
+  "criteria_verified": null,
+  "criteria_total": null,
   "first_try_rate": 0.0,
   "rework_per_task": 0.0,
   "blocked_share": 0.0,
