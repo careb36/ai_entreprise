@@ -37,3 +37,7 @@ def test_plan_lists_branches_in_dependency_order(sqlite_session):
     # A must come before B.
     assert plan["merge_order"].index(a.id) < plan["merge_order"].index(b.id)
     assert plan["task_branches"][0]["branch"].startswith("fabrique/task-")
+
+    # Reversed input still orders by dependency.
+    ordered = integration._topological([b, a])
+    assert [i.id for i in ordered] == [a.id, b.id]

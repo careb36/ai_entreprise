@@ -38,7 +38,12 @@ def _topological(items: list[BacklogItem]) -> list[BacklogItem]:
         progress = False
         still: list[BacklogItem] = []
         for item in remaining:
-            deps = [d for d in (item.depends_on or []) if isinstance(d, int)]
+            deps = []
+            for d in item.depends_on or []:
+                try:
+                    deps.append(int(d))
+                except (TypeError, ValueError):
+                    continue
             if all(d in done or d not in by_id for d in deps):
                 result.append(item)
                 done.add(item.id)
@@ -68,10 +73,21 @@ def plan(session: Session, sprint_id: int) -> dict[str, Any]:
         }
         for i in ordered
     ]
+    by_id = {i.id: i for i in items}
+    unmet = []
+    for i in items:
+        for d in i.depends_on or []:
+            try:
+                did = int(d)
+            except (TypeError, ValueError):
+                continue
+            if did not in by_id:
+                unmet.append({"task_id": i.id, "missing_dependency": did})
     return {
         "sprint_id": sprint.id,
         "sprint_name": sprint.sprint_name,
         "integration_branch": integration_branch(sprint),
         "task_branches": branches,
         "merge_order": [i.id for i in ordered],
+        "unmet_dependencies": unmet,
     }
