@@ -94,7 +94,7 @@ if port_busy "$BACKEND_PORT"; then
   exit 2
 fi
 
-# A fresh database: the backend creates its own schema at startup.
+# A fresh database: the migrations create its schema before the backend starts.
 "$PY" - "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" <<'EOF' || { echo "could not recreate the database"; exit 2; }
 import sys
 import psycopg2
@@ -123,6 +123,13 @@ trap cleanup EXIT
 # The backend asks the daemon once, at startup, which assistants it can run.
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
 grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }
+# The schema through the migrations, and the models and the migrations must
+# agree (what `alembic check` reports) before the backend starts.
+(
+  cd "$REPO/backend" && env POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB ALEMBIC_QUIET=1 \
+    "$PY" -m alembic upgrade head && env POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB ALEMBIC_QUIET=1 \
+    "$PY" -m alembic check
+) > "$WORK/alembic.log" 2>&1 || { echo "the migrations did not apply cleanly, or the models and the migrations disagree; see $WORK/alembic.log"; cat "$WORK/alembic.log"; exit 2; }
 (
   cd "$REPO/backend" && exec env \
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \

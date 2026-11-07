@@ -3,7 +3,7 @@ Database connectivity layer for Fabrique Enterprise Backend.
 
 Provides:
 - A SQLModel / SQLAlchemy engine connected to PostgreSQL via ``psycopg2``.
-- ``create_db_and_tables()`` — idempotent table creation called at startup.
+- ``prepare_database()`` — checks the schema is at the migrations' head at startup.
 - ``get_session()`` — FastAPI dependency that yields a scoped SQLModel session.
 - ``get_neo4j_driver()`` — factory for the Neo4j bolt driver (Temporal Knowledge Graph).
 
@@ -16,7 +16,7 @@ from collections.abc import Generator
 
 import neo4j
 from logging_config import logger
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, create_engine
 
 # ---------------------------------------------------------------------------
 # PostgreSQL — SQLModel / SQLAlchemy engine
@@ -60,119 +60,39 @@ engine = create_engine(
 )
 
 
-def _ensure_runtime_schema() -> None:
-    """Apply lightweight additive fixes for local databases created by older schemas."""
-    statements = (
-        # agents — original additive fixes
-        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS name VARCHAR(255) DEFAULT ''",
-        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS model VARCHAR(255) DEFAULT ''",
-        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS system_prompt TEXT",
-        "ALTER TABLE IF EXISTS agents ADD COLUMN IF NOT EXISTS token_budget INTEGER DEFAULT 500000",
-        # sprints — scope replaces duration_days
-        "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS scope_size VARCHAR DEFAULT 'M'",
-        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_workflow BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_base_branch VARCHAR",
-        # companies — hosts the research tools may read beside the defaults
-        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS research_hosts JSON",
-        # specifications, architectures — the sources the drafting agent consulted
-        "ALTER TABLE IF EXISTS specifications ADD COLUMN IF NOT EXISTS sources JSON",
-        "ALTER TABLE IF EXISTS architectures ADD COLUMN IF NOT EXISTS sources JSON",
-        "ALTER TABLE IF EXISTS sprints ALTER COLUMN duration_days DROP NOT NULL",
-        # sprints — why the worker paused one (no credit at a provider)
-        "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS pause_reason TEXT",
-        # companies — default scope replaces default_sprint_length_days
-        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS default_scope_size VARCHAR DEFAULT 'M'",
-        "ALTER TABLE IF EXISTS companies ALTER COLUMN default_sprint_length_days DROP NOT NULL",
-        # assistant runtime state — persistent cooldown / quota metadata
-        """
-        CREATE TABLE IF NOT EXISTS assistant_runtime_state (
-            id SERIAL PRIMARY KEY,
-            company_id INTEGER NOT NULL REFERENCES companies(id),
-            assistant_key VARCHAR(255) NOT NULL,
-            cooldown_until TIMESTAMP NULL,
-            last_error TEXT NULL,
-            updated_at TIMESTAMP NULL
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_company_id ON assistant_runtime_state (company_id)",
-        "CREATE INDEX IF NOT EXISTS ix_assistant_runtime_state_assistant_key ON assistant_runtime_state (assistant_key)",
-        # bug_reports — the Support agent's triage beside the reporter's choice
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS agent_reply TEXT",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS suggested_severity VARCHAR(20)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS suggested_category VARCHAR(50)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_by VARCHAR(100)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS triaged_at TIMESTAMP",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_severity VARCHAR(20)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_category VARCHAR(50)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_by VARCHAR(255)",
-        "ALTER TABLE IF EXISTS bug_reports ADD COLUMN IF NOT EXISTS decided_at TIMESTAMP",
-        # A reporter who chose no severity or category leaves it empty, not a default.
-        "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN category DROP NOT NULL",
-        "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN category DROP DEFAULT",
-        "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN severity DROP NOT NULL",
-        "ALTER TABLE IF EXISTS bug_reports ALTER COLUMN severity DROP DEFAULT",
-        # agent_runs — the Reviewer agent's suggestion beside a person's approval
-        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_decision VARCHAR(20)",
-        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_category VARCHAR(20)",
-        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS suggested_reason TEXT",
-        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(100)",
-        "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
-        # review_comments — comments brought from the pull or merge request
-        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS source VARCHAR",
-        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_id VARCHAR",
-        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_url VARCHAR",
-        "ALTER TABLE IF EXISTS review_comments ADD COLUMN IF NOT EXISTS external_state VARCHAR",
-        "CREATE INDEX IF NOT EXISTS ix_review_comments_external_id ON review_comments (external_id)",
-        # sprints and backlog_items — planned from a specification, covering its criteria
-        "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS specification_id INTEGER REFERENCES specifications(id)",
-        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS covers JSON",
-        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS depends_on JSON",
-        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS kind VARCHAR",
-        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
-        "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
-        # audit_log — a hash chain per company (audit_chain.py)
-        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS chain_seq INTEGER",
-        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS prev_hash VARCHAR",
-        "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS chain_hash VARCHAR",
-        "CREATE UNIQUE INDEX IF NOT EXISTS ux_audit_log_company_chain_seq ON audit_log (company_id, chain_seq)",
-        """
-        UPDATE audit_log AS a SET company_id = c.id
-        FROM companies AS c
-        WHERE a.company_id IS NULL AND a.details->>'company_id' = c.id::text
-        """,
-    )
-    # vector_memory is created by db/init-db/init.sql (it needs pgvector), not
-    # by SQLModel, so a database set up without that script has no such table.
-    vector_memory_statements = (
-        "ALTER TABLE vector_memory ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
-        "CREATE INDEX IF NOT EXISTS ix_vector_memory_company_id ON vector_memory (company_id)",
-        """
-        UPDATE vector_memory AS m SET company_id = c.id
-        FROM companies AS c
-        WHERE m.company_id IS NULL AND m.metadata->>'company_id' = c.id::text
-        """,
-    )
+def prepare_database() -> None:
+    """The schema as the migrations define it (``app/migrations.py``).
 
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.exec_driver_sql(statement)
+    The backend starts only on a database at the migrations' head. The
+    container's entrypoint and the e2e run ``alembic upgrade head`` first;
+    ``DB_AUTO_UPGRADE=true`` does it here, for a local database. A database
+    behind head stops the start with both versions in the error, instead of
+    being patched in place as the old startup did.
+    """
+    from migrations import require_schema_at_head, upgrade_to_head
+
+    if os.getenv("DB_AUTO_UPGRADE", "false").strip().lower() in ("1", "true", "yes"):
+        logger.info("DB_AUTO_UPGRADE: running the migrations to head")
+        upgrade_to_head(engine)
+    head = require_schema_at_head(engine)
+    logger.info("Database schema at %s", head)
+    _check_vector_memory()
+
+
+def _check_vector_memory() -> None:
+    # vector_memory is created by db/init-db/init.sql (it needs pgvector), not
+    # by the models, so a database set up without that script has no such table.
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.connect() as connection:
         has_vector_memory = connection.exec_driver_sql(
             "SELECT to_regclass('vector_memory') IS NOT NULL"
         ).scalar()
-        if has_vector_memory:
-            for statement in vector_memory_statements:
-                connection.exec_driver_sql(statement)
-        else:
-            logger.warning(
-                "Table vector_memory is missing: memory search and RAG are "
-                "unavailable until db/init-db/init.sql is applied to this database."
-            )
-
-
-def create_db_and_tables() -> None:
-    """Create all tables defined via SQLModel (idempotent — safe to call on startup)."""
-    SQLModel.metadata.create_all(engine)
-    _ensure_runtime_schema()
+    if not has_vector_memory:
+        logger.warning(
+            "Table vector_memory is missing: memory search and RAG are "
+            "unavailable until db/init-db/init.sql is applied to this database."
+        )
 
 
 def get_session() -> Generator[Session, None, None]:

@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # After a verified delivery, run the project's tests through the daemon and
     # record the exit status as evidence.  Off by default: it executes
     # agent-written code on the machine running the daemon.
+    # Run the Alembic migrations to head at startup (a local database); the
+    # container's entrypoint and the e2e run `alembic upgrade head` instead.
+    DB_AUTO_UPGRADE: bool = False
     DELIVERY_TESTS_ENABLED: bool = False
     # Test command to run; empty means detect it (npm test / pytest).
     DELIVERY_TEST_COMMAND: str = ""

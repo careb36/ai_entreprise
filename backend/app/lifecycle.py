@@ -9,7 +9,7 @@ from audit_signing import is_signing_enabled
 from auth_tokens import is_auth_configured
 from config import settings
 from crypto import is_encryption_enabled
-from database import create_db_and_tables, ensure_memory_graph_schema, get_neo4j_driver
+from database import ensure_memory_graph_schema, get_neo4j_driver, prepare_database
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from memory_client import MemoryClient
@@ -128,7 +128,7 @@ async def startup(app):
     - ``process_backlog_tasks()`` — NATS consumer → backlog task execution.
     """
     logger.info("Initializing Enterprise Backend Components...")
-    create_db_and_tables()
+    prepare_database()
 
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
