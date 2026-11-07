@@ -1,5 +1,9 @@
 """Diff between two versions of a specification.
 
+NOTE: requirement/criterion ids are positional (assigned by spec_check.normalize),
+so reordering changes ids and shows as add/remove. Identities are not preserved
+across edits; this is a known limitation.
+
 Deterministic: requirements, criteria, quality attributes and constraints are
 matched by their ids (or by their text for constraints, which carry no id).
 A requirement or criterion is ``added`` when its id is only in the newer
