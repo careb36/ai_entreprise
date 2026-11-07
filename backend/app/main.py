@@ -24,6 +24,7 @@ from routers import (
     architectures_router,
     auth_router,
     enterprise_router,
+    events_router,
     github_router,
     inbox_router,
     mcp_router,
@@ -92,6 +93,7 @@ setup_metrics(app)
 
 app.include_router(auth_router)
 app.include_router(enterprise_router)
+app.include_router(events_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)
 app.include_router(agents_router)
