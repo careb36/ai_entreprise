@@ -19,6 +19,6 @@ export const DRAFT: Specification = {
 
 export const APPROVED: Specification = {
   ...DRAFT, id: 3, title: 'Login', status: 'approved', version: 2, supersedes_id: 2, drafted_by: 'ana@acme.test',
-  approved_by: 'ana@acme.test', approved_at: '2026-10-02T00:00:00Z', questions: [],
+  approved_by: 'ana@acme.test', approved_at: '2026-10-02T12:00:00Z', questions: [],
   check: { ok: true, blocking: 0, warnings: 0, findings: [] },
 }
