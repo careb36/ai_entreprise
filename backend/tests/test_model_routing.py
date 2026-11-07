@@ -16,9 +16,15 @@ def test_rework_raises_difficulty():
 
 
 def test_model_for_band_returns_model():
+    policy = {"bands": {"1-2": "deepseek-v4-pro", "3-5": "qwen3.7-plus"}}
+    assert model_routing.model_for("Developer", 1, policy) == "deepseek-v4-pro"
+    assert model_routing.model_for("Developer", 4, policy) == "qwen3.7-plus"
+
+
+def test_tier_names_do_not_leak_as_model_ids():
     policy = {"bands": {"1-2": "fast", "3-5": "powerful"}}
-    assert model_routing.model_for("Developer", 1, policy) == "fast"
-    assert model_routing.model_for("Developer", 4, policy) == "powerful"
+    assert model_routing.model_for("Developer", 1, policy) is None
+    assert model_routing.model_for("Developer", 4, policy) is None
 
 
 def test_model_for_no_policy_returns_none():

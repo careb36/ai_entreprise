@@ -36,7 +36,7 @@ def estimate_difficulty(
     covers = covers if isinstance(covers, list) else []
     score = 1 + min(len(covers), 3)
     if arch and isinstance(arch.get("modules"), list):
-        covered_reqs = {str(c) for c in covers}
+        covered_reqs = {str(c).rsplit(".", 1)[0] for c in covers}
         touched = 0
         for mod in arch["modules"]:
             mod_cov = {str(c) for c in (mod.get("covers") or [])}
@@ -69,11 +69,15 @@ def model_for(
     """
     pol = policy if policy is not None else _policy()
     bands = pol.get("bands") if isinstance(pol.get("bands"), dict) else {}
+    _TIERS = {"fast", "balanced", "code", "strategic", "powerful", "preview"}
     for band, model in bands.items():
         try:
             lo, hi = band.split("-", 1)
             if int(lo) <= difficulty <= int(hi):
-                return str(model) if model else None
+                value = str(model).strip() if model else ""
+                if not value or value.lower() in _TIERS:
+                    return None
+                return value
         except (ValueError, AttributeError):
             continue
     return None
