@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck, RotateCcw } from 'lucide-react'
+import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck, ClipboardList, RotateCcw } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Verdict } from '../components/Verdict'
 import { Conversation } from '../components/Conversation'
@@ -160,6 +160,9 @@ export default function TaskDetails() {
   }
 
   const lineage = carryOverLineage(task.comments)
+  // The acceptance criteria this task covers, when its sprint was planned from a specification.
+  const specificationId = board?.sprint?.specification_id ?? null
+  const covers = specificationId !== null && task.covers ? task.covers : []
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
@@ -186,6 +189,16 @@ export default function TaskDetails() {
           </span>
         </div>
         <h1 className="text-xl font-bold text-white leading-snug">{task.title}</h1>
+        {covers.length > 0 && specificationId !== null && (
+          <p aria-label={t('specifications.taskCovers')} className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-gray-400">
+            <ClipboardList size={12} aria-hidden="true" />
+            <span>{t('specifications.taskCovers')}</span>
+            {covers.map(id => (
+              <Link key={id} to={`/company/specifications/${specificationId}`}
+                className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-brand-300 hover:underline">{id}</Link>
+            ))}
+          </p>
+        )}
       </div>
 
       {/* Carry-over lineage: another attempt at an earlier task, or the attempt this one got */}

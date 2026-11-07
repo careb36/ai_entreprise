@@ -24,7 +24,8 @@
     "members": "Miembros",
     "github": "GitHub",
     "helpDesk": "Mesa de ayuda",
-    "procedures": "Procedimientos"
+    "procedures": "Procedimientos",
+    "specifications": "Especificaciones"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1459,6 +1460,140 @@
       "escalation": "Escalamiento",
       "retrospective": "Retrospectiva",
       "proposal": "Procedimiento"
+    }
+  },
+  "specifications": {
+    "title": "Especificaciones",
+    "subtitle": "Lo que los agentes construyen. Cada criterio de aceptación se convierte en una prueba, y un sprint planificado desde una especificación aprobada dice qué tarea cubre cada uno.",
+    "selectCompany": "Elegí una empresa para ver sus especificaciones.",
+    "loading": "Cargando especificaciones…",
+    "loadError": "No se pudieron cargar las especificaciones: {{message}}",
+    "loadingOne": "Cargando la especificación…",
+    "loadOneError": "No se pudo cargar la especificación: {{message}}",
+    "invalidId": "ID de especificación inválido: {{id}}",
+    "back": "Todas las especificaciones",
+    "empty": "Todavía no hay especificaciones",
+    "emptyHint": "Pedile un borrador al PO a partir de una consigna corta, o escribí una vos.",
+    "emptyViewer": "Un Manager le pide un borrador al PO, o escribe una.",
+    "version": "v{{version}}",
+    "status": {
+      "draft": "Borrador",
+      "approved": "Aprobada",
+      "superseded": "Reemplazada"
+    },
+    "draftedBy": "Redactada por {{who}}",
+    "approvedBy": "Aprobada por {{who}} el {{date}}",
+    "supersedes": "Revisión de #{{id}}",
+    "checkSummary": "{{blocking}} bloqueantes · {{warnings}} advertencias",
+    "ready": "Lista para aprobar",
+    "summary": "Resumen",
+    "askPO": "Pedile un borrador al PO",
+    "briefLabel": "Consigna",
+    "briefPlaceholder": "Qué hay que construir, para quién y por qué…",
+    "briefHint": "El PO escribe los requisitos, sus criterios de aceptación y las preguntas que no pudo responder. Tarda un minuto.",
+    "drafting": "El PO está redactando…",
+    "draftError": "El PO no pudo redactarla: {{message}}",
+    "writeYourself": "Escribila vos",
+    "taskCovers": "Cubre",
+    "check": {
+      "title": "Verificación",
+      "ok": "Nada bloquea esta especificación: está lista para aprobar.",
+      "blocking": "Bloqueantes",
+      "warnings": "Advertencias"
+    },
+    "questions": {
+      "title": "Preguntas abiertas",
+      "none": "El PO no dejó preguntas.",
+      "unanswered": "Sin responder",
+      "answered": "Respuesta: {{answer}}",
+      "answer": "Responder",
+      "edit": "Editar respuesta",
+      "answerLabel": "Respuesta a la pregunta {{n}}",
+      "save": "Guardar respuesta",
+      "error": "No se pudo guardar la respuesta: {{message}}"
+    },
+    "requirements": {
+      "title": "Requisitos",
+      "none": "Sin requisitos.",
+      "criteria": "Criterios de aceptación",
+      "criteriaOf": "Criterios de aceptación de {{id}}",
+      "given": "Dado",
+      "when": "Cuando",
+      "then": "Entonces"
+    },
+    "coverage": {
+      "uncovered": "Sin cubrir",
+      "planned": "Planificado",
+      "blocked": "Bloqueado",
+      "done": "Hecho",
+      "summary": "{{covered}} de {{total}} criterios cubiertos, {{done}} hechos",
+      "task": "tarea #{{id}}"
+    },
+    "quality": {
+      "title": "Atributos de calidad",
+      "none": "Sin atributos de calidad.",
+      "attribute": "Atributo",
+      "target": "Meta",
+      "targetIs": "Meta: {{target}}"
+    },
+    "constraints": {
+      "title": "Restricciones",
+      "none": "Sin restricciones."
+    },
+    "actions": {
+      "title": "Acciones",
+      "edit": "Editar",
+      "revise": "Revisar",
+      "reviseHint": "Una nueva versión en borrador; esta sigue aprobada hasta que se apruebe la nueva.",
+      "reviseError": "No se pudo iniciar la revisión: {{message}}",
+      "revisePO": "Pedile al PO que la revise",
+      "reviseBrief": "Qué debería cambiar",
+      "sendToPO": "Enviar al PO",
+      "answerFirst_one": "Queda {{count}} pregunta sin responder: si la respondés primero, la revisión sale mejor.",
+      "answerFirst_other": "Quedan {{count}} preguntas sin responder: si las respondés primero, la revisión sale mejor.",
+      "approve": "Aprobar",
+      "approveBlocked": "Corregí primero los hallazgos bloqueantes.",
+      "approveError": "No se pudo aprobar: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Editor de especificación",
+      "newTitle": "Nueva especificación",
+      "idsNote": "Los ids (REQ-1, REQ-1.1, NFR-1) se asignan al guardar.",
+      "title": "Título",
+      "summary": "Resumen",
+      "requirements": "Requisitos",
+      "requirement": "Requisito {{n}}",
+      "requirementTitle": "Título",
+      "requirementTitleOf": "Título del requisito {{n}}",
+      "description": "Descripción",
+      "descriptionOf": "Descripción del requisito {{n}}",
+      "criterionField": "{{field}} del criterio {{r}}.{{n}}",
+      "addRequirement": "Agregar un requisito",
+      "removeRequirement": "Quitar el requisito {{n}}",
+      "addCriterion": "Agregar un criterio",
+      "removeCriterion": "Quitar el criterio {{r}}.{{n}}",
+      "quality": "Atributos de calidad",
+      "qualityHint": "Cada meta lleva un número, para que se pueda medir.",
+      "attributeOf": "Atributo {{n}}",
+      "targetOf": "Meta del atributo {{n}}",
+      "addQuality": "Agregar un atributo de calidad",
+      "removeQuality": "Quitar el atributo {{n}}",
+      "constraints": "Restricciones",
+      "constraintOf": "Restricción {{n}}",
+      "addConstraint": "Agregar una restricción",
+      "removeConstraint": "Quitar la restricción {{n}}",
+      "incomplete": "Cada requisito necesita un título y criterios completos.",
+      "save": "Guardar",
+      "saving": "Guardando…"
+    },
+    "plan": {
+      "label": "Planificar desde una especificación",
+      "none": "Ninguna: planificar desde el objetivo",
+      "option": "{{title}} (v{{version}})",
+      "goalPlaceholder": "La especificación es el objetivo; si querés, agregá una nota para el PO.",
+      "covers": "Cubre",
+      "uncovered_one": "{{count}} criterio queda sin cubrir: {{ids}}. El sprint igual puede empezar.",
+      "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
     }
   },
   "procedures": {

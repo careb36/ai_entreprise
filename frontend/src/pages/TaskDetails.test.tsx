@@ -162,6 +162,49 @@ describe('carry-over lineage', () => {
   })
 })
 
+describe('the criteria a task covers', () => {
+  function board(sprint: Record<string, unknown>, covers?: string[]) {
+    return {
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening', ...sprint },
+        columns: { done: [{
+          id: 12, sprint_id: 9, title: 'Cart listing', description: '', status: 'done', priority: 'high', assignee: 'Developer',
+          comments: [], covers, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+        }] },
+      },
+      isLoading: false,
+      isError: false,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ companyId: 42, activeSprintId: 9 })
+    capabilitiesQuery.mockReturnValue({ data: { memory: false } } as never)
+    runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
+  })
+
+  it('links each covered criterion to the specification the sprint was planned from', () => {
+    boardQuery.mockReturnValue(board({ specification_id: 5 }, ['REQ-1.1', 'REQ-1.2']) as never)
+    setup('/sprints/9/tasks/12')
+    const covers = screen.getByLabelText('Covers')
+    expect(within(covers).getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['REQ-1.1', '/company/specifications/5'],
+      ['REQ-1.2', '/company/specifications/5'],
+    ])
+  })
+
+  it.each([
+    ['no specification', { specification_id: null }, ['REQ-1.1']],
+    ['no criteria', { specification_id: 5 }, []],
+    ['an older board without the field', {}, undefined],
+  ])('shows nothing with %s', (_, sprint, covers) => {
+    boardQuery.mockReturnValue(board(sprint, covers) as never)
+    setup('/sprints/9/tasks/12')
+    expect(screen.queryByLabelText('Covers')).not.toBeInTheDocument()
+  })
+})
+
 describe('task delivery evidence', () => {
   const boardWithTask = {
     data: {

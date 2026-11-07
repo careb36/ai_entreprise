@@ -385,6 +385,8 @@ export interface BacklogItem {
   comments: { author: string; text: string; created_at: string }[]
   created_at: string
   updated_at: string
+  /** The specification's criteria ids the task covers. */
+  covers?: string[]
 }
 
 export interface SprintBoard {
@@ -397,6 +399,7 @@ export interface SprintBoard {
     start_date: string
     scope_size: string
     item_limit: number
+    specification_id?: number | null
   }
   columns: Record<string, BacklogItem[]>
   total: number
@@ -409,6 +412,7 @@ export interface SprintSummary {
   goal: string | null
   start_date: string | null
   scope_size: string
+  specification_id?: number | null
   total: number
   done: number
   /** Tasks blocked on the board, and rework requests over the sprint: the numbers procedures are judged by. */
@@ -445,13 +449,18 @@ export interface PlannedSprintTask {
   description: string
   priority: 'low' | 'medium' | 'high' | 'critical'
   assignee: string
+  /** Criteria ids, when planned from a specification. */
+  covers?: string[]
 }
 
 export interface SprintPlanResponse {
   sprint_name: string
   goal: string
   scope_size: 'S' | 'M' | 'L'
+  specification_id?: number | null
   tasks: PlannedSprintTask[]
+  /** Criteria no task covers. */
+  uncovered?: string[]
 }
 
 // ── Orchestration Health types ────────────────────────────────────────────────
@@ -836,22 +845,12 @@ export const api = {
     token_budget: number
   }) => api.post<ManagedAgent>('/v1/agents', data),
 
-  generateAgentPrompt: (data: {
-    role: string
-    seniority: string
-    specialty?: string
-    persona?: string
-  }) => api.post<{ system_prompt: string }>('/v1/agents/generate_prompt', data),
+  generateAgentPrompt: (data: { role: string; seniority: string; specialty?: string; persona?: string }) =>
+    api.post<{ system_prompt: string }>('/v1/agents/generate_prompt', data),
 
   updateAgent: (agentId: number, data: Partial<{
-    name: string
-    role: string
-    persona: string
-    seniority: string
-    specialty: string
-    model: string
-    system_prompt: string
-    token_budget: number
+    name: string; role: string; persona: string; seniority: string
+    specialty: string; model: string; system_prompt: string; token_budget: number
   }>) => api.patch<ManagedAgent>(`/v1/agents/${agentId}`, data),
 
   deleteAgent: (agentId: number) =>
@@ -990,17 +989,13 @@ export const api = {
       `/v1/sprints/${encodeURIComponent(sprintId)}/stream_ticket`,
     ),
 
-  updateBacklogItem: (itemId: number, data: {
-    status?: string
-    priority?: string
-    assignee?: string
-    comment?: string
-  }) => api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
+  updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
+    api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[] }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number }) =>
     api.post<{ sprint_id: number; backlog_item_ids?: number[]; sprint_url?: string }>('/v1/start_sprint', data),
 
-  planSprint: (data: { company_id: number; prompt: string; scope_size: 'S' | 'M' | 'L' }) =>
+  planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number }) =>
     api.post<SprintPlanResponse>('/v1/plan_sprint', data),
 
   planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>
