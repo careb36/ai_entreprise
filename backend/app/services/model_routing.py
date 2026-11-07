@@ -64,8 +64,8 @@ def model_for(
 ) -> str | None:
     """The model id a *role* should use at *difficulty*, or None to fall back.
 
-    *policy* maps ``{"bands": {"1-2": "fast", "3-5": "powerful"}}`` or
-    ``{"bands": {"1-2": "<model id>"}}``. Band keys are ``"lo-hi"``.
+    *policy* maps ``{"bands": {"1-2": "<model id>", "3-5": "<model id>"}}``.
+    Tier names are ignored. Band keys are ``"lo-hi"``.
     """
     pol = policy if policy is not None else _policy()
     bands = pol.get("bands") if isinstance(pol.get("bands"), dict) else {}
