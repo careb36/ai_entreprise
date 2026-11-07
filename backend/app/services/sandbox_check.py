@@ -1,6 +1,6 @@
 """Sandbox as verification: the mode the daemon used to run agent-written code.
 
-The daemon records ``evidence["sandbox"]`` with the mode it used (``host``,
+The daemon records ``evidence["sandbox"]`` with the mode it *reports* using (``host``,
 ``container`` or ``bwrap``) and the limits applied. The Verifier turns that
 into a check: ``host`` is a finding a person sees (it runs on their machine),
 never a refutation on its own; ``container``/``bwrap`` pass. The evidence
