@@ -479,8 +479,12 @@ def test_specification_diff_and_impact_report_changed_criteria(
         **GOOD,
         "requirements": [GOOD["requirements"][0]],
     }
-    revised_good["requirements"][0]["criteria"][0]["then"] = "the list has two rows per task"
-    v2 = test_client.post(f"/v1/specifications/{v1['id']}/revise", headers=manager).json()
+    revised_good["requirements"][0]["criteria"][0]["then"] = (
+        "the list has two rows per task"
+    )
+    v2 = test_client.post(
+        f"/v1/specifications/{v1['id']}/revise", headers=manager
+    ).json()
     test_client.put(
         f"/v1/specifications/{v2['id']}", json=revised_good, headers=manager
     )

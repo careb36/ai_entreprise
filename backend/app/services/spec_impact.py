@@ -20,7 +20,9 @@ def _covers(item: BacklogItem) -> list[str]:
     return spec_planning.covers_of(item)
 
 
-def _changed_criteria_and_reqs(old: Specification, new: Specification) -> tuple[set[str], set[str]]:
+def _changed_criteria_and_reqs(
+    old: Specification, new: Specification
+) -> tuple[set[str], set[str]]:
     d = spec_diff.diff_specs(old, new)
     criteria = set(d["changed_criterion_ids"])
     reqs = set(d["changed_requirement_ids"])
@@ -30,15 +32,25 @@ def _changed_criteria_and_reqs(old: Specification, new: Specification) -> tuple[
 def impact(session: Session, revision: Specification) -> dict[str, Any]:
     """The affected tasks and modules of *revision*'s approval."""
     if revision.supersedes_id is None:
-        return {"specification_id": revision.id, "previous_id": None,
-                "changed_criterion_ids": [], "changed_requirement_ids": [],
-                "affected_tasks": [], "flagged_modules": []}
+        return {
+            "specification_id": revision.id,
+            "previous_id": None,
+            "changed_criterion_ids": [],
+            "changed_requirement_ids": [],
+            "affected_tasks": [],
+            "flagged_modules": [],
+        }
 
     previous = session.get(Specification, revision.supersedes_id)
     if previous is None:
-        return {"specification_id": revision.id, "previous_id": revision.supersedes_id,
-                "changed_criterion_ids": [], "changed_requirement_ids": [],
-                "affected_tasks": [], "flagged_modules": []}
+        return {
+            "specification_id": revision.id,
+            "previous_id": revision.supersedes_id,
+            "changed_criterion_ids": [],
+            "changed_requirement_ids": [],
+            "affected_tasks": [],
+            "flagged_modules": [],
+        }
 
     criteria, reqs = _changed_criteria_and_reqs(previous, revision)
 
@@ -76,7 +88,7 @@ def impact(session: Session, revision: Specification) -> dict[str, Any]:
         )
     ).all()
     for arch in archs:
-        for mod in (arch.modules or []):
+        for mod in arch.modules or []:
             mod_cov = {str(c) for c in (mod.get("covers") or [])}
             hit = sorted(mod_cov & reqs)
             if not hit:

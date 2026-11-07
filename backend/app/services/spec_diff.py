@@ -13,15 +13,27 @@ from typing import Any
 
 
 def _reqs(spec: Any) -> list[dict[str, Any]]:
-    return list((spec.requirements if hasattr(spec, "requirements") else spec.get("requirements")) or [])
+    return list(
+        (
+            spec.requirements
+            if hasattr(spec, "requirements")
+            else spec.get("requirements")
+        )
+        or []
+    )
 
 
 def _quality(spec: Any) -> list[dict[str, Any]]:
-    return list((spec.quality if hasattr(spec, "quality") else spec.get("quality")) or [])
+    return list(
+        (spec.quality if hasattr(spec, "quality") else spec.get("quality")) or []
+    )
 
 
 def _constraints(spec: Any) -> list[str]:
-    return list((spec.constraints if hasattr(spec, "constraints") else spec.get("constraints")) or [])
+    return list(
+        (spec.constraints if hasattr(spec, "constraints") else spec.get("constraints"))
+        or []
+    )
 
 
 def _req_map(spec: Any) -> dict[str, dict[str, Any]]:
@@ -29,7 +41,11 @@ def _req_map(spec: Any) -> dict[str, dict[str, Any]]:
 
 
 def _crit_map(req: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {str(c.get("id")): c for c in (req.get("criteria") or []) if c.get("id") is not None}
+    return {
+        str(c.get("id")): c
+        for c in (req.get("criteria") or [])
+        if c.get("id") is not None
+    }
 
 
 def diff_specs(old: Any, new: Any) -> dict[str, Any]:
@@ -47,7 +63,9 @@ def diff_specs(old: Any, new: Any) -> dict[str, Any]:
         changes: list[dict[str, Any]] = []
         for field in ("title", "description"):
             if (o.get(field) or "") != (n.get(field) or ""):
-                changes.append({"field": field, "before": o.get(field), "after": n.get(field)})
+                changes.append(
+                    {"field": field, "before": o.get(field), "after": n.get(field)}
+                )
         # criteria diff within the requirement
         oc = _crit_map(o)
         nc = _crit_map(n)
@@ -56,7 +74,9 @@ def diff_specs(old: Any, new: Any) -> dict[str, Any]:
         changed_c = []
         for cid in sorted(set(oc) & set(nc)):
             if (oc[cid].get("given"), oc[cid].get("when"), oc[cid].get("then")) != (
-                nc[cid].get("given"), nc[cid].get("when"), nc[cid].get("then")
+                nc[cid].get("given"),
+                nc[cid].get("when"),
+                nc[cid].get("then"),
             ):
                 changed_c.append(
                     {
@@ -94,10 +114,18 @@ def diff_specs(old: Any, new: Any) -> dict[str, Any]:
     changed_q = []
     for qid in sorted(set(old_q) & set(new_q)):
         o, n = old_q[qid], new_q[qid]
-        if (o.get("attribute"), o.get("target")) != (n.get("attribute"), n.get("target")):
+        if (o.get("attribute"), o.get("target")) != (
+            n.get("attribute"),
+            n.get("target"),
+        ):
             changed_q.append(
-                {"id": qid, "before": o.get("attribute"), "after": n.get("attribute"),
-                 "target_before": o.get("target"), "target_after": n.get("target")}
+                {
+                    "id": qid,
+                    "before": o.get("attribute"),
+                    "after": n.get("attribute"),
+                    "target_before": o.get("target"),
+                    "target_after": n.get("target"),
+                }
             )
 
     # Constraints: no ids; compare as sets of text.
@@ -125,8 +153,12 @@ def diff_specs(old: Any, new: Any) -> dict[str, Any]:
                 changed_criteria_ids.add(str(c["id"]))
 
     return {
-        "from_version": getattr(old, "version", None) if not isinstance(old, dict) else old.get("version"),
-        "to_version": getattr(new, "version", None) if not isinstance(new, dict) else new.get("version"),
+        "from_version": getattr(old, "version", None)
+        if not isinstance(old, dict)
+        else old.get("version"),
+        "to_version": getattr(new, "version", None)
+        if not isinstance(new, dict)
+        else new.get("version"),
         "requirements": {
             "added": added_reqs,
             "removed": removed_reqs,
@@ -142,5 +174,7 @@ def diff_specs(old: Any, new: Any) -> dict[str, Any]:
             "removed": removed_constraints,
         },
         "changed_criterion_ids": sorted(changed_criteria_ids),
-        "changed_requirement_ids": sorted(set(added_reqs) | set(removed_reqs) | {r["id"] for r in changed_reqs}),
+        "changed_requirement_ids": sorted(
+            set(added_reqs) | set(removed_reqs) | {r["id"] for r in changed_reqs}
+        ),
     }
