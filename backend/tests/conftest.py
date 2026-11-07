@@ -44,6 +44,7 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.mcp import McpServer
 from models.procedure import Procedure
@@ -138,6 +139,7 @@ SQLModel.metadata.create_all(
         RunPublication.__table__,
         Specification.__table__,
         Architecture.__table__,
+        TaskEvent.__table__,
     ],
 )
 

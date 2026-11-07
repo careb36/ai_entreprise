@@ -21,6 +21,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .mcp import McpServer
 from .procedure import Procedure
@@ -54,6 +55,7 @@ __all__ = [
     "RunReview",
     "Specification",
     "Sprint",
+    "TaskEvent",
     "User",
     "Verification",
 ]
