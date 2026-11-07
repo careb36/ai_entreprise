@@ -109,7 +109,7 @@ describe('SpecificationDetail', () => {
   })
 
   it('shows coverage beside each criterion, with links to its tasks, and approves a ready draft', async () => {
-    const fetch = stubApi(READY, { 'POST /v1/specifications/5/approve': () => response(200, { ...READY, status: 'approved', approved_by: 'ana@acme.test', approved_at: '2026-10-02T00:00:00Z' }) })
+    const fetch = stubApi(READY, { 'POST /v1/specifications/5/approve': () => response(200, { ...READY, status: 'approved', approved_by: 'ana@acme.test', approved_at: '2026-10-02T12:00:00Z' }) })
     renderAs('Owner')
 
     expect(await screen.findByText('1 of 1 criteria covered, 1 done')).toBeInTheDocument()
