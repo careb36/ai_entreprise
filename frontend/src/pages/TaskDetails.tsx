@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck, ClipboardList, RotateCcw } from 'lucide-react'
+import { ArrowLeft, User, Flag, MessageSquare, Clock, ClipboardCheck, ClipboardList, Hourglass, RotateCcw } from 'lucide-react'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Verdict } from '../components/Verdict'
 import { Conversation } from '../components/Conversation'
@@ -106,6 +106,23 @@ function TaskEvidence({ companyId, taskId }: { companyId: number; taskId: number
   )
 }
 
+/** Links to other tasks of the sprint, by id and, when the board has them, by title. */
+function TaskLinks({ ids, sprintId, titles }: { ids: number[]; sprintId: number; titles: Map<number, string> }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      {ids.map(id => (
+        <Link key={id} to={`/sprints/${sprintId}/tasks/${id}`}
+          className="rounded bg-surface-800 px-1.5 py-0.5 text-[11px] text-brand-300 hover:underline">
+          {titles.has(id)
+            ? t('taskDetails.taskWithTitle', { id, title: titles.get(id), defaultValue: 'task #{{id}}: {{title}}' })
+            : t('taskDetails.taskNumber', { id, defaultValue: 'task #{{id}}' })}
+        </Link>
+      ))}
+    </>
+  )
+}
+
 export default function TaskDetails() {
   const { t } = useTranslation()
   const { taskId, sprintId: paramSprintId } = useParams<{ taskId: string; sprintId: string }>()
@@ -163,6 +180,10 @@ export default function TaskDetails() {
   // The acceptance criteria this task covers, when its sprint was planned from a specification.
   const specificationId = board?.sprint?.specification_id ?? null
   const covers = specificationId !== null && task.covers ? task.covers : []
+  // The tasks of this sprint this one must come after: those not done yet, or all of them once released.
+  const waitingFor = task.waiting_for ?? []
+  const dependsOn = waitingFor.length > 0 ? waitingFor : task.depends_on ?? []
+  const titles = new Map(Object.values(board?.columns ?? {}).flat().map(item => [item.id, item.title]))
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
@@ -187,6 +208,11 @@ export default function TaskDetails() {
             <Flag size={10} className="inline mr-1" />
             {t(`kanban.${task.priority}`, task.priority)}
           </span>
+          {task.kind === 'acceptance_tests' && (
+            <span className="px-2 py-0.5 rounded-md border text-xs font-medium bg-violet-900/40 text-violet-300 border-violet-700/40">
+              {t('kanban.acceptanceTests')}
+            </span>
+          )}
         </div>
         <h1 className="text-xl font-bold text-white leading-snug">{task.title}</h1>
         {covers.length > 0 && specificationId !== null && (
@@ -197,6 +223,14 @@ export default function TaskDetails() {
               <Link key={id} to={`/company/specifications/${specificationId}`}
                 className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-brand-300 hover:underline">{id}</Link>
             ))}
+          </p>
+        )}
+        {dependsOn.length > 0 && (
+          <p aria-label={t(waitingFor.length > 0 ? 'taskDetails.waitsFor' : 'taskDetails.dependedOn')}
+            className={`mt-2 flex flex-wrap items-center gap-1.5 text-xs ${waitingFor.length > 0 ? 'text-amber-300' : 'text-gray-500'}`}>
+            <Hourglass size={12} aria-hidden="true" />
+            <span>{t(waitingFor.length > 0 ? 'taskDetails.waitsFor' : 'taskDetails.dependedOn')}</span>
+            <TaskLinks ids={dependsOn} sprintId={resolvedSprintId} titles={titles} />
           </p>
         )}
       </div>

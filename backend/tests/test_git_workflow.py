@@ -182,6 +182,83 @@ def test_the_spec_is_asked_only_with_the_workflow_on(sqlite_session):
     }
 
 
+def test_the_spec_names_the_branches_of_the_done_tasks_it_depends_on(sqlite_session):
+    company = _company(sqlite_session)
+    sprint = Sprint(company_id=company.id, sprint_name="S")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    done = BacklogItem(sprint_id=sprint.id, title="Store", status="done")
+    pending = BacklogItem(sprint_id=sprint.id, title="Cache", status="blocked")
+    sqlite_session.add_all([done, pending])
+    sqlite_session.commit()
+    task = BacklogItem(
+        sprint_id=sprint.id, title="Endpoint", depends_on=[done.id, pending.id]
+    )
+    sqlite_session.add(task)
+    sqlite_session.commit()
+    spec = git_workflow.delivery_spec(
+        sqlite_session.get_bind(),
+        {"id": sprint.id, "company_id": company.id},
+        {"id": task.id, "title": "Endpoint"},
+    )
+    assert spec["merge"] == [f"fabrique/task-{done.id}"]
+    alone = git_workflow.delivery_spec(
+        sqlite_session.get_bind(),
+        {"id": sprint.id, "company_id": company.id},
+        {"id": done.id, "title": "Store"},
+    )
+    assert "merge" not in alone
+
+
+def test_the_daemon_merges_the_prerequisites_branches_into_the_worktree(repo):
+    first = _deliver(
+        repo,
+        [{"path": "store.py", "content": "STORE = 1\n"}],
+        {**SPEC, "branch": "fabrique/task-1"},
+    )
+    assert first["ok"]
+    second = _deliver(
+        repo,
+        [{"path": "endpoint.py", "content": "from store import STORE\n"}],
+        {
+            **SPEC,
+            "branch": "fabrique/task-2",
+            "merge": ["fabrique/task-1", "fabrique/task-9", "main"],
+        },
+    )
+    assert second["ok"]
+    # The done task's branch is in; a missing one and a branch that is not
+    # La Fabrique's are skipped.
+    assert second["git"]["merged"] == ["fabrique/task-1"]
+    worktree = Path(second["git"]["worktree"])
+    assert (worktree / "store.py").read_text() == "STORE = 1\n"
+    assert git(worktree, "log", "--oneline").count("\n") == 3  # first, merge, endpoint
+    # Already in: nothing merged again.
+    again = _deliver(
+        repo,
+        [{"path": "endpoint.py", "content": "from store import STORE, STORE\n"}],
+        {**SPEC, "branch": "fabrique/task-2", "merge": ["fabrique/task-1"]},
+    )
+    assert again["git"]["merged"] == []
+    # A conflict is an error the backend can read, and the worktree is left clean.
+    _deliver(
+        repo,
+        [{"path": "store.py", "content": "STORE = 2\n"}],
+        {**SPEC, "branch": "fabrique/task-3"},
+    )
+    conflict = _deliver(
+        repo,
+        [{"path": "x.py", "content": "x\n"}],
+        {**SPEC, "branch": "fabrique/task-3", "merge": ["fabrique/task-1"]},
+    )
+    assert (
+        conflict["ok"] is False
+        and "could not merge fabrique/task-1" in conflict["error"]
+    )
+    third_worktree = Path(repo) / ".git" / "fabrique-worktrees" / "fabrique__task-3"
+    assert git(third_worktree, "status", "--porcelain") == ""
+
+
 def test_a_daemon_that_could_not_write_leaves_the_delivery_unverifiable_with_its_reason():
     evidence = {"workspace_writes": []}
     git_workflow.record_reply(

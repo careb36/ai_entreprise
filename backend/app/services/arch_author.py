@@ -23,7 +23,7 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import arch_check, spec_author, spec_check, spec_planning
+from services import arch_check, spec_author, spec_check, spec_planning, standards
 from services.sprint_planner import _build_stack_summary, _list_root_files
 
 ARCHITECT_ROLE = "Architect"
@@ -182,16 +182,14 @@ def requirement_ids(spec: Specification) -> list[str]:
     ]
 
 
-def draft(
+def prepare(
     session: Session,
     spec: Specification,
     existing: Architecture | None = None,
 ) -> dict[str, Any]:
-    """Ask the Architect for a draft (or a revision of *existing*) and return it normalized.
-
-    Raises ``ArchAuthorError`` when nothing usable came back; nothing is
-    written to the database here.
-    """
+    """Everything ``draft_from`` needs, read with *session*: the model, the
+    prompt and the billing unit. Plain values, so the call to the proxy can
+    run in another thread without the session."""
     model, system_prompt, name = architect_profile(session, spec.company_id)
     discovery = session.exec(
         select(ProjectDiscovery)
@@ -210,15 +208,34 @@ def draft(
         root_files,
         content_of(existing) if existing is not None else None,
     )
-    logger.info("Architect drafting for specification=%s model=%s", spec.id, model)
+    return {
+        "specification_id": spec.id,
+        "model": model,
+        "system_prompt": system_prompt,
+        "prompt": prompt + standards.prompt_section(ARCHITECT_ROLE),
+        "bu_id": spec_author.business_unit_id(session, spec.company_id),
+        "questions": (existing.questions if existing is not None else []) or [],
+    }
+
+
+def draft_from(request: dict[str, Any]) -> dict[str, Any]:
+    """The Architect's draft for a ``prepare``d request, normalized; no database.
+
+    Raises ``ArchAuthorError`` when nothing usable came back.
+    """
+    logger.info(
+        "Architect drafting for specification=%s model=%s",
+        request["specification_id"],
+        request["model"],
+    )
     try:
         answer = spec_author.ask(
-            model,
-            system_prompt,
-            prompt,
+            request["model"],
+            request["system_prompt"],
+            request["prompt"],
             max_tokens=DRAFT_MAX_TOKENS,
             role=ARCHITECT_ROLE,
-            bu_id=spec_author.business_unit_id(session, spec.company_id),
+            bu_id=request["bu_id"],
         )
     except spec_author.SpecAuthorError as exc:
         raise ArchAuthorError(str(exc)) from exc
@@ -228,9 +245,18 @@ def draft(
             "The Architect's answer is not an architecture in the expected format"
         )
     arch["questions"] = spec_author.merge_questions(
-        (existing.questions if existing is not None else []) or [], arch["questions"]
+        request["questions"], arch["questions"]
     )
     return arch
+
+
+def draft(
+    session: Session,
+    spec: Specification,
+    existing: Architecture | None = None,
+) -> dict[str, Any]:
+    """``prepare`` then ``draft_from``, in one thread."""
+    return draft_from(prepare(session, spec, existing))
 
 
 # ---------------------------------------------------------------------------

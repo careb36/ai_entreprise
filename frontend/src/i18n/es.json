@@ -494,6 +494,9 @@
     "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
     "carriedTo": "Tiene otro intento en {{sprint}}:",
     "taskNumber": "tarea #{{id}}",
+    "taskWithTitle": "tarea #{{id}}: {{title}}",
+    "waitsFor": "Espera a",
+    "dependedOn": "Dependía de",
     "invalidId": "ID de tarea no válido: {{taskId}}.",
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
@@ -576,7 +579,10 @@
     "qaReworksTitle": "Retrabajos de QA: {{count}}/{{limit}}",
     "qaReworks": "Retrabajo QA {{count}}/{{limit}}",
     "qaFailuresTitle": "Fallos de QA: {{count}}/{{limit}}",
-    "qaFailures": "Fallo QA {{count}}/{{limit}}"
+    "qaFailures": "Fallo QA {{count}}/{{limit}}",
+    "waitsFor_one": "Espera a {{count}} tarea",
+    "waitsFor_other": "Espera a {{count}} tareas",
+    "acceptanceTests": "Tests de aceptación"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -1527,7 +1533,16 @@
       "blocked": "Bloqueado",
       "done": "Hecho",
       "summary": "{{covered}} de {{total}} criterios cubiertos, {{done}} hechos",
-      "task": "tarea #{{id}}"
+      "task": "tarea #{{id}}",
+      "verified": "Verificado",
+      "verifiedSummary": "{{verified}} de {{total}} verificados por un test que pasa",
+      "testPlanned": "Test planificado",
+      "testTask": "tests #{{id}}",
+      "testResult": {
+        "pass": "Test pasó",
+        "fail": "Test falla",
+        "missing": "Test no corrió"
+      }
     },
     "quality": {
       "title": "Atributos de calidad",
@@ -1592,6 +1607,7 @@
       "option": "{{title}} (v{{version}})",
       "goalPlaceholder": "La especificación es el objetivo; si querés, agregá una nota para el PO.",
       "covers": "Cubre",
+      "after": "Después de: {{titles}}",
       "uncovered_one": "{{count}} criterio queda sin cubrir: {{ids}}. El sprint igual puede empezar.",
       "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
     }
@@ -1908,6 +1924,24 @@
       "synced": "{{added}} nuevos, {{updated}} actualizados",
       "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
       "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
+    }
+  },
+  "standards": {
+    "title": "Estándares de calidad",
+    "subtitle": "A qué se atiene la fábrica en cada proyecto, por disciplina. Obligan a todos los roles antes de cualquier tarea; un procedimiento los amplía, nunca los relaja. Los marcados como verificados se comprueban sin un modelo.",
+    "loading": "Cargando los estándares…",
+    "loadError": "No se pudieron cargar los estándares: {{message}}",
+    "checked": "Verificado",
+    "checkedBy": "Verificado: {{how}}.",
+    "areas": {
+      "architecture": "Arquitectura",
+      "development": "Desarrollo",
+      "qa": "QA",
+      "security": "Seguridad",
+      "audit": "Evidencia y auditoría",
+      "documentation": "Documentación",
+      "operations": "Operaciones",
+      "product": "Producto"
     }
   }
 }

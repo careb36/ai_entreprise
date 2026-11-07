@@ -335,7 +335,12 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
               <div key={`${task.title}-${index}`} className="rounded-lg border border-surface-700 bg-surface-900/70 p-2.5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-gray-100">{index + 1}. {task.title}</p>
+                    <p className="text-xs font-semibold text-gray-100">
+                      {index + 1}. {task.title}
+                      {task.kind === 'acceptance_tests' && (
+                        <span className="ml-1.5 badge border bg-violet-900/40 text-violet-300 border-violet-700/40">{t('kanban.acceptanceTests')}</span>
+                      )}
+                    </p>
                     <p className="text-[11px] text-gray-500 mt-1">{task.description}</p>
                     {task.covers && task.covers.length > 0 && (
                       <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-gray-500">
@@ -343,6 +348,15 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                         {task.covers.map(id => (
                           <code key={id} className="rounded bg-surface-800 px-1 py-0.5 font-mono text-[10px] text-gray-300">{id}</code>
                         ))}
+                      </p>
+                    )}
+                    {task.depends_on && task.depends_on.length > 0 && (
+                      // Positions in the plan: the tasks this one waits for.
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {t('specifications.plan.after', {
+                          titles: task.depends_on.map(position => plannedSprint.tasks[position]?.title ?? `#${position + 1}`).join(', '),
+                          defaultValue: 'After: {{titles}}',
+                        })}
                       </p>
                     )}
                   </div>

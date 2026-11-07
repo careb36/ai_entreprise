@@ -111,7 +111,13 @@ def _specification(
 def _load(
     session: Session, user: User | None, arch_id: int, role: str
 ) -> tuple[Architecture, Specification]:
-    arch = session.get(Architecture, arch_id)
+    query = select(Architecture).where(Architecture.id == arch_id)
+    if role == "Manager":
+        # A Manager's operation checks the status it then changes: the row is
+        # locked until the commit, so two replicas cannot approve and edit at
+        # once, and two revisions of one approved architecture serialize on it.
+        query = query.with_for_update()
+    arch = session.exec(query).first()
     if arch is None:
         raise HTTPException(status_code=404, detail="Architecture not found")
     require_company_role(session, user, arch.company_id, role)
@@ -238,9 +244,11 @@ async def draft_architecture(
         if existing.specification_id != spec.id:
             raise HTTPException(status_code=404, detail="Architecture not found")
         _only_draft(existing)
+    # What the Architect is asked is read here, with the request's session;
+    # only the call to the proxy runs in a thread (a session is not shared).
+    request = arch_author.prepare(session, spec, existing)
     try:
-        # The Architect's call waits on the proxy: off the event loop.
-        content = await asyncio.to_thread(arch_author.draft, session, spec, existing)
+        content = await asyncio.to_thread(arch_author.draft_from, request)
     except arch_author.ArchAuthorError as exc:
         raise HTTPException(
             status_code=502, detail=f"The Architect gave no usable draft: {exc}"

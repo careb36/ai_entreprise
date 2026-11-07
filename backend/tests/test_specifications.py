@@ -77,12 +77,15 @@ def test_normalize_numbers_requirements_criteria_and_quality_in_order():
     ]
     assert spec["quality"][0]["id"] == "NFR-1"
     assert spec_check.criterion_ids(spec) == ["REQ-1.1", "REQ-1.2", "REQ-2.1"]
-    assert spec_check.check(spec) == {
-        "ok": True,
-        "blocking": 0,
-        "warnings": 0,
-        "findings": [],
-    }
+    result = spec_check.check(spec)
+    # Nothing blocks; the standards (STD-PO-1) warn on the quality areas the
+    # specification says nothing about (it names performance only).
+    assert (result["ok"], result["blocking"], result["warnings"]) == (True, 0, 3)
+    assert [f["message"] for f in result["findings"]] == [
+        f"No quality attribute says what is expected of {area}."
+        for area in ("security", "reliability", "accessibility")
+    ]
+    assert {f["code"] for f in result["findings"]} == {"quality_area_missing"}
 
 
 def test_the_check_blocks_what_cannot_be_tested_and_warns_about_promises():
@@ -228,13 +231,18 @@ def test_a_manager_writes_a_draft_a_viewer_reads_it_and_nobody_else(
                 "id": c,
                 "requirement_id": c.split(".")[0],
                 "tasks": [],
+                "tests": [],
                 "status": "uncovered",
+                "test": f"test_{c.lower().replace('-', '_').replace('.', '_')}_…",
+                "verified": False,
+                "last_result": None,
             }
             for c in ("REQ-1.1", "REQ-1.2", "REQ-2.1")
         ],
         "total": 3,
         "covered": 0,
         "done": 0,
+        "verified": 0,
     }
     listed = test_client.get(
         f"/v1/specifications?company_id={company.id}", headers=viewer
@@ -500,6 +508,21 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
         )
 
     monkeypatch.setattr(spec_author, "ask", planning)
+    # The PO's call runs in a thread without the session: the request is plain values.
+    prepared = spec_planning.prepare_plan(sqlite_session, spec, "S", 4, [], "note")
+    assert (
+        prepared["specification_id"] == spec.id
+        and "## Note from the person planning\nnote" in prepared["prompt"]
+    )
+    assert set(prepared) >= {
+        "model",
+        "system_prompt",
+        "prompt",
+        "bu_id",
+        "content",
+        "roles",
+        "item_limit",
+    }
     planned = test_client.post(
         "/v1/plan_sprint",
         json={
@@ -516,8 +539,19 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
     )
     plan = planned.json()
     assert plan["specification_id"] == spec.id and plan["sprint_name"] == "Board 1"
-    assert [t["covers"] for t in plan["tasks"]] == [["REQ-1.1", "REQ-1.2"], ["REQ-1.1"]]
-    assert plan["tasks"][1]["assignee"] == "Developer"
+    # QA's test-writing task of REQ-1 comes first; the implementation tasks
+    # depend on it (``services.acceptance``).
+    assert [t["covers"] for t in plan["tasks"]] == [
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-1.1"],
+    ]
+    assert [(t["kind"], t["assignee"]) for t in plan["tasks"]] == [
+        ("acceptance_tests", "QA"),
+        (None, "Developer"),
+        (None, "Developer"),
+    ]
+    assert [t["depends_on"] for t in plan["tasks"]] == [[], [0], [0]]
     assert plan["uncovered"] == ["REQ-2.1"]
     assert (
         test_client.post(
@@ -550,10 +584,14 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
         "/v1/plan_sprint",
         json={"company_id": company.id, "scope_size": "S", "specification_id": spec.id},
     ).json()
+    # One task per requirement, each after its test-writing task.
     assert [t["covers"] for t in fallback["tasks"]] == [
         ["REQ-1.1", "REQ-1.2"],
         ["REQ-2.1"],
+        ["REQ-1.1", "REQ-1.2"],
+        ["REQ-2.1"],
     ]
+    assert [t["depends_on"] for t in fallback["tasks"]] == [[], [], [0], [1]]
     assert fallback["uncovered"] == []
 
 

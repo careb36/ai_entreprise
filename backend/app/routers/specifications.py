@@ -209,16 +209,17 @@ async def draft_specification(
         .where(ProjectDiscovery.company_id == req.company_id)
         .order_by(text("created_at DESC"))
     ).first()
+    # What the PO is asked is read here, with the request's session; only the
+    # call to the proxy runs in a thread (a session is not shared).
+    request = spec_author.prepare(
+        session,
+        req.company_id,
+        req.brief,
+        discovery.detected_stack if discovery else None,
+        existing,
+    )
     try:
-        # The PO's call waits on the proxy: off the event loop.
-        content = await asyncio.to_thread(
-            spec_author.draft,
-            session,
-            req.company_id,
-            req.brief,
-            discovery.detected_stack if discovery else None,
-            existing,
-        )
+        content = await asyncio.to_thread(spec_author.draft_from, request)
     except spec_author.SpecAuthorError as exc:
         raise HTTPException(
             status_code=502, detail=f"The PO gave no usable draft: {exc}"

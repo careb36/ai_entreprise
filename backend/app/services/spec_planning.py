@@ -16,12 +16,12 @@ import json
 from typing import Any
 
 from logging_config import logger
-from models import BacklogItem, Sprint
+from models import Agent, BacklogItem, Company, ProjectDiscovery, Sprint
 from models.specification import Specification
 from sqlalchemy.engine import Engine
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 
-from services import spec_author, spec_check
+from services import acceptance, dependencies, spec_author, spec_check, standards
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -67,6 +67,33 @@ def approved_specification(
     return spec
 
 
+def planning_context_of(
+    session: Session, company_id: int
+) -> tuple[Company, list[dict[str, Any]], ProjectDiscovery | None]:
+    """The company, its agents as dicts and its latest discovery, for the planners."""
+    company = session.get(Company, company_id)
+    if not company:
+        raise PlanRefused(404, "Company not found")
+    agents = [
+        {
+            "role": agent.role,
+            "name": agent.name,
+            "model": agent.model,
+            "seniority": agent.seniority,
+            "specialty": agent.specialty,
+        }
+        for agent in session.exec(
+            select(Agent).where(Agent.company_id == company_id)
+        ).all()
+    ]
+    discovery = session.exec(
+        select(ProjectDiscovery)
+        .where(ProjectDiscovery.company_id == company_id)
+        .order_by(text("created_at DESC"))
+    ).first()
+    return company, agents, discovery
+
+
 def checked_covers(item: dict[str, Any], known: set[str] | None) -> list[str] | None:
     """A task's ``covers`` checked against the specification's criteria ids."""
     covers = item.get("covers")
@@ -108,9 +135,10 @@ def plan_prompt(
     return (
         f"You are {po_name}, the PO. Plan a sprint from the specification below: "
         "split the work into tasks a single agent can deliver, and say for each task "
-        "which acceptance criteria it covers, by id. Every criterion must be covered "
-        "by at least one task of this sprint or a later one; cover the most valuable "
-        "ones first.\n\n"
+        "which acceptance criteria it covers, by id, and which other tasks of this "
+        "plan must be done before it starts (by their exact title; a task that can "
+        "start at once names none). Every criterion must be covered by at least one "
+        "task of this sprint or a later one; cover the most valuable ones first.\n\n"
         f"## Specification: {spec.get('title')}\n{spec.get('summary')}\n\n"
         f"{spec_check.as_prompt(spec)}\n\n"
         f"{note_section}"
@@ -120,7 +148,7 @@ def plan_prompt(
         '{"sprint_name": "...", "goal": "...", "tasks": [{"title": "...", '
         '"description": "what to build and how it will be checked", '
         '"priority": "critical|high|medium|low", "assignee": "Developer", '
-        '"covers": ["REQ-1.1", "REQ-1.2"]}]}'
+        '"covers": ["REQ-1.1", "REQ-1.2"], "depends_on": ["title of a task done first"]}]}'
     )
 
 
@@ -128,11 +156,16 @@ def _validate_tasks(
     tasks: Any, known: set[str], roles: set[str], item_limit: int
 ) -> list[dict[str, Any]]:
     validated = []
+    named: list[list[str]] = []
+    originals: list[str] = []  # the PO's titles as given, for its dependencies by title
     for task in tasks if isinstance(tasks, list) else []:
         if not isinstance(task, dict) or not task.get("title"):
             continue
+        originals.append(str(task["title"]).strip())
         covers = task.get("covers") if isinstance(task.get("covers"), list) else []
         assignee = str(task.get("assignee") or "Developer")
+        raw = task.get("depends_on")
+        named.append([str(d).strip() for d in raw] if isinstance(raw, list) else [])
         validated.append(
             {
                 "title": str(task["title"])[:TASK_TITLE_LIMIT],
@@ -148,12 +181,38 @@ def _validate_tasks(
                 ),
             }
         )
-    return validated[:item_limit]
+    validated, named = validated[:item_limit], named[:item_limit]
+    # Dependencies by title (as the PO wrote it, or as shown once cut to
+    # TASK_TITLE_LIMIT), or by position: unknown ones and self dropped, a
+    # cycle broken at the edge that closes it. Positions in the answer.
+    position_of: dict[str, int] = {}
+    for i, t in enumerate(validated):
+        position_of.setdefault(originals[i].casefold(), i)
+        position_of.setdefault(t["title"].casefold(), i)
+    graph = {
+        i: list(
+            dict.fromkeys(
+                p
+                for d in deps
+                for p in [position_of.get(d.casefold(), int(d) if d.isdigit() else -1)]
+                if 0 <= p < len(validated) and p != i
+            )
+        )
+        for i, deps in enumerate(named)
+    }
+    for i, deps in dependencies.without_cycles(graph).items():
+        validated[i]["depends_on"] = deps
+    return validated
 
 
 def uncovered(spec: dict[str, Any], tasks: list[dict[str, Any]]) -> list[str]:
     """The criteria of *spec* no task in *tasks* covers, in the specification's order."""
-    covered = {c for task in tasks for c in task.get("covers") or []}
+    covered = {
+        c
+        for task in tasks
+        if not acceptance.is_acceptance_task(task)
+        for c in task.get("covers") or []
+    }
     return [cid for cid in spec_check.criterion_ids(spec) if cid not in covered]
 
 
@@ -169,14 +228,101 @@ def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
             "priority": "high" if index < 3 else "medium",
             "assignee": "Developer",
             "covers": [c["id"] for c in r.get("criteria") or []],
+            "depends_on": [],
         }
         for index, r in enumerate(spec.get("requirements") or [])
     ][:item_limit]
+    tasks = acceptance.with_test_tasks(tasks, spec, item_limit)
     return {
         "sprint_name": f"Sprint - {spec.get('title', '')[:40]}".strip(),
         "goal": (spec.get("summary") or spec.get("title") or "")[:140],
         "tasks": tasks,
         "uncovered": uncovered(spec, tasks),
+    }
+
+
+def prepare_plan(
+    session: Session,
+    spec: Specification,
+    scope_size: str,
+    item_limit: int,
+    agents: list[dict[str, Any]],
+    note: str = "",
+) -> dict[str, Any]:
+    """Everything ``plan_from`` needs, read with *session*: plain values, so
+    the call to the proxy can run in another thread without the session.
+
+    *note* is what the person planning added for the PO.
+    """
+    content = spec_content(spec)
+    team = _ensure_execution_team(agents)
+    roles = sorted({a.get("role", "Developer") for a in team})
+    model, system_prompt, po_name = spec_author.po_profile(session, spec.company_id)
+    po_name = _find_po_agent(team).get("name") or po_name
+    from services import arch_author
+
+    return {
+        "specification_id": spec.id,
+        "title": spec.title,
+        "summary": spec.summary,
+        "content": content,
+        "roles": roles,
+        "item_limit": item_limit,
+        "model": model,
+        "system_prompt": system_prompt,
+        "prompt": plan_prompt(
+            po_name,
+            content,
+            scope_size,
+            item_limit,
+            _build_team_roster(team),
+            roles,
+            note,
+        )
+        + arch_author.planning_context(session, spec.id)
+        + standards.prompt_section(spec_author.PO_ROLE),
+        "bu_id": spec_author.business_unit_id(session, spec.company_id),
+    }
+
+
+def plan_from(request: dict[str, Any]) -> dict[str, Any]:
+    """The PO's split into tasks with ``covers`` for a ``prepare_plan``ned
+    request, and what stays uncovered; no database. A failed or unusable
+    answer falls back to one task per requirement."""
+    content, item_limit = request["content"], request["item_limit"]
+    try:
+        answer = spec_author.ask(
+            request["model"],
+            request["system_prompt"],
+            request["prompt"],
+            max_tokens=PLAN_MAX_TOKENS,
+            bu_id=request["bu_id"],
+        )
+        parsed = json.loads(spec_author._strip_fences(answer))
+        if not isinstance(parsed, dict):
+            raise TypeError("not an object")
+    except (spec_author.SpecAuthorError, ValueError, TypeError) as exc:
+        logger.warning(
+            "PO could not plan from specification %s: %s",
+            request["specification_id"],
+            exc,
+        )
+        return plan_fallback(content, item_limit)
+    tasks = _validate_tasks(
+        parsed.get("tasks"),
+        set(spec_check.criterion_ids(content)),
+        set(request["roles"]),
+        item_limit,
+    )
+    if not tasks:
+        return plan_fallback(content, item_limit)
+    tasks = acceptance.with_test_tasks(tasks, content, item_limit)
+    title = request["title"]
+    return {
+        "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {title[:40]}")[:70],
+        "goal": str(parsed.get("goal") or request["summary"] or title)[:140],
+        "tasks": tasks,
+        "uncovered": uncovered(content, tasks),
     }
 
 
@@ -188,51 +334,8 @@ def plan(
     agents: list[dict[str, Any]],
     note: str = "",
 ) -> dict[str, Any]:
-    """The PO's split of *spec* into tasks with ``covers``, and what stays uncovered.
-
-    *note* is what the person planning added for the PO. A failed or
-    unusable answer falls back to one task per requirement.
-    """
-    content = spec_content(spec)
-    team = _ensure_execution_team(agents)
-    roles = sorted({a.get("role", "Developer") for a in team})
-    model, system_prompt, po_name = spec_author.po_profile(session, spec.company_id)
-    po_name = _find_po_agent(team).get("name") or po_name
-    from services import arch_author
-
-    prompt = plan_prompt(
-        po_name, content, scope_size, item_limit, _build_team_roster(team), roles, note
-    ) + arch_author.planning_context(session, spec.id)
-    try:
-        answer = spec_author.ask(
-            model,
-            system_prompt,
-            prompt,
-            max_tokens=PLAN_MAX_TOKENS,
-            bu_id=spec_author.business_unit_id(session, spec.company_id),
-        )
-        parsed = json.loads(spec_author._strip_fences(answer))
-        if not isinstance(parsed, dict):
-            raise TypeError("not an object")
-    except (spec_author.SpecAuthorError, ValueError, TypeError) as exc:
-        logger.warning("PO could not plan from specification %s: %s", spec.id, exc)
-        return plan_fallback(content, item_limit)
-    tasks = _validate_tasks(
-        parsed.get("tasks"),
-        set(spec_check.criterion_ids(content)),
-        set(roles),
-        item_limit,
-    )
-    if not tasks:
-        return plan_fallback(content, item_limit)
-    return {
-        "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {spec.title[:40]}")[
-            :70
-        ],
-        "goal": str(parsed.get("goal") or spec.summary or spec.title)[:140],
-        "tasks": tasks,
-        "uncovered": uncovered(content, tasks),
-    }
+    """``prepare_plan`` then ``plan_from``, in one thread."""
+    return plan_from(prepare_plan(session, spec, scope_size, item_limit, agents, note))
 
 
 # ---------------------------------------------------------------------------
@@ -284,9 +387,11 @@ def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     spec = session.get(Specification, sprint.specification_id)
     if spec is None:
         return ""
-    return requirements_section(
-        spec_content(spec), covers_of(item)
-    ) + arch_author.context_for(session, sprint, item)
+    return (
+        requirements_section(spec_content(spec), covers_of(item))
+        + arch_author.context_for(session, sprint, item)
+        + acceptance.section(session, sprint, item)
+    )
 
 
 def requirements_context(engine: Engine, item_id: int) -> str:
@@ -308,6 +413,10 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
     A criterion is ``done`` when one of its tasks got done; otherwise its
     latest task decides (a retry carried into a later sprint supersedes the
     blocked attempt): ``blocked``, or ``planned``; with no task, ``uncovered``.
+    The test-writing tasks (``services.acceptance``) are listed apart as
+    ``tests`` and decide nothing here; ``verified`` is whether the
+    criterion's acceptance test passed in an observed run of an
+    implementation task, with that run's ``last_result`` and ``test`` name.
     """
     rows = session.exec(
         select(BacklogItem, Sprint.id)
@@ -316,9 +425,13 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
         .order_by(BacklogItem.id)
     ).all()
     by_criterion: dict[str, list[dict[str, Any]]] = {}
+    tests_by_criterion: dict[str, list[dict[str, Any]]] = {}
     for item, sprint_id in rows:
+        target = (
+            tests_by_criterion if acceptance.is_acceptance_task(item) else by_criterion
+        )
         for cid in covers_of(item):
-            by_criterion.setdefault(cid, []).append(
+            target.setdefault(cid, []).append(
                 {
                     "id": item.id,
                     "sprint_id": sprint_id,
@@ -326,10 +439,12 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
                     "status": item.status,
                 }
             )
+    observed = acceptance.verified_criteria(session, spec)
     criteria = []
     for r in spec.requirements or []:
         for c in r.get("criteria") or []:
             tasks = by_criterion.get(c["id"], [])
+            seen = observed.get(c["id"]) or {}
             if any(t["status"] == "done" for t in tasks):
                 status = "done"
             elif tasks:
@@ -341,7 +456,11 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
                     "id": c["id"],
                     "requirement_id": r["id"],
                     "tasks": tasks,
+                    "tests": tests_by_criterion.get(c["id"], []),
                     "status": status,
+                    "test": f"test_{acceptance.token(c['id'])}_…",
+                    "verified": bool(seen.get("verified")),
+                    "last_result": seen.get("result"),
                 }
             )
     return {
@@ -349,4 +468,33 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
         "total": len(criteria),
         "covered": sum(1 for c in criteria if c["status"] != "uncovered"),
         "done": sum(1 for c in criteria if c["status"] == "done"),
+        "verified": sum(1 for c in criteria if c["verified"]),
     }
+
+
+def acceptance_summary(session: Session, item: Any) -> str:
+    """One line for a publication: how many criteria of the task's
+    specification are verified by an observed passing test. Empty when the
+    sprint was not planned from a specification."""
+    if item is None:
+        return ""
+    sprint = session.get(Sprint, item.sprint_id)
+    if sprint is None or sprint.specification_id is None:
+        return ""
+    spec = session.get(Specification, sprint.specification_id)
+    if spec is None:
+        return ""
+    cov = coverage(session, spec)
+    if not cov["total"]:
+        return ""
+    own = [c for c in cov["criteria"] if c["id"] in set(covers_of(item))]
+    mine = (
+        f"; this task's: {sum(1 for c in own if c['verified'])} of {len(own)}"
+        if own
+        else ""
+    )
+    return (
+        f"**Acceptance:** {cov['verified']} of {cov['total']} criteria of "
+        f'"{spec.title}" verified by a passing test in an observed run '
+        f"({round(100 * cov['verified'] / cov['total'])} %){mine}."
+    )

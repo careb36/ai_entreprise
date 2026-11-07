@@ -284,6 +284,19 @@ def check(spec: dict[str, Any]) -> dict[str, Any]:
                     f"Unanswered: {q.get('question', '')}",
                 )
             )
+    # The factory's standards expect a word on security, performance,
+    # reliability and accessibility (STD-PO-1); a warning, never a block.
+    from services import standards
+
+    for area in standards.missing_quality_areas(spec):
+        findings.append(
+            _finding(
+                "warning",
+                "spec",
+                "quality_area_missing",
+                f"No quality attribute says what is expected of {area}.",
+            )
+        )
     blocking = sum(1 for f in findings if f["severity"] == "blocking")
     return {
         "ok": blocking == 0,

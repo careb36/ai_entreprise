@@ -17,8 +17,11 @@ import re
 from typing import Any
 
 from models.company import Company
+from models.sprint import BacklogItem
 from sqlalchemy.engine import Engine
-from sqlmodel import Session
+from sqlmodel import Session, select
+
+from services import dependencies
 
 TASK_BRANCH = "fabrique/task-{id}"
 # A base a Manager may name: what git accepts as a branch, without ranges or options.
@@ -46,11 +49,23 @@ def delivery_spec(
         company = session.get(Company, sprint["company_id"])
         if company is None or not company.git_workflow:
             return None
-        return {
+        spec = {
             "branch": TASK_BRANCH.format(id=item["id"]),
             "base": company.git_base_branch or "",
             "message": commit_message(item, sprint),
         }
+        # The branches of the tasks this one depends on, done: the daemon
+        # merges them into the task's worktree, so it builds on their files.
+        row = session.get(BacklogItem, item["id"])
+        deps = dependencies.depends_on_of(row) if row is not None else []
+        if deps:
+            done = session.exec(
+                select(BacklogItem.id).where(
+                    BacklogItem.id.in_(deps), BacklogItem.status == "done"
+                )
+            ).all()
+            spec["merge"] = [TASK_BRANCH.format(id=d) for d in deps if d in set(done)]
+        return spec
 
 
 def record_reply(evidence: dict[str, Any], reply: Any) -> None:

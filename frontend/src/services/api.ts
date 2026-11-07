@@ -385,8 +385,8 @@ export interface BacklogItem {
   comments: { author: string; text: string; created_at: string }[]
   created_at: string
   updated_at: string
-  /** The specification's criteria ids the task covers. */
-  covers?: string[]
+  covers?: string[]; kind?: 'acceptance_tests' | null // Criteria ids the task covers; QA's test-writing task of a requirement.
+  depends_on?: number[]; waiting_for?: number[] // Ids of sprint tasks to finish first, and those among them not done yet.
 }
 
 export interface SprintBoard {
@@ -449,8 +449,8 @@ export interface PlannedSprintTask {
   description: string
   priority: 'low' | 'medium' | 'high' | 'critical'
   assignee: string
-  /** Criteria ids, when planned from a specification. */
-  covers?: string[]
+  covers?: string[] // Criteria ids, when planned from a specification.
+  depends_on?: number[]; kind?: 'acceptance_tests' | null // Positions in the plan's `tasks` to finish first; QA's test-writing task.
 }
 
 export interface SprintPlanResponse {

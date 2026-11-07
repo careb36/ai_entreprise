@@ -23,7 +23,7 @@ from models import Agent, BusinessUnit
 from models.specification import Specification
 from sqlmodel import Session, select
 
-from services import spec_check
+from services import spec_check, standards
 from services.sprint_planner import _build_stack_summary
 
 PO_ROLE = "PO"
@@ -220,18 +220,15 @@ def merge_questions(
     return kept[: spec_check.MAX_QUESTIONS]
 
 
-def draft(
+def prepare(
     session: Session,
     company_id: int,
     brief: str,
     detected_stack: dict[str, Any] | None = None,
     existing: Specification | None = None,
 ) -> dict[str, Any]:
-    """Ask the PO for a draft (or a revision of *existing*) and return it normalized.
-
-    Raises ``SpecAuthorError`` when nothing usable came back; nothing is
-    written to the database here.
-    """
+    """Everything ``draft_from`` needs, read with *session*: plain values, so
+    the call to the proxy can run in another thread without the session."""
     model, system_prompt, po_name = po_profile(session, company_id)
     current = (
         {
@@ -245,19 +242,48 @@ def draft(
         if existing is not None
         else None
     )
-    prompt = draft_prompt(po_name, brief, detected_stack, current)
+    return {
+        "company_id": company_id,
+        "model": model,
+        "system_prompt": system_prompt,
+        "prompt": draft_prompt(po_name, brief, detected_stack, current)
+        + standards.prompt_section(PO_ROLE),
+        "bu_id": business_unit_id(session, company_id),
+        "questions": (existing.questions if existing is not None else []) or [],
+    }
+
+
+def draft_from(request: dict[str, Any]) -> dict[str, Any]:
+    """The PO's draft for a ``prepare``d request, normalized; no database.
+
+    Raises ``SpecAuthorError`` when nothing usable came back.
+    """
     logger.info(
-        "PO drafting a specification for company=%s model=%s", company_id, model
+        "PO drafting a specification for company=%s model=%s",
+        request["company_id"],
+        request["model"],
     )
     answer = ask(
-        model, system_prompt, prompt, bu_id=business_unit_id(session, company_id)
+        request["model"],
+        request["system_prompt"],
+        request["prompt"],
+        bu_id=request["bu_id"],
     )
     spec = parse_draft(answer)
     if spec is None:
         raise SpecAuthorError(
             "The PO's answer is not a specification in the expected format"
         )
-    spec["questions"] = merge_questions(
-        (existing.questions if existing is not None else []) or [], spec["questions"]
-    )
+    spec["questions"] = merge_questions(request["questions"], spec["questions"])
     return spec
+
+
+def draft(
+    session: Session,
+    company_id: int,
+    brief: str,
+    detected_stack: dict[str, Any] | None = None,
+    existing: Specification | None = None,
+) -> dict[str, Any]:
+    """``prepare`` then ``draft_from``, in one thread."""
+    return draft_from(prepare(session, company_id, brief, detected_stack, existing))

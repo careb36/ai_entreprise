@@ -21,12 +21,9 @@ from auth_tokens import STREAM_TICKET_MINUTES, create_stream_ticket
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import (
-    Agent,
     BacklogItem,
     BusinessUnit,
-    Company,
     OutboxEvent,
-    ProjectDiscovery,
     Sprint,
     User,
 )
@@ -38,7 +35,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import spec_check, spec_planning
+from services import acceptance, dependencies, spec_check, spec_planning
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -57,7 +54,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint as build_self_improvement_plan,
 )
 from sqlalchemy import case, func
-from sqlmodel import Session, select, text
+from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
@@ -66,44 +63,16 @@ VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
-def _load_planning_context(session: Session, company_id: int):
-    company = session.get(Company, company_id)
-    if not company:
-        raise HTTPException(status_code=404, detail="Company not found")
-
-    agents = session.exec(select(Agent).where(Agent.company_id == company_id)).all()
-    agent_dicts = [
-        {
-            "role": agent.role,
-            "name": agent.name,
-            "model": agent.model,
-            "seniority": agent.seniority,
-            "specialty": agent.specialty,
-        }
-        for agent in agents
-    ]
-
-    discovery = session.exec(
-        select(ProjectDiscovery)
-        .where(ProjectDiscovery.company_id == company_id)
-        .order_by(text("created_at DESC"))
-    ).first()
-
-    return company, agent_dicts, discovery
-
-
 def _refused(call, *args):
-    """Call into ``spec_planning``; its refusal is the response's status."""
+    """Call into ``spec_planning`` or ``dependencies``; a refusal is the response's status."""
     try:
         return call(*args)
-    except spec_planning.PlanRefused as exc:
+    except (spec_planning.PlanRefused, dependencies.DependencyError) as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
-def _specification(session: Session, company_id: int, specification_id: int):
-    return _refused(
-        spec_planning.approved_specification, session, company_id, specification_id
-    )
+def _specification(session: Session, company_id: int, spec_id: int):
+    return _refused(spec_planning.approved_specification, session, company_id, spec_id)
 
 
 def _serialize_plan_response(
@@ -133,20 +102,18 @@ async def plan_sprint(
         raise HTTPException(
             status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
         )
-    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+    company, agent_dicts, discovery = _refused(
+        spec_planning.planning_context_of, session, req.company_id
+    )
 
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
-        # The PO's call waits on the proxy: off the event loop.
-        plan = await asyncio.to_thread(
-            spec_planning.plan,
-            session,
-            spec,
-            scope_size,
-            SCOPE_LIMITS[scope_size],
-            agent_dicts,
-            req.prompt,
+        # What the PO is asked is read here, with the request's session; only
+        # the call to the proxy runs in a thread (a session is not shared).
+        request = spec_planning.prepare_plan(
+            session, spec, scope_size, SCOPE_LIMITS[scope_size], agent_dicts, req.prompt
         )
+        plan = await asyncio.to_thread(spec_planning.plan_from, request)
         plan["specification_id"] = spec.id
         return _serialize_plan_response(
             plan, scope_size, f"Sprint - {spec.title[:40]}", spec.summary or spec.title
@@ -185,7 +152,9 @@ async def plan_self_improvement_sprint(
             status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
         )
 
-    company, agent_dicts, discovery = _load_planning_context(session, req.company_id)
+    company, agent_dicts, discovery = _refused(
+        spec_planning.planning_context_of, session, req.company_id
+    )
     objective = build_self_improvement_objective(
         company_name=company.company_name,
         detected_stack=discovery.detected_stack if discovery else None,
@@ -267,7 +236,9 @@ async def start_sprint(
     session.add(sprint)
     session.flush()  # Obtain sprint.id before processing backlog items
 
+    positions = _refused(dependencies.check_positions, backlog_items)
     item_ids = []
+    rows: list[BacklogItem] = []
     for item in backlog_items:
         backlog_item = BacklogItem(
             sprint_id=sprint.id,
@@ -276,27 +247,36 @@ async def start_sprint(
             priority=item.get("priority", "medium"),
             assignee=item.get("assignee", "PO"),
             covers=_refused(spec_planning.checked_covers, item, known),
+            kind=acceptance.ACCEPTANCE_KIND
+            if item.get("kind") == acceptance.ACCEPTANCE_KIND
+            else None,
         )
         session.add(backlog_item)
         session.flush()
         item_ids.append(backlog_item.id)
-
+        rows.append(backlog_item)
+    for row, deps in zip(rows, positions, strict=True):
+        if deps:
+            # It waits for those tasks; the worker queues it once they are done.
+            row.depends_on = [rows[position].id for position in deps]
+            dependencies.note(row, dependencies.waiting_note([rows[p] for p in deps]))
+            session.add(row)
+            continue
         # Outbox entry — delivered to NATS by the process_outbox background worker.
-        nats_payload = {
-            "subject": "task.assign",
-            "message": {
-                "backlog_item_id": backlog_item.id,
-                "interaction_id": str(uuid4()),
-                "agent": item.get("assignee", "PO"),
-                "sprint_id": sprint.id,
-            },
-        }
         session.add(
             OutboxEvent(
                 aggregate_type="backlog_item",
-                aggregate_id=str(backlog_item.id),
+                aggregate_id=str(row.id),
                 event_type="nats_publish",
-                payload=nats_payload,
+                payload={
+                    "subject": "task.assign",
+                    "message": {
+                        "backlog_item_id": row.id,
+                        "interaction_id": str(uuid4()),
+                        "agent": row.assignee or "PO",
+                        "sprint_id": sprint.id,
+                    },
+                },
             )
         )
 
@@ -505,6 +485,7 @@ async def get_sprint_board(
     items_db = session.exec(
         select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
     ).all()
+    by_id = {i.id: i for i in items_db}
 
     items = [
         {
@@ -516,6 +497,9 @@ async def get_sprint_board(
             "assignee": i.assignee,
             "comments": i.comments or [],
             "covers": spec_planning.covers_of(i),
+            "kind": i.kind,
+            "depends_on": dependencies.depends_on_of(i),
+            "waiting_for": dependencies.waiting_for(by_id, i),
             "created_at": str(i.created_at),
             "updated_at": str(i.updated_at),
         }

@@ -60,11 +60,21 @@ export interface CoverageTask {
   status: string
 }
 
+/** What the criterion's acceptance test said in the latest observed run of an implementation task. */
+export type TestResult = 'pass' | 'fail' | 'missing'
+
 export interface CoverageCriterion {
   id: string
   requirement_id: string
   tasks: CoverageTask[]
+  /** QA's test-writing tasks of the criterion's requirement. */
+  tests?: CoverageTask[]
   status: CoverageStatus
+  /** The name its acceptance test carries (`test_req_1_2_…`). */
+  test?: string
+  /** True only when its acceptance test passed in an observed run. */
+  verified?: boolean
+  last_result?: TestResult | null
 }
 
 export interface Coverage {
@@ -72,6 +82,8 @@ export interface Coverage {
   total: number
   covered: number
   done: number
+  /** Criteria whose acceptance test passed in an observed run. */
+  verified?: number
 }
 
 export interface Specification {

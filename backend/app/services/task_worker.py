@@ -46,8 +46,11 @@ from sqlmodel import Session, select, text
 
 from llm.model_factory import default_model_for_role
 from services import (
+    acceptance,
     agent_run_service,
     console_assistants,
+    delivery_gate,
+    dependencies,
     git_workflow,
     mcp_tools,
     procedures,
@@ -57,6 +60,7 @@ from services import (
     scrum_master,
     spec_planning,
     sprint_control,
+    standards,
     workspace_daemon,
 )
 from services.answers import (
@@ -87,9 +91,9 @@ from services.board import (
     SCRUM_MASTER_ROLE,
     blocked_item_next_step,
     comment_list,
+    completed_tasks_context,
     extract_latest_reviewable_comment,
     has_manual_freeze_marker,
-    item_is_settled,
     pending_rework_feedback,
     rework_requests_by,
 )
@@ -104,7 +108,6 @@ from services.orchestration_metrics import (
     KPI_ROLE_ARCHITECT,
     RESULT_NEEDS_WORK,
     VERDICT_REFUTED,
-    VERDICT_UNVERIFIABLE,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -116,7 +119,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
-from services.workspace_daemon import detect_test_command, record_test_run
+from services.workspace_daemon import detect_test_command
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -324,37 +327,8 @@ def _load_recent_lessons(company_id: int | None, current_sprint_id: int) -> str:
 def _load_sprint_completed_tasks(
     sprint_id: int, exclude_item_id: int, limit: int = 5
 ) -> str:
-    """Return a brief summary of done tasks in the same sprint for cross-task context."""
-    try:
-        with Session(engine) as session:
-            done_items = session.exec(
-                select(BacklogItem).where(
-                    BacklogItem.sprint_id == sprint_id,
-                    BacklogItem.id != exclude_item_id,
-                    BacklogItem.status == "done",
-                )
-            ).all()
-            if not done_items:
-                return ""
-            lines = [
-                "Completed tasks in this sprint (build on this work, avoid duplication):"
-            ]
-            for it in done_items[:limit]:
-                deliverable_excerpt = extract_latest_reviewable_comment(
-                    comment_list(it.comments), assignee_role=it.assignee
-                )
-                excerpt = (
-                    deliverable_excerpt[:280].replace("\n", " ")
-                    if deliverable_excerpt
-                    else "(no deliverable)"
-                )
-                lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
-            return "\n".join(lines)
-    except Exception as exc:  # noqa: BLE001 - Completed-task context is best-effort.
-        logger.debug(
-            "Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc
-        )
-        return ""
+    """A brief summary of done tasks in the same sprint, for cross-task context."""
+    return completed_tasks_context(engine, sprint_id, exclude_item_id, limit)
 
 
 # ---------------------------------------------------------------------------
@@ -969,10 +943,9 @@ def _complete_sprint_and_plan_follow_up(
         if not sprint or sprint.status != "active":
             return {"completed": False, "auto_opened": False, "reason": "not_active"}
 
-        items = session.exec(
-            select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
-        ).all()
-        if not items or not all(item_is_settled(item) for item in items):
+        # The dependency holds are reconciled first (``dependencies.sprint_settled``).
+        if not dependencies.sprint_settled(session, completed_sprint_id):
+            session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
         sprint.status = "completed"
@@ -1544,8 +1517,10 @@ def _handoff_body(title: str, deliverable: str) -> str:
 
 
 def _load_procedures_context(company_id: int | None, role: str | None) -> str:
-    """The company's active procedures for *role*, as a prompt section."""
-    return procedures.prompt_context(engine, company_id, role)
+    """The factory's standards for *role*, then the company's active procedures, as prompt sections."""
+    return standards.prompt_section(role) + procedures.prompt_context(
+        engine, company_id, role
+    )
 
 
 def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
@@ -1668,7 +1643,7 @@ def _propose_procedures(
 # ---------------------------------------------------------------------------
 
 
-DELIVERY_QUEUED = "delivery queued"
+DELIVERY_QUEUED = delivery_gate.DELIVERY_QUEUED
 TASK_ASSIGN_CONSUMER = "task-worker"
 DELIVERY_RESULTS_CONSUMER = "delivery-results"
 # A task can take several LLM calls, console assistants and a test run; the
@@ -1677,69 +1652,17 @@ DELIVERY_RESULTS_CONSUMER = "delivery-results"
 TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
 
 
+# The gate before QA, the risk tier and the latest verification: services/delivery_gate.
 def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
-    """
-    ``(problem, observation)`` when the task's latest delivery must not reach QA.
-
-    Gates on a refuted delivery (files missing, rejected or different on disk),
-    an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
-    test run that failed.  A delivery queued for an offline daemon returns
-    ``DELIVERY_QUEUED``: the task waits, neither reviewed nor reworked, until
-    the daemon reports what it wrote.  Other checks — an unevidenced "tests pass" claim, a
-    test run that could not happen — are left to the evidence page, so an
-    honest claim never forces a rework.
-
-    Scoped to the task's company: ``POST /v1/agent_runs`` lets any company
-    ingest a run with any producer and reference, so a run is only trusted
-    when it belongs to the same company as the task.
-    """
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    if (verification.evidence or {}).get("delivery_queued"):
-        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
-    for check in verification.checks or []:
-        name, outcome = check.get("name"), check.get("outcome")
-        if name == "files_written" and outcome == VERDICT_REFUTED:
-            return "delivery refuted", check.get("observation", "")
-        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
-            return "delivery unconfirmed", check.get("observation", "")
-        if name == "tests_run" and outcome == VERDICT_REFUTED:
-            return "tests failed", check.get("observation", "")
-    return None
+    return delivery_gate.gate(engine, company_id, item_id)
 
 
 def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
-    """The Verifier's ``risk_tier`` check on the task's latest delivery, if any."""
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    for check in verification.checks or []:
-        if check.get("name") == "risk_tier":
-            return check
-    return None
+    return delivery_gate.risk(engine, company_id, item_id)
 
 
 def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
-    """The latest verification of the task worker's run for this task, in its company."""
-    with Session(engine) as session:
-        run = session.exec(
-            select(AgentRun)
-            .where(
-                AgentRun.company_id == company_id,
-                AgentRun.external_ref == f"task-{item_id}",
-                AgentRun.producer == TASK_WORKER_PRODUCER,
-            )
-            .order_by(AgentRun.version.desc())
-        ).first()
-        if run is None:
-            return None
-        verification = session.exec(
-            select(Verification)
-            .where(Verification.agent_run_id == run.id)
-            .order_by(Verification.id.desc())
-        ).first()
-    return verification
+    return delivery_gate.latest_verification(engine, company_id, item_id)
 
 
 def _sha256_text(content: str) -> str:
@@ -1823,65 +1746,10 @@ def _delivery_comment(
 
 # The project's test command is detected in services/workspace_daemon.
 _detect_test_command = detect_test_command
+_detect_project_test_command = workspace_daemon.detect_project_test_command
 
 
-async def _detect_project_test_command(
-    nats_client: NATSClient, workspace_root: str
-) -> str | None:
-    """
-    ``_detect_test_command`` on the project's machine.
-
-    The project lives where the daemon runs, so detection reads the daemon's
-    snapshot of it; a folder this server can see itself is the fallback.
-    """
-    if settings.DELIVERY_TEST_COMMAND.strip():
-        return settings.DELIVERY_TEST_COMMAND.strip()
-    try:
-        project = await workspace_daemon.inspect_project(
-            nats_client, workspace_root, snapshot=True
-        )
-    except (workspace_daemon.DaemonUnavailable, workspace_daemon.DaemonError):
-        project = None
-    if project and project.get("is_dir"):
-
-        def _detect_in_snapshot() -> str | None:
-            with workspace_daemon.materialized_snapshot(
-                project.get("snapshot") or {}
-            ) as mirror:
-                return _detect_test_command(mirror)
-
-        return await asyncio.to_thread(_detect_in_snapshot)
-    return await asyncio.to_thread(_detect_test_command, workspace_root)
-
-
-async def _run_delivery_tests(
-    nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
-) -> None:
-    """Run the project's tests through the daemon and add the result to *evidence*:
-    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
-    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
-    workspace_root = evidence["workspace_root"]
-    command = await _detect_project_test_command(nats_client, workspace_root)
-    if not command:
-        evidence["test_run"] = {"command": None, "reason": "no test command found"}
-        return
-    try:
-        result = await nats_client.request(
-            "workspace.execute",
-            {
-                "command": command,
-                "workspace_root": workspace_root,
-                "sprint_id": sprint["id"],
-            },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
-        )
-    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
-        evidence["test_run"] = {
-            "command": command,
-            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
-        }
-        return
-    record_test_run(evidence, command, result)
+_run_delivery_tests = workspace_daemon.run_delivery_tests
 
 
 def _plan_queued_delivery(
@@ -2014,6 +1882,12 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
 
     written, _ = evaluate_workspace_writes(files, evidence)
     if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+        evidence["acceptance"] = await asyncio.to_thread(
+            acceptance.evidence_for, engine, item_id
+        )
+        await acceptance.guard_test_files(
+            nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+        )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
@@ -2111,6 +1985,12 @@ async def _deliver_artifacts(
 
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+            evidence["acceptance"] = await asyncio.to_thread(
+                acceptance.evidence_for, engine, item["id"]
+            )
+            await acceptance.guard_test_files(
+                nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            )
             await _run_delivery_tests(nats_client, sprint, evidence)
 
     recorded = await asyncio.to_thread(
@@ -2280,6 +2160,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
+            # A task that waits for others is queued once they are done.
+            if not await asyncio.to_thread(dependencies.ready, engine, item["id"]):
+                return
             # Guard against duplicate task.assign events for the same item.
             if item.get("status") != "todo":
                 logger.info(
@@ -2954,6 +2837,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 # the ScrumMaster's brief for it, the same context the agent had.
                 + previous_attempt_context(item)
                 + spec_planning.requirements_for(session, sprint, item)
+                + standards.prompt_section(reviewer_dict["role"])
             ) + procedures.procedures_prompt(
                 procedures.active_procedures(
                     session, sprint.company_id, reviewer_dict["role"]
@@ -3399,13 +3283,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 if settled_sprint_ids
                 else []
             )
-            if all(
-                item_is_settled(item)
-                for item in session.exec(
-                    select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
-                ).all()
-            )
+            if dependencies.sprint_settled(session, sprint_id)
         ]
+        session.commit()
 
     # A sprint whose last open task just got blocked for a person closes now,
     # with its retrospective; approvals close theirs on the spot.
@@ -3464,6 +3344,9 @@ def _call_llm_for_review(
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:
     """Find todo items and publish task.assign events for them."""
+    # Tasks waiting on one a person must act on are blocked with the reason;
+    # those whose wait ended come back to todo, and are queued below.
+    await asyncio.to_thread(dependencies.settle_active, engine)
     with Session(engine) as session:
         todo_items = session.exec(
             select(BacklogItem).where(BacklogItem.status == "todo")
@@ -3472,13 +3355,10 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             item_sprint = session.get(Sprint, item.sprint_id)
             if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
                 continue
+            if not dependencies.is_ready(session, item):
+                continue
             dispatch_time = datetime.now(UTC)
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
+            comments = comment_list(item.comments)
 
             if has_manual_freeze_marker(comments):
                 item.status = "blocked"
@@ -3527,8 +3407,6 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "Skipping duplicate autonomous queue publish for item=%s", item.id
                 )
                 continue
-
-            from uuid import uuid4
 
             # Durable: one stored assignment per todo state of the item, even
             # though this runs every review cycle while the worker is busy.

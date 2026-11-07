@@ -13,6 +13,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.status:       which machine this is (hostname, platform, home)
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
+- workspace.hash:         sha256 of named files as they are on disk (file_hash.py)
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import file_diff
+import file_hash
 import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats
@@ -50,10 +52,7 @@ _build_command_env = shell_exec.build_command_env
 _build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("fabrique-daemon")
 
 DAEMON_VERSION = "2026.10"
@@ -71,9 +70,8 @@ ASSISTANT_FALLBACK_PATHS = {
 # Every daemon instance answers in this queue group, so a request is handled once.
 QUEUE_GROUP = "workspace-daemon"
 
-# JetStream streams for deliveries queued while no daemon was connected.  The
-# backend declares the same streams (backend/app/nats_client.py); nats_scope
-# applies NATS_NAMESPACE to both so two stacks on one broker stay apart.
+# The JetStream streams for queued deliveries are declared by the backend
+# (backend/app/nats_client.py); nats_scope applies NATS_NAMESPACE to both.
 
 
 def confirm_workspace_path() -> str:
@@ -691,6 +689,7 @@ async def main():
         ("workspace.status", bound(handle_status, jetstream)),
         ("workspace.browse", bound(handle_browse)),
         ("workspace.inspect", bound(handle_inspect)),
+        ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
     ):

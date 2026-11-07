@@ -14,7 +14,8 @@ prompt's section headers, so one run exercises the whole loop:
 - the Support agent triages every ticket as a high-severity bug;
 - the PO drafts a specification (with a quality target without a number
   and one open question the first time, both fixed on the revision) and
-  plans a sprint from it, one task per requirement with its criteria;
+  plans a sprint from it, one task per requirement with its criteria, the
+  counter after the greeting;
 - the Architect designs it: two modules, an interface, a decision and a
   convention (with one open question the first time, answered before the
   revision).
@@ -48,6 +49,10 @@ REVIEWED: set[str] = set()
 REVIEWED_LOCK = threading.Lock()
 PROMPT_LOG = os.environ.get("FAKE_LLM_PROMPTS", "fake_llm.prompts.log")
 VIOLATIONS_LOG = os.environ.get("FAKE_LLM_VIOLATIONS", "fake_llm.violations.log")
+# The module each requirement's implementation task writes (its slug), so
+# QA's acceptance tests, written first, import what the Developer will deliver.
+ACCEPTANCE_MODULES = {"REQ-1": "add_greeting", "REQ-2": "add_greeting_counter"}
+
 # Per task title: how many deliveries the fake wrote, how many reviews it was
 # asked for, and the paths of the last delivery.
 DELIVERED: dict[str, int] = {}
@@ -139,7 +144,7 @@ def answer(prompt: str) -> str:
                 "goal": "Greet and count",
                 "tasks": [
                     {"title": "Add greeting", "description": "greet(name) with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
-                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"]},
+                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"], "depends_on": ["Add greeting"]},
                 ],
             }
         )
@@ -187,12 +192,35 @@ def answer(prompt: str) -> str:
             return "NEEDS WORK: add a test for empty input."
         return "APPROVED: the module and its test match the task."
     task = re.search(r"## Task: (.+)", prompt)
+    if task and task.group(1).startswith("Acceptance tests for REQ-"):
+        # QA writes one failing test per criterion, named after it, importing
+        # the module the implementation task will write inside each test.
+        title = task.group(1).strip()
+        req = re.match(r"Acceptance tests for (REQ-\d+)", title).group(1)
+        module = ACCEPTANCE_MODULES[req]
+        criteria = list(dict.fromkeys(re.findall(rf"\b({req}\.\d+):", prompt)))
+        path = f"tests/test_{req.lower().replace('-', '_')}.py"
+        tests = "".join(
+            f"def test_{c.lower().replace('-', '_').replace('.', '_')}_holds():\n"
+            f"    from src.{module} import {module}\n\n"
+            f'    assert {module}() == "{module} done"\n\n\n'
+            for c in criteria
+        )
+        with REVIEWED_LOCK:
+            DELIVERED[title] = DELIVERED.get(title, 0) + 1
+            LAST_PATHS[title] = [path]
+        return f"Acceptance tests of {req}.\n\n```python path={path}\n{tests}```\n\n{PADDING}\n"
     if task:
         name = _slug(task.group(1))
         with REVIEWED_LOCK:
             title = task.group(1).strip()
             DELIVERED[title] = DELIVERED.get(title, 0) + 1
             LAST_PATHS[title] = [f"src/{name}.py", f"tests/test_{name}.py"]
+            # The counter's first delivery rewrites an acceptance test: the
+            # Verifier must refuse it, and the next delivery leaves it alone.
+            edits_test = title == "Add greeting counter" and DELIVERED[title] == 1
+            if edits_test:
+                LAST_PATHS[title].append("tests/test_req_2.py")
         return (
             f"Implemented {task.group(1)}.\n\n"
             f"```python path=src/{name}.py\n"
@@ -200,7 +228,12 @@ def answer(prompt: str) -> str:
             f"```python path=tests/test_{name}.py\n"
             f"from src.{name} import {name}\n\n\n"
             f'def test_{name}():\n    assert {name}() == "{name} done"\n```\n\n'
-            f"{PADDING}\n"
+            + (
+                "```python path=tests/test_req_2.py\ndef test_req_2_1_holds():\n    assert True\n```\n\n"
+                if edits_test
+                else ""
+            )
+            + f"{PADDING}\n"
         )
     return "Keep the implementation minimal and covered by a unit test."
 

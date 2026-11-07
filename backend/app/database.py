@@ -121,6 +121,8 @@ def _ensure_runtime_schema() -> None:
         # sprints and backlog_items — planned from a specification, covering its criteria
         "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS specification_id INTEGER REFERENCES specifications(id)",
         "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS covers JSON",
+        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS depends_on JSON",
+        "ALTER TABLE IF EXISTS backlog_items ADD COLUMN IF NOT EXISTS kind VARCHAR",
         "ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS company_id INTEGER REFERENCES companies(id)",
         "CREATE INDEX IF NOT EXISTS ix_audit_log_company_id ON audit_log (company_id)",
         # audit_log — a hash chain per company (audit_chain.py)

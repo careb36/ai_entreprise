@@ -77,6 +77,10 @@ class BacklogItemIn(BaseModel):
     priority: str = "medium"
     assignee: str = "PO"
     covers: list[str] = []
+    depends_on: list[int] = []
+    # ``acceptance_tests`` for a QA task that writes a requirement's acceptance
+    # tests (``services.acceptance``); anything else is an ordinary task.
+    kind: str | None = None
 
 
 class SprintStartRequest(BaseModel):
@@ -89,7 +93,8 @@ class SprintStartRequest(BaseModel):
     goal: str | None = None
     duration_days: int | None = None  # deprecated
     # With a specification, "covers" lists the criteria ids (``REQ-1.2``)
-    # the task covers.
+    # the task covers; "depends_on" lists the positions, in this list, of
+    # the tasks that must be done first (``services.dependencies``).
     backlog_items: list[BacklogItemIn]
     # Blocked tasks of earlier sprints to try again in this one (they count
     # towards the scope). Each gets a fresh task carrying what blocked it.

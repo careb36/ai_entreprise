@@ -307,6 +307,18 @@ def test_the_architect_drafts_from_the_approved_specification_asks_and_a_person_
         return json.dumps(draft)
 
     monkeypatch.setattr(spec_author, "ask", fake_ask)
+    # The Architect's call runs in a thread without the session: what it needs
+    # is plain values, read before.
+    prepared = arch_author.prepare(sqlite_session, spec)
+    assert set(prepared) == {
+        "specification_id",
+        "model",
+        "system_prompt",
+        "prompt",
+        "bu_id",
+        "questions",
+    }
+    assert prepared["specification_id"] == spec.id and "REQ-1.1" in prepared["prompt"]
     assert (
         test_client.post(
             "/v1/architectures/draft",
