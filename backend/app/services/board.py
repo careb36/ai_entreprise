@@ -25,12 +25,12 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from logging_config import logger
 from models import BacklogItem
 from sqlmodel import Session, select
 
 from services import orchestration_metrics as _metrics
 from services.orchestration_metrics import (
-from logging_config import logger
     GATE_AUTHORS_LOWER,
     is_architect_consult_comment,
 )
