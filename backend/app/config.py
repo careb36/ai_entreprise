@@ -174,6 +174,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     SECURITY_HEADERS_ENABLED: bool = True
+    # Optional routing policy: JSON {"bands": {"1-2": "fast", "3-5": "powerful"}}
+    # or model ids. Empty means use the role defaults.
+    AGENT_MODEL_POLICY: str = ""
 
     class Config:
         env_file = ".env"
