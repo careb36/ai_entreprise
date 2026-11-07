@@ -297,6 +297,10 @@ async def run_delivery_tests(
     ``test_run`` (command, exit code, output tail) and ``ci``, the shape
     ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
     workspace_root = evidence["workspace_root"]
+    evidence["sandbox"] = {
+        "mode": settings.DELIVERY_SANDBOX_MODE,
+        "limits": {},
+    }
     command = await detect_project_test_command(nats_client, workspace_root)
     if not command:
         evidence["test_run"] = {"command": None, "reason": "no test command found"}

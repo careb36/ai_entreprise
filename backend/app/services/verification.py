@@ -10,6 +10,7 @@ from services import (
     mcp_tools,
     research_tools,
     risk,
+    sandbox_check,
     standards,
 )
 from services.agent_service import AgentService
@@ -433,6 +434,10 @@ def verify_agent_run(
     standards_check = standards.check_delivery(run.artifact_text)
     if standards_check:
         checks.append(standards_check)
+    # The mode the daemon used to run agent-written code (``services/sandbox_check``).
+    sandbox = sandbox_check.check_sandbox(evidence)
+    if sandbox is not None:
+        checks.append(sandbox)
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(

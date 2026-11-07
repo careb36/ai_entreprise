@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     DELIVERY_TEST_COMMAND: str = ""
     # The daemon itself stops a command after 120 s; wait slightly longer.
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
+    # How the daemon runs agent-written code: host (today), container or bwrap.
+    DELIVERY_SANDBOX_MODE: str = "host"
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants
