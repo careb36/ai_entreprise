@@ -7,6 +7,7 @@
  * Viewers read; Managers write.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Source } from '../components/SourcesConsulted'
 import { API_BASE, ApiError, api, fetchApi } from './api'
 import type { Check, Finding, Question } from './specifications'
 import { useAuthStore } from '../store/useAuthStore'
@@ -64,6 +65,8 @@ export interface Architecture {
   decisions: ArchDecision[]
   conventions: string[]
   questions: Question[]
+  /** The sources the Architect consulted while drafting (the research tools); observations, not its claims. */
+  sources?: Source[]
   /** `Architect`, or the email of the person who wrote it. */
   drafted_by: string | null
   approved_by: string | null

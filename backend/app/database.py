@@ -72,6 +72,11 @@ def _ensure_runtime_schema() -> None:
         "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS scope_size VARCHAR DEFAULT 'M'",
         "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_workflow BOOLEAN DEFAULT FALSE",
         "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS git_base_branch VARCHAR",
+        # companies — hosts the research tools may read beside the defaults
+        "ALTER TABLE IF EXISTS companies ADD COLUMN IF NOT EXISTS research_hosts JSON",
+        # specifications, architectures — the sources the drafting agent consulted
+        "ALTER TABLE IF EXISTS specifications ADD COLUMN IF NOT EXISTS sources JSON",
+        "ALTER TABLE IF EXISTS architectures ADD COLUMN IF NOT EXISTS sources JSON",
         "ALTER TABLE IF EXISTS sprints ALTER COLUMN duration_days DROP NOT NULL",
         # sprints — why the worker paused one (no credit at a provider)
         "ALTER TABLE IF EXISTS sprints ADD COLUMN IF NOT EXISTS pause_reason TEXT",

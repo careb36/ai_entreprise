@@ -15,6 +15,7 @@ import { Check, ChevronDown, ChevronRight, CircleCheck, FileText, FolderOutput, 
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
+import { SourcesConsulted } from '../components/SourcesConsulted'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
@@ -441,6 +442,7 @@ export default function ArchitectureDetail() {
         />
       ) : (
         <>
+          <SourcesConsulted sources={architecture.sources ?? []} headingId="architecture-sources" />
           {architecture.overview && (
             <section aria-labelledby="architecture-overview" className="card p-4">
               <h2 id="architecture-overview" className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">{t('architectures.overview')}</h2>

@@ -23,7 +23,14 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import arch_check, spec_author, spec_check, spec_planning, standards
+from services import (
+    arch_check,
+    research_tools,
+    spec_author,
+    spec_check,
+    spec_planning,
+    standards,
+)
 from services.sprint_planner import _build_stack_summary, _list_root_files
 
 ARCHITECT_ROLE = "Architect"
@@ -212,9 +219,12 @@ def prepare(
         "specification_id": spec.id,
         "model": model,
         "system_prompt": system_prompt,
-        "prompt": prompt + standards.prompt_section(ARCHITECT_ROLE),
+        "prompt": prompt
+        + standards.prompt_section(ARCHITECT_ROLE)
+        + research_tools.prompt_section(ARCHITECT_ROLE),
         "bu_id": spec_author.business_unit_id(session, spec.company_id),
         "questions": (existing.questions if existing is not None else []) or [],
+        "research_hosts": research_tools.company_hosts(session, spec.company_id),
     }
 
 
@@ -229,13 +239,14 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
         request["model"],
     )
     try:
-        answer = spec_author.ask(
+        answer, calls = spec_author.ask_with_tools(
             request["model"],
             request["system_prompt"],
             request["prompt"],
             max_tokens=DRAFT_MAX_TOKENS,
             role=ARCHITECT_ROLE,
             bu_id=request["bu_id"],
+            toolbox=research_tools.toolbox_for_request(ARCHITECT_ROLE, request),
         )
     except spec_author.SpecAuthorError as exc:
         raise ArchAuthorError(str(exc)) from exc
@@ -247,6 +258,7 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
     arch["questions"] = spec_author.merge_questions(
         request["questions"], arch["questions"]
     )
+    arch["sources"] = research_tools.sources_of(calls)
     return arch
 
 

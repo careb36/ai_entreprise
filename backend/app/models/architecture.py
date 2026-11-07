@@ -52,6 +52,9 @@ class Architecture(SQLModel, table=True):
     questions: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON)
     )
+    # The sources the drafting agent consulted (``services/research_tools.py``):
+    # observations the backend made, never the agent's own account.
+    sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     drafted_by: str | None = None  # "Architect", or a person's email
     approved_by: str | None = None
     approved_at: datetime | None = None

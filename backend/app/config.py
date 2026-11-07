@@ -89,6 +89,21 @@ class Settings(BaseSettings):
     # only with ``DELIVERY_TESTS_ENABLED``.
     DEVELOPER_TOOLS_ENABLED: bool = True
     DEVELOPER_TOOL_ROUNDS: int = 8
+    # The research tools (``services/research_tools.py``): the roles that
+    # decide read official sources (documentation, registries, OSV) through
+    # the backend's own egress, from the default hosts plus these; every
+    # source is evidence. The registries' URLs can point at a mirror.
+    RESEARCH_TOOLS_ENABLED: bool = True
+    RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter"
+    RESEARCH_ALLOWED_HOSTS: str = ""
+    RESEARCH_TOOL_ROUNDS: int = 6
+    RESEARCH_TIMEOUT_SECONDS: float = 20.0
+    RESEARCH_FETCH_MAX_BYTES: int = 512 * 1024
+    RESEARCH_PYPI_URL: str = "https://pypi.org/pypi"
+    RESEARCH_NPM_URL: str = "https://registry.npmjs.org"
+    RESEARCH_CRATES_URL: str = "https://crates.io/api/v1/crates"
+    RESEARCH_GO_URL: str = "https://proxy.golang.org"
+    RESEARCH_OSV_URL: str = "https://api.osv.dev"
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True

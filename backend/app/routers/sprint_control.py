@@ -14,12 +14,13 @@ The states and what they allow are in ``services/sprint_control.py``.
 """
 
 from auth_policy import current_user_if_required, require_company_role
+from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import git_workflow, sprint_control
+from services import git_workflow, research_tools, sprint_control
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -185,6 +186,63 @@ def _git_payload(company: Company) -> dict:
         "git_workflow": company.git_workflow,
         "git_base_branch": company.git_base_branch,
     }
+
+
+class ResearchHostsRequest(BaseModel):
+    # Hosts the research tools may read beside the defaults; exact host names.
+    hosts: list[str] = Field(default_factory=list, max_length=100)
+
+
+def _research_payload(company: Company) -> dict:
+    own = [str(h) for h in (company.research_hosts or [])]
+    return {
+        "company_id": company.id,
+        "enabled": settings.RESEARCH_TOOLS_ENABLED,
+        "roles": sorted(research_tools.research_roles()),
+        "hosts": own,
+        "default_hosts": sorted(research_tools.allowed_hosts()),
+    }
+
+
+@router.get("/companies/{company_id}/research")
+async def get_research_hosts(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The sources the company's research tools may read (Viewer): the
+    deployment's defaults and the hosts the company added."""
+    require_company_role(session, user, company_id, "Viewer")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return _research_payload(company)
+
+
+@router.put("/companies/{company_id}/research")
+async def set_research_hosts(
+    company_id: int,
+    req: ResearchHostsRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Replace the hosts the company adds to the research tools' sources
+    (Manager). Exact host names; nothing removes a default."""
+    require_company_role(session, user, company_id, "Manager")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    hosts: list[str] = []
+    for raw in req.hosts:
+        host = raw.strip().lower()
+        if not research_tools.valid_host(host):
+            raise HTTPException(status_code=422, detail=f"not a host name: {raw}")
+        if host not in hosts:
+            hosts.append(host)
+    company.research_hosts = hosts
+    session.add(company)
+    session.commit()
+    return _research_payload(company)
 
 
 @router.get("/companies/{company_id}/git")
