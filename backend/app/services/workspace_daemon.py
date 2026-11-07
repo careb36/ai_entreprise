@@ -8,6 +8,7 @@ request to the daemon.  Paths are the host's own absolute paths and are passed
 through as opaque strings: the backend never resolves them locally.
 """
 
+import asyncio
 import contextlib
 import json
 import os
@@ -215,6 +216,30 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
 
 
 _NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+
+
+async def detect_project_test_command(
+    nats_client: Any, workspace_root: str
+) -> str | None:
+    """``detect_test_command`` on the project's machine.
+
+    The project lives where the daemon runs, so detection reads the daemon's
+    snapshot of it; a folder this server can see itself is the fallback.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    try:
+        project = await inspect_project(nats_client, workspace_root, snapshot=True)
+    except (DaemonUnavailable, DaemonError):
+        project = None
+    if project and project.get("is_dir"):
+
+        def _detect_in_snapshot() -> str | None:
+            with materialized_snapshot(project.get("snapshot") or {}) as mirror:
+                return detect_test_command(mirror)
+
+        return await asyncio.to_thread(_detect_in_snapshot)
+    return await asyncio.to_thread(detect_test_command, workspace_root)
 
 
 def detect_test_command(workspace_root: str) -> str | None:

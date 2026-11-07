@@ -208,6 +208,11 @@ export default function TaskDetails() {
             <Flag size={10} className="inline mr-1" />
             {t(`kanban.${task.priority}`, task.priority)}
           </span>
+          {task.kind === 'acceptance_tests' && (
+            <span className="px-2 py-0.5 rounded-md border text-xs font-medium bg-violet-900/40 text-violet-300 border-violet-700/40">
+              {t('kanban.acceptanceTests')}
+            </span>
+          )}
         </div>
         <h1 className="text-xl font-bold text-white leading-snug">{task.title}</h1>
         {covers.length > 0 && specificationId !== null && (

@@ -14,7 +14,10 @@ and reports histories the loop must never produce:
   from a person after it;
 - ``carried_twice``: one task carried into another sprint more than once;
 - ``decision_without_escalation``: a ScrumMaster decision that names an
-  escalation the task never had.
+  escalation the task never had;
+- ``criteria_verified_without_run``: a run whose Verifier marked a criterion's
+  acceptance test as passed with no observed test run (no exit status from the
+  daemon) in its evidence.
 
 It deliberately imports none of the production readers (``services/board.py``,
 ``services/carry_over.py``, ``services/scrum_master.py``) and restates the
@@ -83,7 +86,10 @@ def check_task(
     """The violations in one task's history, as ``"<rule>: <detail>"`` lines.
 
     *task* has ``id``, ``status``, ``comments`` and ``depends_on``; *runs*
-    are the task worker's runs of it with ``version`` and ``status``;
+    are the task worker's runs of it with ``version``, ``status``,
+    ``verified_criteria`` (the criteria its latest verification marked as
+    passed) and ``observed_test_run`` (whether that verification's evidence
+    holds an exit status from the daemon);
     *messages* are the company's messages about it with ``id``, ``kind``
     and ``body``; *statuses* maps the ids of the tasks it depends on to
     their status.
@@ -130,6 +136,13 @@ def check_task(
                     f"{(statuses or {}).get(dep, 'missing')}, not done"
                 )
 
+    for run in runs:
+        if run.get("verified_criteria") and not run.get("observed_test_run"):
+            violations.append(
+                f"criteria_verified_without_run: run v{run.get('version')} marks "
+                f"{', '.join(run['verified_criteria'])} as passed with no test run observed"
+            )
+
     carried = sum(1 for c in comments if _text(c).startswith(_CARRIED_TO))
     if carried > 1:
         violations.append(f"carried_twice: carried {carried} times")
@@ -155,10 +168,30 @@ def check_task(
     return violations
 
 
+def _run_facts(verification: Any) -> dict[str, Any]:
+    """What a verification row says: the criteria its ``criteria_tests`` check
+    marked as passed, and whether its evidence holds an observed test run."""
+    if verification is None:
+        return {"verified_criteria": [], "observed_test_run": False}
+    passed = [
+        cid
+        for check in verification.checks or []
+        if isinstance(check, dict) and check.get("name") == "criteria_tests"
+        for cid, result in (check.get("results") or {}).items()
+        if result == "pass"
+    ]
+    exit_code = ((verification.evidence or {}).get("test_run") or {}).get("exit_code")
+    return {
+        "verified_criteria": passed,
+        "observed_test_run": isinstance(exit_code, int)
+        and not isinstance(exit_code, bool),
+    }
+
+
 def check_database() -> list[str]:
     """Every task in the database, checked; violations prefixed with the task id."""
     from database import engine
-    from models import AgentMessage, AgentRun, BacklogItem
+    from models import AgentMessage, AgentRun, BacklogItem, Verification
     from sqlmodel import Session, select
 
     found: list[str] = []
@@ -167,8 +200,17 @@ def check_database() -> list[str]:
         for run in session.exec(
             select(AgentRun).where(AgentRun.producer == _TASK_WORKER)
         ).all():
+            verification = session.exec(
+                select(Verification)
+                .where(Verification.agent_run_id == run.id)
+                .order_by(Verification.id.desc())
+            ).first()
             runs_by_ref.setdefault(run.external_ref, []).append(
-                {"version": run.version, "status": run.status}
+                {
+                    "version": run.version,
+                    "status": run.status,
+                    **_run_facts(verification),
+                }
             )
         messages_by_task: dict[int, list[dict[str, Any]]] = {}
         for message in session.exec(select(AgentMessage)).all():

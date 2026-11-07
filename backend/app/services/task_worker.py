@@ -46,6 +46,7 @@ from sqlmodel import Session, select, text
 
 from llm.model_factory import default_model_for_role
 from services import (
+    acceptance,
     agent_run_service,
     console_assistants,
     dependencies,
@@ -1679,6 +1680,10 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
             return "delivery unconfirmed", check.get("observation", "")
         if name == "tests_run" and outcome == VERDICT_REFUTED:
             return "tests failed", check.get("observation", "")
+        if name == acceptance.CHECK_CRITERIA and outcome == VERDICT_REFUTED:
+            return "acceptance tests failed", check.get("observation", "")
+        if name == acceptance.CHECK_UNTOUCHED and outcome == VERDICT_REFUTED:
+            return "acceptance test edited", check.get("observation", "")
     return None
 
 
@@ -1796,35 +1801,7 @@ def _delivery_comment(
 
 # The project's test command is detected in services/workspace_daemon.
 _detect_test_command = detect_test_command
-
-
-async def _detect_project_test_command(
-    nats_client: NATSClient, workspace_root: str
-) -> str | None:
-    """
-    ``_detect_test_command`` on the project's machine.
-
-    The project lives where the daemon runs, so detection reads the daemon's
-    snapshot of it; a folder this server can see itself is the fallback.
-    """
-    if settings.DELIVERY_TEST_COMMAND.strip():
-        return settings.DELIVERY_TEST_COMMAND.strip()
-    try:
-        project = await workspace_daemon.inspect_project(
-            nats_client, workspace_root, snapshot=True
-        )
-    except (workspace_daemon.DaemonUnavailable, workspace_daemon.DaemonError):
-        project = None
-    if project and project.get("is_dir"):
-
-        def _detect_in_snapshot() -> str | None:
-            with workspace_daemon.materialized_snapshot(
-                project.get("snapshot") or {}
-            ) as mirror:
-                return _detect_test_command(mirror)
-
-        return await asyncio.to_thread(_detect_in_snapshot)
-    return await asyncio.to_thread(_detect_test_command, workspace_root)
+_detect_project_test_command = workspace_daemon.detect_project_test_command
 
 
 async def _run_delivery_tests(
@@ -1838,6 +1815,9 @@ async def _run_delivery_tests(
     if not command:
         evidence["test_run"] = {"command": None, "reason": "no test command found"}
         return
+    if evidence.get("acceptance"):
+        # Per-test lines, so the criteria's tests can be told apart.
+        command = acceptance.verbose_command(command)
     try:
         result = await nats_client.request(
             "workspace.execute",
@@ -1855,6 +1835,10 @@ async def _run_delivery_tests(
         }
         return
     record_test_run(evidence, command, result)
+    reply = result if isinstance(result, dict) else {}
+    acceptance.record_results(
+        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    )
 
 
 def _plan_queued_delivery(
@@ -1987,6 +1971,9 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
 
     written, _ = evaluate_workspace_writes(files, evidence)
     if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+        evidence["acceptance"] = await asyncio.to_thread(
+            acceptance.evidence_for, engine, item_id
+        )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
@@ -2084,6 +2071,9 @@ async def _deliver_artifacts(
 
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
+            evidence["acceptance"] = await asyncio.to_thread(
+                acceptance.evidence_for, engine, item["id"]
+            )
             await _run_delivery_tests(nats_client, sprint, evidence)
 
     recorded = await asyncio.to_thread(

@@ -581,7 +581,8 @@
     "qaFailuresTitle": "Fallos de QA: {{count}}/{{limit}}",
     "qaFailures": "Fallo QA {{count}}/{{limit}}",
     "waitsFor_one": "Espera a {{count}} tarea",
-    "waitsFor_other": "Espera a {{count}} tareas"
+    "waitsFor_other": "Espera a {{count}} tareas",
+    "acceptanceTests": "Tests de aceptación"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -1532,7 +1533,16 @@
       "blocked": "Bloqueado",
       "done": "Hecho",
       "summary": "{{covered}} de {{total}} criterios cubiertos, {{done}} hechos",
-      "task": "tarea #{{id}}"
+      "task": "tarea #{{id}}",
+      "verified": "Verificado",
+      "verifiedSummary": "{{verified}} de {{total}} verificados por un test que pasa",
+      "testPlanned": "Test planificado",
+      "testTask": "tests #{{id}}",
+      "testResult": {
+        "pass": "Test pasó",
+        "fail": "Test falla",
+        "missing": "Test no corrió"
+      }
     },
     "quality": {
       "title": "Atributos de calidad",
