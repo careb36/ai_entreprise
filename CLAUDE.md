@@ -144,6 +144,11 @@ Copy `.env.example` to `.env` and fill in:
   task may make before the model must answer, how long one call and one
   connection may take, and how much of a result the model is shown. Nothing
   to enable: a company with no MCP server configured runs as before.
+- `DB_AUTO_UPGRADE` — optional, default `false`. Runs the Alembic migrations
+  to head when the backend starts, for a local database run by hand. The
+  container's entrypoint and the e2e run `alembic upgrade head` themselves,
+  and the backend refuses to start on a database behind head
+  (`app/migrations.py`, `CONTRIBUTING.md` §5).
 - `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (8) — the
   Developer's workspace tools (`services/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
@@ -178,6 +183,8 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 ### Key Components
 
 **`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`).
+
+**`backend/app/migrations.py`** / **`backend/alembic/`** — The schema's version. Alembic owns it: `alembic.ini` and `alembic/env.py` (the models are the target metadata; the URL is the backend's `POSTGRES_*`, or `ALEMBIC_DATABASE_URL`), `alembic/versions/0001_baseline.py` (the baseline: creates each table the models define and the database lacks, adds each column a table lacks, and repeats the old startup's `ALTER TABLE` fixes, indexes and backfills on Postgres, so an empty database, one from `db/init-db/init.sql` and one patched by an older backend all converge). `database.prepare_database` (startup) runs `require_schema_at_head`: a database behind head stops the start with both versions in the error; `DB_AUTO_UPGRADE=true` runs `upgrade_to_head` first. `schema_differences` is what `alembic check` reports (`include_object` leaves `vector_memory` and init.sql's other tables out). The container's `CMD` runs `alembic upgrade head` before uvicorn; the e2e runs `upgrade head` then `check` on Postgres; `backend-tests.yml` runs both on a SQLite file. How to write a migration: `CONTRIBUTING.md` §5.
 
 **`backend/agents/graph.py`** — Optional LangGraph producer, disabled unless `AGENT_GRAPH_ENABLED=true`. Its runs are ingested as `AgentRun` records with `producer: "le-fabrique-graph"`.
 
@@ -427,6 +434,7 @@ Test files:
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
 | `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own, the second-attempt track record in the prompt, a send-back during the triage window makes the answer stale, a decision names the escalation it answers and is judged by it, `END` with a period or Windows line endings |
+| `test_migrations.py` | The schema's version: the migrations build the models' schema from nothing and `alembic check` finds no difference; a database from the old startup (tables present, columns and tables missing) is converged, not rebuilt, and a second run changes nothing; the backend refuses a database that is not at head naming both versions; `DB_AUTO_UPGRADE` runs the migrations at startup; one head |
 | `test_database_timezone.py` | The Postgres session is pinned to UTC, so aware datetimes in `timestamp` columns and the naive UTC text in board comments stay comparable |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |

@@ -5,7 +5,7 @@ Importing from this package gives access to every table model without
 needing to know which sub-module it lives in.  SQLModel registers each
 model with the shared ``MetaData`` object automatically when the module is
 imported, so this ``__init__`` must be imported before
-``database.create_db_and_tables()`` is called.
+``database.prepare_database()`` (or a migration) is called.
 """
 
 from .agent_message import AgentMessage

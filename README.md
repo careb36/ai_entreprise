@@ -616,7 +616,7 @@ la-fabrique/
 │   │   ├── main.py                   # FastAPI entry point · 4 bg workers · SSE bridge
 │   │   ├── models/                   # SQLModel ORM (Sprint, Company, BacklogItem…)
 │   │   ├── schemas.py                # Pydantic request/response schemas
-│   │   ├── database.py               # Engine · session · _ensure_runtime_schema()
+│   │   ├── database.py               # Engine · session · prepare_database() (schema at head)
 │   │   ├── routers/                  # sprint · inbox · procedures · messages · agent_runs · support · workspace · github
 │   │   ├── services/
 │   │   │   ├── agent_worker.py       # NATS consumer → LangGraph execution

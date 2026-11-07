@@ -186,7 +186,7 @@ def test_client(sqlite_session):
     """
     FastAPI TestClient with get_session overridden to the in-memory SQLite session.
 
-    Startup hooks that touch Postgres (create_db_and_tables), NATS, and Neo4j
+    Startup hooks that touch Postgres (prepare_database), NATS, and Neo4j
     are all patched out so no external services are required.
     """
     from database import get_session
@@ -202,7 +202,7 @@ def test_client(sqlite_session):
 
     with (
         # Lifecycle dependencies are imported into the lifecycle module namespace.
-        mock.patch("lifecycle.create_db_and_tables", return_value=None),
+        mock.patch("lifecycle.prepare_database", return_value=None),
         mock.patch(
             "lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")
         ),
