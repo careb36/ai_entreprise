@@ -77,3 +77,35 @@ There is no `develop` integration branch — it only ever mirrored `main`, and i
 was retired on 2026-10-29 along with the release pull request it existed for.
 `archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work
 `main` had already rewritten. `main` carries none of `vr/`.
+
+---
+
+## 5. Schema migrations
+
+The database schema is versioned with Alembic (`backend/alembic/`). The
+backend starts only on a database at the migrations' head: the container's
+entrypoint runs `alembic upgrade head` before uvicorn, the e2e does the same,
+and a backend run by hand needs it too (`cd backend && alembic upgrade head`,
+or `DB_AUTO_UPGRADE=true` for a local database). A database behind head
+stops the start with both versions in the error; nothing patches it in place.
+
+To change the schema:
+
+1. Change the model (`backend/app/models/`).
+2. Write the migration from the difference, against a database at head:
+   `cd backend && alembic revision --autogenerate -m "what changes"`
+   (`ALEMBIC_DATABASE_URL=sqlite:////tmp/x.sqlite` works for this; the
+   first migration is the baseline every database converges to). Read the
+   generated file: autogenerate misses renames and data moves, and a column
+   added `NOT NULL` to a table with rows needs a default or a backfill.
+3. Write the `downgrade` too; a migration that cannot be undone says so and
+   why, and raises (the baseline, `0001`, does: there is no schema before it,
+   so going back means restoring a backup).
+4. Check that the models and the migrations agree: `alembic upgrade head &&
+   alembic check` on a fresh database. CI runs this on a SQLite file
+   (`backend-tests.yml`) and the e2e on Postgres; both fail on a difference.
+5. Add the migration to the pull request with the model change. Never edit a
+   migration that has merged; write the next one.
+
+`vector_memory` is created by `db/init-db/init.sql` (it needs pgvector) and
+the migrations leave it alone.

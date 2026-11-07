@@ -29,6 +29,8 @@ COPY llm/     /app/llm/
 COPY agents/  /app/agents/
 COPY memory/  /app/memory/
 COPY telemetry.py /app/telemetry.py
+COPY alembic.ini /app/alembic.ini
+COPY alembic/  /app/alembic/
 
 EXPOSE 8000
 
@@ -36,4 +38,6 @@ EXPOSE 8000
 # /app/app  — FastAPI application package (routers, models, services, …)
 ENV PYTHONPATH="/app:/app/app"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# The schema first: the migrations to head (backend/alembic/), then the app,
+# which refuses a database behind head.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
