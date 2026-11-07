@@ -4,7 +4,7 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import acceptance, mcp_tools, risk
+from services import criteria_tests, mcp_tools, risk
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -279,7 +279,7 @@ def check_tests_run(evidence: dict) -> dict:
                 "outcome": "pass",
                 "observation": f"{target} passed{truncated}",
             }
-        all_excused, excused = acceptance.excused_failures(evidence)
+        all_excused, excused = criteria_tests.excused_failures(evidence)
         if all_excused:
             # An acceptance test fails before its implementation, by design;
             # only those failed here (``services.acceptance``).
@@ -391,8 +391,8 @@ def verify_agent_run(
         # observed run said of this task's criteria, and that an implementation
         # task left the test files alone.
         for check in (
-            acceptance.check_criteria(evidence),
-            acceptance.check_untouched(
+            criteria_tests.check_criteria(evidence),
+            criteria_tests.check_untouched(
                 [p for p in claimed_files if isinstance(p, str)], evidence
             ),
         ):

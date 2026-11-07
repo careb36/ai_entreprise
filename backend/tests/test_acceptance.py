@@ -21,7 +21,7 @@ from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.specification import Specification
-from services import acceptance, spec_check, spec_planning, task_worker
+from services import acceptance, criteria_tests, spec_check, spec_planning, task_worker
 from sqlmodel import select
 from test_specifications import GOOD
 
@@ -41,12 +41,14 @@ def _load_daemon():
 
 
 def test_criterion_ids_become_test_name_tokens_and_are_found_as_whole_words():
-    assert acceptance.token("REQ-1.2") == "req_1_2"
-    assert acceptance.names_criterion("tests/test_a.py::test_req_1_2_lists", "REQ-1.2")
-    assert acceptance.names_criterion("REQ-1.2 lists the tasks", "REQ-1.2")
+    assert criteria_tests.token("REQ-1.2") == "req_1_2"
+    assert criteria_tests.names_criterion(
+        "tests/test_a.py::test_req_1_2_lists", "REQ-1.2"
+    )
+    assert criteria_tests.names_criterion("REQ-1.2 lists the tasks", "REQ-1.2")
     # ``req_1_2`` is not ``req_1_21``, nor ``req_11_2``.
-    assert not acceptance.names_criterion("test_req_1_21_x", "REQ-1.2")
-    assert not acceptance.names_criterion("test_req_11_2_x", "REQ-1.2")
+    assert not criteria_tests.names_criterion("test_req_1_21_x", "REQ-1.2")
+    assert not criteria_tests.names_criterion("test_req_11_2_x", "REQ-1.2")
 
 
 PYTEST_OUTPUT = textwrap.dedent(
@@ -63,45 +65,47 @@ JEST_OUTPUT = "  ✓ REQ-1.1 greets by name (3 ms)\n  ✕ REQ-1.2 greets the wor
 
 
 def test_per_test_lines_of_pytest_jest_go_and_cargo_are_read():
-    assert acceptance.results_from_output(
+    assert criteria_tests.results_from_output(
         PYTEST_OUTPUT, ["REQ-1.1", "REQ-1.2", "REQ-2.1"]
     ) == {
         "REQ-1.1": "pass",
         "REQ-1.2": "fail",
         "REQ-2.1": "missing",
     }
-    assert acceptance.failing_tests(PYTEST_OUTPUT) == [
+    assert criteria_tests.failing_tests(PYTEST_OUTPUT) == [
         "tests/test_req_1.py::test_req_1_2_empty"
     ]
-    assert acceptance.results_from_output(JEST_OUTPUT, ["REQ-1.1", "REQ-1.2"]) == {
+    assert criteria_tests.results_from_output(JEST_OUTPUT, ["REQ-1.1", "REQ-1.2"]) == {
         "REQ-1.1": "pass",
         "REQ-1.2": "fail",
     }
-    assert acceptance.results_from_output(
+    assert criteria_tests.results_from_output(
         "--- PASS: TestReq_1_1 (0.00s)\n--- FAIL: TestReq_1_2 (0.00s)\n",
         ["REQ-1.1", "REQ-1.2"],
     ) == {"REQ-1.1": "pass", "REQ-1.2": "fail"}
-    assert acceptance.results_from_output(
+    assert criteria_tests.results_from_output(
         "test req_1_1_name ... ok\ntest req_1_2_empty ... FAILED\n",
         ["REQ-1.1", "REQ-1.2"],
     ) == {"REQ-1.1": "pass", "REQ-1.2": "fail"}
     # Two tests of one criterion: it passes only when both do.
-    assert acceptance.results_from_output(
+    assert criteria_tests.results_from_output(
         "a.py::test_req_1_1_a PASSED\na.py::test_req_1_1_b FAILED\n", ["REQ-1.1"]
     ) == {"REQ-1.1": "fail"}
     # ANSI colour is ignored; a summary line names no test.
-    assert acceptance.results_from_output(
+    assert criteria_tests.results_from_output(
         "\x1b[32ma.py::test_req_1_1_a PASSED\x1b[0m\n2 passed in 0.1s\n", ["REQ-1.1"]
     ) == {"REQ-1.1": "pass"}
 
 
 def test_pytest_gets_per_test_output_and_other_runners_are_left_alone():
-    assert acceptance.verbose_command("python -m pytest -q") == "python -m pytest -v"
-    assert acceptance.verbose_command("pytest -v tests") == "pytest -v tests"
-    assert acceptance.verbose_command("python -m pytest -q -p no:cacheprovider") == (
-        "python -m pytest -p no:cacheprovider -v"
+    assert (
+        criteria_tests.verbose_command("python -m pytest -q") == "python -m pytest -v"
     )
-    assert acceptance.verbose_command("npm test --silent") == "npm test --silent"
+    assert criteria_tests.verbose_command("pytest -v tests") == "pytest -v tests"
+    assert criteria_tests.verbose_command(
+        "python -m pytest -q -p no:cacheprovider"
+    ) == ("python -m pytest -p no:cacheprovider -v")
+    assert criteria_tests.verbose_command("npm test --silent") == "npm test --silent"
 
 
 # --- the test-writing tasks in a plan ---------------------------------------
@@ -182,6 +186,14 @@ class _DaemonOverNATS:
             )
         if subject == "workspace.inspect":
             return self.daemon.inspect_project(payload["path"], payload["snapshot"])
+        if subject == "workspace.hash":
+            return {
+                "files": self.daemon.file_hash.hash_files(
+                    payload["workspace_root"],
+                    payload["paths"],
+                    self.daemon._resolve_target_path,
+                )
+            }
         raise AssertionError(subject)
 
     async def publish(self, subject, payload, msg_id=None):
@@ -421,7 +433,9 @@ def test_failing_tests_first_then_the_implementation_that_verifies_the_criteria(
     ]
 
 
-def test_an_implementation_that_edits_an_acceptance_test_is_refuted(factory):
+def test_an_implementation_that_edits_an_acceptance_test_is_refuted_and_the_test_restored(
+    factory, tmp_path
+):
     session, _spec, sprint, nats, tests_task, board_task, _move = factory
     _deliver(nats, tests_task, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
     tests_task.status = "done"
@@ -440,19 +454,65 @@ def test_an_implementation_that_edits_an_acceptance_test_is_refuted(factory):
         },
     )
     verification, checks = _checks(session, board_task)
-    # The tests pass now, but the test file was rewritten: refuted, never silently accepted.
-    assert checks["criteria_tests"]["outcome"] == "pass"
+    # The weakened test was put back before the run: QA's tests judge the
+    # criteria (and fail), the edit is refuted, never silently accepted.
+    assert (
+        tmp_path / "project" / "tests" / "test_req_1.py"
+    ).read_text() == ACCEPTANCE_TESTS
+    assert checks["criteria_tests"]["results"] == {"REQ-1.1": "fail", "REQ-1.2": "fail"}
     assert checks["acceptance_tests_untouched"] == {
         "name": "acceptance_tests_untouched",
         "outcome": "refuted",
         "observation": (
             "edits the acceptance test tests/test_req_1.py: a change to a criterion's "
-            "test is the specification's to decide"
+            "test is the specification's to decide; restored from QA's delivery: "
+            "tests/test_req_1.py"
         ),
     }
+    assert verification.evidence["acceptance"]["tampered"] == ["tests/test_req_1.py"]
     assert verification.verdict == "refuted"
     problem, observation = task_worker._delivery_gate(sprint.company_id, board_task.id)
     assert problem == "acceptance test edited" and "tests/test_req_1.py" in observation
+
+    # A file changed behind the loop's back (not in a delivery) is seen the same way.
+    (tmp_path / "project" / "tests" / "test_req_1.py").write_text(
+        "def test_req_1_1_x():\n    pass\n"
+    )
+    _deliver(nats, board_task, sprint, {"src/__init__.py": "", "src/board.py": BOARD})
+    verification, checks = _checks(session, board_task)
+    assert (
+        tmp_path / "project" / "tests" / "test_req_1.py"
+    ).read_text() == ACCEPTANCE_TESTS
+    assert checks["acceptance_tests_untouched"]["outcome"] == "refuted"
+    assert checks["criteria_tests"]["results"] == {"REQ-1.1": "pass", "REQ-1.2": "pass"}
+    assert verification.verdict == "refuted"
+
+    # Left alone, the next delivery is verified against QA's tests.
+    _deliver(nats, board_task, sprint, {"src/__init__.py": "", "src/board.py": BOARD})
+    verification, checks = _checks(session, board_task)
+    assert checks["acceptance_tests_untouched"]["outcome"] == "pass"
+    assert verification.verdict == "verified"
+
+
+def test_the_daemon_hashes_files_as_they_are_on_disk(tmp_path):
+    daemon = _load_daemon()
+    root = tmp_path / "p"
+    (root / "tests").mkdir(parents=True)
+    (root / "tests" / "test_a.py").write_bytes(b"x = 1\n")
+    reported = daemon.file_hash.hash_files(
+        str(root),
+        ["tests/test_a.py", "tests/none.py", "../out"],
+        daemon._resolve_target_path,
+    )
+    assert [(f["path"], f["status"]) for f in reported] == [
+        ("tests/test_a.py", "present"),
+        ("tests/none.py", "missing"),
+        ("../out", "rejected"),
+    ]
+    assert reported[0]["sha256"] == __import__("hashlib").sha256(b"x = 1\n").hexdigest()
+    assert daemon.file_hash.hash_files(
+        str(tmp_path / "nowhere"), ["a"], daemon._resolve_target_path
+    ) == [{"path": "a", "status": "workspace_missing"}]
 
 
 def test_a_test_task_whose_tests_do_not_run_is_refuted(factory):

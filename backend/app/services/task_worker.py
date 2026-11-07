@@ -49,6 +49,7 @@ from services import (
     acceptance,
     agent_run_service,
     console_assistants,
+    criteria_tests,
     dependencies,
     git_workflow,
     mcp_tools,
@@ -119,7 +120,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
-from services.workspace_daemon import detect_test_command, record_test_run
+from services.workspace_daemon import detect_test_command
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -1672,7 +1673,11 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
         return None
     if (verification.evidence or {}).get("delivery_queued"):
         return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
-    for check in verification.checks or []:
+    checks = list(verification.checks or [])
+    # An edited acceptance test is the reason to give first: the tests that
+    # then fail are QA's, restored.
+    checks.sort(key=lambda c: c.get("name") != criteria_tests.CHECK_UNTOUCHED)
+    for check in checks:
         name, outcome = check.get("name"), check.get("outcome")
         if name == "files_written" and outcome == VERDICT_REFUTED:
             return "delivery refuted", check.get("observation", "")
@@ -1680,9 +1685,9 @@ def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
             return "delivery unconfirmed", check.get("observation", "")
         if name == "tests_run" and outcome == VERDICT_REFUTED:
             return "tests failed", check.get("observation", "")
-        if name == acceptance.CHECK_CRITERIA and outcome == VERDICT_REFUTED:
+        if name == criteria_tests.CHECK_CRITERIA and outcome == VERDICT_REFUTED:
             return "acceptance tests failed", check.get("observation", "")
-        if name == acceptance.CHECK_UNTOUCHED and outcome == VERDICT_REFUTED:
+        if name == criteria_tests.CHECK_UNTOUCHED and outcome == VERDICT_REFUTED:
             return "acceptance test edited", check.get("observation", "")
     return None
 
@@ -1804,41 +1809,7 @@ _detect_test_command = detect_test_command
 _detect_project_test_command = workspace_daemon.detect_project_test_command
 
 
-async def _run_delivery_tests(
-    nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
-) -> None:
-    """Run the project's tests through the daemon and add the result to *evidence*:
-    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
-    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
-    workspace_root = evidence["workspace_root"]
-    command = await _detect_project_test_command(nats_client, workspace_root)
-    if not command:
-        evidence["test_run"] = {"command": None, "reason": "no test command found"}
-        return
-    if evidence.get("acceptance"):
-        # Per-test lines, so the criteria's tests can be told apart.
-        command = acceptance.verbose_command(command)
-    try:
-        result = await nats_client.request(
-            "workspace.execute",
-            {
-                "command": command,
-                "workspace_root": workspace_root,
-                "sprint_id": sprint["id"],
-            },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
-        )
-    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
-        evidence["test_run"] = {
-            "command": command,
-            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
-        }
-        return
-    record_test_run(evidence, command, result)
-    reply = result if isinstance(result, dict) else {}
-    acceptance.record_results(
-        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
-    )
+_run_delivery_tests = workspace_daemon.run_delivery_tests
 
 
 def _plan_queued_delivery(
@@ -1974,6 +1945,9 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         evidence["acceptance"] = await asyncio.to_thread(
             acceptance.evidence_for, engine, item_id
         )
+        await acceptance.guard_test_files(
+            nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+        )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
@@ -2073,6 +2047,9 @@ async def _deliver_artifacts(
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
             evidence["acceptance"] = await asyncio.to_thread(
                 acceptance.evidence_for, engine, item["id"]
+            )
+            await acceptance.guard_test_files(
+                nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
             await _run_delivery_tests(nats_client, sprint, evidence)
 

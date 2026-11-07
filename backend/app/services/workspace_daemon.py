@@ -19,6 +19,8 @@ from typing import Any
 
 from config import settings
 
+from services import criteria_tests
+
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
 INSPECT_TIMEOUT_SECONDS = 30.0
@@ -286,3 +288,40 @@ def detect_test_command(workspace_root: str) -> str | None:
     ):
         return "python -m pytest -q"
     return None
+
+
+async def run_delivery_tests(
+    nats_client: Any, sprint: dict[str, Any], evidence: dict[str, Any]
+) -> None:
+    """Run the project's tests through the daemon and add the result to *evidence*:
+    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
+    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
+    workspace_root = evidence["workspace_root"]
+    command = await detect_project_test_command(nats_client, workspace_root)
+    if not command:
+        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        return
+    if evidence.get("acceptance"):
+        # Per-test lines, so the criteria's tests can be told apart.
+        command = criteria_tests.verbose_command(command)
+    try:
+        result = await nats_client.request(
+            "workspace.execute",
+            {
+                "command": command,
+                "workspace_root": workspace_root,
+                "sprint_id": sprint["id"],
+            },
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
+        evidence["test_run"] = {
+            "command": command,
+            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
+        }
+        return
+    record_test_run(evidence, command, result)
+    reply = result if isinstance(result, dict) else {}
+    criteria_tests.record_results(
+        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    )
