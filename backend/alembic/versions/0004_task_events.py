@@ -1,7 +1,7 @@
 """Add task_events table for the task lifecycle event log.
 
-Revision ID: 0002
-Revises: 0001
+Revision ID: 0004
+Revises: 0003
 Create Date: 2026-11-07 21:00:00 UTC
 """
 
@@ -12,8 +12,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0002"
-down_revision = "0001"
+revision = "0004"
+down_revision = "0003"
 branch_labels = None
 depends_on = None
 
@@ -22,9 +22,15 @@ def upgrade() -> None:
     op.create_table(
         "task_events",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
-        sa.Column("company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False),
-        sa.Column("sprint_id", sa.Integer(), sa.ForeignKey("sprints.id"), nullable=False),
-        sa.Column("task_id", sa.Integer(), sa.ForeignKey("backlog_items.id"), nullable=True),
+        sa.Column(
+            "company_id", sa.Integer(), sa.ForeignKey("companies.id"), nullable=False
+        ),
+        sa.Column(
+            "sprint_id", sa.Integer(), sa.ForeignKey("sprints.id"), nullable=False
+        ),
+        sa.Column(
+            "task_id", sa.Integer(), sa.ForeignKey("backlog_items.id"), nullable=True
+        ),
         sa.Column("event_type", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("payload", sa.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
