@@ -104,20 +104,8 @@ def suggest_for_blocked(
             "suggested_category": "carry_over",
             "suggested_reason": "scrum master suggested another attempt",
         }
-    status = getattr(item, "status", None)
-    if status == "blocked":
-        try:
-            from services.board import blocked_item_next_step
-
-            if blocked_item_next_step(getattr(item, "comments", None), getattr(item, "assignee", None)) == "frozen":
-                return None
-        except Exception:  # noqa: BLE001
-            pass
-    return {
-        "suggested_decision": "accept",
-        "suggested_category": "accept_low_risk",
-        "suggested_reason": "verified delivery, low risk",
-    }
+    # Do not suggest accepting without positive evidence (verified, low-risk).
+    return None
 
 
 def suggest_for_proposal(procedure: Any) -> dict[str, Any] | None:
