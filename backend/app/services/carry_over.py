@@ -132,6 +132,7 @@ def carry_over(
             and new_sprint.specification_id is not None
             and new_sprint.specification_id == sprint.specification_id
             else None,
+            kind=item.kind,
             comments=[
                 {
                     "author": "System",

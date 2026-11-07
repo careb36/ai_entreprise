@@ -147,10 +147,11 @@ describe('Kanban cards', () => {
           todo: [
             makeItem(5, 'Checkout', 'todo', { depends_on: [2, 3], waiting_for: [2, 3] }),
             makeItem(6, 'Receipt', 'todo', { depends_on: [2], waiting_for: [] }),
+            makeItem(8, 'Acceptance tests for REQ-1', 'todo', { assignee: 'QA', kind: 'acceptance_tests' }),
             item,
           ],
         },
-        total: 3,
+        total: 4,
       },
       isLoading: false,
       isError: false,
@@ -165,5 +166,9 @@ describe('Kanban cards', () => {
       const card = screen.getByRole('link', { name: title }).closest('.card') as HTMLElement
       expect(within(card).queryByRole('img', { name: /^Waits for/ })).not.toBeInTheDocument()
     }
+    // QA's test-writing task is marked as such; the others are not.
+    const tests = screen.getByRole('link', { name: 'Acceptance tests for REQ-1' }).closest('.card') as HTMLElement
+    expect(within(tests).getByText('Acceptance tests')).toBeInTheDocument()
+    expect(within(waiting).queryByText('Acceptance tests')).not.toBeInTheDocument()
   })
 })

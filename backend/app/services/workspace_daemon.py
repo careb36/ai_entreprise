@@ -8,6 +8,7 @@ request to the daemon.  Paths are the host's own absolute paths and are passed
 through as opaque strings: the backend never resolves them locally.
 """
 
+import asyncio
 import contextlib
 import json
 import os
@@ -17,6 +18,8 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from config import settings
+
+from services import criteria_tests
 
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
@@ -217,6 +220,30 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
 _NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
 
 
+async def detect_project_test_command(
+    nats_client: Any, workspace_root: str
+) -> str | None:
+    """``detect_test_command`` on the project's machine.
+
+    The project lives where the daemon runs, so detection reads the daemon's
+    snapshot of it; a folder this server can see itself is the fallback.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    try:
+        project = await inspect_project(nats_client, workspace_root, snapshot=True)
+    except (DaemonUnavailable, DaemonError):
+        project = None
+    if project and project.get("is_dir"):
+
+        def _detect_in_snapshot() -> str | None:
+            with materialized_snapshot(project.get("snapshot") or {}) as mirror:
+                return detect_test_command(mirror)
+
+        return await asyncio.to_thread(_detect_in_snapshot)
+    return await asyncio.to_thread(detect_test_command, workspace_root)
+
+
 def detect_test_command(workspace_root: str) -> str | None:
     """
     The command that runs this project's tests, or ``None``.
@@ -261,3 +288,40 @@ def detect_test_command(workspace_root: str) -> str | None:
     ):
         return "python -m pytest -q"
     return None
+
+
+async def run_delivery_tests(
+    nats_client: Any, sprint: dict[str, Any], evidence: dict[str, Any]
+) -> None:
+    """Run the project's tests through the daemon and add the result to *evidence*:
+    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
+    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
+    workspace_root = evidence["workspace_root"]
+    command = await detect_project_test_command(nats_client, workspace_root)
+    if not command:
+        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        return
+    if evidence.get("acceptance"):
+        # Per-test lines, so the criteria's tests can be told apart.
+        command = criteria_tests.verbose_command(command)
+    try:
+        result = await nats_client.request(
+            "workspace.execute",
+            {
+                "command": command,
+                "workspace_root": workspace_root,
+                "sprint_id": sprint["id"],
+            },
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
+        evidence["test_run"] = {
+            "command": command,
+            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
+        }
+        return
+    record_test_run(evidence, command, result)
+    reply = result if isinstance(result, dict) else {}
+    criteria_tests.record_results(
+        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    )
