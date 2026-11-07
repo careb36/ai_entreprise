@@ -362,10 +362,31 @@ class LLMCallError(RuntimeError):
         self.credit_provider = credit_provider
 
 
-def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
-    """The agent's configured model, or its role's default from model_factory."""
+def _resolve_agent_model(
+    agent: dict[str, Any], default_role: str = "Dev", item: dict[str, Any] | None = None
+) -> str:
+    """The agent's configured model, or its role's default from model_factory.
+
+    When a routing policy is configured (``AGENT_MODEL_POLICY``), the model may
+    be chosen by the task's estimated difficulty instead of the role default.
+    """
     configured = (agent.get("model") or "").strip()
-    return configured or default_model_for_role(agent.get("role") or default_role)
+    if configured:
+        return configured
+    role = agent.get("role") or default_role
+    base = default_model_for_role(role)
+    if item is None:
+        return base
+    try:
+        from services import model_routing
+
+        difficulty = model_routing.estimate_difficulty(item)
+        routed = model_routing.model_for(role, difficulty)
+        if routed:
+            return routed
+    except Exception as exc:  # noqa: BLE001 - routing is optional
+        logger.debug("model routing skipped: %s", exc)
+    return base
 
 
 def _execute_task(
@@ -468,7 +489,7 @@ def _execute_task(
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
 
-    model = _resolve_agent_model(agent)
+    model = _resolve_agent_model(agent, item=item)
     role = agent.get("role", "Dev")
 
     who = agent.get("name") or role

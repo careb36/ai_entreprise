@@ -174,6 +174,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     SECURITY_HEADERS_ENABLED: bool = True
+    AGENT_MODEL_POLICY: str = ""
 
     class Config:
         env_file = ".env"
