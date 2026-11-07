@@ -24,7 +24,7 @@ def check_sandbox(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     mode = str(info.get("mode") or "host").strip().lower()
     limits = info.get("limits") if isinstance(info.get("limits"), dict) else {}
     if mode in ("container", "bwrap"):
-        obs = f"{mode}: isolated"
+        obs = f"{mode}: isolated (as reported by the daemon)"
         if limits:
             obs += " (" + ", ".join(f"{k}={v}" for k, v in sorted(limits.items())) + ")"
         return {
