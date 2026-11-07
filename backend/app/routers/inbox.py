@@ -105,6 +105,19 @@ async def inbox(
         )
     ).one()
 
+    pending_run_rows = []
+    if settings.MANAGER_AGENT_ENABLED:
+        pending_run_rows = session.exec(
+            select(AgentRun)
+            .where(
+                AgentRun.company_id == company_id,
+                AgentRun.id.not_in(decided),
+                AgentRun.producer.not_in(IN_HOUSE_PRODUCERS),
+            )
+            .order_by(AgentRun.id.desc())
+            .limit(20)
+        ).all()
+
     return {
         "blocked_tasks": blocked_tasks,
         "proposals": [
@@ -115,10 +128,23 @@ async def inbox(
                 "proposed_by": p.proposed_by,
                 "source_sprint_id": p.source_sprint_id,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
+                "suggestion": (
+                    manager_agent.suggest_for_proposal(p)
+                    if settings.MANAGER_AGENT_ENABLED
+                    else None
+                ),
             }
             for p in proposals
         ],
         "pending_runs": int(pending_runs or 0),
+        "run_suggestions": [
+            {
+                "id": r.id,
+                "producer": r.producer,
+                "suggestion": manager_agent.suggest_for_run(r),
+            }
+            for r in pending_run_rows
+        ],
         "blocked_total": blocked_total,
         "total": blocked_total + len(proposals) + int(pending_runs or 0),
     }

@@ -93,6 +93,24 @@ def suggest_for_blocked(
     }
 
 
+def suggest_for_proposal(procedure: Any) -> dict[str, Any] | None:
+    """A deterministic suggestion for a proposed procedure."""
+    return {
+        "suggested_decision": "adopt",
+        "suggested_category": "adopt_procedure",
+        "suggested_reason": "procedure proposed for review",
+    }
+
+
+def suggest_for_run(run: Any) -> dict[str, Any] | None:
+    """A deterministic suggestion for an external producer's run."""
+    return {
+        "suggested_decision": "approve",
+        "suggested_category": "approve_run",
+        "suggested_reason": "external run awaiting decision",
+    }
+
+
 def record_suggestion(item: Any, suggestion: dict[str, Any] | None) -> None:
     """Store the suggestion apart from the person's decision."""
     if not isinstance(item, dict):
