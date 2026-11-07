@@ -12,11 +12,12 @@ queue.
 """
 
 from auth_policy import current_user_if_required, require_company_role
+from config import settings
 from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
-from services import scrum_master
+from services import manager_agent, scrum_master
 from services.board import (
     awaits_risk_acceptance,
     block_reason,
@@ -76,6 +77,11 @@ async def inbox(
                 # Approved by QA, but high risk (services/risk.py): a person
                 # accepts it (marks it done) or sends it back to work.
                 "risk_hold": awaits_risk_acceptance(item.comments),
+                "suggestion": (
+                    manager_agent.suggest_for_blocked(item, triages.get(item.id))
+                    if settings.MANAGER_AGENT_ENABLED
+                    else None
+                ),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )
