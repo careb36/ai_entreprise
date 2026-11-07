@@ -8,6 +8,8 @@ adds, and Postgres-only where it repeats the old startup's fixes."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import database
 import migrations
 import pytest
@@ -60,7 +62,8 @@ def test_a_database_from_the_old_startup_is_converged_not_rebuilt(db_file):
         row = connection.execute(
             text("SELECT company_name, git_workflow FROM companies")
         ).one()
-    assert row == ("Acme", None)
+    # The old startup's DEFAULT FALSE: the existing row gets false, not NULL.
+    assert row[0] == "Acme" and row[1] in (0, False)
     # A column the model requires was added nullable (an existing row has no
     # value for it); that is the one difference left with the models, and it
     # is named, not hidden. git_base_branch is optional in the model too.
@@ -96,14 +99,16 @@ def test_the_backend_refuses_a_database_that_is_not_at_head(db_file):
 
 
 def test_startup_runs_the_migrations_only_when_asked(db_file, monkeypatch):
+    from config import settings
+
     monkeypatch.setattr(database, "engine", db_file)
-    monkeypatch.delenv("DB_AUTO_UPGRADE", raising=False)
+    monkeypatch.setattr(settings, "DB_AUTO_UPGRADE", False)
     with pytest.raises(migrations.SchemaBehindError):
         database.prepare_database()
-    monkeypatch.setenv("DB_AUTO_UPGRADE", "true")
+    monkeypatch.setattr(settings, "DB_AUTO_UPGRADE", True)
     database.prepare_database()
     assert migrations.current_revision(db_file) == "0001"
-    monkeypatch.delenv("DB_AUTO_UPGRADE")
+    monkeypatch.setattr(settings, "DB_AUTO_UPGRADE", False)
     database.prepare_database()  # at head now: nothing to do
 
 
@@ -144,3 +149,50 @@ def test_the_baseline_is_frozen_a_later_model_change_does_not_leak_into_it(
         line for line in source.splitlines() if line.startswith(("import ", "from "))
     ]
     assert not any("models" in line or "sqlmodel" in line for line in imports), imports
+
+
+def test_a_legacy_sqlite_database_missing_a_foreign_key_column_converges(db_file):
+    # sprints.specification_id references specifications: SQLite cannot add
+    # that constraint in place, so the baseline adds it through a batch.
+    import sqlalchemy as sa
+
+    legacy = sa.MetaData()
+    for table in SQLModel.metadata.sorted_tables:
+        if table.name == "sprints":
+            sa.Table(
+                "sprints",
+                legacy,
+                *[c.copy() for c in table.columns if c.name != "specification_id"],
+            )
+        else:
+            table.to_metadata(legacy)
+    legacy.create_all(db_file)
+    migrations.upgrade_to_head(db_file)
+    inspector = inspect(db_file)
+    assert "specification_id" in {c["name"] for c in inspector.get_columns("sprints")}
+    assert any(
+        fk["referred_table"] == "specifications"
+        for fk in inspector.get_foreign_keys("sprints")
+    )
+
+
+def test_a_new_migration_can_be_generated_and_the_baseline_cannot_be_undone(
+    db_file, tmp_path
+):
+    from alembic import command
+
+    migrations.upgrade_to_head(db_file)
+    config = migrations.alembic_config()
+    versions = migrations.BACKEND_DIR / "alembic" / "versions"
+    config.set_main_option("version_locations", f"{versions} {tmp_path}")
+    script = command.revision(
+        config, message="nothing yet", autogenerate=True, version_path=str(tmp_path)
+    )
+    generated = Path(script.path).read_text()
+    assert "down_revision" in generated and "'0001'" in generated
+    with (
+        pytest.raises(NotImplementedError, match="restore a backup"),
+        db_file.begin() as connection,
+    ):
+        config.attributes["connection"] = connection
+        command.downgrade(config, "base")
