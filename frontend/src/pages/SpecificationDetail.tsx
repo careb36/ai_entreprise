@@ -8,14 +8,16 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, CircleAlert, CircleCheck, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
+import { Check, CircleCheck, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
+import { ArchitectureSummary } from '../components/ArchitectureSummary'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { FindingList, Where } from '../components/Findings'
 import { SpecificationEditor } from '../components/SpecificationEditor'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
 import { errorDetail } from '../services/api'
 import {
-  type Coverage, type CoverageStatus, type Finding, type Specification, type SpecificationBody, SpecificationConflict,
+  type Coverage, type CoverageStatus, type Specification, type SpecificationBody, SpecificationConflict,
   useAnswerQuestion, useApproveSpecification, useDraftSpecification, useReviseSpecification, useSpecification, useUpdateSpecification,
 } from '../services/specifications'
 import { useAppStore } from '../store/useAppStore'
@@ -46,33 +48,6 @@ function toBody(specification: Specification): SpecificationBody {
     quality: specification.quality.map(q => ({ attribute: q.attribute, target: q.target })),
     constraints: [...specification.constraints],
   }
-}
-
-function Where({ where }: { where: string }) {
-  return <code className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-gray-300">{where}</code>
-}
-
-function FindingList({ findings, severity }: { findings: Finding[]; severity: Finding['severity'] }) {
-  const { t } = useTranslation()
-  const own = findings.filter(f => f.severity === severity)
-  if (own.length === 0) return null
-  const blocking = severity === 'blocking'
-  return (
-    <div>
-      <h3 className={`mb-1 text-xs font-semibold uppercase tracking-wider ${blocking ? 'text-red-300' : 'text-amber-300'}`}>
-        {blocking ? t('specifications.check.blocking') : t('specifications.check.warnings')}
-      </h3>
-      <ul aria-label={blocking ? t('specifications.check.blocking') : t('specifications.check.warnings')} className="space-y-1">
-        {own.map((finding, i) => (
-          <li key={`${finding.where}-${finding.code}-${i}`} className="flex flex-wrap items-center gap-2 text-sm text-gray-200">
-            {blocking ? <CircleAlert size={14} className="text-red-300" aria-hidden="true" /> : <CircleAlert size={14} className="text-amber-300" aria-hidden="true" />}
-            <Where where={finding.where} />
-            <span>{finding.message}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
 }
 
 function CheckPanel({ specification }: { specification: Specification }) {
@@ -359,6 +334,7 @@ export default function SpecificationDetail() {
               </ul>
             )}
           </section>
+          <ArchitectureSummary specification={specification} canWrite={canWrite} />
           <Requirements specification={specification} coverage={specification.coverage} />
           <section aria-labelledby="specification-quality" className="card p-4 space-y-2">
             <h2 id="specification-quality" className="text-sm font-semibold text-white">{t('specifications.quality.title')}</h2>

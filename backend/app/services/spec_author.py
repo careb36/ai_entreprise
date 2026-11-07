@@ -85,9 +85,10 @@ def ask(
     *,
     max_tokens: int = DRAFT_MAX_TOKENS,
     timeout: float = DRAFT_TIMEOUT_SECONDS,
+    role: str = PO_ROLE,
     bu_id: int | None = None,
 ) -> str:
-    """One question to the PO through the proxy; no database involved.
+    """One question to an agent (the PO by default) through the proxy; no database involved.
 
     *bu_id* is the company's business unit: the proxy enforces the budget
     and accounts the usage by it.
@@ -99,7 +100,7 @@ def ask(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
-    result = client.chat(messages=messages, model=model, role=PO_ROLE, bu_id=bu_id)
+    result = client.chat(messages=messages, model=model, role=role, bu_id=bu_id)
     if not isinstance(result, dict) or result.get("error"):
         raise SpecAuthorError(f"LLM call failed: {result!r}"[:500])
     choices = result.get("choices") or [{}]

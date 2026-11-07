@@ -1596,6 +1596,120 @@
       "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
     }
   },
+  "architectures": {
+    "title": "Arquitectura",
+    "loading": "Cargando la arquitectura…",
+    "loadError": "No se pudo cargar la arquitectura: {{message}}",
+    "loadingOne": "Cargando la arquitectura…",
+    "loadOneError": "No se pudo cargar la arquitectura: {{message}}",
+    "invalidId": "ID de arquitectura inválido: {{id}}",
+    "back": "Volver a la especificación",
+    "managerOnly": "Solo un Manager escribe una arquitectura.",
+    "noneHint": "Todavía no hay arquitectura. Pedile un diseño al Arquitecto a partir de esta especificación, o escribila vos.",
+    "noneViewer": "Todavía no hay arquitectura. Un Manager le pide un diseño al Arquitecto, o escribe una.",
+    "askArchitect": "Pedile un diseño al Arquitecto",
+    "writeYourself": "Escribila vos",
+    "drafting": "El Arquitecto está diseñando…",
+    "draftError": "El Arquitecto no pudo diseñarla: {{message}}",
+    "overview": "Panorama",
+    "writtenTo": "Escrita en {{path}} el {{date}}, sha256 {{hash}}",
+    "check": {
+      "ok": "Nada bloquea esta arquitectura: está lista para aprobar."
+    },
+    "questions": {
+      "none": "El Arquitecto no dejó preguntas."
+    },
+    "kinds": {
+      "http": "HTTP",
+      "function": "Función",
+      "event": "Evento",
+      "cli": "CLI",
+      "schema": "Esquema",
+      "other": "Otro"
+    },
+    "modules": {
+      "title": "Módulos",
+      "none": "Sin módulos.",
+      "dependsOn": "Depende de",
+      "covers": "Cubre"
+    },
+    "interfaces": {
+      "title": "Interfaces",
+      "none": "Sin interfaces.",
+      "providedBy": "Provista por",
+      "consumers": "Consumida por"
+    },
+    "decisions": {
+      "title": "Decisiones",
+      "none": "Sin decisiones.",
+      "context": "Contexto",
+      "decision": "Decisión",
+      "consequences": "Consecuencias"
+    },
+    "conventions": {
+      "title": "Convenciones",
+      "none": "Sin convenciones."
+    },
+    "markdown": {
+      "title": "Documento",
+      "view": "Ver como Markdown",
+      "loading": "Cargando el documento…",
+      "error": "No se pudo cargar el documento: {{message}}"
+    },
+    "actions": {
+      "reviseArchitect": "Pedile al Arquitecto que la revise",
+      "reviseHint": "Una nueva versión en borrador; esta sigue aprobada hasta que se apruebe la nueva.",
+      "write": "Escribir en el repositorio",
+      "writing": "Escribiendo…",
+      "written": "Escrita en {{path}}, sha256 {{hash}}",
+      "writeError": "No se pudo escribir: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Editor de arquitectura",
+      "newTitle": "Nueva arquitectura",
+      "idsNote": "Los ids (MOD-1, IF-1, ADR-1) se asignan al guardar; acá los módulos se nombran y los nombres se convierten en ids.",
+      "title": "Título",
+      "overview": "Panorama",
+      "module": "Módulo {{n}}",
+      "moduleName": "Nombre",
+      "moduleNameOf": "Nombre del módulo {{n}}",
+      "modulePath": "Ruta",
+      "modulePathOf": "Ruta del módulo {{n}}",
+      "responsibility": "Responsabilidad",
+      "responsibilityOf": "Responsabilidad del módulo {{n}}",
+      "dependsOn": "Depende de",
+      "dependsOnItem": "El módulo {{n}} depende de {{name}}",
+      "covers": "Cubre",
+      "coversItem": "El módulo {{n}} cubre {{id}}",
+      "addModule": "Agregar un módulo",
+      "removeModule": "Quitar el módulo {{n}}",
+      "nothingToPick": "Todavía no hay nada para elegir.",
+      "interface": "Interfaz {{n}}",
+      "interfaceName": "Nombre",
+      "interfaceNameOf": "Nombre de la interfaz {{n}}",
+      "kind": "Tipo",
+      "kindOf": "Tipo de la interfaz {{n}}",
+      "providedBy": "Provista por",
+      "providedByOf": "Módulo que provee la interfaz {{n}}",
+      "pickModule": "Elegí un módulo…",
+      "contract": "Contrato",
+      "contractOf": "Contrato de la interfaz {{n}}",
+      "consumers": "Consumida por",
+      "consumersItem": "La interfaz {{n}} es consumida por {{name}}",
+      "addInterface": "Agregar una interfaz",
+      "removeInterface": "Quitar la interfaz {{n}}",
+      "decision": "Decisión {{n}}",
+      "decisionTitle": "Título",
+      "decisionTitleOf": "Título de la decisión {{n}}",
+      "decisionField": "{{field}} de la decisión {{n}}",
+      "addDecision": "Agregar una decisión",
+      "removeDecision": "Quitar la decisión {{n}}",
+      "conventionOf": "Convención {{n}}",
+      "addConvention": "Agregar una convención",
+      "removeConvention": "Quitar la convención {{n}}",
+      "incomplete": "Cada módulo necesita un nombre y una ruta, cada interfaz un nombre y su módulo, cada decisión un título."
+    }
+  },
   "procedures": {
     "title": "Procedimientos",
     "subtitle": "Las reglas que sigue cada rol. El ScrumMaster las propone después de un sprint con rework; los números del tablero las mantienen o las revierten.",
