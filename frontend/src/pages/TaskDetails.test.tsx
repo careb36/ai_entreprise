@@ -205,6 +205,59 @@ describe('the criteria a task covers', () => {
   })
 })
 
+describe('the tasks a task waits for', () => {
+  function board(task: Record<string, unknown>) {
+    const base = { sprint_id: 9, description: '', priority: 'high', assignee: 'Developer', comments: [], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' }
+    return {
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening' },
+        columns: {
+          done: [{ ...base, id: 10, title: 'Store', status: 'done' }],
+          todo: [{ ...base, id: 12, title: 'Checkout', status: 'todo', ...task }],
+        },
+      },
+      isLoading: false,
+      isError: false,
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAppStore.setState({ companyId: 42, activeSprintId: 9 })
+    capabilitiesQuery.mockReturnValue({ data: { memory: false } } as never)
+    runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
+  })
+
+  it('links each task still waited for, with its title when the board has it', () => {
+    boardQuery.mockReturnValue(board({ depends_on: [10, 11], waiting_for: [10, 11] }) as never)
+    setup('/sprints/9/tasks/12')
+    const waits = screen.getByLabelText('Waits for')
+    expect(within(waits).getAllByRole('link').map(link => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['task #10: Store', '/sprints/9/tasks/10'],
+      ['task #11', '/sprints/9/tasks/11'],
+    ])
+    expect(screen.queryByLabelText('Depended on')).not.toBeInTheDocument()
+  })
+
+  it('shows the dependencies more quietly once none is waited for', () => {
+    boardQuery.mockReturnValue(board({ depends_on: [10], waiting_for: [] }) as never)
+    setup('/sprints/9/tasks/12')
+    const depended = screen.getByLabelText('Depended on')
+    expect(within(depended).getByRole('link', { name: 'task #10: Store' })).toHaveAttribute('href', '/sprints/9/tasks/10')
+    expect(screen.queryByLabelText('Waits for')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['no dependencies', { depends_on: [], waiting_for: [] }],
+    ['an older board without the fields', {}],
+  ])('shows nothing with %s', (_, task) => {
+    boardQuery.mockReturnValue(board(task) as never)
+    setup('/sprints/9/tasks/12')
+    expect(screen.queryByLabelText('Waits for')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Depended on')).not.toBeInTheDocument()
+  })
+})
+
 describe('task delivery evidence', () => {
   const boardWithTask = {
     data: {

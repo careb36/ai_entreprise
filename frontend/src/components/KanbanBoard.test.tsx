@@ -14,10 +14,10 @@ vi.mock('../hooks/useQueries', async importOriginal => ({
   useUpdateBacklogItem: vi.fn(),
 }))
 
-function makeItem(id: number, title: string, status = 'todo') {
+function makeItem(id: number, title: string, status = 'todo', extra: Record<string, unknown> = {}) {
   return {
     id, sprint_id: 7, title, description: '', status, priority: 'high',
-    assignee: 'Developer', comments: [], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z',
+    assignee: 'Developer', comments: [], created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...extra,
   }
 }
 
@@ -137,5 +137,33 @@ describe('Kanban cards', () => {
       expect(within(otherCard).queryByRole('link', { name: /^Delivery:/ })).not.toBeInTheDocument()
     }
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+  })
+
+  it('badges a card with how many tasks it still waits for, and only then', () => {
+    vi.mocked(useSprintBoard).mockReturnValue({
+      data: {
+        sprint: { id: 7, sprint_name: 'Hardening' },
+        columns: {
+          todo: [
+            makeItem(5, 'Checkout', 'todo', { depends_on: [2, 3], waiting_for: [2, 3] }),
+            makeItem(6, 'Receipt', 'todo', { depends_on: [2], waiting_for: [] }),
+            item,
+          ],
+        },
+        total: 3,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never)
+    renderBoard()
+
+    const waiting = screen.getByRole('link', { name: 'Checkout' }).closest('.card') as HTMLElement
+    const badge = within(waiting).getByRole('img', { name: 'Waits for 2 tasks' })
+    expect(badge).toHaveTextContent('2')
+    for (const title of ['Receipt', 'Encrypt credentials']) {
+      const card = screen.getByRole('link', { name: title }).closest('.card') as HTMLElement
+      expect(within(card).queryByRole('img', { name: /^Waits for/ })).not.toBeInTheDocument()
+    }
   })
 })

@@ -25,7 +25,7 @@ const plan: SprintPlanResponse = {
   uncovered: ['REQ-2.1'],
   tasks: [
     { title: 'Cart listing', description: 'List the items', assignee: 'Developer', priority: 'high', covers: ['REQ-1.1', 'REQ-1.2'] },
-    { title: 'Payment', description: 'Take the money', assignee: 'Developer', priority: 'high', covers: [] },
+    { title: 'Payment', description: 'Take the money', assignee: 'Developer', priority: 'high', covers: [], depends_on: [0] },
   ],
 }
 
@@ -102,8 +102,26 @@ describe('planning a sprint from a specification', () => {
     expect(startMutation.mutateAsync.mock.calls[0][0].backlog_items[0].covers).toEqual(['REQ-1.1', 'REQ-1.2'])
   })
 
+  it('shows which tasks a planned task comes after, and launches with the dependencies', async () => {
+    const startMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(useStartSprint).mockReturnValue(startMutation as never)
+    renderPlanner()
+
+    fireEvent.change(screen.getByPlaceholderText('Describe the sprint goal…'), { target: { value: 'Take payments' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Plan' }))
+    expect(await screen.findByText('Plan Preview')).toBeInTheDocument()
+    expect(screen.getByText('After: Cart listing')).toBeInTheDocument()
+    expect(screen.getAllByText(/^After:/)).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Sprint' }))
+    expect(await screen.findByTestId('board')).toBeInTheDocument()
+    const items = startMutation.mutateAsync.mock.calls[0][0].backlog_items
+    expect(items[0].depends_on).toBeUndefined()
+    expect(items[1].depends_on).toEqual([0])
+  })
+
   it('sends the goal beside the specification when both are given, and neither note nor chips without one', async () => {
-    const planMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ ...plan, specification_id: null, uncovered: [], tasks: [{ ...plan.tasks[1] }] }) })
+    const planMutation = mutation({ mutateAsync: vi.fn().mockResolvedValue({ ...plan, specification_id: null, uncovered: [], tasks: [{ ...plan.tasks[1], depends_on: [] }] }) })
     vi.mocked(usePlanSprint).mockReturnValue(planMutation as never)
     renderPlanner()
 

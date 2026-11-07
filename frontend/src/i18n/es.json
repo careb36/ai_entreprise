@@ -494,6 +494,9 @@
     "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
     "carriedTo": "Tiene otro intento en {{sprint}}:",
     "taskNumber": "tarea #{{id}}",
+    "taskWithTitle": "tarea #{{id}}: {{title}}",
+    "waitsFor": "Espera a",
+    "dependedOn": "Dependía de",
     "invalidId": "ID de tarea no válido: {{taskId}}.",
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
@@ -576,7 +579,9 @@
     "qaReworksTitle": "Retrabajos de QA: {{count}}/{{limit}}",
     "qaReworks": "Retrabajo QA {{count}}/{{limit}}",
     "qaFailuresTitle": "Fallos de QA: {{count}}/{{limit}}",
-    "qaFailures": "Fallo QA {{count}}/{{limit}}"
+    "qaFailures": "Fallo QA {{count}}/{{limit}}",
+    "waitsFor_one": "Espera a {{count}} tarea",
+    "waitsFor_other": "Espera a {{count}} tareas"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -1592,6 +1597,7 @@
       "option": "{{title}} (v{{version}})",
       "goalPlaceholder": "La especificación es el objetivo; si querés, agregá una nota para el PO.",
       "covers": "Cubre",
+      "after": "Después de: {{titles}}",
       "uncovered_one": "{{count}} criterio queda sin cubrir: {{ids}}. El sprint igual puede empezar.",
       "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
     }

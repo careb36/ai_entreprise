@@ -343,6 +343,15 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                         ))}
                       </p>
                     )}
+                    {task.depends_on && task.depends_on.length > 0 && (
+                      // Positions in the plan: the tasks this one waits for.
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {t('specifications.plan.after', {
+                          titles: task.depends_on.map(position => plannedSprint.tasks[position]?.title ?? `#${position + 1}`).join(', '),
+                          defaultValue: 'After: {{titles}}',
+                        })}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-[10px] uppercase tracking-wide text-brand-300">
