@@ -23,7 +23,7 @@ from models import Agent, BusinessUnit
 from models.specification import Specification
 from sqlmodel import Session, select
 
-from services import spec_check, standards
+from services import mcp_tools, research_tools, spec_check, standards
 from services.sprint_planner import _build_stack_summary
 
 PO_ROLE = "PO"
@@ -96,11 +96,20 @@ def ask(
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
+    client = _client(timeout, max_tokens)
+    result = client.chat(messages=messages, model=model, role=role, bu_id=bu_id)
+    return _content(result)
+
+
+def _client(timeout: float, max_tokens: int) -> LLMProxyClient:
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
-    result = client.chat(messages=messages, model=model, role=role, bu_id=bu_id)
+    return client
+
+
+def _content(result: Any) -> str:
     if not isinstance(result, dict) or result.get("error"):
         raise SpecAuthorError(f"LLM call failed: {result!r}"[:500])
     choices = result.get("choices") or [{}]
@@ -108,6 +117,43 @@ def ask(
     if not str(content).strip():
         raise SpecAuthorError("LLM call failed: empty response")
     return str(content).strip()
+
+
+def ask_with_tools(
+    model: str,
+    system_prompt: str | None,
+    prompt: str,
+    *,
+    max_tokens: int = DRAFT_MAX_TOKENS,
+    timeout: float = DRAFT_TIMEOUT_SECONDS,
+    role: str = PO_ROLE,
+    bu_id: int | None = None,
+    toolbox: Any = None,
+) -> tuple[str, list[dict[str, Any]]]:
+    """``ask`` with a toolbox (``mcp_tools.chat_with_tools``): the answer and
+    the observations of every tool call the agent made on the way. Without a
+    toolbox it is ``ask`` itself (the one place a test replaces)."""
+    if toolbox is None:
+        plain = ask(
+            model,
+            system_prompt,
+            prompt,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            role=role,
+            bu_id=bu_id,
+        )
+        return plain, []
+    messages = [{"role": "user", "content": prompt}]
+    if system_prompt:
+        messages.insert(0, {"role": "system", "content": system_prompt})
+    try:
+        result, calls = mcp_tools.chat_with_tools(
+            _client(timeout, max_tokens), messages, model, role, toolbox, bu_id=bu_id
+        )
+    finally:
+        toolbox.close()
+    return _content(result), calls
 
 
 DRAFT_FORMAT = """\
@@ -247,9 +293,11 @@ def prepare(
         "model": model,
         "system_prompt": system_prompt,
         "prompt": draft_prompt(po_name, brief, detected_stack, current)
-        + standards.prompt_section(PO_ROLE),
+        + standards.prompt_section(PO_ROLE)
+        + research_tools.prompt_section(PO_ROLE),
         "bu_id": business_unit_id(session, company_id),
         "questions": (existing.questions if existing is not None else []) or [],
+        "research_hosts": research_tools.company_hosts(session, company_id),
     }
 
 
@@ -263,11 +311,12 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
         request["company_id"],
         request["model"],
     )
-    answer = ask(
+    answer, calls = ask_with_tools(
         request["model"],
         request["system_prompt"],
         request["prompt"],
         bu_id=request["bu_id"],
+        toolbox=research_tools.toolbox_for_request(PO_ROLE, request),
     )
     spec = parse_draft(answer)
     if spec is None:
@@ -275,6 +324,8 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
             "The PO's answer is not a specification in the expected format"
         )
     spec["questions"] = merge_questions(request["questions"], spec["questions"])
+    # The sources consulted on the way: observations, kept with the draft.
+    spec["sources"] = research_tools.sources_of(calls)
     return spec
 
 

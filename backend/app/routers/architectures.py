@@ -86,6 +86,7 @@ def serialize(arch: Architecture, spec: Specification) -> dict[str, Any]:
         "decisions": content["decisions"],
         "conventions": content["conventions"],
         "questions": content["questions"],
+        "sources": arch.sources or [],
         "drafted_by": arch.drafted_by,
         "approved_by": arch.approved_by,
         "approved_at": _iso(arch.approved_at),
@@ -257,6 +258,7 @@ async def draft_architecture(
         company_id=spec.company_id, specification_id=spec.id, title=content["title"]
     )
     _apply(arch, content, arch_author.ARCHITECT_ROLE)
+    arch.sources = content.get("sources") or []
     return _saved(session, arch, spec)
 
 

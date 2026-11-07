@@ -13,7 +13,9 @@ Tables defined here represent the multi-tenancy core of Fabrique:
 """
 
 from datetime import datetime
+from typing import Any
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -32,6 +34,9 @@ class Company(SQLModel, table=True):
     # from git_base_branch, or from what the repository has checked out.
     git_workflow: bool = False
     git_base_branch: str | None = None
+    # Hosts the research tools may read beside the defaults
+    # (services/research_tools.py); a Manager writes it.
+    research_hosts: list[Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

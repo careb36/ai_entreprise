@@ -76,6 +76,7 @@ def serialize(spec: Specification, session: Session | None = None) -> dict[str, 
         "quality": content["quality"],
         "constraints": content["constraints"],
         "questions": content["questions"],
+        "sources": spec.sources or [],
         "drafted_by": spec.drafted_by,
         "approved_by": spec.approved_by,
         "approved_at": spec.approved_at.isoformat() if spec.approved_at else None,
@@ -226,6 +227,7 @@ async def draft_specification(
         ) from exc
     spec = existing or Specification(company_id=req.company_id, title=content["title"])
     _apply(spec, content, spec_author.PO_ROLE)
+    spec.sources = content.get("sources") or []
     session.add(spec)
     session.commit()
     session.refresh(spec)

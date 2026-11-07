@@ -132,6 +132,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider" \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
+    RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
@@ -309,6 +310,8 @@ ARCH=$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/j
 ARCH_ID=$(echo "$ARCH" | json "d.get('id', '')")
 check "the Architect designed it from the approved specification, numbered by the backend" test "$(echo "$ARCH" | json "d['drafted_by'], [m['id'] for m in d['modules']], d['interfaces'][0]['module_id'], d['interfaces'][0]['consumers']")" = "Architect ['MOD-1', 'MOD-2'] MOD-1 ['MOD-2']"
 check "its prompt carried the specification's criteria" test "$(prompt_seen "the Architect of an AI software factory.*REQ-2.1: given two greetings answered")" = yes
+check "the Architect looked pytest up at the registry through the research tools, and the draft keeps the source as an observation" test "$(echo "$ARCH" | json "[(s['tool'], s['package'], s['ecosystem'], s['status'], s['allowed'], len(s['sha256']), s['url']) for s in d['sources']]")" = "[('package', 'pytest', 'pypi', 200, True, 64, 'http://127.0.0.1:$LLM_PORT/pypi/pytest/json')]" -a "$(prompt_seen "the Architect of an AI software factory.*## Sources")" = yes
+check "the PO consulted nothing, and its draft says so" test "$(echo "$SPEC" | json "d['sources']")" = "[]"
 check "the check blocks it on the open question" test "$(echo "$ARCH" | json "[(f['where'], f['code']) for f in d['check']['findings'] if f['severity'] == 'blocking']")" = "[('Q1', 'open_question')]"
 check "a person answers the Architect's question" test "$(api -X POST "$API/v1/architectures/$ARCH_ID/questions/0" -H 'Content-Type: application/json' -d '{"answer": "Per process."}' | json "d['questions'][0]['answer']")" = "Per process."
 check "the Architect's revision carried the answer, and the check passes" test "$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/json' -d "{\"specification_id\": $SPEC_ID, \"architecture_id\": $ARCH_ID}" | json "d['id'] == $ARCH_ID, d['check']['ok']")" = "True True" -a "$(prompt_seen "A: Per process.")" = yes

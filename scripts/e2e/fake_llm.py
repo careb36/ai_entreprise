@@ -246,12 +246,33 @@ READS_FIRST = "Add greeting counter"
 READS_PATH = "src/add_greeting.py"
 
 
+ARCHITECT_PROMPT = ", the Architect of an AI software factory. Design how the specification"
+LOOKS_UP = {"name": "pytest", "ecosystem": "pypi"}
+PYPI_RECORD = {
+    "info": {"name": "pytest", "version": "9.0.1", "summary": "testing framework", "requires_python": ">=3.9"},
+    "releases": {
+        "9.0.0": [{"upload_time_iso_8601": "2026-09-15T00:00:00Z"}],
+        "9.0.1": [{"upload_time_iso_8601": "2026-10-20T00:00:00Z"}],
+    },
+}
+
+
 def tool_call_for(prompt: str, messages: list, tools: list) -> dict | None:
     """One ``workspace__read`` call before the counter's delivery, when the
     backend offered the workspace tools and no tool has answered yet; the
-    fake then delivers as usual, so the run's evidence carries the read."""
+    fake then delivers as usual, so the run's evidence carries the read.
+    Likewise one ``research__package`` lookup before the Architect's design,
+    when the research tools are offered, so the draft keeps its source."""
     offered = {t.get("function", {}).get("name") for t in tools if isinstance(t, dict)}
-    if "workspace__read" not in offered or any(m.get("role") == "tool" for m in messages):
+    if any(m.get("role") == "tool" for m in messages):
+        return None
+    if "research__package" in offered and ARCHITECT_PROMPT in prompt:
+        return {
+            "id": "call_lookup_pytest",
+            "type": "function",
+            "function": {"name": "research__package", "arguments": json.dumps(LOOKS_UP)},
+        }
+    if "workspace__read" not in offered:
         return None
     task = re.search(r"## Task: (.+)", prompt)
     if not task or task.group(1).strip() != READS_FIRST:
@@ -276,6 +297,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        # A PyPI look-alike for the research tools (RESEARCH_PYPI_URL points here).
+        if self.path == "/pypi/pytest/json":
+            return self._send(200, PYPI_RECORD)
+        if self.path.startswith("/pypi/"):
+            return self._send(404, {"message": "Not Found"})
         if self.path.startswith("/v1/models"):
             return self._send(
                 200,

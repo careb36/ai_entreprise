@@ -1943,5 +1943,13 @@
       "operations": "Operaciones",
       "product": "Producto"
     }
+  },
+  "sources": {
+    "title_one": "{{count}} fuente consultada",
+    "title_other": "{{count}} fuentes consultadas",
+    "hint": "Lo que el agente leyó al redactar, registrado por el backend: la página, cuándo, el estado y el hash de lo que volvió. Lo que concluyó es su afirmación.",
+    "fetched": "{{status}} · {{hash}} · {{date}}",
+    "failed": "falló ({{status}})",
+    "refused": "rechazada: {{host}} no está en la lista de fuentes de la compañía"
   }
 }

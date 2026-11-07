@@ -12,6 +12,7 @@ import { Check, CircleCheck, FlaskConical, Loader2, Pencil, Send, WandSparkles }
 import { ArchitectureSummary } from '../components/ArchitectureSummary'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
+import { SourcesConsulted } from '../components/SourcesConsulted'
 import { SpecificationEditor } from '../components/SpecificationEditor'
 import { useCurrentRole } from '../hooks/useQueries'
 import { parseRouteId } from '../lib/routeId'
@@ -353,6 +354,7 @@ export default function SpecificationDetail() {
           )}
           {canWrite && <Actions specification={specification} onEdit={() => setEditing(true)} />}
           <CheckPanel specification={specification} />
+          <SourcesConsulted sources={specification.sources ?? []} headingId="specification-sources" />
           <section aria-labelledby="specification-questions" className="card p-4 space-y-2">
             <h2 id="specification-questions" className="text-sm font-semibold text-white">{t('specifications.questions.title')}</h2>
             {specification.questions.length === 0 ? (

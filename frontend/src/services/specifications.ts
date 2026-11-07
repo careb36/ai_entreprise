@@ -6,6 +6,7 @@
  * Managers write.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Source } from '../components/SourcesConsulted'
 import { ApiError, api, fetchApi } from './api'
 
 export type SpecificationStatus = 'draft' | 'approved' | 'superseded'
@@ -98,6 +99,8 @@ export interface Specification {
   quality: QualityAttribute[]
   constraints: string[]
   questions: Question[]
+  /** The sources the PO consulted while drafting (the research tools); observations, not its claims. */
+  sources?: Source[]
   /** `PO`, or the email of the person who wrote it. */
   drafted_by: string | null
   approved_by: string | null

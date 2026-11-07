@@ -74,6 +74,14 @@ def disable_auth_for_legacy_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_research_tools(monkeypatch):
+    """The research tools (``services/research_tools.py``) reach the network;
+    a test that wants them turns ``RESEARCH_TOOLS_ENABLED`` on and fakes the
+    HTTP client, as ``test_research_tools.py`` does."""
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def no_nats_namespace(monkeypatch):
     """Tests assert on the plain subjects, so they must not inherit a prefix.
 

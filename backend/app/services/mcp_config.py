@@ -25,7 +25,7 @@ from sqlmodel import Session, select
 
 NAME_LIMIT = 64
 # Names the built-in toolboxes use for their tools (``<name>__<tool>``).
-RESERVED_SERVER_NAMES = {"workspace"}
+RESERVED_SERVER_NAMES = {"workspace", "research"}
 _TRANSPORT_ALIASES = {
     "streamable-http": "http",
     "streamable_http": "http",

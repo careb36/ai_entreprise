@@ -234,6 +234,7 @@ def chat_with_tools(
     *,
     max_rounds: int | None = None,
     on_round: Callable[[dict[str, Any], list[dict[str, Any]]], None] | None = None,
+    bu_id: int | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The model's final answer and the observations of every tool call it made.
 
@@ -242,8 +243,9 @@ def chat_with_tools(
     answer with the calls it made, so every round is recorded as a turn.
     """
     schemas = toolbox.schemas() if toolbox is not None else []
+    billing = {"bu_id": bu_id} if bu_id else {}
     if not schemas:
-        return client.chat(messages=messages, model=model, role=role), []
+        return client.chat(messages=messages, model=model, role=role, **billing), []
     rounds = (
         max_rounds
         or getattr(toolbox, "max_rounds", None)
@@ -252,7 +254,9 @@ def chat_with_tools(
     observations: list[dict[str, Any]] = []
     history = list(messages)
     for round_no in range(1, rounds + 1):
-        result = client.chat(messages=history, model=model, role=role, tools=schemas)
+        result = client.chat(
+            messages=history, model=model, role=role, tools=schemas, **billing
+        )
         calls = tool_calls_of(result)
         if not calls or result.get("error"):
             return result, observations
@@ -270,7 +274,9 @@ def chat_with_tools(
                 }
             )
     history.append({"role": "user", "content": ROUNDS_EXHAUSTED_NOTE})
-    return client.chat(messages=history, model=model, role=role), observations
+    return client.chat(
+        messages=history, model=model, role=role, **billing
+    ), observations
 
 
 def summarize(observations: list[dict[str, Any]]) -> str:

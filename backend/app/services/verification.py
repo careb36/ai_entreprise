@@ -4,7 +4,14 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import context_read, criteria_tests, mcp_tools, risk, standards
+from services import (
+    context_read,
+    criteria_tests,
+    mcp_tools,
+    research_tools,
+    risk,
+    standards,
+)
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -371,6 +378,12 @@ def aggregate_verdict(checks: list[dict]) -> str:
     return VERDICT_VERIFIED
 
 
+def _declared_files(artifact: str | None) -> list[dict]:
+    from services.task_worker import parse_file_manifest
+
+    return parse_file_manifest(artifact or "")
+
+
 def verify_agent_run(
     session: Session, run: AgentRun, evidence: dict | None
 ) -> Verification:
@@ -408,6 +421,13 @@ def verify_agent_run(
         context = context_read.check_context_read(evidence)
         if context:
             checks.append(context)
+        # The sources the run consulted (``services/research_tools.py``) and
+        # the dependencies it named without a registry lookup; a record.
+        sources = research_tools.check_sources(
+            evidence, _declared_files(run.artifact_text)
+        )
+        if sources:
+            checks.append(sources)
     # The factory's standards over the files the deliverable declares
     # (``services.standards``): a secret refutes, the rest is for the reviewer.
     standards_check = standards.check_delivery(run.artifact_text)

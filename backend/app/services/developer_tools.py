@@ -42,7 +42,7 @@ from typing import Any
 
 from config import settings
 
-from services import context_read, developer_tool_schemas, mcp_tools
+from services import context_read, developer_tool_schemas, mcp_tools, research_tools
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -288,37 +288,48 @@ class WorkspaceToolbox:
 
 
 class CombinedToolbox:
-    """The workspace tools beside the company's MCP tools, as one toolbox."""
+    """The built-in toolboxes (the workspace's, the research one) beside the
+    company's MCP tools, as one toolbox."""
 
     def __init__(
-        self, workspace: WorkspaceToolbox, mcp: mcp_tools.Toolbox | None
+        self,
+        workspace: WorkspaceToolbox | None,
+        mcp: mcp_tools.Toolbox | None,
+        research: Any = None,
     ) -> None:
+        self.builtin = [box for box in (workspace, research) if box is not None]
         self.workspace = workspace
         self.mcp = mcp
-        self.max_rounds = workspace.max_rounds
+        self.max_rounds = max(box.max_rounds for box in self.builtin)
 
     @property
     def unavailable(self) -> dict[str, str]:
         return dict(self.mcp.unavailable) if self.mcp is not None else {}
 
     def schemas(self) -> list[dict[str, Any]]:
-        return self.workspace.schemas() + (
-            self.mcp.schemas() if self.mcp is not None else []
-        )
+        schemas: list[dict[str, Any]] = []
+        for box in self.builtin:
+            schemas += box.schemas()
+        return schemas + (self.mcp.schemas() if self.mcp is not None else [])
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
     ) -> tuple[dict[str, Any], str]:
         name = str(((tool_call.get("function") or {}).get("name")) or "")
         # The built-in tools by their exact names; everything else, the MCP
-        # servers' (an MCP server cannot be named ``workspace``: the name is
-        # reserved in ``mcp_config``, so nothing is shadowed).
-        if name in self.workspace.tools or self.mcp is None:
-            return self.workspace.call(tool_call, round_no)
+        # servers' (an MCP server cannot be named ``workspace`` or
+        # ``research``: the names are reserved in ``mcp_config``, so nothing
+        # is shadowed).
+        for box in self.builtin:
+            if name in box.tools:
+                return box.call(tool_call, round_no)
+        if self.mcp is None:
+            return self.builtin[0].call(tool_call, round_no)
         return self.mcp.call(tool_call, round_no)
 
     def close(self) -> None:
-        self.workspace.close()
+        for box in self.builtin:
+            box.close()
         if self.mcp is not None:
             self.mcp.close()
 
@@ -432,15 +443,18 @@ def toolbox_for(
     tools for a role that delivers files when a project path is known.
     Returns ``None`` when there is nothing to offer, as the MCP loader does."""
     mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
-    if company_id is None or not offered_to(role) or "nats" not in _bridge:
+    workspace = None
+    if company_id is not None and offered_to(role) and "nats" in _bridge:
+        root = tool_root(company_id, item_id, engine=engine)
+        if root:
+            workspace = WorkspaceToolbox(
+                _request_from_thread, root, test_command=_detect_test_command(root)
+            )
+    # The research tools for the roles that decide (``services/research_tools.py``).
+    research = research_tools.toolbox_for(company_id, role, engine=engine)
+    if workspace is None and research is None:
         return mcp
-    root = tool_root(company_id, item_id, engine=engine)
-    if not root:
-        return mcp
-    workspace = WorkspaceToolbox(
-        _request_from_thread, root, test_command=_detect_test_command(root)
-    )
-    return CombinedToolbox(workspace, mcp)
+    return CombinedToolbox(workspace, mcp, research)
 
 
 def repository_section(
