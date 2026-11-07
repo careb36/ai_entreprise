@@ -505,6 +505,21 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
         )
 
     monkeypatch.setattr(spec_author, "ask", planning)
+    # The PO's call runs in a thread without the session: the request is plain values.
+    prepared = spec_planning.prepare_plan(sqlite_session, spec, "S", 4, [], "note")
+    assert (
+        prepared["specification_id"] == spec.id
+        and "## Note from the person planning\nnote" in prepared["prompt"]
+    )
+    assert set(prepared) >= {
+        "model",
+        "system_prompt",
+        "prompt",
+        "bu_id",
+        "content",
+        "roles",
+        "item_limit",
+    }
     planned = test_client.post(
         "/v1/plan_sprint",
         json={

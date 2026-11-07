@@ -486,12 +486,47 @@ def test_an_implementation_that_edits_an_acceptance_test_is_refuted_and_the_test
     assert checks["acceptance_tests_untouched"]["outcome"] == "refuted"
     assert checks["criteria_tests"]["results"] == {"REQ-1.1": "pass", "REQ-1.2": "pass"}
     assert verification.verdict == "refuted"
+    # The tests passed in that run, but the delivery was refuted: the
+    # criteria read as passed and are not verified by it.
+    cov = spec_planning.coverage(session, _spec)
+    assert [(c["last_result"], c["verified"]) for c in cov["criteria"][:2]] == [
+        ("pass", False),
+        ("pass", False),
+    ]
 
     # Left alone, the next delivery is verified against QA's tests.
     _deliver(nats, board_task, sprint, {"src/__init__.py": "", "src/board.py": BOARD})
     verification, checks = _checks(session, board_task)
     assert checks["acceptance_tests_untouched"]["outcome"] == "pass"
     assert verification.verdict == "verified"
+    assert spec_planning.coverage(session, _spec)["verified"] == 2
+
+
+def test_the_latest_run_across_tasks_speaks_for_a_criterion(factory):
+    session, spec, sprint, nats, tests_task, board_task, _move = factory
+    _deliver(nats, tests_task, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
+    # A second implementation task covering the same criteria, created later.
+    again = BacklogItem(
+        sprint_id=sprint.id,
+        title="Board again",
+        status="todo",
+        covers=["REQ-1.1", "REQ-1.2"],
+    )
+    session.add(again)
+    session.commit()
+    session.refresh(again)
+    # The later task verifies them first; then the earlier task's run fails them.
+    _deliver(nats, again, sprint, {"src/__init__.py": "", "src/board.py": BOARD})
+    assert spec_planning.coverage(session, spec)["verified"] == 2
+    _deliver(
+        nats, board_task, sprint, {"src/__init__.py": "", "src/board.py": BROKEN_BOARD}
+    )
+    cov = spec_planning.coverage(session, spec)
+    # The most recent verification wins, whatever the tasks' order by id.
+    assert [(c["last_result"], c["verified"]) for c in cov["criteria"][:2]] == [
+        ("fail", False),
+        ("fail", False),
+    ]
 
 
 def test_the_daemon_hashes_files_as_they_are_on_disk(tmp_path):
@@ -594,3 +629,27 @@ def test_a_criterion_verified_without_an_observed_run_is_illegal():
         "verified_criteria": [],
         "observed_test_run": False,
     }
+    # An exit status that travelled as text still counts; a key that is not
+    # text is read as text.
+    odd = history_check._run_facts(
+        Verification(
+            company_id=1,
+            agent_run_id=1,
+            verdict="verified",
+            checks=[{"name": "criteria_tests", "results": {7: "pass"}}],
+            evidence={"test_run": {"exit_code": "0"}},
+        )
+    )
+    assert odd == {"verified_criteria": ["7"], "observed_test_run": True}
+    assert (
+        history_check._run_facts(
+            Verification(
+                company_id=1,
+                agent_run_id=1,
+                verdict="verified",
+                checks=[],
+                evidence={"test_run": {"exit_code": "x"}},
+            )
+        )["observed_test_run"]
+        is False
+    )

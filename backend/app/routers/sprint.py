@@ -108,16 +108,12 @@ async def plan_sprint(
 
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
-        # The PO's call waits on the proxy: off the event loop.
-        plan = await asyncio.to_thread(
-            spec_planning.plan,
-            session,
-            spec,
-            scope_size,
-            SCOPE_LIMITS[scope_size],
-            agent_dicts,
-            req.prompt,
+        # What the PO is asked is read here, with the request's session; only
+        # the call to the proxy runs in a thread (a session is not shared).
+        request = spec_planning.prepare_plan(
+            session, spec, scope_size, SCOPE_LIMITS[scope_size], agent_dicts, req.prompt
         )
+        plan = await asyncio.to_thread(spec_planning.plan_from, request)
         plan["specification_id"] = spec.id
         return _serialize_plan_response(
             plan, scope_size, f"Sprint - {spec.title[:40]}", spec.summary or spec.title

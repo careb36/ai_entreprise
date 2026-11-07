@@ -181,7 +181,7 @@ def check_task(
         if run.get("verified_criteria") and not run.get("observed_test_run"):
             violations.append(
                 f"criteria_verified_without_run: run v{run.get('version')} marks "
-                f"{', '.join(run['verified_criteria'])} as passed with no test run observed"
+                f"{', '.join(str(c) for c in run['verified_criteria'])} as passed with no test run observed"
             )
 
     carried = sum(1 for c in comments if _text(c).startswith(_CARRIED_TO))
@@ -215,18 +215,18 @@ def _run_facts(verification: Any) -> dict[str, Any]:
     if verification is None:
         return {"verified_criteria": [], "observed_test_run": False}
     passed = [
-        cid
+        str(cid)
         for check in verification.checks or []
         if isinstance(check, dict) and check.get("name") == "criteria_tests"
         for cid, result in (check.get("results") or {}).items()
         if result == "pass"
     ]
     exit_code = ((verification.evidence or {}).get("test_run") or {}).get("exit_code")
-    return {
-        "verified_criteria": passed,
-        "observed_test_run": isinstance(exit_code, int)
-        and not isinstance(exit_code, bool),
-    }
+    # The daemon reports an integer; one that travelled as text still counts.
+    observed = (isinstance(exit_code, int) and not isinstance(exit_code, bool)) or (
+        isinstance(exit_code, str) and exit_code.strip().lstrip("-").isdigit()
+    )
+    return {"verified_criteria": passed, "observed_test_run": observed}
 
 
 def check_database() -> list[str]:

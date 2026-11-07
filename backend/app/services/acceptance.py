@@ -46,6 +46,7 @@ from services.criteria_tests import (
     RESULT_PASS,
     token,
 )
+from services.orchestration_metrics import VERDICT_VERIFIED
 
 QA_ROLE = "QA"
 TITLE_PREFIX = "Acceptance tests for "
@@ -392,14 +393,20 @@ def verified_criteria(
 ) -> dict[str, dict[str, Any]]:
     """Per criterion id, the latest observed result of an implementation task's
     run (``result``, ``task_id``, ``verified``), from the Verifier's
-    ``criteria_tests`` checks; criteria never tested are absent."""
+    ``criteria_tests`` checks; criteria never tested are absent.
+
+    Across the tasks covering a criterion, the most recent verification (not
+    the task's position) gives ``result``; ``verified`` is true only when the
+    test passed in a run whose whole verdict is verified, so a refuted
+    delivery never verifies a criterion.
+    """
     items = session.exec(
         select(BacklogItem)
         .join(Sprint, Sprint.id == BacklogItem.sprint_id)
         .where(Sprint.specification_id == spec.id)
-        .order_by(BacklogItem.id)
     ).all()
     latest: dict[str, dict[str, Any]] = {}
+    seen_at: dict[str, int] = {}
     for item in items:
         if is_acceptance_task(item) or not item.covers:
             continue
@@ -429,9 +436,13 @@ def verified_criteria(
         if not check:
             continue
         for cid, result in (check.get("results") or {}).items():
+            if seen_at.get(cid, -1) > verification.id:
+                continue
+            seen_at[cid] = verification.id
             latest[cid] = {
                 "result": result,
                 "task_id": item.id,
-                "verified": result == RESULT_PASS,
+                "verified": result == RESULT_PASS
+                and verification.verdict == VERDICT_VERIFIED,
             }
     return latest

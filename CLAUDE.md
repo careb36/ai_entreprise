@@ -240,7 +240,13 @@ the LangGraph graph is only an optional kickoff conversation.
    wrote; a file that differs or is missing is restored from QA's deliverable
    (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
    criterion is judged against a weakened test. `services/criteria_tests.py`
-   holds the reading of the runner's output and the two checks. The Developer's
+   holds the reading of the runner's output and the two checks. A criterion
+   is `verified` only from the most recent verification across the tasks
+   covering it, and only when that run's whole verdict is verified.
+   The PO's and the Architect's calls to the proxy (`spec_author`,
+   `arch_author`, `spec_planning`) are `prepare`d with the request's session
+   and run in a thread as plain values (`draft_from`, `plan_from`): a session
+   never crosses a thread. The Developer's
    prompt names the test files and test names to make pass
    (`acceptance.section`), the specification's coverage says per criterion
    `verified` (its test passed in an observed run of an implementation task)

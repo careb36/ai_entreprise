@@ -241,7 +241,7 @@ def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
     }
 
 
-def plan(
+def prepare_plan(
     session: Session,
     spec: Specification,
     scope_size: str,
@@ -249,10 +249,10 @@ def plan(
     agents: list[dict[str, Any]],
     note: str = "",
 ) -> dict[str, Any]:
-    """The PO's split of *spec* into tasks with ``covers``, and what stays uncovered.
+    """Everything ``plan_from`` needs, read with *session*: plain values, so
+    the call to the proxy can run in another thread without the session.
 
-    *note* is what the person planning added for the PO. A failed or
-    unusable answer falls back to one task per requirement.
+    *note* is what the person planning added for the PO.
     """
     content = spec_content(spec)
     team = _ensure_execution_team(agents)
@@ -261,40 +261,80 @@ def plan(
     po_name = _find_po_agent(team).get("name") or po_name
     from services import arch_author
 
-    prompt = plan_prompt(
-        po_name, content, scope_size, item_limit, _build_team_roster(team), roles, note
-    ) + arch_author.planning_context(session, spec.id)
+    return {
+        "specification_id": spec.id,
+        "title": spec.title,
+        "summary": spec.summary,
+        "content": content,
+        "roles": roles,
+        "item_limit": item_limit,
+        "model": model,
+        "system_prompt": system_prompt,
+        "prompt": plan_prompt(
+            po_name,
+            content,
+            scope_size,
+            item_limit,
+            _build_team_roster(team),
+            roles,
+            note,
+        )
+        + arch_author.planning_context(session, spec.id),
+        "bu_id": spec_author.business_unit_id(session, spec.company_id),
+    }
+
+
+def plan_from(request: dict[str, Any]) -> dict[str, Any]:
+    """The PO's split into tasks with ``covers`` for a ``prepare_plan``ned
+    request, and what stays uncovered; no database. A failed or unusable
+    answer falls back to one task per requirement."""
+    content, item_limit = request["content"], request["item_limit"]
     try:
         answer = spec_author.ask(
-            model,
-            system_prompt,
-            prompt,
+            request["model"],
+            request["system_prompt"],
+            request["prompt"],
             max_tokens=PLAN_MAX_TOKENS,
-            bu_id=spec_author.business_unit_id(session, spec.company_id),
+            bu_id=request["bu_id"],
         )
         parsed = json.loads(spec_author._strip_fences(answer))
         if not isinstance(parsed, dict):
             raise TypeError("not an object")
     except (spec_author.SpecAuthorError, ValueError, TypeError) as exc:
-        logger.warning("PO could not plan from specification %s: %s", spec.id, exc)
+        logger.warning(
+            "PO could not plan from specification %s: %s",
+            request["specification_id"],
+            exc,
+        )
         return plan_fallback(content, item_limit)
     tasks = _validate_tasks(
         parsed.get("tasks"),
         set(spec_check.criterion_ids(content)),
-        set(roles),
+        set(request["roles"]),
         item_limit,
     )
     if not tasks:
         return plan_fallback(content, item_limit)
     tasks = acceptance.with_test_tasks(tasks, content, item_limit)
+    title = request["title"]
     return {
-        "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {spec.title[:40]}")[
-            :70
-        ],
-        "goal": str(parsed.get("goal") or spec.summary or spec.title)[:140],
+        "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {title[:40]}")[:70],
+        "goal": str(parsed.get("goal") or request["summary"] or title)[:140],
         "tasks": tasks,
         "uncovered": uncovered(content, tasks),
     }
+
+
+def plan(
+    session: Session,
+    spec: Specification,
+    scope_size: str,
+    item_limit: int,
+    agents: list[dict[str, Any]],
+    note: str = "",
+) -> dict[str, Any]:
+    """``prepare_plan`` then ``plan_from``, in one thread."""
+    return plan_from(prepare_plan(session, spec, scope_size, item_limit, agents, note))
 
 
 # ---------------------------------------------------------------------------
