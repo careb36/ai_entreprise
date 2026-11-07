@@ -32,9 +32,12 @@ class ManagerPolicy:
 
     # Categories the agent may decide alone (e.g. "accept_low_risk").
     autonomous: set[str] = field(default_factory=set)
-    # Categories that always escalate to the client.
-    escalate: set[str] = field(
-        default_factory=lambda: {
+    # Categories that always escalate to the client. Mandatory: a caller may
+    # add to this set but never remove the entries below.
+    escalate: set[str] = field(default_factory=set)
+
+    _MANDATORY_ESCALATE = frozenset(
+        {
             "approve_specification",
             "approve_architecture",
             "accept_high_risk",
@@ -43,10 +46,16 @@ class ManagerPolicy:
         }
     )
 
+    def __post_init__(self) -> None:
+        self.escalate = set(self.escalate) | set(self._MANDATORY_ESCALATE)
+
     def may_decide_alone(self, category: str) -> bool:
-        if category in self.escalate:
+        try:
+            if category in self.escalate:
+                return False
+            return category in self.autonomous
+        except TypeError:
             return False
-        return category in self.autonomous
 
 
 def parse_suggestion(text: str) -> dict[str, Any] | None:
@@ -56,10 +65,13 @@ def parse_suggestion(text: str) -> dict[str, Any] | None:
     m = ANSWER_RE.search(text)
     if not m:
         return None
+    reason = m.group("reason").strip()
+    if not reason:
+        return None
     return {
         "suggested_decision": m.group("decision").strip().lower(),
         "suggested_category": m.group("category").strip().lower(),
-        "suggested_reason": m.group("reason").strip(),
+        "suggested_reason": reason,
     }
 
 
@@ -80,12 +92,27 @@ def suggest_for_blocked(
             "suggested_category": "accept_high_risk",
             "suggested_reason": "high-risk delivery waiting for a person",
         }
-    if triage and triage.get("decision") == "carry_over":
+    if triage and triage.get("decision") == "person":
+        return {
+            "suggested_decision": "escalate",
+            "suggested_category": "needs_person",
+            "suggested_reason": "scrum master left it for a person",
+        }
+    if triage and triage.get("decision") == "retry":
         return {
             "suggested_decision": "carry_over",
             "suggested_category": "carry_over",
             "suggested_reason": "scrum master suggested another attempt",
         }
+    status = getattr(item, "status", None)
+    if status == "blocked":
+        try:
+            from services.board import blocked_item_next_step
+
+            if blocked_item_next_step(getattr(item, "comments", None), getattr(item, "assignee", None)) == "frozen":
+                return None
+        except Exception:  # noqa: BLE001
+            pass
     return {
         "suggested_decision": "accept",
         "suggested_category": "accept_low_risk",
@@ -115,7 +142,7 @@ def record_suggestion(item: Any, suggestion: dict[str, Any] | None) -> None:
     """Store the suggestion apart from the person's decision."""
     if not isinstance(item, dict):
         return
-    if suggestion is None:
+    if not isinstance(suggestion, dict):
         item["suggested_decision"] = None
         item["suggested_category"] = None
         item["suggested_reason"] = None
