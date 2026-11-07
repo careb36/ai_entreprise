@@ -58,6 +58,16 @@ _INDEXES = (
     ("ix_audit_log_company_id", "audit_log", ["company_id"], False),
     ("ux_audit_log_company_chain_seq", "audit_log", ["company_id", "chain_seq"], True),
 )
+# The value the old startup gave a column it added to a table with rows
+# (``ADD COLUMN … DEFAULT …``): an existing row gets it here too, instead of NULL.
+_HISTORICAL_DEFAULTS = {
+    ("agents", "name"): sa.text("''"),
+    ("agents", "model"): sa.text("''"),
+    ("agents", "token_budget"): sa.text("500000"),
+    ("sprints", "scope_size"): sa.text("'M'"),
+    ("companies", "git_workflow"): sa.false(),
+    ("companies", "default_scope_size"): sa.text("'M'"),
+}
 _POSTGRES_ONLY = (
     # audit rows written before company_id was a column carry it in details
     """
@@ -781,22 +791,29 @@ def upgrade() -> None:
         for column in table.columns:
             if column.name in present:
                 continue
-            # Added nullable: an existing row has no value for it, and the
-            # application fills it. The model's NOT NULL holds for new rows
-            # through the ORM, as it did under the old patches.
-            op.add_column(
-                table.name,
-                sa.Column(column.name, column.type, nullable=True),
-            )
-            if column.foreign_keys:
-                fk = next(iter(column.foreign_keys))
-                op.create_foreign_key(
-                    None,
-                    table.name,
-                    fk.column.table.name,
-                    [column.name],
-                    [fk.column.name],
+            # Added nullable, as the old patches did: an existing row gets the
+            # value they gave it (``_HISTORICAL_DEFAULTS``) or none. The
+            # model's NOT NULL holds for new rows through the ORM. Through
+            # batch_alter_table so SQLite, which cannot add a constraint in
+            # place, gets the foreign key too.
+            default = _HISTORICAL_DEFAULTS.get((table.name, column.name))
+            with op.batch_alter_table(table.name) as batch:
+                batch.add_column(
+                    sa.Column(
+                        column.name,
+                        column.type,
+                        nullable=True,
+                        server_default=default,
+                    )
                 )
+                if column.foreign_keys:
+                    fk = next(iter(column.foreign_keys))
+                    batch.create_foreign_key(
+                        f"fk_{table.name}_{column.name}",
+                        fk.column.table.name,
+                        [column.name],
+                        [fk.column.name],
+                    )
     inspector = sa.inspect(bind)
     if bind.dialect.name == "postgresql":
         for table_name, column_name in _MADE_OPTIONAL:
@@ -830,10 +847,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The baseline has nothing before it: a downgrade drops the schema this
-    # revision defines, and only that (vector_memory and the rest of
-    # init.sql's tables are not the migrations' to drop).
-    bind = op.get_bind()
-    schema, _indexes = _schema()
-    for table in reversed(schema.sorted_tables):
-        table.drop(bind, checkfirst=True)
+    # Irreversible on purpose. There is no schema before the baseline to go
+    # back to: undoing it would mean dropping every table, with its data, and
+    # on a database init.sql set up, its own tables (vector_memory,
+    # factory_state, performance_metrics) still reference these, so the drop
+    # could not complete anyway. Restore a backup to go back further.
+    raise NotImplementedError(
+        "0001 is the baseline: it cannot be downgraded; restore a backup instead"
+    )
