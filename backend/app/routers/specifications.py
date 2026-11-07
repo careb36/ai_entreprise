@@ -323,13 +323,15 @@ async def diff_specification(
     # Diff the older version against the newer one: older -> newer.
     if (other.version or 0) <= (spec.version or 0):
         d = spec_diff.diff_specs(other, spec)
+        from_version, to_version = other.version, spec.version
     else:
         d = spec_diff.diff_specs(spec, other)
+        from_version, to_version = spec.version, other.version
     return {
         "specification_id": spec.id,
         "against_id": other.id,
-        "from_version": other.version,
-        "to_version": spec.version,
+        "from_version": from_version,
+        "to_version": to_version,
         "diff": d,
     }
 

@@ -64,7 +64,10 @@ def impact(session: Session, revision: Specification) -> dict[str, Any]:
     ).all()
     for item, sprint in rows:
         covered = set(_covers(item))
-        hit = sorted(covered & criteria)
+        # A task is affected when it covers a changed criterion, or a
+        # criterion of a changed requirement (title/description reworded).
+        changed_req_criteria = {cid for cid in covered if cid.rsplit(".", 1)[0] in reqs}
+        hit = sorted((covered & criteria) | changed_req_criteria)
         if not hit:
             continue
         affected_tasks.append(

@@ -475,10 +475,10 @@ def test_specification_diff_and_impact_report_changed_criteria(
     test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
 
     # A revision that rewords one criterion and drops a requirement.
-    revised_good = {
-        **GOOD,
-        "requirements": [GOOD["requirements"][0]],
-    }
+    import copy
+
+    revised_good = copy.deepcopy(GOOD)
+    revised_good["requirements"] = [copy.deepcopy(GOOD["requirements"][0])]
     revised_good["requirements"][0]["criteria"][0]["then"] = (
         "the list has two rows per task"
     )
