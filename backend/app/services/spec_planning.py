@@ -189,9 +189,11 @@ def plan(
     roles = sorted({a.get("role", "Developer") for a in team})
     model, system_prompt, po_name = spec_author.po_profile(session, spec.company_id)
     po_name = _find_po_agent(team).get("name") or po_name
+    from services import arch_author
+
     prompt = plan_prompt(
         po_name, content, scope_size, item_limit, _build_team_roster(team), roles
-    )
+    ) + arch_author.planning_context(session, spec.id)
     try:
         answer = spec_author.ask(
             model, system_prompt, prompt, max_tokens=PLAN_MAX_TOKENS
@@ -249,11 +251,21 @@ def requirements_section(spec: dict[str, Any], covers: list[str]) -> str:
 
 
 def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
-    """The requirements section for *item* of *sprint*; empty without a specification."""
+    """The requirements and architecture sections for *item* of *sprint*.
+
+    Empty without a specification; the architecture part only once one is
+    approved for it (``services.arch_author``).
+    """
+    from services import arch_author
+
     if sprint is None or sprint.specification_id is None or not covers_of(item):
         return ""
     spec = session.get(Specification, sprint.specification_id)
-    return requirements_section(spec_content(spec), covers_of(item)) if spec else ""
+    if spec is None:
+        return ""
+    return requirements_section(
+        spec_content(spec), covers_of(item)
+    ) + arch_author.context_for(session, sprint, item)
 
 
 def requirements_context(engine: Engine, item_id: int) -> str:

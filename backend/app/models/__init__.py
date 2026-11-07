@@ -10,6 +10,7 @@ imported, so this ``__init__`` must be imported before
 
 from .agent_message import AgentMessage
 from .agent_run import AgentRun, AgentRunApproval, Verification
+from .architecture import Architecture
 from .audit import AuditLog
 from .company import (
     Agent,
@@ -34,6 +35,7 @@ __all__ = [
     "AgentMessage",
     "AgentRun",
     "AgentRunApproval",
+    "Architecture",
     "AssistantRuntimeState",
     "AuditLog",
     "BacklogItem",

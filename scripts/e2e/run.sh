@@ -290,7 +290,7 @@ check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?compan
 ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
 check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
 
-echo "9. a specification: drafted by the PO, checked, approved, covered by a sprint"
+echo "9. a specification and its architecture: drafted, checked, approved, covered by a sprint"
 spec_field() { api "$API/v1/specifications/$1?company_id=$CID" | json "$2"; }
 SPEC=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"brief\": \"A greeting service for the e2e run.\"}")
 SPEC_ID=$(echo "$SPEC" | json "d.get('id', '')")
@@ -303,7 +303,19 @@ REVISED=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: applicati
 check "the PO revised it from the answer, and the check passes" test "$(echo "$REVISED" | json "d['id'] == $SPEC_ID, d['check']['ok'], d['questions'][0]['answer']")" = "True True No, English only."
 check "the revision prompt carried the answer" test "$(prompt_seen "A: No, English only.")" = yes
 check "a person approves it" test "$(api -X POST "$API/v1/specifications/$SPEC_ID/approve" | json "d['status']")" = approved
+ARCH=$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/json' -d "{\"specification_id\": $SPEC_ID}")
+ARCH_ID=$(echo "$ARCH" | json "d.get('id', '')")
+check "the Architect designed it from the approved specification, numbered by the backend" test "$(echo "$ARCH" | json "d['drafted_by'], [m['id'] for m in d['modules']], d['interfaces'][0]['module_id'], d['interfaces'][0]['consumers']")" = "Architect ['MOD-1', 'MOD-2'] MOD-1 ['MOD-2']"
+check "its prompt carried the specification's criteria" test "$(prompt_seen "the Architect of an AI software factory.*REQ-2.1: given two greetings answered")" = yes
+check "the check blocks it on the open question" test "$(echo "$ARCH" | json "[(f['where'], f['code']) for f in d['check']['findings'] if f['severity'] == 'blocking']")" = "[('Q1', 'open_question')]"
+check "a person answers the Architect's question" test "$(api -X POST "$API/v1/architectures/$ARCH_ID/questions/0" -H 'Content-Type: application/json' -d '{"answer": "Per process."}' | json "d['questions'][0]['answer']")" = "Per process."
+check "the Architect's revision carried the answer, and the check passes" test "$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/json' -d "{\"specification_id\": $SPEC_ID, \"architecture_id\": $ARCH_ID}" | json "d['id'] == $ARCH_ID, d['check']['ok']")" = "True True" -a "$(prompt_seen "A: Per process.")" = yes
+check "a person approves the architecture" test "$(api -X POST "$API/v1/architectures/$ARCH_ID/approve" | json "d['status']")" = approved
+WRITTEN=$(api -X POST "$API/v1/architectures/$ARCH_ID/write")
+check "it is written to the repository, and the daemon's hash of the file is kept" test "$(echo "$WRITTEN" | json "d['written_path']")" = docs/ARCHITECTURE.md -a "$(echo "$WRITTEN" | json "d['written_sha256']")" = "$(sha256sum "$WORK/project/docs/ARCHITECTURE.md" | cut -d' ' -f1)"
+check "the document names the modules and the decision" test "$(grep -c '### MOD-2: Counter\|### ADR-1: Standard library only' "$WORK/project/docs/ARCHITECTURE.md")" = 2
 PLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"scope_size\": \"S\", \"specification_id\": $SPEC_ID}")
+check "the planning prompt carried the approved architecture" test "$(prompt_seen "the PO. Plan a sprint from the specification below.*Architecture (approved).*MOD-1: Greeter")" = yes
 check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
 NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
   \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
@@ -314,6 +326,7 @@ check "Greeting 1 closes" wait_sprint "$S4"
 check "both tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Add greeting counter=done', 'Add greeting=done']"
 check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
 check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
+check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no
 check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
 
 echo "10. every task's history, read independently"

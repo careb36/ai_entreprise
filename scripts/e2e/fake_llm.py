@@ -14,7 +14,10 @@ prompt's section headers, so one run exercises the whole loop:
 - the Support agent triages every ticket as a high-severity bug;
 - the PO drafts a specification (with a quality target without a number
   and one open question the first time, both fixed on the revision) and
-  plans a sprint from it, one task per requirement with its criteria.
+  plans a sprint from it, one task per requirement with its criteria;
+- the Architect designs it: two modules, an interface, a decision and a
+  convention (with one open question the first time, answered before the
+  revision).
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -107,6 +110,26 @@ def answer(prompt: str) -> str:
                 ],
                 "constraints": ["Python, standard library only"],
                 "questions": [] if revision else ["Should the greeting be localized?"],
+            }
+        )
+    if ", the Architect of an AI software factory. Design how the specification" in prompt:
+        revision = "## Answers to your questions" in prompt
+        return json.dumps(
+            {
+                "title": "Greeting service design",
+                "overview": "One module greets, another counts; a function interface joins them.",
+                "modules": [
+                    {"name": "Greeter", "responsibility": "Builds the greeting text.", "path": "src/greeting.py", "depends_on": [], "covers": ["REQ-1"]},
+                    {"name": "Counter", "responsibility": "Counts the greetings answered.", "path": "src/greeting_counter.py", "depends_on": ["Greeter"], "covers": ["REQ-2"]},
+                ],
+                "interfaces": [
+                    {"name": "greet", "kind": "function", "module": "Greeter", "contract": "greet(name: str) -> str", "consumers": ["Counter"]}
+                ],
+                "decisions": [
+                    {"title": "Standard library only", "context": "The constraint says so.", "decision": "No third-party package.", "consequences": "Nothing to install."}
+                ],
+                "conventions": ["Every module has a test file beside it."],
+                "questions": [] if revision else ["Is the counter per process or shared?"],
             }
         )
     if ", the PO. Plan a sprint from the specification below" in prompt:

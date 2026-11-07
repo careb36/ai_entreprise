@@ -8,6 +8,7 @@ makes it easy to rename or split router modules in the future.
 
 from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
+from routers.architectures import router as architectures_router
 from routers.auth import router as auth_router
 from routers.enterprise import router as enterprise_router
 from routers.github import router as github_router
@@ -25,6 +26,7 @@ from routers.workspace import router as workspace_router
 __all__ = [
     "agent_runs_router",
     "agents_router",
+    "architectures_router",
     "auth_router",
     "enterprise_router",
     "github_router",
