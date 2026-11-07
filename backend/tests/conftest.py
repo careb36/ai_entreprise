@@ -27,6 +27,7 @@ from config import settings
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
 
@@ -138,6 +139,7 @@ SQLModel.metadata.create_all(
         RunPublication.__table__,
         Specification.__table__,
         Architecture.__table__,
+        ApiToken.__table__,
     ],
 )
 
