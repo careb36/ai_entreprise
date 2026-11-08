@@ -2024,7 +2024,8 @@
         "company": "el de la empresa",
         "deployment": "el de la instalación"
       },
-      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
+      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea",
+      "search": "Filtrar modelos…"
     }
   },
   "manager": {

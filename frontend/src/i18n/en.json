@@ -2024,7 +2024,8 @@
         "company": "the company's default",
         "deployment": "the deployment's setting"
       },
-      "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task"
+      "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task",
+      "search": "Filter models…"
     }
   },
   "manager": {
