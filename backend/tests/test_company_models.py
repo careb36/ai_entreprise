@@ -214,3 +214,40 @@ def test_the_reviewer_agent_asks_with_the_companys_reviewer_model(
     monkeypatch.setattr(reviewer_agent, "ask_llm", fake_ask)
     reviewer_agent.review_cycle(sqlite_session.get_bind())
     assert asked == ["judge-model"]
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_an_agent_runs_only_a_connection_of_its_company(sqlite_session, test_client):
+    company, other = _company(sqlite_session), _company(sqlite_session)
+    manager = _member(sqlite_session, company.id, "Manager")
+    ours, theirs = (
+        ProviderConnection(
+            company_id=owner.id, provider="deepseek", name="d", base_url="https://x/v1"
+        )
+        for owner in (company, other)
+    )
+    sqlite_session.add_all([ours, theirs])
+    sqlite_session.commit()
+    body = {"company_id": company.id, "name": "Dev", "role": "Developer"}
+    refused = test_client.post(
+        "/v1/agents", json={**body, "model": f"conn:{theirs.id}:m"}, headers=manager
+    )
+    assert refused.status_code == 422 and "not one of the company's" in refused.text
+    hired = test_client.post(
+        "/v1/agents", json={**body, "model": f"conn:{ours.id}:m"}, headers=manager
+    )
+    assert hired.status_code == 200, hired.text
+    agent_id = hired.json()["id"]
+    patch = test_client.patch(
+        f"/v1/agents/{agent_id}",
+        json={"model": f"conn:{theirs.id}:m"},
+        headers=manager,
+    )
+    assert patch.status_code == 422 and "not one of the company's" in patch.text
+    assert sqlite_session.get(Agent, agent_id).model == f"conn:{ours.id}:m"
+    # A plain id and the role's default are still accepted.
+    for model in ("deepseek-v4-flash", ""):
+        response = test_client.patch(
+            f"/v1/agents/{agent_id}", json={"model": model}, headers=manager
+        )
+        assert response.status_code == 200 and response.json()["model"] == model

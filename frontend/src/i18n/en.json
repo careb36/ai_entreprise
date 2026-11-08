@@ -1157,7 +1157,9 @@
       "support": "Favors fast, balanced models for clear responses and lightweight triage.",
       "generalist": "Uses a balanced general-purpose model when the role does not clearly call for a specialist."
     },
-    "readOnly": "You can read the agents. Only a Manager or the Owner changes them."
+    "readOnly": "You can read the agents. Only a Manager or the Owner changes them.",
+    "connectionGroup": "Company connection: {{connection}}",
+    "connectionModelHint": "Runs through the company's connection {{connection}}; the key stays with the company."
   },
   "common": {
     "loading": "Loading...",

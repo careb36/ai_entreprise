@@ -4,27 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cpu, Loader2, Sparkles } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import {
-  connectionModelRef,
+  connectionModelOptions,
   modelsApi,
-  type ConnectionModels,
+  type ModelOption,
   type ModelSettings,
   type ModelSuggestion,
 } from '../services/models'
 
-interface Option { value: string; label: string }
-
-/**
- * The models the company's enabled connections confirmed, as `conn:<id>:<model>`:
- * only a connection validated with success, and only what its provider listed.
- * The catalogue says what a model can do, never that the provider serves it.
- */
-function modelOptions(connections: ConnectionModels[]): Option[] {
-  return connections
-    .filter(conn => conn.validation_ok === true)
-    .flatMap(conn => conn.models
-      .filter(m => m.listed)
-      .map(m => ({ value: connectionModelRef(conn.connection_id, m.id), label: `${conn.name} · ${m.name ?? m.id}` })))
-}
+type Option = ModelOption
 
 /**
  * The models the company's agents run: one default and one per role. An
@@ -47,7 +34,7 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
     }
   }, [settings.data])
 
-  const options = useMemo(() => modelOptions(models.data?.connections ?? []), [models.data])
+  const options = useMemo(() => connectionModelOptions(models.data?.connections ?? []), [models.data])
   const save = useMutation({
     mutationFn: () => modelsApi.saveSettings(companyId, {
       default_model: draft?.default_model || null,
