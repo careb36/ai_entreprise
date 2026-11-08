@@ -85,8 +85,11 @@ def extract_claimed_paths(claims: dict | None) -> list[str]:
     return paths
 
 
-def check_claimed_files_present(run: AgentRun) -> dict:
-    paths = extract_claimed_paths(run.claims)
+def check_claimed_files_present(run: AgentRun, evidence: dict | None = None) -> dict:
+    # A file the workspace edit tool changed comes from the tool's record (an
+    # observation, ``services/workspace_edits.py``), not from the answer's text.
+    edited = context_read.files_edited((evidence or {}).get("tool_calls"))
+    paths = [p for p in extract_claimed_paths(run.claims) if p not in edited]
     if not paths:
         return {
             "name": "claimed_files_present",
@@ -393,7 +396,7 @@ def verify_agent_run(
 ) -> Verification:
     checks = [
         check_artifact_nonempty(run),
-        check_claimed_files_present(run),
+        check_claimed_files_present(run, evidence),
         check_claimed_tests_evidenced(run, evidence),
     ]
     # A claim that files were written is only settleable against a daemon
@@ -436,13 +439,17 @@ def verify_agent_run(
         # The sources the run consulted (``services/research_tools.py``) and
         # the dependencies it named without a registry lookup; a record.
         sources = research_tools.check_sources(
-            evidence, _declared_files(run.artifact_text)
+            evidence,
+            _declared_files(run.artifact_text) + context_read.edited_texts(evidence),
         )
         if sources:
             checks.append(sources)
     # The factory's standards over the files the deliverable declares
     # (``services.standards``): a secret refutes, the rest is for the reviewer.
-    standards_check = standards.check_delivery(run.artifact_text)
+    # The edit tool's files too: what the delivery wrote for them (an observation).
+    standards_check = standards.check_delivery(
+        run.artifact_text, context_read.edited_texts(evidence)
+    )
     if standards_check:
         checks.append(standards_check)
     # SecOps scans (``services/secops_checks``): dependency audit, secret scan,

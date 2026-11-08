@@ -57,10 +57,7 @@ from services import (
     standards,
     workspace_daemon,
 )
-from services.answers import (
-    BRIEF_MAX_TOKENS,
-    REVIEW_MAX_TOKENS,
-)
+from services.answers import BRIEF_MAX_TOKENS, REVIEW_MAX_TOKENS
 from services.answers import (
     gate_reason as _gate_reason,
 )
@@ -114,6 +111,7 @@ from services.sprint_planner import (
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
 from services.workspace_daemon import detect_test_command
+from services.workspace_edits import delivered, observe_tools, with_tool_edits
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -497,8 +495,9 @@ def _execute_task(
         )
     finally:
         if toolbox is not None:
-            toolbox.close()
+            toolbox.close()  # The tools' edits come back as files to deliver.
     agent["tool_calls"] = tool_calls
+    agent["tool_edits"] = getattr(toolbox, "edited_files", [])
 
     failure = _llm_failure(result, model)
     if failure:
@@ -615,10 +614,12 @@ def _consult_architect(
 
 
 def _validate_minimum_deliverable(
-    item: dict[str, Any], deliverable: str
+    item: dict[str, Any], deliverable: str, tool_edits: Any = None
 ) -> tuple[bool, str]:
-    """Apply lightweight quality checks before sending output to QA review."""
+    """Light checks before QA review; edit-tool files make the prose a summary."""
     text = (deliverable or "").strip()
+    if delivered(tool_edits) and text.count("```") % 2 == 0:
+        return True, "ok"
     if not text:
         return False, "Empty output from agent"
 
@@ -1683,10 +1684,8 @@ def _record_task_run(
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
     )
-    # The MCP tool calls the backend made for the producer are observations
-    # too; they go with the daemon's report, never with the claims.
-    if agent.get("tool_calls"):
-        evidence = {**(evidence or {}), "tool_calls": agent["tool_calls"]}
+    # Tool calls and edited files: observations beside the daemon's, not claims.
+    evidence = observe_tools(evidence, agent)
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)
@@ -1902,7 +1901,7 @@ async def _deliver_artifacts(
     worker compares that with the sha256 of the content it sent.  Returns the
     payload for QA review.
     """
-    targets = parse_file_manifest(deliverable)
+    targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
     if not targets:
         targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
     review_payload = _build_review_payload(deliverable, targets)
@@ -2407,7 +2406,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 return
 
             is_valid, validation_reason = _validate_minimum_deliverable(
-                item, deliverable
+                item, deliverable, agent.get("tool_edits")
             )
             if not is_valid:
                 reason = _gate_reason(validation_reason, agent.get("finish_reason"))
