@@ -8,7 +8,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Source } from '../components/SourcesConsulted'
-import { API_BASE, ApiError, api, fetchApi } from './api'
+import { API_BASE } from '../lib/apiBase'
+import { ApiError, api, fetchApi } from './api'
 import type { Check, Finding, Question } from './specifications'
 import { useAuthStore } from '../store/useAuthStore'
 

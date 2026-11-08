@@ -11,6 +11,7 @@ from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
 from routers.architectures import router as architectures_router
 from routers.auth import router as auth_router
+from routers.build import router as build_router
 from routers.enterprise import router as enterprise_router
 from routers.events import router as events_router
 from routers.github import router as github_router
@@ -26,6 +27,7 @@ from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
 from routers.sprint_control import router as sprint_control_router
 from routers.support import router as support_router
+from routers.voice import router as voice_router
 from routers.workspace import router as workspace_router
 
 __all__ = [
@@ -34,6 +36,7 @@ __all__ = [
     "api_tokens_router",
     "architectures_router",
     "auth_router",
+    "build_router",
     "enterprise_router",
     "events_router",
     "github_router",
@@ -49,5 +52,6 @@ __all__ = [
     "sprint_control_router",
     "sprint_router",
     "support_router",
+    "voice_router",
     "workspace_router",
 ]

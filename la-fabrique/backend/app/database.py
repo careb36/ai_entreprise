@@ -24,7 +24,15 @@ from sqlmodel import Session, create_engine
 
 
 def _build_database_url() -> str:
-    """Construct the PostgreSQL DSN from individual environment variables."""
+    """Return the DSN: ``DATABASE_URL`` when set, Postgres otherwise.
+
+    ``DATABASE_URL`` exists so the desktop install (``run_fusion.py``) can run
+    the factory with no infrastructure (``sqlite:///…/factory.db``).
+    Production keeps the Postgres default.
+    """
+    override = os.getenv("DATABASE_URL")
+    if override:
+        return override
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
     user = os.getenv("POSTGRES_USER", "factory")
@@ -51,13 +59,20 @@ def _connect_args(url: str) -> dict[str, str]:
 
 
 _DATABASE_URL = _build_database_url()
-engine = create_engine(
-    _DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    connect_args=_connect_args(_DATABASE_URL),
-)
+_IS_SQLITE = _DATABASE_URL.startswith("sqlite")
+# Public alias: the portable code paths (row locking, JSON columns) need
+# to branch on the engine without importing a private name.
+IS_SQLITE = _IS_SQLITE
+
+_ENGINE_ARGS: dict = {
+    "connect_args": {"check_same_thread": False}
+    if _IS_SQLITE
+    else _connect_args(_DATABASE_URL),
+}
+if not _IS_SQLITE:
+    _ENGINE_ARGS.update(pool_pre_ping=True, pool_size=5, max_overflow=10)
+
+engine = create_engine(_DATABASE_URL, **_ENGINE_ARGS)
 
 
 def prepare_database() -> None:
@@ -112,6 +127,19 @@ def get_session() -> Generator[Session, None, None]:
 # ---------------------------------------------------------------------------
 
 
+def neo4j_disabled() -> bool:
+    """True when the install runs without the optional graph backend.
+
+    ``NEO4J_ENABLED=false`` (the setting) or ``NEO4J_DISABLED=true`` (what the
+    desktop launcher sets) both say so.
+    """
+    from config import settings
+
+    if not settings.NEO4J_ENABLED:
+        return True
+    return os.getenv("NEO4J_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_neo4j_driver() -> neo4j.Driver:
     """
     Return a new Neo4j bolt driver instance.
@@ -119,7 +147,13 @@ def get_neo4j_driver() -> neo4j.Driver:
     Credentials are read from environment variables.  This function creates a
     new driver object each time it is called; callers are responsible for
     closing the driver when they are done.
+
+    A disabled graph (``neo4j_disabled``) fails fast instead of making every
+    caller wait for the driver's connect timeout; the desktop install disables
+    it because memory search is optional there.
     """
+    if neo4j_disabled():
+        raise RuntimeError("Neo4j is disabled (NEO4J_ENABLED=false)")
     return neo4j.GraphDatabase.driver(
         os.getenv("NEO4J_URI", "bolt://localhost:7687"),
         auth=(os.getenv("NEO4J_USER", "neo4j"), os.getenv("NEO4J_PASSWORD", "")),

@@ -24,6 +24,7 @@ from routers import (
     api_tokens_router,
     architectures_router,
     auth_router,
+    build_router,
     enterprise_router,
     events_router,
     github_router,
@@ -39,10 +40,12 @@ from routers import (
     sprint_control_router,
     sprint_router,
     support_router,
+    voice_router,
     workspace_router,
 )
-from security import get_cors_origins, setup_security
+from security import add_security_headers, get_cors_origins, setup_security
 from services.healthcheck import aggregate
+from ui_static import mount_ui
 
 settings = Settings()
 
@@ -72,12 +75,18 @@ app = FastAPI(
         {"name": "Support", "description": "System health, logs, and bug reporting"},
         {"name": "Agents", "description": "LangGraph orchestration and Glassroom SSE"},
         {"name": "Auth", "description": "User registration and company membership"},
+        {"name": "Build", "description": "Projects written from one sentence"},
         {
             "name": "Workspace",
             "description": "The developer's machine via the workspace daemon",
         },
     ],
 )
+
+# Setup security (rate limiting) before CORS: a middleware added later wraps
+# the ones before it, so CORS stays outside the limiter. Its 429 then carries
+# the CORS headers a browser needs to read it, and preflights never count.
+setup_security(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,9 +97,6 @@ app.add_middleware(
     # The support logs download names its file in this header.
     expose_headers=["Content-Disposition"],
 )
-
-# Setup security (rate limiting + security headers)
-setup_security(app)
 
 # Setup Prometheus metrics
 setup_metrics(app)
@@ -116,6 +122,8 @@ app.include_router(workspace_router)
 app.include_router(mcp_router)
 app.include_router(providers_router)
 app.include_router(model_settings_router)
+app.include_router(voice_router)
+app.include_router(build_router)
 
 # Register exception handlers
 register_exception_handlers(app)
@@ -139,3 +147,11 @@ async def health_check(request: Request):
 async def deep_health_check(request: Request):
     nats_client = getattr(request.app.state, "nats_client", None)
     return await aggregate(nats_client, nats_state=_nats_state(request))
+
+
+# Last, so every API route above wins over the SPA fallback.
+mount_ui(app)
+
+# Even later: the shell the SPA fallback returns is exactly what an iframe
+# loads, so the headers have to wrap that middleware too.
+add_security_headers(app)

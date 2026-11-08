@@ -7,12 +7,17 @@ Provides:
 - CORS configuration
 """
 
+import os
+
 from config import settings
 from fastapi import Request
+from limits import parse as parse_limit
 from logging_config import logger
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import JSONResponse
 
 # Rate limiter configuration
 limiter = Limiter(
@@ -25,47 +30,123 @@ limiter = Limiter(
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
+def frame_ancestors() -> list[str]:
+    """Origins allowed to embed this UI in an iframe, empty by default.
+
+    The factory ships its own React interface and the desktop assistant's
+    dashboard embeds it, which is a *different* origin: `X-Frame-Options: DENY`
+    blanked that panel. `SAMEORIGIN` does not help and `ALLOW-FROM` is dead, so
+    the caller (run_fusion.py) names the dashboard origins explicitly; without
+    that variable the strict default stands.
+    """
+    raw = os.getenv("FRAME_ANCESTORS", "")
+    return [o.strip().rstrip("/") for o in raw.replace(",", " ").split() if o.strip()]
+
+
+def apply_security_headers(path: str, response):
+    """Set the security headers on *response* for a request to *path*.
+
+    The middleware calls it on every response; the 500 handler calls it too,
+    because Starlette sends an unhandled error from outside every middleware.
+    With ``SECURITY_HEADERS_ENABLED`` off the response is left as it is.
+    """
+    if not settings.SECURITY_HEADERS_ENABLED:
+        return response
+
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # Prevent clickjacking. An explicit embedder allowlist replaces the
+    # blanket DENY, because frame-ancestors is the only header browsers
+    # still honour for that.
+    ancestors = frame_ancestors()
+    if not ancestors:
+        response.headers["X-Frame-Options"] = "DENY"
+
+    # XSS protection
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Strict transport security (HTTPS only)
+    response.headers["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+
+    # Content security policy. A route that set its own (the generated
+    # project previews, which are sandboxed) keeps it: this middleware is
+    # outermost, so overwriting would silently drop the sandbox.
+    existing = response.headers.get("Content-Security-Policy")
+    if existing:
+        csp = existing
+    elif path in {"/docs", "/redoc", "/openapi.json"}:
+        csp = (
+            "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
+            "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "
+            "https://fonts.googleapis.com 'unsafe-inline'; "
+            "font-src https://fonts.gstatic.com; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:"
+        )
+    else:
+        csp = "default-src 'self'"
+    if ancestors:
+        csp += "; frame-ancestors 'self' " + " ".join(ancestors)
+    response.headers["Content-Security-Policy"] = csp
+
+    # Referrer policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions policy
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    return response
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        return apply_security_headers(request.url.path, response)
 
-        # Prevent MIME type sniffing
-        response.headers["X-Content-Type-Options"] = "nosniff"
 
-        # Prevent clickjacking
-        response.headers["X-Frame-Options"] = "DENY"
+# The Glassroom stream is an EventSource that reconnects on its own, so it is
+# never refused. Health, metrics, the docs and the UI's files are not under
+# /v1/ and are never limited either.
+RATE_LIMIT_EXEMPT = {"/v1/glassroom/stream"}
+_DEFAULT_LIMIT = parse_limit(settings.RATE_LIMIT_DEFAULT)
+_LOCAL_STORAGE = settings.RATE_LIMIT_STORAGE_URI.startswith("memory://")
 
-        # XSS protection
-        response.headers["X-XSS-Protection"] = "1; mode=block"
 
-        # Strict transport security (HTTPS only)
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
+def is_rate_limited(path: str) -> bool:
+    """Whether a request to *path* counts against ``RATE_LIMIT_DEFAULT``."""
+    return path.startswith("/v1/") and path not in RATE_LIMIT_EXEMPT
 
-        # Content security policy
-        if request.url.path in {"/docs", "/redoc", "/openapi.json"}:
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
-                "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "
-                "https://fonts.googleapis.com 'unsafe-inline'; "
-                "font-src https://fonts.gstatic.com; "
-                "img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:"
-            )
-        else:
-            response.headers["Content-Security-Policy"] = "default-src 'self'"
 
-        # Referrer policy
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+class DefaultRateLimitMiddleware(BaseHTTPMiddleware):
+    """Apply ``RATE_LIMIT_DEFAULT`` to every API request, per client address.
 
-        # Permissions policy
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=()"
-        )
+    slowapi's own middleware finds the route before counting, and FastAPI no
+    longer flattens included routers into ``app.routes``, so it found none and
+    limited nothing. This counts by path instead, in the limiter's storage;
+    the sign-in routes still carry their own, tighter limit on top.
+    """
 
-        return response
+    async def dispatch(self, request: Request, call_next):
+        if limiter.enabled and is_rate_limited(request.url.path):
+            key = get_remote_address(request)
+            if _LOCAL_STORAGE:
+                allowed = limiter._limiter.hit(_DEFAULT_LIMIT, "default", key)
+            else:
+                # A remote store (Redis, Memcached) answers over the network:
+                # wait for it off the event loop, not on it.
+                allowed = await run_in_threadpool(
+                    limiter._limiter.hit, _DEFAULT_LIMIT, "default", key
+                )
+            if not allowed:
+                return JSONResponse(
+                    {"error": f"Rate limit exceeded: {settings.RATE_LIMIT_DEFAULT}"},
+                    status_code=429,
+                )
+        return await call_next(request)
 
 
 def setup_security(app):
@@ -77,11 +158,25 @@ def setup_security(app):
 
     # Add rate limit exceeded handler
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(DefaultRateLimitMiddleware)
 
-    # Add security headers middleware
+    logger.info("Security middleware configured (rate limiting)")
+
+
+def add_security_headers(app):
+    """Attach the headers last so they are the outermost middleware.
+
+    Added in ``setup_security`` they sat *inside* the SPA fallback, and the
+    factory's own shell — the one page a browser puts in an iframe — came back
+    with no CSP and no X-Frame-Options at all.
+    """
+    if not settings.SECURITY_HEADERS_ENABLED:
+        logger.warning(
+            "SECURITY_HEADERS_ENABLED is off: responses carry no security headers"
+        )
+        return
     app.add_middleware(SecurityHeadersMiddleware)
-
-    logger.info("Security middleware configured (rate limiting + security headers)")
+    logger.info("Security headers middleware attached (outermost)")
 
 
 def get_cors_origins():
@@ -89,9 +184,3 @@ def get_cors_origins():
     if settings.CORS_ORIGINS == "*":
         return ["*"]
     return [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
-
-
-def check_rate_limit(request: Request):
-    """Check if request is within rate limit. Returns True if allowed."""
-    # This is a placeholder for custom rate limit logic if needed
-    return True
