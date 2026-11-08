@@ -117,6 +117,66 @@ def test_ok_status_without_choices_is_an_error_not_an_empty_answer(client, upstr
     assert resp.get_json()["provider"] == "qwen"
 
 
+def _openai_body(message: dict, finish_reason: str = "stop") -> FakeResponse:
+    return FakeResponse(
+        200,
+        {
+            "choices": [{"message": message, "finish_reason": finish_reason}],
+            "usage": {"total_tokens": 7},
+        },
+    )
+
+
+def test_an_empty_answer_falls_back_to_another_provider(client, upstream):
+    upstream.set("deepseek", _openai_body({"role": "assistant", "content": "  "}))
+    upstream.set("qwen", openai_ok("answer from qwen"))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert upstream.providers_called() == ["deepseek", "qwen"]
+    assert body["choices"][0]["message"]["content"] == "answer from qwen"
+    assert body["fallback_from"]["message"] == "empty response"
+
+
+def test_an_empty_answer_everywhere_is_a_502_naming_it(client, upstream):
+    empty = _openai_body({"role": "assistant", "content": None})
+    for provider in ("deepseek", "qwen", "gemini"):
+        upstream.set(provider, empty)
+    upstream.set("gemini", FakeResponse(503, {"message": "gemini down"}))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 502
+    body = resp.get_json()
+    assert (body["provider"], body["message"]) == ("deepseek", "empty response")
+
+
+def test_a_tool_call_without_text_is_an_answer(client, upstream):
+    call = {"id": "c1", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+    upstream.set(
+        "deepseek",
+        _openai_body({"role": "assistant", "content": None, "tool_calls": [call]}, "tool_calls"),
+    )
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 200
+    assert upstream.providers_called() == ["deepseek"]
+    assert resp.get_json()["choices"][0]["message"]["tool_calls"] == [call]
+
+
+def test_an_empty_answer_cut_at_the_length_limit_is_returned_as_cut(client, upstream):
+    upstream.set("deepseek", _openai_body({"role": "assistant", "content": ""}, "length"))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 200
+    assert upstream.providers_called() == ["deepseek"]
+    assert resp.get_json()["choices"][0]["finish_reason"] == "length"
+
+
 def test_quota_error_falls_back_to_a_catalogue_model(client, upstream):
     upstream.set("deepseek", FakeResponse(429, {"error": {"message": "quota exhausted"}}))
     upstream.set("qwen", openai_ok("answer from qwen"))
@@ -144,6 +204,56 @@ def test_5xx_fallback_skips_candidates_missing_from_the_catalogue(client, upstre
     assert resp.status_code == 200
     assert upstream.providers_called() == ["gemini", "qwen"]
     assert resp.get_json().get("served_model") == "qwen3.6-flash"
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        FakeResponse(402, {"error": {"message": "Insufficient Balance"}}),
+        FakeResponse(400, {"error": {"message": "Your credit balance is too low"}}),
+        FakeResponse(403, {"error": {"code": "Arrearage", "message": "Arrearage"}}),
+        FakeResponse(200, {"error": {"message": "insufficient_quota"}}),
+    ],
+)
+def test_a_provider_without_credit_falls_back(client, upstream, response):
+    upstream.set("deepseek", response)
+    upstream.set("qwen", openai_ok("answer from qwen"))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 200
+    assert upstream.providers_called() == ["deepseek", "qwen"]
+    assert resp.get_json()["fallback_from"]["status"] == response.status_code
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        FakeResponse(403, {"error": {"message": "forbidden"}}),
+        FakeResponse(400, {"error": {"message": "insufficient permissions for model"}}),
+        FakeResponse(400, {"error": {"message": "bad request from the load balancer"}}),
+    ],
+)
+def test_a_refusal_that_is_not_about_credit_does_not_fall_back(client, upstream, response):
+    upstream.set("deepseek", response)
+    upstream.set("qwen", openai_ok("answer from qwen"))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 502
+    assert upstream.providers_called() == ["deepseek"]
+
+
+def test_no_credit_anywhere_keeps_the_402_for_the_backend(client, upstream):
+    no_credit = FakeResponse(402, {"error": {"message": "Insufficient Balance"}})
+    for provider in ("deepseek", "qwen", "gemini"):
+        upstream.set(provider, no_credit)
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    # The backend pauses the sprint on the primary's 402 (sprint_control).
+    assert resp.status_code == 502
+    assert resp.get_json()["status"] == 402
 
 
 def test_failed_fallbacks_return_the_original_error(client, upstream):

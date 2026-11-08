@@ -39,12 +39,64 @@ RULES: dict[str, str] = {
         "Approve an outside producer's run whose latest verification is "
         "verified, with a risk tier of low or medium, within the file limit."
     ),
+    "merge_local": (
+        "Merge a done task's branch, or a sprint's integration whose tests "
+        "passed: QA approved, latest run verified, risk tier low or medium, "
+        "within the size limits."
+    ),
+    "undo_delivery": (
+        "Undo a delivery whose latest verification is refuted, when no person "
+        "has worked on the task since."
+    ),
+    "send_back_blocked": (
+        "Send a blocked task back for another attempt, when the ScrumMaster's "
+        "triage chose another attempt with a brief."
+    ),
+    "carry_over": (
+        "Carry a blocked task into the next sprint, when it is not yet carried "
+        "and the triage did not leave it for a person."
+    ),
+    "answer_question": (
+        "Answer an open question of the PO or the Architect, only when the "
+        "answer is already in an approved specification or decision."
+    ),
+    "publish": (
+        "Publish the sprint's integration branch, only when the company has a "
+        "remote and has turned publishing on."
+    ),
+    "resume_after_credit": (
+        "Resume a sprint paused for lack of credit, once the provider's balance "
+        "check passes."
+    ),
+    "approve_specification": (
+        "Approve a specification draft with no blocking finding, no open "
+        "question, and every requirement carrying criteria."
+    ),
+    "approve_architecture": (
+        "Approve an architecture draft with no blocking finding, no open "
+        "question, covering every requirement of the approved specification."
+    ),
+    "accept_high_risk": (
+        "Accept a high-risk delivery whose latest run is verified, whose "
+        "criterion tests all pass, with no secret in the standards check and "
+        "within a tighter size limit."
+    ),
 }
 # The decision each rule lets the agent take, and the category it applies to.
 RULE_DECISIONS = {
     "accept_delivery": ("accept_delivery", "accept"),
     "adopt_procedure": ("adopt_procedure", "adopt"),
     "approve_run": ("approve_run", "approve"),
+    "merge_local": ("merge_local", "merge"),
+    "undo_delivery": ("undo_delivery", "undo"),
+    "send_back_blocked": ("send_back_blocked", "send_back"),
+    "carry_over": ("carry_over", "carry_over"),
+    "answer_question": ("answer_question", "answer"),
+    "publish": ("publish", "publish"),
+    "resume_after_credit": ("resume_after_credit", "resume"),
+    "approve_specification": ("approve_specification", "approve"),
+    "approve_architecture": ("approve_architecture", "approve"),
+    "accept_high_risk": ("accept_high_risk", "accept"),
 }
 # Decisions that always go to the client, whatever a policy says.
 ALWAYS_ESCALATE = frozenset(
@@ -173,6 +225,86 @@ def _rule_holds(rule: str, facts: dict[str, Any], policy: Policy) -> str | None:
             return f"{files if files is not None else 'unknown'} files, over the limit"
         if (facts.get("criteria") or 0) > policy.max_criteria:
             return f"{facts.get('criteria')} criteria, over the limit"
+        return None
+    if rule == "merge_local":
+        if facts.get("qa_approved") is not True:
+            return "QA has not approved"
+        if facts.get("verdict") != "verified":
+            return f"the latest run is {facts.get('verdict') or 'not verified'}"
+        if tier not in LOW_TIERS:
+            return f"the risk tier is {tier or 'unknown'}"
+        if facts.get("integration_status") not in (None, "tests_passed"):
+            return (
+                f"integration status is {facts.get('integration_status') or 'unknown'}"
+            )
+        if files is None or files > policy.max_files:
+            return f"{files if files is not None else 'unknown'} files, over the limit"
+        return None
+    if rule == "undo_delivery":
+        if facts.get("verdict") != "refuted":
+            return f"the latest verification is {facts.get('verdict') or 'not refuted'}"
+        if facts.get("person_touched"):
+            return "a person has worked on the task since"
+        return None
+    if rule == "send_back_blocked":
+        if not facts.get("blocked"):
+            return "the task is not blocked"
+        if facts.get("triage_decision") != "retry":
+            return "the ScrumMaster did not choose another attempt"
+        if not facts.get("triage_brief"):
+            return "no brief for the next attempt"
+        return None
+    if rule == "carry_over":
+        if not facts.get("blocked"):
+            return "the task is not blocked"
+        if facts.get("carried"):
+            return "already carried over"
+        if facts.get("triage_decision") == "person":
+            return "the triage left it for a person"
+        return None
+    if rule == "answer_question":
+        if not facts.get("open_question"):
+            return "no open question"
+        if not facts.get("answer_known"):
+            return "the answer is not in an approved specification or decision"
+        return None
+    if rule == "publish":
+        if not facts.get("has_remote"):
+            return "no remote configured"
+        if not facts.get("publishing_on"):
+            return "publishing is turned off"
+        return None
+    if rule == "resume_after_credit":
+        if not facts.get("paused_for_credit"):
+            return "the sprint is not paused for credit"
+        if not facts.get("balance_ok"):
+            return "the provider balance check failed"
+        return None
+    if rule == "approve_specification":
+        if facts.get("blocking_findings"):
+            return "blocking findings remain"
+        if facts.get("open_questions"):
+            return "open questions remain"
+        if not facts.get("all_requirements_have_criteria"):
+            return "a requirement has no criterion"
+        return None
+    if rule == "approve_architecture":
+        if facts.get("blocking_findings"):
+            return "blocking findings remain"
+        if facts.get("open_questions"):
+            return "open questions remain"
+        if not facts.get("covers_all_requirements"):
+            return "does not cover every requirement"
+        return None
+    if rule == "accept_high_risk":
+        if facts.get("verdict") != "verified":
+            return f"the latest run is {facts.get('verdict') or 'not verified'}"
+        if not facts.get("all_criterion_tests_pass"):
+            return "not every criterion test passes"
+        if facts.get("standards_secret"):
+            return "a secret was found by the standards check"
+        if files is None or files > 5:
+            return f"{files if files is not None else 'unknown'} files, over the tighter limit"
         return None
     if rule == "adopt_procedure":
         if facts.get("autonomy_level") != 3:
