@@ -67,10 +67,10 @@ export default function ModelConnections({ companyId, canManage }: { companyId: 
                     onClick={() => validate.mutate(row.id)}>
                     {t('models.connections.validate')}
                   </button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => toggle.mutate(row)}>
+                  <button type="button" className="btn-ghost btn-sm" disabled={toggle.isPending} onClick={() => toggle.mutate(row)}>
                     {row.enabled ? t('models.connections.turnOff') : t('models.connections.turnOn')}
                   </button>
-                  <button type="button" className="btn-danger btn-sm"
+                  <button type="button" className="btn-danger btn-sm" disabled={remove.isPending}
                     aria-label={t('models.connections.removeNamed', { name: row.name })}
                     onClick={() => { if (window.confirm(t('models.connections.confirmRemove', { name: row.name }))) remove.mutate(row.id) }}>
                     <Trash2 size={14} />
