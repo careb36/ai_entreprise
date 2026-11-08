@@ -11,6 +11,7 @@ import { useUndoDelivery } from '../services/runReviews'
 vi.mock('../services/runReviews', () => ({
   useUndoDelivery: vi.fn(),
   usePublishRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  useMergeRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
   useReviewComments: vi.fn(() => ({ data: { comments: [] } })),
   useSyncComments: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false })),

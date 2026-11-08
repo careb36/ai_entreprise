@@ -1911,22 +1911,27 @@
     "gitCommit": "On branch {{branch}}, commit {{commit}} (on top of {{parent}})",
     "gitNoCommit": "On branch {{branch}}: no new commit, nothing changed",
     "publish": {
-      "title": "Publish the branch",
-      "button": "Publish as pull request",
+      "title": "Merge or publish the branch",
+      "button": "Publish as pull request (optional)",
       "again": "Publish again",
-      "hint": "Pushes {{branch}} to origin with this computer's Git credentials and opens a draft pull request (gh) or merge request (glab); without them, gives the page to open it. The description carries this run's evidence.",
+      "hint": "Publishing pushes {{branch}} to origin with this computer's Git credentials and opens a draft pull request (gh) or merge request (glab); without them, gives the page to open it. The description carries this run's evidence.",
       "pushed": "{{name}} pushed {{commit}} on {{branch}} → {{base}}",
       "how": {
         "gh": "Draft pull request",
         "glab": "Draft merge request",
-        "compare": "Open the request"
+        "compare": "Open the request",
+        "local": "Merged locally, nothing pushed"
       },
       "noUrl": "Pushed; this remote has no web page to open a request",
       "updated": "description updated with this run",
       "sync": "Bring comments",
       "synced": "{{added}} new, {{updated}} updated",
       "truncated": "Only part of the comments came: open the request on the platform for the rest",
-      "fromPlatform": "Comments from the request that are not on a line shown here"
+      "fromPlatform": "Comments from the request that are not on a line shown here",
+      "merge": "Merge locally",
+      "mergeHint": "Merging puts {{branch}} into the base branch of the repository on this computer; nothing is pushed and no remote is needed.",
+      "merged": "{{name}} merged {{commit}} from {{branch}} into {{base}}",
+      "alreadyIn": "already in the base branch"
     },
     "undo": {
       "title": "Undo this delivery",

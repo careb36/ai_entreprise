@@ -49,7 +49,8 @@ export interface RunReview {
   created_at: string
 }
 
-export type PublishHow = 'gh' | 'glab' | 'compare'
+/** `local`: merged into a base branch of the local repository, nothing pushed. */
+export type PublishHow = 'gh' | 'glab' | 'compare' | 'local'
 
 /** A run's branch pushed to its platform, and the request opened for it (`how`). */
 export interface RunPublication {
@@ -100,6 +101,9 @@ export const reviewsApi = {
   /** A push and the platform's CLI on the person's machine: sent once, never retried, waited on past the backend's 150 s. */
   publish: (companyId: number, runId: number) =>
     fetchApi<RunPublication>(`/v1/agent_runs/${runId}/publish?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 180_000 }),
+  /** Merges the task branch into the base branch on the daemon's machine; no remote involved. */
+  merge: (companyId: number, runId: number) =>
+    fetchApi<RunPublication>(`/v1/agent_runs/${runId}/merge?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 180_000 }),
   /** Reads the request's comments on the platform through the daemon: a few paginated calls. */
   syncComments: (companyId: number, runId: number, publicationId: number) =>
     fetchApi<SyncResult>(`/v1/agent_runs/${runId}/publications/${publicationId}/sync?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 240_000 }),
@@ -158,6 +162,15 @@ export function usePublishRun(companyId: number, runId: number) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => reviewsApi.publish(companyId, runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: publicationsKey(companyId, runId) }),
+  })
+}
+
+/** Merge the run's branch into the local repository's base branch (Managers). */
+export function useMergeRun(companyId: number, runId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => reviewsApi.merge(companyId, runId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: publicationsKey(companyId, runId) }),
   })
 }

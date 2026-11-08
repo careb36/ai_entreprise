@@ -29,6 +29,7 @@ from models import BugReport
 from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
+from services import locks
 
 SUPPORT_AGENT_NAME = "Support agent"
 SUPPORT_ROLE = "Support"
@@ -243,7 +244,10 @@ async def run_support_agent(engine) -> None:
     )
     while True:
         try:
-            count = await asyncio.to_thread(triage_cycle, engine)
+            # One replica at a time (issue #328): the others skip the round.
+            count = await asyncio.to_thread(
+                locks.run_exclusive, engine, locks.SUPPORT_AGENT, triage_cycle, engine
+            )
             if count:
                 logger.info("Support agent triaged %s ticket(s)", count)
         except Exception as exc:  # noqa: BLE001 - Keep the loop alive.
