@@ -2109,5 +2109,22 @@
     "stopFirst": "Stop the sprint first",
     "archivedBy": "Archived by {{who}}",
     "showArchived": "Show archived sprints"
+  },
+  "routing": {
+    "title": "Difficulty and model",
+    "hint": "Closed sprints, by the difficulty each task was routed by and the model of its last delivery.",
+    "caption": "Tasks by difficulty and model",
+    "difficulty": "Difficulty",
+    "model": "Model",
+    "tasks": "Tasks",
+    "firstAttempt": "First attempt",
+    "rework": "Rework / task",
+    "blocked": "Blocked",
+    "tokens": "Reported tokens",
+    "difficultyBand": "{{difficulty}} (band {{band}})",
+    "noDelivery": "no delivery",
+    "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
+    "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
+    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
   }
 }

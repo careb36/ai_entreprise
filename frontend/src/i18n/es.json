@@ -2109,5 +2109,22 @@
     "stopFirst": "Detené el sprint primero",
     "archivedBy": "Archivado por {{who}}",
     "showArchived": "Mostrar sprints archivados"
+  },
+  "routing": {
+    "title": "Dificultad y modelo",
+    "hint": "Sprints cerrados, según la dificultad con la que se enrutó cada tarea y el modelo de su última entrega.",
+    "caption": "Tareas por dificultad y modelo",
+    "difficulty": "Dificultad",
+    "model": "Modelo",
+    "tasks": "Tareas",
+    "firstAttempt": "Primer intento",
+    "rework": "Retrabajo / tarea",
+    "blocked": "Bloqueadas",
+    "tokens": "Tokens informados",
+    "difficultyBand": "{{difficulty}} (banda {{band}})",
+    "noDelivery": "sin entrega",
+    "firstAttemptValue": "{{rate}} ({{first}}; {{done}} hechas)",
+    "unreported_one": "{{count}} turno sin conteo de tokens informado, fuera de los tokens.",
+    "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens."
   }
 }

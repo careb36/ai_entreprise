@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import BaseModel, Field
-from services import arch_author, arch_check, document_approval
+from services import arch_author, arch_check, document_approval, repo_map
 from services.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
 
@@ -225,6 +225,7 @@ async def update_architecture(
 @router.post("/draft")
 async def draft_architecture(
     req: DraftRequest,
+    http_request: Request,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -248,6 +249,9 @@ async def draft_architecture(
     # What the Architect is asked is read here, with the request's session;
     # only the call to the proxy runs in a thread (a session is not shared).
     request = arch_author.prepare(session, spec, existing)
+    request["prompt"] += await repo_map.fetch_section(
+        getattr(http_request.app.state, "nats_client", None), request["project_path"]
+    )
     try:
         content = await asyncio.to_thread(arch_author.draft_from, request)
     except arch_author.ArchAuthorError as exc:

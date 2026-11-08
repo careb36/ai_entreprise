@@ -13,7 +13,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
 - workspace.hash:         sha256 of named files as they are on disk (file_hash.py); workspace.undo: undo a delivery (delivery_snapshot.py)
-- workspace.list / read / search / find, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, workspace_edit.py)
+- workspace.list / read / search / find / map, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, repo_map.py, workspace_edit.py)
 - workspace.git.publish / merge: push a branch and open its request (gh, glab), or merge it locally (local_merge.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
@@ -49,7 +49,7 @@ import nats_connect
 import nats_scope
 import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
-import delivery_snapshot, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
+import delivery_snapshot, repo_map, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
 _build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -630,7 +630,7 @@ async def main():
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
-        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS)),
         *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
