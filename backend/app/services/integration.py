@@ -30,7 +30,7 @@ from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, select
 
-from services import criteria_tests, workspace_daemon
+from services import workspace_daemon
 from services.agent_service import AgentService
 
 BRANCH_PREFIX = "fabrique/task-"
