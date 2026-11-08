@@ -47,11 +47,11 @@ from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported f
 import nats
 import nats_scope
 import platform_reviews
+import sprint_integration
 import shell_exec
 import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-_build_command_env = shell_exec.build_command_env  # Old private names; the logic is in shell_exec.
-_build_shell_command = shell_exec.build_shell_command
+_build_shell_command = shell_exec.build_shell_command  # An old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -72,8 +72,7 @@ ASSISTANT_FALLBACK_PATHS = {
 # Every daemon instance answers in this queue group, so a request is handled once.
 QUEUE_GROUP = "workspace-daemon"
 
-# The JetStream streams for queued deliveries are declared by the backend
-# (backend/app/nats_client.py); nats_scope applies NATS_NAMESPACE to both.
+# Queued-delivery streams: declared by the backend (nats_client.py), namespaced by nats_scope.
 
 
 def confirm_workspace_path() -> str:
@@ -267,7 +266,7 @@ def _has_fallback_binary(name: str) -> bool:
 
 def detect_assistants(commands: list[str]) -> list[str]:
     """Return the assistant commands found on the PATH used for command execution."""
-    search_path = _build_command_env().get("PATH")
+    search_path = shell_exec.build_command_env().get("PATH")
     return [
         name
         for name in commands
@@ -674,6 +673,7 @@ async def main():
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in workspace_read.HANDLERS),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
+        ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 
