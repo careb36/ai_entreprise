@@ -437,6 +437,26 @@ def _check(tmp_path, start=SERVE, **extra):
     return port, app_run.check_application(request)
 
 
+SLOW_TO_STOP = (
+    "import http.server, signal, sys, time\n"
+    "def bye(*_):\n"
+    "    time.sleep(1)\n"
+    "    sys.exit(0)\n"
+    "signal.signal(signal.SIGTERM, bye)\n"
+    "http.server.test(HandlerClass=http.server.SimpleHTTPRequestHandler,"
+    " port=int(sys.argv[1]), bind='127.0.0.1')\n"
+)
+
+
+def test_a_server_the_shell_outlives_is_stopped_before_the_reply(tmp_path):
+    """The shell dies at once; the server it started takes a second to let go."""
+    (tmp_path / "index.html").write_text("hello")
+    (tmp_path / "slow.py").write_text(SLOW_TO_STOP)
+    port, reply = _check(tmp_path, start=f"{PY} slow.py $PORT; true")
+    assert reply["listening"] and reply["stopped"]
+    assert not app_run.port_in_use(port)
+
+
 def test_the_application_is_started_probed_and_stopped(tmp_path):
     (tmp_path / "index.html").write_text("hello")
     port, reply = _check(tmp_path)

@@ -98,9 +98,47 @@ def http_probe(url: str) -> Dict[str, Any]:
         return {"url": url, "status": None, "error": str(getattr(e, "reason", e))}
 
 
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
+
+
+def _await_group(pgid: int) -> None:
+    """The shell may exit before the server it started: wait for the whole group.
+
+    A zombie still answers ``killpg(pgid, 0)`` but holds no socket, so the wait
+    is bounded and ends in SIGKILL rather than a hang."""
+    deadline = time.monotonic() + STOP_GRACE_SECONDS
+    while _group_alive(pgid) and time.monotonic() < deadline:
+        time.sleep(POLL_SECONDS / 5)
+    if _group_alive(pgid):
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            return
+        deadline = time.monotonic() + 1
+        while _group_alive(pgid) and time.monotonic() < deadline:
+            time.sleep(POLL_SECONDS / 5)
+
+
 def _stop_host(process: subprocess.Popen) -> bool:
     """Stop the application and everything it started."""
+    stopped = _signal_leader(process)
+    if os.name != "nt":
+        _await_group(process.pid)
+    return stopped
+
+
+def _signal_leader(process: subprocess.Popen) -> bool:
     if process.poll() is not None:
+        if os.name != "nt":
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
         return True
     try:
         if os.name == "nt":
