@@ -391,8 +391,8 @@ def _execute_task(
     on a failed or empty call. With ``company_id`` the turn goes to
     ``audit_log`` (role, company, token cost) for the KPIs.
     """
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.company_id = company_id
 
     system_prompt = agent.get("system_prompt") or (
         f"You are a {agent.get('seniority', 'Senior')} {agent.get('role', 'Developer')} "
@@ -585,10 +585,8 @@ def _consult_architect(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
     )
 
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
-    client.max_tokens = BRIEF_MAX_TOKENS
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
     try:
         result = client.chat(
             messages=[
@@ -3309,7 +3307,7 @@ def _call_llm_for_review(
     reads from the audit trail instead of its comment-scan fallback.
     """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens = REVIEW_MAX_TOKENS
+    client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})

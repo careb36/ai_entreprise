@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     # The model catalogue (issue #356): models.dev, refreshed in the
     # background at most every MODELS_CATALOG_REFRESH_HOURS (0 keeps the
     # snapshot shipped in app/data/models_dev.json and never calls out).
+    # Shared with the LLM proxy: it accepts a company's own provider
+    # connection (issue #356) only with this token. Empty disables them.
+    LLM_PROXY_INTERNAL_TOKEN: str = ""
     MODELS_CATALOG_URL: str = "https://models.dev/api.json"
     MODELS_CATALOG_REFRESH_HOURS: float = 24.0
     RESEARCH_TOOLS_ENABLED: bool = True

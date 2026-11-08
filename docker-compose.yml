@@ -86,6 +86,7 @@ services:
       dockerfile: Dockerfile
     container_name: factory-llm-proxy
     environment:
+      LLM_PROXY_INTERNAL_TOKEN: ${LLM_PROXY_INTERNAL_TOKEN:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-factory}
@@ -139,6 +140,7 @@ services:
       NATS_URL: nats://nats:4222
       NATS_NAMESPACE: ${NATS_NAMESPACE:-}
       LLM_PROXY_URL: http://llm-proxy:5100
+      LLM_PROXY_INTERNAL_TOKEN: ${LLM_PROXY_INTERNAL_TOKEN:-}
       AUDIT_LOG_PATH: /app/.factory/logs
       AGENT_WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       AGENT_GRAPH_ENABLED: ${AGENT_GRAPH_ENABLED:-true}
