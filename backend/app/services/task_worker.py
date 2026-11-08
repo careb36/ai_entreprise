@@ -56,10 +56,7 @@ from services import (
     standards,
     workspace_daemon,
 )
-from services.answers import (
-    BRIEF_MAX_TOKENS,
-    REVIEW_MAX_TOKENS,
-)
+from services.answers import BRIEF_MAX_TOKENS, REVIEW_MAX_TOKENS
 from services.answers import (
     gate_reason as _gate_reason,
 )
@@ -113,6 +110,7 @@ from services.sprint_planner import (
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
 from services.workspace_daemon import detect_test_command
+from services.workspace_edits import with_tool_edits
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -496,8 +494,9 @@ def _execute_task(
         )
     finally:
         if toolbox is not None:
-            toolbox.close()
+            toolbox.close()  # The tools' edits come back as files to deliver.
     agent["tool_calls"] = tool_calls
+    agent["tool_edits"] = getattr(toolbox, "edited_files", [])
 
     failure = _llm_failure(result, model)
     if failure:
@@ -1903,7 +1902,7 @@ async def _deliver_artifacts(
     worker compares that with the sha256 of the content it sent.  Returns the
     payload for QA review.
     """
-    targets = parse_file_manifest(deliverable)
+    targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
     if not targets:
         targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
     review_payload = _build_review_payload(deliverable, targets)

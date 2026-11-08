@@ -212,6 +212,7 @@ def test_the_daemon_handlers_answer_over_nats_in_the_reply_shape(project):
         "workspace.list",
         "workspace.read",
         "workspace.search",
+        "workspace.find",
     ]
 
 
@@ -269,6 +270,7 @@ def test_the_toolbox_offers_the_read_tools_and_the_test_run_only_with_a_command(
         "workspace__list",
         "workspace__read",
         "workspace__search",
+        "workspace__find_file",
     ]
     with_tests = developer_tools.WorkspaceToolbox(
         _Requester(daemon), str(project), test_command="python -m pytest -q"
@@ -298,7 +300,10 @@ def test_a_read_is_recorded_with_the_file_s_hash_and_the_model_sees_the_numbered
         and observation["is_error"] is False
     )
     assert observation["result_sha256"] == hashlib.sha256(text.encode()).hexdigest()
-    assert text.startswith("    1| def greet(name):")
+    assert text.splitlines()[:2] == [
+        "[src/greet.py: lines 1–2 of 2]",
+        "    1| def greet(name):",
+    ]
     listing, text = box.call(_call("workspace__list"), 1)
     assert listing["tool"] == "list" and "src/greet.py" in text.splitlines()
     search, text = box.call(_call("workspace__search", pattern="greet", path="src"), 2)
@@ -465,6 +470,7 @@ def test_the_combined_toolbox_dispatches_by_name_and_caps_the_rounds(
         "workspace__list",
         "workspace__read",
         "workspace__search",
+        "workspace__find_file",
         "tracker__search",
     ]
     assert box.unavailable == {"gone": "unreachable"} and box.max_rounds == 2
@@ -515,6 +521,7 @@ def test_the_tools_go_to_the_roles_that_deliver_files_when_the_project_is_known(
             "workspace__list",
             "workspace__read",
             "workspace__search",
+            "workspace__find_file",
         ]
         for role in ("QA", "dev", "Developer"):
             assert developer_tools.offered_to(role)
@@ -685,6 +692,7 @@ def test_the_worker_offers_the_tools_reads_through_the_daemon_and_keeps_the_read
         "workspace__list",
         "workspace__read",
         "workspace__search",
+        "workspace__find_file",
     ]
     read = agent["tool_calls"][0]
     assert (
