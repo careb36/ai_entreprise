@@ -496,8 +496,7 @@ def _call_openai_compatible(provider: str, model: str, data: dict, timeout: floa
         {**data, "model": model},
         timeout,
     )
-    if not result.get("choices"):
-        raise UpstreamError(provider, model, status, "response contained no choices", retriable=False)
+    upstream.check_openai_answer(provider, model, status, result)
     return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))
 
 
