@@ -40,7 +40,7 @@ from models.agent_run import (
 from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
-from services import company_models
+from services import company_models, locks
 
 REVIEWER_AGENT_NAME = "Reviewer agent"
 REVIEWER_ROLE = "Reviewer"
@@ -336,7 +336,10 @@ async def run_reviewer_agent(engine) -> None:
     )
     while True:
         try:
-            count = await asyncio.to_thread(review_cycle, engine)
+            # One replica at a time (issue #328): the others skip the round.
+            count = await asyncio.to_thread(
+                locks.run_exclusive, engine, locks.REVIEWER_AGENT, review_cycle, engine
+            )
             if count:
                 logger.info("Reviewer agent suggested on %s run(s)", count)
         except Exception as exc:  # noqa: BLE001 - Keep the loop alive.
