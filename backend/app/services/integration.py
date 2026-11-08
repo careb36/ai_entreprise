@@ -246,6 +246,8 @@ async def _run_suite(
         {"id": context["sprint_id"], "company_id": context["company_id"]},
         evidence,
         engine,
+        # The tests alone: the integration's status reads only the test run.
+        application=False,
     )
     test_run = dict(evidence.get("test_run") or {})
     test_run.pop("criteria", None)

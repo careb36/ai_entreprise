@@ -2691,9 +2691,9 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 )
                 rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
                 instruction = (
-                    "Fix the code so the project's tests pass and deliver every "
+                    "Fix the code so the project's checks pass and deliver every "
                     "changed file in full as a path= block."
-                    if problem == "tests failed"
+                    if problem in delivery_gate.CODE_PROBLEMS
                     else "Re-run the task and give every file in full as a path= block."
                 )
                 task_events.record(

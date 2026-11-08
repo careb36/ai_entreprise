@@ -221,11 +221,47 @@ class _Tail:
         return bytes(self.data).decode("utf-8", errors="replace")
 
 
-def run_bounded(argv: list[str], timeout: int) -> dict[str, Any]:
+def kill_tree(process: subprocess.Popen) -> None:
+    """Kill *process* and everything it started: its process group on POSIX
+    (it must have been started with ``start_new_session``), its process tree
+    on Windows (``taskkill /T /F``), where a shell wrapper's ``terminate()``
+    would leave the program it launched running."""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(process.pid)],
+            capture_output=True, check=False,
+        )
+        if process.poll() is None:
+            process.kill()
+        return
+    import signal
+
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        if process.poll() is None:
+            process.kill()
+
+
+def run_bounded(
+    argv: list[str],
+    timeout: float,
+    cwd: str | None = None,
+    env: dict[str, str] | None = None,
+    own_group: bool = False,
+) -> dict[str, Any]:
     """Run *argv*, keeping at most ``MAX_OUTPUT_BYTES`` of each stream's tail.
     Returns ``exit_code`` (``None`` when killed at *timeout*), the decoded
-    ``stdout`` / ``stderr``, ``timed_out`` and ``output_truncated``."""
-    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ``stdout`` / ``stderr``, ``timed_out`` and ``output_truncated``.
+
+    With *own_group* the command runs in a process group (a session) of its
+    own and the whole group (the tree on Windows) is killed at the timeout and
+    once it ends, so a shell's children (a test runner, a browser) never
+    outlive it; otherwise only *argv*'s process is killed, as before."""
+    process = subprocess.Popen(
+        argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env,
+        start_new_session=own_group and os.name != "nt",
+    )
     out = _Tail(process.stdout, MAX_OUTPUT_BYTES)
     err = _Tail(process.stderr, MAX_OUTPUT_BYTES)
     timed_out = False
@@ -233,8 +269,15 @@ def run_bounded(argv: list[str], timeout: int) -> dict[str, Any]:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        process.kill()
+        if own_group:
+            kill_tree(process)
+        else:
+            process.kill()
         process.wait()
+    finally:
+        if own_group and not timed_out:
+            # The shell is gone; what it left running in its group goes too.
+            kill_tree(process)
     stdout, stderr = out.text(), err.text()
     return {
         "exit_code": None if timed_out else process.returncode,
