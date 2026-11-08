@@ -112,7 +112,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
-from services.workspace_daemon import detect_install_command, detect_test_command
+from services.workspace_daemon import detect_test_command
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -1731,7 +1731,6 @@ def _delivery_comment(
 
 
 # The project's test command is detected in services/workspace_daemon.
-_detect_install_command = detect_install_command
 _detect_test_command = detect_test_command
 _detect_project_test_command = workspace_daemon.detect_project_test_command
 

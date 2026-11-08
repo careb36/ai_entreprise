@@ -15,7 +15,7 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services import task_worker, workspace_daemon
 from services.verification import check_tests_run
 from sqlmodel import select
 
@@ -74,12 +74,12 @@ def test_pytest_configuration_is_detected(no_override, tmp_path, name, content):
 
 def test_install_command_detection(no_override, tmp_path):
     (tmp_path / "package.json").write_text("{}")
-    assert task_worker._detect_install_command(str(tmp_path)) == "npm install"
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == "npm install"
     (tmp_path / "requirements.txt").write_text("x")
     # package.json wins only if present; remove to test pip
     (tmp_path / "package.json").unlink()
     assert (
-        task_worker._detect_install_command(str(tmp_path))
+        workspace_daemon.detect_install_command(str(tmp_path))
         == "pip install -r requirements.txt"
     )
 
