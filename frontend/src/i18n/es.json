@@ -583,7 +583,29 @@
     "qaFailures": "Fallo QA {{count}}/{{limit}}",
     "waitsFor_one": "Espera a {{count}} tarea",
     "waitsFor_other": "Espera a {{count}} tareas",
-    "acceptanceTests": "Tests de aceptación"
+    "acceptanceTests": "Tests de aceptación",
+    "moveQueued": "De vuelta al trabajo: la tarea quedó en cola para su agente.",
+    "moveReopened": "El sprint se reabrió y la tarea quedó en cola para su agente.",
+    "moveReopenedWaiting": "El sprint se reabrió; la tarea espera a que terminen otras tareas del sprint.",
+    "moveWaits": {
+      "paused": "El sprint está en pausa: reanúdalo para ejecutar esta tarea.",
+      "planned": "El sprint no empezó: inícialo para ejecutar esta tarea.",
+      "dependencies": "La tarea espera a que terminen otras tareas del sprint."
+    },
+    "moveToSprint": "Mover a sprint…",
+    "moveTarget": "Sprint al que mover la tarea",
+    "moveChoose": "Elige un sprint",
+    "moveTargetOption": "{{name}} ({{status}})",
+    "moveNewSprint": "Un sprint nuevo",
+    "moveConfirm": "Mover",
+    "moveCancel": "Cancelar",
+    "movedToSprint": "Tarea movida a \"{{name}}\".",
+    "sprintStatus": {
+      "active": "activo",
+      "planned": "planificado",
+      "paused": "en pausa",
+      "needs_split": "requiere división"
+    }
   },
   "glassroom": {
     "title": "Sala de Cristal",

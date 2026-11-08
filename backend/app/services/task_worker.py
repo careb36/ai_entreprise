@@ -108,6 +108,11 @@ from services.orchestration_metrics import (
     record_agent_turn,
     should_consult_architect,
 )
+from services.sprint_close import RECLOSED
+from services.sprint_close import (
+    describe_follow_up_reason as _describe_follow_up_reason,
+)
+from services.sprint_close import reclosed as _reclosed
 from services.sprint_planner import (
     build_self_improvement_objective,
     plan_self_improvement_sprint,
@@ -897,13 +902,19 @@ def _complete_sprint_and_plan_follow_up(
         result = {
             "completed": True,
             "auto_opened": False,
-            "reason": "completed_no_follow_up",
+            # A second close, after a person reopened it: no second follow-up.
+            "reason": RECLOSED
+            if _reclosed(session, sprint.id)
+            else "completed_no_follow_up",
             "sprint_id": sprint.id,
             "sprint_name": sprint.sprint_name,
             "company_id": sprint.company_id,
         }
 
         company = session.get(Company, sprint.company_id)
+        if result["reason"] == RECLOSED:
+            session.commit()
+            return result
         if not company:
             result["reason"] = "company_missing"
             session.commit()
@@ -1064,26 +1075,6 @@ def _complete_sprint_and_plan_follow_up(
         return result
 
 
-def _describe_follow_up_reason(result: dict[str, Any]) -> str:
-    """Render a human-readable reason for autonomous follow-up decisions."""
-    reason = result.get("reason")
-    if reason == "auto_follow_up_opened":
-        return f"Autonomous follow-up opened: {result.get('next_sprint_name', 'Self-improvement sprint')}"
-    if reason == "autonomy_below_threshold":
-        return "Autonomous follow-up skipped: company autonomy level is below 3."
-    if reason == "auto_self_improvement_disabled":
-        return "Autonomous follow-up skipped: auto self-improvement is disabled."
-    if reason == "active_sprint_already_exists":
-        return f"Autonomous follow-up skipped: sprint {result.get('blocking_sprint_id')} is still active or needs split."
-    if reason == "planner_returned_no_tasks":
-        return "Autonomous follow-up skipped: planner did not produce a usable backlog."
-    if reason == "company_missing":
-        return "Autonomous follow-up skipped: company context was missing."
-    if reason == "completed_no_follow_up":
-        return "Sprint completed with no autonomous follow-up trigger."
-    return "Autonomous follow-up evaluation completed."
-
-
 async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> None:
     """Close a sprint once all cards are done and optionally open the next autonomous self-improvement sprint."""
     # Build retrospective metrics before closing so the planner can use them.
@@ -1099,6 +1090,8 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     if not result.get("completed"):
         return
     integration_jobs.schedule_after_close(nats_client, engine, sprint_id)  # issue #314
+    if result.get("reason") == RECLOSED:
+        retro_metrics = None  # learned once, at the first close
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await asyncio.to_thread(
             _post_message,

@@ -84,7 +84,7 @@ describe('Kanban cards', () => {
     const card = link.closest('.card') as HTMLElement
     const select = within(card).getByRole('combobox', { name: 'Change status' })
     fireEvent.change(select, { target: { value: 'done' } })
-    expect(mutate).toHaveBeenCalledWith({ itemId: 2, data: { status: 'done' } })
+    expect(mutate).toHaveBeenCalledWith({ itemId: 2, data: { status: 'done' } }, expect.anything())
 
     fireEvent.click(link)
     expect(screen.getByText('Task page')).toBeInTheDocument()

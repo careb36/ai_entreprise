@@ -583,7 +583,29 @@
     "qaFailures": "QA fail {{count}}/{{limit}}",
     "waitsFor_one": "Waits for {{count}} task",
     "waitsFor_other": "Waits for {{count}} tasks",
-    "acceptanceTests": "Acceptance tests"
+    "acceptanceTests": "Acceptance tests",
+    "moveQueued": "Back to work: the task was queued for its agent.",
+    "moveReopened": "The sprint was reopened and the task was queued for its agent.",
+    "moveReopenedWaiting": "The sprint was reopened; the task waits for other tasks of the sprint to be done.",
+    "moveWaits": {
+      "paused": "The sprint is paused: resume it to run this task.",
+      "planned": "The sprint has not started: start it to run this task.",
+      "dependencies": "The task waits for other tasks of the sprint to be done."
+    },
+    "moveToSprint": "Move to sprint…",
+    "moveTarget": "Sprint to move the task to",
+    "moveChoose": "Choose a sprint",
+    "moveTargetOption": "{{name}} ({{status}})",
+    "moveNewSprint": "A new sprint",
+    "moveConfirm": "Move",
+    "moveCancel": "Cancel",
+    "movedToSprint": "Task moved to \"{{name}}\".",
+    "sprintStatus": {
+      "active": "active",
+      "planned": "planned",
+      "paused": "paused",
+      "needs_split": "needs split"
+    }
   },
   "glassroom": {
     "title": "Glassroom",
