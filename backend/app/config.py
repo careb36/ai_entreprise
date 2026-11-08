@@ -74,6 +74,28 @@ class Settings(BaseSettings):
     DELIVERY_SANDBOX_CPUS: float = 2.0
     DELIVERY_SANDBOX_MEMORY_MB: int = 2048
     DELIVERY_SANDBOX_PIDS: int = 512
+    # Stack profiles (services/stack_profiles.py): the commands detected per
+    # stack, overridden here for the deployment and per company
+    # (Company.stack_profile). Empty means detect.
+    DELIVERY_INSTALL_COMMAND: str = ""
+    DELIVERY_LINT_COMMAND: str = ""
+    DELIVERY_START_COMMAND: str = ""
+    DELIVERY_E2E_COMMAND: str = ""
+    DELIVERY_APP_PORT: int = 0
+    DELIVERY_APP_PROBE_PATH: str = "/"
+    # With DELIVERY_TESTS_ENABLED: install the dependencies before the tests
+    # when a manifest the delivery wrote differs from the last install's
+    # (services/app_check.py), in the same sandbox, with the network open
+    # (a registry is needed) unless DELIVERY_INSTALL_NETWORK is false.
+    DELIVERY_INSTALL_ENABLED: bool = True
+    DELIVERY_INSTALL_TIMEOUT_SECONDS: float = 600.0
+    DELIVERY_INSTALL_NETWORK: bool = True
+    # With DELIVERY_TESTS_ENABLED: start the application in the sandbox, wait
+    # for its port, send a smoke request (and run the e2e command when the
+    # profile has one), stop it. Off by default: it runs agent-written code.
+    DELIVERY_APP_CHECK_ENABLED: bool = False
+    DELIVERY_APP_READY_TIMEOUT_SECONDS: float = 60.0
+    DELIVERY_E2E_TIMEOUT_SECONDS: float = 300.0
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants

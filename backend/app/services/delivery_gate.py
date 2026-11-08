@@ -16,7 +16,7 @@ from models.agent_run import AgentRun, Verification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from services import criteria_tests, standards
+from services import app_check, criteria_tests, standards
 from services.orchestration_metrics import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 
 _TASK_WORKER = "le-fabrique-task-worker"
@@ -31,7 +31,20 @@ _GATE_PROBLEMS = {
     criteria_tests.CHECK_UNTOUCHED: "acceptance test edited",
     standards.CHECK_NAME: "standards violated",
     "secops": "security scan failed",
+    app_check.CHECK_INSTALL: "dependency install failed",
+    app_check.CHECK_APP: "application failed to start",
+    app_check.CHECK_E2E: "end-to-end tests failed",
 }
+
+# The problems the code itself caused: the Developer fixes the code.
+CODE_PROBLEMS = frozenset(
+    {
+        "tests failed",
+        "dependency install failed",
+        "application failed to start",
+        "end-to-end tests failed",
+    }
+)
 
 
 def gate(engine: Engine, company_id: int, item_id: int) -> tuple[str, str] | None:
