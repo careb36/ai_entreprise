@@ -20,7 +20,14 @@ A regression, in the totals or in any specification both cards hold:
   totals only, and only when both cards reported some;
 - a specification that completed before did not complete now.
 
-Wall-clock is shown, never judged: it depends on the machine. Prints the diff
+Wall-clock is shown, never judged: it depends on the machine. Two runs made
+under different routing policies (``scorecard.py write --policy``, each run
+with its own ``AGENT_MODEL_POLICY``) are compared the same way, and the diff
+adds a table by difficulty: per band, the tasks, the share done at the first
+attempt, rework per task, the blocked share, the reported tokens and the
+models that delivered, summed over the specifications. The table by
+difficulty is shown, never judged: a policy is meant to move work between
+models. A card from before the split (schema v1) shows none. Prints the diff
 as Markdown (the job summary and the issue body) and exits 1 on a
 regression, 2 when a card does not match the schema, 0 otherwise.
 """
@@ -133,6 +140,67 @@ def compare(
     }
 
 
+def by_difficulty(card: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """The card's tasks per difficulty, summed over its specs and models."""
+    out: dict[int, dict[str, Any]] = {}
+    for spec in card["specs"]:
+        for row in spec.get("routing") or []:
+            band = out.setdefault(
+                row["difficulty"],
+                {
+                    "tasks": 0,
+                    "first": 0,
+                    "blocked": 0,
+                    "rework": 0,
+                    "tokens": 0,
+                    "models": set(),
+                },
+            )
+            band["tasks"] += row["tasks"]
+            band["first"] += row["done_first_attempt"]
+            band["blocked"] += row["blocked"]
+            band["rework"] += row["rework"]
+            band["tokens"] += row["tokens"]["reported"]
+            band["models"].add(row["model"] or "none")
+    return out
+
+
+def _band_cell(band: dict[str, Any] | None) -> tuple[str, ...]:
+    if not band or not band["tasks"]:
+        return ("–",) * 6
+    tasks = band["tasks"]
+    return (
+        str(tasks),
+        f"{band['first'] / tasks:.2f}",
+        f"{band['rework'] / tasks:.2f}",
+        f"{band['blocked'] / tasks:.2f}",
+        str(band["tokens"]),
+        ", ".join(sorted(band["models"])),
+    )
+
+
+def render_bands(previous: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    """The Markdown table by difficulty, before → after; empty without a split."""
+    before, after = by_difficulty(previous), by_difficulty(current)
+    if not before and not after:
+        return []
+    lines = [
+        "",
+        f"### By difficulty (policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`)",
+        "",
+        "| Difficulty | Tasks | First attempt | Rework / task | Blocked | Tokens | Models |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for difficulty in sorted(set(before) | set(after)):
+        b, a = _band_cell(before.get(difficulty)), _band_cell(after.get(difficulty))
+        lines.append(
+            f"| {difficulty} | "
+            + " | ".join(f"{x} → {y}" for x, y in zip(b, a, strict=True))
+            + " |"
+        )
+    return lines
+
+
 def previous_of(current: Path, directory: Path) -> Path | None:
     """The newest scorecard in *directory* whose name sorts before *current*'s."""
     earlier = sorted(
@@ -149,7 +217,10 @@ def render(
     lines = [
         f"## Bench: {current['stamp']} against {previous['stamp']}",
         "",
-        f"Commits `{previous['commit'][:12]}` → `{current['commit'][:12]}`; models `{previous['llm']}` → `{current['llm']}`.",
+        (
+            f"Commits `{previous['commit'][:12]}` → `{current['commit'][:12]}`; models `{previous['llm']}` → `{current['llm']}`; "
+            f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`."
+        ),
         "",
         "| Where | Criteria | First attempt | Blocked | Rework / task | Tokens | Wall-clock |",
         "|---|---|---|---|---|---|---|",
@@ -163,6 +234,7 @@ def render(
             f"| {b['tokens_reported']:.0f} → {a['tokens_reported']:.0f} "
             f"| {b['wall_clock_seconds']:.0f} s → {a['wall_clock_seconds']:.0f} s |"
         )
+    lines += render_bands(previous, current)
     if result["new_specs"]:
         lines += [
             "",

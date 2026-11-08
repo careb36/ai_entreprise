@@ -5,10 +5,14 @@ import { errorDetail } from '../services/api'
 import {
   MANAGER_RULES,
   useManagerPolicy,
+  useManagerRecord,
   useSaveManagerPolicy,
   type ManagerPolicy,
   type ManagerPolicyUpdate,
 } from '../services/manager'
+
+// The backend stores naive UTC; a timestamp that names its zone (Z, +hh:mm, -hh:mm) is read as written.
+const HAS_ZONE = /(Z|[+-]\d{2}:?\d{2})$/
 
 const LIMITS = ['max_files', 'max_criteria', 'max_files_high_risk'] as const
 // The rules that read more facts than the rest: shown apart, still opt-in.
@@ -33,6 +37,7 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
   const { t } = useTranslation()
   const policy = useManagerPolicy(companyId)
   const save = useSaveManagerPolicy(companyId)
+  const record = useManagerRecord(companyId)
   const [form, setForm] = useState<ManagerPolicyUpdate | null>(null)
 
   useEffect(() => {
@@ -40,6 +45,12 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
   }, [policy.data])
 
   if (!policy.data || !form) return null
+  const stored = policy.data
+  // Rules compared as a set: unticking and ticking a rule again is no change.
+  const canonical = (f: ManagerPolicyUpdate) => JSON.stringify({ ...f, rules: [...f.rules].sort() })
+  const dirty = canonical(form) !== canonical(formOf(stored))
+  // Saving the policy again is how a Manager puts rules suspended after overrides back in force.
+  const flagged = record.data?.flagged_rules ?? []
   const catalogue = policy.data.catalogue
   const rules = MANAGER_RULES.filter(name => name in catalogue)
   const toggle = (name: string) =>
@@ -120,9 +131,41 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
         </p>
       )}
       {canManage && (
-        <button type="button" className="btn btn-primary btn-sm" disabled={save.isPending} onClick={() => save.mutate(form)}>
-          {t('manager.policy.save', { defaultValue: 'Save the policy' })}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={save.isPending || (!dirty && flagged.length === 0)}
+            onClick={() => save.mutate(form)}
+          >
+            {save.isPending
+              ? t('manager.policy.saving', { defaultValue: 'Saving…' })
+              : t('manager.policy.save', { defaultValue: 'Save the policy' })}
+          </button>
+          <p role="status" className="text-xs text-gray-400">
+            {dirty
+              ? t('manager.policy.unsaved', { defaultValue: 'Unsaved changes' })
+              : flagged.length > 0 && !save.isSuccess
+                ? t('manager.policy.reconfirm', {
+                    rules: flagged.join(', '),
+                    defaultValue: 'Suspended after overrides: {{rules}}. Saving the policy puts them back in force.',
+                  })
+              : save.isSuccess
+                ? t('manager.policy.saved', { defaultValue: 'Saved. The Manager agent applies it from its next cycle.' })
+                : !stored.updated_at
+                  ? t('manager.policy.noChanges', { defaultValue: 'No changes to save' })
+                  : null}
+          </p>
+        </div>
+      )}
+      {stored.updated_at && (
+        <p className="text-xs text-gray-500">
+          {t('manager.policy.lastSaved', {
+            when: new Date(HAS_ZONE.test(stored.updated_at) ? stored.updated_at : `${stored.updated_at}Z`).toLocaleString(),
+            who: stored.updated_by ?? '—',
+            defaultValue: 'Last saved {{when}} by {{who}}',
+          })}
+        </p>
       )}
     </section>
   )

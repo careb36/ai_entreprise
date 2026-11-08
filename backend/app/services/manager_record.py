@@ -28,6 +28,7 @@ from models import AgentRunApproval, BacklogItem, Procedure
 from models.manager import ManagerDecision, ManagerPolicy
 from sqlmodel import Session, select
 
+from services import task_projection
 from services.board import SEND_BACK_MARKER, comment_list
 from services.carry_over import carried_over
 
@@ -42,7 +43,7 @@ def _task_decision(session: Session, row: ManagerDecision) -> str | None:
     item = session.get(BacklogItem, row.item_id)
     if item is None:
         return None
-    if carried_over(item):
+    if carried_over(item, task_projection.record_of(session, item)):
         return "carry_over"
     seen = int((row.evidence or {}).get("comments_seen") or 0)
     notes = [

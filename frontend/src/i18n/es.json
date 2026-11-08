@@ -583,7 +583,29 @@
     "qaFailures": "Fallo QA {{count}}/{{limit}}",
     "waitsFor_one": "Espera a {{count}} tarea",
     "waitsFor_other": "Espera a {{count}} tareas",
-    "acceptanceTests": "Tests de aceptación"
+    "acceptanceTests": "Tests de aceptación",
+    "moveQueued": "De vuelta al trabajo: la tarea quedó en cola para su agente.",
+    "moveReopened": "El sprint se reabrió y la tarea quedó en cola para su agente.",
+    "moveReopenedWaiting": "El sprint se reabrió; la tarea espera a que terminen otras tareas del sprint.",
+    "moveWaits": {
+      "paused": "El sprint está en pausa: reanúdalo para ejecutar esta tarea.",
+      "planned": "El sprint no empezó: inícialo para ejecutar esta tarea.",
+      "dependencies": "La tarea espera a que terminen otras tareas del sprint."
+    },
+    "moveToSprint": "Mover a sprint…",
+    "moveTarget": "Sprint al que mover la tarea",
+    "moveChoose": "Elige un sprint",
+    "moveTargetOption": "{{name}} ({{status}})",
+    "moveNewSprint": "Un sprint nuevo",
+    "moveConfirm": "Mover",
+    "moveCancel": "Cancelar",
+    "movedToSprint": "Tarea movida a \"{{name}}\".",
+    "sprintStatus": {
+      "active": "activo",
+      "planned": "planificado",
+      "paused": "en pausa",
+      "needs_split": "requiere división"
+    }
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -2028,7 +2050,10 @@
       },
       "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea",
       "search": "Filtrar modelos…"
-    }
+    },
+    "statConnections": "Conexiones",
+    "statModels": "Modelos",
+    "statValidated": "Validadas"
   },
   "manager": {
     "suggestion": "El agente Manager sugiere: {{decision}}",
@@ -2083,7 +2108,13 @@
         "approve_specification": "Aprobar una especificación que el control no bloquea",
         "approve_architecture": "Aprobar una arquitectura que cubre todos los requisitos",
         "accept_high_risk": "Aceptar una entrega de alto riesgo con todas las pruebas de criterio en verde"
-      }
+      },
+      "saving": "Guardando…",
+      "unsaved": "Hay cambios sin guardar",
+      "saved": "Guardada. El agente Manager la aplica desde su próximo ciclo.",
+      "noChanges": "No hay cambios para guardar",
+      "lastSaved": "Guardada por última vez el {{when}} por {{who}}",
+      "reconfirm": "Suspendidas después de correcciones: {{rules}}. Guardar la política las vuelve a poner en vigor."
     }
   },
   "sprintAdmin": {
@@ -2104,5 +2135,22 @@
     "stopFirst": "Detené el sprint primero",
     "archivedBy": "Archivado por {{who}}",
     "showArchived": "Mostrar sprints archivados"
+  },
+  "routing": {
+    "title": "Dificultad y modelo",
+    "hint": "Sprints cerrados, según la dificultad con la que se enrutó cada tarea y el modelo de su última entrega.",
+    "caption": "Tareas por dificultad y modelo",
+    "difficulty": "Dificultad",
+    "model": "Modelo",
+    "tasks": "Tareas",
+    "firstAttempt": "Primer intento",
+    "rework": "Retrabajo / tarea",
+    "blocked": "Bloqueadas",
+    "tokens": "Tokens informados",
+    "difficultyBand": "{{difficulty}} (banda {{band}})",
+    "noDelivery": "sin entrega",
+    "firstAttemptValue": "{{rate}} ({{first}}; {{done}} hechas)",
+    "unreported_one": "{{count}} turno sin conteo de tokens informado, fuera de los tokens.",
+    "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens."
   }
 }

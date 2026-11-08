@@ -5,6 +5,7 @@ import { ArrowRight, MessagesSquare } from 'lucide-react'
 import { useAgentMessages } from '../hooks/useQueries'
 import { MESSAGE_KINDS, type AgentMessage, type MessageKind } from '../services/api'
 import { SkeletonBlock } from './Skeleton'
+import { MarkdownText } from './MarkdownText'
 
 const KIND_STYLES: Record<MessageKind, string> = {
   question: 'border-sky-700/60 text-sky-300',
@@ -125,7 +126,7 @@ function MessageItem({ message, showTask }: { message: AgentMessage; showTask: b
           {message.task_title}
         </Link>
       )}
-      <p className="whitespace-pre-wrap break-words text-sm text-gray-200">{body}</p>
+      <MarkdownText text={body} className="text-sm text-gray-200" />
       {long && (
         <button type="button" onClick={() => setExpanded(value => !value)} className="mt-1 text-xs text-gray-400 underline">
           {expanded ? t('conversation.showLess', { defaultValue: 'Show less' }) : t('conversation.showMore', { defaultValue: 'Show more' })}

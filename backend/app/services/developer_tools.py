@@ -35,13 +35,15 @@ test command, which ``DELIVERY_TESTS_ENABLED`` already runs after every
 delivery; it is offered only when that setting is on, since it runs
 project code on the daemon's machine.
 
-A "repository map" (the top of the tree) goes into the prompt of a task on
-an existing project, so the model knows what to read.
+A repository map (the top of the tree and the definitions ranked by use,
+``services/repo_map.py``) goes into the prompt of a task on an existing
+project, so the model knows what to read.
 """
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import json
 import logging
@@ -55,7 +57,9 @@ from config import settings
 from services import (
     developer_tool_replies,
     developer_tool_schemas,
+    edit_lint,
     mcp_tools,
+    repo_map,
     research_tools,
     sandbox,
     workspace_edits,
@@ -507,6 +511,10 @@ def toolbox_for(
                 can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
                 edit_suffixes=workspace_edits.delivery_suffixes(),
             )
+            if workspace.can_edit:  # The linter after each edit, read once.
+                workspace.lint_profile = functools.partial(
+                    edit_lint.load_profile, _bridge, company_id, root, engine
+                )
     # The research tools for the roles that decide (``services/research_tools.py``).
     research = research_tools.toolbox_for(company_id, role, engine=engine)
     if workspace is None and research is None:
@@ -521,36 +529,20 @@ def repository_section(
     *,
     engine: Any = None,
 ) -> str:
-    """The prompt's "## Repository" section: the top of the project's tree,
-    bounded, with a word on the tools. Empty when the tools are not offered
-    or the project cannot be listed."""
-    if company_id is None or not offered_to(role) or "nats" not in _bridge:
+    """The prompt's "## Repository" section (``services/repo_map.py``): the
+    top of the project's tree and its definitions ranked by use, bounded,
+    with a word on the tools for a role that has them. The Architect gets it
+    too, as context for its brief. Empty when neither applies or the project
+    cannot be listed."""
+    tools = offered_to(role)
+    architect = str(role or "").strip().lower() in repo_map.ARCHITECT_ROLES
+    if company_id is None or "nats" not in _bridge:
         return ""
-    try:
-        root = tool_root(company_id, item_id, engine=engine)
-        if not root:
-            return ""
-        reply = _request_from_thread(
-            "workspace.list",
-            {"workspace_root": root, "path": None, "depth": 2},
-            LIST_TIMEOUT_SECONDS,
-        )
-    except Exception as exc:  # noqa: BLE001 - The prompt goes without the map.
-        logger.warning("Could not list the project for company=%s: %s", company_id, exc)
+    if not (tools or (architect and settings.REPO_MAP_MAX_CHARS > 0)):
         return ""
-    entries = [str(e) for e in reply.get("entries") or []]
-    if not entries:
+    root = tool_root(company_id, item_id, engine=engine)
+    if not root:
         return ""
-    listing = "\n".join(entries)
-    if len(listing) > MAP_MAX_CHARS:
-        listing = listing[:MAP_MAX_CHARS].rsplit("\n", 1)[0] + "\n[listing cut here]"
-    elif reply.get("truncated"):
-        listing += "\n[listing cut here]"
-    return (
-        "\n\n## Repository\n"
-        "The project exists; the tree below is its top two levels as they are on "
-        "disk now. Use the workspace tools to read the files you will change and "
-        "the ones around them before you write, and to search for what you need; "
-        "a file you deliver replaces the one on disk whole, so deliver it complete.\n\n"
-        f"{listing}"
+    return repo_map.section(
+        _request_from_thread, root, tools=tools, tree_chars=MAP_MAX_CHARS
     )
