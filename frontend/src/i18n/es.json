@@ -1219,7 +1219,12 @@
       "conversation": "Conversación"
     },
     "streamConnected": "Flujo conectado",
-    "streamDisconnected": "Flujo desconectado"
+    "streamDisconnected": "Flujo desconectado",
+    "integration": "Integración del sprint",
+    "integrationBranch": "Rama de integración",
+    "integrationError": "No se pudo cargar el plan de integración.",
+    "integrationHint": "Mergeá estas ramas en orden, corré la suite completa sobre el resultado y publicá un único PR.",
+    "unmetDeps": "Dependencias sin resolver"
   },
   "sprints": {
     "subtitle": "Todos los sprints de esta empresa, primero los activos.",

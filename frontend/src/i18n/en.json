@@ -1219,7 +1219,12 @@
       "conversation": "Conversation"
     },
     "streamConnected": "Stream connected",
-    "streamDisconnected": "Stream disconnected"
+    "streamDisconnected": "Stream disconnected",
+    "integration": "Sprint integration",
+    "integrationBranch": "Integration branch",
+    "integrationError": "Could not load the integration plan.",
+    "integrationHint": "Merge these branches in order, run the full suite on the result, then publish one PR.",
+    "unmetDeps": "Unmet dependencies"
   },
   "sprints": {
     "subtitle": "Every sprint of this company, active ones first.",
