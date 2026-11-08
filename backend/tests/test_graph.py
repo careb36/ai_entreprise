@@ -49,6 +49,17 @@ def test_resolve_model_name_unknown_role_falls_back_to_developer():
     assert _resolve_model_name("UnknownRole") == expected
 
 
+def test_the_kickoff_follows_agent_model_and_role_overrides(monkeypatch):
+    from agents.graph import _resolve_model_name
+
+    monkeypatch.delenv("NEMOTRON_ROLES", raising=False)
+    monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("AGENT_MODEL_ARCHITECT", "deepseek-flash")
+    assert _resolve_model_name("PO") == "deepseek-v4-pro"
+    assert _resolve_model_name("Architect") == "deepseek-flash"
+    assert _resolve_model_name("UnknownRole") == "deepseek-v4-pro"
+
+
 # ---------------------------------------------------------------------------
 # _extract_backlog
 # ---------------------------------------------------------------------------
