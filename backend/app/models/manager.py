@@ -35,6 +35,11 @@ class ManagerPolicy(SQLModel, table=True):
     # acceptance criteria a task covers.
     max_files: int = 10
     max_criteria: int = 5
+    # The tighter file limit ``accept_high_risk`` reads (issue #394).
+    max_files_high_risk: int = 3
+    # The client turned publishing on: ``publish`` holds only with it, and
+    # only for a repository with a remote. Publishing is never required.
+    publish_enabled: bool = False
     updated_by: str | None = None
     updated_at: datetime = Field(default_factory=_utcnow)
 

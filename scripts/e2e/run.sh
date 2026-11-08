@@ -443,7 +443,10 @@ echo "9b. the Manager agent decides for the client"
 # one rule and moves to autonomy level 1, where every approved task waits for
 # a person: the agent accepts the low-risk delivery, never the high-risk one.
 PUT_JSON=(-H 'Content-Type: application/json' -X PUT)
-check "no policy can hand the agent a high-risk acceptance" test "$(api -o /dev/null -w '%{http_code}' "${PUT_JSON[@]}" "$API/v1/companies/$CID/manager_policy" -d '{"rules": ["accept_high_risk"]}')" = 422
+# Cancelling a sprint, changing autonomy and spending above budget stay with a
+# person whatever the policy says (#394); accepting high risk is an opt-in
+# strict rule the client did not name here.
+check "no policy can hand the agent a sprint's cancellation" test "$(api -o /dev/null -w '%{http_code}' "${PUT_JSON[@]}" "$API/v1/companies/$CID/manager_policy" -d '{"rules": ["cancel_sprint"]}')" = 422
 check "a Manager lets the agent accept low-risk deliveries alone" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$CID/manager_policy" -d '{"rules": ["accept_delivery"]}' | json "d['rules']")" = "['accept_delivery']"
 check "and moves the company to autonomy level 1" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$CID/autonomy" -d '{"autonomy_level": 1}' | json "d['autonomy_level']")" = 1
 NEW5=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{

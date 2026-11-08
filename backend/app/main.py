@@ -40,6 +40,7 @@ from routers import (
     run_secrets_router,
     specifications_router,
     sprint_control_router,
+    sprint_crud_router,
     sprint_router,
     support_router,
     webhooks_router,
@@ -107,6 +108,7 @@ app.include_router(enterprise_router)
 app.include_router(events_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)
+app.include_router(sprint_crud_router)
 app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(api_tokens_router)

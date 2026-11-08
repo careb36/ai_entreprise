@@ -9,7 +9,11 @@ act alone only when a rule the policy names holds *and* its own suggestion is
 the decision that rule allows; anything else stays with the client.
 
 ``ALWAYS_ESCALATE`` is the confirmation set (OpenHands' confirmation mode):
-decisions no policy can hand to the agent. A policy naming one is refused.
+decisions no policy can hand to the agent (cancel a sprint, change the
+autonomy level, spend above budget). A policy naming one is refused. Every
+other action a Manager takes in the product is a rule a policy may name
+(issue #394), off until named; the strict ones (approve a specification or
+an architecture, accept a high-risk delivery) read more facts than the rest.
 The agent never edits a policy; a rule whose override rate rises is flagged
 (``services/manager_record.py``) and the agent stops applying it until a
 Manager looks, which narrows the policy and never widens it.
@@ -24,7 +28,8 @@ from typing import Any
 from models.manager import ManagerPolicy
 from sqlmodel import Session, select
 
-# The rules a policy may name, with what each needs to hold.
+# The rules a policy may name, with what each needs to hold. Every one is
+# off until a Manager names it; ``services/manager_rules.py`` holds the checks.
 RULES: dict[str, str] = {
     "accept_delivery": (
         "Accept a delivery QA approved that waits for a person only because "
@@ -40,46 +45,51 @@ RULES: dict[str, str] = {
         "verified, with a risk tier of low or medium, within the file limit."
     ),
     "merge_local": (
-        "Merge a done task's branch, or a sprint's integration whose tests "
-        "passed: QA approved, latest run verified, risk tier low or medium, "
-        "within the size limits."
+        "Merge a done task's branch into the base branch locally when QA "
+        "approved it, its latest run is verified, its risk tier is low or "
+        "medium and it is within the file limit; or a sprint's integration "
+        "whose suite passed."
     ),
     "undo_delivery": (
-        "Undo a delivery whose latest verification is refuted, when no person "
-        "has worked on the task since."
+        "Undo a delivery from the daemon's snapshot when its latest "
+        "verification is refuted, it was not made on a Git branch, and no "
+        "person has worked on the task since."
     ),
     "send_back_blocked": (
-        "Send a blocked task back for another attempt, when the ScrumMaster's "
-        "triage chose another attempt with a brief."
+        "Send back to work a task blocked for a person when the ScrumMaster's "
+        "triage chose another attempt with a brief and its sprint is open."
     ),
     "carry_over": (
-        "Carry a blocked task into the next sprint, when it is not yet carried "
-        "and the triage did not leave it for a person."
+        "Mark a task blocked for a person for another attempt in the next "
+        "sprint, when it was not carried before, is not itself a second "
+        "attempt, and the ScrumMaster's triage did not leave it for a person."
     ),
     "answer_question": (
-        "Answer an open question of the PO or the Architect, only when the "
-        "answer is already in an approved specification or decision."
+        "Answer the PO's or the Architect's open question on a draft, only "
+        "with the answer an approved specification or architecture already "
+        "gives to the same question or decision, word for word."
     ),
     "publish": (
-        "Publish the sprint's integration branch, only when the company has a "
-        "remote and has turned publishing on."
+        "Publish a done task's branch as a pull or merge request when the "
+        "client turned publishing on and the repository has a remote, under "
+        "the same conditions as merge_local."
     ),
     "resume_after_credit": (
-        "Resume a sprint paused for lack of credit, once the provider's balance "
-        "check passes."
+        "Resume a sprint paused for lack of credit once a short call to the "
+        "provider through the proxy passes."
     ),
     "approve_specification": (
-        "Approve a specification draft with no blocking finding, no open "
-        "question, and every requirement carrying criteria."
+        "Approve a draft specification the check does not block, with no open "
+        "question and acceptance criteria on every requirement."
     ),
     "approve_architecture": (
-        "Approve an architecture draft with no blocking finding, no open "
-        "question, covering every requirement of the approved specification."
+        "Approve a draft architecture the check does not block, with no open "
+        "question, that covers every requirement of its approved specification."
     ),
     "accept_high_risk": (
-        "Accept a high-risk delivery whose latest run is verified, whose "
-        "criterion tests all pass, with no secret in the standards check and "
-        "within a tighter size limit."
+        "Accept a high-risk delivery QA approved when its latest run is "
+        "verified, every criterion test the task covers passed, the standards "
+        "check found no secret, and it is within the high-risk file limit."
     ),
 }
 # The decision each rule lets the agent take, and the category it applies to.
@@ -89,8 +99,8 @@ RULE_DECISIONS = {
     "approve_run": ("approve_run", "approve"),
     "merge_local": ("merge_local", "merge"),
     "undo_delivery": ("undo_delivery", "undo"),
-    "send_back_blocked": ("send_back_blocked", "send_back"),
-    "carry_over": ("carry_over", "carry_over"),
+    "send_back_blocked": ("blocked_task", "send_back"),
+    "carry_over": ("blocked_task", "carry_over"),
     "answer_question": ("answer_question", "answer"),
     "publish": ("publish", "publish"),
     "resume_after_credit": ("resume_after_credit", "resume"),
@@ -100,14 +110,7 @@ RULE_DECISIONS = {
 }
 # Decisions that always go to the client, whatever a policy says.
 ALWAYS_ESCALATE = frozenset(
-    {
-        "approve_specification",
-        "approve_architecture",
-        "accept_high_risk",
-        "cancel_sprint",
-        "change_autonomy",
-        "spend_above_budget",
-    }
+    {"cancel_sprint", "delete_sprint", "change_autonomy", "spend_above_budget"}
 )
 LOW_TIERS = ("low", "medium")
 MAX_LIMIT = 1000
@@ -122,6 +125,8 @@ class Policy:
     rules: list[str] = field(default_factory=list)
     max_files: int = 10
     max_criteria: int = 5
+    max_files_high_risk: int = 3
+    publish_enabled: bool = False
 
 
 def _now() -> datetime:
@@ -135,6 +140,14 @@ def _limit(value: Any, name: str, default: int) -> int:
         raise PolicyError(f"{name} must be a whole number")
     if not 0 <= value <= MAX_LIMIT:
         raise PolicyError(f"{name} must be between 0 and {MAX_LIMIT}")
+    return value
+
+
+def _flag(value: Any, name: str) -> bool:
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise PolicyError(f"{name} must be true or false")
     return value
 
 
@@ -159,6 +172,10 @@ def validate(payload: dict[str, Any]) -> Policy:
         rules=clean,
         max_files=_limit(payload.get("max_files"), "max_files", 10),
         max_criteria=_limit(payload.get("max_criteria"), "max_criteria", 5),
+        max_files_high_risk=_limit(
+            payload.get("max_files_high_risk"), "max_files_high_risk", 3
+        ),
+        publish_enabled=_flag(payload.get("publish_enabled"), "publish_enabled"),
     )
 
 
@@ -180,7 +197,13 @@ def load(session: Session, company_id: int) -> Policy:
         for r in (row.rules or [])
         if isinstance(r, str) and r in RULES and r not in ALWAYS_ESCALATE
     ]
-    return Policy(rules=rules, max_files=row.max_files, max_criteria=row.max_criteria)
+    return Policy(
+        rules=rules,
+        max_files=row.max_files,
+        max_criteria=row.max_criteria,
+        max_files_high_risk=row.max_files_high_risk,
+        publish_enabled=bool(row.publish_enabled),
+    )
 
 
 def save(
@@ -190,6 +213,8 @@ def save(
     row.rules = list(policy.rules)
     row.max_files = policy.max_files
     row.max_criteria = policy.max_criteria
+    row.max_files_high_risk = policy.max_files_high_risk
+    row.publish_enabled = policy.publish_enabled
     row.updated_by = actor
     row.updated_at = _now()
     session.add(row)
@@ -201,126 +226,13 @@ def serialize(policy: Policy, row: ManagerPolicy | None = None) -> dict[str, Any
         "rules": list(policy.rules),
         "max_files": policy.max_files,
         "max_criteria": policy.max_criteria,
+        "max_files_high_risk": policy.max_files_high_risk,
+        "publish_enabled": policy.publish_enabled,
         "updated_by": row.updated_by if row else None,
         "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
         "catalogue": RULES,
         "always_escalate": sorted(ALWAYS_ESCALATE),
     }
-
-
-def _rule_holds(rule: str, facts: dict[str, Any], policy: Policy) -> str | None:
-    """Why *rule* does not hold for *facts*, or ``None`` when it does."""
-    tier = facts.get("risk_tier")
-    files = facts.get("files")
-    if rule == "accept_delivery":
-        if facts.get("frozen"):
-            return "an operator froze the task"
-        if not facts.get("human_led_hold"):
-            return "the hold is not only the autonomy level's"
-        if facts.get("verdict") != "verified":
-            return f"the latest run is {facts.get('verdict') or 'not verified'}"
-        if tier not in LOW_TIERS:
-            return f"the risk tier is {tier or 'unknown'}"
-        if files is None or files > policy.max_files:
-            return f"{files if files is not None else 'unknown'} files, over the limit"
-        if (facts.get("criteria") or 0) > policy.max_criteria:
-            return f"{facts.get('criteria')} criteria, over the limit"
-        return None
-    if rule == "merge_local":
-        if facts.get("qa_approved") is not True:
-            return "QA has not approved"
-        if facts.get("verdict") != "verified":
-            return f"the latest run is {facts.get('verdict') or 'not verified'}"
-        if tier not in LOW_TIERS:
-            return f"the risk tier is {tier or 'unknown'}"
-        if facts.get("integration_status") not in (None, "tests_passed"):
-            return (
-                f"integration status is {facts.get('integration_status') or 'unknown'}"
-            )
-        if files is None or files > policy.max_files:
-            return f"{files if files is not None else 'unknown'} files, over the limit"
-        return None
-    if rule == "undo_delivery":
-        if facts.get("verdict") != "refuted":
-            return f"the latest verification is {facts.get('verdict') or 'not refuted'}"
-        if facts.get("person_touched"):
-            return "a person has worked on the task since"
-        return None
-    if rule == "send_back_blocked":
-        if not facts.get("blocked"):
-            return "the task is not blocked"
-        if facts.get("triage_decision") != "retry":
-            return "the ScrumMaster did not choose another attempt"
-        if not facts.get("triage_brief"):
-            return "no brief for the next attempt"
-        return None
-    if rule == "carry_over":
-        if not facts.get("blocked"):
-            return "the task is not blocked"
-        if facts.get("carried"):
-            return "already carried over"
-        if facts.get("triage_decision") == "person":
-            return "the triage left it for a person"
-        return None
-    if rule == "answer_question":
-        if not facts.get("open_question"):
-            return "no open question"
-        if not facts.get("answer_known"):
-            return "the answer is not in an approved specification or decision"
-        return None
-    if rule == "publish":
-        if not facts.get("has_remote"):
-            return "no remote configured"
-        if not facts.get("publishing_on"):
-            return "publishing is turned off"
-        return None
-    if rule == "resume_after_credit":
-        if not facts.get("paused_for_credit"):
-            return "the sprint is not paused for credit"
-        if not facts.get("balance_ok"):
-            return "the provider balance check failed"
-        return None
-    if rule == "approve_specification":
-        if facts.get("blocking_findings"):
-            return "blocking findings remain"
-        if facts.get("open_questions"):
-            return "open questions remain"
-        if not facts.get("all_requirements_have_criteria"):
-            return "a requirement has no criterion"
-        return None
-    if rule == "approve_architecture":
-        if facts.get("blocking_findings"):
-            return "blocking findings remain"
-        if facts.get("open_questions"):
-            return "open questions remain"
-        if not facts.get("covers_all_requirements"):
-            return "does not cover every requirement"
-        return None
-    if rule == "accept_high_risk":
-        if facts.get("verdict") != "verified":
-            return f"the latest run is {facts.get('verdict') or 'not verified'}"
-        if not facts.get("all_criterion_tests_pass"):
-            return "not every criterion test passes"
-        if facts.get("standards_secret"):
-            return "a secret was found by the standards check"
-        if files is None or files > 5:
-            return f"{files if files is not None else 'unknown'} files, over the tighter limit"
-        return None
-    if rule == "adopt_procedure":
-        if facts.get("autonomy_level") != 3:
-            return f"autonomy level {facts.get('autonomy_level')}, not 3"
-        if facts.get("reverted_for_role"):
-            return "the board reverted an earlier procedure for this role"
-        return None
-    if rule == "approve_run":
-        if facts.get("verdict") != "verified":
-            return f"the latest verification is {facts.get('verdict') or 'missing'}"
-        if tier not in LOW_TIERS:
-            return f"the risk tier is {tier or 'unknown'}"
-        if files is None or files > policy.max_files:
-            return f"{files if files is not None else 'unknown'} files, over the limit"
-        return None
-    return "unknown rule"
 
 
 def evaluate(
@@ -334,8 +246,12 @@ def evaluate(
 
     ``{"allowed": bool, "rule": name or None, "why": text}``. Never allowed
     for the confirmation set, over budget, after the client overrode the
-    agent on the item, or under a flagged rule.
+    agent on the item, or under a flagged rule. A category may have several
+    rules (a blocked task: send back, carry over); the one whose decision is
+    the suggestion decides.
     """
+    from services.manager_rules import rule_holds
+
     if category in ALWAYS_ESCALATE:
         return {"allowed": False, "rule": None, "why": f"{category}: always the client"}
     if facts.get("over_budget"):
@@ -350,24 +266,31 @@ def evaluate(
             "rule": None,
             "why": "the client overrode the agent on this item before",
         }
-    for rule in policy.rules:
-        rule_category, decision = RULE_DECISIONS[rule]
-        if rule_category != category:
-            continue
-        if suggestion != decision:
-            return {
-                "allowed": False,
-                "rule": rule,
-                "why": f"the suggestion is not {decision}",
-            }
-        if rule in flagged:
-            return {
-                "allowed": False,
-                "rule": rule,
-                "why": "the rule is flagged: its override rate rose",
-            }
-        why_not = _rule_holds(rule, facts, policy)
-        if why_not is None:
-            return {"allowed": True, "rule": rule, "why": RULES[rule]}
-        return {"allowed": False, "rule": rule, "why": why_not}
-    return {"allowed": False, "rule": None, "why": "no rule of the policy applies"}
+    named = [r for r in policy.rules if RULE_DECISIONS[r][0] == category]
+    if not named:
+        return {"allowed": False, "rule": None, "why": "no rule of the policy applies"}
+    rule = next((r for r in named if RULE_DECISIONS[r][1] == suggestion), None)
+    if rule is None:
+        decisions = " or ".join(RULE_DECISIONS[r][1] for r in named)
+        return {
+            "allowed": False,
+            "rule": named[0],
+            "why": f"the suggestion is not {decisions}",
+        }
+    if rule in flagged:
+        return {
+            "allowed": False,
+            "rule": rule,
+            "why": "the rule is flagged: its override rate rose",
+        }
+    why_not = rule_holds(rule, facts, policy)
+    if why_not is None:
+        return {"allowed": True, "rule": rule, "why": RULES[rule]}
+    return {"allowed": False, "rule": rule, "why": why_not}
+
+
+def _rule_holds(rule: str, facts: dict[str, Any], policy: Policy) -> str | None:
+    """Why *rule* does not hold for *facts* (``services/manager_rules.py``)."""
+    from services.manager_rules import rule_holds
+
+    return rule_holds(rule, facts, policy)

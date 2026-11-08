@@ -23,7 +23,14 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ProjectDiscovery, Specification, User
 from pydantic import BaseModel, Field
-from services import spec_author, spec_check, spec_diff, spec_impact, spec_planning
+from services import (
+    document_approval,
+    spec_author,
+    spec_check,
+    spec_diff,
+    spec_impact,
+    spec_planning,
+)
 from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1/specifications", tags=["Core"])
@@ -271,28 +278,10 @@ async def approve_specification(
     """
     spec = _load(session, user, spec_id, "Manager")
     _only_draft(spec)
-    result = spec_check.check(spec_planning.spec_content(spec))
-    if not result["ok"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": f"{result['blocking']} finding(s) block the approval.",
-                "findings": [
-                    f for f in result["findings"] if f["severity"] == "blocking"
-                ],
-            },
-        )
-    if spec.supersedes_id is not None:
-        previous = session.get(Specification, spec.supersedes_id)
-        if previous is not None and previous.status == "approved":
-            previous.status = "superseded"
-            previous.updated_at = _now()
-            session.add(previous)
-    spec.status = "approved"
-    spec.approved_by = _actor(user)
-    spec.approved_at = _now()
-    spec.updated_at = spec.approved_at
-    session.add(spec)
+    try:
+        document_approval.approve_specification(session, spec, _actor(user))
+    except document_approval.ApprovalRefused as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     session.commit()
     session.refresh(spec)
     return serialize(spec, session)

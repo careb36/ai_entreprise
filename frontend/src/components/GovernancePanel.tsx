@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
 import type { InboxWithManager, ManagerDecision } from '../services/manager'
 import { ClientBriefCard, ManagerDecisions, ManagerSuggestion } from './ManagerDecisions'
+import { ManagerPolicyPanel } from './ManagerPolicyPanel'
 import { ClientRequestBox } from './ClientRequestBox'
 
 // The note written on the task when a person sends it back to work. Not
@@ -214,6 +215,7 @@ function Inbox({ companyId }: { companyId: number }) {
       <ClientBriefCard companyId={companyId} />
       {canManage && <ClientRequestBox companyId={companyId} />}
       <ManagerDecisions decisions={data?.agent_decisions ?? []} canManage={canManage} />
+      <ManagerPolicyPanel companyId={companyId} canManage={canManage} />
       {inbox.isError && (
         <div role="alert" className="alert-error flex items-center justify-between gap-3">
           <span>{t('inbox.loadError', { message: errorDetail(inbox.error), defaultValue: 'Could not load what needs you: {{message}}' })}</span>

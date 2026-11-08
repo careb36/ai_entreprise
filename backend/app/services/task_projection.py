@@ -24,7 +24,7 @@ The ``*_from_events`` functions are the projections themselves.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from models import BacklogItem, TaskEvent
@@ -88,7 +88,11 @@ def _needs_work(event: Event) -> bool:
 
 
 def _is_person_send_back(event: Event) -> bool:
-    return _kind(event) == "sent_back" and _actor(event) == task_events.PERSON
+    # A person's, or the Manager agent's on the client's behalf (issue #394).
+    return _kind(event) == "sent_back" and (
+        _actor(event) == task_events.PERSON
+        or _actor(event).lower() == board.MANAGER_AGENT_AUTHOR
+    )
 
 
 def _since_send_back(events: list[Event]) -> list[Event]:
@@ -350,6 +354,73 @@ class TaskRecord:
             _kind(e) == "carried_over" and _payload(e).get("direction") == direction
             for e in self.events
         )
+
+    def carry_mark(self, mark_prefix: str, unmark_prefix: str) -> bool | None:
+        """The Manager agent's carry-over mark: ``True`` marked, ``False`` a
+        person took it back, ``None`` never marked (``carry_over.carry_mark``).
+
+        From the events, the mark's payload says so; an event written before
+        the payload carried it is read by its actor and rendered prefix.
+        """
+        state: bool | None = None
+        if self.events is None:
+            for comment in self.comments:
+                author = str(comment.get("author") or "").strip().lower()
+                text = str(comment.get("text") or "")
+                if author == board.MANAGER_AGENT_AUTHOR and text.startswith(
+                    mark_prefix
+                ):
+                    state = True
+                elif author == "user" and text.startswith(unmark_prefix):
+                    state = False
+            return state
+        for event in self.events:
+            mark = _payload(event).get("carry_mark")
+            if mark is not None:
+                state = bool(mark)
+            elif _actor(event).lower() == board.MANAGER_AGENT_AUTHOR and _text(
+                event
+            ).startswith(mark_prefix):
+                state = True
+            elif _actor(event) == task_events.PERSON and _text(event).startswith(
+                unmark_prefix
+            ):
+                state = False
+        return state
+
+    def qa_approved(self) -> bool | None:
+        """QA's latest verdict is an approval with no rework after it, from the
+        events; ``None`` when the comments must answer."""
+        if self.events is None:
+            return None
+        for event in reversed(self.events):
+            if _needs_work(event) and _text(event):
+                return False
+            if _payload(event).get("verdict") == "approved" and _actor(
+                event
+            ).lower() not in (
+                task_events.SYSTEM,
+                task_events.GATE,
+                task_events.PERSON,
+                board.MANAGER_AGENT_AUTHOR,
+            ):
+                return True
+        return False
+
+    def person_since(self, since: datetime) -> bool | None:
+        """A person wrote on the task at or after *since* (naive UTC), from the
+        events; ``None`` when the comments must answer."""
+        if self.events is None:
+            return None
+        for event in self.events:
+            if _actor(event) != task_events.PERSON or not _text(event):
+                continue
+            moment = _created_at(event)
+            if moment is not None and moment.tzinfo is not None:
+                moment = moment.astimezone(UTC).replace(tzinfo=None)
+            if moment is None or moment >= since:
+                return True
+        return False
 
     def held_by_dependency(self, prefix: str) -> bool:
         """The System's latest note is a dependency hold.

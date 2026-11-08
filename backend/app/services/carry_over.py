@@ -30,6 +30,10 @@ from services.board import (
 )
 
 REASON_LIMIT = 500
+# The Manager agent's mark on a blocked task its policy lets it carry over
+# (``carry_over`` rule, issue #394), and a person's note taking it back.
+CARRY_MARK_PREFIX = "Marked for carry-over by the Manager agent"
+CARRY_UNMARK_PREFIX = "Carry-over mark taken back"
 
 
 class CarryOverError(ValueError):
@@ -63,6 +67,18 @@ def carried_over(
 ) -> bool:
     """Already given to another sprint: it no longer waits for a person."""
     return _record(item, record).carried("to")
+
+
+def carry_mark(
+    item: BacklogItem, record: task_projection.TaskRecord | None = None
+) -> bool | None:
+    """Whether the Manager agent marked the task for the next sprint: ``True``
+    marked, ``False`` a person took the mark back, ``None`` never marked.
+
+    Read from *record* (the events when they cover the thread), else from the
+    comments.
+    """
+    return _record(item, record).carry_mark(CARRY_MARK_PREFIX, CARRY_UNMARK_PREFIX)
 
 
 def is_carry_over(
@@ -114,6 +130,10 @@ def carry_over(
     for item, sprint in rows:
         item_id = item.id
         record = records[item.id]
+        if sprint.archived_at is not None:
+            raise CarryOverError(
+                409, f"Task {item_id} belongs to an archived sprint; unarchive it first"
+            )
         if not waits_for_a_person(item, record):
             raise CarryOverError(
                 409, f"Task {item_id} is not blocked waiting for a person"
@@ -278,6 +298,8 @@ def carry_over_on_the_companys_own(
         and not carried_over(item, records[item.id])
         and not is_carry_over(item, records[item.id])
         and not _left_for_a_person(triages.get(item.id))
+        # A person took back the Manager agent's mark: it waits for them.
+        and carry_mark(item, records[item.id]) is not False
         # Approved, waiting for a person to accept it: not another attempt.
         and not records[item.id].awaits_risk_acceptance()
     ][:room]

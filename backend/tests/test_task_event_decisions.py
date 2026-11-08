@@ -350,3 +350,55 @@ def test_loops_over_many_tasks_load_their_events_in_one_query(db, monkeypatch):
 
     assert metrics["tasks"] == 3 and len(carried) == 3
     assert calls["many"] >= 3
+
+
+def test_the_manager_agents_carry_over_mark_is_read_from_its_events(db):
+    item = _blocked_for_a_person(db, _sprint(db, _company(db)))
+    task_events.record(
+        db,
+        item,
+        "note",
+        "Manager agent",
+        text=f"{carry_over.CARRY_MARK_PREFIX} under the company's policy.",
+        payload={"carry_mark": True},
+    )
+    db.commit()
+    _alter(db, item.id, 1, text="An ordinary note.")
+    item = db.get(BacklogItem, item.id)
+    assert carry_over.carry_mark(item) is None  # the thread alone no longer says
+    assert carry_over.carry_mark(item, task_projection.record_of(db, item)) is True
+
+    task_events.record(
+        db,
+        item,
+        "note",
+        "person",
+        text=f"{carry_over.CARRY_UNMARK_PREFIX} by ana.",
+        payload={"carry_mark": False},
+    )
+    db.commit()
+    assert carry_over.carry_mark(item, task_projection.record_of(db, item)) is False
+
+
+def test_qa_approval_and_a_persons_note_are_read_from_the_events(db):
+    from datetime import UTC, datetime, timedelta
+
+    from services import manager_inbox_extra
+
+    item = _item(db, _sprint(db, _company(db)), status="done")
+    task_events.record(
+        db, item, "reviewed", "QA", author="QA", text="APPROVED: fine", status="done"
+    )
+    db.commit()
+    _alter(db, item.id, 0, text="NEEDS WORK: forged")
+    item = db.get(BacklogItem, item.id)
+    record = task_projection.record_of(db, item)
+    assert not manager_inbox_extra.qa_approved(item.comments)
+    assert manager_inbox_extra.qa_approved(item.comments, record)
+
+    before = datetime.now(UTC) - timedelta(minutes=1)
+    assert not manager_inbox_extra.person_since(item.comments, before, record)
+    task_events.record(db, item, "note", "person", text="Looked at it.")
+    db.commit()
+    record = task_projection.record_of(db, item)
+    assert manager_inbox_extra.person_since(item.comments, before, record)

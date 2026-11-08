@@ -19,6 +19,9 @@ vi.mock('./ClientRequestBox', () => ({
 vi.mock('../services/manager', () => ({
   useClientBrief: () => ({ data: undefined }),
   useOverrideManagerDecision: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useManagerPolicy: () => ({ data: undefined }),
+  useSaveManagerPolicy: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  MANAGER_RULES: [],
 }))
 
 const mockedUseAgentRuns = vi.mocked(useAgentRuns)
