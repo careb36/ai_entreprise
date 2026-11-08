@@ -145,7 +145,7 @@ function OrchestrationHealthSection({ companyId }: { companyId: number }) {
             </span>
           )}
         </div>
-        <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh', 'Refresh')}>
+        <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh', 'Refresh')} aria-label={t('common.refresh', 'Refresh')}>
           <RefreshCw size={13} />
         </button>
       </div>
@@ -246,7 +246,7 @@ export const AnalyticsDashboard: React.FC<{ sprintId: number }> = ({ sprintId })
         </div>
         <div className="flex items-center gap-3">
           <HealthBadge score={analytics.health_score} />
-          <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh','Refresh')}>
+          <button onClick={() => refetch()} className="btn-ghost btn-icon" title={t('common.refresh','Refresh')} aria-label={t('common.refresh','Refresh')}>
             <RefreshCw size={14} />
           </button>
         </div>
