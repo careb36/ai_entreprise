@@ -342,7 +342,7 @@ def for_task(session: Session, task_id: int) -> list[TaskEvent]:
         session.exec(
             select(TaskEvent)
             .where(TaskEvent.task_id == task_id)
-            .order_by(TaskEvent.seq, TaskEvent.id)  # type: ignore[arg-type]
+            .order_by(TaskEvent.id)  # type: ignore[arg-type]
         ).all()
     )
 
