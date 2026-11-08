@@ -17,6 +17,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import command_policy
+
 logger = logging.getLogger("fabrique-daemon.shell")
 
 IS_WINDOWS = os.name == "nt"
@@ -86,13 +88,17 @@ def summarize_command_result(command: str, result: dict[str, Any]) -> str:
 
 
 def execute_shell_command(
-    command: str, cwd: str = ".", sandbox: Any = None
+    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None
 ) -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 
     Args:
         command: Shell command string (passed to the host shell).
         cwd:     Working directory for the command.
+        policy:  The request's ``command_policy``; with it, or with the
+                 daemon's ``FABRIQUE_COMMAND_DENY``, a command the policy
+                 refuses is not run (``command_policy.py``) and the result
+                 says ``refused`` with the reason.
 
     Returns:
         Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
@@ -101,6 +107,10 @@ def execute_shell_command(
         captured before the kill, so the caller can tell "hung" from "ran and
         failed".
     """
+    refused = command_policy.refusal(command, policy)
+    if refused:
+        logger.warning(f"Not running {command!r}: {refused}")
+        return {"success": False, "refused": True, "error": refused}
     if sandbox is not None:
         # Agent-written code: run it as the request's sandbox says
         # (``sandbox.py``), and report what was applied. A mode that cannot
