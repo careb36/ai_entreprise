@@ -130,4 +130,13 @@ describe('ManagerPolicyPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save the policy' }))
     expect(mutate).toHaveBeenCalled()
   })
+
+  it('reads a last-saved time with a negative offset as written', () => {
+    vi.mocked(useManagerPolicy).mockReturnValue({
+      data: { ...POLICY, updated_by: 'owner@example.test', updated_at: '2026-11-08T17:00:00-05:00' },
+    } as never)
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    const expected = new Date('2026-11-08T22:00:00Z').toLocaleString()
+    expect(screen.getByText(new RegExp(`Last saved ${expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))).toBeInTheDocument()
+  })
 })

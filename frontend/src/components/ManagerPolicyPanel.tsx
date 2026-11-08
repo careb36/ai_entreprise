@@ -11,6 +11,9 @@ import {
   type ManagerPolicyUpdate,
 } from '../services/manager'
 
+// The backend stores naive UTC; a timestamp that names its zone (Z, +hh:mm, -hh:mm) is read as written.
+const HAS_ZONE = /(Z|[+-]\d{2}:?\d{2})$/
+
 const LIMITS = ['max_files', 'max_criteria', 'max_files_high_risk'] as const
 // The rules that read more facts than the rest: shown apart, still opt-in.
 const STRICT = new Set(['approve_specification', 'approve_architecture', 'accept_high_risk'])
@@ -158,7 +161,7 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
       {stored.updated_at && (
         <p className="text-xs text-gray-500">
           {t('manager.policy.lastSaved', {
-            when: new Date(stored.updated_at.endsWith('Z') || stored.updated_at.includes('+') ? stored.updated_at : `${stored.updated_at}Z`).toLocaleString(),
+            when: new Date(HAS_ZONE.test(stored.updated_at) ? stored.updated_at : `${stored.updated_at}Z`).toLocaleString(),
             who: stored.updated_by ?? '—',
             defaultValue: 'Last saved {{when}} by {{who}}',
           })}
