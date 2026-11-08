@@ -77,6 +77,7 @@ export default function Generate() {
                 onClick={() => copyId(result.interaction_id)}
                 className="btn-ghost btn-icon flex-shrink-0"
                 title={t('common.copyId', 'Copy ID')}
+                aria-label={t('common.copyId', 'Copy ID')}
               >
                 {copied ? <Check size={13} className="text-status-success" /> : <Copy size={13} />}
               </button>
