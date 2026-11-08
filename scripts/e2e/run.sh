@@ -31,6 +31,9 @@
 #      agent's record counts the decision, and the next ticket's prompt
 #      carries that record.
 #   7. A run from another producer gets the Reviewer agent's suggestion.
+#      Then the company connects its own provider: validated against the
+#      provider's model list, suggested for the Reviewer, chosen, and the
+#      next run's review reaches the proxy through that connection.
 #   8. A task whose file marks authentication is approved by QA and still
 #      waits for a person (the risk tier, at autonomy level 3 too); a
 #      Manager accepts it.
@@ -87,6 +90,8 @@ else
 fi
 PROMPTS=$WORK/fake_llm.prompts.log
 VIOLATIONS=$WORK/fake_llm.violations.log
+CONNECTIONS=$WORK/fake_llm.connections.log
+INTERNAL_TOKEN=e2e-internal-token
 : > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
 FAILED=0
 
@@ -123,14 +128,15 @@ with conn.cursor() as cur:
 conn.close()
 EOF
 
-rm -f "$PROMPTS"
+rm -f "$PROMPTS" "$CONNECTIONS"
 # A console assistant the daemon can run, under its own name so a real
 # Copilot or Claude CLI on this machine is never asked.
 ADVICE="Fake Copilot advice: keep each module beside its test."
 mkdir -p "$WORK/bin"
 printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
-FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
+FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS \
+  FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
   NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
@@ -154,7 +160,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
-    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
+    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
     RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
@@ -301,6 +307,22 @@ check "the agent's record counts the miss, beside the Verifier's verdict ($VERDI
 R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
 check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
 check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
+
+echo "7b. the company's own provider connection"
+# The fake proxy plays the provider too: /provider/v1/models answers the key.
+CONN_BODY="{\"provider\": \"deepseek\", \"name\": \"E2E DeepSeek\", \"base_url\": \"http://127.0.0.1:$LLM_PORT/provider/v1\", \"api_key\": \"e2e-provider-key\"}"
+CONN_JSON=$(api -X POST "$API/v1/companies/$CID/providers" -H 'Content-Type: application/json' -d "$CONN_BODY")
+CONN=$(echo "$CONN_JSON" | json "d['id']")
+check "a Manager connects the company's provider, and the key is never returned" test "$(echo "$CONN_JSON" | json "d['api_key_set'], 'e2e-provider-key' in json.dumps(d)")" = "(True, False)"
+check "the validation lists the provider's models with the key" test "$(api -X POST "$API/v1/companies/$CID/providers/$CONN/validate" | json "d['provider']['validation_ok'], sorted(d['provider']['listed_models'])")" = "(True, ['deepseek-v4-flash', 'e2e-unlisted-elsewhere'])"
+CONN_MODEL="conn:$CONN:deepseek-v4-flash"
+check "the Reviewer's suggestion is the listed model the catalogue describes" test "$(api "$API/v1/companies/$CID/model_suggestions" | json "d['suggestions']['Reviewer']['model']")" = "$CONN_MODEL"
+check "a Manager chooses it for the Reviewer" test "$(api -X PUT "$API/v1/companies/$CID/model_settings" -H 'Content-Type: application/json' -d "{\"role_models\": {\"Reviewer\": \"$CONN_MODEL\"}}" | json "d['effective']['Reviewer']")" = "{'model': '$CONN_MODEL', 'source': 'role'}"
+R3=$(ingest_run "pr-103" '{"files": ["app.py"], "summary": "Adds a toast"}')
+check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R3" "d['reviewed_by'], d['suggested_decision']"
+check "that review reached the proxy through the company's connection, with its key and the model it listed" test "$("$PY" -c "import json, sys; rows = [json.loads(l) for l in open(sys.argv[1])]; print([(r['model'], r['base_url'], r['key_ok']) for r in rows if r['run'] == 'pr-103'][:1])" "$CONNECTIONS" 2>/dev/null)" = "[('deepseek-v4-flash', 'http://127.0.0.1:$LLM_PORT/provider/v1', True)]"
+check "and only that review: the other roles kept the deployment's models" test "$("$PY" -c "import json, sys; print(sorted({json.loads(l)['run'] for l in open(sys.argv[1])}))" "$CONNECTIONS")" = "['pr-103']"
+api -X PUT "$API/v1/companies/$CID/model_settings" -H 'Content-Type: application/json' -d '{"role_models": {}}' > /dev/null
 
 echo "8. a high-risk delivery waits for a person"
 # Its file name marks authentication (services/risk.py): QA's approval does
