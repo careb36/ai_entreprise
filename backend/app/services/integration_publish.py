@@ -19,9 +19,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from models import AgentRun, BacklogItem, Sprint
-from models.integration import SprintIntegration
-from sqlmodel import Session, select
+from models import AgentRun, BacklogItem, Sprint, Verification
+from models.integration import PUBLISHABLE, SprintIntegration
+from sqlmodel import Session
 
 from services.agent_service import AgentService
 from services.git_publish import (
@@ -30,44 +30,56 @@ from services.git_publish import (
     PUBLISH_HOW,
     PublishRefused,
     _cell,
-    _latest_verification,
 )
-from services.review_changes import run_changes
+from services.review_changes import _workspace_file, run_changes
 from services.spec_planning import acceptance_summary
 
 MAX_FILES_PER_TASK = 30
+REFUSALS = {
+    "conflict": "The integration stopped at a conflict: integrate again once it is resolved",
+    "incomplete": "A done task's branch was missing from the integration: it is not the whole sprint",
+    "pending": "The integration has not run yet: the workspace daemon did not answer",
+    "error": "The integration could not run: integrate again",
+}
 
 
-def _task_run(session: Session, item: BacklogItem, company_id: int) -> AgentRun | None:
-    return session.exec(
-        select(AgentRun)
-        .where(
-            AgentRun.company_id == company_id,
-            AgentRun.external_ref == f"task-{item.id}",
-        )
-        .order_by(AgentRun.id.desc())
-    ).first()
+INTEGRATED = ("merged", "already_merged")
+STATE_LABELS = {
+    "missing": "No branch",
+    "refused": "Not a task branch",
+    "not_attempted": "Not attempted",
+}
 
 
 def _integration_lines(row: SprintIntegration) -> list[str]:
-    lines = [f"**Integration:** {_cell(row.status)}", ""]
-    merged = row.merged or []
-    lines.append(
-        f"Merged into `{_cell(row.branch)}` from `{_cell(row.base)}`, in dependency order:"
-    )
-    lines += [
-        f"- task {_cell(m.get('task_id'))}: `{_cell(m.get('branch'))}` → `{_cell(m.get('commit'))[:12]}`"
-        for m in merged
+    tasks = row.tasks or []
+    lines = [
+        f"**Integration:** {_cell(row.status)}",
+        "",
+        f"Integrated into `{_cell(row.branch)}` from `{_cell(row.base)}`, in dependency order:",
     ]
-    already = (row.details or {}).get("already_merged") or []
-    lines += [f"- `{_cell(a.get('branch'))}` already in" for a in already]
-    for key, label in (("missing", "No branch"), ("left_out", "Not done, left out")):
-        entries = (row.details or {}).get(key) or []
-        if entries:
-            lines.append(
-                f"{label}: "
-                + ", ".join(f"task {_cell(e.get('task_id'))}" for e in entries)
-            )
+    for t in tasks:
+        if t.get("state") not in INTEGRATED:
+            continue
+        how = (
+            f"merged as `{_cell(t.get('merge_commit'))[:12]}`"
+            if t.get("state") == "merged"
+            else "already in"
+        )
+        lines.append(
+            f"- task {_cell(t.get('task_id'))}: `{_cell(t.get('branch'))}`"
+            f" at `{_cell(t.get('source_commit'))[:12]}`, {how}"
+        )
+    for state, label in STATE_LABELS.items():
+        ids = [t.get("task_id") for t in tasks if t.get("state") == state]
+        if ids:
+            lines.append(f"{label}: " + ", ".join(f"task {_cell(i)}" for i in ids))
+    left_out = (row.details or {}).get("left_out") or []
+    if left_out:
+        lines.append(
+            "Not done, left out: "
+            + ", ".join(f"task {_cell(e.get('task_id'))}" for e in left_out)
+        )
     lines += ["", f"Integrated commit `{_cell(row.commit)}`."]
     test_run = row.test_run or {}
     lines.append("")
@@ -79,6 +91,7 @@ def _integration_lines(row: SprintIntegration) -> list[str]:
         )
         lines.append(
             f"**Test suite on the integrated branch:** `{_cell(test_run['command'])}`, {outcome}"
+            f" at `{_cell(row.tested_commit)[:12]}`"
             + (
                 " (in a sandbox)"
                 if (test_run.get("sandbox") or {}).get("mode") not in (None, "host")
@@ -95,18 +108,37 @@ def _integration_lines(row: SprintIntegration) -> list[str]:
     return lines
 
 
+def _file_line(f: dict[str, Any]) -> str:
+    return (
+        f"- `{_cell(f.get('path'))}` {_cell(f.get('change') or 'changed')}"
+        f" (+{f.get('additions', 0)} −{f.get('deletions', 0)})"
+    )
+
+
 def _task_lines(
-    session: Session, item: BacklogItem, run: AgentRun | None
+    session: Session, row: SprintIntegration, task: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
-    """``(observed, claimed)`` for one task."""
-    header = f"### Task {item.id}: {_cell(item.title)}"
-    if run is None:
+    """``(observed, claimed)`` for one task, from the run and verification recorded at integration."""
+    item = session.get(BacklogItem, task.get("task_id"))
+    title = item.title if item is not None else task.get("title")
+    header = f"### Task {_cell(task.get('task_id'))}: {_cell(title)}"
+    run = session.get(AgentRun, task["run_id"]) if task.get("run_id") else None
+    if run is None or run.company_id != row.company_id:
         return [header, "", "No run recorded."], []
-    verification = _latest_verification(session, run)
+    verification = (
+        session.get(Verification, task["verification_id"])
+        if task.get("verification_id")
+        else None
+    )
+    if verification is not None and verification.agent_run_id != run.id:
+        verification = None
     observed = [
         header,
         "",
-        f"Run {run.id}. **Verdict:** {_cell(verification.verdict if verification else 'not verified')}",
+        (
+            f"Run {run.id}, verification {_cell(verification.id if verification else None)}."
+            f" **Verdict:** {_cell(verification.verdict if verification else 'not verified')}"
+        ),
     ]
     checks = [
         c
@@ -120,22 +152,33 @@ def _task_lines(
                 f"{_cell(c.get('name'))} {_cell(c.get('outcome'))}" for c in checks
             )
         )
-    acceptance = acceptance_summary(session, item)
+    acceptance = acceptance_summary(session, item) if item is not None else None
     if acceptance:
         observed.append(acceptance)
-    files = run_changes(session, run).get("files") or []
-    observed += [
-        f"- `{_cell(f.get('path'))}` {_cell(f.get('change') or 'changed')} (+{f.get('additions', 0)} −{f.get('deletions', 0)})"
-        for f in files[:MAX_FILES_PER_TASK]
-    ]
+    # Files the workspace daemon read back, as that verification recorded them.
+    writes = ((verification.evidence if verification else None) or {}).get(
+        "workspace_writes"
+    ) or []
+    files = [_workspace_file(w) for w in writes if isinstance(w, dict)]
+    observed += [_file_line(f) for f in files[:MAX_FILES_PER_TASK]]
     if len(files) > MAX_FILES_PER_TASK:
         observed.append(f"- … and {len(files) - MAX_FILES_PER_TASK} more")
+    claimed = []
     summary = (run.claims or {}).get("summary")
-    claimed = (
-        [f"- Task {item.id} ({_cell(run.producer)}): {_cell(summary)}"]
-        if summary
-        else []
-    )
+    if summary:
+        claimed.append(
+            f"- Task {item.id if item else task.get('task_id')} ({_cell(run.producer)}): {_cell(summary)}"
+        )
+    if not files:
+        # A diff the producer sent, never read back from disk: its words.
+        changes = run_changes(session, run)
+        if changes.get("source") == "artifact":
+            paths = [f.get("path") for f in changes.get("files") or []]
+            if paths:
+                claimed.append(
+                    f"- Task {_cell(task.get('task_id'))}, files in the diff it sent: "
+                    + ", ".join(f"`{_cell(p)}`" for p in paths[:MAX_FILES_PER_TASK])
+                )
     return observed, claimed
 
 
@@ -148,20 +191,11 @@ def request_body(session: Session, row: SprintIntegration) -> str:
         "",
         *_integration_lines(row),
     ]
-    items = {
-        i.id: i
-        for i in session.exec(
-            select(BacklogItem).where(BacklogItem.sprint_id == row.sprint_id)
-        ).all()
-    }
     claims: list[str] = []
-    for merged in row.merged or []:
-        item = items.get(merged.get("task_id"))
-        if item is None:
+    for task in row.tasks or []:
+        if task.get("state") not in INTEGRATED:
             continue
-        observed, claimed = _task_lines(
-            session, item, _task_run(session, item, row.company_id)
-        )
+        observed, claimed = _task_lines(session, row, task)
         lines += ["", *observed]
         claims += claimed
     if claims:
@@ -173,10 +207,9 @@ def request_body(session: Session, row: SprintIntegration) -> str:
 
 def publish_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
     """The ``workspace.git.publish`` request for the sprint's branch, or why not."""
-    if row.status == "conflict":
+    if row.status not in PUBLISHABLE:
         raise PublishRefused(
-            409,
-            "The integration stopped at a conflict: integrate again once it is resolved",
+            409, REFUSALS.get(row.status, "This integration cannot be published")
         )
     if not row.repository or not row.commit:
         raise PublishRefused(409, "This integration names no commit to publish")
