@@ -9,6 +9,7 @@ company-scoped."""
 from __future__ import annotations
 
 import asyncio
+import json
 import secrets
 from uuid import uuid4
 
@@ -768,10 +769,14 @@ def test_the_migration_backfills_events_and_marks_what_it_cannot_read(
             '[{"author": "Dev", "text": "w"},'
             ' {"author": "System", "text": "Something this revision never wrote"}]'
         )
-        by_a_person = (
-            '[{"author": "Dev", "text": "w"},'
-            ' {"author": "QA", "text": "NEEDS WORK: tests"},'
-            ' {"author": "user", "text": "Good enough, closing it."}]'
+        # A person's note longer than the platform's cap is backfilled whole.
+        long_note = "Good enough, closing it. " + "detail " * 900
+        by_a_person = json.dumps(
+            [
+                {"author": "Dev", "text": "w"},
+                {"author": "QA", "text": "NEEDS WORK: tests"},
+                {"author": "user", "text": long_note},
+            ]
         )
         for item_id, status, comments in (
             (1, "done", readable),
@@ -816,6 +821,8 @@ def test_the_migration_backfills_events_and_marks_what_it_cannot_read(
         events = task_events.for_task(session, 3)
         assert [e.event_type for e in events][-1] == "approved_by_person"
         assert events[-1].task_status == "done"
+        assert events[-1].payload["text"] == long_note.strip()
+        assert len(long_note) > task_events.TEXT_LIMIT
         assert (
             history_check.check_events(closed.comments, "done", _as_dicts(events)) == []
         )
@@ -826,3 +833,123 @@ def test_the_migration_backfills_events_and_marks_what_it_cannot_read(
         session.commit()
         assert live.seq == 1
         assert session.exec(select(TaskEvent).where(TaskEvent.task_id == 2)).all()
+
+
+# --- review findings: concurrency, signing, text, the checker, the inbox -----
+
+
+def test_a_writer_holding_a_stale_task_keeps_the_comment_committed_meanwhile(db):
+    item = _item(db, _sprint(db, _company(db)))
+    with Session(db.get_bind()) as other:
+        stale = other.get(BacklogItem, item.id)
+        assert not stale.comments
+        task_events.record(db, item, "note", "system", text="first writer")
+        db.commit()
+        task_events.record(other, stale, "note", "person", text="second writer")
+        other.commit()
+    db.expire_all()
+    fresh = db.get(BacklogItem, item.id)
+    assert [c["text"] for c in fresh.comments] == ["first writer", "second writer"]
+    assert_projection_agrees(db, item.id)
+
+
+def test_an_unsigned_event_after_a_signed_one_is_a_downgrade(db, monkeypatch):
+    import audit_signing
+
+    key = secrets.token_hex(32)
+    monkeypatch.setattr(audit_signing, "_configured_key", lambda: key)
+    item = _item(db, _sprint(db, _company(db)))
+    task_events.record(db, item, "claimed", "system", status="in_progress")
+    # Written without the key, as someone rewriting the tail would.
+    monkeypatch.setattr(audit_signing, "_configured_key", lambda: None)
+    task_events.record(db, item, "note", "system", text="rewritten")
+    db.commit()
+    monkeypatch.setattr(audit_signing, "_configured_key", lambda: key)
+    report = task_events.verify_chain(db, item.id)
+    assert report["status"] == "broken"
+    assert report["breaks"] == [{"seq": 2, "reason": "downgrade"}]
+
+
+def test_a_persons_text_is_kept_whole_and_the_platforms_is_capped(db):
+    item = _item(db, _sprint(db, _company(db)))
+    feedback = "NEEDS WORK: review by Ana: " + "rename it. " * 900
+    person = task_events.record(db, item, "reviewed", "person", text=feedback)
+    worker = task_events.record(db, item, "note", "system", text="x" * 9000)
+    db.commit()
+    assert person.payload["text"] == feedback
+    assert item.comments[-2]["text"] == feedback
+    assert len(worker.payload["text"]) == task_events.TEXT_LIMIT
+    assert_projection_agrees(db, item.id)
+
+
+def test_history_check_finds_comments_naming_events_the_task_lacks():
+    comments = [{"author": "Dev", "text": "w", "event_id": 4}]
+    [violation] = history_check.check_events(comments, "in_review", [])
+    assert violation.startswith("comment_without_event: comment 0")
+    # A thread from before events existed is not compared.
+    assert history_check.check_events([{"author": "Dev", "text": "w"}], "x", []) == []
+
+
+def test_history_check_finds_a_deleted_or_moved_comment():
+    events = [
+        _event(1, "delivered", "Dev", "w", "in_review"),
+        # An escalation carries no text and no comment, on purpose.
+        {"id": 2, "kind": "escalated", "task_status": None, "payload": {}},
+        _event(3, "blocked", "System", "QA quality gate failed", "blocked"),
+    ]
+    whole = [
+        {"author": "Dev", "text": "w", "event_id": 1},
+        {"author": "System", "text": "QA quality gate failed", "event_id": 3},
+    ]
+    assert history_check.check_events(whole, "blocked", events) == []
+
+    [violation] = history_check.check_events(whole[:1], "blocked", events)
+    assert violation.startswith("event_without_comment: event 3 (blocked)")
+
+    moved = list(reversed(whole))
+    assert any(
+        v.startswith("comments_out_of_order")
+        for v in history_check.check_events(moved, "blocked", events)
+    )
+
+
+def test_the_inbox_loads_the_events_once_for_every_task(
+    test_client, db, signing_key, monkeypatch
+):
+    company = _company(db)
+    sprint = _sprint(db, company)
+    for _ in range(3):
+        item = _item(db, sprint)
+        task_events.record(
+            db, item, "delivered", "Developer", author="Dev", text=DELIVERABLE
+        )
+        task_events.record(
+            db,
+            item,
+            "blocked",
+            "system",
+            status="blocked",
+            text="QA quality gate failed — task blocked pending manual triage.",
+        )
+    db.commit()
+    calls = {"many": 0}
+    real = task_events.for_tasks
+
+    def counted(session, ids):
+        calls["many"] += 1
+        return real(session, ids)
+
+    def refused(*_a, **_k):
+        raise AssertionError("one query per task")
+
+    monkeypatch.setattr(task_events, "for_tasks", counted)
+    monkeypatch.setattr(task_events, "for_task", refused)
+    response = test_client.get(
+        f"/v1/inbox?company_id={company.id}",
+        headers=_headers(db, company.id, "Viewer"),
+    )
+    assert response.status_code == 200, response.text
+    assert calls["many"] == 1
+    tasks = response.json()["blocked_tasks"]
+    assert len(tasks) == 3
+    assert all(t["reason"].startswith("QA quality gate failed") for t in tasks)

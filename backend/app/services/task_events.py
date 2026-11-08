@@ -89,6 +89,7 @@ PERSON = "person"
 # The comment author each actor's comments carry on the board.
 _DEFAULT_AUTHORS = {SYSTEM: "System", PERSON: "user"}
 FLAG_NAMES = ("explicit_block", "needs_person", "retryable", "retry", "frozen")
+# The cap on text the platform writes; a person's text is kept whole.
 TEXT_LIMIT = 4000
 CHAIN_VERSION = 1
 # The advisory-lock namespace for task chains ("tevt" in ASCII).
@@ -266,7 +267,9 @@ def record(
         raise ValueError(f"task {item.id} has no company")
     now = _naive_now()
     body = dict(payload or {})
-    rendered = (text or "")[:TEXT_LIMIT] if text else None
+    # A person's text is kept whole (a review body and its line comments are
+    # the Developer's instructions); only what the platform writes is capped.
+    rendered = (text if actor == PERSON else text[:TEXT_LIMIT]) if text else None
     if rendered:
         comment_author = author or _DEFAULT_AUTHORS.get(actor, actor)
         implied = actor_for(comment_author)
@@ -296,6 +299,10 @@ def record(
     )
     seal(session, event)
     if rendered:
+        # seal() holds the task's lock and flushed this session's changes:
+        # read the thread again under it, so a comment another writer
+        # committed since this item was loaded is kept, never overwritten.
+        session.refresh(item, attribute_names=["comments"], with_for_update=True)
         item.comments = [
             *board.comment_list(item.comments),
             {
@@ -346,6 +353,20 @@ def for_task(session: Session, task_id: int) -> list[TaskEvent]:
     )
 
 
+def for_tasks(session: Session, task_ids: list[int]) -> dict[int, list[TaskEvent]]:
+    """The events of several tasks in one query, by task, each in order."""
+    grouped: dict[int, list[TaskEvent]] = {task_id: [] for task_id in task_ids}
+    if not task_ids:
+        return grouped
+    for event in session.exec(
+        select(TaskEvent)
+        .where(TaskEvent.task_id.in_(task_ids))  # type: ignore[union-attr]
+        .order_by(TaskEvent.id)  # type: ignore[arg-type]
+    ).all():
+        grouped.setdefault(event.task_id, []).append(event)
+    return grouped
+
+
 def as_dict(event: TaskEvent) -> dict[str, Any]:
     return {
         "id": event.id,
@@ -370,7 +391,8 @@ def verify_chain(session: Session, task_id: int) -> dict[str, Any]:
     """Walk a task's events and report where the chain breaks.
 
     ``status`` is ``empty``, ``intact`` or ``broken``; ``breaks`` lists
-    ``gap``, ``prev_mismatch``, ``hash_mismatch`` and ``key_missing`` by
+    ``gap``, ``prev_mismatch``, ``hash_mismatch``, ``key_missing`` and
+    ``downgrade`` (an unsigned event after a signed one while a key is set) by
     sequence number, as ``audit_chain.verify_chain`` does for the audit rows.
     """
     rows = [e for e in for_task(session, task_id) if e.seq is not None]
@@ -379,9 +401,14 @@ def verify_chain(session: Session, task_id: int) -> dict[str, Any]:
     key = audit_signing._configured_key()
     breaks: list[dict[str, Any]] = []
     expected, previous = 1, None
+    keyed_seen = False
     for row in rows:
         stored = row.chain_hash or ""
         keyed = stored.startswith(SIGNED_PREFIX)
+        if key is not None and keyed_seen and not keyed:
+            # Rewriting a signed stretch without the key leaves unsigned hashes.
+            breaks.append({"seq": row.seq, "reason": "downgrade"})
+        keyed_seen = keyed_seen or keyed
         if row.seq != expected:
             breaks.append({"seq": row.seq, "reason": "gap"})
         if (row.prev_hash or None) != previous:

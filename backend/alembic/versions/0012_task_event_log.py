@@ -248,7 +248,8 @@ def _backfill() -> None:
                     event_type=kind,
                     payload={
                         "author": str(comment.get("author") or ""),
-                        "text": str(comment.get("text") or "").strip()[:4000],
+                        # The whole text: the comment keeps it, so must its event.
+                        "text": str(comment.get("text") or "").strip(),
                         "backfilled": True,
                         **flags,
                     },

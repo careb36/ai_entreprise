@@ -143,10 +143,20 @@ def next_step_from_events(events: list[TaskEvent]) -> str | None:
 # --- The questions, from the events when they cover the task -----------------
 
 
-def _events(session: Session, item: BacklogItem) -> list[TaskEvent] | None:
+# Histories loaded at once (``task_events.for_tasks``), by task id; a caller
+# answering for many tasks passes them so no question queries per task.
+Histories = dict[int, list[TaskEvent]]
+
+
+def _events(
+    session: Session, item: BacklogItem, histories: Histories | None = None
+) -> list[TaskEvent] | None:
     if item.id is None:
         return None
-    events = task_events.for_task(session, item.id)
+    if histories is not None and item.id in histories:
+        events = histories[item.id]
+    else:
+        events = task_events.for_task(session, item.id)
     return events if covers(item, events) else None
 
 
@@ -155,29 +165,37 @@ def source(session: Session, item: BacklogItem) -> str:
     return "events" if _events(session, item) is not None else "comments"
 
 
-def pending_rework_feedback(session: Session, item: BacklogItem) -> list[str]:
-    events = _events(session, item)
+def pending_rework_feedback(
+    session: Session, item: BacklogItem, histories: Histories | None = None
+) -> list[str]:
+    events = _events(session, item, histories)
     if events is None:
         return board.pending_rework_feedback(item.comments)
     return pending_rework_from_events(events)
 
 
-def block_reason(session: Session, item: BacklogItem) -> str:
-    events = _events(session, item)
+def block_reason(
+    session: Session, item: BacklogItem, histories: Histories | None = None
+) -> str:
+    events = _events(session, item, histories)
     if events is None:
         return board.block_reason(item.comments)
     return block_reason_from_events(events)
 
 
-def awaits_risk_acceptance(session: Session, item: BacklogItem) -> bool:
-    events = _events(session, item)
+def awaits_risk_acceptance(
+    session: Session, item: BacklogItem, histories: Histories | None = None
+) -> bool:
+    events = _events(session, item, histories)
     if events is None:
         return board.awaits_risk_acceptance(item.comments)
     return awaits_risk_acceptance_from_events(events)
 
 
-def blocked_item_next_step(session: Session, item: BacklogItem) -> str | None:
-    events = _events(session, item)
+def blocked_item_next_step(
+    session: Session, item: BacklogItem, histories: Histories | None = None
+) -> str | None:
+    events = _events(session, item, histories)
     if events is None:
         return board.blocked_item_next_step(item.comments, item.assignee)
     return next_step_from_events(events)

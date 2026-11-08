@@ -120,8 +120,15 @@ def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
 def check_events(
     comments: list[dict[str, Any]], status: Any, events: list[dict[str, Any]]
 ) -> list[str]:
-    """Where the thread and the events disagree; nothing when there are no events."""
-    if not events:
+    """Where the thread and the events disagree.
+
+    Nothing for a task with neither events nor comments naming one (a thread
+    from before events existed). Every comment that names an event must
+    render it, and every event that renders text (``text`` in its payload;
+    an escalation or a bare block carries none) must keep its comment, in
+    the same order, so a comment deleted or moved is found.
+    """
+    if not events and not any("event_id" in c for c in comments):
         return []
     violations: list[str] = []
     by_id = {e.get("id"): e for e in events}
@@ -146,6 +153,22 @@ def check_events(
                 f"comment_differs_from_event: comment {index} and event "
                 f"{event.get('id')} ({event.get('kind')}) say different things"
             )
+    rendering = [e.get("id") for e in events if "text" in (e.get("payload") or {})]
+    named = [c.get("event_id") for c in comments if c.get("event_id") in by_id]
+    kept = set(named)
+    for event_id in rendering:
+        if event_id not in kept:
+            event = by_id[event_id]
+            violations.append(
+                f"event_without_comment: event {event_id} ({event.get('kind')}) "
+                "renders a comment the thread no longer has"
+            )
+    shown = set(rendering)
+    if [i for i in named if i in shown] != [i for i in rendering if i in kept]:
+        violations.append(
+            "comments_out_of_order: the thread's comments are not in the order "
+            "of the events they render"
+        )
     whole = (
         bool(comments)
         and all(c.get("event_id") in by_id for c in comments)
