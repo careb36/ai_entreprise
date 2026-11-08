@@ -44,6 +44,7 @@ from services import (
     developer_tools,
     edit_blocks,
     git_workflow,
+    integration,
     mcp_tools,
     model_routing,
     procedures,
@@ -1140,7 +1141,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     )
     if not result.get("completed"):
         return
-
+    integration.schedule_after_close(nats_client, engine, sprint_id)  # issue #314
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await asyncio.to_thread(
             _post_message,
@@ -1153,8 +1154,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
             kind="retrospective",
             body=_format_retrospective_summary(retro_metrics),
         )
-        # Measure adopted procedures first, so a proposal starts from today's
-        # rules. Learning never blocks closing a sprint.
+        # Measure procedures before proposing; learning never blocks closing.
         try:
             await asyncio.to_thread(
                 _evaluate_procedures, retro_metrics["company_id"], sprint_id
@@ -1391,8 +1391,7 @@ def _update_item_status(
 
 
 # ---------------------------------------------------------------------------
-# The conversation between roles. Messages are claims: the record of who said
-# what to whom. The board and the AgentRun evidence decide what happened.
+# The conversation between roles: messages are claims; the evidence decides.
 # ---------------------------------------------------------------------------
 
 MESSAGE_BODY_LIMIT = 4000
