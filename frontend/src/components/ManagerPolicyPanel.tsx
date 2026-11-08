@@ -40,6 +40,8 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
   }, [policy.data])
 
   if (!policy.data || !form) return null
+  const stored = policy.data
+  const dirty = JSON.stringify(form) !== JSON.stringify(formOf(stored))
   const catalogue = policy.data.catalogue
   const rules = MANAGER_RULES.filter(name => name in catalogue)
   const toggle = (name: string) =>
@@ -120,9 +122,36 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
         </p>
       )}
       {canManage && (
-        <button type="button" className="btn btn-primary btn-sm" disabled={save.isPending} onClick={() => save.mutate(form)}>
-          {t('manager.policy.save', { defaultValue: 'Save the policy' })}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={save.isPending || !dirty}
+            onClick={() => save.mutate(form)}
+          >
+            {save.isPending
+              ? t('manager.policy.saving', { defaultValue: 'Saving…' })
+              : t('manager.policy.save', { defaultValue: 'Save the policy' })}
+          </button>
+          <p role="status" className="text-xs text-gray-400">
+            {dirty
+              ? t('manager.policy.unsaved', { defaultValue: 'Unsaved changes' })
+              : save.isSuccess
+                ? t('manager.policy.saved', { defaultValue: 'Saved. The Manager agent applies it from its next cycle.' })
+                : !stored.updated_at
+                  ? t('manager.policy.noChanges', { defaultValue: 'No changes to save' })
+                  : null}
+          </p>
+        </div>
+      )}
+      {stored.updated_at && (
+        <p className="text-xs text-gray-500">
+          {t('manager.policy.lastSaved', {
+            when: new Date(stored.updated_at.endsWith('Z') || stored.updated_at.includes('+') ? stored.updated_at : `${stored.updated_at}Z`).toLocaleString(),
+            who: stored.updated_by ?? '—',
+            defaultValue: 'Last saved {{when}} by {{who}}',
+          })}
+        </p>
       )}
     </section>
   )

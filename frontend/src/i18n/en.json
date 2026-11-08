@@ -2083,7 +2083,12 @@
         "approve_specification": "Approve a specification the check does not block",
         "approve_architecture": "Approve an architecture that covers every requirement",
         "accept_high_risk": "Accept a high-risk delivery with every criterion test passing"
-      }
+      },
+      "saving": "Saving…",
+      "unsaved": "Unsaved changes",
+      "saved": "Saved. The Manager agent applies it from its next cycle.",
+      "noChanges": "No changes to save",
+      "lastSaved": "Last saved {{when}} by {{who}}"
     }
   },
   "sprintAdmin": {

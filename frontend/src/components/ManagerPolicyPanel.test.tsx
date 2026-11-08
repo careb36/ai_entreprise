@@ -80,4 +80,34 @@ describe('ManagerPolicyPanel', () => {
     render(<ManagerPolicyPanel companyId={3} canManage />)
     expect(screen.getByRole('alert')).toHaveTextContent('Could not save the policy')
   })
+
+  it('says nothing changed until a box is ticked, then that the change is unsaved', () => {
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    const button = screen.getByRole('button', { name: 'Save the policy' })
+    expect(button).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('No changes to save')
+    fireEvent.click(screen.getByRole('checkbox', { name: /Merge a done task's branch/ }))
+    expect(button).toBeEnabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
+  })
+
+  it('confirms a save and says when and by whom the policy was last saved', () => {
+    vi.mocked(useManagerPolicy).mockReturnValue({
+      data: { ...POLICY, updated_by: 'owner@example.test', updated_at: '2026-11-08T22:00:00' },
+    } as never)
+    vi.mocked(useSaveManagerPolicy).mockReturnValue({
+      mutate, isPending: false, isError: false, isSuccess: true, error: null,
+    } as never)
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    expect(screen.getByRole('status')).toHaveTextContent(/^Saved\./)
+    expect(screen.getByText(/Last saved .* by owner@example\.test/)).toBeInTheDocument()
+  })
+
+  it('shows that a save is under way', () => {
+    vi.mocked(useSaveManagerPolicy).mockReturnValue({
+      mutate, isPending: true, isError: false, error: null,
+    } as never)
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+  })
 })
