@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { useAuthStore } from '../store/useAuthStore'
+import { standardsApi } from '../services/standards'
 import {
   api,
   ApiError,
@@ -95,6 +96,10 @@ export function useInbox(companyId: number | null, refreshMs: number | false = 3
     enabled: companyId !== null,
     refetchInterval: refreshMs,
   })
+}
+
+export function useStandards() {
+  return useQuery({ queryKey: ['standards'] as const, queryFn: standardsApi.list, staleTime: Infinity })
 }
 
 export function useProcedures(companyId: number | null) {

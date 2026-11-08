@@ -10,7 +10,7 @@ export class ApiError extends Error {
   /** The server's own `detail` message, when the error body carried one. */
   public detail?: string
 
-  constructor(public status: number, message: string, detail?: string) {
+  constructor(public status: number, message: string, detail?: string, public data?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.detail = detail
@@ -385,6 +385,8 @@ export interface BacklogItem {
   comments: { author: string; text: string; created_at: string }[]
   created_at: string
   updated_at: string
+  covers?: string[]; kind?: 'acceptance_tests' | null // Criteria ids the task covers; QA's test-writing task of a requirement.
+  depends_on?: number[]; waiting_for?: number[] // Ids of sprint tasks to finish first, and those among them not done yet.
 }
 
 export interface SprintBoard {
@@ -397,6 +399,7 @@ export interface SprintBoard {
     start_date: string
     scope_size: string
     item_limit: number
+    specification_id?: number | null
   }
   columns: Record<string, BacklogItem[]>
   total: number
@@ -409,6 +412,7 @@ export interface SprintSummary {
   goal: string | null
   start_date: string | null
   scope_size: string
+  specification_id?: number | null
   total: number
   done: number
   /** Tasks blocked on the board, and rework requests over the sprint: the numbers procedures are judged by. */
@@ -445,13 +449,18 @@ export interface PlannedSprintTask {
   description: string
   priority: 'low' | 'medium' | 'high' | 'critical'
   assignee: string
+  covers?: string[] // Criteria ids, when planned from a specification.
+  depends_on?: number[]; kind?: 'acceptance_tests' | null // Positions in the plan's `tasks` to finish first; QA's test-writing task.
 }
 
 export interface SprintPlanResponse {
   sprint_name: string
   goal: string
   scope_size: 'S' | 'M' | 'L'
+  specification_id?: number | null
   tasks: PlannedSprintTask[]
+  /** Criteria no task covers. */
+  uncovered?: string[]
 }
 
 // ── Orchestration Health types ────────────────────────────────────────────────
@@ -668,7 +677,7 @@ interface FetchOptions extends RequestInit {
   params?: Record<string, string | number>
   /** Retry 5xx responses (default true). A 503 that means "not connected" should not. */
   retryServerErrors?: boolean
-  _attempt?: number
+  once?: boolean; timeoutMs?: number; _attempt?: number // once: never resent (not idempotent)
 }
 
 let onUnauthorized: (() => void) | null = null
@@ -677,8 +686,9 @@ export function setOnUnauthorized(handler: (() => void) | null) {
   onUnauthorized = handler
 }
 
-async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, _attempt = 0, auth = true, retryServerErrors = true, ...fetchOptions } = options
+export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  const { params, _attempt = 0, auth = true, once = false, timeoutMs = TIMEOUT_MS, ...rest } = options
+  const { retryServerErrors = !once, ...fetchOptions } = rest
 
   let url = `${API_BASE}${endpoint}`
   if (params) {
@@ -689,7 +699,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const token = auth ? useAuthStore.getState().getValidToken() : null
@@ -719,7 +729,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
         await delay(600 * (_attempt + 1))
         return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
       }
-      throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
+      throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
     }
 
     if (response.status === 204) return undefined as unknown as T
@@ -729,10 +739,10 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
     clearTimeout(timer)
     if (err instanceof ApiError) throw err
     if ((err as Error).name === 'AbortError') {
-      if (_attempt < MAX_RETRIES) return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
+      if (!once && _attempt < MAX_RETRIES) return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
       throw new ApiError(0, 'Request timed out. Please check your connection.')
     }
-    if (_attempt < MAX_RETRIES) {
+    if (!once && _attempt < MAX_RETRIES) {
       await delay(600 * (_attempt + 1))
       return fetchApi<T>(endpoint, { ...options, _attempt: _attempt + 1 })
     }
@@ -747,30 +757,29 @@ async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filename: stri
   if (token) headers.set('Authorization', ['Bearer', token].join(' '))
   const response = await fetch(`${API_BASE}${endpoint}`, { headers })
   if (!response.ok) {
-    throw new ApiError(response.status, friendlyMessage(response.status), await readDetail(response))
+    throw new ApiError(response.status, friendlyMessage(response.status), ...(await readDetail(response)))
   }
   const disposition = response.headers.get('Content-Disposition') ?? ''
   const match = /filename="?([^";]+)"?/.exec(disposition)
   return { blob: await response.blob(), filename: match ? match[1] : null }
 }
 
-async function readDetail(response: Response): Promise<string | undefined> {
+/** The body's `detail` as a message and as sent (an object carries more, e.g. a 409's findings). */
+async function readDetail(response: Response): Promise<[string | undefined, unknown]> {
   try {
-    const body = await response.json()
-    const detail = body?.detail
-    if (typeof detail === 'string' && detail) return detail
+    const detail = (await response.json())?.detail
+    if (typeof detail === 'string' && detail) return [detail, detail]
     // Some endpoints answer with {message, ...} (e.g. GitHub rate limits).
-    if (detail && typeof detail === 'object' && typeof detail.message === 'string') return detail.message
-    return undefined
+    if (detail && typeof detail === 'object' && typeof detail.message === 'string') return [detail.message, detail]
+    return [undefined, detail]
   } catch {
-    return undefined
+    return [undefined, undefined]
   }
 }
 
 function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
-
 
 export interface AgentActivity {
   total_tasks: number
@@ -836,22 +845,12 @@ export const api = {
     token_budget: number
   }) => api.post<ManagedAgent>('/v1/agents', data),
 
-  generateAgentPrompt: (data: {
-    role: string
-    seniority: string
-    specialty?: string
-    persona?: string
-  }) => api.post<{ system_prompt: string }>('/v1/agents/generate_prompt', data),
+  generateAgentPrompt: (data: { role: string; seniority: string; specialty?: string; persona?: string }) =>
+    api.post<{ system_prompt: string }>('/v1/agents/generate_prompt', data),
 
   updateAgent: (agentId: number, data: Partial<{
-    name: string
-    role: string
-    persona: string
-    seniority: string
-    specialty: string
-    model: string
-    system_prompt: string
-    token_budget: number
+    name: string; role: string; persona: string; seniority: string
+    specialty: string; model: string; system_prompt: string; token_budget: number
   }>) => api.patch<ManagedAgent>(`/v1/agents/${agentId}`, data),
 
   deleteAgent: (agentId: number) =>
@@ -990,17 +989,13 @@ export const api = {
       `/v1/sprints/${encodeURIComponent(sprintId)}/stream_ticket`,
     ),
 
-  updateBacklogItem: (itemId: number, data: {
-    status?: string
-    priority?: string
-    assignee?: string
-    comment?: string
-  }) => api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
+  updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
+    api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[] }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number }) =>
     api.post<{ sprint_id: number; backlog_item_ids?: number[]; sprint_url?: string }>('/v1/start_sprint', data),
 
-  planSprint: (data: { company_id: number; prompt: string; scope_size: 'S' | 'M' | 'L' }) =>
+  planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number }) =>
     api.post<SprintPlanResponse>('/v1/plan_sprint', data),
 
   planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>

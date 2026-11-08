@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BookCheck, Check, Loader2, Plus, X } from 'lucide-react'
-import { useAgents, useCreateProcedure, useCurrentRole, useDecideProcedure, useProcedures } from '../hooks/useQueries'
+import { BookCheck, Check, Loader2, Plus, ShieldCheck, X } from 'lucide-react'
+import { useAgents, useCreateProcedure, useCurrentRole, useDecideProcedure, useProcedures, useStandards } from '../hooks/useQueries'
 import { ALL_ROLES, ApiError, errorDetail, type Procedure, type ProcedureMetrics } from '../services/api'
+import type { Standard } from '../services/standards'
 import { useAppStore } from '../store/useAppStore'
 
 const RESULT_STYLES: Record<string, string> = {
@@ -70,9 +71,60 @@ export default function Procedures() {
           <Section id="history" title={t('procedures.history', { defaultValue: 'History' })}
             empty={t('procedures.noHistory', { defaultValue: 'Nothing retired or rejected yet.' })} items={history}
             render={p => <ProcedureCard key={p.id} procedure={p} actions={[]} />} />
+          <Standards />
         </>
       )}
     </div>
+  )
+}
+
+/** The factory's quality standards: fixed, by discipline; a procedure adds to them, never relaxes them. */
+function Standards() {
+  const { t } = useTranslation()
+  const query = useStandards()
+  const byArea = new Map<string, Standard[]>()
+  for (const standard of query.data?.standards ?? []) {
+    byArea.set(standard.area, [...(byArea.get(standard.area) ?? []), standard])
+  }
+  return (
+    <section aria-labelledby="procedures-standards" className="space-y-3">
+      <h2 id="procedures-standards" className="text-sm font-semibold text-white flex items-center gap-2">
+        <ShieldCheck size={15} className="text-brand-400" aria-hidden="true" />
+        {t('standards.title')}
+      </h2>
+      <p className="text-xs text-gray-400">{t('standards.subtitle')}</p>
+      {query.isLoading && (
+        <div role="status" className="flex items-center gap-2 text-sm text-gray-400">
+          <Loader2 size={15} className="animate-spin" /> {t('standards.loading')}
+        </div>
+      )}
+      {query.isError && <p role="alert" className="alert-error text-sm">{t('standards.loadError', { message: errorDetail(query.error) })}</p>}
+      {[...byArea.entries()].map(([area, items]) => (
+        <div key={area} className="card p-4 space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{t(`standards.areas.${area}`, { defaultValue: area })}</h3>
+          <ul className="space-y-2">
+            {items.map(standard => (
+              <li key={standard.id} className="text-sm text-gray-300">
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="rounded bg-surface-800 px-1.5 py-0.5 font-mono text-[11px] text-brand-300">{standard.id}</code>
+                  <span className="font-semibold text-white">{standard.title}</span>
+                  {standard.roles.map(role => (
+                    <span key={role} className="badge">{role === '*' ? t('procedures.everyRole') : role}</span>
+                  ))}
+                  {standard.checked && (
+                    <span className="badge border bg-emerald-900/40 text-emerald-300 border-emerald-700/40" title={standard.checked}>
+                      {t('standards.checked')}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-gray-400">{standard.rule}</p>
+                {standard.checked && <p className="mt-0.5 text-[11px] text-emerald-300/80">{t('standards.checkedBy', { how: standard.checked })}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   )
 }
 

@@ -67,6 +67,22 @@ SCOPE_LIMITS: dict[str, int] = {"S": 4, "M": 8, "L": 12}
 SCOPE_HARD_MAX = 12
 
 
+class BacklogItemIn(BaseModel):
+    """One task of ``POST /v1/start_sprint``; fields it does not know are kept."""
+
+    model_config = ConfigDict(extra="allow")
+
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    assignee: str = "PO"
+    covers: list[str] = []
+    depends_on: list[int] = []
+    # ``acceptance_tests`` for a QA task that writes a requirement's acceptance
+    # tests (``services.acceptance``); anything else is an ordinary task.
+    kind: str | None = None
+
+
 class SprintStartRequest(BaseModel):
     """Payload for ``POST /v1/start_sprint`` — creates a sprint with initial backlog."""
 
@@ -76,20 +92,27 @@ class SprintStartRequest(BaseModel):
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8 items) | "L" (≤12 items)
     goal: str | None = None
     duration_days: int | None = None  # deprecated
-    backlog_items: list[
-        dict[str, str]
-    ]  # Each item has at least "title" and "description"
+    # With a specification, "covers" lists the criteria ids (``REQ-1.2``)
+    # the task covers; "depends_on" lists the positions, in this list, of
+    # the tasks that must be done first (``services.dependencies``).
+    backlog_items: list[BacklogItemIn]
     # Blocked tasks of earlier sprints to try again in this one (they count
     # towards the scope). Each gets a fresh task carrying what blocked it.
     carry_over_ids: list[int] = []
+    # The approved specification the sprint is planned from; its criteria
+    # are the only ones a task may cover.
+    specification_id: int | None = None
 
 
 class SprintPlanRequest(BaseModel):
     """Payload for ``POST /v1/plan_sprint`` — turns a strategic prompt into a sprint backlog."""
 
     company_id: int
-    prompt: str
+    prompt: str = ""
     scope_size: str = "M"
+    # Plan from an approved specification instead of a prompt: the PO splits
+    # it into tasks that name the criteria they cover.
+    specification_id: int | None = None
 
 
 class SelfImprovementSprintRequest(BaseModel):
@@ -148,6 +171,45 @@ class DiscoveryRequest(BaseModel):
 
     project_path: str  # Absolute or relative path to the project root
     company_id: int | None = None  # Optional for pre-creation discovery
+
+
+class ReviewCommentCreate(BaseModel):
+    """Payload for ``POST /v1/agent_runs/{id}/comments``: a note on a line of a changed file."""
+
+    company_id: int
+    path: str | None = Field(default=None, max_length=1000)
+    line: int | None = Field(default=None, ge=1)
+    side: str = "new"
+    body: str = Field(min_length=1, max_length=4000)
+    # Only when authentication is off: who wrote it.
+    author_name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def side_and_body(self) -> "ReviewCommentCreate":
+        if self.side not in {"new", "old"}:
+            raise ValueError("side must be 'new' or 'old'")
+        if self.line is not None and not self.path:
+            raise ValueError("a line needs the path of its file")
+        self.body = self.body.strip()
+        if not self.body:
+            raise ValueError("body must not be blank")
+        return self
+
+
+class RunReviewCreate(BaseModel):
+    """Payload for ``POST /v1/agent_runs/{id}/reviews``: a submitted review."""
+
+    company_id: int
+    event: str
+    body: str | None = Field(default=None, max_length=8000)
+    author_name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def known_event(self) -> "RunReviewCreate":
+        if self.event not in {"comment", "approve", "request_changes"}:
+            raise ValueError("event must be 'comment', 'approve' or 'request_changes'")
+        self.body = (self.body or "").strip() or None
+        return self
 
 
 class AgentRunApprovalRequest(BaseModel):

@@ -16,6 +16,7 @@ import logging
 from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
+import connections
 import upstream
 from catalogue import GEMINI_ALIASES as _GEMINI_ALIASES
 from catalogue import GEMINI_DEPRECATED as _GEMINI_DEPRECATED
@@ -69,8 +70,6 @@ NVIDIA_PROXY_URL = _env("NVIDIA_PROXY_URL", "https://integrate.api.nvidia.com/v1
 # (with an error if need be) before the caller gives up on it.
 LLM_UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110"))
 
-# --- API Key Validation (deferred to after logger is defined) ---
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
 
@@ -111,9 +110,7 @@ def _build_database_url() -> str:
 engine = create_engine(_build_database_url(), pool_pre_ping=True)
 
 # --- Dynamic Model Catalogue ---
-
-# Preference order for fallback resolution (most preferred first).
-# Only used when the exact requested model is not in the live catalogue.
+# Preference order (most preferred first) when the exact model is not in the catalogue.
 _PREFERENCE_TIERS = {
     "fast":     ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
                  "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
@@ -424,8 +421,7 @@ def list_models():
                            "description": f"{label} {mid}"})
             listed.add(mid)
 
-    # Pick the best non-preview balanced/fast model for orchestration tasks
-    # (team suggestion, routing decisions) — prefer stability over power.
+    # The best non-preview balanced/fast model for orchestration: stability over power.
     orchestrator = _pick_orchestrator(models)
 
     return jsonify({"models": models, "orchestrator": orchestrator, "refreshed_at": _last_refresh})
@@ -555,7 +551,11 @@ def chat_completions():
             "available": available_model_ids(),
         }), 400
 
-    resolved = resolve_model(requested)
+    try:
+        conn = connections.from_headers(request.headers)
+    except connections.ConnectionRefused as exc:
+        return jsonify({"error": "connection_refused", "message": str(exc)}), 403
+    resolved = ("connection", requested) if conn else resolve_model(requested)
     if resolved is None:
         available = available_model_ids()
         return jsonify({
@@ -568,7 +568,11 @@ def chat_completions():
 
     provider, model = resolved
     try:
-        result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
+        if conn:  # The company's own key: no fallback to the deployment's providers.
+            result, tokens = connections.call(conn, model, data, _post_upstream, LLM_UPSTREAM_TIMEOUT_SECONDS)
+            served_provider, served_model, fallback_from = f"connection:{conn['name']}", model, None
+        else:
+            result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
     except UpstreamError as exc:
         body = {"error": "upstream_error", **exc.as_dict(), "requested_model": requested}
         if len(exc.attempts) > 1:

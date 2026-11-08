@@ -82,6 +82,17 @@ jobs:
           # checks anything. explicit-package-bases keeps it to one module name.
           mypy app --ignore-missing-imports --explicit-package-bases || true
 
+      - name: Check the migrations against the models
+        working-directory: ./backend
+        run: |
+          # The models and the migrations must agree: `alembic check` on a
+          # database the migrations built from nothing (a SQLite file here;
+          # the e2e does the same on Postgres).
+          rm -f "$RUNNER_TEMP/migrations-check.sqlite"
+          export ALEMBIC_DATABASE_URL="sqlite:///$RUNNER_TEMP/migrations-check.sqlite"
+          PYTHONPATH=.:app poetry run alembic upgrade head
+          PYTHONPATH=.:app poetry run alembic check
+
       - name: Run tests
         working-directory: ./backend
         run: |

@@ -8,7 +8,7 @@ import { CalendarDays, Layers } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useSprints } from '../hooks/useQueries'
 import type { SprintSummary } from '../services/api'
-import { QuickLaunch } from './Dashboard'
+import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
 import { LearningTrend } from '../components/LearningTrend'
 

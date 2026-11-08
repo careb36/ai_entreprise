@@ -42,3 +42,26 @@ clean:
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name "node_modules" -exec rm -rf {} +
 	@echo "$(GREEN)✨ Clean.$(RESET)"
+
+ci:
+	@echo "$(GREEN)🧪 CI local (backend + frontend + proxy)...$(RESET)"
+	@make ci-backend
+	@make ci-frontend
+	@make ci-proxy
+
+ci-backend:
+	@echo "$(GREEN)🐍 Backend: ruff + pytest...$(RESET)"
+	cd backend && PYTHONPATH=.:app poetry run ruff check app tests
+	cd backend && PYTHONPATH=.:app poetry run ruff format --check app tests
+	cd backend && PYTHONPATH=.:app poetry run pytest tests -q
+
+ci-frontend:
+	@echo "$(GREEN)🎨 Frontend: tsc + lint + tests + build...$(RESET)"
+	cd frontend && npx tsc --noEmit
+	cd frontend && npm run lint
+	cd frontend && npm run test:run
+	cd frontend && npm run build
+
+ci-proxy:
+	@echo "$(GREEN)🤖 LLM proxy: pytest...$(RESET)"
+	cd llm-proxy && poetry run python -m pytest tests -q

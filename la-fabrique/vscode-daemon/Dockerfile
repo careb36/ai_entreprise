@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir nats-py==2.3.1
 
-COPY daemon.py nats_scope.py shell_exec.py /app/
+COPY command_policy.py daemon.py delivery_journal.py file_diff.py file_edits.py file_hash.py git_workspace.py nats_scope.py platform_reviews.py sandbox.py shell_exec.py workspace_read.py /app/
 
 # Run as an unprivileged user, never as root: a flaw in the app then cannot
 # rewrite the image or reach what root reaches on a shared volume.

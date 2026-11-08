@@ -15,7 +15,7 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services import task_worker, workspace_daemon
 from services.verification import check_tests_run
 from sqlmodel import select
 
@@ -72,12 +72,72 @@ def test_pytest_configuration_is_detected(no_override, tmp_path, name, content):
     assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
 
 
+def test_install_command_detection(no_override, tmp_path):
+    (tmp_path / "package.json").write_text("{}")
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == "npm install"
+    (tmp_path / "requirements.txt").write_text("x")
+    # package.json wins only if present; remove to test pip
+    (tmp_path / "package.json").unlink()
+    assert (
+        workspace_daemon.detect_install_command(str(tmp_path))
+        == "pip install -r requirements.txt"
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("[project]\nname = 'x'\n", "pip install -e ."),
+        ("[tool.poetry]\nname = 'x'\n", "poetry install"),
+        # This repository's backend: Poetry without a package to build.
+        ("[tool.poetry]\npackage-mode = false\n", "poetry install"),
+        ("[project]\n[tool.poetry]\npackage-mode=false\n", "poetry install"),
+        ("[tool.pytest.ini_options]\n", None),
+    ],
+)
+def test_a_python_project_gets_the_installer_its_metadata_names(
+    no_override, tmp_path, content, expected
+):
+    (tmp_path / "pyproject.toml").write_text(content)
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == expected
+
+
+def test_a_pyproject_that_is_not_utf8_does_not_break_detection(no_override, tmp_path):
+    (tmp_path / "pyproject.toml").write_bytes(b"[project]\nname = '\xff\xfe'\n")
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == "pip install -e ."
+
+
+@pytest.mark.parametrize("marker", ["build.gradle", "build.gradle.kts"])
+def test_gradle_installs_by_compiling_the_tests(no_override, tmp_path, marker):
+    # `gradle dependencies` only reports; resolving what the tests need fails
+    # on a missing artifact.
+    (tmp_path / marker).write_text("")
+    assert (
+        workspace_daemon.detect_install_command(str(tmp_path)) == "gradle testClasses"
+    )
+
+
 def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
     assert task_worker._detect_test_command(str(tmp_path)) is None
     (tmp_path / "tests" / "unit").mkdir(parents=True)
     (tmp_path / "tests" / "unit" / "test_x.py").write_text("def test_x(): pass\n")
     assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
+
+
+@pytest.mark.parametrize(
+    ("marker", "expected"),
+    [
+        ("go.mod", "go test ./..."),
+        ("Cargo.toml", "cargo test"),
+        ("pom.xml", "mvn -q test"),
+        ("build.gradle", "gradle test"),
+        ("build.gradle.kts", "gradle test"),
+    ],
+)
+def test_more_stacks_are_detected(no_override, tmp_path, marker, expected):
+    (tmp_path / marker).write_text("")
+    assert task_worker._detect_test_command(str(tmp_path)) == expected
 
 
 # ---------------------------------------------------------------------------

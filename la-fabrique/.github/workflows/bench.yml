@@ -1,0 +1,14 @@
+name: bench
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bench on one reference spec
+        run: scripts/bench/run.sh bench/specs/01-cli-todo

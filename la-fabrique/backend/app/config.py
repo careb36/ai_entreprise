@@ -54,11 +54,27 @@ class Settings(BaseSettings):
     # After a verified delivery, run the project's tests through the daemon and
     # record the exit status as evidence.  Off by default: it executes
     # agent-written code on the machine running the daemon.
+    # Run the Alembic migrations to head at startup (a local database); the
+    # container's entrypoint and the e2e run `alembic upgrade head` instead.
+    DB_AUTO_UPGRADE: bool = False
     DELIVERY_TESTS_ENABLED: bool = False
     # Test command to run; empty means detect it (npm test / pytest).
     DELIVERY_TEST_COMMAND: str = ""
     # The daemon itself stops a command after 120 s; wait slightly longer.
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
+    # Where agent-written code runs (the delivery test run and the
+    # Developer's own test runs): ``host`` (the daemon's user, files and
+    # network, as before), ``container`` (an ephemeral container per run:
+    # the worktree mounted, network off, CPU/memory/process limits, every
+    # capability dropped) or ``bwrap`` (bubblewrap namespaces). A company
+    # may set its own (``Company.delivery_sandbox``). The daemon reports what
+    # it applied, and the Verifier records it (``sandbox``).
+    DELIVERY_SANDBOX: str = "host"
+    DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
+    DELIVERY_SANDBOX_NETWORK: bool = False
+    DELIVERY_SANDBOX_CPUS: float = 2.0
+    DELIVERY_SANDBOX_MEMORY_MB: int = 2048
+    DELIVERY_SANDBOX_PIDS: int = 512
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants
@@ -77,6 +93,42 @@ class Settings(BaseSettings):
     REVIEWER_AGENT_INTERVAL_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
+    # MCP tools (``services/mcp_tools.py``): how many rounds of tool calls a
+    # task may make before the model must answer, how long one call and one
+    # connection may take, and how much of a result the model is shown.
+    MCP_MAX_TOOL_ROUNDS: int = 6
+    MCP_TOOL_TIMEOUT_SECONDS: float = 60.0
+    MCP_CONNECT_TIMEOUT_SECONDS: float = 20.0
+    MCP_RESULT_MAX_CHARS: int = 4000
+    # The Developer's workspace tools (``services/developer_tools.py``): read
+    # the project through the daemon (list, read, search) and run its tests
+    # before delivering, for at most this many rounds. ``run_tests`` is offered
+    # only with ``DELIVERY_TESTS_ENABLED``.
+    DEVELOPER_TOOLS_ENABLED: bool = True
+    DEVELOPER_TOOL_ROUNDS: int = 8
+    # The research tools (``services/research_tools.py``): the roles that
+    # decide read official sources (documentation, registries, OSV) through
+    # the backend's own egress, from the default hosts plus these; every
+    # source is evidence. The registries' URLs can point at a mirror.
+    # The model catalogue (issue #356): models.dev, refreshed in the
+    # background at most every MODELS_CATALOG_REFRESH_HOURS (0 keeps the
+    # snapshot shipped in app/data/models_dev.json and never calls out).
+    # Shared with the LLM proxy: it accepts a company's own provider
+    # connection (issue #356) only with this token. Empty disables them.
+    LLM_PROXY_INTERNAL_TOKEN: str = ""
+    MODELS_CATALOG_URL: str = "https://models.dev/api.json"
+    MODELS_CATALOG_REFRESH_HOURS: float = 24.0
+    RESEARCH_TOOLS_ENABLED: bool = True
+    RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter"
+    RESEARCH_ALLOWED_HOSTS: str = ""
+    RESEARCH_TOOL_ROUNDS: int = 6
+    RESEARCH_TIMEOUT_SECONDS: float = 20.0
+    RESEARCH_FETCH_MAX_BYTES: int = 512 * 1024
+    RESEARCH_PYPI_URL: str = "https://pypi.org/pypi"
+    RESEARCH_NPM_URL: str = "https://registry.npmjs.org"
+    RESEARCH_CRATES_URL: str = "https://crates.io/api/v1/crates"
+    RESEARCH_GO_URL: str = "https://proxy.golang.org"
+    RESEARCH_OSV_URL: str = "https://api.osv.dev"
     # Consult the Architect agent before Developers start high-priority, design-sensitive
     # or QA-reworked tasks. Emits ``ARCHITECT_CONSULTED:`` comments for analytics.
     ARCHITECT_CONSULT_ENABLED: bool = True
@@ -159,24 +211,28 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     # Security — rate limiting and CORS
     # ---------------------------------------------------------------------------
-    # Every route, per client address, unless exempt (health, metrics, the
-    # Glassroom stream). Through the Vite dev proxy a person's tabs share one
-    # address, and the UI's own polling takes about forty a minute.
+    # Every route under /v1/, per client address, unless exempt (the
+    # Glassroom stream; health, metrics and the UI's files are not under /v1/).
+    # Through the Vite dev proxy a person's tabs share one address, and the
+    # UI's own polling takes about forty a minute.
     RATE_LIMIT_DEFAULT: str = "300/minute"
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     # Login, registration and the desktop key exchange, per client address:
     # enough for a person, too few to guess a password or a voice key.
     AUTH_RATE_LIMIT: str = "10/minute"
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     # Off only behind a proxy that sets these headers itself.
     SECURITY_HEADERS_ENABLED: bool = True
+    NEO4J_ENABLED: bool = True
+    AGENT_MODEL_POLICY: str = ""
+    MANAGER_AGENT_ENABLED: bool = False
 
     class Config:
         env_file = ".env"
         case_sensitive = True
         # The .env is shared with docker compose and keeps keys the backend
-        # does not read (retired ones included, like VOICE_API_KEY): they are
-        # ignored instead of stopping the backend at startup.
+        # does not read (retired ones included): they are ignored instead of
+        # stopping the backend at startup.
         extra = "ignore"
 
 

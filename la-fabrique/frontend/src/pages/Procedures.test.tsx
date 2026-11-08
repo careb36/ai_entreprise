@@ -37,6 +37,10 @@ function stubApi(overrides: Record<string, () => Response> = {}) {
     const key = `${init.method ?? 'GET'} ${pathname}`
     if (overrides[key]) return overrides[key]()
     if (key === 'GET /v1/procedures') return response(200, { procedures: PROCEDURES })
+    if (key === 'GET /v1/standards') return response(200, { areas: ['security', 'development'], standards: [
+      { id: 'STD-SEC-1', area: 'security', roles: ['*'], title: 'No secret in the repository, ever', rule: 'Keys live in the environment.', checked: 'a secret-looking value in a delivered file refutes the delivery' },
+      { id: 'STD-DEV-3', area: 'development', roles: ['Developer'], title: 'Small, named, typed', rule: 'Identifiers in English.', checked: null },
+    ] })
     if (key === 'GET /v1/agents') return response(200, { agents: [{ id: 1, role: 'Developer' }, { id: 2, role: 'QA' }] })
     return response(404)
   })
@@ -84,6 +88,15 @@ describe('Procedures', () => {
     expect(history).toHaveTextContent('Reverted')
     expect(history).toHaveTextContent('After: 1 per task, 50% blocked (2 sprints).')
     expect(screen.queryByRole('region', { name: 'Write a procedure' })).not.toBeInTheDocument()
+
+    // The factory's standards, by discipline, with what the loop checks without a model.
+    const standards = await screen.findByRole('region', { name: 'Quality standards' })
+    expect(await within(standards).findByText('No secret in the repository, ever')).toBeInTheDocument()
+    expect(within(standards).getByText('Security')).toBeInTheDocument()
+    expect(within(standards).getByText('Every role')).toBeInTheDocument()
+    expect(within(standards).getByText('Checked')).toHaveAttribute('title', 'a secret-looking value in a delivered file refutes the delivery')
+    expect(within(standards).getByText('Small, named, typed')).toBeInTheDocument()
+    expect(within(standards).getAllByText('Checked')).toHaveLength(1)
   })
 
   it('lets a manager adopt a proposal and write a procedure', async () => {

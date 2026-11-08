@@ -103,10 +103,16 @@ jobs:
           docker run --rm --entrypoint python "fabrique-${{ matrix.name }}:ci" \
             -c "import daemon; print('daemon imports OK')"
 
+      # Solo el job del proxy deja un contenedor. Los dos runners comparten el
+      # Docker de la máquina, así que si cada job de la matriz borrara el
+      # nombre, el del daemon mataba el contenedor del proxy mientras este
+      # esperaba /health.
       - name: Clean up ${{ matrix.name }}
         if: always()
         env:
           CONTAINER: fabrique-llm-proxy-smoke-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
-          docker rm -f "$CONTAINER" 2>/dev/null || true
+          if [ "${{ matrix.name }}" = "llm-proxy" ]; then
+            docker rm -f "$CONTAINER" 2>/dev/null || true
+          fi
           docker rmi -f "fabrique-${{ matrix.name }}:ci" 2>/dev/null || true

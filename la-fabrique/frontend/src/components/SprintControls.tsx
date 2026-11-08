@@ -13,7 +13,7 @@ import { Loader2, Pause, Play, Send, Square } from 'lucide-react'
 import { useCurrentRole, useDispatchSprint, usePauseSprint, useResumeSprint } from '../hooks/useQueries'
 import { useToast } from '../store/toastStore'
 import { errorDetail } from '../services/api'
-import { type SprintState, useAutonomy, useSetAutonomy, useStartSprint, useStopSprint } from '../services/workControl'
+import { type SprintState, useAutonomy, useGitWorkflow, useSetAutonomy, useSetGitWorkflow, useStartSprint, useStopSprint } from '../services/workControl'
 
 const AUTONOMY_LEVELS = [1, 2, 3] as const
 
@@ -97,7 +97,21 @@ function AutonomyControl({ companyId, canManage }: { companyId: number; canManag
   )
 }
 
-/** Board-tab controls: dispatch pending tasks, pause, stop, autonomy. */
+function GitWorkflowControl({ companyId, canManage }: { companyId: number; canManage: boolean }) {
+  const { t } = useTranslation()
+  const git = useGitWorkflow(companyId)
+  const setGit = useSetGitWorkflow(companyId)
+  if (!git.data) return null
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-gray-400" title={t('workControl.gitHint')}>
+      <input type="checkbox" checked={git.data.git_workflow} disabled={!canManage || setGit.isPending}
+        onChange={event => setGit.mutate({ git_workflow: event.target.checked, git_base_branch: git.data?.git_base_branch ?? null })} />
+      {t('workControl.git')}
+    </label>
+  )
+}
+
+/** Board-tab controls: dispatch pending tasks, pause, stop, autonomy, Git branches. */
 export function SprintControls({ sprint }: { sprint: SprintState }) {
   const { t } = useTranslation()
   const toast = useToast()
@@ -131,6 +145,7 @@ export function SprintControls({ sprint }: { sprint: SprintState }) {
     <div className="flex flex-col items-end gap-1">
       <div className="flex flex-wrap items-center justify-end gap-1">
         <AutonomyControl companyId={sprint.company_id} canManage={canManage} />
+        <GitWorkflowControl companyId={sprint.company_id} canManage={canManage} />
         <button type="button" disabled={busy || !running} onClick={dispatch}
           title={running ? undefined : t('workspace.dispatchPausedHint', { defaultValue: 'Resume the sprint to dispatch tasks' })}
           className="btn-ghost btn-sm flex items-center gap-1.5 text-brand-300">

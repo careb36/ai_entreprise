@@ -5,21 +5,25 @@ Runs natively on the developer's machine (macOS, Linux or Windows) — the one
 where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
-- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk)
+- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
+                          and the diff against what was there, file_diff.py); with a
+                          `git` spec, as a commit on the task's branch (git_workspace.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
+- workspace.hash:         sha256 of named files as they are on disk (file_hash.py)
+- workspace.list / read / search: the Developer's read-only tools on the project (workspace_read.py)
+- workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
+- workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
                           the result goes to workspace.delivered
 
-Start it with scripts/start-daemon.sh (macOS/Linux) or scripts/start-daemon.ps1
-(Windows); it reconnects to NATS on its own.
+Start it with scripts/start-daemon.sh (macOS/Linux) or .ps1 (Windows); it reconnects to NATS on its own.
 """
 
 import asyncio
-import configparser
 import hashlib
 import json
 import logging
@@ -33,23 +37,24 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlsplit
 
+import delivery_journal
+import file_diff
+import file_edits
+import file_hash
+import git_workspace
+from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats
 import nats_scope
+import platform_reviews
 import shell_exec
+import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-
-# The old private names stay so the handlers read as they did; the logic lives
-# in shell_exec so it can be tested and linted on its own.
-_build_command_env = shell_exec.build_command_env
+_build_command_env = shell_exec.build_command_env  # Old private names; the logic is in shell_exec.
 _build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("fabrique-daemon")
 
 DAEMON_VERSION = "2026.10"
@@ -67,35 +72,9 @@ ASSISTANT_FALLBACK_PATHS = {
 # Every daemon instance answers in this queue group, so a request is handled once.
 QUEUE_GROUP = "workspace-daemon"
 
-# JetStream streams for deliveries queued while no daemon was connected.  The
-# backend declares the same streams (backend/app/nats_client.py); nats_scope
-# applies NATS_NAMESPACE to both so two stacks on one broker stay apart.
+# The JetStream streams for queued deliveries are declared by the backend
+# (backend/app/nats_client.py); nats_scope applies NATS_NAMESPACE to both.
 
-
-def compute_prompt_hash(prompt: str) -> str:
-    """Return a SHA-256 hex digest of the prompt for audit / tamper-detection."""
-    return hashlib.sha256(prompt.encode()).hexdigest()
-
-
-def create_commit_message(
-    interaction_id: str,
-    agent_id: str,
-    prompt_hash: str,
-    decision_signature: Optional[str] = None,
-) -> str:
-    """
-    Build a structured git commit message that embeds governance metadata.
-
-    The ``interaction_id`` and ``prompt_hash`` fields allow full traceability
-    from a git commit back to the originating API call and decision record.
-    """
-    sig = decision_signature or "placeholder_signature"
-    return f"""feat: AI generated code
-
-interaction_id: {interaction_id}
-agent_id: {agent_id}
-prompt_hash: {prompt_hash}
-decision_signature: {sig}"""
 
 def confirm_workspace_path() -> str:
     """Ensure the default workspace root directory exists and return its path."""
@@ -129,17 +108,11 @@ def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     """
-    Write a list of files to the workspace directory, creating parent dirs as needed.
+    Write *files* (``path`` with ``content``, or ``edits``: ``file_edits.py``) under the workspace.
 
-    Args:
-        workspace_path: Absolute path to the workspace root.
-        files:          List of dicts with ``path`` (relative) and ``content`` keys.
-
-    Returns:
-        One dict per file: ``path`` (as requested), ``status`` (``written``,
-        ``skipped_protected`` or ``rejected``) and, for written files,
-        ``absolute_path``, ``bytes`` and ``sha256`` of the bytes read back from
-        disk after writing — an observation, not an echo of the request.
+    One report per file: ``status`` (``written``, ``skipped_protected``,
+    ``rejected``, ``rejected_edit`` or ``rejected_syntax`` with ``error``) and,
+    when written, ``bytes`` and the ``sha256`` read back from disk: an observation.
     """
     results = []
     workspace_root = Path(workspace_path).expanduser()
@@ -155,7 +128,6 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     for file_info in files:
         requested = file_info.get("path", "")
         target_path = _resolve_target_path(workspace_path, requested)
-        content = file_info.get("content", "")
         overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
 
         if not target_path or target_path == workspace_root:
@@ -168,7 +140,12 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             logger.warning("Skipped protected document overwrite: %s", target_path)
             continue
 
+        content, extra = file_edits.resolve_content(target_path, file_info)
+        if content is None:  # A refused edit or a file that does not parse.
+            results.append({"path": requested, "absolute_path": str(target_path), **extra})
+            continue
         os.makedirs(target_path.parent, exist_ok=True)
+        before = file_diff.read_previous(target_path)
         with open(target_path, "w", encoding="utf-8", newline="") as f:
             f.write(content)
         on_disk = target_path.read_bytes()
@@ -178,21 +155,25 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             "absolute_path": str(target_path),
             "bytes": len(on_disk),
             "sha256": hashlib.sha256(on_disk).hexdigest(),
+            **file_diff.describe_change(requested, before, on_disk),
+            **extra,
         })
         logger.info(f"File written: {target_path}")
-    return results
+    return file_diff.cap_reply(results)
 
 
-def deliver_files(workspace_path: str, files: list) -> Dict[str, Any]:
-    """``write_files`` wrapped in the reply shape the backend reads."""
+def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """``write_files`` wrapped in the reply shape the backend reads; a commit on the task's branch when *git* names it."""
     try:
+        if git:
+            return git_workspace.deliver(workspace_path, git, files, write_files)
         write_results = write_files(workspace_path, files)
         return {
             "ok": all(r["status"] == "written" for r in write_results),
             "workspace_root": workspace_path,
             "files": write_results,
         }
-    except OSError as e:
+    except (OSError, git_workspace.GitError) as e:
         logger.error("Writing files under %s failed: %s", workspace_path, e)
         return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
 
@@ -216,25 +197,6 @@ async def _publish_glassroom_status(nc, sprint_id, content: str) -> None:
         "type": "status",
     }).encode())
 
-
-def _is_assistant_command(command: str) -> bool:
-    normalized = (command or "").lower()
-    return "copilot" in normalized or "claude" in normalized
-
-
-def _summarize_command_result(command: str, result: Dict[str, Any]) -> str:
-    command_preview = " ".join((command or "").strip().split())[:180]
-    exit_code = result.get("exit_code", -1)
-    output = (result.get("stdout") or result.get("stderr") or result.get("error") or "").strip()
-    output_preview = output[:240]
-
-    if result.get("success"):
-        return f"Workspace command finished successfully (exit {exit_code}): {command_preview}"
-
-    if output_preview:
-        return f"Workspace command failed (exit {exit_code}): {output_preview}"
-
-    return f"Workspace command failed (exit {exit_code}): {command_preview}"
 
 async def handle_msg(nc, msg):
     """
@@ -265,7 +227,7 @@ async def handle_msg(nc, msg):
             # Sprint kickoff stories also travel on this subject; they are for
             # the backend's agent graph, not for this daemon.
             return
-        response = await asyncio.to_thread(deliver_files, workspace_path, files)
+        response = await asyncio.to_thread(deliver_files, workspace_path, files, data.get("git"))
         if reply_to:
             await nc.publish(reply_to, json.dumps(response).encode())
 
@@ -275,11 +237,11 @@ async def handle_msg(nc, msg):
 
     elif subject == "workspace.execute":
         cmd = data.get("command")
-        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path)
+        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"))
 
-        sprint_id = data.get("sprint_id", "1")
-        if not _is_assistant_command(cmd):
-            await _publish_glassroom_status(nc, sprint_id, _summarize_command_result(cmd, result))
+        sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
+        if sprint_id is not None and not shell_exec.is_assistant_command(cmd):
+            await _publish_glassroom_status(nc, sprint_id, shell_exec.summarize_command_result(cmd, result))
 
         if reply_to:
             await nc.publish(reply_to, json.dumps(result).encode())
@@ -453,103 +415,6 @@ def browse(path: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def _git_dir(root: Path) -> Optional[Path]:
-    """The repository's git directory: ``.git`` itself, or where a ``.git`` file points."""
-    dot_git = root / ".git"
-    if dot_git.is_dir():
-        return dot_git
-    if dot_git.is_file():
-        try:
-            line = dot_git.read_text(encoding="utf-8", errors="ignore").strip()
-        except OSError:
-            return None
-        if line.startswith("gitdir:"):
-            git_dir = Path(line[len("gitdir:"):].strip())
-            return git_dir if git_dir.is_absolute() else (root / git_dir).resolve()
-    return None
-
-
-def _strip_credentials(url: str) -> str:
-    """Drop a password or token embedded in a remote URL (``https://TOKEN@host/...``)."""
-    if "://" not in url:
-        return url
-    parts = urlsplit(url)
-    if "@" not in parts.netloc:
-        return url
-    userinfo, host_port = parts.netloc.rsplit("@", 1)
-    if ":" in userinfo or parts.scheme in {"http", "https"}:
-        return parts._replace(netloc=host_port).geturl()
-    # ssh://git@host/... names the login user, not a secret.
-    return url
-
-
-def remote_web_url(remote_url: Optional[str]) -> tuple:
-    """``(provider, web_url)`` for a git remote: github, gitlab, bitbucket or other."""
-    if not remote_url:
-        return None, None
-    url = remote_url.strip()
-    if "://" in url:
-        parts = urlsplit(url)
-        host, path = parts.hostname or "", parts.path
-    elif ":" in url:
-        # scp-like syntax: git@github.com:owner/repo.git
-        host, path = url.split(":", 1)
-        host = host.split("@")[-1]
-    else:
-        return "other", None
-    path = path.strip("/")
-    if path.endswith(".git"):
-        path = path[: -len(".git")]
-    host = host.lower()
-    if host == "github.com" or host.endswith(".github.com"):
-        provider = "github"
-    elif "gitlab" in host:
-        provider = "gitlab"
-    elif "bitbucket" in host:
-        provider = "bitbucket"
-    else:
-        provider = "other"
-    return provider, (f"https://{host}/{path}" if host and path else None)
-
-
-def git_info(root: Path) -> Dict[str, Any]:
-    """Branch and origin of the repository at *root*, read from its git files."""
-    info: Dict[str, Any] = {
-        "is_repo": False, "branch": None, "remote_url": None, "provider": None, "web_url": None,
-    }
-    git_dir = _git_dir(root)
-    if git_dir is None:
-        return info
-    info["is_repo"] = True
-    try:
-        head = (git_dir / "HEAD").read_text(encoding="utf-8", errors="ignore").strip()
-        if head.startswith("ref: refs/heads/"):
-            info["branch"] = head[len("ref: refs/heads/"):]
-    except OSError:
-        pass
-    # Linked worktrees keep the shared config in the main repository.
-    common_dir = git_dir
-    commondir_file = git_dir / "commondir"
-    if commondir_file.is_file():
-        try:
-            common = Path(commondir_file.read_text(encoding="utf-8").strip())
-            common_dir = common if common.is_absolute() else (git_dir / common).resolve()
-        except OSError:
-            pass
-    config = configparser.ConfigParser(strict=False, interpolation=None)
-    try:
-        config.read(common_dir / "config", encoding="utf-8")
-    except (configparser.Error, OSError):
-        return info
-    remotes = [section for section in config.sections() if section.startswith('remote "')]
-    preferred = 'remote "origin"' if 'remote "origin"' in remotes else (remotes[0] if remotes else None)
-    if preferred and config.has_option(preferred, "url"):
-        remote = _strip_credentials(config.get(preferred, "url"))
-        info["remote_url"] = remote
-        info["provider"], info["web_url"] = remote_web_url(remote)
-    return info
-
-
 # What the backend's stack detection reads.  Paths are listed for every file;
 # contents only for these build/config files.  ``.env`` is never sent.
 SNAPSHOT_SKIP_DIRS = {
@@ -703,7 +568,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
         await msg.term()
         return
     workspace_path = job.get("workspace_root") or ""
-    response = await asyncio.to_thread(deliver_files, workspace_path, job.get("files") or [])
+    response = await asyncio.to_thread(delivery_journal.once, job.get("job_id"), lambda: deliver_files(workspace_path, job.get("files") or [], job.get("git")))
     result = {
         **response,
         "job_id": job.get("job_id"),
@@ -718,11 +583,12 @@ async def process_queued_delivery(nc, js, msg) -> None:
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
-    except Exception as e:  # noqa: BLE001 - Retry the job; writing again is idempotent.
+    except Exception as e:  # noqa: BLE001 - Retry; the journal replays the response, edits apply once.
         logger.warning("Could not report queued delivery %s (%s); will retry", job.get("job_id"), e)
         await msg.nak(delay=10)
         return
     await msg.ack()
+    delivery_journal.forget(job.get("job_id"))
     logger.info("Queued delivery %s: %s", job.get("job_id"), _delivery_summary(response))
     if job.get("sprint_id") is not None:
         await _publish_glassroom_status(nc, job["sprint_id"], f"{_delivery_summary(response)} (queued delivery)")
@@ -794,28 +660,21 @@ async def main():
     except Exception as e:  # noqa: BLE001 - Without JetStream only live requests are served.
         logger.warning("JetStream unavailable (%s); queued deliveries are not processed", e)
 
-    async def _callback(msg):
-        await handle_msg(nc, msg)
-
-    async def _capabilities_callback(msg):
-        await handle_capabilities(nc, msg)
-
-    async def _status_callback(msg):
-        await handle_status(nc, msg, jetstream)
-
-    async def _browse_callback(msg):
-        await handle_browse(nc, msg)
-
-    async def _inspect_callback(msg):
-        await handle_inspect(nc, msg)
+    def bound(handler, *extra):
+        async def callback(msg): await handler(nc, msg, *extra)  # noqa: E704 - one line per handler.
+        return callback
 
     for subject, callback in (
-        ("workspace.generate", _callback),
-        ("workspace.execute", _callback),
-        ("workspace.capabilities", _capabilities_callback),
-        ("workspace.status", _status_callback),
-        ("workspace.browse", _browse_callback),
-        ("workspace.inspect", _inspect_callback),
+        ("workspace.generate", bound(handle_msg)),
+        ("workspace.execute", bound(handle_msg)),
+        ("workspace.capabilities", bound(handle_capabilities)),
+        ("workspace.status", bound(handle_status, jetstream)),
+        ("workspace.browse", bound(handle_browse)),
+        ("workspace.inspect", bound(handle_inspect)),
+        ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in workspace_read.HANDLERS),
+        ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
+        ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 

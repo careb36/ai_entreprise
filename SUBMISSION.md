@@ -70,7 +70,9 @@ tiers — Ultra for reasoning, Super/Nano for the rest.
   `nvidia/nemotron-3-super-120b-a12b` / a Nano model for the fast calls.
 - **The split is configuration:** `NEMOTRON_ROLES`, `NEMOTRON_MODEL`,
   `NEMOTRON_MODEL_STRATEGIC` and `NEMOTRON_MODEL_FAST` live in
-  `la-fabrique/.env` (`.env.example` ships them with every role opted in), and
+  `la-fabrique/.env` (`.env.example` ships them empty, so no role is opted in
+  until they are set; the launcher sets `AGENT_MODEL` to Nemotron when it finds
+  a Nebius or NVIDIA key), and
   `la-fabrique/backend/llm/model_factory.py` applies them per role. The
   reference assistant's **⚙ Nemotron** panel can write them from the live
   catalogue; that assistant is not distributed here.

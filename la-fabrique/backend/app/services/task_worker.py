@@ -1,19 +1,10 @@
 """
-Task Worker — NATS consumer for backlog item execution by AI agents.
+Task Worker: the NATS consumer that has an AI agent execute each backlog item.
 
-Listens for ``task.assign`` events published by the transactional outbox
-and dispatches each task to the appropriate AI agent based on the backlog
-item's ``assignee`` field.  The agent's LLM model and system prompt are
-loaded from the ``agents`` table so each role uses its configured model.
-
-Workflow per task:
-1. Receive ``task.assign`` NATS message with ``backlog_item_id`` and ``sprint_id``.
-2. Load the BacklogItem from Postgres (title, description, assignee).
-3. Look up the Agent row matching the assignee role + company.
-4. Call the LLM proxy with the agent's model and system prompt.
-5. Update the backlog item: status → ``in_progress`` → ``in_review``,
-   append a comment with the agent's deliverable.
-6. Publish a Glassroom event so the UI shows real-time progress.
+Per task: receive ``task.assign`` (from the outbox), load the item and the agent
+for its ``assignee`` (role and company, with its configured model and prompt),
+call the LLM proxy, move the item to ``in_review`` with the deliverable as a
+comment, and publish to Glassroom.
 """
 
 import asyncio
@@ -44,16 +35,25 @@ from nats_client import NATSClient
 from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
 
-from llm.model_factory import default_model_for_role
 from services import (
+    acceptance,
     agent_run_service,
     console_assistants,
+    delivery_gate,
+    dependencies,
+    developer_tools,
+    edit_blocks,
+    git_workflow,
+    mcp_tools,
+    model_routing,
     procedures,
     retrospective,
     review_digest,
     risk,
     scrum_master,
+    spec_planning,
     sprint_control,
+    standards,
     workspace_daemon,
 )
 from services.answers import (
@@ -84,9 +84,9 @@ from services.board import (
     SCRUM_MASTER_ROLE,
     blocked_item_next_step,
     comment_list,
+    completed_tasks_context,
     extract_latest_reviewable_comment,
     has_manual_freeze_marker,
-    item_is_settled,
     pending_rework_feedback,
     rework_requests_by,
 )
@@ -101,7 +101,6 @@ from services.orchestration_metrics import (
     KPI_ROLE_ARCHITECT,
     RESULT_NEEDS_WORK,
     VERDICT_REFUTED,
-    VERDICT_UNVERIFIABLE,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -113,7 +112,7 @@ from services.sprint_planner import (
     plan_self_improvement_sprint,
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
-from services.workspace_daemon import record_test_run
+from services.workspace_daemon import detect_test_command
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -202,7 +201,7 @@ FILE_MANIFEST_INSTRUCTIONS = (
     "Use one block per file, give the complete content (not a diff or an excerpt), and "
     "keep explanations outside the blocks. Files are written to the project exactly as "
     "given."
-)
+) + edit_blocks.INSTRUCTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -321,43 +320,8 @@ def _load_recent_lessons(company_id: int | None, current_sprint_id: int) -> str:
 def _load_sprint_completed_tasks(
     sprint_id: int, exclude_item_id: int, limit: int = 5
 ) -> str:
-    """Return a brief summary of done tasks in the same sprint for cross-task context."""
-    try:
-        with Session(engine) as session:
-            done_items = session.exec(
-                select(BacklogItem).where(
-                    BacklogItem.sprint_id == sprint_id,
-                    BacklogItem.id != exclude_item_id,
-                    BacklogItem.status == "done",
-                )
-            ).all()
-            if not done_items:
-                return ""
-            lines = [
-                "Completed tasks in this sprint (build on this work, avoid duplication):"
-            ]
-            for it in done_items[:limit]:
-                comments = it.comments or []
-                if isinstance(comments, str):
-                    try:
-                        comments = json.loads(comments)
-                    except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                        comments = []
-                deliverable_excerpt = extract_latest_reviewable_comment(
-                    comments, assignee_role=it.assignee
-                )
-                excerpt = (
-                    deliverable_excerpt[:280].replace("\n", " ")
-                    if deliverable_excerpt
-                    else "(no deliverable)"
-                )
-                lines.append(f"- [{it.assignee or 'Agent'}] {it.title}: {excerpt}")
-            return "\n".join(lines)
-    except Exception as exc:  # noqa: BLE001 - Completed-task context is best-effort.
-        logger.debug(
-            "Failed to load sprint completed tasks for sprint=%s: %s", sprint_id, exc
-        )
-        return ""
+    """A brief summary of done tasks in the same sprint, for cross-task context."""
+    return completed_tasks_context(engine, sprint_id, exclude_item_id, limit)
 
 
 # ---------------------------------------------------------------------------
@@ -390,12 +354,6 @@ class LLMCallError(RuntimeError):
         self.credit_provider = credit_provider
 
 
-def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
-    """The agent's configured model, or its role's default from model_factory."""
-    configured = (agent.get("model") or "").strip()
-    return configured or default_model_for_role(agent.get("role") or default_role)
-
-
 def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -408,23 +366,19 @@ def _execute_task(
     sprint_id: int | None = None,
     lessons_context: str | None = None,
     procedures_context: str | None = None,
+    requirements_context: str | None = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
 
-    Runs synchronously (called via ``asyncio.to_thread``).
-    Returns the LLM response text.  An empty agent model resolves to the
-    role's default from ``llm.model_factory``.  The model the proxy reports
-    as having answered is stored as ``agent["served_model"]`` (``None`` when
-    not reported) so the AgentRun records it.  Raises ``LLMCallError`` when
-    the call fails or returns no content.
-
-    When ``company_id`` is provided the turn is also written to ``audit_log``
-    (role, company, token cost) so ``GET /v1/analytics/orchestration_health``
-    can compute the Developer token KPI.
+    Runs synchronously (``asyncio.to_thread``). Returns the LLM's text. An
+    empty agent model resolves to the role's default; the model the proxy
+    reports is stored as ``agent["served_model"]``. Raises ``LLMCallError``
+    on a failed or empty call. With ``company_id`` the turn goes to
+    ``audit_log`` (role, company, token cost) for the KPIs.
     """
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.company_id = company_id
 
     system_prompt = agent.get("system_prompt") or (
         f"You are a {agent.get('seniority', 'Senior')} {agent.get('role', 'Developer')} "
@@ -433,11 +387,9 @@ def _execute_task(
     )
 
     # Sections run from the most stable to the most variable, so the providers'
-    # prefix cache (DeepSeek, Gemini) bills the shared start of the prompt at
-    # the cached rate: the output format, the role's procedures and the
-    # company's lessons are the same for every task of a sprint; the task, its
-    # memory and its history come next; what changes between attempts (the
-    # Architect's brief, the review feedback) goes last.
+    # prefix cache bills the shared start of the prompt at the cached rate:
+    # format, procedures and lessons first; the task and its history next;
+    # what changes between attempts (the brief, the review feedback) last.
     user_prompt = FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (procedures_context or "")
     if lessons_context:
         user_prompt += (
@@ -454,6 +406,9 @@ def _execute_task(
         f"Priority: {item.get('priority', 'medium')}\n\n"
         "Produce a complete, professional deliverable for this task. "
         "Be thorough and specific to the project context."
+    ) + (requirements_context or "")
+    user_prompt += developer_tools.repository_section(
+        company_id, agent.get("role"), item.get("id"), engine=engine
     )
 
     if memory_context:
@@ -499,25 +454,50 @@ def _execute_task(
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
 
-    model = _resolve_agent_model(agent)
+    model = model_routing.resolve_agent_model(
+        agent, item=item, rework=bool(rework_feedback)
+    )
     role = agent.get("role", "Dev")
 
+    who = agent.get("name") or role
     logger.info(
-        "Agent %s (%s) working on: %s [model=%s]",
-        agent.get("name") or role,
-        role,
-        item["title"],
-        model,
+        "Agent %s (%s) working on: %s [model=%s]", who, role, item["title"], model
     )
 
-    result = client.chat(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        model=model,
-        role=role,
+    def record(llm_result: dict[str, Any], preview: str) -> None:
+        if company_id is not None:
+            record_agent_turn(
+                company_id=company_id,
+                sprint_id=sprint_id,
+                backlog_item_id=item.get("id"),
+                agent={**agent, "model": llm_result.get("served_model") or model},
+                action=ACTION_EXECUTE_TASK,
+                llm_result=llm_result,
+                result_preview=preview,
+            )
+
+    # The workspace and MCP tools for this role: each call an observation.
+    toolbox = developer_tools.toolbox_for(
+        company_id, role, engine=engine, item_id=item.get("id")
     )
+    try:
+        result, tool_calls = mcp_tools.chat_with_tools(
+            client,
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            model,
+            role,
+            toolbox,
+            on_round=lambda r, calls: record(
+                r, "tool calls: " + mcp_tools.summarize(calls)
+            ),
+        )
+    finally:
+        if toolbox is not None:
+            toolbox.close()
+    agent["tool_calls"] = tool_calls
 
     failure = _llm_failure(result, model)
     if failure:
@@ -526,17 +506,7 @@ def _execute_task(
     content = _llm_content(result)
     agent["served_model"] = result.get("served_model") or None
     agent["finish_reason"] = _llm_finish_reason(result)
-
-    if company_id is not None:
-        record_agent_turn(
-            company_id=company_id,
-            sprint_id=sprint_id,
-            backlog_item_id=item.get("id"),
-            agent={**agent, "model": agent["served_model"] or model},
-            action=ACTION_EXECUTE_TASK,
-            llm_result=result,
-            result_preview=content,
-        )
+    record(result, content)
     return content
 
 
@@ -561,8 +531,8 @@ def _consult_architect(
                 Agent.role == KPI_ROLE_ARCHITECT,
             )
         ).first()
-        # How tasks went after its earlier briefs, counted from the boards. A
-        # failed count leaves the record out; it never blocks the Developer.
+        cm = model_routing.company_model(session, sprint["company_id"], "Architect")
+        # Its record from the boards; a failed count only leaves it out.
         record = ""
         if architect_row:
             try:
@@ -587,8 +557,8 @@ def _consult_architect(
     architect = {
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": _resolve_agent_model(
-            {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
+        "model": model_routing.resolve_agent_model(
+            {"model": architect_row.model or cm, "role": KPI_ROLE_ARCHITECT}
         ),
         "seniority": architect_row.seniority,
         "specialty": architect_row.specialty,
@@ -603,10 +573,8 @@ def _consult_architect(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
     )
 
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
-    client.max_tokens = BRIEF_MAX_TOKENS
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
     try:
         result = client.chat(
             messages=[
@@ -783,12 +751,12 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
     """
     Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
 
-    Each block becomes one ``{"path", "content"}`` entry with its own content.
+    Each block becomes one ``{"path", "content"}`` entry (plus ``edits`` when marked ``edit``).
     Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
     the same path appears twice the last block wins, keeping the position of
     the first.  Returns ``[]`` when the answer declares no files.
     """
-    files: dict[str, str] = {}
+    files: dict[str, dict] = {}
     for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
         match = _MANIFEST_PATH.search(block.group("info"))
         if not match:
@@ -798,8 +766,15 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
             continue
         if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
             continue
-        files[rel] = block.group("body")
-    return [{"path": path, "content": content} for path, content in files.items()]
+        files[rel] = {"path": rel, "content": block.group("body")}
+        if edit_blocks.is_edit_block(block.group("info"), match):
+            files[rel]["edits"] = edit_blocks.parse(block.group("body"))
+    return list(files.values())
+
+
+def expected_hashes(targets: list[dict[str, Any]]) -> dict[str, str]:
+    """The sha256 of what was sent; none for an edit, whose result only the daemon knows."""
+    return {t["path"]: _sha256_text(t["content"]) for t in targets if "edits" not in t}
 
 
 def _build_review_payload(
@@ -956,10 +931,9 @@ def _complete_sprint_and_plan_follow_up(
         if not sprint or sprint.status != "active":
             return {"completed": False, "auto_opened": False, "reason": "not_active"}
 
-        items = session.exec(
-            select(BacklogItem).where(BacklogItem.sprint_id == completed_sprint_id)
-        ).all()
-        if not items or not all(item_is_settled(item) for item in items):
+        # The dependency holds are reconciled first (``dependencies.sprint_settled``).
+        if not dependencies.sprint_settled(session, completed_sprint_id):
+            session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
         sprint.status = "completed"
@@ -1003,27 +977,14 @@ def _complete_sprint_and_plan_follow_up(
             session.commit()
             return result
 
-        discovery = session.exec(
-            select(ProjectDiscovery)
-            .where(ProjectDiscovery.company_id == company.id)
-            .order_by(text("created_at DESC"))
-        ).first()
+        # The agents carry their company, so a connection model routes with its key.
+        _, agent_dicts, discovery = spec_planning.planning_context_of(
+            session, company.id
+        )
         detected_stack = _coerce_json_dict(
             discovery.detected_stack if discovery else None
         )
         project_path = discovery.project_path if discovery else None
-
-        agents = session.exec(select(Agent).where(Agent.company_id == company.id)).all()
-        agent_dicts = [
-            {
-                "role": agent.role,
-                "name": agent.name,
-                "model": agent.model,
-                "seniority": agent.seniority,
-                "specialty": agent.specialty,
-            }
-            for agent in agents
-        ]
 
         scope_size = (company.default_scope_size or "M").upper()
         if scope_size not in {"S", "M", "L"}:
@@ -1057,6 +1018,7 @@ def _complete_sprint_and_plan_follow_up(
             scope_size=scope_size,
             status="active",
             goal=plan.get("goal") or objective,
+            specification_id=sprint.specification_id,
         )
         session.add(next_sprint)
         session.flush()
@@ -1330,32 +1292,29 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             )
             return None
 
-        # Find the agent matching this assignee role within the company.
         agent_row = session.exec(
             select(Agent).where(
                 Agent.company_id == sprint.company_id,
                 Agent.role == (item.assignee or "Dev"),
             )
         ).first()
-
+        cm = model_routing.company_model(session, sprint.company_id, item.assignee)
         agent_dict = {}
         if agent_row:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                "model": _resolve_agent_model(
-                    {"model": agent_row.model, "role": agent_row.role}
-                ),
+                # The agent's, else the company's; empty lets difficulty routing apply.
+                "model": (agent_row.model or "").strip() or cm,
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
             }
         else:
-            # Fallback: use default config if no matching agent found.
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": default_model_for_role(item.assignee or "Dev"),
+                "model": cm,
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -1370,6 +1329,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 "assignee": item.assignee,
                 "status": item.status,
                 "comments": item.comments or [],
+                "covers": item.covers if isinstance(item.covers, list) else [],
             },
             "sprint": {
                 "id": sprint.id,
@@ -1415,12 +1375,7 @@ def _update_item_status(
         item.updated_at = datetime.now(UTC)
 
         if comment_text and comment_author:
-            existing = item.comments or []
-            if isinstance(existing, str):
-                try:
-                    existing = json.loads(existing)
-                except (json.JSONDecodeError, TypeError):
-                    existing = []
+            existing = comment_list(item.comments)
             existing.append(
                 {
                     "author": comment_author,
@@ -1504,7 +1459,7 @@ def _triage_blocked_task(
                 session, company_id, item, reason
             )
         decision = scrum_master.decide(
-            scrum_master.ask_triage(model, system_prompt, prompt), item_id
+            scrum_master.ask_triage(model, system_prompt, prompt, company_id), item_id
         )
         if decision is None:
             return
@@ -1535,17 +1490,10 @@ def _handoff_body(title: str, deliverable: str) -> str:
 
 
 def _load_procedures_context(company_id: int | None, role: str | None) -> str:
-    """The company's active procedures for *role*, as a prompt section."""
-    if company_id is None:
-        return ""
-    try:
-        with Session(engine) as session:
-            return procedures.procedures_prompt(
-                procedures.active_procedures(session, company_id, role)
-            )
-    except Exception as exc:  # noqa: BLE001 - Procedures are context; the task goes on without them.
-        logger.debug("Procedures fetch failed for company=%s: %s", company_id, exc)
-        return ""
+    """The factory's standards for *role*, then the company's active procedures, as prompt sections."""
+    return standards.prompt_section(role) + procedures.prompt_context(
+        engine, company_id, role
+    )
 
 
 def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
@@ -1607,9 +1555,9 @@ def _ask_scrum_master_for_procedures(
             "change what made it fail.\n\n" + procedures.proposal_format(roles)
         )
         model, system_prompt = scrum_master.profile(session, company_id)
-    # Asked outside the session, with the client's usual retries: a sprint
-    # closes once, and a transient proxy error should not lose its proposals.
-    return scrum_master.ask_model(model, system_prompt, prompt), roles
+    # Outside the session, usual retries: a transient error must not lose proposals.
+    answer = scrum_master.ask_model(model, system_prompt, prompt, company_id=company_id)
+    return answer, roles
 
 
 def _propose_procedures(
@@ -1668,7 +1616,7 @@ def _propose_procedures(
 # ---------------------------------------------------------------------------
 
 
-DELIVERY_QUEUED = "delivery queued"
+DELIVERY_QUEUED = delivery_gate.DELIVERY_QUEUED
 TASK_ASSIGN_CONSUMER = "task-worker"
 DELIVERY_RESULTS_CONSUMER = "delivery-results"
 # A task can take several LLM calls, console assistants and a test run; the
@@ -1677,69 +1625,17 @@ DELIVERY_RESULTS_CONSUMER = "delivery-results"
 TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
 
 
+# The gate before QA, the risk tier and the latest verification: services/delivery_gate.
 def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
-    """
-    ``(problem, observation)`` when the task's latest delivery must not reach QA.
-
-    Gates on a refuted delivery (files missing, rejected or different on disk),
-    an unconfirmed one (daemon silent) and, when delivery tests are enabled, a
-    test run that failed.  A delivery queued for an offline daemon returns
-    ``DELIVERY_QUEUED``: the task waits, neither reviewed nor reworked, until
-    the daemon reports what it wrote.  Other checks — an unevidenced "tests pass" claim, a
-    test run that could not happen — are left to the evidence page, so an
-    honest claim never forces a rework.
-
-    Scoped to the task's company: ``POST /v1/agent_runs`` lets any company
-    ingest a run with any producer and reference, so a run is only trusted
-    when it belongs to the same company as the task.
-    """
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    if (verification.evidence or {}).get("delivery_queued"):
-        return DELIVERY_QUEUED, (verification.evidence or {}).get("reason") or ""
-    for check in verification.checks or []:
-        name, outcome = check.get("name"), check.get("outcome")
-        if name == "files_written" and outcome == VERDICT_REFUTED:
-            return "delivery refuted", check.get("observation", "")
-        if name == "files_written" and outcome == VERDICT_UNVERIFIABLE:
-            return "delivery unconfirmed", check.get("observation", "")
-        if name == "tests_run" and outcome == VERDICT_REFUTED:
-            return "tests failed", check.get("observation", "")
-    return None
+    return delivery_gate.gate(engine, company_id, item_id)
 
 
 def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
-    """The Verifier's ``risk_tier`` check on the task's latest delivery, if any."""
-    verification = _latest_task_verification(company_id, item_id)
-    if verification is None:
-        return None
-    for check in verification.checks or []:
-        if check.get("name") == "risk_tier":
-            return check
-    return None
+    return delivery_gate.risk(engine, company_id, item_id)
 
 
 def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
-    """The latest verification of the task worker's run for this task, in its company."""
-    with Session(engine) as session:
-        run = session.exec(
-            select(AgentRun)
-            .where(
-                AgentRun.company_id == company_id,
-                AgentRun.external_ref == f"task-{item_id}",
-                AgentRun.producer == TASK_WORKER_PRODUCER,
-            )
-            .order_by(AgentRun.version.desc())
-        ).first()
-        if run is None:
-            return None
-        verification = session.exec(
-            select(Verification)
-            .where(Verification.agent_run_id == run.id)
-            .order_by(Verification.id.desc())
-        ).first()
-    return verification
+    return delivery_gate.latest_verification(engine, company_id, item_id)
 
 
 def _sha256_text(content: str) -> str:
@@ -1788,6 +1684,10 @@ def _record_task_run(
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
     )
+    # The MCP tool calls the backend made for the producer are observations
+    # too; they go with the daemon's report, never with the claims.
+    if agent.get("tool_calls"):
+        evidence = {**(evidence or {}), "tool_calls": agent["tool_calls"]}
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)
@@ -1817,117 +1717,12 @@ def _delivery_comment(
     return f"Delivery unconfirmed: {observation}{run_note}"
 
 
-_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+# The project's test command is detected in services/workspace_daemon.
+_detect_test_command = detect_test_command
+_detect_project_test_command = workspace_daemon.detect_project_test_command
 
 
-def _detect_test_command(workspace_root: str) -> str | None:
-    """
-    The command that runs this project's tests, or ``None``.
-
-    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
-    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
-    folder with ``test_*.py`` files means ``python -m pytest``.
-    """
-    if settings.DELIVERY_TEST_COMMAND.strip():
-        return settings.DELIVERY_TEST_COMMAND.strip()
-    root = os.path.abspath(workspace_root)
-    package_json = os.path.join(root, "package.json")
-    if os.path.isfile(package_json):
-        try:
-            with open(package_json, encoding="utf-8") as fh:
-                script = (json.load(fh).get("scripts") or {}).get("test")
-        except (OSError, ValueError, AttributeError):
-            script = None
-        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
-            return "npm test --silent"
-    for name, marker in (
-        ("pytest.ini", None),
-        ("pyproject.toml", "[tool.pytest"),
-        ("setup.cfg", "[tool:pytest"),
-    ):
-        path = os.path.join(root, name)
-        if not os.path.isfile(path):
-            continue
-        if marker is None:
-            return "python -m pytest -q"
-        try:
-            with open(path, encoding="utf-8") as fh:
-                if marker in fh.read():
-                    return "python -m pytest -q"
-        except OSError:
-            continue
-    tests_dir = os.path.join(root, "tests")
-    if os.path.isdir(tests_dir) and any(
-        name.startswith("test_") and name.endswith(".py")
-        for _dir, _subdirs, names in os.walk(tests_dir)
-        for name in names
-    ):
-        return "python -m pytest -q"
-    return None
-
-
-async def _detect_project_test_command(
-    nats_client: NATSClient, workspace_root: str
-) -> str | None:
-    """
-    ``_detect_test_command`` on the project's machine.
-
-    The project lives where the daemon runs, so detection reads the daemon's
-    snapshot of it; a folder this server can see itself is the fallback.
-    """
-    if settings.DELIVERY_TEST_COMMAND.strip():
-        return settings.DELIVERY_TEST_COMMAND.strip()
-    try:
-        project = await workspace_daemon.inspect_project(
-            nats_client, workspace_root, snapshot=True
-        )
-    except (workspace_daemon.DaemonUnavailable, workspace_daemon.DaemonError):
-        project = None
-    if project and project.get("is_dir"):
-
-        def _detect_in_snapshot() -> str | None:
-            with workspace_daemon.materialized_snapshot(
-                project.get("snapshot") or {}
-            ) as mirror:
-                return _detect_test_command(mirror)
-
-        return await asyncio.to_thread(_detect_in_snapshot)
-    return await asyncio.to_thread(_detect_test_command, workspace_root)
-
-
-async def _run_delivery_tests(
-    nats_client: NATSClient, sprint: dict[str, Any], evidence: dict[str, Any]
-) -> None:
-    """
-    Run the project's tests through the daemon and add the result to *evidence*.
-
-    ``test_run`` keeps the command, exit code and output tail; ``ci`` restates
-    the conclusion in the shape ``check_claimed_tests_evidenced`` reads, so an
-    agent's "tests pass" is judged against this run.  The exit status comes
-    from the daemon, never from the agent.
-    """
-    workspace_root = evidence["workspace_root"]
-    command = await _detect_project_test_command(nats_client, workspace_root)
-    if not command:
-        evidence["test_run"] = {"command": None, "reason": "no test command found"}
-        return
-    try:
-        result = await nats_client.request(
-            "workspace.execute",
-            {
-                "command": command,
-                "workspace_root": workspace_root,
-                "sprint_id": sprint["id"],
-            },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
-        )
-    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
-        evidence["test_run"] = {
-            "command": command,
-            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
-        }
-        return
-    record_test_run(evidence, command, result)
+_run_delivery_tests = workspace_daemon.run_delivery_tests
 
 
 def _plan_queued_delivery(
@@ -1937,13 +1732,10 @@ def _plan_queued_delivery(
     targets: list[dict[str, str]],
     evidence: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    The ``workspace.deliver`` job that keeps the files for an offline daemon.
+    """The ``workspace.deliver`` job that keeps the files for an offline daemon.
 
-    Marks *evidence* as waiting for the job, so the recorded verification makes
-    the delivery gate hold the task.  The job is published only after that
-    record exists: a daemon that is just connecting can report back within
-    milliseconds, and its report must find the run waiting for it.
+    Marks *evidence* as waiting for it, so the delivery gate holds the task; the
+    job is published only once that record exists, for a daemon reporting at once.
     """
     job_id = str(uuid4())
     evidence["delivery_queued"] = {"job_id": job_id}
@@ -2058,11 +1850,18 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         evidence["reason"] = data.get("error") or (
             "the workspace daemon sent no per-file results"
         )
+    git_workflow.record_reply(evidence, data)
     evidence["delivered_after_queue"] = True
 
     written, _ = evaluate_workspace_writes(files, evidence)
     if settings.DELIVERY_TESTS_ENABLED and written == "pass":
-        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence)
+        evidence["acceptance"] = await asyncio.to_thread(
+            acceptance.evidence_for, engine, item_id
+        )
+        await acceptance.guard_test_files(
+            nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+        )
+        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
@@ -2115,9 +1914,12 @@ async def _deliver_artifacts(
         workspace_root = await asyncio.to_thread(
             _resolve_workspace_root, sprint["company_id"]
         )
+        git_spec = await asyncio.to_thread(
+            git_workflow.delivery_spec, engine, sprint, item
+        )
         evidence = {
             "workspace_root": workspace_root,
-            "expected": {t["path"]: _sha256_text(t["content"]) for t in targets},
+            "expected": expected_hashes(targets),
             "workspace_writes": None,
         }
         if not workspace_root:
@@ -2131,6 +1933,7 @@ async def _deliver_artifacts(
                         "files": targets,
                         "interaction_id": f"task-{item['id']}",
                         "sprint_id": sprint["id"],
+                        **({"git": git_spec} if git_spec else {}),
                     },
                     timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
                 )
@@ -2140,6 +1943,7 @@ async def _deliver_artifacts(
                 )
                 if evidence["workspace_writes"] is None:
                     evidence["reason"] = "the workspace daemon sent no per-file results"
+                git_workflow.record_reply(evidence, reply)
             except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
                 evidence["reason"] = (
                     f"the workspace daemon did not reply ({type(e).__name__})"
@@ -2150,11 +1954,17 @@ async def _deliver_artifacts(
                 if nats_client.jetstream_enabled:
                     queued_job = _plan_queued_delivery(
                         item, sprint, workspace_root, targets, evidence
-                    )
+                    ) | ({"git": git_spec} if git_spec else {})
 
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
-            await _run_delivery_tests(nats_client, sprint, evidence)
+            evidence["acceptance"] = await asyncio.to_thread(
+                acceptance.evidence_for, engine, item["id"]
+            )
+            await acceptance.guard_test_files(
+                nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            )
+            await _run_delivery_tests(nats_client, sprint, evidence, engine)
 
     recorded = await asyncio.to_thread(
         _record_task_run, item, agent, sprint, deliverable, targets, evidence
@@ -2323,6 +2133,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
+            # A task that waits for others is queued once they are done.
+            if not await asyncio.to_thread(dependencies.ready, engine, item["id"]):
+                return
             # Guard against duplicate task.assign events for the same item.
             if item.get("status") != "todo":
                 logger.info(
@@ -2375,6 +2188,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 lessons_ctx,
                 procedures_ctx,
                 completed_ctx,
+                requirements_ctx,
                 assistant_context,
             ) = await asyncio.gather(
                 asyncio.to_thread(
@@ -2388,6 +2202,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 ),
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
+                ),
+                asyncio.to_thread(
+                    spec_planning.requirements_context, engine, item["id"]
                 ),
                 console_assistants.collect_advice(
                     nats_client, item, agent, sprint, _resolve_workspace_root
@@ -2547,6 +2364,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 sprint["id"],
                 lessons_ctx or None,
                 procedures_ctx or None,
+                requirements_ctx or None,
             )
             deliverable = await asyncio.to_thread(
                 _sanitize_deliverable_text, deliverable
@@ -2729,6 +2547,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     # Durable: assignments published while this worker was down are processed
     # when it starts.  The handler records its own failures on the board, so a
     # message is acknowledged once the handler returns.
+    developer_tools.bind(
+        nats_client, asyncio.get_running_loop(), _resolve_workspace_root
+    )
     await nats_client.consume(
         "task.assign",
         TASK_ASSIGN_CONSUMER,
@@ -2804,12 +2625,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     Agent.role == "QA",
                 )
             ).first()
-
+            qa_model = getattr(reviewer, "model", None) or model_routing.company_model(
+                session, sprint.company_id, "QA"
+            )
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
-                "model": _resolve_agent_model(
-                    {"model": reviewer.model if reviewer else None, "role": "QA"}
+                "model": model_routing.resolve_agent_model(
+                    {"model": qa_model, "role": "QA"}
                 ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
                 "system_prompt": reviewer.system_prompt if reviewer else None,
@@ -2991,6 +2814,8 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 # A second attempt is judged against what blocked the first and
                 # the ScrumMaster's brief for it, the same context the agent had.
                 + previous_attempt_context(item)
+                + spec_planning.requirements_for(session, sprint, item)
+                + standards.prompt_section(reviewer_dict["role"])
             ) + procedures.procedures_prompt(
                 procedures.active_procedures(
                     session, sprint.company_id, reviewer_dict["role"]
@@ -3436,13 +3261,9 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 if settled_sprint_ids
                 else []
             )
-            if all(
-                item_is_settled(item)
-                for item in session.exec(
-                    select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
-                ).all()
-            )
+            if dependencies.sprint_settled(session, sprint_id)
         ]
+        session.commit()
 
     # A sprint whose last open task just got blocked for a person closes now,
     # with its retrospective; approvals close theirs on the spot.
@@ -3468,11 +3289,11 @@ def _call_llm_for_review(
     reads from the audit trail instead of its comment-scan fallback.
     """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens = REVIEW_MAX_TOKENS
+    client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
-    model = _resolve_agent_model(agent, default_role="QA")
+    model = model_routing.resolve_agent_model(agent, default_role="QA")
     result = client.chat(
         model=model,
         messages=messages,
@@ -3501,6 +3322,9 @@ def _call_llm_for_review(
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:
     """Find todo items and publish task.assign events for them."""
+    # Tasks waiting on one a person must act on are blocked with the reason;
+    # those whose wait ended come back to todo, and are queued below.
+    await asyncio.to_thread(dependencies.settle_active, engine)
     with Session(engine) as session:
         todo_items = session.exec(
             select(BacklogItem).where(BacklogItem.status == "todo")
@@ -3509,13 +3333,10 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             item_sprint = session.get(Sprint, item.sprint_id)
             if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
                 continue
+            if not dependencies.is_ready(session, item):
+                continue
             dispatch_time = datetime.now(UTC)
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
+            comments = comment_list(item.comments)
 
             if has_manual_freeze_marker(comments):
                 item.status = "blocked"
@@ -3564,8 +3385,6 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                     "Skipping duplicate autonomous queue publish for item=%s", item.id
                 )
                 continue
-
-            from uuid import uuid4
 
             # Durable: one stored assignment per todo state of the item, even
             # though this runs every review cycle while the worker is busy.

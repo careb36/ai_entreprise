@@ -31,6 +31,9 @@
 #      agent's record counts the decision, and the next ticket's prompt
 #      carries that record.
 #   7. A run from another producer gets the Reviewer agent's suggestion.
+#      Then the company connects its own provider: validated against the
+#      provider's model list, suggested for the Reviewer, chosen, and the
+#      next run's review reaches the proxy through that connection.
 #   8. A task whose file marks authentication is approved by QA and still
 #      waits for a person (the risk tier, at autonomy level 3 too); a
 #      Manager accepts it.
@@ -70,8 +73,25 @@ WORK=${E2E_WORKDIR:-$(mktemp -d -t fabrique-e2e-XXXXXX)}
 mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
 API=http://127.0.0.1:$BACKEND_PORT
+# Where agent-written code runs (DELIVERY_SANDBOX): on the host, or with
+# E2E_SANDBOX=container in an ephemeral container per run, from a small image
+# with pytest built here (the project's tests need it; the network is off at
+# run time).
+SANDBOX=${E2E_SANDBOX:-host}
+SANDBOX_IMAGE=fabrique-e2e-sandbox:1
+if [ "$SANDBOX" = "container" ]; then
+  docker image inspect "$SANDBOX_IMAGE" >/dev/null 2>&1 \
+    || printf 'FROM python:3.12-slim\nRUN pip install --no-cache-dir pytest\n' \
+      | docker build -q -t "$SANDBOX_IMAGE" - >/dev/null \
+    || { echo "could not build the sandbox image"; exit 2; }
+  TEST_COMMAND="python -m pytest -q -p no:cacheprovider"
+else
+  TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
+fi
 PROMPTS=$WORK/fake_llm.prompts.log
 VIOLATIONS=$WORK/fake_llm.violations.log
+CONNECTIONS=$WORK/fake_llm.connections.log
+INTERNAL_TOKEN=e2e-internal-token
 : > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
 FAILED=0
 
@@ -94,7 +114,7 @@ if port_busy "$BACKEND_PORT"; then
   exit 2
 fi
 
-# A fresh database: the backend creates its own schema at startup.
+# A fresh database: the migrations create its schema before the backend starts.
 "$PY" - "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" <<'EOF' || { echo "could not recreate the database"; exit 2; }
 import sys
 import psycopg2
@@ -108,14 +128,15 @@ with conn.cursor() as cur:
 conn.close()
 EOF
 
-rm -f "$PROMPTS"
+rm -f "$PROMPTS" "$CONNECTIONS"
 # A console assistant the daemon can run, under its own name so a real
 # Copilot or Claude CLI on this machine is never asked.
 ADVICE="Fake Copilot advice: keep each module beside its test."
 mkdir -p "$WORK/bin"
 printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
-FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
+FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS \
+  FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
   NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
@@ -123,6 +144,13 @@ trap cleanup EXIT
 # The backend asks the daemon once, at startup, which assistants it can run.
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
 grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }
+# The schema through the migrations, and the models and the migrations must
+# agree (what `alembic check` reports) before the backend starts.
+(
+  cd "$REPO/backend" && env POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB ALEMBIC_QUIET=1 \
+    "$PY" -m alembic upgrade head && env POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB ALEMBIC_QUIET=1 \
+    "$PY" -m alembic check
+) > "$WORK/alembic.log" 2>&1 || { echo "the migrations did not apply cleanly, or the models and the migrations disagree; see $WORK/alembic.log"; cat "$WORK/alembic.log"; exit 2; }
 (
   cd "$REPO/backend" && exec env \
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
@@ -130,7 +158,10 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e RATE_LIMIT_DEFAULT=100000/minute \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
-    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 \
+    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
+    DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
+    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
+    RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
@@ -199,6 +230,7 @@ echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
 check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
 check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
+check "the factory's standards bind the Developer before the task, and QA's review" test "$(prompt_seen "## Quality standards.*STD-SEC-1 No secret in the repository, ever \[checked\].*## Task: Add parser")" = yes -a "$(prompt_seen "reviewing the following deliverable for the task: 'Add parser'.*## Quality standards.*STD-QA-2 Review against the criteria")" = yes
 check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
 check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes
 check "the sprint list counts it as a briefed second attempt, not done" test "$(api "$API/v1/sprints?company_id=$CID" | json "next(s['second_attempts'] for s in d if s['id'] == $S1)")" = "{'total': 1, 'done': 0, 'briefed': 1, 'briefed_done': 0}"
@@ -276,6 +308,22 @@ R2=$(ingest_run "pr-102" '{"files": ["app.py"], "summary": "Adds a farewell"}')
 check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R2" "d['reviewed_by'], d['suggested_decision']"
 check "with that record in its prompt" test "$(prompt_seen "RUN pr-102 v1 .*yours matched 0 of 1")" = yes
 
+echo "7b. the company's own provider connection"
+# The fake proxy plays the provider too: /provider/v1/models answers the key.
+CONN_BODY="{\"provider\": \"deepseek\", \"name\": \"E2E DeepSeek\", \"base_url\": \"http://127.0.0.1:$LLM_PORT/provider/v1\", \"api_key\": \"e2e-provider-key\"}"
+CONN_JSON=$(api -X POST "$API/v1/companies/$CID/providers" -H 'Content-Type: application/json' -d "$CONN_BODY")
+CONN=$(echo "$CONN_JSON" | json "d['id']")
+check "a Manager connects the company's provider, and the key is never returned" test "$(echo "$CONN_JSON" | json "d['api_key_set'], 'e2e-provider-key' in json.dumps(d)")" = "True False"
+check "the validation lists the provider's models with the key" test "$(api -X POST "$API/v1/companies/$CID/providers/$CONN/validate" | json "d['provider']['validation_ok'], sorted(d['provider']['listed_models'])")" = "True ['deepseek-v4-flash', 'e2e-unlisted-elsewhere']"
+CONN_MODEL="conn:$CONN:deepseek-v4-flash"
+check "the Reviewer's suggestion is the listed model the catalogue describes" test "$(api "$API/v1/companies/$CID/model_suggestions" | json "d['suggestions']['Reviewer']['model']")" = "$CONN_MODEL"
+check "a Manager chooses it for the Reviewer" test "$(api -X PUT "$API/v1/companies/$CID/model_settings" -H 'Content-Type: application/json' -d "{\"role_models\": {\"Reviewer\": \"$CONN_MODEL\"}}" | json "d['effective']['Reviewer']")" = "{'model': '$CONN_MODEL', 'source': 'role'}"
+R3=$(ingest_run "pr-103" '{"files": ["app.py"], "summary": "Adds a toast"}')
+check "the next run is reviewed" wait_value 60 "Reviewer agent approved" run_field "$R3" "d['reviewed_by'], d['suggested_decision']"
+check "that review reached the proxy through the company's connection, with its key and the model it listed" test "$("$PY" -c "import json, sys; rows = [json.loads(l) for l in open(sys.argv[1])]; print([(r['model'], r['base_url'], r['key_ok']) for r in rows if r['run'] == 'pr-103'][:1])" "$CONNECTIONS" 2>/dev/null)" = "[('deepseek-v4-flash', 'http://127.0.0.1:$LLM_PORT/provider/v1', True)]"
+check "and only that review: the other roles kept the deployment's models" test "$("$PY" -c "import json, sys; print(sorted({json.loads(l)['run'] for l in open(sys.argv[1])}))" "$CONNECTIONS")" = "['pr-103']"
+api -X PUT "$API/v1/companies/$CID/model_settings" -H 'Content-Type: application/json' -d '{"role_models": {}}' > /dev/null
+
 echo "8. a high-risk delivery waits for a person"
 # Its file name marks authentication (services/risk.py): QA's approval does
 # not close it, at autonomy level 3 too; a Manager accepts it.
@@ -290,14 +338,79 @@ check "the inbox lists it as a high-risk hold" test "$(api "$API/v1/inbox?compan
 ACCEPTED=$(api -X PATCH "$API/v1/backlog/$RISKY" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by a person."}' | json "d.get('status', '')")
 check "a Manager accepts it" test "$ACCEPTED" = done -a "$(board "$S3")" = "Add login check=done"
 
-echo "9. every task's history, read independently"
+echo "9. a specification and its architecture: drafted, checked, approved, covered by a sprint"
+spec_field() { api "$API/v1/specifications/$1?company_id=$CID" | json "$2"; }
+SPEC=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"brief\": \"A greeting service for the e2e run.\"}")
+SPEC_ID=$(echo "$SPEC" | json "d.get('id', '')")
+check "the PO drafted it from the brief, numbered by the backend" test "$(echo "$SPEC" | json "d['drafted_by'], [c['id'] for r in d['requirements'] for c in r['criteria']]")" = "PO ['REQ-1.1', 'REQ-1.2', 'REQ-2.1']"
+check "the check blocks it: a target without a number and an open question" test "$(echo "$SPEC" | json "sorted((f['where'], f['code']) for f in d['check']['findings'] if f['severity'] == 'blocking')")" = "[('NFR-1', 'no_number'), ('Q1', 'open_question')]"
+check "approval is refused while it blocks" test "$(api -o /dev/null -w '%{http_code}' -X POST "$API/v1/specifications/$SPEC_ID/approve")" = 409
+ANSWERED=$(api -X POST "$API/v1/specifications/$SPEC_ID/questions/0" -H 'Content-Type: application/json' -d '{"answer": "No, English only."}' | json "d['questions'][0]['answer']")
+check "a person answers the PO's question" test "$ANSWERED" = "No, English only."
+REVISED=$(api -X POST "$API/v1/specifications/draft" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"brief\": \"A greeting service for the e2e run.\", \"specification_id\": $SPEC_ID}")
+check "the PO revised it from the answer, and the check passes" test "$(echo "$REVISED" | json "d['id'] == $SPEC_ID, d['check']['ok'], d['questions'][0]['answer']")" = "True True No, English only."
+check "the revision prompt carried the answer" test "$(prompt_seen "A: No, English only.")" = yes
+check "a person approves it" test "$(api -X POST "$API/v1/specifications/$SPEC_ID/approve" | json "d['status']")" = approved
+ARCH=$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/json' -d "{\"specification_id\": $SPEC_ID}")
+ARCH_ID=$(echo "$ARCH" | json "d.get('id', '')")
+check "the Architect designed it from the approved specification, numbered by the backend" test "$(echo "$ARCH" | json "d['drafted_by'], [m['id'] for m in d['modules']], d['interfaces'][0]['module_id'], d['interfaces'][0]['consumers']")" = "Architect ['MOD-1', 'MOD-2'] MOD-1 ['MOD-2']"
+check "its prompt carried the specification's criteria" test "$(prompt_seen "the Architect of an AI software factory.*REQ-2.1: given two greetings answered")" = yes
+check "the Architect looked pytest up at the registry through the research tools, and the draft keeps the source as an observation" test "$(echo "$ARCH" | json "[(s['tool'], s['package'], s['ecosystem'], s['status'], s['allowed'], len(s['sha256']), s['url']) for s in d['sources']]")" = "[('package', 'pytest', 'pypi', 200, True, 64, 'http://127.0.0.1:$LLM_PORT/pypi/pytest/json')]" -a "$(prompt_seen "the Architect of an AI software factory.*## Sources")" = yes
+check "the PO consulted nothing, and its draft says so" test "$(echo "$SPEC" | json "d['sources']")" = "[]"
+check "the check blocks it on the open question" test "$(echo "$ARCH" | json "[(f['where'], f['code']) for f in d['check']['findings'] if f['severity'] == 'blocking']")" = "[('Q1', 'open_question')]"
+check "a person answers the Architect's question" test "$(api -X POST "$API/v1/architectures/$ARCH_ID/questions/0" -H 'Content-Type: application/json' -d '{"answer": "Per process."}' | json "d['questions'][0]['answer']")" = "Per process."
+check "the Architect's revision carried the answer, and the check passes" test "$(api -X POST "$API/v1/architectures/draft" -H 'Content-Type: application/json' -d "{\"specification_id\": $SPEC_ID, \"architecture_id\": $ARCH_ID}" | json "d['id'] == $ARCH_ID, d['check']['ok']")" = "True True" -a "$(prompt_seen "A: Per process.")" = yes
+check "a person approves the architecture" test "$(api -X POST "$API/v1/architectures/$ARCH_ID/approve" | json "d['status']")" = approved
+WRITTEN=$(api -X POST "$API/v1/architectures/$ARCH_ID/write")
+check "it is written to the repository, and the daemon's hash of the file is kept" test "$(echo "$WRITTEN" | json "d['written_path']")" = docs/ARCHITECTURE.md -a "$(echo "$WRITTEN" | json "d['written_sha256']")" = "$(sha256sum "$WORK/project/docs/ARCHITECTURE.md" | cut -d' ' -f1)"
+check "the document names the modules and the decision" test "$(grep -c '### MOD-2: Counter\|### ADR-1: Standard library only' "$WORK/project/docs/ARCHITECTURE.md")" = 2
+PLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $CID, \"scope_size\": \"S\", \"specification_id\": $SPEC_ID}")
+check "the planning prompt carried the approved architecture" test "$(prompt_seen "the PO. Plan a sprint from the specification below.*Architecture (approved).*MOD-1: Greeter")" = yes
+check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks'] if not t['kind']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
+check "QA's test-writing task of each requirement comes first, and each implementation waits for its tests" test "$(echo "$PLAN" | json "[(t['kind'], t['assignee'], t['depends_on']) for t in d['tasks']]")" = "[('acceptance_tests', 'QA', []), ('acceptance_tests', 'QA', []), (None, 'Developer', [0]), (None, 'Developer', [1, 2])]"
+check "and the counter after the greeting, by position" test "$(echo "$PLAN" | json "d['tasks'][3]['depends_on'][-1]")" = 2
+NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
+  \"backlog_items\": $(echo "$PLAN" | json "json.dumps(d['tasks'])")}")
+S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
+check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
+TESTS2_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][1]")
+GREETING_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][2]")
+check "the counter waits for its tests and for the greeting on the board" test "$(api "$API/v1/sprints/$S4/board" | json "next((i['depends_on'], i['waiting_for'], i['kind']) for c in d['columns'].values() for i in c if i['title'] == 'Add greeting counter')")" = "([$TESTS2_ID, $GREETING_ID], [$TESTS2_ID, $GREETING_ID], None)"
+check "Greeting 1 closes" wait_sprint "$S4"
+check "the four tasks got done" test "$(api "$API/v1/sprints/$S4/board" | json "sorted(f\"{i['title']}={i['status']}\" for c in d['columns'].values() for i in c)")" = "['Acceptance tests for REQ-1: Greet by name=done', 'Acceptance tests for REQ-2: Count the greetings=done', 'Add greeting counter=done', 'Add greeting=done']"
+check "QA wrote the acceptance tests first, one per criterion, named after it" test "$(grep -c 'def test_req_1_[12]_holds' "$WORK/project/tests/test_req_1.py")" = 2 -a "$(grep -n '## Task: Acceptance tests for REQ-1' "$PROMPTS" | head -1 | cut -d: -f1)" -lt "$(grep -n '## Task: Add greeting' "$PROMPTS" | grep -v counter | head -1 | cut -d: -f1)"
+check "the Developer's prompt named the tests to make pass" test "$(prompt_seen "## Task: Add greeting counter.*Acceptance tests to make pass.*tests/test_req_2.py.*REQ-2.1: a test named test_req_2_1_")" = yes
+check "the delivery that rewrote an acceptance test was refuted, never silently accepted" test "$(api "$API/v1/sprints/$S4/board" | json "sum(1 for c in d['columns'].values() for i in c for m in i['comments'] if 'edits the acceptance test tests/test_req_2.py' in m['text'])")" -ge 1
+check "the acceptance test QA wrote is the one on disk: the rewrite was restored from QA's delivery" test "$(grep -c 'from src.add_greeting_counter import add_greeting_counter' "$WORK/project/tests/test_req_2.py")" = 1 -a "$(api "$API/v1/sprints/$S4/board" | json "sum(1 for c in d['columns'].values() for i in c for m in i['comments'] if 'restored from QA' in m['text'])")" -ge 1
+check "the counter was worked on only after the greeting was done" test "$(grep -n '## Task: Add greeting counter' "$PROMPTS" | head -1 | cut -d: -f1)" -gt "$(grep -n "reviewing the following deliverable for the task: 'Add greeting'" "$PROMPTS" | tail -1 | cut -d: -f1)"
+check "each task's prompt carried only the requirements it covers" test "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-2.1: given two greetings answered")" = yes -a "$(prompt_seen "## Task: Add greeting counter.*Requirements this task covers.*REQ-1.1")" = no
+check "and QA judged the deliverable against the same criteria" test "$(prompt_seen "reviewing the following deliverable for the task: 'Add greeting counter'.*REQ-2.1: given two greetings answered")" = yes
+check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no
+check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
+check "and every criterion verified by its test passing in an observed run" test "$(spec_field "$SPEC_ID" "d['coverage']['verified'], [(c['id'], c['last_result']) for c in d['coverage']['criteria']]")" = "3 [('REQ-1.1', 'pass'), ('REQ-1.2', 'pass'), ('REQ-2.1', 'pass')]"
+# The Developer's workspace tools (services/developer_tools.py): the counter's
+# Developer reads the greeting's module through the real daemon before each
+# delivery; the read is evidence with the file's hash, and the Verifier says
+# which modified files it had read first.
+COUNTER_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][3]")
+COUNTER_RUNS=$(api "$API/v1/agent_runs?company_id=$CID&external_ref=task-$COUNTER_ID" | json "' '.join(str(r['id']) for r in sorted(d['agent_runs'], key=lambda r: r['id']))")
+counter_check() {  # counter_check <run id> <check name> <python expression over c, the check>
+  api "$API/v1/agent_runs/$1/verifications?company_id=$CID" | json "(lambda c: ($3))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$2'))"; }
+COUNTER_FIRST=${COUNTER_RUNS%% *}; COUNTER_LAST=${COUNTER_RUNS##* }
+check "the delivery's tests ran where DELIVERY_SANDBOX says ($SANDBOX), and the Verifier recorded the daemon's own report" test "$(counter_check "$COUNTER_LAST" sandbox "c['sandbox']['mode'], c['isolated']")" = "('$SANDBOX', $([ "$SANDBOX" = host ] && echo False || echo True))"
+check "the counter's Developer read the greeting's module through the daemon before delivering, and the read is evidence with the file's hash" test "$(counter_check "$COUNTER_LAST" tools_used "c['calls'][0]['tool'], c['calls'][0]['path'], c['calls'][0]['sha256']")" = "('read', 'src/add_greeting.py', '$(sha256sum "$WORK/project/src/add_greeting.py" | cut -d' ' -f1)')"
+check "its prompt opened with the repository map, naming that module" test "$(prompt_seen "## Task: Add greeting counter.*## Repository.*src/add_greeting.py")" = yes
+check "the Verifier said the first delivery rewrote QA's test without reading it, and the second changed no existing file" test "$(counter_check "$COUNTER_FIRST" context_read "c['read'], c['modified_unread']")" = "(['src/add_greeting.py'], ['tests/test_req_2.py'])" -a "$(counter_check "$COUNTER_LAST" context_read "c['modified_unread'], c['observation']")" = "([], 'read 1 file(s); no existing file was changed')"
+
+echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.
 HISTORY=$(cd "$REPO/backend" && POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER \
   POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB PYTHONPATH=.:app "$PY" app/history_check.py 2>&1)
 check "no illegal history (done without approval or verified delivery, carried twice, stray decision)" test "$(echo "$HISTORY" | tail -1)" = "0 illegal history(ies)"
 echo "$HISTORY" | grep -v "illegal history" | sed 's/^/       /'
 
-echo "10. the loop's order, seen from the model"
+echo "11. the loop's order, seen from the model"
 check "QA only reviewed delivered work, the files that delivery wrote" test ! -s "$VIOLATIONS"
 [ -s "$VIOLATIONS" ] && sed 's/^/       /' "$VIOLATIONS"
 

@@ -90,8 +90,19 @@ def test_local_sqlite_mode_disables_optional_services(monkeypatch):
     assert env["DATABASE_URL"].startswith("sqlite:///")
     assert env["DATABASE_URL"].endswith("factory.db")
     assert env["NEO4J_DISABLED"] == "true"
+    assert env["NEO4J_ENABLED"] == "false"
     assert env["NATS_DISABLED"] == "true"
     assert env["VOICE_API_KEY"] == "k"
+
+
+def test_the_backend_brings_its_database_to_head(monkeypatch):
+    """The factory refuses a database behind its Alembic head, and here no
+    container entrypoint runs the migrations: the backend does, in both modes."""
+    monkeypatch.delenv("DB_AUTO_UPGRADE", raising=False)
+
+    for use_sqlite in (True, False):
+        env = run_fusion._child_env(voice_key="k", use_sqlite=use_sqlite, announce=False)
+        assert env["DB_AUTO_UPGRADE"] == "true"
 
 
 def test_the_browser_gets_a_session_even_on_a_single_user_install(monkeypatch):

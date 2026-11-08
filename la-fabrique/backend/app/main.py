@@ -21,13 +21,22 @@ from metrics import setup_metrics
 from routers import (
     agent_runs_router,
     agents_router,
+    api_tokens_router,
+    architectures_router,
     auth_router,
     build_router,
     enterprise_router,
+    events_router,
     github_router,
     inbox_router,
+    mcp_router,
     messages_router,
+    model_settings_router,
     procedures_router,
+    providers_router,
+    reviews_router,
+    run_secrets_router,
+    specifications_router,
     sprint_control_router,
     sprint_router,
     support_router,
@@ -94,16 +103,25 @@ setup_metrics(app)
 
 app.include_router(auth_router)
 app.include_router(enterprise_router)
+app.include_router(events_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)
 app.include_router(agents_router)
 app.include_router(agent_runs_router)
+app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)
 app.include_router(inbox_router)
 app.include_router(messages_router)
 app.include_router(procedures_router)
+app.include_router(reviews_router)
+app.include_router(run_secrets_router)
+app.include_router(specifications_router)
+app.include_router(architectures_router)
 app.include_router(workspace_router)
+app.include_router(mcp_router)
+app.include_router(providers_router)
+app.include_router(model_settings_router)
 app.include_router(voice_router)
 app.include_router(build_router)
 

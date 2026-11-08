@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Procedure, User
 from models.procedure import PROCEDURE_STATUSES
 from pydantic import BaseModel, Field
-from services import procedures
+from services import procedures, standards
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])
@@ -60,6 +60,12 @@ def _serialize(procedure: Procedure) -> dict:
 
 def _actor(user: User | None) -> str:
     return user.email if user is not None else "local demo"
+
+
+@router.get("/standards")
+async def list_standards():
+    """The factory's quality standards: a fixed catalogue, the same for every company."""
+    return {"standards": standards.catalogue(), "areas": list(standards.AREAS)}
 
 
 @router.get("/procedures")

@@ -115,6 +115,7 @@ def _child_env(
         # The graph backend is optional and absent in a desktop install;
         # failing fast keeps startup at ~2 s instead of a bolt timeout.
         env.setdefault("NEO4J_DISABLED", "true")
+        env.setdefault("NEO4J_ENABLED", "false")
         # Same for the broker: without it the connector retries forever and
         # prints a traceback every few seconds on the user's console.
         env.setdefault("NATS_DISABLED", "true")
@@ -129,6 +130,10 @@ def _child_env(
               flush=True)
     env["AUTH_REQUIRED"] = "true"
     env.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "1440")
+    # The factory starts only on a database at its Alembic head. The backend
+    # runs here by hand (no container entrypoint to run `alembic upgrade
+    # head`), so it brings the database there itself, SQLite or Postgres.
+    env.setdefault("DB_AUTO_UPGRADE", "true")
     # The assistant's dashboard embeds the factory's own UI in an iframe, which
     # is a different origin: `X-Frame-Options: DENY` (the API default) left that
     # panel blank. Only the panel's own origin, not every loopback port: any
@@ -751,6 +756,7 @@ def _full_env(secrets: dict[str, str], agents_dir: Path) -> dict[str, str]:
         "NATS_URL": "nats://127.0.0.1:4222",
         "LLM_PROXY_URL": PROXY_URL,
         "NEO4J_DISABLED": "true",
+        "NEO4J_ENABLED": "false",
         "AGENT_WORKSPACE_ROOT": str(agents_dir),
     }
     model = _agent_model(secrets)

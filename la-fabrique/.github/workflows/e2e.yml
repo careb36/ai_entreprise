@@ -33,6 +33,12 @@ jobs:
       actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Once with agent-written code on the host, once in a container per run
+    # (DELIVERY_SANDBOX=container): the daemon's report must say which.
+    strategy:
+      fail-fast: false
+      matrix:
+        sandbox: [host, container]
 
 
     # Postgres and NATS are started as plain containers on ports picked at run
@@ -68,14 +74,14 @@ jobs:
           # A service container cannot be given arguments and the stock NATS
           # image starts without JetStream, which the backend needs for the
           # durable task queue the loop relies on.
-          docker run -d --name "pg-e2e-$GITHUB_RUN_ID" \
+          docker run -d --name "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
             -p "127.0.0.1::5432" pgvector/pgvector:pg15
-          docker run -d --name "nats-e2e-$GITHUB_RUN_ID" \
+          docker run -d --name "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             -p "127.0.0.1::4222" nats:2.10 -js
 
-          pg_port="$(docker port "pg-e2e-$GITHUB_RUN_ID" 5432/tcp | head -1 | sed 's/.*://')"
-          nats_port="$(docker port "nats-e2e-$GITHUB_RUN_ID" 4222/tcp | head -1 | sed 's/.*://')"
+          pg_port="$(docker port "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" 5432/tcp | head -1 | sed 's/.*://')"
+          nats_port="$(docker port "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" 4222/tcp | head -1 | sed 's/.*://')"
 
           # TCP, not the Unix socket: the image starts a temporary server that
           # listens on the socket alone while it runs the init scripts, so
@@ -84,7 +90,7 @@ jobs:
           # next check lands in the gap and exits 1. The backend also connects
           # over TCP on the mapped port, so that is what has to answer.
           for _ in $(seq 1 60); do
-            docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1 >/dev/null 2>&1 && break
+            docker exec "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" pg_isready -U factory -h 127.0.0.1 >/dev/null 2>&1 && break
             sleep 1
           done
           for _ in $(seq 1 30); do
@@ -93,7 +99,7 @@ jobs:
           done
           # A ready socket is not a ready port, and the port is what the e2e
           # talks to. Fail here, loudly, instead of inside the run.
-          docker exec "pg-e2e-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1
+          docker exec "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" pg_isready -U factory -h 127.0.0.1
 
           {
             echo "E2E_POSTGRES_HOST=127.0.0.1"
@@ -126,6 +132,7 @@ jobs:
       - name: Run the loop end to end
         env:
           E2E_WORKDIR: ${{ runner.temp }}/e2e
+          E2E_SANDBOX: ${{ matrix.sandbox }}
         run: |
           # Ask Poetry which interpreter has the dependencies: it owns the
           # backend's virtualenv, so this is the only reliable answer.
@@ -140,12 +147,12 @@ jobs:
       - name: Stop the containers
         if: always()
         run: |
-          docker rm -f "pg-e2e-$GITHUB_RUN_ID" "nats-e2e-$GITHUB_RUN_ID" || true
+          docker rm -f "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" || true
 
       - name: Keep the logs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
-          name: e2e-logs
+          name: e2e-logs-${{ matrix.sandbox }}
           path: ${{ runner.temp }}/e2e/*.log
           if-no-files-found: ignore

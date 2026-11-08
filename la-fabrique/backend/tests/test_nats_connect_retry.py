@@ -63,7 +63,7 @@ def _patch_startup(stack: ExitStack, client, base_delay: float) -> dict:
             "process_backlog_tasks",
         )
     }
-    stack.enter_context(patch("lifecycle.create_db_and_tables", return_value=None))
+    stack.enter_context(patch("lifecycle.prepare_database", return_value=None))
     stack.enter_context(
         patch("lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed"))
     )

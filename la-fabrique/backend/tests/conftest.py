@@ -24,9 +24,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 
 from config import settings
+
+# The tests never call models.dev: the catalogue stays on its snapshot.
+settings.MODELS_CATALOG_REFRESH_HOURS = 0
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
+from models.api_token import ApiToken
+from models.architecture import Architecture
 from models.audit import AuditLog
 
 # ---------------------------------------------------------------------------
@@ -43,8 +48,14 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.event import TaskEvent
 from models.github import GitHubRepoBinding
+from models.mcp import McpServer
 from models.procedure import Procedure
+from models.provider import ProviderConnection
+from models.review import ReviewComment, RunPublication, RunReview
+from models.run_secret import RunSecret
+from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
 from sqlalchemy.pool import StaticPool
@@ -79,6 +90,14 @@ def disable_auth_for_legacy_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_research_tools(monkeypatch):
+    """The research tools (``services/research_tools.py``) reach the network;
+    a test that wants them turns ``RESEARCH_TOOLS_ENABLED`` on and fakes the
+    HTTP client, as ``test_research_tools.py`` does."""
+    monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)
+
+
+@pytest.fixture(autouse=True)
 def no_nats_namespace(monkeypatch):
     """Tests assert on the plain subjects, so they must not inherit a prefix.
 
@@ -87,6 +106,14 @@ def no_nats_namespace(monkeypatch):
     with a namespaced subject.
     """
     monkeypatch.delenv("NATS_NAMESPACE", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def daemon_state_in_tmp(monkeypatch, tmp_path):
+    """The daemon's delivery journal (``vscode-daemon/delivery_journal.py``)
+    writes under ``FABRIQUE_DAEMON_STATE``; each test gets its own, never
+    the developer's home."""
+    monkeypatch.setenv("FABRIQUE_DAEMON_STATE", str(tmp_path / "daemon-state"))
 
 
 @pytest.fixture(autouse=True)
@@ -129,6 +156,16 @@ SQLModel.metadata.create_all(
         BugReport.__table__,
         AgentMessage.__table__,
         Procedure.__table__,
+        McpServer.__table__,
+        ProviderConnection.__table__,
+        RunReview.__table__,
+        ReviewComment.__table__,
+        RunPublication.__table__,
+        Specification.__table__,
+        Architecture.__table__,
+        ApiToken.__table__,
+        TaskEvent.__table__,
+        RunSecret.__table__,
     ],
 )
 
@@ -175,7 +212,7 @@ def test_client(sqlite_session):
     """
     FastAPI TestClient with get_session overridden to the in-memory SQLite session.
 
-    Startup hooks that touch Postgres (create_db_and_tables), NATS, and Neo4j
+    Startup hooks that touch Postgres (prepare_database), NATS, and Neo4j
     are all patched out so no external services are required.
     """
     from database import get_session
@@ -191,7 +228,7 @@ def test_client(sqlite_session):
 
     with (
         # Lifecycle dependencies are imported into the lifecycle module namespace.
-        mock.patch("lifecycle.create_db_and_tables", return_value=None),
+        mock.patch("lifecycle.prepare_database", return_value=None),
         mock.patch(
             "lifecycle.get_neo4j_driver", side_effect=Exception("neo4j stubbed")
         ),

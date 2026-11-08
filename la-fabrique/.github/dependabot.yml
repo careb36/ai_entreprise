@@ -126,6 +126,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # The images stay on python 3.12: the backend's dependencies (greenlet,
+    # regex, grpcio and others) publish no 3.15 wheels yet and the slim image
+    # has no compiler to build them. 3.12.x patch updates still arrive.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker
     directory: /backend/janitor
@@ -138,6 +144,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # The images stay on python 3.12: the backend's dependencies (greenlet,
+    # regex, grpcio and others) publish no 3.15 wheels yet and the slim image
+    # has no compiler to build them. 3.12.x patch updates still arrive.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker
     directory: /frontend
@@ -162,6 +174,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # The images stay on python 3.12: the backend's dependencies (greenlet,
+    # regex, grpcio and others) publish no 3.15 wheels yet and the slim image
+    # has no compiler to build them. 3.12.x patch updates still arrive.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker
     directory: /vscode-daemon
@@ -174,6 +192,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # The images stay on python 3.12: the backend's dependencies (greenlet,
+    # regex, grpcio and others) publish no 3.15 wheels yet and the slim image
+    # has no compiler to build them. 3.12.x patch updates still arrive.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # Docker Compose — the root only has docker-compose.yml, no Dockerfile,
   # so the "docker" ecosystem would not detect that file.
@@ -188,6 +212,12 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # The images stay on python 3.12: the backend's dependencies (greenlet,
+    # regex, grpcio and others) publish no 3.15 wheels yet and the slim image
+    # has no compiler to build them. 3.12.x patch updates still arrive.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # GitHub Actions — the workflows in .github/workflows/.
   - package-ecosystem: github-actions

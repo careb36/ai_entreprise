@@ -29,7 +29,7 @@ from models import (
 )
 from sqlmodel import Session, func, select
 
-from services import sprint_control
+from services import company_models, sprint_control
 from services.sprint_planner import plan_foundation_sprint
 
 
@@ -384,7 +384,10 @@ class CompanyService:
             persona=payload.get("persona"),
             seniority=str(payload.get("seniority") or "Senior").strip() or "Senior",
             specialty=str(payload.get("specialty") or "").strip(),
-            model=str(payload.get("model") or "").strip(),
+            model=company_models.clean_model(
+                self.session, company_id, payload.get("model"), "model"
+            )
+            or "",
             system_prompt=payload.get("system_prompt"),
             token_budget=int(payload.get("token_budget") or 500000),
         )
@@ -412,7 +415,12 @@ class CompanyService:
             if field not in payload:
                 continue
             value = payload[field]
-            if field == "token_budget" and value is not None:
+            if field == "model":
+                value = company_models.clean_model(
+                    self.session, agent.company_id, value, "model"
+                )
+                agent.model = value or ""
+            elif field == "token_budget" and value is not None:
                 setattr(agent, field, int(value))
             elif (
                 field in {"name", "role", "seniority", "specialty", "model"}
