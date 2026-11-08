@@ -92,7 +92,7 @@ jobs:
       - name: Compare with the previous scorecard
         id: compare
         run: |
-          card="$(ls "$RUNNER_TEMP"/bench-out/*.json | tail -1)"
+          card="$(find "$RUNNER_TEMP/bench-out" -maxdepth 1 -name '*.json' | sort | tail -1)"
           set +e
           python3 scripts/bench/compare.py "$card" --dir bench/scorecards > "$RUNNER_TEMP/bench-out/compare.md"
           status=$?
