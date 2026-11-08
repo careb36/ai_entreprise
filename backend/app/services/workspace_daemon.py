@@ -312,6 +312,42 @@ def detect_test_command(workspace_root: str) -> str | None:
     return None
 
 
+def detect_install_command(workspace_root: str) -> str | None:
+    """The command that installs this project's dependencies, or None."""
+    root = os.path.abspath(workspace_root)
+    if os.path.isfile(os.path.join(root, "package.json")):
+        return "npm install"
+    if os.path.isfile(os.path.join(root, "requirements.txt")):
+        return "pip install -r requirements.txt"
+    pyproject = os.path.join(root, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            with open(pyproject, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            text = ""
+        # A Poetry project installs its dependencies with Poetry, whether it
+        # is a package or not (``package-mode = false`` cannot be built by
+        # pip); an editable pip install is for a PEP 621 package.
+        if "[tool.poetry]" in text:
+            return "poetry install"
+        if "[project]" in text:
+            return "pip install -e ."
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo build"
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go mod download"
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q dependency:resolve"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle testClasses"
+    if os.path.isfile(os.path.join(root, "Gemfile")):
+        return "bundle install"
+    return None
+
+
 async def run_delivery_tests(
     nats_client: Any,
     sprint: dict[str, Any],
