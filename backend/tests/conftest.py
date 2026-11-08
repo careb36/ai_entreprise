@@ -50,6 +50,7 @@ from models.company import (
 )
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
+from models.integration import SprintIntegration
 from models.mcp import McpServer
 from models.procedure import Procedure
 from models.provider import ProviderConnection
@@ -106,6 +107,8 @@ def daemon_state_in_tmp(monkeypatch, tmp_path):
     writes under ``FABRIQUE_DAEMON_STATE``; each test gets its own, never
     the developer's home."""
     monkeypatch.setenv("FABRIQUE_DAEMON_STATE", str(tmp_path / "daemon-state"))
+    # The edit tool's originals (``vscode-daemon/workspace_edit.py``) too.
+    monkeypatch.setenv("FABRIQUE_EDIT_STATE", str(tmp_path / "edit-state"))
 
 
 @pytest.fixture(autouse=True)
@@ -159,6 +162,7 @@ SQLModel.metadata.create_all(
         TaskEvent.__table__,
         RunSecret.__table__,
         CompanyWebhook.__table__,
+        SprintIntegration.__table__,
     ],
 )
 

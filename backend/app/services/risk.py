@@ -218,6 +218,9 @@ def raise_for_tool_calls(result: dict[str, Any], tool_calls: Any) -> dict[str, A
             if isinstance(call, dict)
             and not call.get("read_only")
             and not call.get("is_error")
+            # The workspace edit tool's changes reach the disk only through the
+            # delivery (``services/workspace_edits.py``), classified by its paths.
+            and (call.get("server"), call.get("tool")) != ("workspace", "edit")
         }
     )
     if not writers:

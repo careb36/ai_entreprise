@@ -2,13 +2,19 @@
 
 A task used to be written in one shot from a prompt, with a listing of the
 project's root files as all the model saw of the code it was changing. Here
-the roles that deliver files (Developer, QA) get four tools through the
+the roles that deliver files (Developer, QA) get these tools through the
 workspace daemon, offered beside the company's MCP tools in the same loop
-(``services/mcp_tools.chat_with_tools``):
+(``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
+agent-computer interface (``developer_tool_replies``):
 
 - ``workspace__list``: the tree under a folder, bounded;
-- ``workspace__read``: a file, numbered, bounded;
-- ``workspace__search``: the lines matching a pattern, bounded;
+- ``workspace__read``: a window of 100 numbered lines, paged with ``start_line``;
+- ``workspace__search``: the lines matching a pattern; past the bound, how many;
+- ``workspace__find_file``: files by name or glob; past the bound, how many;
+- ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
+  existing file, applied by the daemon only if the file still parses
+  (``vscode-daemon/workspace_edit.py``); offered only where the task's files
+  may be touched (its worktree, or a project without the Git workflow);
 - ``workspace__run_tests``: the project's test command (or a narrower one
   within the same runner), bounded output.
 
@@ -21,7 +27,10 @@ tier for one it had not. What the model says it learned stays a claim; its
 own account of a test run is never evidence, the daemon's exit status after
 the delivery is (``workspace_daemon.run_delivery_tests``).
 
-The tools are read-only on the project. ``run_tests`` executes the project's
+An edit is an observation with the file's sha256 before and after, and a
+working copy delivered with the answer's files (``services/workspace_edits.py``).
+
+The other tools are read-only on the project. ``run_tests`` executes the project's
 test command, which ``DELIVERY_TESTS_ENABLED`` already runs after every
 delivery; it is offered only when that setting is on, since it runs
 project code on the daemon's machine.
@@ -37,25 +46,28 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from typing import Any
 
 from config import settings
 
 from services import (
-    context_read,
+    developer_tool_replies,
     developer_tool_schemas,
     mcp_tools,
     research_tools,
     sandbox,
+    workspace_edits,
 )
 
 logger = logging.getLogger("fabrique-task-worker")
 
 SERVER = developer_tool_schemas.SERVER
 TOOL_ROLES = {"developer", "dev", "qa", "tester"}
-READ_TOOLS = ("list", "read", "search")
+READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
 RUN_TESTS = developer_tool_schemas.RUN_TESTS
+EDIT = developer_tool_schemas.EDIT
 LIST_TIMEOUT_SECONDS = 20.0
 READ_TIMEOUT_SECONDS = 20.0
 SEARCH_TIMEOUT_SECONDS = 40.0
@@ -106,6 +118,8 @@ class WorkspaceToolbox:
         result_max_chars: int | None = None,
         sandbox: dict[str, Any] | None = None,
         sandbox_error: str | None = None,
+        can_edit: bool = False,
+        edit_suffixes: set[str] | None = None,
     ) -> None:
         self.requester = requester
         self.workspace_root = workspace_root
@@ -117,22 +131,34 @@ class WorkspaceToolbox:
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
+        # The edit tool: where it may write, which file types a delivery takes,
+        # the daemon's session for the originals, and what ``close`` brought back.
+        self.can_edit = can_edit
+        self.edit_suffixes = edit_suffixes
+        self.edit_session = uuid.uuid4().hex
+        self.edits_made = False
+        self.edited_files: list[dict[str, Any]] = []
+        self.finish_error: str | None = None
 
     @property
     def tools(self) -> dict[str, dict[str, Any]]:
         return {
-            s["function"]["name"]: {"server": SERVER, "read_only": True}
+            s["function"]["name"]: {
+                "server": SERVER,
+                "read_only": not s["function"]["name"].endswith(EDIT),
+            }
             for s in self.schemas()
         }
 
     def schemas(self) -> list[dict[str, Any]]:
-        if self.test_command:
-            return list(developer_tool_schemas.SCHEMAS)
-        return [
+        schemas = [
             s
             for s in developer_tool_schemas.SCHEMAS
-            if not s["function"]["name"].endswith(RUN_TESTS)
+            if self.test_command or not s["function"]["name"].endswith(RUN_TESTS)
         ]
+        if self.can_edit:
+            schemas.append(developer_tool_schemas.EDIT_SCHEMA)
+        return schemas
 
     def call(
         self, tool_call: dict[str, Any], round_no: int
@@ -170,6 +196,7 @@ class WorkspaceToolbox:
         observation = self._observation(
             tool, arguments, round_no, is_error, elapsed_ms, text
         )
+        observation["read_only"] = tool != EDIT
         observation.update(extra)
         if len(text) > self.result_max_chars:
             observation["truncated"] = True
@@ -188,10 +215,7 @@ class WorkspaceToolbox:
                 },
                 LIST_TIMEOUT_SECONDS,
             )
-            lines = list(reply.get("entries") or [])
-            if reply.get("truncated"):
-                lines.append("[listing cut here]")
-            return "\n".join(lines) or "(empty)"
+            return developer_tool_replies.list_text(reply)
         if tool == "read":
             reply = self.requester(
                 "workspace.read",
@@ -208,35 +232,33 @@ class WorkspaceToolbox:
                     "sha256": reply.get("sha256"),
                     "bytes": reply.get("bytes"),
                     "lines": reply.get("lines"),
+                    "first_line": reply.get("first_line"),
+                    "last_line": reply.get("last_line"),
                     "file_truncated": bool(reply.get("truncated")),
                 }
             )
-            if reply.get("binary"):
-                return f"(binary file, {reply.get('bytes')} bytes)"
-            text = context_read.redact_secrets(
-                str(arguments.get("path") or ""), str(reply.get("text") or "")
+            return developer_tool_replies.read_text(
+                str(arguments.get("path") or ""), reply, self.result_max_chars
             )
-            if reply.get("truncated"):
-                text += f"\n[{reply.get('lines')} lines in the file; read on with start_line]"
-            return text or "(empty file)"
-        if tool == "search":
+        if tool in ("search", developer_tool_schemas.FIND):
+            subject = "workspace.search" if tool == "search" else "workspace.find"
+            pattern = arguments.get("pattern")
             reply = self.requester(
-                "workspace.search",
+                subject,
                 {
                     "workspace_root": root,
-                    "pattern": arguments.get("pattern"),
+                    "pattern": pattern,
                     "path": arguments.get("path"),
                 },
                 SEARCH_TIMEOUT_SECONDS,
             )
-            lines = [
-                context_read.redact_secrets(m.split(":", 1)[0], m)
-                for m in reply.get("matches") or []
-            ]
-            extra["files_scanned"] = reply.get("files_scanned")
-            if reply.get("truncated"):
-                lines.append("[more matches not shown]")
-            return "\n".join(lines) or "(no match)"
+            extra["match_count"] = reply.get("match_count")
+            if tool == "search":
+                extra["files_scanned"] = reply.get("files_scanned")
+                return developer_tool_replies.search_text(str(pattern), reply)
+            return developer_tool_replies.find_text(str(pattern), reply)
+        if tool == EDIT:
+            return workspace_edits.edit(self, arguments, extra)
         if tool == RUN_TESTS:
             command = self._test_command(arguments.get("command"))
             extra["command"] = command
@@ -258,7 +280,9 @@ class WorkspaceToolbox:
                 return f"The tests ran past the time limit and were stopped.\n{output[-2000:]}"
             if reply.get("error") and exit_code is None:
                 raise RuntimeError(str(reply["error"]))
-            return f"exit status {exit_code}\n{output[-self.result_max_chars :]}"
+            return developer_tool_replies.tests_text(
+                exit_code, output, self.result_max_chars
+            )
         raise RuntimeError("unknown tool")
 
     def _test_command(self, requested: Any) -> str:
@@ -275,6 +299,10 @@ class WorkspaceToolbox:
         ):
             return wanted
         return base
+
+    def close(self) -> None:
+        """The edits' files to deliver come back; the originals go back on disk."""
+        workspace_edits.finish(self)
 
     def _observation(
         self,
@@ -300,9 +328,6 @@ class WorkspaceToolbox:
             "read_only": True,
         }
 
-    def close(self) -> None:
-        pass
-
 
 class CombinedToolbox:
     """The built-in toolboxes (the workspace's, the research one) beside the
@@ -322,6 +347,10 @@ class CombinedToolbox:
     @property
     def unavailable(self) -> dict[str, str]:
         return dict(self.mcp.unavailable) if self.mcp is not None else {}
+
+    @property
+    def edited_files(self) -> list[dict[str, Any]]:
+        return self.workspace.edited_files if self.workspace is not None else []
 
     def schemas(self) -> list[dict[str, Any]]:
         schemas: list[dict[str, Any]] = []
@@ -475,6 +504,8 @@ def toolbox_for(
                 test_command=_detect_test_command(root),
                 sandbox=box,
                 sandbox_error=box_error,
+                can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
+                edit_suffixes=workspace_edits.delivery_suffixes(),
             )
     # The research tools for the roles that decide (``services/research_tools.py``).
     research = research_tools.toolbox_for(company_id, role, engine=engine)
