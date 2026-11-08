@@ -758,7 +758,7 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
     the same path appears twice the last block wins, keeping the position of
     the first.  Returns ``[]`` when the answer declares no files.
     """
-    files: dict[str, str] = {}
+    files: dict[str, dict] = {}
     for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
         match = _MANIFEST_PATH.search(block.group("info"))
         if not match:
