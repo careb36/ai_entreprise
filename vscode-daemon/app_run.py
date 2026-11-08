@@ -227,6 +227,9 @@ def _e2e_record(req: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
     if record["timed_out"]:
         record["timeout_seconds"] = req["e2e_seconds"]
     record.update(_tail(text))
+    if run.get("output_truncated"):
+        # The runner's own bound cut the stream: its head is gone too.
+        record["stream_truncated"] = True
     if record["output_truncated"]:
         # A list reporter prints one line per test first and the failures'
         # details after: the head keeps the lines the backend reads back.

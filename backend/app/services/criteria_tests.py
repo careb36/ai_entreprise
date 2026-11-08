@@ -45,6 +45,24 @@ _LINE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 _PASS_WORDS = {"PASSED", "XPASS", "PASS", "ok"}
 
 
+# What a test file's name looks like, in the runners the daemon may run:
+# ``test_*.py``, ``*_test.py``/``*_test.go``, ``*.test.ts``, ``*.spec.ts``,
+# ``FooTest.java``, ``foo_spec.rb``. A manifest or a configuration file QA
+# delivered beside its tests (``package.json``, ``playwright.config.ts``) is
+# not one, and is never guarded as an acceptance test.
+_TEST_FILE = re.compile(
+    r"^(?:test_.+|.+_test|.+\.(?:test|spec))\.[A-Za-z0-9]+$"
+    r"|^.+Tests?\.(?:java|kt|cs)$|^.+_spec\.rb$"
+)
+
+
+def is_test_file(path: Any) -> bool:
+    """Whether *path* names a test file (by its name, never its folder)."""
+    if not isinstance(path, str):
+        return False
+    return bool(_TEST_FILE.match(path.replace("\\", "/").rsplit("/", 1)[-1]))
+
+
 def token(criterion_id: str) -> str:
     """The test-name token of a criterion id: ``REQ-1.2`` → ``req_1_2``."""
     return re.sub(r"[^a-z0-9]+", "_", str(criterion_id).lower()).strip("_")

@@ -54,35 +54,43 @@ SMOKE_COMMAND = (
 _SMOKE_FILE = re.compile(r"^e2e/[^/]+\.spec\.[cm]?[jt]s$")
 _SECTION_HEADER = "## Browser checks to write"
 
-# What a runner prints when the browser runtime, not the code, is missing.
+# What a runner prints when the browser runtime, not the code, is missing:
+# the launch and loading errors themselves, never a mere mention of the
+# installer (a failing test's assertion text or console output may name it).
 _RUNTIME_MISSING: tuple[tuple[re.Pattern[str], str], ...] = (
     (
-        re.compile(r"Executable doesn't exist at|playwright install", re.IGNORECASE),
-        "the browser Playwright drives is not installed on the daemon's machine",
+        re.compile(r"Executable doesn't exist at|browserType\.launch:"),
+        "the browser Playwright drives could not be launched on the daemon's machine",
     ),
     (
-        re.compile(
-            r"Host system is missing dependencies to run browsers", re.IGNORECASE
-        ),
+        re.compile(r"Host system is missing dependencies to run browsers"),
         "the daemon's machine lacks the system libraries the browser needs",
     ),
     (
         re.compile(
             r"Cannot find (?:module|package) '(?:@playwright/test|playwright)"
-            r"|No module named '?(?:playwright|pytest_playwright)",
-            re.IGNORECASE,
+            r"|No module named '?(?:playwright|pytest_playwright)"
         ),
         "the Playwright package is not installed for this project",
     ),
     (
         re.compile(
             r"could not determine executable to run"
-            r"|\b(?:npx|playwright): (?:command )?not found",
-            re.IGNORECASE,
+            r"|^(?:sh: \d+: |/bin/sh: )?(?:npx|playwright): (?:command )?not found",
+            re.MULTILINE,
         ),
         "Playwright (or npx) is not installed on the daemon's machine",
     ),
 )
+# Why a delivery no browser observed waits for a person whatever the
+# autonomy level allows (``sprint_control.person_acceptance_reason``).
+UNOBSERVED_REASON = (
+    "its browser checks could not run, so no browser observed it; a person accepts it"
+)
+FAILING_CAP = 50
+_RUNNING = re.compile(r"^\s*Running (\d+) tests? using", re.MULTILINE)
+_TEST_INDEX = re.compile(r"^\s*(?:✓|✔|✘|ok|x)\s+(\d+)\s+.*\S:\d+:\d+\s+›", re.MULTILINE)
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def smoke_path(criterion_id: str) -> str:
@@ -178,7 +186,7 @@ async def with_browser_checks(
         if serves_web(await ctx.profile()):
             return text + section(facts["covers"])
     except Exception as exc:  # noqa: BLE001 - Context only; the unit tests still get written.
-        logger.debug("Browser checks not offered for item=%s: %s", item_id, exc)
+        logger.warning("Browser checks not offered for item=%s: %s", item_id, exc)
     return text
 
 
@@ -228,29 +236,71 @@ def runtime_missing(text: str, exit_code: Any) -> str | None:
     return None
 
 
+_DERIVED = ("runtime_missing", "criteria", "failing_tests", "failures_complete")
+
+
 def read_back(evidence: dict[str, Any]) -> None:
     """Annotate ``evidence["app_run"]["e2e"]`` with what its output says:
     ``runtime_missing``, or per criterion the browser tests' results
-    (``criteria``, only the criteria a test named) and ``failing_tests``."""
+    (``criteria``, only the criteria a test named), ``failing_tests`` and
+    ``failures_complete``. Everything is read first and set at the end, so
+    a failure leaves the record as it was; reading again gives the same."""
     app = evidence.get("app_run")
     e2e = app.get("e2e") if isinstance(app, dict) else None
     if not isinstance(e2e, dict) or not e2e.get("command"):
         return
-    text = _output(e2e)
+    raw = {k: v for k, v in e2e.items() if k not in _DERIVED}
+    text = _output(raw)
+    derived: dict[str, Any] = {}
     missing = (
-        None if e2e.get("timed_out") else runtime_missing(text, e2e.get("exit_code"))
+        None if raw.get("timed_out") else runtime_missing(text, raw.get("exit_code"))
     )
-    if missing:
-        e2e["runtime_missing"] = missing
-        return
     acceptance = evidence.get("acceptance")
-    if not acceptance:
-        return
-    results = results_from_output(text, acceptance.get("all") or [])
-    criteria = {c: r for c, r in results.items() if r != RESULT_MISSING}
-    if criteria:
-        e2e["criteria"] = criteria
-    e2e["failing_tests"] = failing_tests(text)[:50]
+    if missing:
+        derived["runtime_missing"] = missing
+    elif acceptance:
+        results = results_from_output(text, acceptance.get("all") or [])
+        criteria = {c: r for c, r in results.items() if r != RESULT_MISSING}
+        if criteria:
+            derived["criteria"] = criteria
+        failing = failing_tests(text)
+        derived["failing_tests"] = failing[:FAILING_CAP]
+        derived["failures_complete"] = failures_complete(raw, text, failing)
+    app["e2e"] = {**raw, **derived}
+
+
+def failures_complete(e2e: dict[str, Any], text: str, failing: list[str]) -> bool:
+    """Whether the failing tests read from the output are all of them, so
+    failures may be excused: the daemon kept the whole stream, at most
+    ``FAILING_CAP`` failed, and either the whole output was kept or every
+    test Playwright announced (``Running N tests``) has its line in what
+    was kept. Anything less is never excused."""
+    if e2e.get("stream_truncated") or len(failing) > FAILING_CAP:
+        return False
+    if not e2e.get("output_truncated"):
+        return True
+    text = _ANSI.sub("", text)
+    announced = _RUNNING.search(text)
+    if not announced:
+        return False
+    seen = {int(i) for i in _TEST_INDEX.findall(text)}
+    return seen == set(range(1, int(announced.group(1)) + 1))
+
+
+def unobserved_reason(engine: Any, company_id: int, item_id: int) -> str | None:
+    """``UNOBSERVED_REASON`` when the task's latest verification says its
+    browser checks could not run (``e2e_run`` with ``runtime_missing``)."""
+    from services import delivery_gate
+
+    try:
+        verification = delivery_gate.latest_verification(engine, company_id, item_id)
+    except Exception as exc:  # noqa: BLE001 - Logged; the other holds still apply.
+        logger.warning("Browser checks of item=%s not read: %s", item_id, exc)
+        return None
+    for check in (verification.checks if verification else None) or []:
+        if check.get("name") == CHECK_E2E and check.get("runtime_missing"):
+            return UNOBSERVED_REASON
+    return None
 
 
 def _tail(record: dict[str, Any], limit: int = 400) -> str:
@@ -291,7 +341,7 @@ def check_e2e(evidence: dict[str, Any]) -> dict[str, Any] | None:
         excused_all, excused = excused_among(
             e2e.get("failing_tests") or [], evidence.get("acceptance") or {}
         )
-        if excused_all:
+        if excused_all and e2e.get("failures_complete"):
             outcome = "pass"
             observation = (
                 f"{target} exited {e2e['exit_code']}: only the browser checks of "

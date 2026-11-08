@@ -2830,13 +2830,12 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     risk_check.get("tier")
                 )
                 company = session.get(Company, sprint.company_id)
-                if (
-                    not needs_work
-                    and not risk_hold
-                    and sprint_control.needs_person_acceptance(company.autonomy_level)
-                ):
+                person_reason = sprint_control.person_acceptance_reason(
+                    company.autonomy_level, engine, sprint.company_id, item.id
+                )
+                if not needs_work and not risk_hold and person_reason:
                     risk_hold = True
-                    risk_check = {"reasons": [sprint_control.HUMAN_LED_REASON]}
+                    risk_check = {"reasons": [person_reason]}
 
                 previous_reworks = rework_requests_by(comments, reviewer_dict["name"])
                 autopilot_rework_allowed = (

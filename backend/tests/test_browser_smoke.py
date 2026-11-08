@@ -296,7 +296,7 @@ def test_a_failing_browser_test_of_the_task_s_criterion_refutes_it():
                 "    npx playwright install\n"
             ),
             1,
-            "browser Playwright drives is not installed",
+            "browser Playwright drives could not be launched",
         ),
         (
             "Error: Cannot find module '@playwright/test'\n",
@@ -541,7 +541,7 @@ def test_a_real_run_without_its_browser_is_unverifiable(web_project, monkeypatch
     empty.mkdir()
     monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(empty))
     evidence = _real_check(web_project)
-    assert "not installed" in evidence["app_run"]["e2e"]["runtime_missing"]
+    assert evidence["app_run"]["e2e"]["runtime_missing"]
     check = browser_smoke.check_e2e(evidence)
     assert check["outcome"] == "unverifiable", check
 
@@ -549,3 +549,236 @@ def test_a_real_run_without_its_browser_is_unverifiable(web_project, monkeypatch
 def test_the_smoke_command_downloads_nothing():
     """npx never fetches Playwright at check time: a missing one is reported."""
     assert browser_smoke.SMOKE_COMMAND.startswith("npx --no-install playwright test")
+
+
+# ---------------------------------------------------------------------------
+# Review findings on the first version (PR #422)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def review_db(monkeypatch, sqlite_session):
+    from services import task_worker
+
+    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    return sqlite_session
+
+
+def _unobserved_item(session, autonomy):
+    """An item in review whose latest run's browser checks could not run."""
+    from models.agent_run import AgentRun, Verification
+    from sqlmodel import select
+    from test_risk_tier import _item_in_review
+
+    item = _item_in_review(session, "low", autonomy=autonomy)
+    run = session.exec(
+        select(AgentRun).where(AgentRun.external_ref == f"task-{item.id}")
+    ).one()
+    verification = session.exec(
+        select(Verification).where(Verification.agent_run_id == run.id)
+    ).one()
+    verification.verdict = "unverifiable"
+    verification.checks = [
+        *verification.checks,
+        {
+            "name": "e2e_run",
+            "outcome": "unverifiable",
+            "observation": "observed nothing in a browser",
+            "runtime_missing": True,
+        },
+    ]
+    run.status = "unverifiable"
+    session.add_all([verification, run])
+    session.commit()
+    return item
+
+
+@pytest.mark.parametrize("autonomy", [2, 3])
+def test_a_delivery_no_browser_observed_waits_for_a_person_at_any_level(
+    review_db, monkeypatch, autonomy
+):
+    """Finding 1: QA's approval alone never closes it, and it is not sent back."""
+    from test_risk_tier import _approve as approve_in_review
+
+    item = approve_in_review(
+        monkeypatch, review_db, _unobserved_item(review_db, autonomy)
+    )
+    assert item.status == "blocked"
+    hold = item.comments[-1]
+    assert hold["author"] == "System"
+    assert browser_smoke.UNOBSERVED_REASON in hold["text"]
+    from services.board import awaits_risk_acceptance, pending_rework_feedback
+
+    assert awaits_risk_acceptance(item.comments)
+    assert not pending_rework_feedback(item.comments)
+
+
+def test_a_delivery_a_browser_observed_closes_as_before(review_db, monkeypatch):
+    from test_risk_tier import _approve as approve_in_review
+    from test_risk_tier import _item_in_review
+
+    item = approve_in_review(
+        monkeypatch, review_db, _item_in_review(review_db, "low", autonomy=2)
+    )
+    assert item.status == "done"
+
+
+def test_the_history_check_wants_a_person_on_an_unobserved_delivery(
+    review_db, monkeypatch
+):
+    from history_check import check_task
+    from test_risk_tier import _approve as approve_in_review
+
+    item = approve_in_review(monkeypatch, review_db, _unobserved_item(review_db, 3))
+    runs = [{"version": 1, "status": "unverifiable"}]
+    # The thread as comments alone (the events are not what this checks).
+    thread = [{k: v for k, v in c.items() if k != "event_id"} for c in item.comments]
+    qa_only = {"id": item.id, "status": "done", "comments": thread}
+    assert "high_risk_done_without_person" in check_task(qa_only, runs, [])
+    accepted = {
+        **qa_only,
+        "comments": [
+            *thread,
+            {"author": "user", "text": "Accepted after reading the evidence."},
+        ],
+    }
+    assert check_task(accepted, runs, []) == []
+
+
+def _long_run(failing_lines: str, announced: int | None, **e2e) -> dict:
+    head = (f"Running {announced} tests using 1 worker\n\n" if announced else "") + (
+        failing_lines
+    )
+    evidence = _evidence(
+        head, excused=["REQ-1.2"], truncated=True, output_truncated=True, **e2e
+    )
+    browser_smoke.read_back(evidence)
+    return evidence
+
+
+def test_failures_are_excused_only_when_the_failure_set_is_complete():
+    """Finding 2: a failure outside what was kept never lets the suite pass."""
+    lines = (
+        "  ✓  1 e2e/req_1_1.spec.ts:3:5 › REQ-1.1 ok (5ms)\n"
+        "  ✘  2 e2e/req_1_2.spec.ts:3:5 › REQ-1.2 no (5ms)\n"
+    )
+    # Every announced test has its line: complete, excused.
+    assert browser_smoke.check_e2e(_long_run(lines, 2))["outcome"] == "pass"
+    # A third test ran whose line was not kept: never excused.
+    assert browser_smoke.check_e2e(_long_run(lines, 3))["outcome"] == "refuted"
+    # No announcement to count against: never excused.
+    assert browser_smoke.check_e2e(_long_run(lines, None))["outcome"] == "refuted"
+    # The daemon's own bound cut the stream: its head is not the start.
+    cut = _long_run(lines, 2, stream_truncated=True)
+    assert browser_smoke.check_e2e(cut)["outcome"] == "refuted"
+
+
+def test_more_failures_than_are_kept_are_never_excused():
+    lines = "".join(
+        f"  ✘  {i} e2e/req_1_2.spec.ts:{i}:5 › REQ-1.2 case {i} (5ms)\n"
+        for i in range(1, browser_smoke.FAILING_CAP + 2)
+    )
+    evidence = _evidence(lines, excused=["REQ-1.2"])
+    browser_smoke.read_back(evidence)
+    assert len(evidence["app_run"]["e2e"]["failing_tests"]) == browser_smoke.FAILING_CAP
+    assert browser_smoke.check_e2e(evidence)["outcome"] == "refuted"
+
+
+def test_the_daemon_marks_a_stream_its_bound_cut():
+    record = app_run._e2e_record(
+        {"e2e": "x", "e2e_seconds": 5},
+        {"stdout": "tail", "exit_code": 1, "output_truncated": True},
+    )
+    assert record["stream_truncated"] is True
+
+
+def test_a_failing_test_that_mentions_the_installer_is_refuted():
+    """Finding 3: a mere mention of the installer is not a missing browser."""
+    evidence = _evidence(
+        "  ✘  1 e2e/req_1_1.spec.ts:3:5 › REQ-1.1 shows it (5ms)\n"
+        "    Error: expect(received).toContain(expected)\n"
+        "    Received: 'run npx playwright install to set up the browsers'\n",
+        excused=[],
+    )
+    browser_smoke.read_back(evidence)
+    assert "runtime_missing" not in evidence["app_run"]["e2e"]
+    assert browser_smoke.check_e2e(evidence)["outcome"] == "refuted"
+
+
+def test_a_manifest_qa_delivers_is_not_guarded_as_an_acceptance_test(sqlite_session):
+    """Finding 4: package.json beside QA's tests stays the implementation's."""
+    from models.agent_run import AgentRun, Verification
+    from services import acceptance
+
+    item = _test_task(sqlite_session, WEB)
+    sprint_id, company_id = (
+        item.sprint_id,
+        sqlite_session.get(Sprint, item.sprint_id).company_id,
+    )
+    files = [
+        "tests/test_req_1.py",
+        "e2e/req_1_1.spec.ts",
+        "package.json",
+        "playwright.config.ts",
+    ]
+    run = AgentRun(
+        company_id=company_id,
+        external_ref=f"task-{item.id}",
+        producer="le-fabrique-task-worker",
+        claims={"files": files},
+        artifact_digest="d",
+        artifact_size=1,
+        status="verified",
+    )
+    sqlite_session.add(run)
+    sqlite_session.commit()
+    sqlite_session.add(
+        Verification(
+            company_id=company_id,
+            agent_run_id=run.id,
+            verdict="verified",
+            checks=[],
+            evidence={
+                "workspace_writes": [
+                    {"path": p, "status": "written", "sha256": "h"} for p in files
+                ]
+            },
+        )
+    )
+    sqlite_session.commit()
+    guarded, _ = acceptance.test_files_of(sqlite_session, sprint_id, ["REQ-1.1"])
+    assert guarded == ["tests/test_req_1.py", "e2e/req_1_1.spec.ts"]
+    assert set(acceptance.test_hashes_of(sqlite_session, sprint_id)) == set(guarded)
+    # An implementation task that changes the dependencies is not refuted.
+    check = criteria_tests.check_untouched(
+        ["package.json"],
+        {
+            "acceptance": {"kind": None, "test_files": guarded},
+            "workspace_writes": [{"path": "package.json", "status": "written"}],
+        },
+    )
+    assert check["outcome"] == "pass"
+
+
+def test_reading_back_is_all_or_nothing_and_idempotent(monkeypatch):
+    """Kilo: a failure partway leaves the record as it was; twice is once."""
+    evidence = _evidence(
+        "  ✓  1 e2e/req_1_1.spec.ts:3:5 › REQ-1.1 ok (5ms)\n"
+        "  ✘  2 e2e/req_1_2.spec.ts:3:5 › REQ-1.2 no (5ms)\n",
+        excused=["REQ-1.2"],
+    )
+    before = dict(evidence["app_run"]["e2e"])
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("partway")
+
+    monkeypatch.setattr(browser_smoke, "failures_complete", boom)
+    with pytest.raises(RuntimeError):
+        browser_smoke.read_back(evidence)
+    assert evidence["app_run"]["e2e"] == before
+    monkeypatch.undo()
+    browser_smoke.read_back(evidence)
+    once = dict(evidence["app_run"]["e2e"])
+    browser_smoke.read_back(evidence)
+    assert evidence["app_run"]["e2e"] == once
+    assert once["criteria"] == {"REQ-1.1": "pass", "REQ-1.2": "fail"}

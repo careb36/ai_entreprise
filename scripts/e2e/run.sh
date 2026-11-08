@@ -50,8 +50,8 @@
 #      have no Playwright at all), so the run checks the plumbing and that a
 #      missing browser is reported unverifiable with its reason, never a pass
 #      or a refutation; the greeting, approved on that unverifiable run,
-#      waits for a person (autonomy level 1 once QA's verified tests are
-#      done). tests/test_browser_smoke.py drives a real browser.
+#      waits for a person at autonomy level 2 (no browser observed it).
+#      tests/test_browser_smoke.py drives a real browser.
 #  10. Every task's history is legal, read by app/history_check.py, which
 #      shares no code with the readers it checks.
 #  11. QA only reviewed delivered work (the fake model's order check).
@@ -504,14 +504,13 @@ S6=$(echo "$NEW6" | json "d.get('sprint_id', '')")
 WGREETING=$(echo "$NEW6" | json "d['backlog_item_ids'][2]")
 web_board() { api "$API/v1/sprints/$S6/board" | json "' '.join(sorted(f\"{i['id']}={i['status']}\" for c in d['columns'].values() for i in c))"; }
 tests_done() { api "$API/v1/sprints/$S6/board" | json "sum(1 for c in d['columns'].values() for i in c if i['kind'] == 'acceptance_tests' and i['status'] == 'done')"; }
-# QA's tests are verified and close on QA's approval. The greeting's run will
-# be unverifiable (no browser), so no agent may close it: at autonomy level 1
-# it waits for a person, who accepts it having read the evidence.
+# QA's tests are verified and close on QA's approval at autonomy level 2.
+# No browser observed the greeting, so QA's approval does not close it: it
+# waits for a person, who accepts it having read the evidence.
 check "QA's two test-writing tasks are done" wait_value "$TIMEOUT" 2 tests_done
-check "the company moves to autonomy level 1 before the greeting is reviewed" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$WCID/autonomy" -d '{"autonomy_level": 1}' | json "d['autonomy_level']")" = 1
 web_status() { api "$API/v1/sprints?company_id=$WCID" | json "next((s['status'] for s in d if s['id'] == $S6), '')"; }
 check "Web 1 closes around the greeting waiting for a person" wait_value "$TIMEOUT" completed web_status
-check "the greeting waits for a person, QA having approved it" test "$(api "$API/v1/inbox?company_id=$WCID" | json "[t['risk_hold'] for t in d['blocked_tasks'] if t['id'] == $WGREETING]")" = "[True]"
+check "the greeting waits for a person at autonomy level 2, QA having approved it, because no browser observed it" test "$(api "$API/v1/inbox?company_id=$WCID" | json "[t['risk_hold'] for t in d['blocked_tasks'] if t['id'] == $WGREETING]")" = "[True]" -a "$(api "$API/v1/sprints/$S6/board" | json "sum(1 for c in d['columns'].values() for i in c if i['id'] == $WGREETING for m in i['comments'] if 'no browser observed it' in m['text'])")" -ge 1
 check "a person accepts it" test "$(api -X PATCH "$API/v1/backlog/$WGREETING" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "Accepted by a person who read the evidence."}' | json "d.get('status', '')")" = done
 echo "     board: $(web_board)"
 check "QA was asked for a browser test per criterion here, and not in the project that serves no page" test "$(grep '## Task: Acceptance tests for REQ-1' "$PROMPTS" | tail -1 | grep -c 'Browser checks to write.*REQ-1.1 → e2e/req_1_1.spec.ts.*REQ-1.2 → e2e/req_1_2.spec.ts')" = 1 -a "$(grep '## Task: Acceptance tests for REQ-1' "$PROMPTS" | head -1 | grep -c 'Browser checks to write')" = 0
