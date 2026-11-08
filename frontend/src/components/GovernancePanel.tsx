@@ -5,6 +5,8 @@ import { useAgentRuns, useCurrentRole, useInbox, useReviewerRecord, useSprints, 
 import { secondAttempts } from '../lib/learningTrend'
 import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
+import type { InboxWithManager, ManagerDecision } from '../services/manager'
+import { ClientBriefCard, ManagerDecisions, ManagerSuggestion } from './ManagerDecisions'
 
 // The note written on the task when a person sends it back to work. Not
 // translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
@@ -30,7 +32,7 @@ function Section({ id, title, count, children }: { id: string; title: string; co
   )
 }
 
-function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: boolean }) {
+function BlockedTask({ task, canManage }: { task: InboxBlockedTask & { suggestion?: ManagerDecision | null }; canManage: boolean }) {
   const { t } = useTranslation()
   const update = useUpdateBacklogItem()
   const accept = useUpdateBacklogItem()
@@ -62,6 +64,7 @@ function BlockedTask({ task, canManage }: { task: InboxBlockedTask; canManage: b
           </p>
         )}
         {task.reason && <p className="break-words text-xs text-gray-400">{task.reason}</p>}
+        <ManagerSuggestion suggestion={task.suggestion} />
         {task.triage && (
           <p className="break-words text-xs text-sky-200/80">
             <span className="font-semibold">
@@ -196,7 +199,8 @@ function Inbox({ companyId }: { companyId: number }) {
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
   const inbox = useInbox(companyId)
-  const blocked = inbox.data?.blocked_tasks ?? []
+  const data = inbox.data as InboxWithManager | undefined
+  const blocked = data?.blocked_tasks ?? []
   const proposals = inbox.data?.proposals ?? []
   // How earlier second attempts went, counted from the closed sprints' boards:
   // the evidence beside the ScrumMaster's advice when a person decides what to
@@ -206,6 +210,8 @@ function Inbox({ companyId }: { companyId: number }) {
 
   return (
     <div className="space-y-8">
+      <ClientBriefCard companyId={companyId} />
+      <ManagerDecisions decisions={data?.agent_decisions ?? []} canManage={canManage} />
       {inbox.isError && (
         <div role="alert" className="alert-error flex items-center justify-between gap-3">
           <span>{t('inbox.loadError', { message: errorDetail(inbox.error), defaultValue: 'Could not load what needs you: {{message}}' })}</span>

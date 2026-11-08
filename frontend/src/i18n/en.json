@@ -2008,5 +2008,18 @@
       },
       "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task"
     }
+  },
+  "manager": {
+    "suggestion": "Manager agent suggests: {{decision}}",
+    "suggestionUnusable": "The Manager agent could not suggest; it is yours to decide.",
+    "briefTitle": "Your brief",
+    "briefLine": "Last day: {{done}} tasks done, {{decided}} decided by the Manager agent ({{overridden}} overridden), {{waiting}} waiting for you, {{tokens}} tokens.",
+    "overBudget": "Over the token budget: the agent decides nothing alone.",
+    "decided": "Decided by the Manager agent: {{decision}} ({{kind}} #{{id}})",
+    "rule": "Allowed by the rule {{rule}}",
+    "overriddenBy": "Overridden by {{who}}",
+    "overrideError": "Could not override: {{message}}",
+    "override": "Override",
+    "decisionsTitle": "Decided by the Manager agent"
   }
 }

@@ -2008,5 +2008,18 @@
       },
       "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
     }
+  },
+  "manager": {
+    "suggestion": "El agente Manager sugiere: {{decision}}",
+    "suggestionUnusable": "El agente Manager no pudo sugerir; la decisión es tuya.",
+    "briefTitle": "Tu resumen",
+    "briefLine": "Último día: {{done}} tareas hechas, {{decided}} decididas por el agente Manager ({{overridden}} revertidas), {{waiting}} esperan por ti, {{tokens}} tokens.",
+    "overBudget": "Por encima del presupuesto de tokens: el agente no decide nada solo.",
+    "decided": "Decidido por el agente Manager: {{decision}} ({{kind}} #{{id}})",
+    "rule": "Permitido por la regla {{rule}}",
+    "overriddenBy": "Revertido por {{who}}",
+    "overrideError": "No se pudo revertir: {{message}}",
+    "override": "Revertir",
+    "decisionsTitle": "Decidido por el agente Manager"
   }
 }
