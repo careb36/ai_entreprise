@@ -40,7 +40,13 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision
 from sqlmodel import Session
 
-from services import document_approval, manager_observe, sprint_control, task_events
+from services import (
+    document_approval,
+    manager_observe,
+    sprint_control,
+    task_events,
+    task_projection,
+)
 from services.board import BRIEF_PREFIX, SEND_BACK_MARKER
 from services.carry_over import (
     CARRY_MARK_PREFIX,
@@ -163,7 +169,11 @@ def _publish(session: Session, row: ManagerDecision) -> tuple[str, dict]:
 
 def _task(session: Session, row: ManagerDecision) -> BacklogItem:
     item = session.get(BacklogItem, row.item_id)
-    if item is None or not waits_for_a_person(item) or carried_over(item):
+    if item is None:
+        raise Stale("the task no longer waits for a person")
+    # From the task's events when they cover the thread (issue #324).
+    record = task_projection.record_of(session, item)
+    if not waits_for_a_person(item, record) or carried_over(item, record):
         raise Stale("the task no longer waits for a person")
     return item
 
@@ -176,7 +186,8 @@ def _blocked_task(
     item = _task(session, row)
     reason = row.suggested_reason or ""
     if row.suggested_decision == "send_back":
-        triage = scrum_master.triages_for(session, [item]).get(item.id) or {}
+        records = {item.id: task_projection.record_of(session, item)}
+        triage = scrum_master.triages_for(session, [item], records).get(item.id) or {}
         brief = str(triage.get("brief") or "")
         task_events.record(
             session,
@@ -196,6 +207,7 @@ def _blocked_task(
         text=f"{CARRY_MARK_PREFIX} under the company's policy (rule {rule}, "
         f"decision #{row.id}): the next sprint planned gives it another attempt. "
         f"{reason}",
+        payload={"carry_mark": True},
     )
     return "marked_for_carry_over", {}
 
@@ -312,7 +324,7 @@ def _undo_send_back(session: Session, row: ManagerDecision, actor: str) -> str:
 
 def _undo_mark(session: Session, row: ManagerDecision, actor: str) -> str:
     item = session.get(BacklogItem, row.item_id)
-    if item is None or carried_over(item):
+    if item is None or carried_over(item, task_projection.record_of(session, item)):
         raise Refused(409, "The task was carried into another sprint already.")
     task_events.record(
         session,
@@ -321,6 +333,7 @@ def _undo_mark(session: Session, row: ManagerDecision, actor: str) -> str:
         task_events.PERSON,
         text=f"{CARRY_UNMARK_PREFIX} by {actor} (decision #{row.id}); the task "
         "waits for a person.",
+        payload={"carry_mark": False},
     )
     return "waits_for_a_person"
 

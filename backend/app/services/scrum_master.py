@@ -27,15 +27,12 @@ from logging_config import setup_logger
 from models import Agent, AgentMessage, BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services import company_models, procedures, task_events
+from services import company_models, procedures, task_events, task_projection
 from services.board import (
     BRIEF_PREFIX,
     SCRUM_MASTER_ROLE,
     count_second_attempt,
-    is_rework_request,
-    last_send_back_at,
     no_second_attempts,
-    since_send_back,
 )
 
 logger = setup_logger("fabrique-scrum-master")
@@ -133,12 +130,17 @@ def triage_prompt(
     reason: str,
     procedures_context: str = "",
     record_context: str = "",
+    task_record: task_projection.TaskRecord | None = None,
 ) -> str:
-    """What the ScrumMaster is told about a blocked task."""
+    """What the ScrumMaster is told about a blocked task.
+
+    The rework asked for comes from *task_record* (its events when they cover
+    the thread), else from the comments.
+    """
+    task_record = task_record or task_projection.TaskRecord(item.comments)
     feedback = [
-        f"{c.get('author') or 'Reviewer'}: {str(c.get('text', '')).strip()[:FEEDBACK_CHARS]}"
-        for c in since_send_back(item.comments)
-        if is_rework_request(c)
+        f"{author or 'Reviewer'}: {text[:FEEDBACK_CHARS]}"
+        for author, text in task_record.rework_since_send_back()
     ][-FEEDBACK_SHOWN:]
     return (
         "You are the ScrumMaster. A task was blocked after the agents' attempts and "
@@ -307,7 +309,12 @@ def prepare_triage(
     )
     record = track_record_context(track_record(session, company_id))
     model, system_prompt = profile(session, company_id)
-    return triage_prompt(item, reason, context, record), model, system_prompt
+    task_record = task_projection.record_of(session, item)
+    return (
+        triage_prompt(item, reason, context, record, task_record),
+        model,
+        system_prompt,
+    )
 
 
 def ask_triage(
@@ -418,7 +425,7 @@ def decisions_for(
 
     A triage answers one block. It is stale, and left out, once the task was
     escalated again (a later ``escalation`` message) or sent back to work by a
-    person after it (*sent_back_at*, from the task's comments): the next block
+    person after it (*sent_back_at*, from the task's record): the next block
     may have another cause and gets its own answer, or the deterministic
     default when none comes.
     """
@@ -479,13 +486,18 @@ def decisions_for(
 
 
 def triages_for(
-    session: Session, items: list[BacklogItem]
+    session: Session,
+    items: list[BacklogItem],
+    records: dict[int, task_projection.TaskRecord] | None = None,
 ) -> dict[int, dict[str, Any]]:
-    """``decisions_for`` the given tasks, minding when a person last sent each back."""
+    """``decisions_for`` the given tasks, minding when a person last sent each back
+    (read from *records*, or from the tasks' events loaded in one query)."""
+    if records is None or any(item.id not in records for item in items):
+        records = {**task_projection.records_for(session, items), **(records or {})}
     sent_back = {
         item.id: moment
         for item in items
-        if (moment := last_send_back_at(item.comments)) is not None
+        if (moment := records[item.id].last_send_back_at()) is not None
     }
     return decisions_for(session, [item.id for item in items], sent_back)
 

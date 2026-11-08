@@ -31,7 +31,14 @@ from models.manager import ManagerDecision
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from services import locks, manager_actions_extra, procedures, run_review
+from services import (
+    locks,
+    manager_actions_extra,
+    procedures,
+    run_review,
+    task_events,
+    task_projection,
+)
 from services.agent_service import AgentService
 from services.carry_over import carried_over
 
@@ -61,25 +68,17 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _note(item: BacklogItem, author: str, text: str) -> None:
-    comments = list(item.comments or [])
-    comments.append({"author": author, "text": text, "created_at": str(_now())})
-    item.comments = comments
-    item.updated_at = _now()
-
-
 def _accept(session: Session, item: BacklogItem, text: str) -> None:
     """Mark the held task done only if nobody touched it since it was read.
 
-    One conditional ``UPDATE … WHERE status = 'blocked' AND updated_at = …``:
-    a person's send-back, comment or acceptance in between changes the row,
-    and the agent changes nothing (``Stale``).
+    One conditional ``UPDATE … WHERE status = 'blocked' AND updated_at = …``
+    claims it: a person's send-back, comment or acceptance in between changes
+    the row, and the agent changes nothing (``Stale``). The acceptance is then
+    the task's event (issue #324), rendered as the agent's note. The task's
+    chain lock is taken first, as every comment writer takes it before the
+    row, so the claim and the event are written under it in one lock order.
     """
-    now = _now()
-    comments = [dict(c) for c in item.comments or [] if isinstance(c, dict)]
-    comments.append(
-        {"author": MANAGER_AGENT_NAME, "text": text, "created_at": str(now)}
-    )
+    task_events.lock_chain(session, item.id)
     result = session.exec(  # type: ignore[call-overload]
         update(BacklogItem)
         .where(
@@ -87,12 +86,22 @@ def _accept(session: Session, item: BacklogItem, text: str) -> None:
             BacklogItem.status == "blocked",
             BacklogItem.updated_at == item.updated_at,
         )
-        .values(status="done", comments=comments, updated_at=now)
+        .values(status="done", updated_at=_now())
         .execution_options(synchronize_session=False)
     )
     if result.rowcount != 1:
         raise Stale(f"task {item.id} changed since the agent read it")
     session.expire(item)
+    task_events.record(
+        session,
+        item,
+        "moved",
+        MANAGER_AGENT_NAME,
+        author=MANAGER_AGENT_NAME,
+        status="done",
+        text=text,
+        payload={"accepted_by": MANAGER_AGENT_NAME},
+    )
 
 
 def _audit(
@@ -268,7 +277,7 @@ def _override(session: Session, row: ManagerDecision, actor: str) -> dict[str, A
         note = manager_actions_extra.override_note(row)
     elif row.category in ("accept_delivery", "accept_high_risk"):
         item = session.get(BacklogItem, row.item_id)
-        if item is None or carried_over(item):
+        if item is None or carried_over(item, task_projection.record_of(session, item)):
             raise OverrideRefused(409, "The task was carried into another sprint.")
         if item.status != "done":
             raise OverrideRefused(
@@ -279,14 +288,15 @@ def _override(session: Session, row: ManagerDecision, actor: str) -> dict[str, A
                 409, "The task was decided again after the agent's acceptance."
             )
         # Back to waiting for a person: the hold note is still the latest verdict.
-        item.status = "blocked"
-        _note(
+        task_events.record(
+            session,
             item,
-            "user",
-            f"{OVERRIDE_PREFIX} {actor} took back the Manager agent's acceptance "
+            "moved",
+            task_events.PERSON,
+            status="blocked",
+            text=f"{OVERRIDE_PREFIX} {actor} took back the Manager agent's acceptance "
             f"(decision #{row.id}); the delivery waits for a person again.",
         )
-        session.add(item)
         outcome = "waits_for_a_person"
     elif row.category == "adopt_procedure":
         procedure = session.get(Procedure, row.item_id)
