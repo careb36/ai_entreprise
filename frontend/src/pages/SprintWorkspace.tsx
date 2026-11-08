@@ -23,6 +23,7 @@ import SprintOverview from './Dashboard'
 import { useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { SprintControls, SprintStatusBanner } from '../components/SprintControls'
+import { SprintIntegration } from '../components/SprintIntegration'
 import { parseRouteId } from '../lib/routeId'
 
 export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'analytics'] as const
@@ -221,7 +222,10 @@ export const SprintWorkspace: React.FC = () => {
           ) : tab === 'analytics' ? (
             <AnalyticsDashboard sprintId={sprintId} />
           ) : (
-            <SprintOverview sprintId={sprintId} />
+            <>
+              <SprintOverview sprintId={sprintId} />
+              <SprintIntegration sprintId={sprintId} />
+            </>
           )}
         </div>
       </div>
