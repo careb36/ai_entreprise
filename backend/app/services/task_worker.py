@@ -1,14 +1,10 @@
 """
-Task Worker — NATS consumer for backlog item execution by AI agents.
+Task Worker: the NATS consumer that has an AI agent execute each backlog item.
 
-Listens for ``task.assign`` events published by the transactional outbox
-and dispatches each task to the appropriate AI agent based on the backlog
-item's ``assignee`` field.  The agent's LLM model and system prompt are
-loaded from the ``agents`` table so each role uses its configured model.
-
-Per task: receive ``task.assign``, load the item and its agent (role and
-company), call the LLM proxy with the agent's model and prompt, move the item
-to ``in_review`` with the deliverable as a comment, and publish to Glassroom.
+Per task: receive ``task.assign`` (from the outbox), load the item and the agent
+for its ``assignee`` (role and company, with its configured model and prompt),
+call the LLM proxy, move the item to ``in_review`` with the deliverable as a
+comment, and publish to Glassroom.
 """
 
 import asyncio
@@ -761,8 +757,7 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
     """
     Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
 
-    Each block becomes one ``{"path", "content"}`` entry; a block marked ``edit``
-    also carries its SEARCH/REPLACE ``edits`` (``edit_blocks.py``).
+    Each block becomes one ``{"path", "content"}`` entry (plus ``edits`` when marked ``edit``).
     Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
     the same path appears twice the last block wins, keeping the position of
     the first.  Returns ``[]`` when the answer declares no files.
@@ -781,6 +776,11 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
         if edit_blocks.is_edit_block(block.group("info"), match):
             files[rel]["edits"] = edit_blocks.parse(block.group("body"))
     return list(files.values())
+
+
+def expected_hashes(targets: list[dict[str, Any]]) -> dict[str, str]:
+    """The sha256 of what was sent; none for an edit, whose result only the daemon knows."""
+    return {t["path"]: _sha256_text(t["content"]) for t in targets if "edits" not in t}
 
 
 def _build_review_payload(
@@ -1940,12 +1940,7 @@ async def _deliver_artifacts(
         )
         evidence = {
             "workspace_root": workspace_root,
-            # An edit's result is known only to the daemon: no expected hash.
-            "expected": {
-                t["path"]: _sha256_text(t["content"])
-                for t in targets
-                if "edits" not in t
-            },
+            "expected": expected_hashes(targets),
             "workspace_writes": None,
         }
         if not workspace_root:
