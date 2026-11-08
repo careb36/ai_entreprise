@@ -2028,7 +2028,10 @@
       },
       "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea",
       "search": "Filtrar modelos…"
-    }
+    },
+    "statConnections": "Conexiones",
+    "statModels": "Modelos",
+    "statValidated": "Validadas"
   },
   "manager": {
     "suggestion": "El agente Manager sugiere: {{decision}}",
