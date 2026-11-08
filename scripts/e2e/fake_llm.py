@@ -24,6 +24,8 @@ prompt's section headers, so one run exercises the whole loop:
   revision);
 - the Developer of the counter reads the greeting's module through the
   workspace tools before delivering (one ``workspace__read`` call);
+- QA, asked for browser checks (a project that serves pages), also writes
+  one Playwright smoke test per criterion, ``e2e/req_1_1.spec.ts``;
 - it also plays a company's own provider: ``/provider/v1/models`` lists two
   models for the key ``e2e-provider-key``, and a request that arrives with
   the company's connection (``X-Provider-Connection``) is answered only with
@@ -94,6 +96,24 @@ def _check_review(title: str, prompt: str) -> None:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")[:40] or "task"
+
+
+def smoke_tests(prompt: str, criteria: list[str]) -> list[tuple[str, str]]:
+    """QA's browser smoke tests, one file per criterion, when the prompt asks
+    for them (``services/browser_smoke.py``): the page's heading is shown."""
+    if "## Browser checks to write" not in prompt:
+        return []
+    return [
+        (
+            f"e2e/{c.lower().replace('-', '_').replace('.', '_')}.spec.ts",
+            "import { test, expect } from '@playwright/test';\n\n"
+            f"test('{c} shows the greeting page', async ({{ page }}) => {{\n"
+            "  await page.goto(process.env.APP_URL + '/');\n"
+            "  await expect(page.locator('h1')).toHaveText('Greetings');\n"
+            "});\n",
+        )
+        for c in criteria
+    ]
 
 
 def answer(prompt: str) -> str:
@@ -230,10 +250,12 @@ def answer(prompt: str) -> str:
             f'    assert {module}() == "{module} done"\n\n\n'
             for c in criteria
         )
+        smoke = smoke_tests(prompt, criteria)
         with REVIEWED_LOCK:
             DELIVERED[title] = DELIVERED.get(title, 0) + 1
-            LAST_PATHS[title] = [path]
-        return f"Acceptance tests of {req}.\n\n```python path={path}\n{tests}```\n\n{PADDING}\n"
+            LAST_PATHS[title] = [path] + [p for p, _ in smoke]
+        blocks = "".join(f"```ts path={p}\n{text}```\n\n" for p, text in smoke)
+        return f"Acceptance tests of {req}.\n\n```python path={path}\n{tests}```\n\n{blocks}{PADDING}\n"
     if task:
         name = _slug(task.group(1))
         with REVIEWED_LOCK:

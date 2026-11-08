@@ -2127,8 +2127,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
-                asyncio.to_thread(
-                    spec_planning.requirements_context, engine, item["id"]
+                spec_planning.task_requirements_context(
+                    nats_client, engine, item["id"], _resolve_workspace_root
                 ),
                 console_assistants.collect_advice(
                     nats_client, item, agent, sprint, _resolve_workspace_root
@@ -2790,13 +2790,12 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     risk_check.get("tier")
                 )
                 company = session.get(Company, sprint.company_id)
-                if (
-                    not needs_work
-                    and not risk_hold
-                    and sprint_control.needs_person_acceptance(company.autonomy_level)
-                ):
+                person_reason = sprint_control.person_acceptance_reason(
+                    company.autonomy_level, engine, sprint.company_id, item.id
+                )
+                if not needs_work and not risk_hold and person_reason:
                     risk_hold = True
-                    risk_check = {"reasons": [sprint_control.HUMAN_LED_REASON]}
+                    risk_check = {"reasons": [person_reason]}
 
                 previous_reworks = record.rework_requests_by(reviewer_dict["name"])
                 autopilot_rework_allowed = (

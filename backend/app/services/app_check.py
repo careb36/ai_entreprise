@@ -22,7 +22,10 @@ Around the delivery test run (``workspace_daemon.run_delivery_tests``):
   waits for the port, sends one GET to the probe path, runs the profile's e2e
   command when there is one, stops the application and replies with what it
   saw. That reply is ``evidence["app_run"]``; the Verifier's
-  ``application_started`` and ``e2e_run`` checks read it.
+  ``application_started`` and ``e2e_run`` checks read it. Without an e2e
+  command, QA's browser smoke tests run as the e2e command when QA wrote
+  them (``services/browser_smoke.py``), read back per criterion. QA's own
+  test-writing task changes no application code: it is not started for it.
 
 The commands come from the stack profile (``services/stack_profiles.py``):
 configuration, never evidence. Every outcome here is the daemon's report; a
@@ -37,14 +40,15 @@ from typing import Any
 
 from config import settings
 
-from services import stack_profiles
+from services import browser_smoke, stack_profiles
+from services.browser_smoke import CHECK_E2E, check_e2e
+from services.criteria_tests import ACCEPTANCE_KIND
 from services.orchestration_metrics import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 
 logger = logging.getLogger(__name__)
 
 CHECK_INSTALL = "dependencies_installed"
 CHECK_APP = "application_started"
-CHECK_E2E = "e2e_run"
 OUTPUT_TAIL_CHARS = 2000
 # What the backend adds to the daemon's own bounds before it stops waiting.
 _REPLY_MARGIN_SECONDS = 30.0
@@ -310,7 +314,10 @@ async def install_if_needed(ctx: Context) -> None:
 
 def _earlier_failure(evidence: dict[str, Any]) -> str | None:
     """Why starting the application would prove nothing new: the install or
-    the tests already failed (the task goes back for that)."""
+    the tests already failed (the task goes back for that), or the delivery
+    is QA's acceptance tests, which change no application code."""
+    if (evidence.get("acceptance") or {}).get("kind") == ACCEPTANCE_KIND:
+        return "QA's acceptance tests change no application code"
     for check in checks(evidence, only=(CHECK_INSTALL,)):
         if check["outcome"] == VERDICT_REFUTED:
             return "the dependency install failed"
@@ -358,7 +365,11 @@ async def check_application(ctx: Context) -> None:
         return
     ready = float(settings.DELIVERY_APP_READY_TIMEOUT_SECONDS)
     e2e_timeout = float(settings.DELIVERY_E2E_TIMEOUT_SECONDS)
-    e2e = profile.get("e2e")
+    e2e = profile.get("e2e") or browser_smoke.default_command(
+        ctx.company().get("overrides"), profile, evidence
+    )
+    if e2e and not profile.get("e2e"):
+        base["e2e_source"] = browser_smoke.SOURCE_SMOKE
     try:
         reply = await ctx.nats.request(
             "workspace.app.check",
@@ -385,6 +396,7 @@ async def check_application(ctx: Context) -> None:
         }
         return
     evidence["app_run"] = {**base, **_app_record(reply)}
+    browser_smoke.read_back(evidence)
 
 
 def _app_record(reply: Any) -> dict[str, Any]:
@@ -515,27 +527,6 @@ def check_app(evidence: dict[str, Any]) -> dict[str, Any] | None:
         "observation": observation,
         "sandbox": sandbox or None,
     }
-
-
-def check_e2e(evidence: dict[str, Any]) -> dict[str, Any] | None:
-    """``e2e_run``: present only when an e2e command ran against the app."""
-    app = evidence.get("app_run")
-    e2e = app.get("e2e") if isinstance(app, dict) else None
-    if not isinstance(e2e, dict) or not e2e.get("command"):
-        return None
-    target = f"`{e2e['command']}`"
-    if e2e.get("timed_out"):
-        outcome = VERDICT_REFUTED
-        observation = f"{target} did not finish within {e2e.get('timeout_seconds')}s"
-    elif e2e.get("exit_code") == 0:
-        outcome, observation = "pass", f"{target} passed against the running app"
-    elif isinstance(e2e.get("exit_code"), int):
-        outcome = VERDICT_REFUTED
-        observation = f"{target} exited {e2e['exit_code']}{_tail(e2e)}"
-    else:
-        outcome = VERDICT_UNVERIFIABLE
-        observation = f"{target} reported no exit status"
-    return {"name": CHECK_E2E, "outcome": outcome, "observation": observation}
 
 
 def checks(

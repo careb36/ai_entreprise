@@ -12,6 +12,7 @@ whether a task got done, is blocked, is planned or does not exist.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -408,6 +409,19 @@ def requirements_context(engine: Engine, item_id: int) -> str:
     except Exception as exc:  # noqa: BLE001 - Requirements are context; the task goes on without them.
         logger.debug("Requirements fetch failed for item=%s: %s", item_id, exc)
         return ""
+
+
+async def task_requirements_context(
+    nats_client: Any, engine: Engine, item_id: int, resolve_root: Any
+) -> str:
+    """``requirements_context``, plus the browser checks QA writes in a
+    project that serves pages (``services.browser_smoke``)."""
+    from services import browser_smoke
+
+    text = await asyncio.to_thread(requirements_context, engine, item_id)
+    return await browser_smoke.with_browser_checks(
+        nats_client, engine, item_id, resolve_root, text
+    )
 
 
 def coverage(session: Session, spec: Specification) -> dict[str, Any]:

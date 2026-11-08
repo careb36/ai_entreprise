@@ -281,7 +281,8 @@ Copy `.env.example` to `.env` and fill in:
   In a sprint planned from a specification it also decides the **acceptance
   tests per criterion** (`services/acceptance.py`): the runner's per-test lines
   are read back into criterion ids (pytest gets `-v`; name a verbose command
-  here for another runner, e.g. `jest --verbose`, `vitest --reporter=verbose`).
+  here for another runner, e.g. `jest --verbose`, `vitest --reporter=verbose`;
+  Playwright's list reporter is read too).
 - **Stack profiles and the application check** (issue #315,
   `services/stack_profiles.py`, `services/app_check.py`,
   `vscode-daemon/app_run.py`). Per detected stack (Node, Python, Go, Rust,
@@ -329,9 +330,46 @@ Copy `.env.example` to `.env` and fill in:
   `taskkill /T /F` when no job could be made), `stopped` holds only once the port
   no longer answers, and a host e2e command runs in a group of its own that
   is killed at its timeout and when it ends. It is skipped after a failed
-  install or failed tests, and a sprint's integration runs the tests alone. A refuted install, start or e2e run sends
+  install or failed tests, and for QA's acceptance-test task (it changes no
+  application code), and a sprint's integration runs the tests alone. A refuted install, start or e2e run sends
   the task back like failed tests (`delivery_gate.CODE_PROBLEMS`). In a
   container an install keeps only what it writes into the worktree.
+  **Browser smoke tests per criterion** (`services/browser_smoke.py`): a
+  profile's `web` says the project serves pages a browser renders (detected:
+  an `.html` file in the root, `public/`, `static/`, `src/`, `templates/` or
+  `www/`, or a browser framework among `package.json`'s dependencies,
+  `stack_profiles.serves_pages`; a company sets `"web": true` for a project
+  that has neither yet). When the check is on and the resolved profile has a
+  start command, a port and `web` (`serves_web`), QA's test-writing task in
+  a sprint planned from a specification is also asked (`## Browser checks to
+  write`, through `spec_planning.task_requirements_context`) for one
+  Playwright test per criterion a person sees in the browser,
+  `e2e/req_1_2.spec.ts`, each test titled with the criterion id, opening
+  `process.env.APP_URL`. Once QA's deliveries wrote such files (as the daemon
+  read them back, `acceptance["test_hashes"]`) and no e2e command is
+  configured (an empty company `e2e` turns it off), the check runs
+  `npx --no-install playwright test e2e --reporter=list` against the running
+  app (`app_run["e2e_source"] == "smoke"`); the daemon keeps the head of a
+  long e2e output too (`output_head`), where the per-test lines are, and
+  `read_back` maps them to criterion ids (`criteria`, only those a test
+  named; a failing one fails the criterion in `criteria_tests`, and failures
+  of criteria not implemented yet are excused as for the unit tests, but only
+  when the failure set is known whole, `failures_complete`: the daemon's
+  bound did not cut the stream (`stream_truncated`), at most `FAILING_CAP`
+  (50) failed, and the output was kept whole or every test Playwright
+  announced (`Running N tests`) has its line; otherwise a non-zero exit is
+  refuted). Only test files are guarded as acceptance tests
+  (`criteria_tests.is_test_file`: `test_*`, `*_test`, `*.test.*`,
+  `*.spec.*`…); a `package.json` or `playwright.config.*` QA delivered stays
+  the implementation's to change. A browser runtime missing on the daemon's
+  machine (the launch errors themselves: `Executable doesn't exist at`,
+  `browserType.launch:`, missing system libraries, `@playwright/test` not
+  found, no `npx`, exit 127; never a mere mention of the installer) is
+  `runtime_missing`: `e2e_run` is unverifiable with the reason, never a pass
+  and never a refutation, and the task QA approves waits for a person at
+  every autonomy level (`sprint_control.person_acceptance_reason`,
+  `browser_smoke.UNOBSERVED_REASON` in the hold note; the history check
+  wants a person's acceptance after it), never sent back for rework.
 - `MCP_MAX_TOOL_ROUNDS` (6), `MCP_TOOL_TIMEOUT_SECONDS` (60),
   `MCP_CONNECT_TIMEOUT_SECONDS` (20), `MCP_RESULT_MAX_CHARS` (4000) — the
   MCP tool loop (`services/mcp_tools.py`): how many rounds of tool calls a
@@ -714,6 +752,7 @@ Test files:
 | `test_audit_chain.py` | The audit hash chain per company: numbered and linked rows, each company its own chain, a deleted, altered or moved row breaks it where it was, a chain rewritten without the key does not verify, unkeyed chains say so, rows without a company stay unchained, KPI turn rows are signed and chained too |
 | `test_command_policy.py` | The daemon's command policy: `$(...)` and nested substitutions checked without recursing forever (too deep is refused), allow matches whole words as an argv prefix (`git status` never allows `git push`, `ls` never `lsof`), backticks also inside double quotes and never inside single ones, file redirections refused in allow mode (`2>&1`, `/dev/null` pass) and inspected in deny mode, quotes do not hide a denied word, unreadable text and unknown modes refused; through the daemon's `workspace.execute`, nothing runs without a policy changing, a refused command never reaches the shell and says why, an unreadable policy is refused, `FABRIQUE_COMMAND_DENY` wins over the request; syntax the scanner does not model is refused (here-documents, `$'…'` quotes, comments, backslashes inside backticks, a non-ASCII stream number), a line continuation inside double quotes is read as the shell does, allow patterns are case-sensitive, an empty or malformed policy and a command that is not text are refused, and on Windows a policy refuses rather than read `cmd.exe` syntax with POSIX rules |
 | `test_win_job.py` | Windows Job Objects (issue #396): a no-op outside Windows; the stop terminates the application's job and skips `taskkill`, falls back to `taskkill` without a job, and reports a port that still answers; on Windows only (no CI runner yet), a server a `start /b` wrapper left behind is stopped with its port |
+| `test_browser_smoke.py` | QA's browser smoke test per criterion (issue #315): a project serves pages from its files (an HTML page, a browser framework) or its company's profile, and only with the check on, a start command and a port; QA's test-writing task is asked for one Playwright test per criterion there and nowhere else (an implementation task, no specification, the check off); Playwright's list lines (`✓`/`✘`, `ok`/`x`, a project prefix, a title or else its file) read back per criterion, from the head of a long output the daemon keeps; failures of criteria not implemented yet excused, the task's own refuting it and failing its criterion; a missing browser runtime (no browser, no package, no npx, exit 127, missing libraries) unverifiable, never a pass or a refutation; the suite runs as the e2e command only when QA wrote it and none is configured; QA's own delivery does not start the application; with Playwright and Chromium on the machine, a real browser runs QA's tests against the running app, and the same run without its browser is unverifiable; a delivery no browser observed waits for a person at levels 2 and 3, never sent back, and the history check refuses its close by QA alone; failures are excused only when the failure set is whole (every announced test seen, the stream not cut, at most 50 failures); a failing test that mentions the installer is refuted, not unverifiable; a `package.json` or `playwright.config.ts` QA delivered is not guarded as an acceptance test |
 | `test_app_check.py` | The execution environment (issue #315): each stack's profile detected (Node, Python, Go, Rust, Maven, Gradle, .NET, PHP, Ruby) with its install, start and port, e2e and lint from `package.json`, manifests recognised at any depth, the deployment's then the company's overrides with an empty command turning a step off, bad overrides refused; an install only for a written manifest whose hash changed, recorded after an exit 0 and not run again for the same bytes, a failed one refuted and retried, off when disabled, the install's network setting applied both ways, a manifest the install does not cover (a root npm install and `backend/requirements.txt`) never recorded as installed, the resolved profile's test command run (no suite, no command; a stack override's runner; Poetry and Pipenv through their runners), the integration's tests alone, the reply wait covering the container's launch and teardown, a launch timeout or an unreadable log still removing the container, the process tree killed on Windows, a timed-out e2e command's children killed, the daemon bounding a requested timeout; a real `http.server` started, probed and stopped, an app that exits before listening refuted with its log, one that never listens stopped at the bound, a 500 refuted, the e2e command against the running app, the command policy, a busy port and a required sandbox refusing before anything runs, container mode through a fake runtime; through the task worker the install, tests and application checks recorded, a failing start or install sent back, no start after failed tests, the check opt-in, a company turning its tests off; a Manager sets the profile and a Viewer reads it |
 | `test_sandbox.py` | Sandboxed execution: container mode through a fake runtime (worktree mounted, network off, limits, capabilities dropped, only the listed variables, the daemon's report), a mode that cannot run is an error and never a host run, host reports itself unisolated and the daemon can force a container, a hung sandboxed command is killed, limits are bounded, the company's mode in the delivery test run and the Developer's test runs, the evidence keeps the daemon's report and the Verifier records it (host and an older daemon as findings), a Manager sets the company's sandbox |
 | `test_research_tools.py` | The research tools: a page read as text and recorded with its hash, a host off the list refused and the refusal recorded (a redirect that leaves the list too; plain http only for a host named explicitly), an error page and a binary as errors the model sees, a package looked up at each registry, advisories from OSV with the version asked, the tools for the roles that decide and the `## Sources` prompt section, `research` a reserved MCP name, the combined toolbox without a workspace root, the Verifier's `sources` check naming the dependencies nobody looked up, a Manager adds hosts and a Viewer reads them, the PO's draft keeps the source it consulted |
@@ -805,6 +844,20 @@ for the client with the agent's suggestion beside it; the client overrides
 the acceptance (a second override is a 409), `GET /v1/manager_record` counts
 it, and the client's own acceptance of the high-risk one counts as agreeing
 with the suggestion.
+Then a web project (issue #315; the run enables `DELIVERY_APP_CHECK_ENABLED`):
+a second company, whose Manager marks its folder as serving pages started
+on `E2E_WEB_PORT` (`"web": true`), gets the same
+specification; QA's test-writing tasks are asked for browser checks (the
+first company's never were) and write one Playwright smoke test per
+criterion, the greeting's application is started and answers on its port,
+and the smoke suite runs as the e2e command. The daemon is given no browser
+(`PLAYWRIGHT_BROWSERS_PATH` points at an empty folder, and the runner may
+have no Playwright at all), so the run checks the plumbing and that `e2e_run`
+is unverifiable with `runtime_missing`, while the unit tests still decide the
+criteria. At autonomy level 2 QA's verified test tasks close on its
+approval, while the greeting, approved on a run no browser observed, waits
+for a person, who accepts it. A real browser run is
+`tests/test_browser_smoke.py`'s, where Playwright and Chromium are installed.
 At the end, `app/history_check.py` reads every task's history from the run's
 database, sharing no code with the readers it checks, and the run fails on
 an illegal one.
