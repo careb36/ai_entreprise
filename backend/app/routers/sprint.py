@@ -35,7 +35,7 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import acceptance, dependencies, spec_check, spec_planning
+from services import acceptance, dependencies, spec_check, spec_planning, task_events
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -259,7 +259,9 @@ async def start_sprint(
         if deps:
             # It waits for those tasks; the worker queues it once they are done.
             row.depends_on = [rows[position].id for position in deps]
-            dependencies.note(row, dependencies.waiting_note([rows[p] for p in deps]))
+            dependencies.note(
+                session, row, dependencies.waiting_note([rows[p] for p in deps])
+            )
             session.add(row)
             continue
         # Outbox entry — delivered to NATS by the process_outbox background worker.
@@ -551,23 +553,21 @@ async def update_backlog_item(
             raise HTTPException(status_code=404, detail="Sprint not found")
         require_company_role(session, user, sprint.company_id, "Manager")
 
-    if req.status:
-        item.status = req.status
     if req.priority:
         item.priority = req.priority
     if req.assignee is not None:
         item.assignee = req.assignee
-    if req.comment:
-        # Append the new comment to the existing JSON list.
-        comments = list(item.comments or [])
-        comments.append(
-            {
-                "author": "user",
-                "text": req.comment,
-                "created_at": str(datetime.now(UTC).replace(tzinfo=None)),
-            }
+    if req.status or req.comment:
+        # A person's transition: its event first, the comment its rendering.
+        task_events.record(
+            session,
+            item,
+            task_events.person_kind(req.status, req.comment),
+            task_events.PERSON,
+            status=req.status or None,
+            text=req.comment or None,
+            created_at=str(datetime.now(UTC).replace(tzinfo=None)),
         )
-        item.comments = comments
     item.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
     session.add(item)

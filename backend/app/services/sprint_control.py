@@ -24,6 +24,7 @@ from uuid import uuid4
 from models import BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
+from services import task_events
 from services.glassroom import publish_glassroom
 
 PLANNED = "planned"
@@ -120,17 +121,14 @@ def pause_task_for_credit(
         pause_for_credit(session, sprint_id, provider)
         item = session.get(BacklogItem, item_id)
         if item is not None:
-            item.status = "todo"
-            item.comments = [
-                *(item.comments or []),
-                {
-                    "author": "System",
-                    "text": f"Paused: {credit_reason(provider)}",
-                    "created_at": datetime.now(UTC).isoformat(),
-                },
-            ]
-            item.updated_at = datetime.now(UTC)
-            session.add(item)
+            task_events.record(
+                session,
+                item,
+                "paused",
+                task_events.SYSTEM,
+                status="todo",
+                text=f"Paused: {credit_reason(provider)}",
+            )
         session.commit()
 
 
@@ -198,17 +196,18 @@ def stop(session: Session, sprint: Sprint) -> int:
     ).all()
     now = datetime.now(UTC)
     for item in items:
-        item.status = "blocked"
-        item.comments = [
-            *(item.comments or []),
-            {
-                "author": "System",
-                "text": "Stopped: a Manager stopped the sprint; nothing more runs on it.",
-                "created_at": now.isoformat(),
-            },
-        ]
-        item.updated_at = now
-        session.add(item)
+        # A Manager decided; the System carries it out and signs the note.
+        task_events.record(
+            session,
+            item,
+            "blocked",
+            task_events.SYSTEM,
+            status="blocked",
+            text="Stopped: a Manager stopped the sprint; nothing more runs on it.",
+            payload={"stopped_by": "person"},
+            created_at=now.isoformat(),
+            company_id=sprint.company_id,
+        )
     return len(items)
 
 

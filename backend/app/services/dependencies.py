@@ -23,6 +23,7 @@ from models import BacklogItem, Sprint
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
+from services import task_events
 from services.board import comment_list, item_is_settled
 
 WAITING_PREFIX = "Waits for task"
@@ -134,12 +135,15 @@ def unmet(item: Any, done_ids: set[int]) -> list[int]:
     return [dep for dep in depends_on_of(item) if dep not in done_ids]
 
 
-def note(item: BacklogItem, text: str) -> None:
-    item.comments = [
-        *comment_list(item.comments),
-        {"author": SYSTEM, "text": text, "created_at": datetime.now(UTC).isoformat()},
-    ]
-    item.updated_at = datetime.now(UTC)
+def note(
+    session: Session,
+    item: BacklogItem,
+    text: str,
+    kind: str = "note",
+    status: str | None = None,
+) -> None:
+    """The System's note on *item*, written as its event (``task_events.record``)."""
+    task_events.record(session, item, kind, task_events.SYSTEM, text=text, status=status)
 
 
 def _last_system_note(item: BacklogItem) -> str:
@@ -236,12 +240,14 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
                     for d in pending
                     if d in items and (d in stuck or d in blocked)
                 ]
-                item.status = "blocked"
                 note(
+                    session,
                     item,
                     f"{BLOCKED_BY_DEPENDENCY_PREFIX}{'s' if len(holding) > 1 else ''} "
                     + ", ".join(f'{d.id} ("{d.title}")' for d in holding)
                     + ", which waits for a person.",
+                    kind="blocked",
+                    status="blocked",
                 )
                 session.add(item)
                 blocked.append(item.id)
@@ -254,14 +260,16 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
             ):
                 # Its wait ended: the tasks got done, or are back in work (a
                 # person sent one back); the worker queues it once they are done.
-                item.status = "todo"
                 plural = "s" if len(depends_on_of(item)) > 1 else ""
                 note(
+                    session,
                     item,
                     f"{RELEASED_PREFIX}{plural} it waited for got done."
                     if not pending
                     else f"{RELEASED_PREFIX}{plural} it waited for are back in work; "
                     + waiting_note([items[d] for d in pending if d in items]),
+                    kind="released",
+                    status="todo",
                 )
                 session.add(item)
                 released.append(item.id)

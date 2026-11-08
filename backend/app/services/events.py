@@ -11,6 +11,8 @@ from typing import Any
 from models import TaskEvent
 from sqlmodel import Session, select
 
+from services import task_events
+
 
 def record(
     session: Session,
@@ -27,7 +29,7 @@ def record(
         event_type=event_type,
         payload=payload or {},
     )
-    session.add(event)
+    task_events.seal(session, event)
     session.commit()
     session.refresh(event)
     return event

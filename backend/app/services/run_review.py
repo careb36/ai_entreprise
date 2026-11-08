@@ -28,8 +28,9 @@ from models.sprint import BacklogItem, Sprint
 from sqlmodel import Session, select
 
 from services.agent_service import AgentService
-from services.board import SEND_BACK_MARKER, awaits_risk_acceptance
-from services.carry_over import carried_over, waits_for_a_person
+from services import task_events, task_projection
+from services.board import SEND_BACK_MARKER
+from services.carry_over import carried_over
 from services.review_changes import run_changes
 
 CLOSED_SPRINTS = {"completed", "cancelled"}
@@ -158,11 +159,27 @@ def feedback_text(author: str, body: str | None, comments: list[ReviewComment]) 
     return "\n".join(lines)
 
 
-def _append_person_note(item: BacklogItem, text: str) -> None:
-    comments = list(item.comments or [])
-    comments.append({"author": "user", "text": text, "created_at": str(_now())})
-    item.comments = comments
-    item.updated_at = _now()
+def _person_event(
+    session: Session,
+    item: BacklogItem,
+    kind: str,
+    text: str,
+    review: RunReview,
+    status: str | None = None,
+) -> None:
+    """A person's transition of the task, its event first, rendered as their note."""
+    task_events.record(
+        session,
+        item,
+        kind,
+        task_events.PERSON,
+        text=text,
+        status=status,
+        run_id=review.agent_run_id,
+        payload={"review_id": review.id, "by": review.author_name},
+        created_at=str(_now()),
+        company_id=review.company_id,
+    )
 
 
 def _act_on_task(
@@ -181,27 +198,39 @@ def _act_on_task(
             "The task was carried into another sprint: review its new attempt there.",
         )
     if review.event == "approve":
-        if item.status != "blocked" or not awaits_risk_acceptance(item.comments):
+        if item.status != "blocked" or not task_projection.awaits_risk_acceptance(
+            session, item
+        ):
             raise ReviewRefused(
                 409,
                 "QA decides this task. A person approves a delivery only when QA "
                 "approved it and it waits for a person (a high-risk hold, or "
                 "autonomy level 1).",
             )
-        item.status = "done"
-        _append_person_note(item, f"{ACCEPT_NOTE}, in review #{review.id}.")
+        _person_event(
+            session,
+            item,
+            "approved_by_person",
+            f"{ACCEPT_NOTE}, in review #{review.id}.",
+            review,
+            status="done",
+        )
         return "accepted"
-    if not waits_for_a_person(item):
+    if not task_projection.waits_for_a_person(session, item):
         raise ReviewRefused(
             409,
             f"The task is {item.status} and still in the agents' hands; changes "
             "are requested when it waits for a person.",
         )
-    item.status = "todo"
-    _append_person_note(
-        item, f"{SEND_BACK_MARKER} by a person, in review #{review.id}."
+    _person_event(
+        session,
+        item,
+        "sent_back",
+        f"{SEND_BACK_MARKER} by a person, in review #{review.id}.",
+        review,
+        status="todo",
     )
-    _append_person_note(item, feedback)
+    _person_event(session, item, "reviewed", feedback, review)
     return "sent_back"
 
 

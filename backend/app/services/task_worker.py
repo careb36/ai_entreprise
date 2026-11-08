@@ -55,6 +55,7 @@ from services import (
     spec_planning,
     sprint_control,
     standards,
+    task_events,
     workspace_daemon,
 )
 from services.answers import (
@@ -827,9 +828,8 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
             return False
 
         changed = item.status != "blocked"
-        item.status = "blocked"
-        item.updated_at = datetime.now(UTC)
-        session.add(item)
+        if changed:
+            task_events.record(session, item, "blocked", "system", status="blocked")
         session.commit()
         return changed
 
@@ -853,22 +853,17 @@ def _recover_inflight_items_for_restart() -> list[dict[str, Any]]:
                     comments = []
 
             if has_manual_freeze_marker(comments):
-                item.status = "blocked"
-                item.updated_at = recovery_time
-                session.add(item)
+                task_events.record(session, item, "blocked", "system", status="blocked")
                 continue
 
-            comments.append(
-                {
-                    "author": "System",
-                    "text": "Worker recovery after backend restart — unfinished in-progress task returned to todo for redispatch.",
-                    "created_at": recovery_time.isoformat(),
-                }
+            task_events.record(
+                session,
+                item,
+                "recovered",
+                "system",
+                status="todo",
+                text="Worker recovery after backend restart — unfinished in-progress task returned to todo for redispatch.",
             )
-            item.comments = comments
-            item.status = "todo"
-            item.updated_at = recovery_time
-            session.add(item)
             recovered.append(
                 {
                     "id": item.id,
@@ -1340,23 +1335,13 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
         }
 
 
-def _append_item_comment(item_id: int, text: str, author: str) -> None:
-    """Add a comment to a backlog item without changing its status."""
-    with Session(engine) as session:
-        item = session.get(BacklogItem, item_id)
-        if not item:
-            return
-        item.comments = [
-            *(item.comments or []),
-            {
-                "author": author,
-                "text": text[:4000],
-                "created_at": datetime.now(UTC).isoformat(),
-            },
-        ]
-        item.updated_at = datetime.now(UTC)
-        session.add(item)
-        session.commit()
+def _append_item_comment(
+    item_id: int, text: str, author: str, kind: str = "note", **fields: Any
+) -> None:
+    """Record an event on a backlog item, rendered as a comment, without changing its status."""
+    task_events.record_by_id(
+        engine, item_id, kind, text=text, author=author, **fields
+    )
 
 
 def _update_item_status(
@@ -1364,29 +1349,20 @@ def _update_item_status(
     status: str,
     comment_text: str | None = None,
     comment_author: str | None = None,
+    kind: str | None = None,
+    **fields: Any,
 ):
-    """Update a backlog item's status and optionally append a comment."""
-    with Session(engine) as session:
-        item = session.get(BacklogItem, item_id)
-        if not item:
-            return
-
-        item.status = status
-        item.updated_at = datetime.now(UTC)
-
-        if comment_text and comment_author:
-            existing = comment_list(item.comments)
-            existing.append(
-                {
-                    "author": comment_author,
-                    "text": comment_text[:4000],
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
-            )
-            item.comments = existing
-
-        session.add(item)
-        session.commit()
+    """Record a transition of a backlog item: its event, its status and the comment rendering it."""
+    text = comment_text if comment_text and comment_author else None
+    task_events.record_by_id(
+        engine,
+        item_id,
+        kind or ("note" if text else "moved"),
+        status=status,
+        text=text,
+        author=comment_author if text else None,
+        **fields,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1453,6 +1429,8 @@ def _triage_blocked_task(
             item = session.get(BacklogItem, item_id)
             if item is None:
                 return
+            task_events.escalated(session, item, escalation_id, reason)
+            session.commit()
             assignee = item.assignee
             prompt, model, system_prompt = scrum_master.prepare_triage(
                 session, company_id, item, reason
@@ -1865,7 +1843,12 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
     await asyncio.to_thread(
-        _append_item_comment, item_id, f"Queued delivery: {comment}", "System"
+        _append_item_comment,
+        item_id,
+        f"Queued delivery: {comment}",
+        "System",
+        "verified",
+        run_id=recorded[0] if recorded else None,
     )
     if sprint_id is not None:
         await publish_glassroom(
@@ -1983,6 +1966,8 @@ async def _deliver_artifacts(
             "in_progress",
             comment_text=comment,
             comment_author="System",
+            kind="verified",
+            run_id=recorded[0] if recorded else None,
         )
         await publish_glassroom(
             nats_client,
@@ -2060,6 +2045,7 @@ async def _send_back_from_quality_gate(
         "todo" if rework else "blocked",
         comment_text=text,
         comment_author=QUALITY_GATE_AUTHOR,
+        kind="reviewed" if rework else "blocked",
     )
     await publish_glassroom(
         nats_client,
@@ -2145,7 +2131,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 return
 
             # 2. Mark as in_progress and notify glassroom.
-            await asyncio.to_thread(_update_item_status, item["id"], "in_progress")
+            await asyncio.to_thread(
+                _update_item_status, item["id"], "in_progress", kind="claimed"
+            )
 
             await publish_glassroom(
                 nats_client,
@@ -2239,6 +2227,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     "in_progress",
                     comment_text=assistant_usage_comment,
                     comment_author="System",
+                    kind="advised",
                 )
 
             # Architect consultation for design-sensitive or reworked Developer tasks.
@@ -2309,6 +2298,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         "in_progress",
                         comment_text=format_architect_consult_comment(architect_advice),
                         comment_author=ARCHITECT_COMMENT_AUTHOR,
+                        kind="advised",
                     )
                     await publish_glassroom(
                         nats_client,
@@ -2432,6 +2422,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 "in_review",
                 comment_text=review_text,
                 comment_author=agent.get("name") or agent["role"],
+                kind="delivered",
+                actor=agent["role"],
             )
             await asyncio.to_thread(
                 _post_message,
@@ -2525,6 +2517,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                             else f"Agent error: {str(e)[:500]}"
                         ),
                         comment_author="System",
+                        kind="blocked",
                     )
                 except Exception:  # noqa: BLE001, S110 - Recovery bookkeeping must not mask the task failure.
                     pass
@@ -2646,9 +2639,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     comments = []
 
             if has_manual_freeze_marker(comments):
-                item.status = "blocked"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
+                task_events.record(session, item, "blocked", "system", status="blocked")
                 session.commit()
                 logger.info("Skipping QA review for manually frozen item=%s", item.id)
                 continue
@@ -2665,9 +2656,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 and "qa review failed" in c.get("text", "").lower()
             )
             if qa_review_failures >= MAX_QA_REVIEW_FAILURES:
-                item.status = "blocked"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
+                task_events.record(
+                    session,
+                    item,
+                    "blocked",
+                    "system",
+                    status="blocked",
+                    payload={"reason": "review retries exhausted"},
+                )
                 session.commit()
 
                 await publish_glassroom(
@@ -2693,17 +2689,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 continue
 
             if not deliverable:
-                comments.append(
-                    {
-                        "author": "System",
-                        "text": "QA review aborted: no deliverable found in task comments.",
-                        "created_at": datetime.now(UTC).isoformat(),
-                    }
+                task_events.record(
+                    session,
+                    item,
+                    "blocked",
+                    "system",
+                    status="blocked",
+                    text="QA review aborted: no deliverable found in task comments.",
                 )
-                item.comments = comments
-                item.status = "blocked"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
                 session.commit()
 
                 await publish_glassroom(
@@ -2743,22 +2736,21 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     if problem == "tests failed"
                     else "Re-run the task and give every file in full as a path= block."
                 )
-                comments.append(
-                    {
-                        "author": DELIVERY_GATE_AUTHOR,
-                        "text": (
-                            f"NEEDS WORK: {problem} — {observation}. {instruction}"
-                            if rework
-                            else f"{problem.capitalize()} after {previous_gate_reworks} "
-                            f"rework(s) — blocked for manual triage: {observation}"
-                        ),
-                        "created_at": datetime.now(UTC).isoformat(),
-                    }
+                task_events.record(
+                    session,
+                    item,
+                    "reviewed" if rework else "blocked",
+                    "gate",
+                    author=DELIVERY_GATE_AUTHOR,
+                    status="todo" if rework else "blocked",
+                    text=(
+                        f"NEEDS WORK: {problem} — {observation}. {instruction}"
+                        if rework
+                        else f"{problem.capitalize()} after {previous_gate_reworks} "
+                        f"rework(s) — blocked for manual triage: {observation}"
+                    ),
                 )
-                item.comments = comments
-                item.status = "todo" if rework else "blocked"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
+                comments = comment_list(item.comments)
                 gate_message = _message(
                     sprint.company_id,
                     sprint.id,
@@ -2888,52 +2880,44 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     risk_hold = True
                     risk_check = {"reasons": [sprint_control.HUMAN_LED_REASON]}
 
-                # Append review comment
-                comments.append(
-                    {
-                        "author": reviewer_dict["name"],
-                        "text": normalized_review[:2000],
-                        "created_at": datetime.now(UTC).isoformat(),
-                    }
-                )
-
-                previous_reworks = rework_requests_by(
-                    comments[:-1], reviewer_dict["name"]
-                )
-
+                previous_reworks = rework_requests_by(comments, reviewer_dict["name"])
                 autopilot_rework_allowed = (
                     needs_work
                     and AUTOPILOT_QA_REWORK_ENABLED
                     and previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
                 )
-
-                item.comments = comments
                 if needs_work:
-                    item.status = "todo" if autopilot_rework_allowed else "blocked"
+                    review_status = "todo" if autopilot_rework_allowed else "blocked"
                 else:
-                    item.status = "blocked" if risk_hold else "done"
-                item.updated_at = datetime.now(UTC)
-
-                if needs_work:
-                    if autopilot_rework_allowed:
-                        comments.append(
-                            {
-                                "author": "System",
-                                "text": f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
-                                "created_at": datetime.now(UTC).isoformat(),
-                            }
-                        )
-                    else:
-                        comments.append(
-                            {
-                                "author": "System",
-                                "text": "QA quality gate failed — task blocked pending manual triage.",
-                                "created_at": datetime.now(UTC).isoformat(),
-                            }
-                        )
-                        quality_gate_blocked_ids.add(item.id)
-
-                    item.comments = comments
+                    review_status = "blocked" if risk_hold else "done"
+                # The verdict, then what it leads to: each an event and its comment.
+                task_events.record(
+                    session,
+                    item,
+                    "reviewed",
+                    reviewer_dict["role"],
+                    author=reviewer_dict["name"],
+                    status=review_status,
+                    text=normalized_review[:2000],
+                    payload={"verdict": "needs_work" if needs_work else "approved"},
+                )
+                if needs_work and autopilot_rework_allowed:
+                    task_events.record(
+                        session,
+                        item,
+                        "sent_back",
+                        "system",
+                        text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
+                    )
+                elif needs_work:
+                    task_events.record(
+                        session,
+                        item,
+                        "blocked",
+                        "system",
+                        text="QA quality gate failed — task blocked pending manual triage.",
+                    )
+                    quality_gate_blocked_ids.add(item.id)
 
                 risk_note = None
                 if risk_hold:
@@ -2942,14 +2926,10 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                         f"{RISK_HOLD_PREFIX} ({risk_reasons or 'high tier'}). "
                         "Mark it done to accept it, or send it back to work."
                     )
-                    comments.append(
-                        {
-                            "author": "System",
-                            "text": risk_note,
-                            "created_at": datetime.now(UTC).isoformat(),
-                        }
+                    task_events.record(
+                        session, item, "risk_hold", "system", text=risk_note
                     )
-                    item.comments = comments
+                comments = comment_list(item.comments)
 
                 session.add(item)
                 session.add(
@@ -3122,16 +3102,13 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 if credit:
                     continue
 
-                comments.append(
-                    {
-                        "author": "System",
-                        "text": f"QA review failed — will retry automatically. Reason: {str(e)[:300]}",
-                        "created_at": datetime.now(UTC).isoformat(),
-                    }
+                task_events.record(
+                    session,
+                    item,
+                    "review_failed",
+                    "system",
+                    text=f"QA review failed — will retry automatically. Reason: {str(e)[:300]}",
                 )
-                item.comments = comments
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
                 session.commit()
 
                 await publish_glassroom(
@@ -3176,17 +3153,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 continue
 
             if next_step == "review":
-                comments.append(
-                    {
-                        "author": "System",
-                        "text": "Autonomous recovery detected a blocked task with an existing deliverable and no explicit block reason. Returning it to QA review.",
-                        "created_at": datetime.now(UTC).isoformat(),
-                    }
+                task_events.record(
+                    session,
+                    item,
+                    "recovered",
+                    "system",
+                    status="in_review",
+                    text="Autonomous recovery detected a blocked task with an existing deliverable and no explicit block reason. Returning it to QA review.",
                 )
-                item.comments = comments
-                item.status = "in_review"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
 
                 sprint = session.get(Sprint, item.sprint_id)
                 if sprint:
@@ -3213,17 +3187,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            comments.append(
-                {
-                    "author": "System",
-                    "text": "Automatic retry — re-queuing blocked task.",
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
+            task_events.record(
+                session,
+                item,
+                "retried",
+                "system",
+                status="todo",
+                text="Automatic retry — re-queuing blocked task.",
             )
-            item.comments = comments
-            item.status = "todo"
-            item.updated_at = datetime.now(UTC)
-            session.add(item)
 
             sprint = session.get(Sprint, item.sprint_id)
             if sprint:
@@ -3338,9 +3309,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             comments = comment_list(item.comments)
 
             if has_manual_freeze_marker(comments):
-                item.status = "blocked"
-                item.updated_at = datetime.now(UTC)
-                session.add(item)
+                task_events.record(session, item, "blocked", "system", status="blocked")
                 logger.info(
                     "Keeping manually frozen todo item=%s blocked during dispatch",
                     item.id,
@@ -3352,9 +3321,9 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 assignee_role=item.assignee,
             )
             if existing_deliverable:
-                item.status = "in_review"
-                item.updated_at = dispatch_time
-                session.add(item)
+                task_events.record(
+                    session, item, "recovered", "system", status="in_review"
+                )
                 _clear_queue_marker(item.id)
                 await publish_glassroom(
                     nats_client,
