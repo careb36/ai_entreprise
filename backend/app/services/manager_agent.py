@@ -313,10 +313,11 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
     try:
         manager_actions.act(session, row, verdict["rule"])
     except manager_actions.Stale as exc:
+        # The row moved under the agent without changing the situation (an
+        # edit, a timestamp): left pending, the next cycle reads it again.
         session.rollback()
-        logger.info("Manager agent did not act on decision %s: %s", row.id, exc)
-        _settle(session, session.get(ManagerDecision, row.id), STALE)
-        return STALE
+        logger.info("Manager agent did not act on decision %s yet: %s", row.id, exc)
+        return PENDING
     return DONE
 
 

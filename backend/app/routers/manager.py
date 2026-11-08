@@ -47,6 +47,9 @@ def serialize_decision(row: ManagerDecision) -> dict:
         "decided_at": row.decided_at.isoformat() if row.decided_at else None,
         "overridden_by": row.overridden_by,
         "overridden_at": row.overridden_at.isoformat() if row.overridden_at else None,
+        "action_state": row.action_state,
+        "audit_log_id": row.audit_log_id,
+        "override_audit_log_id": row.override_audit_log_id,
     }
 
 

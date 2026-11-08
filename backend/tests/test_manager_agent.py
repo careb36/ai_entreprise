@@ -1155,3 +1155,29 @@ def test_the_brief_dates_work_and_decisions_by_their_own_moments(
     assert brief["done"]["count"] == 0
     assert brief["agent"]["overridden"] == 1
     assert brief["agent"]["suggested"] == 0 and brief["agent"]["taken_alone"] == 0
+
+
+def test_a_row_that_moved_without_a_new_situation_is_tried_again(
+    sqlite_session, monkeypatch
+):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery")
+    real_accept = manager_actions._accept
+    attempts = []
+
+    def moved_once(session, task, text):
+        attempts.append(task.id)
+        if len(attempts) == 1:
+            raise manager_actions.Stale("updated_at moved")
+        return real_accept(session, task, text)
+
+    monkeypatch.setattr(manager_actions, "_accept", moved_once)
+    _cycle(sqlite_session, company, answer("accept", "accept_delivery"))
+    (row,) = _rows(sqlite_session, company)
+    assert row.action_state == manager_agent.PENDING and row.decided_by is None
+    _cycle(sqlite_session, company, answer("accept", "accept_delivery"))
+    sqlite_session.refresh(row)
+    assert row.action_state == manager_agent.DONE and len(attempts) == 2
+    sqlite_session.refresh(item)
+    assert item.status == "done"

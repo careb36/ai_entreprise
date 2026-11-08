@@ -37,9 +37,15 @@
 #   8. A task whose file marks authentication is approved by QA and still
 #      waits for a person (the risk tier, at autonomy level 3 too); a
 #      Manager accepts it.
-#   9. Every task's history is legal, read by app/history_check.py, which
+#   9. A specification and its architecture are drafted, checked, approved
+#      and covered by a sprint.
+#  9b. The Manager agent (issue #331): with a policy that lets it accept a
+#      low-risk delivery at autonomy level 1, it accepts one alone (audited,
+#      with the rule), a high-risk one still waits for the client, and the
+#      client's override is counted in its record.
+#  10. Every task's history is legal, read by app/history_check.py, which
 #      shares no code with the readers it checks.
-#  10. QA only reviewed delivered work (the fake model's order check).
+#  11. QA only reviewed delivered work (the fake model's order check).
 #
 # Environment (defaults in brackets):
 #   E2E_POSTGRES_HOST [127.0.0.1]  E2E_POSTGRES_PORT [5432]
@@ -186,6 +192,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 REVIEWER_VERIFY_GRACE_SECONDS=5 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
+    MANAGER_AGENT_ENABLED=true MANAGER_AGENT_INTERVAL_SECONDS=2 \
     RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
@@ -430,6 +437,39 @@ check "the delivery's tests ran where DELIVERY_SANDBOX says ($SANDBOX), and the 
 check "the counter's Developer read the greeting's module through the daemon before delivering, and the read is evidence with the file's hash" test "$(counter_check "$COUNTER_LAST" tools_used "c['calls'][0]['tool'], c['calls'][0]['path'], c['calls'][0]['sha256']")" = "('read', 'src/add_greeting.py', '$(sha256sum "$WORK/project/src/add_greeting.py" | cut -d' ' -f1)')"
 check "its prompt opened with the repository map, naming that module" test "$(prompt_seen "## Task: Add greeting counter.*## Repository.*src/add_greeting.py")" = yes
 check "the Verifier said the first delivery rewrote QA's test without reading it, and the second changed no existing file" test "$(counter_check "$COUNTER_FIRST" context_read "c['read'], c['modified_unread']")" = "(['src/add_greeting.py'], ['tests/test_req_2.py'])" -a "$(counter_check "$COUNTER_LAST" context_read "c['modified_unread'], c['observation']")" = "([], 'read 1 file(s); no existing file was changed')"
+
+echo "9b. the Manager agent decides for the client"
+# Without a policy the agent has only suggested so far. The client hands it
+# one rule and moves to autonomy level 1, where every approved task waits for
+# a person: the agent accepts the low-risk delivery, never the high-risk one.
+PUT_JSON=(-H 'Content-Type: application/json' -X PUT)
+check "no policy can hand the agent a high-risk acceptance" test "$(api -o /dev/null -w '%{http_code}' "${PUT_JSON[@]}" "$API/v1/companies/$CID/manager_policy" -d '{"rules": ["accept_high_risk"]}')" = 422
+check "a Manager lets the agent accept low-risk deliveries alone" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$CID/manager_policy" -d '{"rules": ["accept_delivery"]}' | json "d['rules']")" = "['accept_delivery']"
+check "and moves the company to autonomy level 1" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$CID/autonomy" -d '{"autonomy_level": 1}' | json "d['autonomy_level']")" = 1
+NEW5=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $CID, \"sprint_name\": \"Sprint 5\", \"start_date\": \"2026-01-06\", \"scope_size\": \"S\",
+  \"backlog_items\": [{\"title\": \"Add widget\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"},
+                    {\"title\": \"Add login audit\", \"description\": \"A function with a test.\", \"assignee\": \"Developer\"}]}")
+S5=$(echo "$NEW5" | json "d.get('sprint_id', '')")
+WIDGET=$(echo "$NEW5" | json "d.get('backlog_item_ids', ['', ''])[0]")
+AUDITED=$(echo "$NEW5" | json "d.get('backlog_item_ids', ['', ''])[1]")
+task_status() { api "$API/v1/sprints/$S5/board" | json "next((i['status'] for c in d['columns'].values() for i in c if i['id'] == $1), '')"; }
+agent_decided() { api "$API/v1/manager_decisions?company_id=$CID" | json "[(r['decided_by'], r['rule'], r['outcome'], r['audit_log_id'] is not None) for r in d['decisions'] if r['item_kind'] == 'task' and r['item_id'] == $1 and r['decided_by']]"; }
+held_suggestion() { api "$API/v1/inbox?company_id=$CID" | json "[(t['risk_hold'], (t.get('suggestion') or {}).get('suggested_decision'), (t.get('suggestion') or {}).get('decided_by')) for t in d['blocked_tasks'] if t['id'] == $1]"; }
+check "Sprint 5 closes" wait_sprint "$S5"
+check "the agent accepted the low-risk delivery alone, under the rule, audited" wait_value 60 "[('Manager agent', 'accept_delivery', 'accepted', True)]" agent_decided "$WIDGET"
+check "the task is done, with the agent's note on the board" test "$(task_status "$WIDGET")" = done -a "$(api "$API/v1/sprints/$S5/board" | json "sum(1 for c in d['columns'].values() for i in c if i['id'] == $WIDGET for m in i['comments'] if m['text'].startswith('Accepted by the Manager agent under the company'))")" = 1
+check "the high-risk delivery still waits for the client, the agent's suggestion beside it as a claim" wait_value 60 "[(True, 'accept', None)]" held_suggestion "$AUDITED"
+check "the agent's prompt carried the standards that bind it" test "$(prompt_seen "^You are the Manager agent.*## Quality standards.*STD-SEC-1.*--- ITEM (accept_delivery)")" = yes
+DECISION_ID=$(api "$API/v1/manager_decisions?company_id=$CID" | json "next((r['id'] for r in d['decisions'] if r['item_id'] == $WIDGET and r['decided_by']), '')")
+OVERRIDE=$(api -X POST "$API/v1/manager_decisions/$DECISION_ID/override" | json "d.get('outcome', '')")
+check "the client overrides it in one click, and it waits for a person again" test "$OVERRIDE" = waits_for_a_person -a "$(task_status "$WIDGET")" = blocked
+check "a second override of the same decision is refused" test "$(api -o /dev/null -w '%{http_code}' -X POST "$API/v1/manager_decisions/$DECISION_ID/override")" = 409
+manager_record() { api "$API/v1/manager_record?company_id=$CID" | json "(lambda c: (c['taken_alone'], c['overridden'], c['override_rate']))(d['categories']['accept_delivery'])"; }
+check "the agent's record counts the override" test "$(manager_record)" = "(1, 1, 1.0)"
+ACCEPTED5=$(api -X PATCH "$API/v1/backlog/$AUDITED" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by the client."}' | json "d.get('status', '')")
+check "the client accepts the high-risk delivery" test "$ACCEPTED5" = done
+check "and the record counts that decision against the agent's suggestion" test "$(api "$API/v1/manager_record?company_id=$CID" | json "(lambda c: c['decided'] >= 1 and c['agreed'] == c['decided'] and c['taken_alone'] == 0)(d['categories']['accept_high_risk'])")" = True
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.
