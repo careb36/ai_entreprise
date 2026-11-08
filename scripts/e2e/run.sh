@@ -46,6 +46,12 @@
 #   E2E_POSTGRES_USER [factory]    E2E_POSTGRES_PASSWORD [$POSTGRES_PASSWORD]
 #   E2E_POSTGRES_DB [factory_e2e]  (dropped and recreated on every run)
 #   E2E_NATS_URL [nats://127.0.0.1:4222]
+#   E2E_NATS_SERVER []             a nats-server binary: the run starts its own
+#                                  broker with one user per component
+#                                  (scripts/nats_config.py) instead of using
+#                                  E2E_NATS_URL, and checks /health says the
+#                                  backend is authenticated
+#   E2E_NATS_PORT [14222]          that broker's port
 #   E2E_BACKEND_PORT [18000]       E2E_LLM_PORT [15100]
 #   E2E_PYTHON [python]            the backend's interpreter (poetry env)
 #   E2E_WORKDIR [mktemp]           logs and the project folder
@@ -94,6 +100,25 @@ CONNECTIONS=$WORK/fake_llm.connections.log
 INTERNAL_TOKEN=e2e-internal-token
 : > "$PROMPTS"; : > "$VIOLATIONS"  # a reused E2E_WORKDIR starts clean
 FAILED=0
+BACKEND_NATS_ENV=""
+DAEMON_NATS_ENV=""
+if [ -n "${E2E_NATS_SERVER:-}" ]; then
+  NATS_PORT=${E2E_NATS_PORT:-14222}
+  NATS_URL=nats://127.0.0.1:$NATS_PORT
+  mkdir -p "$WORK/nats"
+  python3 "$REPO/scripts/nats_config.py" --namespace "$NATS_NAMESPACE" --output "$WORK/nats/nats-server.conf" >/dev/null \
+    || { echo "could not write the NATS configuration"; exit 2; }
+  # Throwaway credentials for this run's own broker, never stored.
+  E2E_NATS_BACKEND_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
+  E2E_NATS_DAEMON_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
+  NATS_BACKEND_PASSWORD=$E2E_NATS_BACKEND_SECRET NATS_DAEMON_PASSWORD=$E2E_NATS_DAEMON_SECRET \
+    "$E2E_NATS_SERVER" -c "$WORK/nats/nats-server.conf" -js -sd "$WORK/nats/js" -a 127.0.0.1 -p "$NATS_PORT" \
+    > "$WORK/nats.log" 2>&1 & NPID=$!
+  trap 'kill $NPID 2>/dev/null' EXIT  # replaced by cleanup once the stack runs
+  for _ in $(seq 1 20); do (echo > "/dev/tcp/127.0.0.1/$NATS_PORT") 2>/dev/null && break; sleep 0.5; done
+  BACKEND_NATS_ENV="NATS_USER=backend NATS_PASSWORD=$E2E_NATS_BACKEND_SECRET"
+  DAEMON_NATS_ENV="NATS_USER=daemon NATS_PASSWORD=$E2E_NATS_DAEMON_SECRET"
+fi
 
 check() {  # check <description> <shell test...>
   local what=$1; shift
@@ -137,9 +162,9 @@ printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
 FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS \
   FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
-PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
+env $DAEMON_NATS_ENV PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
   NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
-cleanup() { kill ${BPID:-} $DPID $LPID 2>/dev/null; wait 2>/dev/null; }
+cleanup() { kill ${BPID:-} $DPID $LPID ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
 trap cleanup EXIT
 # The backend asks the daemon once, at startup, which assistants it can run.
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
@@ -152,7 +177,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     "$PY" -m alembic check
 ) > "$WORK/alembic.log" 2>&1 || { echo "the migrations did not apply cleanly, or the models and the migrations disagree; see $WORK/alembic.log"; cat "$WORK/alembic.log"; exit 2; }
 (
-  cd "$REPO/backend" && exec env \
+  cd "$REPO/backend" && exec env $BACKEND_NATS_ENV \
     POSTGRES_HOST=$PG_HOST POSTGRES_PORT=$PG_PORT POSTGRES_USER=$PG_USER POSTGRES_PASSWORD=$PG_PASSWORD POSTGRES_DB=$PG_DB \
     NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE LLM_PROXY_URL=http://127.0.0.1:$LLM_PORT NEO4J_URI=bolt://127.0.0.1:1 \
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
@@ -160,7 +185,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
-    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
+    REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 REVIEWER_VERIFY_GRACE_SECONDS=5 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
     RESEARCH_ALLOWED_HOSTS=127.0.0.1 RESEARCH_PYPI_URL=http://127.0.0.1:$LLM_PORT/pypi \
     AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false AUDIT_LOG_PATH="$WORK/audit" \
     PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
@@ -169,6 +194,9 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
 for _ in $(seq 1 60); do healthy && break; sleep 1; done
 healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
 echo "stack up: $API (logs in $WORK)"
+if [ -n "${E2E_NATS_SERVER:-}" ]; then
+  check "the backend is authenticated on its own broker" test "$(curl -s "$API/health" | "$PY" -c 'import sys, json; n = json.load(sys.stdin)["nats"]; print(n["authenticated"] and n["connected"])')" = True
+fi
 
 api() { curl -s "$@"; }
 json() { "$PY" -c "import sys, json; d = json.load(sys.stdin); print($1)"; }

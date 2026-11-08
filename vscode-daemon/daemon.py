@@ -44,7 +44,7 @@ import file_edits
 import file_hash
 import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
-import nats
+import nats_connect
 import nats_scope
 import platform_reviews
 import sprint_integration
@@ -525,31 +525,14 @@ async def handle_inspect(nc, msg):
     await _reply(nc, msg, body)
 
 
-async def handle_status(nc, msg, jetstream: bool = False):
-    await _reply(nc, msg, {"host": host_info(), "version": DAEMON_VERSION, "jetstream": jetstream})
+async def handle_status(nc, msg, jetstream=False):
+    jetstream = jetstream() if callable(jetstream) else jetstream
+    await _reply(nc, msg, {"host": host_info(), "version": DAEMON_VERSION, "jetstream": bool(jetstream)})
 
 
 # ---------------------------------------------------------------------------
 # Deliveries queued while this daemon was offline (JetStream)
 # ---------------------------------------------------------------------------
-
-
-async def ensure_delivery_streams(js) -> None:
-    from nats.js import api
-    from nats.js.errors import NotFoundError
-
-    for name, subject in nats_scope.DELIVERY_STREAMS.items():
-        try:
-            await js.stream_info(name)
-        except NotFoundError:
-            await js.add_stream(api.StreamConfig(
-                name=name,
-                subjects=[subject],
-                retention=api.RetentionPolicy.WORK_QUEUE,
-                storage=api.StorageType.FILE,
-                max_age=nats_scope.STREAM_MAX_AGE_SECONDS,
-                duplicate_window=nats_scope.STREAM_DUPLICATE_WINDOW_SECONDS,
-            ))
 
 
 async def process_queued_delivery(nc, js, msg) -> None:
@@ -587,22 +570,28 @@ async def process_queued_delivery(nc, js, msg) -> None:
         await _publish_glassroom_status(nc, job["sprint_id"], f"{_delivery_summary(response)} (queued delivery)")
 
 
-async def consume_queued_deliveries(nc, js) -> None:
+async def consume_queued_deliveries(nc, js, ready=None) -> None:
+    """Wait for the backend's streams, then write each queued delivery (``ready`` is set once consuming)."""
     from nats.js import api
 
-    psub = await js.pull_subscribe(
-        nats_scope.DELIVERY_SUBJECT,
-        durable=nats_scope.DELIVERY_CONSUMER,
-        stream=nats_scope.DELIVERY_STREAM,
-        config=api.ConsumerConfig(
-            durable_name=nats_scope.DELIVERY_CONSUMER,
-            deliver_policy=api.DeliverPolicy.ALL,
-            ack_policy=api.AckPolicy.EXPLICIT,
-            ack_wait=120,
-            max_deliver=10,
-            filter_subject=nats_scope.DELIVERY_SUBJECT,
-        ),
+    config = api.ConsumerConfig(
+        durable_name=nats_scope.DELIVERY_CONSUMER, deliver_policy=api.DeliverPolicy.ALL, ack_policy=api.AckPolicy.EXPLICIT,
+        ack_wait=120, max_deliver=10, filter_subject=nats_scope.DELIVERY_SUBJECT,
     )
+    while True:
+        await nats_connect.wait_for_streams(js, nats_scope.DELIVERY_STREAMS)
+        try:
+            psub = await js.pull_subscribe(
+                nats_scope.DELIVERY_SUBJECT, durable=nats_scope.DELIVERY_CONSUMER, stream=nats_scope.DELIVERY_STREAM,
+                config=config, inbox_prefix=nats_connect.PULL_INBOX_PREFIX,
+            )
+            break
+        except Exception as e:  # noqa: BLE001 - A permission or JetStream error: try again, say why.
+            logger.warning("Could not consume queued deliveries (%s); retrying", e)
+            await asyncio.sleep(5)
+    if ready is not None:
+        ready["jetstream"] = True
+    logger.info("Consuming queued deliveries from %s", nats_scope.DELIVERY_STREAM)
     while True:
         try:
             msgs = await psub.fetch(1, timeout=5)
@@ -622,36 +611,18 @@ async def consume_queued_deliveries(nc, js) -> None:
 
 
 async def connect_with_retry():
-    """Connect to NATS, waiting for it if the backend stack is not up yet."""
-    delay = 1.0
-    while True:
-        try:
-            return await nats.connect(
-                NATS_URL,
-                name=f"fabrique-daemon@{platform.node()}",
-                max_reconnect_attempts=-1,
-                reconnect_time_wait=2,
-            )
-        except Exception as e:  # noqa: BLE001 - Keep waiting for the broker.
-            logger.warning("NATS at %s unavailable (%s); retrying in %.0fs", NATS_URL, e, delay)
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, 30)
+    """Connect to NATS with the credentials and TLS the environment names (``nats_connect``)."""
+    return await nats_connect.connect_with_retry(NATS_URL)
 
 
 async def main():
-    logger.info(f"Connecting to NATS at {NATS_URL}...")
+    logger.info("Connecting to NATS at %s...", nats_connect.safe_url(NATS_URL))
     nc = await connect_with_retry()
     host = host_info()
 
-    jetstream = False
-    consumer = None
-    try:
-        js = nc.jetstream()
-        await ensure_delivery_streams(js)
-        consumer = asyncio.create_task(consume_queued_deliveries(nc, js))
-        jetstream = True
-    except Exception as e:  # noqa: BLE001 - Without JetStream only live requests are served.
-        logger.warning("JetStream unavailable (%s); queued deliveries are not processed", e)
+    # The streams are the backend's: the consumer waits until they exist.
+    state = {"jetstream": False}
+    consumer = asyncio.create_task(consume_queued_deliveries(nc, nc.jetstream(), state))
 
     def bound(handler, *extra):
         async def callback(msg): await handler(nc, msg, *extra)  # noqa: E704 - one line per handler.
@@ -661,7 +632,7 @@ async def main():
         ("workspace.generate", bound(handle_msg)),
         ("workspace.execute", bound(handle_msg)),
         ("workspace.capabilities", bound(handle_capabilities)),
-        ("workspace.status", bound(handle_status, jetstream)),
+        ("workspace.status", bound(handle_status, lambda: state["jetstream"])),
         ("workspace.browse", bound(handle_browse)),
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
@@ -673,16 +644,12 @@ async def main():
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 
-    logger.info(
-        "Daemon ready on %s (%s), home %s; JetStream %s.",
-        host["hostname"], host["platform"], host["home"], "on" if jetstream else "off",
-    )
+    logger.info("Daemon ready on %s (%s), home %s.", host["hostname"], host["platform"], host["home"])
     try:
         while True:
             await asyncio.sleep(3600)
     finally:
-        if consumer:
-            consumer.cancel()
+        consumer.cancel()
         await nc.drain()
 
 
