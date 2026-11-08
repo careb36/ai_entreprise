@@ -200,7 +200,10 @@ class Settings(BaseSettings):
     SECURITY_HEADERS_ENABLED: bool = True
     NEO4J_ENABLED: bool = True
     AGENT_MODEL_POLICY: str = ""
+    # The Manager agent (services/manager_agent.py): suggests each inbox
+    # decision and takes alone only what the company's policy allows.
     MANAGER_AGENT_ENABLED: bool = False
+    MANAGER_AGENT_INTERVAL_SECONDS: float = 60.0
 
     class Config:
         env_file = ".env"

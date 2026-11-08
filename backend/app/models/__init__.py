@@ -25,6 +25,7 @@ from .company import (
 from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .integration import SprintIntegration
+from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
 from .provider import ProviderConnection
@@ -52,6 +53,8 @@ __all__ = [
     "CompanyMember",
     "CompanyWebhook",
     "GitHubRepoBinding",
+    "ManagerDecision",
+    "ManagerPolicy",
     "McpServer",
     "OutboxEvent",
     "Procedure",

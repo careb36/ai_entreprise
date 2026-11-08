@@ -73,8 +73,13 @@ def record_approval(
     decision: str,
     feedback: str | None = None,
     rejection_category: str | None = None,
+    actor_id: str | None = None,
 ) -> AgentRunApproval:
-    """A person's decision on a run, audited (``POST /approve`` and reviews)."""
+    """A person's decision on a run, audited (``POST /approve`` and reviews).
+
+    *actor_id* names who decided in the audit row when it is not a person
+    (the Manager agent under its policy); by default ``human:<approver>``.
+    """
     approval = AgentRunApproval(
         company_id=run.company_id,
         agent_run_id=run.id,
@@ -88,7 +93,7 @@ def record_approval(
         session=session,
         company_id=run.company_id,
         interaction_id=f"agent-run:{run.external_ref}",
-        agent_id=f"human:{approver_name}",
+        agent_id=actor_id or f"human:{approver_name}",
         action=f"agent_run_{decision}",
         details={
             "company_id": str(run.company_id),
