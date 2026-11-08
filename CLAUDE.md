@@ -160,6 +160,16 @@ Copy `.env.example` to `.env` and fill in:
   (`POST /v1/manager_decisions/{id}/override`). `GET /v1/manager_record`
   counts agreement and overrides by category, and those numbers go into its
   next prompt. Off by default: each item costs an LLM call.
+- `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`,
+  `SMTP_STARTTLS` (true), `SMTP_SSL` (false), `MANAGER_BRIEF_INTERVAL_HOURS`
+  (24) — optional. With the Manager agent on and `SMTP_HOST` set, the
+  client's brief (`services/brief_mail.py`: the deterministic
+  `manager_brief.brief` rendered as plain text) goes by mail to the Owners and
+  Managers of each company that has a `ManagerPolicy`, once per interval; each
+  send is audited as `manager_brief_sent` with its window and how many people
+  it reached (never an address), the next window starts where the last sent
+  one ended, and a failed send is retried from the same start at most once an
+  hour. One replica sends at a time (`locks.MANAGER_BRIEF`).
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
   the GitHub page shows it as the webhook Payload URL.
@@ -649,6 +659,7 @@ Test files:
 | `test_memory_lessons.py` | Company-scoped memory search, retrospectives visible to every role, lessons from the last completed sprints in the task prompt |
 | `test_support_agent.py` | Support agent triage: fixed answer format, suggestions beside the reporter's choice, unusable answers left to people, failed calls retried, reply visible to the reporter; its record against the admins' decisions (unusable answers as misses, beside the reporters who chose a value, legacy rows compared case-blind) and that record in its next prompt |
 | `test_reviewer_agent.py` | The Reviewer agent: fixed answer format, the prompt treats the run as data and carries the Verifier's checks, a suggestion stored on an outside producer's run beside no approval (in-house and decided runs skipped), unusable answers left to people, failed calls retried; its record against the decisions people recorded, with the Verifier's verdict as the baseline, company-scoped, and in its next prompt |
+| `test_brief_mail.py` | The client's brief by mail: sent to the company's Owners and Managers (never a Viewer) once per interval, the next window starting where the last sent one ended; a failed send audited with the error's type and no address, retried from the same start once an hour; nothing without SMTP, a Manager policy or a recipient; the render lists the decisions the agent took alone (not mere suggestions), what waits and the quota; STARTTLS and login |
 | `test_manager_agent.py` | The Manager agent: the fixed answer format (another category, a decision the category does not allow, no reason or no `END` are unusable); the confirmation set cannot be unlocked, by the API or behind it; each rule holds only on its facts (verdict, tier, files, criteria, autonomy level, a reverted procedure) and only for its own decision, never over budget, after an override or when flagged; an autonomy-1 hold accepted alone, noted and audited with the rule, and the history check accepting it while still refusing the agent on a high-risk hold; a high-risk hold left to the client; no policy, only suggestions; an unusable answer left and not asked again, a failed call writing nothing, one row per situation, a second replica skipping an item the first is deciding without asking the model, the loop skipping a round another replica runs; a procedure adopted alone only at level 3, an outside run approved alone through the approval record; a Manager writes the policy and a Viewer reads it; the override (Manager only, once, company-scoped) puts the task back in the inbox, restores a superseded procedure, records a rejection, is counted and keeps the agent off that item; the record's agreement with the client's decisions in the next prompt; a rule whose overrides rise flagged and not applied, the policy untouched; the brief and its scoping |
 | `test_llm_client.py` | The proxy client: `max_tokens` travels only when set, the default wait follows the proxy's upstream budget, an error the proxy answered is not sent again (no status is retried), a request that never reached the proxy is |
 | `test_token_diet.py` | What the worker stops asking twice: a Developer answer cut at the length limit is sent back as such instead of "the complete result again", a formless QA answer is asked again with the format named, the fixed-form answers are capped and the deliverable is not, every wait follows the proxy's budget |

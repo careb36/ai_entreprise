@@ -41,6 +41,7 @@ SUPPORT_AGENT = "support-agent"
 REVIEWER_AGENT = "reviewer-agent"
 MANAGER_AGENT = "manager-agent"
 MANAGER_ITEM = "manager-item"
+MANAGER_BRIEF = "manager-brief"
 SPRINT_INTEGRATION = "sprint-integration"
 
 _local_lock = threading.Lock()
