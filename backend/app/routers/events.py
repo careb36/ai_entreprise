@@ -3,8 +3,8 @@
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
-from models import Sprint, User
-from services import events
+from models import BacklogItem, Sprint, User
+from services import events, task_events, task_projection
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Company"])
@@ -33,4 +33,29 @@ async def sprint_events(
             }
             for e in rows
         ],
+    }
+
+
+@router.get("/tasks/{task_id}/events")
+async def task_event_log(
+    task_id: int,
+    session: Session = Depends(get_session),  # noqa: B008
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """A task's events in order, its chain's state and which record the board reads."""
+    item = session.get(BacklogItem, task_id)
+    sprint = session.get(Sprint, item.sprint_id) if item is not None else None
+    if item is None or sprint is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    require_company_role(session, user, sprint.company_id, "Viewer")
+    rows = [
+        e
+        for e in task_events.for_task(session, task_id)
+        if e.company_id == sprint.company_id
+    ]
+    return {
+        "task_id": task_id,
+        "source": "events" if task_projection.covers(item, rows) else "comments",
+        "chain": task_events.verify_chain(session, task_id),
+        "events": [task_events.as_dict(e) for e in rows],
     }

@@ -22,6 +22,18 @@ and reports histories the loop must never produce:
   acceptance test as passed with no observed test run (no exit status from the
   daemon) in its evidence.
 
+The task's events (``task_events``, issue #324) are a second record, read
+beside the thread and never instead of it:
+
+- ``comment_without_event``: a comment names an event the task does not have;
+- ``comment_differs_from_event``: a comment says something else than the
+  event it renders (its author or its text);
+- and, once the events render the whole thread (every comment names one and
+  none is a ``legacy`` marker): ``done_without_approval_event`` (done with no
+  ``reviewed`` approval and no ``approved_by_person`` event) and
+  ``status_differs_from_events`` (the status the latest transition left is
+  not the task's).
+
 It deliberately imports none of the production readers (``services/board.py``,
 ``services/carry_over.py``, ``services/scrum_master.py``) and restates the
 markers it looks for, so a bug shared with them cannot hide here. It runs in
@@ -105,11 +117,91 @@ def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
     return _when(closing[-1]) if closing else None
 
 
+def check_events(
+    comments: list[dict[str, Any]], status: Any, events: list[dict[str, Any]]
+) -> list[str]:
+    """Where the thread and the events disagree.
+
+    Nothing for a task with neither events nor comments naming one (a thread
+    from before events existed). Every comment that names an event must
+    render it, and every event that renders text (``text`` in its payload;
+    an escalation or a bare block carries none) must keep its comment, in
+    the same order, so a comment deleted or moved is found.
+    """
+    if not events and not any("event_id" in c for c in comments):
+        return []
+    violations: list[str] = []
+    by_id = {e.get("id"): e for e in events}
+    for index, comment in enumerate(comments):
+        if "event_id" not in comment:
+            continue
+        event = by_id.get(comment.get("event_id"))
+        if event is None:
+            violations.append(
+                f"comment_without_event: comment {index} names event "
+                f"{comment.get('event_id')}, which the task does not have"
+            )
+            continue
+        payload = event.get("payload") or {}
+        said = (_author(comment), _text(comment))
+        rendered = (
+            str(payload.get("author") or "").strip().lower(),
+            str(payload.get("text") or "").strip(),
+        )
+        if said != rendered:
+            violations.append(
+                f"comment_differs_from_event: comment {index} and event "
+                f"{event.get('id')} ({event.get('kind')}) say different things"
+            )
+    rendering = [e.get("id") for e in events if "text" in (e.get("payload") or {})]
+    named = [c.get("event_id") for c in comments if c.get("event_id") in by_id]
+    kept = set(named)
+    for event_id in rendering:
+        if event_id not in kept:
+            event = by_id[event_id]
+            violations.append(
+                f"event_without_comment: event {event_id} ({event.get('kind')}) "
+                "renders a comment the thread no longer has"
+            )
+    shown = set(rendering)
+    if [i for i in named if i in shown] != [i for i in rendering if i in kept]:
+        violations.append(
+            "comments_out_of_order: the thread's comments are not in the order "
+            "of the events they render"
+        )
+    whole = (
+        bool(comments)
+        and all(c.get("event_id") in by_id for c in comments)
+        and not any(e.get("kind") == "legacy" for e in events)
+    )
+    if not whole:
+        return violations
+    if status == "done" and not any(
+        e.get("kind") == "approved_by_person"
+        or (
+            e.get("kind") == "reviewed"
+            and (e.get("payload") or {}).get("verdict") == "approved"
+        )
+        for e in events
+    ):
+        violations.append("done_without_approval_event")
+    left = next(
+        (e.get("task_status") for e in reversed(events) if e.get("task_status")),
+        "todo",
+    )
+    if status and left != status:
+        violations.append(
+            f"status_differs_from_events: the task is {status}, its events left it {left}"
+        )
+    return violations
+
+
 def check_task(
     task: dict[str, Any],
     runs: list[dict[str, Any]],
     messages: list[dict[str, Any]],
     others: dict[int, Any] | None = None,
+    events: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """The violations in one task's history, as ``"<rule>: <detail>"`` lines.
 
@@ -121,12 +213,15 @@ def check_task(
     ``reads_without_hash`` (the files a workspace read recorded with no
     sha256); *messages* are the company's messages about it with ``id``, ``kind``
     and ``body``; *others* maps the ids of the tasks it depends on to their
-    ``status`` and ``comments`` (a bare status string is accepted).
+    ``status`` and ``comments`` (a bare status string is accepted); *events*
+    are its events in order, with ``id``, ``kind``, ``task_status`` and
+    ``payload``.
     """
     comments = [c for c in task.get("comments") or [] if isinstance(c, dict)]
     status = task.get("status")
     violations: list[str] = []
 
+    violations.extend(check_events(comments, status, events or []))
     approvals = [i for i, c in enumerate(comments) if _is_approval(c)]
     person_notes = [i for i, c in enumerate(comments) if _author(c) == _PERSON]
 
@@ -263,7 +358,7 @@ def _run_facts(verification: Any) -> dict[str, Any]:
 def check_database() -> list[str]:
     """Every task in the database, checked; violations prefixed with the task id."""
     from database import engine
-    from models import AgentMessage, AgentRun, BacklogItem, Verification
+    from models import AgentMessage, AgentRun, BacklogItem, TaskEvent, Verification
     from sqlmodel import Session, select
 
     found: list[str] = []
@@ -290,6 +385,20 @@ def check_database() -> list[str]:
                 messages_by_task.setdefault(message.backlog_item_id, []).append(
                     {"id": message.id, "kind": message.kind, "body": message.body}
                 )
+        events_by_task: dict[int, list[dict[str, Any]]] = {}
+        for event in session.exec(
+            select(TaskEvent)
+            .where(TaskEvent.task_id.is_not(None))  # type: ignore[union-attr]
+            .order_by(TaskEvent.task_id, TaskEvent.id)
+        ).all():
+            events_by_task.setdefault(event.task_id, []).append(
+                {
+                    "id": event.id,
+                    "kind": event.event_type,
+                    "task_status": event.task_status,
+                    "payload": event.payload or {},
+                }
+            )
         items = session.exec(select(BacklogItem)).all()
         others = {
             item.id: {"status": item.status, "comments": item.comments or []}
@@ -309,6 +418,7 @@ def check_database() -> list[str]:
                 runs_by_ref.get(f"task-{item.id}", []),
                 messages_by_task.get(item.id, []),
                 others,
+                events_by_task.get(item.id, []),
             ):
                 found.append(f"task {item.id} ({item.title}): {violation}")
     return found

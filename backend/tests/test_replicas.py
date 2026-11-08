@@ -25,7 +25,7 @@ import pytest
 from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import locks, replicas, scrum_master, task_worker
+from services import locks, replicas, scrum_master, task_events, task_worker
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
 from test_review_gate import _FakeNATS
@@ -218,6 +218,38 @@ def test_a_restarting_worker_leaves_the_tasks_another_worker_holds(engine):
     statuses = {i.id: i.status for i in _items(engine, sprint_id)}
     assert statuses == {held_item.id: "in_progress", orphan.id: "todo"}
     assert "Worker recovery" in _items(engine, sprint_id)[1].comments[-1]["text"]
+
+
+def test_the_claim_and_the_recovery_are_task_events(engine):
+    """Every transition is an event first (issue #324), also under several replicas."""
+    sprint_id = _sprint(engine, _company(engine), items=("todo", "in_progress"))
+    claimed, frozen = _items(engine, sprint_id)
+    with Session(engine) as session:
+        item = session.get(BacklogItem, frozen.id)
+        item.comments = [
+            {"author": "System", "text": "Freeze after sleep-induced churn"}
+        ]
+        session.add(item)
+        session.commit()
+
+    assert replicas.claim_todo(engine, claimed.id)
+    assert replicas.recover_inflight(engine)[0]["id"] == claimed.id
+
+    with Session(engine) as session:
+        kinds = [
+            (e.event_type, e.task_status)
+            for e in task_events.for_task(session, claimed.id)
+        ]
+        assert kinds == [("claimed", "in_progress"), ("recovered", "todo")]
+        item = session.get(BacklogItem, claimed.id)
+        events = task_events.for_task(session, claimed.id)
+        assert item.comments[-1]["event_id"] == events[-1].id
+        assert item.comments[-1]["text"] == replicas.RECOVERY_NOTE
+        assert [
+            (e.event_type, e.task_status)
+            for e in task_events.for_task(session, frozen.id)
+        ] == [("blocked", "blocked")]
+        assert session.get(BacklogItem, frozen.id).status == "blocked"
 
 
 def test_a_surviving_worker_recovers_the_task_of_one_that_died(engine, monkeypatch):
