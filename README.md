@@ -132,9 +132,11 @@ docker compose up -d          # backend :8000 · frontend :5173 · LLM proxy :51
 ```
 
 The default team runs on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
-and DeepSeek (Developer, QA), so it needs both keys. Each agent's model can be
-changed on the **Agents** page, and `NEMOTRON_ROLES` moves roles to NVIDIA
-Nemotron on Nebius (see [Model Providers](#model-providers-nebius--nvidia-nemotron)).
+and DeepSeek (Developer, QA), so it needs both keys. `AGENT_MODEL` puts the whole
+team on one model instead (`AGENT_MODEL=deepseek-v4-pro` needs only
+`DEEPSEEK_API_KEY`), and `AGENT_MODEL_<ROLE>` (`AGENT_MODEL_SCRUM_MASTER`, …)
+sets one role. Each agent's model can also be changed on the **Agents** page,
+and `NEMOTRON_ROLES` moves roles to NVIDIA Nemotron on Nebius (see [Model Providers](#model-providers-nebius--nvidia-nemotron)).
 
 Open `http://localhost:5173`, create a company, point it at a project folder and
 plan your first sprint. Try it without API keys: `scripts/seed_demo_evidence.py`
@@ -443,6 +445,18 @@ Beside the MCP tools, the roles that deliver files (Developer, QA) get the **wor
 What the Developer read is evidence: every read is recorded with the file's sha256 and size as the daemon read them, and the Verifier's `context_read` check says which of the files the delivery modified were read first and which were not. A file modified without being read raises the risk tier, so the delivery waits for a person. What the model says it learned from a file stays a claim, and its own account of a test run is never evidence: the daemon's exit status after the delivery is.
 
 The tools never open a file that may hold secrets (`.env`, keys, certificates, `.ssh`, `.aws`…), skip a symlink that leads out of the project, redact a secret-looking line before the model sees it, and a search runs in a child process the daemon stops at its deadline, so a pattern that backtracks forever costs that much and no more. With the Git workflow on, the tools look at the task's own worktree once it has delivered there.
+
+### Where agent-written code runs
+
+With `DELIVERY_TESTS_ENABLED`, the daemon runs tests a model wrote, and the Developer's `workspace__run_tests` runs them too. **Where** they run is a setting, `DELIVERY_SANDBOX`, and a company may choose its own under its settings (`PUT /v1/companies/{id}/sandbox`):
+
+- **`host`**, the default, runs the command as the daemon's user, with its files, its network and its environment. This is what every earlier version did. Nothing is isolated.
+- **`container`** gives each run an ephemeral Docker or Podman container. The task's worktree is mounted at `/workspace` and nothing else of the host is. The network is off unless `DELIVERY_SANDBOX_NETWORK` opens it. CPU, memory and process limits apply (`DELIVERY_SANDBOX_CPUS`, `_MEMORY_MB`, `_PIDS`), every capability is dropped, privilege escalation is blocked, the command runs as the host user's uid, and the image comes from `DELIVERY_SANDBOX_IMAGE`.
+- **`bwrap`**, bubblewrap on Linux, mounts the system directories read-only and the worktree read-write. It runs the command in new namespaces (the network's too, unless opened) with a fresh `/tmp`. It applies no CPU or memory limit, and the report says so.
+
+In both isolated modes, a sandboxed run sees no environment variable of the daemon's beyond a short base (`PATH`, `HOME=/tmp`, `LANG`), except the ones the company lists **by name** (`env`). Their values stay on the daemon's machine, so the backend never sends a secret. The person running the daemon can refuse the host for everything: `FABRIQUE_SANDBOX_REQUIRED=container` makes a `host` request run in a container, and the report says the daemon forced it. A mode that cannot run on that machine fails the test run with the reason. The tests then read as unverified, never as passed on the host.
+
+The daemon reports what it applied, and that report is the evidence. The Verifier records it as the `sandbox` check, a record and never the verdict: the tests' exit status still decides. A run on the host is marked as a finding a Manager sees, and so is one from an older daemon that reports no sandbox. What each mode protects against, and what it does not, is in [`docs/threat_model.md`](docs/threat_model.md).
 
 ### The roles that decide read official sources
 

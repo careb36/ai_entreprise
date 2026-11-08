@@ -120,6 +120,7 @@ def test_lists_the_tasks_only_a_person_can_move(test_client, sqlite_session, mem
         "triage": None,
         "frozen": False,
         "risk_hold": False,
+        "suggestion": None,
         "updated_at": triage.updated_at.isoformat(),
     }
     assert tasks["Frozen one"]["frozen"] is True

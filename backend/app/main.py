@@ -21,9 +21,11 @@ from metrics import setup_metrics
 from routers import (
     agent_runs_router,
     agents_router,
+    api_tokens_router,
     architectures_router,
     auth_router,
     enterprise_router,
+    events_router,
     github_router,
     inbox_router,
     mcp_router,
@@ -92,10 +94,12 @@ setup_metrics(app)
 
 app.include_router(auth_router)
 app.include_router(enterprise_router)
+app.include_router(events_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)
 app.include_router(agents_router)
 app.include_router(agent_runs_router)
+app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)
 app.include_router(inbox_router)

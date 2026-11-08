@@ -10,6 +10,7 @@ imported, so this ``__init__`` must be imported before
 
 from .agent_message import AgentMessage
 from .agent_run import AgentRun, AgentRunApproval, Verification
+from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
 from .company import (
@@ -21,6 +22,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .mcp import McpServer
 from .procedure import Procedure
@@ -35,6 +37,7 @@ __all__ = [
     "AgentMessage",
     "AgentRun",
     "AgentRunApproval",
+    "ApiToken",
     "Architecture",
     "AssistantRuntimeState",
     "AuditLog",
@@ -54,6 +57,7 @@ __all__ = [
     "RunReview",
     "Specification",
     "Sprint",
+    "TaskEvent",
     "User",
     "Verification",
 ]

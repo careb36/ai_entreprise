@@ -74,3 +74,45 @@ def test_without_nemotron_roles_nothing_changes(monkeypatch):
     monkeypatch.setenv("NEMOTRON_MODEL", "nvidia/Nemotron-Ultra")
 
     assert ModelFactory.model_for_role(AgentRole.DEVELOPER) == "deepseek-v4-pro"
+
+
+def _clear_model_env(monkeypatch):
+    monkeypatch.delenv("AGENT_MODEL", raising=False)
+    monkeypatch.delenv("NEMOTRON_ROLES", raising=False)
+    for role in AgentRole:
+        monkeypatch.delenv(f"AGENT_MODEL_{role.name}", raising=False)
+
+
+def test_agent_model_puts_the_whole_team_on_one_model(monkeypatch):
+    from llm.model_factory import default_model_for_role
+
+    _clear_model_env(monkeypatch)
+    monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
+    for role in AgentRole:
+        assert ModelFactory.model_for_role(role) == "deepseek-v4-pro"
+    # Every caller of the role default sees it, aliases included.
+    for name in ("ScrumMaster", "Reviewer", "Support", "PO", "Dev", "unknown"):
+        assert default_model_for_role(name) == "deepseek-v4-pro"
+
+
+def test_a_role_variable_beats_nemotron_and_agent_model(monkeypatch):
+    from llm.model_factory import default_model_for_role
+
+    _clear_model_env(monkeypatch)
+    monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("AGENT_MODEL_TECH_WRITER", "deepseek-flash")
+    monkeypatch.setenv("AGENT_MODEL_SCRUM_MASTER", "  ")  # blank: not set
+    monkeypatch.setenv("NEMOTRON_ROLES", "QA,TechWriter")
+    monkeypatch.setenv("NEMOTRON_MODEL", "nvidia/Nemotron-Super")
+    assert ModelFactory.model_for_role(AgentRole.TECH_WRITER) == "deepseek-flash"
+    assert ModelFactory.model_for_role(AgentRole.QA) == "nvidia/Nemotron-Super"
+    assert ModelFactory.model_for_role(AgentRole.SCRUM_MASTER) == "deepseek-v4-pro"
+    assert default_model_for_role("TechWriter") == "deepseek-flash"
+
+
+def test_without_agent_model_the_defaults_stay(monkeypatch):
+    from llm.model_factory import default_model_for_role
+
+    _clear_model_env(monkeypatch)
+    assert default_model_for_role("ScrumMaster") == "qwen3.7-plus"
+    assert default_model_for_role("Developer") == "deepseek-v4-pro"
