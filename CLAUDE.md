@@ -715,12 +715,42 @@ per-role models with the suggestions beside them; a Viewer reads it.
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 
+## Meta VR branch: VR, voice and the B1 assistant
+
+This branch is `main` plus what the Meta VR Start Developer Competition entry
+adds; every factory feature is `main`'s. What it adds (`CHANGELOG_COMPETITION.md`):
+
+- **`xr/`** — La Fabrique XR, a seated, hands-first WebXR control room on the
+  Immersive Web SDK, with its own `package.json` and tests; published to Pages
+  by `.github/workflows/xr-pages.yml`.
+- **`asistente-b1/`** — Assistant B1, the desktop voice assistant that runs the
+  factory (`assistant-tests.yml`).
+- **Voice façade** — `routers/voice.py`, `voice_actions.py`, `voice_support.py`,
+  `services/voice_control.py`: `/v1/voice/{ping,status,command}` speak for the
+  factory's own routes (plan, start, dispatch, pause, resume, approve) with the
+  desktop's `X-Voice-Key` (`VOICE_API_KEY`, one company: `VOICE_COMPANY_ID`,
+  else the oldest) or a signed-in user at the usual role. `routers/build.py` /
+  `services/codegen.py`: `POST /v1/voice/build` writes a small project from one
+  sentence under `FABRICA_BUILDS_DIR` and serves it sandboxed
+  (`Content-Security-Policy: sandbox`, kept by the security middleware).
+  `POST /v1/auth/desktop` trades the voice key for the desktop operator's
+  session (`escritorio@fabrica.local`; the `@fabrica.local` domain cannot be
+  registered), and `/v1/auth/desktop/handoff` + `/redeem` give the launcher a
+  single-use, one-minute code the UI redeems from `/#codigo=`
+  (`frontend/src/lib/handoff.ts`). Tests: `test_voice_{access,build,control}.py`,
+  `test_auth_desktop.py`.
+- **`speech-service/`** — speech-to-text, text-to-speech and intent for the
+  voice layer (faster-whisper, Kokoro), opt-in in Compose with
+  `--profile speech` (`SPEECH_*` in `.env.example`; `speech-service-tests.yml`).
+- **`demo/`, `tools/`, root `tests/`** — the competition's demo coding agent and
+  checks.
+
 ## Documentation
 
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
 - Branches: trunk-based. Each change is a branch cut from `main` with one pull request into `main`, merged once the head is green (`CONTRIBUTING.md`, Branches). There is no `develop` integration branch.
-- The Glassroom VR entry for the Meta VR Start Developer Competition lives on
-  the `main_meta` branch (`vr/`, `docs/VR_ENTRY.md`); `main` is the web product.
+- The Meta VR Start Developer Competition entry lives on the `meta-vr` branch
+  (this factory plus the VR and voice pieces below); `main` is the web product.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
