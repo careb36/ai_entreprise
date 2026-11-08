@@ -1951,5 +1951,12 @@
     "fetched": "{{status}} · {{hash}} · {{date}}",
     "failed": "falló ({{status}})",
     "refused": "rechazada: {{host}} no está en la lista de fuentes de la compañía"
+  },
+  "models": {
+    "title": "Modelos",
+    "subtitle": "Modelos con los que corren los agentes de la empresa.",
+    "suggestions": "Sugerencias",
+    "none": "ninguno",
+    "modelsCount": "modelos"
   }
 }

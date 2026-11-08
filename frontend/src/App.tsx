@@ -28,6 +28,7 @@ import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
 import Specifications from './pages/Specifications'
+import Models from './pages/Models'
 import SpecificationDetail from './pages/SpecificationDetail'
 import ArchitectureDetail from './pages/ArchitectureDetail'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -439,6 +440,7 @@ function AppContent() {
               <Route path="/company/members" element={<CompanyMembers />} />
               <Route path="/company/procedures" element={<Procedures />} />
               <Route path="/company/specifications" element={<Specifications />} />
+              <Route path="/company/models" element={<Models />} />
               <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
               <Route path="/company/specifications/:specId/architecture/new" element={<ArchitectureDetail />} />
               <Route path="/company/specifications/:specId/architectures/:id" element={<ArchitectureDetail />} />
