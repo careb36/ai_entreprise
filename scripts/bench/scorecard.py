@@ -14,8 +14,13 @@ Subcommands, used by ``scripts/bench/run.sh``:
   comments, the runs, the specification's own coverage; a failed reading
   marks the entry ``error``, never a green zero) and the reported tokens from the
   audit log (only rows whose usage the provider reported, ``tokens:
-  reported``), and writes one spec entry.
-- ``write --out-dir DIR ENTRY...`` joins the entries into one scorecard,
+  reported``), and writes one spec entry. The entry splits the tasks by
+  difficulty and the model of their last delivery (``routing``, read by the
+  backend's ``services/routing_record.py``, the same split the Sprints page
+  shows), so two runs under different ``AGENT_MODEL_POLICY`` values compare
+  band by band.
+- ``write --out-dir DIR [--policy LABEL] ENTRY...`` joins the entries into
+  one scorecard labelled with the routing policy it ran under,
   checks it against the schema (``validate``) and writes
   ``<stamp>.json`` and ``<stamp>.md``.
 
@@ -186,15 +191,51 @@ def _ratio(numerator: float, denominator: float) -> float:
     return round(numerator / denominator, 4) if denominator else 0.0
 
 
-def _board():
-    """The backend's reader of a task's comment thread (``services/board.py``),
-    the one the sprint list and the procedures count rework with."""
+def _backend_app() -> None:
     app = str(Path(__file__).resolve().parents[2] / "backend" / "app")
     if app not in sys.path:
         sys.path.append(app)
+
+
+def _board():
+    """The backend's reader of a task's comment thread (``services/board.py``),
+    the one the sprint list and the procedures count rework with."""
+    _backend_app()
     from services import board
 
     return board
+
+
+def _routing_record():
+    """The backend's split by difficulty and model (``services/routing_record.py``)."""
+    _backend_app()
+    from services import routing_record
+
+    return routing_record
+
+
+def routing_rows(
+    items: list[dict[str, Any]],
+    last_model: dict[int, str | None],
+    runs_per_task: dict[int, int],
+    turns: dict[int, list[tuple[str | None, int | None]]],
+    policy: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """The spec's tasks per difficulty (as planned) and model of the last
+    delivery: done, first attempts, rework, blocked and reported tokens."""
+    rr = _routing_record()
+    facts = [
+        rr.task_fact(
+            difficulty=rr.difficulty_of(i),
+            model=last_model.get(i.get("id")),
+            status=i.get("status"),
+            comments=i.get("comments"),
+            runs=runs_per_task.get(i.get("id"), 0),
+            tokens=rr.turn_tokens(turns.get(i.get("id"), [])),
+        )
+        for i in items
+    ]
+    return rr.aggregate(facts, policy or {})
 
 
 def task_history(comments: Any) -> dict[str, Any]:
@@ -220,6 +261,7 @@ def summarize_spec(
     tokens: dict[str, int],
     models: dict[str, list[str]],
     error: str | None = None,
+    routing: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One spec's entry from what was observed.
 
@@ -269,11 +311,17 @@ def summarize_spec(
             "turns_unreported": int(tokens.get("turns_unreported", 0)),
         },
         "models": {role: sorted(set(m)) for role, m in sorted(models.items())},
+        "routing": list(routing or []),
     }
 
 
 def build_scorecard(
-    specs: list[dict[str, Any]], *, stamp: str, commit: str, llm: str
+    specs: list[dict[str, Any]],
+    *,
+    stamp: str,
+    commit: str,
+    llm: str,
+    policy: str = "default",
 ) -> dict[str, Any]:
     """The run's scorecard: every spec's entry and the totals over them."""
     criteria_passed = sum(s["criteria"]["passed"] for s in specs)
@@ -287,6 +335,7 @@ def build_scorecard(
         "stamp": stamp,
         "commit": commit,
         "llm": llm,
+        "policy": policy,
         "specs": sorted(specs, key=lambda s: s["name"]),
         "totals": {
             "specs": len(specs),
@@ -319,7 +368,7 @@ def render_markdown(card: dict[str, Any]) -> str:
     lines = [
         f"# Bench scorecard {card['stamp']}",
         "",
-        f"Factory commit `{card['commit']}`, models from `{card['llm']}`, schema v{card['schema_version']}.",
+        f"Factory commit `{card['commit']}`, models from `{card['llm']}`, routing policy `{card.get('policy', 'default')}`, schema v{card['schema_version']}.",
         "Criteria are graded by the acceptance tests a person wrote for each specification;",
         "tokens count only the turns whose usage the provider reported.",
         "",
@@ -354,6 +403,13 @@ def render_markdown(card: dict[str, Any]) -> str:
         )
         if s.get("error"):
             lines.append(f"- Error: {s['error']}")
+        lines += [
+            f"- Difficulty {r['difficulty']}, {r['model'] or 'no delivery'}: "
+            f"{r['done_first_attempt']}/{r['tasks']} at the first attempt, {r['done']} done, "
+            f"{r['rework_per_task']:.2f} rework / task, {_pct(r['blocked_share'])} blocked, "
+            f"{r['tokens']['reported']} tokens"
+            for r in s.get("routing") or []
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -369,20 +425,24 @@ def _get(api: str, path: str) -> Any:
 
 def reported_tokens(
     dsn: dict[str, str], company_id: int
-) -> tuple[dict[str, int], dict[str, list[str]]]:
+) -> tuple[
+    dict[str, int], dict[str, list[str]], dict[int, list[tuple[str | None, int]]]
+]:
     """The company's KPI turns in the audit log: tokens of the reported ones,
-    how many were and were not reported, and the model served per role."""
+    how many were and were not reported, the model served per role, and each
+    task's turns (``(usage status, cost)``) for the split by difficulty."""
     import psycopg2  # the backend's environment has it
 
     tokens = {"reported": 0, "turns_reported": 0, "turns_unreported": 0}
     models: dict[str, list[str]] = {}
+    per_task: dict[int, list[tuple[str | None, int]]] = {}
     with psycopg2.connect(**dsn) as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT details->>'agent_role', details->>'model', details->>'tokens', cost_tokens "
-            "FROM audit_log WHERE company_id = %s AND details->>'tokens' IS NOT NULL",
+            "SELECT details->>'agent_role', details->>'model', details->>'tokens', cost_tokens, "
+            "interaction_id FROM audit_log WHERE company_id = %s AND details->>'tokens' IS NOT NULL",
             (company_id,),
         )
-        for role, model, status, cost in cur.fetchall():
+        for role, model, status, cost, interaction in cur.fetchall():
             if status == "reported":
                 tokens["reported"] += int(cost or 0)
                 tokens["turns_reported"] += 1
@@ -390,16 +450,31 @@ def reported_tokens(
                 tokens["turns_unreported"] += 1
             if role and model:
                 models.setdefault(role, []).append(model)
-    return tokens, models
+            prefix, _, number = (interaction or "").partition("-")
+            if prefix == "task" and number.isdigit():
+                per_task.setdefault(int(number), []).append((status, int(cost or 0)))
+    return tokens, models, per_task
+
+
+def _policy_from_env() -> dict[str, Any]:
+    """The ``AGENT_MODEL_POLICY`` the run's backend read, for the band names."""
+    try:
+        data = json.loads(os.environ.get("AGENT_MODEL_POLICY") or "{}")
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def collect(args: argparse.Namespace) -> dict[str, Any]:
     graded = json.loads(Path(args.grade).read_text(encoding="utf-8"))
     items: list[dict[str, Any]] = []
     runs: dict[int, int] = {}
+    last_model: dict[int, str | None] = {}
+    turns: dict[int, list[tuple[str | None, int]]] = {}
     status, verified, error = args.status, None, args.error or None
     tokens: dict[str, int] = {}
     models: dict[str, list[str]] = {}
+    routing: list[dict[str, Any]] = []
     try:
         if args.sprint:
             board = _get(args.api, f"/v1/sprints/{args.sprint}/board")
@@ -409,7 +484,11 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
                     args.api,
                     f"/v1/agent_runs?company_id={args.company}&external_ref=task-{item['id']}",
                 )
-                runs[item["id"]] = len(found.get("agent_runs") or [])
+                found_runs = found.get("agent_runs") or []  # newest first
+                runs[item["id"]] = len(found_runs)
+                last_model[item["id"]] = (found_runs[0] if found_runs else {}).get(
+                    "model"
+                )
         if args.spec_id:
             spec = _get(args.api, f"/v1/specifications/{args.spec_id}")
             verified = (spec.get("coverage") or {}).get("verified")
@@ -419,7 +498,8 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
                     ("host", "port", "user", "password", "dbname"), args.pg, strict=True
                 )
             )
-            tokens, models = reported_tokens(dsn, args.company)
+            tokens, models, turns = reported_tokens(dsn, args.company)
+        routing = routing_rows(items, last_model, runs, turns, _policy_from_env())
     except Exception as exc:  # noqa: BLE001 - a failed collection is recorded, not hidden.
         # An observation that could not be made is never a green zero.
         status = "error"
@@ -435,6 +515,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         tokens=tokens,
         models=models,
         error=error,
+        routing=routing,
     )
 
 
@@ -471,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
     w = sub.add_parser("write")
     w.add_argument("--out-dir", required=True, type=Path)
     w.add_argument("--llm", default="fake")
+    w.add_argument("--policy", default="default", help="the routing policy's label")
     w.add_argument("--stamp", default=time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
@@ -484,7 +566,13 @@ def main(argv: list[str] | None = None) -> int:
         args.out.write_text(json.dumps(collect(args), indent=2))
         return 0
     entries = [json.loads(p.read_text(encoding="utf-8")) for p in args.entries]
-    card = build_scorecard(entries, stamp=args.stamp, commit=_commit(), llm=args.llm)
+    card = build_scorecard(
+        entries,
+        stamp=args.stamp,
+        commit=_commit(),
+        llm=args.llm,
+        policy=args.policy or "default",
+    )
     problems = validate(card)
     if problems:
         print(

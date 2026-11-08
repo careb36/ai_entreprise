@@ -52,6 +52,10 @@
 #                                    the fake; it spends tokens, so CI sets it
 #                                    only behind a flag. Empty: the fake.
 #   BENCH_RESEARCH_TOOLS [false with the fake, true otherwise]
+#   AGENT_MODEL_POLICY [empty]       the routing policy the backend runs under
+#                                    (services/model_routing.py), passed through
+#   BENCH_POLICY [default, or the policy itself]  the policy's label on the
+#                                    scorecard, so compare.py can tell two runs apart
 #
 # A grade or a collection that fails stops the run (BENCH FAILED): a spec is
 # never left out of the scorecard, and nothing of an earlier run in the same
@@ -94,6 +98,7 @@ BACKEND_PORT=${BENCH_BACKEND_PORT:-18100}
 LLM_PORT=${BENCH_LLM_PORT:-15200}
 PY=${BENCH_PYTHON:-${E2E_PYTHON:-python}}
 TIMEOUT=${BENCH_TIMEOUT:-600}
+POLICY_LABEL=${BENCH_POLICY:-${AGENT_MODEL_POLICY:-default}}
 LLM_URL=${BENCH_LLM_URL:-}
 WORK=${BENCH_WORKDIR:-$(mktemp -d -t fabrique-bench-XXXXXX)}
 mkdir -p "$WORK/projects" "$WORK/audit" "$WORK/entries"
@@ -159,7 +164,7 @@ PGENV=(POSTGRES_HOST="$PG_HOST" POSTGRES_PORT="$PG_PORT" POSTGRES_USER="$PG_USER
     CONSOLE_ASSISTANTS_ENABLED=false SUPPORT_AGENT_ENABLED=false REVIEWER_AGENT_ENABLED=false \
     DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_SANDBOX=host \
     RESEARCH_TOOLS_ENABLED="$RESEARCH" AUTO_SELF_IMPROVEMENT_ENABLED=false AGENT_GRAPH_ENABLED=false \
-    AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
+    AGENT_MODEL_POLICY="${AGENT_MODEL_POLICY:-}" AUDIT_LOG_PATH="$WORK/audit" PYTHONPATH=.:app "$PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT"
 ) > "$WORK/backend.log" 2>&1 & BPID=$!
 for _ in $(seq 1 60); do healthy && break; sleep 1; done
 healthy || { echo "backend did not come up; see $WORK/backend.log"; exit 2; }
@@ -238,7 +243,7 @@ ENTRIES=("$WORK"/entries/*.json)
 [ -f "${ENTRIES[0]}" ] && [ ${#ENTRIES[@]} -eq ${#SPECS[@]} ] \
   || fail "${#SPECS[@]} specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
-CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" "${ENTRIES[@]}") \
+CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"

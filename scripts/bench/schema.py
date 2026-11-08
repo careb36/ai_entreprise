@@ -1,12 +1,17 @@
 """The bench scorecard's schema: what ``scorecard.py write`` and
 ``compare.py`` accept. A card off the schema is never written or compared
 (exit status 2): every counter present, every number finite.
+
+Version 2 (issue #319) adds the routing policy's label (``policy``) and, per
+spec, the tasks split by difficulty and model (``routing``). A version 1 card
+(the references kept before it) is still read, without either.
 """
 
 import math
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+READABLE_VERSIONS = (1, 2)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
 SPEC_STATUSES = ("completed", "timeout", "error")
 
@@ -59,16 +64,62 @@ def _count(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+_ROUTING_COUNTS = ("tasks", "done", "done_first_attempt", "blocked", "rework")
+_ROUTING_RATES = ("rework_per_task", "blocked_share", "first_attempt_rate")
+
+
+def _routing_problems(where: str, rows: Any) -> list[str]:
+    """What is wrong with a spec's split by difficulty and model."""
+    if not isinstance(rows, list):
+        return [f"{where}.routing must be a list"]
+    problems = []
+    for index, row in enumerate(rows):
+        at = f"{where}.routing[{index}]"
+        if not isinstance(row, dict):
+            problems.append(f"{at} is not an object")
+            continue
+        difficulty = row.get("difficulty")
+        if not _count(difficulty) or not 1 <= difficulty <= 5:
+            problems.append(f"{at}.difficulty must be an integer from 1 to 5")
+        if row.get("model") is not None and not isinstance(row.get("model"), str):
+            problems.append(f"{at}.model must be a string or null")
+        problems.extend(
+            f"{at}.{k} must be a count"
+            for k in _ROUTING_COUNTS
+            if not _count(row.get(k))
+        )
+        problems.extend(
+            f"{at}.{k} must be a finite number"
+            for k in _ROUTING_RATES
+            if not _number(row.get(k))
+        )
+        tokens = row.get("tokens") if isinstance(row.get("tokens"), dict) else {}
+        problems.extend(
+            f"{at}.tokens.{k} must be a count"
+            for k in _TOKEN_FIELDS
+            if not _count(tokens.get(k))
+        )
+        if all(_count(row.get(k)) for k in _ROUTING_COUNTS) and not (
+            row["done_first_attempt"] <= row["done"] <= row["tasks"]
+        ):
+            problems.append(f"{at}: done_first_attempt <= done <= tasks does not hold")
+    return problems
+
+
 def validate(card: Any) -> list[str]:
     """What is wrong with *card* against the schema; empty when it is sound."""
     if not isinstance(card, dict):
         return ["the scorecard is not an object"]
     problems = []
-    if card.get("schema_version") != SCHEMA_VERSION:
-        problems.append(
-            f"schema_version is {card.get('schema_version')!r}, expected {SCHEMA_VERSION}"
-        )
-    for key in ("stamp", "commit", "llm"):
+    version = card.get("schema_version")
+    if version not in READABLE_VERSIONS or isinstance(version, bool):
+        problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
+    keys = (
+        ("stamp", "commit", "llm", "policy")
+        if version == 2
+        else ("stamp", "commit", "llm")
+    )
+    for key in keys:
         if not isinstance(card.get(key), str) or not card.get(key):
             problems.append(f"{key} must be a non-empty string")
     specs = card.get("specs")
@@ -128,6 +179,8 @@ def validate(card: Any) -> list[str]:
             problems.append(
                 f"{where}.tasks: done_first_attempt <= done <= total does not hold"
             )
+        if version == 2:
+            problems.extend(_routing_problems(where, spec.get("routing")))
     totals = card.get("totals")
     if not isinstance(totals, dict):
         problems.append("totals must be an object")
