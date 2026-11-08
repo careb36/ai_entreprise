@@ -181,23 +181,35 @@ def deliver(
     }
 
 
+def merge_state(root: Path, worktree: Path, ref: str) -> str:
+    """``skip`` (not La Fabrique's), ``missing``, ``already`` (in HEAD) or ``todo``."""
+    if not valid_branch(ref) or not ref.startswith(TASK_BRANCH_PREFIX):
+        return "skip"
+    if run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{ref}"], root, check=False).returncode != 0:
+        return "missing"
+    if run_git(["merge-base", "--is-ancestor", ref, "HEAD"], worktree, check=False).returncode == 0:
+        return "already"
+    return "todo"
+
+
+def merge_one(worktree: Path, ref: str, message: str) -> subprocess.CompletedProcess:
+    """``git merge --no-ff`` of *ref* as La Fabrique; a conflict is left for the caller to read and abort."""
+    name, email = COMMITTER
+    return run_git(
+        ["-c", f"user.name={name}", "-c", f"user.email={email}", "-c", "commit.gpgsign=false",
+         "merge", "--no-ff", "--no-edit", "--no-verify", "-m", message, ref],
+        worktree,
+        check=False,
+    )
+
+
 def merge_branches(root: Path, worktree: Path, branches: list) -> list:
     """Merge each of *branches* (La Fabrique's own) into *worktree*; the ones merged now."""
     merged = []
-    name, email = COMMITTER
     for ref in branches:
-        if not valid_branch(ref) or not ref.startswith(TASK_BRANCH_PREFIX):
+        if merge_state(root, worktree, ref) != "todo":
             continue
-        if run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{ref}"], root, check=False).returncode != 0:
-            continue
-        if run_git(["merge-base", "--is-ancestor", ref, "HEAD"], worktree, check=False).returncode == 0:
-            continue
-        result = run_git(
-            ["-c", f"user.name={name}", "-c", f"user.email={email}", "-c", "commit.gpgsign=false",
-             "merge", "--no-ff", "--no-edit", "--no-verify", "-m", f"Merge {ref} (a task this one depends on)", ref],
-            worktree,
-            check=False,
-        )
+        result = merge_one(worktree, ref, f"Merge {ref} (a task this one depends on)")
         if result.returncode != 0:
             run_git(["merge", "--abort"], worktree, check=False)
             raise GitError(f"could not merge {ref} into the task's worktree: {(result.stderr or result.stdout).strip()}")

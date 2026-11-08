@@ -703,7 +703,8 @@ Interactive docs at `http://localhost:8000/docs` when running locally. Routes ot
 | `GET`  | `/v1/sprints/{id}/board` | The Kanban board of a sprint |
 | `POST` | `/v1/sprints/{id}/pause` · `/resume` · `/dispatch` | Hold, resume or re-queue a sprint's tasks |
 | `PATCH` | `/v1/backlog/{id}` | Change a task's status, priority or assignee, or add a note (Manager) |
-| `GET`  | `/v1/inbox` | What needs a person: blocked tasks (with the ScrumMaster's triage of each), procedure proposals, undecided runs of other producers |
+| `GET` · `POST` | `/v1/sprints/{id}/integration` · `/integrate` · `/integration/publish` | A sprint's task branches merged into `fabrique/sprint-<id>` in dependency order and the suite run on the result (on its own when a sprint closes with the Git workflow on), and one pull or merge request for the sprint (Viewer reads, Manager integrates and publishes) |
+| `GET`  | `/v1/inbox` | What needs a person: blocked tasks (with the ScrumMaster's triage of each), procedure proposals, undecided runs of other producers, integrations stopped at a conflict or a failing suite |
 | `GET`  | `/v1/messages` | The conversation between roles (filters: sprint, task, kind) |
 | `GET` · `POST` | `/v1/procedures` (+ `/adopt`, `/reject`, `/retire`) | The rules each role follows, proposed by the ScrumMaster and measured by the board |
 | `GET` | `/v1/standards` | The factory's quality standards, the same for every company, with what the loop checks without a model |
