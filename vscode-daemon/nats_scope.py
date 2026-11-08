@@ -22,9 +22,6 @@ import re
 DELIVER_SUBJECT = "workspace.deliver"
 DELIVERED_SUBJECT = "workspace.delivered"
 
-STREAM_MAX_AGE_SECONDS = 7 * 24 * 3600
-STREAM_DUPLICATE_WINDOW_SECONDS = 15 * 60
-
 
 def _namespace() -> str:
     raw = re.sub(r"[^A-Za-z0-9_-]", "_", os.getenv("NATS_NAMESPACE", "")).strip("_")

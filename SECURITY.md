@@ -300,8 +300,9 @@ What this means today, and what it does not:
   picks it, so prompt injection cannot reach that string.
 - The exposure is a **human or agent** invoking `workspace.execute` with an
   arbitrary command, and the mitigations are the ones already in place: the
-  daemon listens on NATS with a scoped namespace, and the subjects it accepts
-  are a fixed list.
+  daemon listens on NATS with a scoped namespace, the subjects it accepts
+  are a fixed list, and with credentials on the bus only the backend's user
+  may send it a request (§8.6).
 
 Tracked as a limitation, not a fixed issue. Closing it means running the
 workspace inside a container or a kernel sandbox with the project bind-mounted
@@ -323,6 +324,46 @@ you would not run yourself.
 - Sanitize any model output inserted into SQL, Cypher, JSON, HTML, or logs.
 - Limit output size to avoid DoS.
 - Do not render markdown/HTML from untrusted model output without a sanitizer.
+
+### 8.6 The Message Bus (NATS)
+
+Anything that can publish on NATS can ask the workspace daemon to write files
+and run commands on the computer that holds the user's projects, so the bus is
+part of the daemon's attack surface, not plumbing behind it (issue #327).
+
+- **One user per component.** `scripts/nats_config.py` writes
+  `nats/nats-server.conf` (`--check` fails when the committed file is stale;
+  the backend suite checks it too, `test_nats_security.py`). The `backend` user publishes the work (`workspace.>`,
+  `task.>`, `glassroom.>`, `audit.>`, `system.>`) and owns JetStream; its
+  replies arrive under `_INBOX.backend`. The `daemon` user subscribes to
+  `workspace.>` and `_INBOX.daemon.>`, answers each request once
+  (`allow_responses`), and publishes only `workspace.delivered`, `glassroom.*`
+  and the JetStream calls of its own consumer on the deliveries stream. It
+  cannot send a request (`workspace.execute`…), assign a task, read the
+  backend's replies, or create, change or delete a stream; the streams are the
+  backend's, and the daemon waits until they exist. `--namespace` writes the
+  same rules for a deployment with `NATS_NAMESPACE`.
+- **Credentials.** The broker turns users on when both
+  `NATS_BACKEND_PASSWORD` and `NATS_DAEMON_PASSWORD` are set (`nats/start.sh`;
+  only one set refuses to start; neither keeps the old unauthenticated broker).
+  The backend and the daemon read `NATS_USER`/`NATS_PASSWORD`, or
+  `NATS_CREDS_FILE` (a `.creds` file, which wins), or `NATS_NKEY_SEED` (a seed
+  file). Passwords live only in the environment: the configuration names
+  `$NATS_BACKEND_PASSWORD`, never the value, and no log line or `/health`
+  field carries a secret (`/health` says only `authenticated` and `tls`).
+- **TLS.** With `nats/certs/server.crt` and `server.key` the broker requires
+  TLS; `NATS_TLS=true` makes both components connect with it, `NATS_TLS_CA`
+  pins the CA and `NATS_TLS_CERT`/`NATS_TLS_KEY` present a client
+  certificate (verified by the broker with `NATS_TLS_VERIFY=true`).
+  `docs/OPERATIONS.md`, "Securing the bus", generates a self-signed CA.
+- **Exposure.** Without credentials the broker is safe only on loopback; the
+  backend warns at startup when `NATS_BIND` is anything else, and the daemon
+  when it connects to a broker on another machine without credentials.
+
+The design follows the scoped credentials of the agents that ship this
+already: OpenHands' scoped API keys and the per-integration tokens of GitHub
+Copilot coding agent and OpenAI Codex, one credential per component with only
+what it needs.
 
 ---
 
@@ -420,6 +461,28 @@ Every PR that touches backend, frontend, agents, or infrastructure must pass thi
 - [ ] Security unit tests for authorization and input validation
 - [ ] Negative tests for prompt injection and tool abuse
 - [ ] Regression tests for previous security bugs
+
+### 10.8 Deployment Checklist
+
+Before the stack serves anyone but the person running it:
+
+- [ ] **Bind.** `NATS_BIND` stays `127.0.0.1` unless the daemon runs on
+      another machine; the frontend and API sit behind TLS.
+- [ ] **Bus credentials.** `NATS_BACKEND_PASSWORD` and `NATS_DAEMON_PASSWORD`
+      set (or `.creds` files), `python3 scripts/nats_config.py --check` passes,
+      and `/health` reports `nats.authenticated: true` (§8.6).
+- [ ] **Bus TLS.** Whenever NATS leaves the machine: certificates in
+      `nats/certs`, `NATS_TLS=true` and `NATS_TLS_CA` on the backend and the
+      daemon, `/health` reports `nats.tls: true`.
+- [ ] **API tokens.** External callers use per-company API tokens
+      (`/v1/auth/tokens`), stored hashed, named, scoped and
+      revoked when no longer used; `JWT_SECRET_KEY` set and `AUTH_REQUIRED` on.
+- [ ] **Secrets at rest.** `FERNET_SECRET_KEY` set, so provider keys, MCP
+      secrets, run secrets and project credentials are encrypted (the backend
+      warns at startup without it); `AUDIT_SIGNING_KEY` keys the audit chain.
+- [ ] **Sandbox.** With `DELIVERY_TESTS_ENABLED`, `DELIVERY_SANDBOX=container`
+      (or each company's mode), and `FABRIQUE_SANDBOX_REQUIRED=container` on the
+      daemon's machine so nothing falls back to the host.
 
 ---
 

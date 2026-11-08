@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
+import nats_auth
 from config import Settings
 from exception_handlers import register_exception_handlers
 from fastapi import FastAPI, Request
@@ -130,13 +131,28 @@ def _nats_state(request: Request) -> str:
     return getattr(request.app.state, "nats_state", "connecting")
 
 
+def _nats_health(request: Request) -> dict:
+    """The bus as ``/health`` shows it: state, JetStream, auth and TLS, no secret."""
+    client = getattr(request.app.state, "nats_client", None)
+    security = getattr(client, "security", None) or nats_auth.describe()
+    connection = getattr(client, "nc", None)
+    return {
+        "state": _nats_state(request),
+        "connected": bool(getattr(connection, "is_connected", connection is not None)),
+        "jetstream": bool(getattr(request.app.state, "jetstream", False)),
+        "authenticated": bool(security.get("authenticated")),
+        "tls": bool(security.get("tls")),
+    }
+
+
 @app.get("/health")
 async def health_check(request: Request):
+    nats_health = _nats_health(request)
     return {
         "status": "healthy",
         "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
-        "nats": _nats_state(request),
-        "jetstream": bool(getattr(request.app.state, "jetstream", False)),
+        "nats": nats_health,
+        "jetstream": nats_health["jetstream"],
     }
 
 

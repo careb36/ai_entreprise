@@ -47,6 +47,19 @@ Un modo que no puede correr en la máquina del daemon hace fallar la corrida, nu
 """
 
 
+BUS_SECTION = """## El bus de mensajes (NATS)
+
+Quien puede publicar en NATS puede pedirle al daemon que escriba archivos y ejecute comandos en la computadora de la persona. Por eso cada componente se conecta con su propio usuario (`nats/nats-server.conf`, generado por `scripts/nats_config.py`) y solo con los subjects que necesita.
+
+| Usuario | Puede | No puede |
+|---------|-------|----------|
+| `backend` | Publicar `workspace.>`, `task.>`, `glassroom.>`, `audit.>`, `system.>` y la API de JetStream (crea los streams); recibir en `_INBOX.backend.>` | Leer las respuestas del daemon a sus propias consultas (`_INBOX.daemon.>`) |
+| `daemon` | Recibir `workspace.>` y responder una vez a cada pedido; publicar `workspace.delivered`, `glassroom.*` y las llamadas de JetStream de su propio consumidor del stream de entregas | Enviar un pedido (`workspace.execute`, `workspace.generate`…), asignar tareas (`task.>`), leer las respuestas del backend, crear, cambiar o borrar streams |
+
+Sin `NATS_BACKEND_PASSWORD` y `NATS_DAEMON_PASSWORD` el broker corre sin autenticación, como antes; es seguro solo mientras `NATS_BIND` sea `127.0.0.1`, y el backend lo advierte al arrancar si no lo es. Con `NATS_TLS=true` el tráfico va cifrado y `NATS_TLS_CA` fija la CA que firmó el certificado del broker. Las credenciales nunca aparecen en los logs ni en `/health`, que informa solo si la conexión está autenticada y cifrada.
+"""
+
+
 def build() -> TM:
     """Construye el modelo de amenazas de La Fabrique."""
     tm = TM("La Fabrique")
@@ -207,6 +220,7 @@ def main() -> int:
          "documentan en `SECURITY.md`."),
         "",
         SANDBOX_SECTION,
+        BUS_SECTION,
     ]
     for severity in ("Critical", "Very High", "High", "Medium", "Low", "Very Low"):
         selected = por_sev.get(severity, [])

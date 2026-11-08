@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import nats
+import nats_auth
 from logging_config import setup_logger
 from nats.errors import TimeoutError as NATSTimeoutError
 from nats.js import api as js_api
@@ -55,8 +56,8 @@ class DurableStream:
 
 
 # Work-queue streams: a message is removed once its consumer acknowledges it.
-# The workspace daemon declares the two workspace streams with the same
-# settings, so whichever process starts first creates them.
+# The backend creates all three; the workspace daemon's NATS user may not
+# (nats/nats-server.conf), so it waits until they exist.
 DURABLE_STREAMS: tuple[DurableStream, ...] = (
     DurableStream("FABRIQUE_TASKS", ("task.assign",)),
     DurableStream("FABRIQUE_DELIVERIES", ("workspace.deliver",)),
@@ -139,18 +140,32 @@ class NATSClient:
         self.subscriptions: dict[str, asyncio.Task] = {}
         # Set by ``enable_jetstream`` once the durable streams exist.
         self.js = None
+        # How the connection authenticates and whether it uses TLS; no secret.
+        self.security = nats_auth.describe()
 
     async def connect(self):
         """
         Establish a connection to the NATS server.
 
+        Credentials and TLS come from the environment (``nats_auth``): a user
+        and password, a ``.creds`` file or an nkey seed, never logged.
+
         Raises:
             Exception: Propagated from the ``nats`` library if the server is
                        unreachable or authentication fails.
+            nats_auth.NATSConfigError: The settings name a missing file or
+                       are incomplete.
         """
+        options = nats_auth.connect_options()
+        self.security = nats_auth.describe()
         try:
-            self.nc = await nats.connect(self.nats_url)
-            logger.info(f"Connected to NATS at {self.nats_url}")
+            self.nc = await nats.connect(self.nats_url, **options)
+            logger.info(
+                "Connected to NATS at %s (auth: %s, TLS: %s)",
+                nats_auth.safe_url(self.nats_url),
+                self.security["auth"],
+                "on" if self.security["tls"] else "off",
+            )
         except Exception as e:
             logger.error(f"Failed to connect to NATS: {e}")
             raise
