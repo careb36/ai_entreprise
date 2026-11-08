@@ -1,15 +1,15 @@
 import { useTranslation } from 'react-i18next'
 import { GitBranch } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../services/api'
+import { integrationApi } from '../services/integration'
 
 export function SprintIntegration({ sprintId }: { sprintId: number }) {
   const { t } = useTranslation()
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['sprint-integration', sprintId],
-    queryFn: () => api.sprintIntegration(sprintId),
+    queryFn: () => integrationApi.plan(sprintId),
   })
-  const integration = data as any
+  const integration = data
 
   if (isLoading) return <div role="status" className="text-sm text-gray-400">{t('common.loading')}</div>
   if (isError || !data) return (
@@ -28,13 +28,13 @@ export function SprintIntegration({ sprintId }: { sprintId: number }) {
       <p className="text-xs text-gray-400">
         {t('sprint.integrationBranch', { defaultValue: 'Integration branch' })}: <code className="text-gray-200">{integration?.integration_branch}</code>
       </p>
-      {integration?.unmet_dependencies?.length > 0 && (
+      {(integration?.unmet_dependencies?.length ?? 0) > 0 && (
         <div role="alert" className="alert-error text-xs">
-          {t('sprint.unmetDeps', { defaultValue: 'Unmet dependencies' })}: {integration.unmet_dependencies.map((d: any) => `#${d.task_id}→#${d.missing_dependency}`).join(', ')}
+          {t('sprint.unmetDeps', { defaultValue: 'Unmet dependencies' })}: {integration?.unmet_dependencies.map(d => `#${d.task_id}→#${d.missing_dependency}`).join(', ')}
         </div>
       )}
       <ol className="space-y-1 text-xs">
-        {integration?.task_branches?.map((b: any, i: number) => (
+        {integration?.task_branches?.map((b, i) => (
           <li key={b.task_id} className="flex items-center gap-2">
             <span className="text-gray-500">{i + 1}.</span>
             <code className="text-gray-300">{b.branch}</code>
