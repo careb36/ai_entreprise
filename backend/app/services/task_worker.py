@@ -1475,7 +1475,7 @@ def _triage_blocked_task(
                 session, company_id, item, reason
             )
         decision = scrum_master.decide(
-            scrum_master.ask_triage(model, system_prompt, prompt), item_id
+            scrum_master.ask_triage(model, system_prompt, prompt, company_id), item_id
         )
         if decision is None:
             return
@@ -1571,9 +1571,9 @@ def _ask_scrum_master_for_procedures(
             "change what made it fail.\n\n" + procedures.proposal_format(roles)
         )
         model, system_prompt = scrum_master.profile(session, company_id)
-    # Asked outside the session, with the client's usual retries: a sprint
-    # closes once, and a transient proxy error should not lose its proposals.
-    return scrum_master.ask_model(model, system_prompt, prompt), roles
+    # Outside the session, usual retries: a transient error must not lose proposals.
+    answer = scrum_master.ask_model(model, system_prompt, prompt, company_id=company_id)
+    return answer, roles
 
 
 def _propose_procedures(

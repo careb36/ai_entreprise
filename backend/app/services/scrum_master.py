@@ -208,6 +208,7 @@ def ask_model(
     *,
     timeout: float = TIMEOUT_SECONDS,
     retries: int | None = None,
+    company_id: int | None = None,
 ) -> str:
     """One question to the ScrumMaster through the proxy; no database involved.
 
@@ -220,6 +221,7 @@ def ask_model(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout = timeout
+    client.company_id = company_id
     client.max_tokens = ANSWER_MAX_TOKENS
     if retries is not None:
         client.max_retries = retries
@@ -243,7 +245,14 @@ def ask(
 ) -> str:
     """Ask the company's ScrumMaster agent (its model, or the role's default)."""
     model, system_prompt = profile(session, company_id)
-    return ask_model(model, system_prompt, prompt, timeout=timeout, retries=retries)
+    return ask_model(
+        model,
+        system_prompt,
+        prompt,
+        timeout=timeout,
+        retries=retries,
+        company_id=company_id,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -302,10 +311,17 @@ def prepare_triage(
     return triage_prompt(item, reason, context, record), model, system_prompt
 
 
-def ask_triage(model: str, system_prompt: str | None, prompt: str) -> str:
+def ask_triage(
+    model: str, system_prompt: str | None, prompt: str, company_id: int | None = None
+) -> str:
     """The triage question itself: one short attempt (see ``TRIAGE_TIMEOUT_SECONDS``)."""
     return ask_model(
-        model, system_prompt, prompt, timeout=TRIAGE_TIMEOUT_SECONDS, retries=0
+        model,
+        system_prompt,
+        prompt,
+        timeout=TRIAGE_TIMEOUT_SECONDS,
+        retries=0,
+        company_id=company_id,
     )
 
 
@@ -360,7 +376,7 @@ def triage(
     """
     try:
         prompt, model, system_prompt = prepare_triage(session, company_id, item, reason)
-        answer = ask_triage(model, system_prompt, prompt)
+        answer = ask_triage(model, system_prompt, prompt, company_id)
     except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
         logger.warning("ScrumMaster triage failed for item=%s: %s", item.id, exc)
         return None

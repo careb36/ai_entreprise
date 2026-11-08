@@ -161,3 +161,22 @@ def test_the_client_sends_the_connection_and_refuses_what_it_cannot_route(
         and "not this company's" in refused["error"]
         and sent == {}
     )
+
+
+def test_scrum_master_and_authoring_clients_carry_the_company(monkeypatch):
+    """A ``conn:`` model needs the company on the client: the ScrumMaster's
+    questions and the PO's and Architect's drafts pass it on."""
+    from app.services import scrum_master, spec_author
+
+    seen = []
+
+    def fake_chat(self, messages, model, role=None, bu_id=None, **kwargs):
+        seen.append(self.company_id)
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr("llm_proxy_client.LLMProxyClient.chat", fake_chat)
+    scrum_master.ask_model("conn:1:m", None, "hi", company_id=7)
+    scrum_master.ask_triage("conn:1:m", None, "hi", 8)
+    spec_author.ask("conn:1:m", None, "hi", company_id=9)
+    spec_author.ask_with_tools("conn:1:m", None, "hi", company_id=10)
+    assert seen == [7, 8, 9, 10]

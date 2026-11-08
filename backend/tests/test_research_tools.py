@@ -423,7 +423,9 @@ def test_the_po_consults_a_source_and_the_draft_keeps_it(
             return _answer(json.dumps({**GOOD, "questions": []}))
 
     client = _Client()
-    monkeypatch.setattr(spec_author, "_client", lambda timeout, max_tokens: client)
+    monkeypatch.setattr(
+        spec_author, "_client", lambda timeout, max_tokens, company_id=None: client
+    )
     drafted = test_client.post(
         "/v1/specifications/draft",
         json={"company_id": company.id, "brief": "A rate-limited API for the e2e."},

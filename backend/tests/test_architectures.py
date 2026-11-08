@@ -312,6 +312,7 @@ def test_the_architect_drafts_from_the_approved_specification_asks_and_a_person_
     prepared = arch_author.prepare(sqlite_session, spec)
     assert set(prepared) == {
         "specification_id",
+        "company_id",
         "model",
         "system_prompt",
         "prompt",
