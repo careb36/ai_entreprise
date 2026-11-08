@@ -79,14 +79,24 @@ class ModelFactory:
     @staticmethod
     def model_for_role(role: AgentRole) -> str:
         """
-        The model id to use for *role*.
+        The model id to use for *role*, from the most specific setting to the
+        least:
 
-        ``NEMOTRON_ROLES`` (comma-separated role names) opts roles into the
-        NVIDIA models served by Nebius Token Factory; ``NEMOTRON_MODEL``
-        (with ``NEMOTRON_MODEL_STRATEGIC`` / ``_FAST`` overrides) names them.
-        Unset means the ``ROLE_MODEL_MAP`` default, so nothing changes for
-        existing deployments.
+        1. ``AGENT_MODEL_<ROLE>`` (``AGENT_MODEL_PO``, ``AGENT_MODEL_ARCHITECT``,
+           ``AGENT_MODEL_SCRUM_MASTER``, ``AGENT_MODEL_DEVELOPER``,
+           ``AGENT_MODEL_QA``, ``AGENT_MODEL_SECOPS``,
+           ``AGENT_MODEL_TECH_WRITER``, ``AGENT_MODEL_ENGRAM_PROCESSOR``);
+        2. ``NEMOTRON_ROLES``, for the roles it names: ``NEMOTRON_MODEL``
+           (with ``NEMOTRON_MODEL_STRATEGIC`` / ``_FAST`` overrides);
+        3. ``AGENT_MODEL``, for every role (one provider for the whole team);
+        4. the ``ROLE_MODEL_MAP`` default.
+
+        Unset means the default, so nothing changes for existing deployments.
+        An agent's own ``model`` (the Agents page) still wins over all of it.
         """
+        own = os.getenv(f"AGENT_MODEL_{role.name}", "").strip()
+        if own:
+            return own
         default = ModelFactory.ROLE_MODEL_MAP[role].model_name
         opted_in = {
             r.strip().lower()
@@ -94,7 +104,7 @@ class ModelFactory:
             if r.strip()
         }
         if role.value.lower() not in opted_in:
-            return default
+            return os.getenv("AGENT_MODEL", "").strip() or default
         tier_var = {
             AgentRole.PO: "NEMOTRON_MODEL_STRATEGIC",
             AgentRole.ARCHITECT: "NEMOTRON_MODEL_STRATEGIC",
@@ -181,10 +191,12 @@ def default_model_for_role(role: str) -> str:
     """
     The model id an agent of *role* uses when its own ``model`` is empty.
 
-    This is the single source of role defaults: the LangGraph producer and
-    the task worker both read ``ModelFactory.ROLE_MODEL_MAP``.
+    This is the single source of role defaults for every caller (the task
+    worker, the ScrumMaster, the Support and Reviewer agents, the PO's
+    drafts, the LangGraph producer): ``ModelFactory.model_for_role``, so
+    ``AGENT_MODEL`` and its per-role variants reach all of them.
     """
-    return ModelFactory.ROLE_MODEL_MAP[role_for_name(role)].model_name
+    return ModelFactory.model_for_role(role_for_name(role))
 
 
 def get_llm_for_role(role: str) -> ChatOpenAI:

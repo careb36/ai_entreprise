@@ -16,6 +16,26 @@ import pytest
 from sqlalchemy import inspect, text
 from sqlmodel import SQLModel, create_engine
 
+HEAD = migrations.head_revision()
+
+
+def _baseline_schema():
+    """The schema as 0001 froze it: what an older backend's database holds,
+    without the columns later migrations add."""
+    import importlib.util
+
+    path = migrations.BACKEND_DIR / "alembic" / "versions" / "0001_baseline.py"
+    spec = importlib.util.spec_from_file_location("baseline_0001", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    schema, indexes = module._schema()
+    import sqlalchemy as sa
+
+    for name, table_name, columns, unique in indexes:
+        table = schema.tables[table_name]
+        sa.Index(name, *(table.c[c] for c in columns), unique=unique)
+    return schema
+
 
 @pytest.fixture
 def db_file(tmp_path, monkeypatch):
@@ -28,7 +48,7 @@ def db_file(tmp_path, monkeypatch):
 def test_the_migrations_build_the_models_schema_from_nothing(db_file):
     assert migrations.current_revision(db_file) is None
     head = migrations.upgrade_to_head(db_file)
-    assert head == "0001" and migrations.current_revision(db_file) == head
+    assert head == HEAD and migrations.current_revision(db_file) == head
     tables = set(inspect(db_file).get_table_names())
     assert {t.name for t in SQLModel.metadata.sorted_tables} <= tables
     assert "alembic_version" in tables
@@ -41,9 +61,10 @@ def test_a_database_from_the_old_startup_is_converged_not_rebuilt(db_file):
     # and some tables not yet known. Here: every table but two, and the
     # companies table without two later columns.
     skipped = {"architectures", "mcp_servers"}
-    SQLModel.metadata.create_all(
+    baseline = _baseline_schema()
+    baseline.create_all(
         db_file,
-        tables=[t for t in SQLModel.metadata.sorted_tables if t.name not in skipped],
+        tables=[t for t in baseline.sorted_tables if t.name not in skipped],
     )
     with db_file.begin() as connection:
         connection.execute(text("ALTER TABLE companies DROP COLUMN git_base_branch"))
@@ -75,27 +96,29 @@ def test_a_database_from_the_old_startup_is_converged_not_rebuilt(db_file):
     assert differences == [("modify_nullable", "companies", "git_workflow")]
     # Running it again changes nothing.
     migrations.upgrade_to_head(db_file)
-    assert migrations.current_revision(db_file) == "0001"
+    assert migrations.current_revision(db_file) == HEAD
 
 
 def test_the_backend_refuses_a_database_that_is_not_at_head(db_file):
     with pytest.raises(
-        migrations.SchemaBehindError, match="at unversioned and the code needs 0001"
+        migrations.SchemaBehindError, match=f"at unversioned and the code needs {HEAD}"
     ):
         migrations.require_schema_at_head(db_file)
-    SQLModel.metadata.create_all(db_file)
+    _baseline_schema().create_all(db_file)
     with db_file.begin() as connection:
         connection.execute(
             text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         )
         connection.execute(text("INSERT INTO alembic_version VALUES ('0000')"))
     with pytest.raises(
-        migrations.SchemaBehindError, match="at 0000 and the code needs 0001"
+        migrations.SchemaBehindError, match=f"at 0000 and the code needs {HEAD}"
     ):
         migrations.require_schema_at_head(db_file)
     with db_file.begin() as connection:
-        connection.execute(text("UPDATE alembic_version SET version_num = '0001'"))
-    assert migrations.require_schema_at_head(db_file) == "0001"
+        connection.execute(
+            text("UPDATE alembic_version SET version_num = :v"), {"v": HEAD}
+        )
+    assert migrations.require_schema_at_head(db_file) == HEAD
 
 
 def test_startup_runs_the_migrations_only_when_asked(db_file, monkeypatch):
@@ -107,13 +130,13 @@ def test_startup_runs_the_migrations_only_when_asked(db_file, monkeypatch):
         database.prepare_database()
     monkeypatch.setattr(settings, "DB_AUTO_UPGRADE", True)
     database.prepare_database()
-    assert migrations.current_revision(db_file) == "0001"
+    assert migrations.current_revision(db_file) == HEAD
     monkeypatch.setattr(settings, "DB_AUTO_UPGRADE", False)
     database.prepare_database()  # at head now: nothing to do
 
 
 def test_the_migration_scripts_have_one_head_and_the_ini_points_at_them():
-    assert migrations.head_revision() == "0001"
+    assert migrations.head_revision() == HEAD == "0005"
     assert migrations.ALEMBIC_INI.is_file()
     assert (
         migrations.BACKEND_DIR / "alembic" / "versions" / "0001_baseline.py"
@@ -157,7 +180,7 @@ def test_a_legacy_sqlite_database_missing_a_foreign_key_column_converges(db_file
     import sqlalchemy as sa
 
     legacy = sa.MetaData()
-    for table in SQLModel.metadata.sorted_tables:
+    for table in _baseline_schema().sorted_tables:
         if table.name == "sprints":
             sa.Table(
                 "sprints",
@@ -189,10 +212,25 @@ def test_a_new_migration_can_be_generated_and_the_baseline_cannot_be_undone(
         config, message="nothing yet", autogenerate=True, version_path=str(tmp_path)
     )
     generated = Path(script.path).read_text()
-    assert "down_revision" in generated and "'0001'" in generated
+    assert "down_revision" in generated and f"'{HEAD}'" in generated
     with (
         pytest.raises(NotImplementedError, match="restore a backup"),
         db_file.begin() as connection,
     ):
         config.attributes["connection"] = connection
         command.downgrade(config, "base")
+
+
+def test_tables_init_sql_made_get_the_baseline_indexes_they_lack(db_file):
+    # A table that existed before 0001 (init.sql's) had only the indexes the
+    # old startup added by hand; 0003 creates the rest of the baseline's.
+    baseline = _baseline_schema()
+    for table in baseline.sorted_tables:
+        for index in list(table.indexes):
+            table.indexes.discard(index)
+    baseline.create_all(db_file)
+    assert not inspect(db_file).get_indexes("specifications")
+    migrations.upgrade_to_head(db_file)
+    names = {i["name"] for i in inspect(db_file).get_indexes("specifications")}
+    assert "ix_specifications_company_id" in names
+    assert migrations.schema_differences(db_file) == []

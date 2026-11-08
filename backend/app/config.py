@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     DELIVERY_TEST_COMMAND: str = ""
     # The daemon itself stops a command after 120 s; wait slightly longer.
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
+    # Where agent-written code runs (the delivery test run and the
+    # Developer's own test runs): ``host`` (the daemon's user, files and
+    # network, as before), ``container`` (an ephemeral container per run:
+    # the worktree mounted, network off, CPU/memory/process limits, every
+    # capability dropped) or ``bwrap`` (bubblewrap namespaces). A company
+    # may set its own (``Company.delivery_sandbox``). The daemon reports what
+    # it applied, and the Verifier records it (``sandbox``).
+    DELIVERY_SANDBOX: str = "host"
+    DELIVERY_SANDBOX_IMAGE: str = "python:3.12-slim"
+    DELIVERY_SANDBOX_NETWORK: bool = False
+    DELIVERY_SANDBOX_CPUS: float = 2.0
+    DELIVERY_SANDBOX_MEMORY_MB: int = 2048
+    DELIVERY_SANDBOX_PIDS: int = 512
 
     # ---------------------------------------------------------------------------
     # Autonomous improvement & console assistants
@@ -175,9 +188,10 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     RATE_LIMIT_DEFAULT: str = "100/minute"
     RATE_LIMIT_STORAGE_URI: str = "memory://"
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     SECURITY_HEADERS_ENABLED: bool = True
     AGENT_MODEL_POLICY: str = ""
+    MANAGER_AGENT_ENABLED: bool = False
 
     class Config:
         env_file = ".env"

@@ -37,6 +37,12 @@ class Company(SQLModel, table=True):
     # Hosts the research tools may read beside the defaults
     # (services/research_tools.py); a Manager writes it.
     research_hosts: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # Where agent-written code runs for this company (services/sandbox.py):
+    # ``host``, ``container`` or ``bwrap``; empty: the deployment's
+    # DELIVERY_SANDBOX. The environment variables a sandboxed run may see, by
+    # name (the values stay on the daemon's machine); none by default.
+    delivery_sandbox: str | None = None
+    sandbox_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

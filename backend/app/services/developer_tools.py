@@ -42,7 +42,13 @@ from typing import Any
 
 from config import settings
 
-from services import context_read, developer_tool_schemas, mcp_tools, research_tools
+from services import (
+    context_read,
+    developer_tool_schemas,
+    mcp_tools,
+    research_tools,
+    sandbox,
+)
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -98,10 +104,16 @@ class WorkspaceToolbox:
         *,
         test_command: str | None = None,
         result_max_chars: int | None = None,
+        sandbox: dict[str, Any] | None = None,
+        sandbox_error: str | None = None,
     ) -> None:
         self.requester = requester
         self.workspace_root = workspace_root
         self.test_command = test_command
+        # Where its test runs execute (services/sandbox.py): agent code.
+        self.sandbox = sandbox
+        # The company's sandbox could not be read: its test runs are refused.
+        self.sandbox_error = sandbox_error
         self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
         self.unavailable: dict[str, str] = {}
         self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
@@ -228,13 +240,18 @@ class WorkspaceToolbox:
         if tool == RUN_TESTS:
             command = self._test_command(arguments.get("command"))
             extra["command"] = command
+            if self.sandbox_error:
+                raise RuntimeError(f"tests not run: {self.sandbox_error}")
+            request: dict[str, Any] = {"workspace_root": root, "command": command}
+            if self.sandbox is not None:
+                request["sandbox"] = self.sandbox
             reply = self.requester(
-                "workspace.execute",
-                {"workspace_root": root, "command": command},
-                settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+                "workspace.execute", request, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
             exit_code = reply.get("exit_code")
             extra["exit_code"] = exit_code
+            if isinstance(reply.get("sandbox"), dict):
+                extra["sandbox"] = reply["sandbox"]
             extra["timed_out"] = bool(reply.get("timed_out"))
             output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
             if reply.get("timed_out"):
@@ -447,8 +464,17 @@ def toolbox_for(
     if company_id is not None and offered_to(role) and "nats" in _bridge:
         root = tool_root(company_id, item_id, engine=engine)
         if root:
+            box, box_error = None, None
+            try:
+                box = sandbox.request_for_company_id(company_id, engine)
+            except sandbox.PolicyUnavailable as e:
+                box_error = str(e)
             workspace = WorkspaceToolbox(
-                _request_from_thread, root, test_command=_detect_test_command(root)
+                _request_from_thread,
+                root,
+                test_command=_detect_test_command(root),
+                sandbox=box,
+                sandbox_error=box_error,
             )
     # The research tools for the roles that decide (``services/research_tools.py``).
     research = research_tools.toolbox_for(company_id, role, engine=engine)

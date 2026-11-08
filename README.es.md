@@ -138,8 +138,11 @@ docker compose up -d          # backend :8000 · frontend :5173 · proxy de LLM 
 ```
 
 El equipo por defecto usa Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
-y DeepSeek (Developer, QA), así que necesita las dos claves. El modelo de cada
-agente se cambia en la página **Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
+y DeepSeek (Developer, QA), así que necesita las dos claves. `AGENT_MODEL` pone
+a todo el equipo en un solo modelo (`AGENT_MODEL=deepseek-v4-pro` necesita solo
+`DEEPSEEK_API_KEY`), y `AGENT_MODEL_<ROL>` (`AGENT_MODEL_SCRUM_MASTER`, …) fija
+el de un rol. El modelo de cada agente también se cambia en la página
+**Agentes**, y `NEMOTRON_ROLES` pasa roles a NVIDIA
 Nemotron en Nebius (ver *Model Providers* en el [README en inglés](README.md#model-providers-nebius--nvidia-nemotron)).
 
 Abrí `http://localhost:5173`, creá una empresa, apuntala a la carpeta de un
@@ -427,6 +430,18 @@ Junto a las herramientas MCP, los roles que entregan archivos (Developer, QA) re
 Lo que el Developer leyó es evidencia: cada lectura se registra con el sha256 y el tamaño del archivo tal como los leyó el daemon, y el chequeo `context_read` del Verifier dice cuáles de los archivos que la entrega modificó se leyeron antes y cuáles no. Un archivo modificado sin haberlo leído sube el nivel de riesgo, así que la entrega espera a una persona. Lo que el modelo dice haber aprendido de un archivo sigue siendo una afirmación, y su propio relato de una corrida de tests nunca es evidencia: lo es el estado de salida que informa el daemon después de la entrega.
 
 Las herramientas nunca abren un archivo que pueda guardar secretos (`.env`, claves, certificados, `.ssh`, `.aws`…), saltean un symlink que salga del proyecto, tachan una línea con pinta de secreto antes de que el modelo la vea, y una búsqueda corre en un proceso hijo que el daemon detiene al vencer su plazo, así que un patrón que retrocede sin fin cuesta eso y nada más. Con el flujo Git activo, las herramientas miran el worktree de la tarea una vez que entregó ahí.
+
+### Dónde corre el código que escriben los agentes
+
+Con `DELIVERY_TESTS_ENABLED`, el daemon corre pruebas que escribió un modelo, y lo mismo hace `workspace__run_tests` del Developer. **Dónde** corren es una configuración, `DELIVERY_SANDBOX`, y una compañía puede elegir la suya en su configuración (`PUT /v1/companies/{id}/sandbox`):
+
+- **`host`**, el valor por defecto, corre el comando con el usuario del daemon, sus archivos, su red y su entorno. Es lo que hacían todas las versiones anteriores. No aísla nada.
+- **`container`** le da a cada corrida un contenedor efímero de Docker o Podman. El worktree de la tarea se monta en `/workspace` y no se monta nada más del host. La red queda apagada salvo que `DELIVERY_SANDBOX_NETWORK` la abra. Se aplican límites de CPU, memoria y procesos (`DELIVERY_SANDBOX_CPUS`, `_MEMORY_MB`, `_PIDS`), se quitan todas las capabilities, se bloquea la escalada de privilegios, el comando corre con el uid del usuario del host y la imagen sale de `DELIVERY_SANDBOX_IMAGE`.
+- **`bwrap`**, bubblewrap en Linux, monta los directorios del sistema en solo lectura y el worktree en lectura y escritura. Corre el comando en namespaces nuevos (también el de red, salvo que se abra) con un `/tmp` limpio. No aplica límite de CPU ni de memoria, y el reporte lo dice.
+
+En los dos modos aislados, una corrida no ve ninguna variable de entorno del daemon más allá de una base corta (`PATH`, `HOME=/tmp`, `LANG`), salvo las que la compañía lista **por nombre** (`env`). Sus valores quedan en la máquina del daemon, así que el backend nunca envía un secreto. Quien corre el daemon puede rechazar el host para todo: `FABRIQUE_SANDBOX_REQUIRED=container` hace que un pedido `host` corra en un contenedor, y el reporte dice que lo forzó el daemon. Un modo que no puede correr en esa máquina hace fallar la corrida con el motivo. Las pruebas quedan entonces como no verificadas, nunca como aprobadas en el host.
+
+El daemon informa lo que aplicó, y ese reporte es la evidencia. El Verificador lo registra como la comprobación `sandbox`, un registro y nunca el veredicto: decide el código de salida de las pruebas. Una corrida en el host queda marcada como un hallazgo que ve un Manager, igual que una de un daemon viejo que no informa sandbox. Qué protege cada modo, y qué no, está en [`docs/threat_model.md`](docs/threat_model.md).
 
 ### Los roles que deciden leen fuentes oficiales
 

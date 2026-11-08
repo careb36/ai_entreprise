@@ -133,7 +133,18 @@ Copy `.env.example` to `.env` and fill in:
 - `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are
   written, the daemon runs the project's tests (`DELIVERY_TEST_COMMAND`, or detected
   `npm test` / `pytest`) and the exit status is recorded as evidence; a failing run
-  sends the task back for rework. It executes agent-written code on the daemon's machine.
+  sends the task back for rework. It executes agent-written code on the daemon's machine,
+  where `DELIVERY_SANDBOX` says: `host` (default, as before), `container` (an
+  ephemeral container per run: worktree mounted, network off unless
+  `DELIVERY_SANDBOX_NETWORK`, limits `DELIVERY_SANDBOX_CPUS` / `_MEMORY_MB` /
+  `_PIDS`, image `DELIVERY_SANDBOX_IMAGE`, every capability dropped) or `bwrap`.
+  A company sets its own (`Company.delivery_sandbox`, and `sandbox_env`: the
+  variable names a sandboxed run may see) with `GET`/`PUT
+  /v1/companies/{id}/sandbox` (Viewer / Manager). The daemon reports what it
+  applied (`test_run.sandbox`) and the Verifier records it as the `sandbox`
+  check (`services/sandbox.py`; `host` is a finding, never a refutation);
+  `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
+  for everything (`vscode-daemon/sandbox.py`).
   In a sprint planned from a specification it also decides the **acceptance
   tests per criterion** (`services/acceptance.py`): the runner's per-test lines
   are read back into criterion ids (pytest gets `-v`; name a verbose command
@@ -459,6 +470,7 @@ Test files:
 | `test_glassroom_access.py` | The Glassroom stream with authentication required: a sprint-scoped ticket for a Viewer, refused without one, with an access token, another sprint's or an expired one, and once its holder left the company |
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 | `test_audit_chain.py` | The audit hash chain per company: numbered and linked rows, each company its own chain, a deleted, altered or moved row breaks it where it was, a chain rewritten without the key does not verify, unkeyed chains say so, rows without a company stay unchained, KPI turn rows are signed and chained too |
+| `test_sandbox.py` | Sandboxed execution: container mode through a fake runtime (worktree mounted, network off, limits, capabilities dropped, only the listed variables, the daemon's report), a mode that cannot run is an error and never a host run, host reports itself unisolated and the daemon can force a container, a hung sandboxed command is killed, limits are bounded, the company's mode in the delivery test run and the Developer's test runs, the evidence keeps the daemon's report and the Verifier records it (host and an older daemon as findings), a Manager sets the company's sandbox |
 | `test_research_tools.py` | The research tools: a page read as text and recorded with its hash, a host off the list refused and the refusal recorded (a redirect that leaves the list too; plain http only for a host named explicitly), an error page and a binary as errors the model sees, a package looked up at each registry, advisories from OSV with the version asked, the tools for the roles that decide and the `## Sources` prompt section, `research` a reserved MCP name, the combined toolbox without a workspace root, the Verifier's `sources` check naming the dependencies nobody looked up, a Manager adds hosts and a Viewer reads them, the PO's draft keeps the source it consulted |
 | `test_developer_tools.py` | The Developer's workspace tools: the daemon lists the tree without dependencies or VCS data, reads a file numbered with its hash and tells a binary apart, cuts a long file and says how long it is, searches and refuses a bad pattern, answers over NATS in the reply shape; the toolbox offers the read tools and the test run only with a command, records a read with the file's hash, turns errors into results, runs the project's command or a narrower one on the same runner (shell syntax falls back), the combined toolbox dispatches by prefix and caps the rounds, the tools go to the roles that deliver files when the project is known, the prompt carries the repository map; the Verifier says which modified files were read first and the tier follows; the worker offers the tools, reads through the daemon and keeps the reads as evidence; the history check refuses a read recorded without a hash; a narrower test command must be the same runner exactly, files that may hold secrets are never read nor searched, a secret-looking line is redacted, a symlink out of the project is never opened, a large file is hashed whole but only its head read, a search that backtracks forever is stopped at the deadline and one over more files than the bound still scans the bound, a test run with no sprint is reported to nobody, the tools look at the task's worktree once it delivered there |
 | `test_mcp_tools.py` | MCP tools in a task, against a real MCP server in-process: discovery in the OpenAI `tools` shape with prefixed names, the loop runs the calls and records them (arguments, error, sha256, read-only), results masked for the server's secrets and cut with the record saying so, a failing, unknown or malformed call is an error result, the round cap ends in a request without tools, an unreachable server is named and the task goes on, the Verifier records the calls as `tools_used` and a writing tool raises the tier, the loader takes the company's enabled servers for the role, and the worker keeps the calls as evidence apart from the claims |
@@ -630,7 +642,11 @@ Every LLM call goes through the proxy client (`backend/app/llm_proxy_client.py`)
 `"gemini-pro"`), a `role`, and an optional `bu_id`. There is no
 `model_preference` parameter: the `fast` / `powerful` tiers are an internal
 fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
-`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
+`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`); every caller
+reads them through `default_model_for_role` → `ModelFactory.model_for_role`,
+which applies, most specific first, `AGENT_MODEL_<ROLE>`, `NEMOTRON_ROLES`,
+`AGENT_MODEL` (one model for the whole team, e.g. DeepSeek alone), then the
+map. An agent's own `model` (the Agents page) wins over all of them.
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 

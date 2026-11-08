@@ -80,6 +80,21 @@ def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_pat
     assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
 
 
+@pytest.mark.parametrize(
+    ("marker", "expected"),
+    [
+        ("go.mod", "go test ./..."),
+        ("Cargo.toml", "cargo test"),
+        ("pom.xml", "mvn -q test"),
+        ("build.gradle", "gradle test"),
+        ("build.gradle.kts", "gradle test"),
+    ],
+)
+def test_more_stacks_are_detected(no_override, tmp_path, marker, expected):
+    (tmp_path / marker).write_text("")
+    assert task_worker._detect_test_command(str(tmp_path)) == expected
+
+
 # ---------------------------------------------------------------------------
 # check_tests_run
 # ---------------------------------------------------------------------------

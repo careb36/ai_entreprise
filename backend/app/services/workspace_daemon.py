@@ -201,6 +201,9 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
         "timed_out": timed_out,
         "reason": reply.get("error"),
     }
+    if isinstance(reply.get("sandbox"), dict):
+        # Where the daemon ran it (services/sandbox.py): its own report.
+        test_run["sandbox"] = reply["sandbox"]
     if timed_out:
         test_run["timeout_seconds"] = reply.get("timeout_seconds")
         conclusion = "timed_out"
@@ -287,11 +290,33 @@ def detect_test_command(workspace_root: str) -> str | None:
         for name in names
     ):
         return "python -m pytest -q"
+
+    # Go.
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go test ./..."
+    # Rust.
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo test"
+    # Java (Maven / Gradle).
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q test"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle test"
+    # Ruby.
+    if os.path.isfile(os.path.join(root, "Gemfile")) and os.path.isdir(
+        os.path.join(root, "spec")
+    ):
+        return "bundle exec rspec"
     return None
 
 
 async def run_delivery_tests(
-    nats_client: Any, sprint: dict[str, Any], evidence: dict[str, Any]
+    nats_client: Any,
+    sprint: dict[str, Any],
+    evidence: dict[str, Any],
+    engine: Any = None,
 ) -> None:
     """Run the project's tests through the daemon and add the result to *evidence*:
     ``test_run`` (command, exit code, output tail) and ``ci``, the shape
@@ -304,6 +329,14 @@ async def run_delivery_tests(
     if evidence.get("acceptance"):
         # Per-test lines, so the criteria's tests can be told apart.
         command = criteria_tests.verbose_command(command)
+    from services import sandbox
+
+    try:
+        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, engine)
+    except sandbox.PolicyUnavailable as e:
+        # Never run agent code under a guessed sandbox: the tests stay unverified.
+        evidence["test_run"] = {"command": command, "reason": str(e)}
+        return
     try:
         result = await nats_client.request(
             "workspace.execute",
@@ -311,6 +344,8 @@ async def run_delivery_tests(
                 "command": command,
                 "workspace_root": workspace_root,
                 "sprint_id": sprint["id"],
+                # Agent-written code: run as the company's sandbox says.
+                "sandbox": box,
             },
             timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
         )
