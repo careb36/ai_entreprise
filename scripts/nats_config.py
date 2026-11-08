@@ -10,12 +10,19 @@ broker gives each component its own user, with only the subjects it needs:
   ``audit.>``, ``system.>``) and owns JetStream: it creates the streams and
   consumes the task and result streams. Its replies arrive under
   ``_INBOX.backend``.
-- ``daemon`` answers requests on ``workspace.>`` (``allow_responses``: one
-  reply per request) and may publish only its results (``workspace.delivered``),
-  Glassroom status lines and the JetStream calls of its own consumer on the
-  deliveries stream. It may not send a request (``workspace.execute``…),
-  assign a task, read the backend's replies, or create, change or delete a
-  stream.
+- ``daemon`` hears requests on ``workspace.>`` and answers them under
+  ``_INBOX.backend.>``, where the backend's replies arrive; it may also
+  publish its results (``workspace.delivered``), Glassroom status lines and
+  the JetStream calls of its own consumer on the deliveries stream. It may
+  not send a request (``workspace.execute``…), assign a task, read the
+  backend's replies, or create, change or delete a stream.
+
+  There is no ``allow_responses`` grant on purpose: it lets a client answer
+  any reply subject it received, and the daemon hears ``workspace.>``. A
+  holder of the daemon's credentials could publish to ``workspace.delivered``
+  with ``workspace.execute`` as the reply subject, receive its own message,
+  and "answer" it, which would send a command to the real daemon. Replies
+  are allowed by subject instead, only under the backend's inbox.
 
 The passwords are never in the file: it names ``$NATS_BACKEND_PASSWORD`` and
 ``$NATS_DAEMON_PASSWORD``, which nats-server reads from its environment
@@ -46,9 +53,6 @@ DEFAULT_OUTPUT = REPO / "nats" / "nats-server.conf"
 BACKEND_INBOX = "_INBOX.backend"
 DAEMON_INBOX = "_INBOX.daemon"
 PASSWORD_VARS = {"backend": "NATS_BACKEND_PASSWORD", "daemon": "NATS_DAEMON_PASSWORD"}
-# A daemon reply may come after a long command (shell_exec: 120 s) or a test
-# run; the permission to answer a request lasts this long.
-RESPONSE_EXPIRES = "30m"
 
 
 def clean_namespace(raw: str) -> str:
@@ -84,6 +88,8 @@ def daemon_permissions(namespace: str = "") -> dict:
     return {
         "publish": {
             "allow": [
+                # Its answers to the backend's requests (nats_auth.INBOX_PREFIX).
+                f"{BACKEND_INBOX}.>",
                 _subject(namespace, "workspace.delivered"),
                 "glassroom.*",
                 f"{api}.INFO",
@@ -98,7 +104,6 @@ def daemon_permissions(namespace: str = "") -> dict:
             ]
         },
         "subscribe": {"allow": ["workspace.>", f"{DAEMON_INBOX}.>"]},
-        "allow_responses": {"max": 1, "expires": RESPONSE_EXPIRES},
     }
 
 

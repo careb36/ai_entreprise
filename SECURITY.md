@@ -336,8 +336,11 @@ part of the daemon's attack surface, not plumbing behind it (issue #327).
   the backend suite checks it too, `test_nats_security.py`). The `backend` user publishes the work (`workspace.>`,
   `task.>`, `glassroom.>`, `audit.>`, `system.>`) and owns JetStream; its
   replies arrive under `_INBOX.backend`. The `daemon` user subscribes to
-  `workspace.>` and `_INBOX.daemon.>`, answers each request once
-  (`allow_responses`), and publishes only `workspace.delivered`, `glassroom.*`
+  `workspace.>` and `_INBOX.daemon.>`, answers under `_INBOX.backend.>`
+  (by subject, not with `allow_responses`: that grant would let a holder of
+  the daemon's credentials publish to `workspace.delivered` with
+  `workspace.execute` as reply subject and then "answer" itself, commanding
+  the real daemon), and publishes only `workspace.delivered`, `glassroom.*`
   and the JetStream calls of its own consumer on the deliveries stream. It
   cannot send a request (`workspace.execute`…), assign a task, read the
   backend's replies, or create, change or delete a stream; the streams are the

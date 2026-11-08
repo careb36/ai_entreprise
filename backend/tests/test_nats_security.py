@@ -589,7 +589,6 @@ def _rules(user, namespace=""):
         "workspace.deliver",
         "task.assign",
         "audit.write",
-        "_INBOX.backend.abc.1",
         "$JS.API.STREAM.CREATE.FABRIQUE_DELIVERIES",
         "$JS.API.STREAM.UPDATE.FABRIQUE_DELIVERIES",
         "$JS.API.STREAM.DELETE.FABRIQUE_TASKS",
@@ -622,9 +621,15 @@ def test_the_daemon_may_publish(subject):
     assert nats_config.allowed(_rules("daemon"), "publish", subject)
 
 
-def test_the_daemon_answers_requests_once_and_hears_only_its_subjects():
+def test_the_daemon_answers_only_under_the_backends_inbox():
     rules = _rules("daemon")
-    assert rules["allow_responses"]["max"] == 1
+    # No dynamic reply grant: it would let the daemon answer a reply subject
+    # it set itself, such as workspace.execute (Copilot review on #382).
+    assert "allow_responses" not in rules
+    assert nats_config.allowed(rules, "publish", "_INBOX.backend.Xk3.17")
+    for subject in ("workspace.execute", "workspace.generate", "_INBOX.daemon.x.1"):
+        assert not nats_config.allowed(rules, "publish", subject)
+    assert "allow_responses" not in (REPO / "nats" / "nats-server.conf").read_text()
     for subject in ("workspace.execute", "workspace.generate", "_INBOX.daemon.x.1"):
         assert nats_config.allowed(rules, "subscribe", subject)
     for subject in ("task.assign", "glassroom.1", "_INBOX.backend.x.1", "audit.write"):
@@ -873,6 +878,76 @@ def test_live_the_daemon_can_answer_but_not_command(tmp_path, monkeypatch):
                 allow_reconnect=False,
                 max_reconnect_attempts=0,
             )
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        process.kill()
+        process.wait()
+
+
+@live
+def test_live_the_daemon_cannot_answer_itself_into_a_command(tmp_path):
+    """Regression: publish with reply ``workspace.execute``, hear it, answer it.
+
+    With ``allow_responses`` the broker let a holder of the daemon's
+    credentials answer the reply subject of a message it had published
+    itself, which sent a command to the real daemon. The answer must be
+    refused, while the backend's requests still get their replies.
+    """
+    import nats
+
+    process, port = _broker(tmp_path)
+    url = f"nats://127.0.0.1:{port}"
+    daemon_env = {"NATS_USER": "daemon", "NATS_PASSWORD": "daemon-pw"}
+    backend_env = {"NATS_USER": "backend", "NATS_PASSWORD": "backend-pw"}
+
+    async def scenario():
+        real = await nats.connect(url, **nats_connect.connect_options(daemon_env))
+        commands = []
+
+        async def on_command(msg):
+            commands.append(msg.data)
+            if msg.reply:
+                await msg.respond(b'{"ok": true}')
+
+        await real.subscribe("workspace.execute", cb=on_command)
+        await real.flush()
+
+        errors = []
+
+        async def on_error(e):
+            errors.append(str(e))
+
+        attacker = await nats.connect(
+            url, error_cb=on_error, **nats_connect.connect_options(daemon_env)
+        )
+        heard = asyncio.get_running_loop().create_future()
+
+        async def on_own(msg):
+            if not heard.done():
+                heard.set_result(msg)
+
+        await attacker.subscribe("workspace.delivered", cb=on_own)
+        await attacker.flush()
+        await attacker.publish("workspace.delivered", b"{}", reply="workspace.execute")
+        own = await asyncio.wait_for(heard, 3)
+        assert own.reply == "workspace.execute"
+        await own.respond(b'{"command": "touch /tmp/pwned"}')
+        await attacker.flush()
+        await asyncio.sleep(0.3)
+        assert commands == []
+        assert any("workspace.execute" in e for e in errors), errors
+
+        # The backend's own request still gets the daemon's answer.
+        backend = await nats.connect(url, **nats_auth.connect_options(backend_env))
+        reply = await backend.request(
+            "workspace.execute", b'{"command": "id"}', timeout=2
+        )
+        assert json.loads(reply.data) == {"ok": True}
+        assert commands == [b'{"command": "id"}']
+        for nc in (backend, attacker, real):
+            await nc.close()
 
     try:
         asyncio.run(scenario())

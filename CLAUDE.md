@@ -145,8 +145,9 @@ Copy `.env.example` to `.env` and fill in:
   `--namespace X` for a namespaced deployment): `backend` publishes
   `workspace.>`, `task.>`, `glassroom.>`, `audit.>`, `system.>` and the
   JetStream API, its replies under `_INBOX.backend`; `daemon` subscribes to
-  `workspace.>` and `_INBOX.daemon.>`, answers each request once
-  (`allow_responses`) and publishes only `workspace.delivered`, `glassroom.*`
+  `workspace.>` and `_INBOX.daemon.>`, answers under `_INBOX.backend.>`
+  (never `allow_responses`, which would let it reply to a `workspace.*`
+  subject it set itself) and publishes only `workspace.delivered`, `glassroom.*`
   and its own consumer's JetStream calls on the deliveries stream, so it
   cannot send a request (`workspace.execute`…), assign a task, read the
   backend's replies or create, change or delete a stream (it waits for the
