@@ -16,6 +16,11 @@ aborted, the branches after it are not attempted (one may build on the
 conflicted one), and the branch stays at the last clean merge. Running the
 same request again picks up where it stopped: a branch already merged is
 skipped, so a published integration branch only ever moves forward.
+
+``sources`` names the commit each task branch pointed at when it was read,
+and ``test_worktree`` is a detached worktree at the integrated commit: the
+suite runs there, so a later integration that moves the branch never changes
+what an earlier one tested.
 """
 
 from __future__ import annotations
@@ -31,6 +36,33 @@ TASK_BRANCH_PREFIX = "fabrique/task-"
 # The conflict hunks a person reads to decide; the files are always listed in full.
 MAX_HUNKS_CHARS = 20_000
 MAX_BRANCHES = 200
+# Detached worktrees kept per sprint branch, the newest first.
+KEEP_SNAPSHOTS = 3
+
+
+def _tip(root: Path, ref: str) -> str:
+    return run_git(["rev-parse", f"refs/heads/{ref}"], root).stdout.strip()
+
+
+def snapshot_worktree(worktree: Path, root: Path, commit: str) -> Path:
+    """A detached worktree at *commit* beside the branch's.
+
+    The most recent ``KEEP_SNAPSHOTS`` of the branch are kept, so a suite
+    still running at an earlier commit is not pulled from under it.
+    """
+    path = worktree.parent / f"{worktree.name}@{commit[:12]}"
+    run_git(["worktree", "prune"], root, check=False)
+    if not (path / ".git").exists():
+        run_git(["worktree", "add", "--detach", str(path), commit], root)
+    path.touch()
+    older = sorted(
+        (p for p in worktree.parent.glob(f"{worktree.name}@*") if p != path),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in older[KEEP_SNAPSHOTS - 1 :]:
+        run_git(["worktree", "remove", "--force", str(old)], root, check=False)
+    return path
 
 
 def _head(worktree: Path) -> str:
@@ -70,6 +102,7 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     worktree = worktree_for(root, branch, base)
     start = _head(worktree)
     merged, already, missing, refused = [], [], [], []
+    sources: Dict[str, str] = {}
     conflict = None
     not_attempted: list = []
     for index, ref in enumerate(refs):
@@ -80,6 +113,7 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         if state == "missing":
             missing.append(ref)
             continue
+        sources[ref] = _tip(root, ref)
         if state == "already":
             already.append(ref)
             continue
@@ -89,7 +123,8 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
             run_git(["merge", "--abort"], worktree, check=False)
             not_attempted = refs[index + 1 :]
             break
-        merged.append({"branch": ref, "commit": _head(worktree)})
+        merged.append({"branch": ref, "source": sources[ref], "commit": _head(worktree)})
+    commit = _head(worktree)
     return {
         "ok": conflict is None,
         "repository": str(root),
@@ -98,7 +133,11 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         "worktree": str(worktree),
         # Where the branch stood before this request, and where it stands now.
         "start": start,
-        "commit": _head(worktree),
+        "commit": commit,
+        # Every requested branch merged or already in: nothing missing or refused.
+        "complete": conflict is None and not missing and not refused,
+        "test_worktree": str(snapshot_worktree(worktree, root, commit)) if conflict is None else None,
+        "sources": sources,
         "merged": merged,
         "already_merged": already,
         "missing": missing,
