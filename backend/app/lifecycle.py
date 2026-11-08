@@ -13,6 +13,7 @@ from database import ensure_memory_graph_schema, get_neo4j_driver, prepare_datab
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from memory_client import MemoryClient
+from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
 from services import console_capabilities
 from services.agent_worker import process_agent_tasks
@@ -138,6 +139,9 @@ async def startup(app):
     app.state.nats_state = NATS_STATE_CONNECTING
     app.state.nats_workers_started = False
     app.state.jetstream = False
+    bind_warning = exposed_bind_warning()
+    if bind_warning:
+        logger.warning(bind_warning)
     client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
     connect_task = asyncio.create_task(
         _connect_nats_and_start_workers(app, client), name="nats_connector"
