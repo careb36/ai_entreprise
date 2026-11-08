@@ -13,7 +13,6 @@
 
 ### Proof, not promises, for every line of code an AI agent writes
 
-> **Languages:** [🇺🇸 English](README.md) | [🇪🇸 Español](README.es.md)
 
 </div>
 
@@ -143,8 +142,6 @@ plan your first sprint. Try it without API keys: `scripts/seed_demo_evidence.py`
 seeds one run per verdict.
 
 > **Not a developer?** The [**Manager's Business Guide**](USER_GUIDE.md) explains La Fabrique without code.
->
-> **Why it is built this way:** the reasoning and the design rules are in [`docs/POSITIONING.md`](docs/POSITIONING.md).
 
 ## Screenshots
 
@@ -174,6 +171,7 @@ seeds one run per verdict.
 - [Getting Started](#getting-started)
 - [Agent Orchestration](#agent-orchestration)
 - [Model Providers (Nebius / NVIDIA Nemotron)](#model-providers-nebius--nvidia-nemotron)
+- [Voice assistant and coding-agent demo](#voice-assistant-and-coding-agent-demo)
 - [GlassRoom](#glassroom)
 - [Project Structure](#project-structure)
 - [API Reference](#api-reference)
@@ -181,7 +179,6 @@ seeds one run per verdict.
 - [Contributing](#contributing)
 - [Security](#security)
 - [Responsible use](#responsible-use)
-- [Roadmap](#roadmap)
 - [Documentation](#documentation)
 - [License](#license)
 
@@ -201,7 +198,7 @@ Work is organized into **AI Sprints** — units of bounded, verifiable scope rat
 
 A sprint closes when every task is settled: done, or blocked until a person acts. Blocked tasks stay on the board, appear in the retrospective and count in the numbers the company's procedures are judged by; a person can send one back to work from the **Review** page or carry it into the next sprint, and with autonomy level 3 the company carries it over on its own, once. The escalation is answered: the ScrumMaster reads what blocked the task and decides, in a fixed format a parser checks, between another attempt with a brief for it or leaving it to a person. That decision is a message, so a claim: the Review page shows it, the brief travels with the next attempt into the agent's prompt, and the company never carries over on its own what the ScrumMaster left to a person. When the optional kickoff graph decides the scope exceeds the team's capacity, the sprint transitions to `needs_split`.
 
-**Sprint lifecycle:** `active` ⇄ `paused` → `completed` | `needs_split` | `cancelled`
+**Sprint lifecycle:** `active` ⇄ `paused`; `active` → `completed` | `needs_split`
 
 ---
 
@@ -215,11 +212,12 @@ graph TD
     B -->|Bolt| D[(Neo4j 5<br/>Engram knowledge graph)]
     B -->|publish/subscribe| E[NATS JetStream]
 
-    E -->|workspace.generate| F[LangGraph Workflow<br/>kickoff → PO → SM → Dev → burn]
+    E -->|workspace.generate| F[LangGraph Workflow<br/>kickoff → PO → Architect → SM → Dev → burn]
     E -->|glassroom.sprint_id| A
     E -->|workspace.execute| G[VS Code Daemon<br/>file writes · shell commands]
 
     F -->|chat_async| H[LLM Proxy :5100<br/>token budget · audit]
+    H -->|OpenAI-compatible API| N[Nebius Token Factory<br/>NVIDIA Nemotron]
     H -->|Gemini API| I[Google AI Studio]
     H -->|DeepSeek API| J[DeepSeek]
 
@@ -271,7 +269,7 @@ sequenceDiagram
 | **Knowledge Graph** | Neo4j 5.25 Enterprise + APOC |
 | **Message Broker** | NATS JetStream |
 | **AI Models** | NVIDIA Nemotron on Nebius Token Factory + Gemini + DeepSeek + Qwen |
-| **Infrastructure** | Docker Compose (8 services), VS Code CLI |
+| **Infrastructure** | Docker Compose (8 services, plus an optional Linux daemon container), native workspace daemon (Python) |
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -296,7 +294,9 @@ The canonical way to start a clean local environment is `reset_infra.sh`:
 ```bash
 # 1. Copy and configure environment
 cp .env.example .env
-# Edit .env — fill in GEMINI_API_KEY, DEEPSEEK_API_KEY,
+# Edit .env — fill in the key of each provider your agents use (for
+# example DEEPSEEK_API_KEY and QWEN_API_KEY for the role defaults, or
+# NEBIUS_API_KEY / NVIDIA_API_KEY with NEMOTRON_ROLES or AGENT_MODEL),
 # POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
 
 # 2. Full clean start
@@ -335,19 +335,31 @@ agents deliver while it is not running are queued and written when it connects.
 
 ## Getting Started
 
-Once the stack is running, you can interact with the API:
+Once the stack is running, you can interact with the API. Authentication is
+required by default (`AUTH_REQUIRED=true`): register and log in first, then send
+the token with every call below except `/health`.
 
 ```bash
 # Health check
 curl http://localhost:8000/health
 
+# Register and log in (needs JWT_SECRET_KEY in .env)
+curl -X POST http://localhost:8000/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "me@example.com", "password": "<password>", "full_name": "Me"}'
+TOKEN=$(curl -s -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "me@example.com", "password": "<password>"}' | jq -r .access_token)
+
 # Create a company
 curl -X POST http://localhost:8000/v1/init_company \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"company_name": "My Company"}'
 
 # Start a sprint (carry_over_ids: blocked tasks of earlier sprints to try again)
 curl -X POST http://localhost:8000/v1/start_sprint \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "company_id": <company_id>,
@@ -361,7 +373,7 @@ curl -X POST http://localhost:8000/v1/start_sprint \
   }'
 
 # What the company needs a person for
-curl "http://localhost:8000/v1/inbox?company_id=<company_id>"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8000/v1/inbox?company_id=<company_id>"
 
 # Open API docs
 open http://localhost:8000/docs
@@ -373,13 +385,15 @@ open http://localhost:8000/docs
 
 ## Agent Orchestration
 
-With `AGENT_GRAPH_ENABLED=true` (off by default), each sprint kickoff also runs a **LangGraph conversation** via the `workspace.generate` NATS subject; its transcript is recorded as an `AgentRun` and never blocks the sprint's tasks. The graph has a fixed topology with `recursion_limit=12`:
+With `AGENT_GRAPH_ENABLED=true` (off by default), each sprint kickoff also runs a **LangGraph conversation** via the `workspace.generate` NATS subject; its transcript is recorded as an `AgentRun` and never blocks the sprint's tasks. The graph has a fixed topology with `recursion_limit=16`:
 
 ```mermaid
 flowchart LR
     K([kickoff]) --> PO([PO])
-    PO -->|success| SM([Scrum Master])
+    PO -->|success| AR([Architect])
     PO -->|error| B
+    AR -->|success| SM([Scrum Master])
+    AR -->|error| B
     SM -->|success| DEV([Developer])
     SM -->|error| B
     DEV -->|success| POW([PO wrap])
@@ -389,6 +403,7 @@ flowchart LR
 
     style K  fill:#6366f1,color:#fff,stroke:none
     style PO fill:#0ea5e9,color:#fff,stroke:none
+    style AR fill:#0ea5e9,color:#fff,stroke:none
     style SM fill:#0ea5e9,color:#fff,stroke:none
     style DEV fill:#0ea5e9,color:#fff,stroke:none
     style POW fill:#0ea5e9,color:#fff,stroke:none
@@ -402,10 +417,13 @@ flowchart LR
 |------|-------|----------------|
 | `kickoff` | System | Validates sprint brief, extracts backlog items, emits opening status event |
 | `po` | Product Owner | Prioritizes backlog (OpenProject optional), identifies riskiest item |
+| `architect` | Architect | Defines the technical approach: design decisions, interface changes, constraints and risks |
 | `scrum_master` | Scrum Master | Sequences work, surfaces blockers, assigns first execution move to Developer |
 | `developer` | Developer | Claims first actionable item, states implementation plan, flags dependencies |
 | `po_wrap` | Product Owner | Closes kickoff with 3-bullet summary: priority · owner · next action |
 | `burn` | System | Persists engram to Neo4j; publishes the kickoff completion event |
+
+When a run carries PO feedback, the graph enters at a `rejection` node instead of `kickoff`: it hands the feedback to the Architect (design or scope concerns) or the Developer, then goes to `po_wrap`.
 
 **Error handling:** Any node failure sets `last_error` and short-circuits to `burn`. `GraphRecursionError` is caught explicitly at the workflow level. Either way the kickoff has failed, but the sprint stays `active`: the agent worker publishes `Kickoff failed: <reason>; tasks continue` to the Glassroom, and backlog tasks keep running in the task worker. Only an explicit split decision marks a sprint `needs_split`.
 
@@ -511,10 +529,11 @@ Reviews and comments are a person's words, never evidence: they are audited, and
 
 Every model call goes through `llm-proxy/`, which routes each request by the
 model id's prefix and only sends a request for an id that is in that provider's
-fetched catalogue. Four providers are wired today:
+fetched catalogue. Five providers are wired:
 
 | Provider | Model id prefix | Endpoint |
 |---|---|---|
+| `nvidia` | `nvidia/` | `https://integrate.api.nvidia.com/v1` (NVIDIA's gateway, with `NVIDIA_API_KEY`) |
 | `nebius` | `nvidia/`, `meta-llama/`, `mistralai/`, `deepseek-ai/`, `qwen/`, `google/` | `https://api.tokenfactory.nebius.com/v1` (Nebius Token Factory) |
 | `gemini` | `gemini-`, `gemma-` | Google Generative Language API |
 | `deepseek` | `deepseek-` | `https://api.deepseek.com/v1` |
@@ -525,7 +544,7 @@ fetched catalogue. Four providers are wired today:
 `console.nebius.com`, whose IAM keys do not authenticate here. Log in, open
 **Workspace → Explore → API keys**, create one and copy it (it is shown once).
 Set `NEBIUS_API_KEY` and the proxy fetches the live catalogue at startup (and
-hourly), lists what it found on `GET /v1/models`, and routes Nemotron ids to
+every hour after), lists what it found on `GET /v1/models`, and routes Nemotron ids to
 Token Factory over the OpenAI-compatible chat endpoint:
 
 ```bash
@@ -550,19 +569,29 @@ curl -s localhost:5100/v1/models | jq -r '.models[] | select(.provider=="nebius"
 
 ### Giving agent roles an NVIDIA model
 
-The role defaults in `backend/llm/model_factory.py` are Qwen and DeepSeek. To
-run specific roles on Nemotron, opt them in — unset means nothing changes:
+`NEMOTRON_ROLES` names the roles that run on Nemotron; `AGENT_MODEL` gives
+every other role one model. Both are empty in `.env.example`, so nothing
+changes until you set them: unset, the roles keep the Qwen/DeepSeek defaults in
+`backend/llm/model_factory.py`. For example:
 
 ```bash
 # Comma-separated role names (case-insensitive).
-NEMOTRON_ROLES=PO,Architect,SecOps,Developer,QA,TechWriter
+NEMOTRON_ROLES=po,architect,scrummaster,developer,qa,secops,techwriter,engramprocessor
 
 # The model those roles get. The _STRATEGIC and _FAST variants override it
 # per role: PO, Architect and SecOps read _STRATEGIC; TechWriter reads _FAST.
 NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
-NEMOTRON_MODEL_STRATEGIC=nvidia/Nemotron-3-Ultra-550b-a55b
-NEMOTRON_MODEL_FAST=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
+NEMOTRON_MODEL_STRATEGIC=nvidia/nemotron-3-ultra-550b-a55b
+NEMOTRON_MODEL_FAST=nvidia/nemotron-3-super-120b-a12b
+# Any role NEMOTRON_ROLES does not name.
+AGENT_MODEL=nvidia/nemotron-3-super-120b-a12b
 ```
+
+The proxy checks every id against the provider's live catalogue before a
+request goes out, so a retired or mistyped id fails at the door with its
+reason. With `NVIDIA_API_KEY` (an `nvapi-` key) the same `nvidia/` ids are
+served by NVIDIA's own gateway (`NVIDIA_PROXY_URL`); when both keys are set,
+the first provider whose key works and whose catalogue lists the id answers.
 
 ### Checking the integration end to end
 
@@ -591,9 +620,65 @@ the choice reaches every LangGraph node. Requests still carry
 `X-Agent-Role` and `X-Business-Unit-ID`, so per-role and per-company token
 budgets apply to Nemotron calls exactly as they do to the others.
 
+### Nebius services used, and what Token Factory changed
+
+**Nebius Token Factory is the only Nebius service this project uses.** The
+`nebius` provider in `llm-proxy/` talks to its OpenAI-compatible endpoint, and
+`NEBIUS_PROXY_URL` can point the same provider at a Nebius Serverless Endpoint
+instead. No other Nebius service (compute, storage, managed databases) is part
+of the stack: the rest runs on the project's own PostgreSQL, NATS and Neo4j.
+
+What Token Factory did for the project, concretely:
+
+- **The NVIDIA open-model line behind one key.** Nemotron 3 Ultra (550B) and
+  Super (120B) are served from the same endpoint, so the project never had to
+  host or quantize a model to give the strategic roles (PO, Architect, SecOps)
+  a larger one than the rest. The tiering in `backend/llm/model_factory.py` is
+  a configuration choice, not infrastructure.
+- **A live catalogue instead of a hardcoded list.** The proxy fetches what
+  Token Factory serves at startup (and every hour after) and refuses any id that is not in
+  it. A new Nemotron release becomes available by changing an environment
+  variable, with no release of La Fabrique.
+- **The proxy's existing controls applied unchanged.** Per-company token
+  budgets, per-role routing, and the `reported` / `estimated` marking of each
+  answer's token count work on Nemotron calls as on every other provider,
+  because Token Factory speaks the same OpenAI-compatible protocol.
+- **A reproducible check.** `scripts/verify-nebius.sh` proves the key, the
+  catalogue and a completion separately, so the integration can be verified in
+  a minute on any machine with a key.
+
 [⬆ Back to Top](#la-fabrique)
 
 ---
+
+## Voice assistant and coding-agent demo
+
+Hackathon category: **Coding & Agents Engineering**. Two pieces sit beside the
+factory, at the root of the repository (one level above this folder), and run
+without it:
+
+- **`demo/coding_agent.py`** — the write, run, test loop in one file: the model
+  proposes files as JSON, the agent writes them to an empty directory, runs
+  `unittest`, and hands a failing output back to the model until the tests
+  pass. With `NEBIUS_API_KEY` it runs on Nemotron through Token Factory
+  (`nvidia/nemotron-3-ultra-550b-a55b` by default); `--offline` replays two
+  recorded answers, one failing and one fixing, so it runs without a key.
+
+  ```bash
+  python demo/coding_agent.py --offline
+  NEBIUS_API_KEY=... python demo/coding_agent.py --task "slugify with unittest tests"
+  ```
+
+- **`asistente-b1/`** — a desktop assistant (Apache-2.0, standard library at
+  its core; PyQt6 window, faster-whisper and Piper are optional) that drives
+  the factory by voice through `/v1/voice/*`: the status, plan, create, dispatch,
+  pause, resume and decide actions, and `/v1/voice/build` for a project asked
+  for in one sentence. Set `VOICE_API_KEY` on the backend and the same key in
+  the assistant. See [`asistente-b1/README.md`](../asistente-b1/README.md).
+
+From the repository root, `python tools/hackathon_check.py` checks the submission requirements it can
+check offline (licence, README, Token Factory and Nemotron defaults, the demo
+ending green, no committed keys) and, with a key, the live provider.
 
 ## GlassRoom
 
@@ -609,9 +694,9 @@ The GlassRoom is the real-time observability view for a running sprint. It uses 
 
 **Event types:** `status`, `agent_start`, `message`, `agent_complete`, `error`, `needs_split`
 
-The SSE endpoint (`GET /v1/glassroom/stream?sprint_id=<id>`) replays the last 50 events on connect so late-joining clients get full context. With authentication required it also takes `ticket=<t>`, a five-minute token for that sprint from `POST /v1/sprints/{id}/stream_ticket` (a browser EventSource cannot send an Authorization header). Keepalive pings are sent every 15 seconds to maintain the connection.
+The SSE endpoint (`GET /v1/glassroom/stream?sprint_id=<id>`) replays the sprint's history on connect (the tasks' comments, plus the last 50 live events the backend kept in memory) so late-joining clients get full context. With authentication required it also takes `ticket=<t>`, a five-minute token for that sprint from `POST /v1/sprints/{id}/stream_ticket` (a browser EventSource cannot send an Authorization header). Keepalive pings are sent every 15 seconds to maintain the connection.
 
-The same room in a headset, Glassroom VR (the Meta VR Start Developer Competition entry), lives on the `main_meta` branch; `main` is the web product.
+The same room in a headset, La Fabrique XR (the Meta VR Start Developer Competition entry), is developed on the `meta-vr` branch, in `xr/`.
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -627,11 +712,12 @@ la-fabrique/
 │   │   └── tools/
 │   │       └── openproject_tools.py  # Work package creation
 │   ├── app/
-│   │   ├── main.py                   # FastAPI entry point · 4 bg workers · SSE bridge
+│   │   ├── main.py                   # FastAPI entry point: middleware, routers, health
+│   │   ├── lifecycle.py              # Startup: 4 NATS workers (Glassroom bridge, outbox, agent, task)
 │   │   ├── models/                   # SQLModel ORM (Sprint, Company, BacklogItem…)
 │   │   ├── schemas.py                # Pydantic request/response schemas
 │   │   ├── database.py               # Engine · session · prepare_database() (schema at head)
-│   │   ├── routers/                  # sprint · inbox · procedures · messages · agent_runs · support · workspace · github
+│   │   ├── routers/                  # sprint · inbox · procedures · messages · agent_runs · agents · enterprise · auth · support · workspace · github · voice · build
 │   │   ├── services/
 │   │   │   ├── agent_worker.py       # NATS consumer → LangGraph execution
 │   │   │   ├── task_worker.py        # Executes tasks, delivery gate, QA review, closes sprints
@@ -643,12 +729,12 @@ la-fabrique/
 │   │   │   ├── support_agent.py      # Triages help-desk tickets (SUPPORT_AGENT_ENABLED)
 │   │   │   ├── reviewer_agent.py     # Suggests the decision on other producers' runs (REVIEWER_AGENT_ENABLED)
 │   │   │   └── outbox_service.py     # Transactional outbox → NATS drain
+│   │   ├── llm_proxy_client.py       # HTTP client for LLM proxy service
 │   │   └── nats_client.py            # Async NATS publish/subscribe wrapper
 │   ├── llm/
 │   │   └── model_factory.py          # Role → model mapping
 │   ├── memory/
 │   │   └── engram_processor.py       # pgvector + Neo4j engram persistence
-│   ├── llm_proxy_client.py           # HTTP client for LLM proxy service
 │   └── telemetry.py                  # OpenTelemetry tracer setup
 ├── frontend/
 │   └── src/
@@ -657,7 +743,6 @@ la-fabrique/
 │       │   ├── KanbanBoard.tsx       # Sprint backlog board (dnd-kit)
 │       │   ├── GovernancePanel.tsx   # Review: what needs a person (inbox)
 │       │   ├── Conversation.tsx      # Messages between roles per sprint and task
-│       │   ├── ControlPanel.tsx      # Sprint configuration UI
 │       │   └── ErrorBoundary.tsx     # Global React error boundary
 │       ├── pages/
 │       │   ├── Dashboard.tsx         # Sprint planner (QuickLaunch) with carry-over of blocked tasks
@@ -670,10 +755,11 @@ la-fabrique/
 ├── llm-proxy/                        # Token budget + audit gateway (Flask :5100)
 ├── vscode-daemon/                    # Local NATS subscriber for IDE file operations
 ├── scripts/
+│   ├── start-daemon.sh / .ps1        # Start the workspace daemon natively
 │   └── verify_infra.py               # Infrastructure health verification script
 ├── db/
 │   └── init-db/init.sql              # Postgres bootstrap DDL
-├── docker-compose.yml                # 8-service local stack definition
+├── docker-compose.yml                # 8-service local stack (+ optional daemon container)
 ├── reset_infra.sh                    # Canonical full-reset script
 └── .env.example                      # Required environment variables template
 ```
@@ -745,9 +831,16 @@ npm run test        # Watch mode during development
 
 ### CI
 
-Tests run automatically on every pull request via GitHub Actions:
-- `.github/workflows/backend-tests.yml` — backend pytest suite
-- `.github/workflows/frontend-build.yml` — frontend tsc + vitest + build
+The GitHub Actions workflows live in `.github/workflows/` and run on pull
+requests that touch the paths each one lists (if it lists any), and on pushes to `main`:
+- `backend-tests.yml` — backend and LLM proxy pytest suites, with ruff
+- `frontend-build.yml` — frontend `tsc`, lint, Vitest and build
+- `e2e.yml` — the end-to-end run in `scripts/e2e/`
+- `docker-build.yml`, `file-sizes.yml`, `security-scan.yml`, `workflows.yml`
+
+GitHub runs workflows only from the repository root's `.github/workflows/`.
+They run where this folder is the repository root (the `main` branch); in the
+`fusion` tree, where it sits under `la-fabrique/`, GitHub does not pick them up.
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -775,27 +868,10 @@ La Fabrique's agents write files and run commands on the computer where the
 **workspace daemon** runs — like an IDE would. Point the daemon only at folders
 you own or are authorised to modify, and only connect a repository you have the
 right to change. Model output is an aid for a person, not a determination:
-verification is deterministic, but the decision to approve, carry over or reject
-a task is always a person's. See [SECURITY.md](SECURITY.md).
-
-[⬆ Back to Top](#la-fabrique)
-
----
-
-## Roadmap
-
-| Item | Status |
-| --- | --- |
-| Deterministic verification (claims vs. observations) | Done |
-| Append-only, signed audit chain | Done |
-| Per-company token budgets at a single LLM proxy | Done |
-| Nebius Token Factory / NVIDIA Nemotron routing | Done |
-| Sprint orchestration with carry-over and ScrumMaster escalation | Done |
-| Evidence page with per-verdict summary | Done |
-| Reviewer agent that suggests (never decides) on other producers' runs | Done |
-| Qualification of relationships between entities in the engram graph | Planned |
-| Per-source data-quality indicators | Planned |
-| Deterministic procedures measured against their own adoption | Planned |
+verification is deterministic, a person can send any blocked task back or carry
+it over, and an approved high-risk task (authentication, secrets, payments, the
+CI pipeline) waits for a person at every autonomy level. See
+[SECURITY.md](SECURITY.md).
 
 [⬆ Back to Top](#la-fabrique)
 
@@ -803,8 +879,7 @@ a task is always a person's. See [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
-[Architecture](ARCHITECTURE.md) · [Positioning](docs/POSITIONING.md) ·
-[API reference](docs/API.md) · [Threat model](docs/threat_model.md) ·
+[Architecture](ARCHITECTURE.md) · [API reference](docs/API.md) ·
 [User guide](USER_GUIDE.md) · [Contributing](CONTRIBUTING.md) ·
 [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md) ·
 [Changelog](CHANGELOG.md) · [Hackathon](docs/HACKATHON.md)
@@ -822,7 +897,7 @@ Copyright © 2026 Carolina Pereira.
 
 ## Support & Maintenance
 
-- **System Support:** La Fabrique is maintained by **Carolina Pereira**. Critical errors are automatically reported to the vendor for resolution.
+- **Error reports:** an unhandled error is logged and opens an incident ticket on NATS. Set `FABRIQUE_VENDOR_SUPPORT_URL` (and `FABRIQUE_VENDOR_ID` to name the installation) to also send each report to a support webhook; the error response says whether it got there.
 - **Project Support:** For issues with AI-generated code in your projects, use the built-in Support Bot.
 - **Contact:** For licensing and Enterprise SLA inquiries, please contact the owner directly.
 

@@ -6,11 +6,11 @@ first-class observability.
 
 This document is the single source of truth for **proposing, reviewing, and
 merging changes** — for humans and for AI agents. If you are an agent, read
-§2 and `AGENTS.md` before you open a PR.
+§2 before you open a PR.
 
-- Normative: `CONTRIBUTING.md`, `SECURITY.md`, `CODEOWNERS`, accepted ADRs.
-- Precedence: `SECURITY.md` > accepted ADR > `CONTRIBUTING.md` > tooling default.
-- Questions: open a `question` issue or ask in `#fabrique-eng`.
+- Normative: `CONTRIBUTING.md`, `SECURITY.md`, `.github/CODEOWNERS`.
+- Precedence: `SECURITY.md` > `CONTRIBUTING.md` > tooling default.
+- Questions: open an issue.
 
 ---
 
@@ -24,15 +24,17 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 | Security | Threat model, secrets, dependency & data-handling review | Yes (security-sensitive) |
 | Developers | Implementation, tests, observability | Yes (own area, after review) |
 | QA | Verification against acceptance criteria | No |
-| AI agents | Draft specs, implement, review, verify, merge — per `AGENTS.md` | Yes (any PR, head green only) |
+| AI agents | Draft specs, implement, review, verify, merge | Yes (any PR, head green only) |
 | Human Owner | Ownership, escalation, final call | Yes |
 
 ---
 
 ## 2. Non-negotiables
 
-1. **No secrets in the repo.** Ever. Use the secret manager. No workflow scans
-   for secrets, so nothing will catch a committed key: check before you commit.
+1. **No secrets in the repo.** Ever. Keep them in `.env`, which git ignores.
+   No workflow scans a pull request for secrets (`gitleaks` runs over the
+   history only weekly), so nothing will catch a committed key in time: check
+   before you commit.
 2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
    third-party tools without Security sign-off. No new dependency without
    Security review.
@@ -59,7 +61,7 @@ Apache 2.0, and keep third-party notices intact.
 
 See [`README.md`](README.md) — Installation for the full stack and the
 workspace daemon. Per-project commands (backend tests, frontend gates, lint)
-are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) and [`AGENTS.md`](AGENTS.md).
+are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
 
 ---
 
@@ -68,15 +70,12 @@ are in [`CODING_STANDARDS.md`](CODING_STANDARDS.md) and [`AGENTS.md`](AGENTS.md)
 | Branch | What it is | Who merges into it |
 |--------|-----------|--------------------|
 | `main` | The web product, and the default branch | An agent or a person, with the head green (rule 5) |
-| `main_meta`, `develop_meta` | The Glassroom VR entry for the Meta VR Start Developer Competition (`vr/`) | As for `main` |
-| `archive/*` | Old lines of work kept for reference; nothing merges into them | Nobody |
+| `fusion` | The NVIDIA × Nebius hackathon submission: this factory under `la-fabrique/`, with the desktop assistant and the coding-agent demo at the root | As for `main` |
+| `meta-vr` | La Fabrique XR, the entry for the Meta VR Start Developer Competition (`xr/`) | As for `main` |
 
-Work is trunk-based: one branch cut from `main`, one pull request into `main`,
-merged with a merge commit rather than a squash so the history keeps its shape.
-There is no `develop` integration branch — it only ever mirrored `main`, and it
-was retired on 2026-10-29 along with the release pull request it existed for.
-`archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work
-`main` had already rewritten. `main` carries none of `vr/`.
+Work is trunk-based: one branch cut from the line it changes (`main`, `fusion`
+or `meta-vr`), one pull request back into it, merged with a merge commit rather than a squash so the history keeps its shape.
+There is no `develop` integration branch.
 
 ---
 

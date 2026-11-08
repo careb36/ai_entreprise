@@ -18,8 +18,8 @@ on:
       - '.github/workflows/e2e.yml'
 
 
-# Un único runner self-hosted atiende un job a la vez: al llegar un push nuevo
-# se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
+# When a new push arrives, the runs for the commit it replaces are cancelled
+# instead of queueing.
 concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -31,10 +31,7 @@ jobs:
     permissions:
       contents: read
       actions: write
-    # Runs on the self-hosted runner like every other workflow: hosted runners
-    # are blocked by the account's spending limit, so a job on ubuntu-latest
-    # never starts and reports a failure it never produced.
-    runs-on: [self-hosted, linux, x64, lafabrique]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     # Once with agent-written code on the host, once in a container per run
     # (DELIVERY_SANDBOX=container): the daemon's report must say which.
@@ -50,29 +47,29 @@ jobs:
     # on the runner (another e2e run, a leftover container, a local
     # `docker compose up`) held 5433 or 4223.
     env:
-      # A nivel de job: el venv se crea en el paso de install y lo consume el
-      # paso del e2e, que corre en otra shell. Si solo lo tuviera el primero,
-      # el segundo resolvería otro directorio y crearía un venv vacío.
-      # `runner.temp` no vale aquí: el contexto `runner` no existe en un `env`
-      # de job y deja el workflow inválido.
+      # At job level: the venv is created in the install step and used by
+      # the e2e step, which runs in another shell. If only the first had it,
+      # the second would resolve another directory and create an empty venv.
+      # `runner.temp` does not work here: the `runner` context does not exist
+      # in a job's `env` and makes the workflow invalid.
       POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
-      # Poetry consulta el keyring en cada operación. En un runner sin sesión
-      # de escritorio completa, secretstorage abre DBus, no recibe respuesta y
-      # aborta el `poetry install` ("Cannot install greenlet"). No hay ningún
-      # secreto que buscar aquí: la clave se lee del entorno.
+      # Poetry queries the keyring on every operation. On a runner without a
+      # full desktop session, secretstorage opens DBus, gets no answer and
+      # aborts `poetry install` ("Cannot install greenlet"). There is no
+      # secret to look up here: the key is read from the environment.
       POETRY_NO_INTERACTION: "1"
       PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Start Postgres, NATS and pick free ports
         run: |
           # Docker itself picks the port (empty host side of -p), then the
           # mapping is read back. Binding an ephemeral port in Python and
-          # passing it to Docker loses a race: this host runs several
-          # self-hosted agents against one Docker daemon, so two concurrent
-          # e2e runs get the same free port and the second container cannot
-          # bind it ("pg_isready: rejecting connections" for a minute).
+          # passing it to Docker loses a race when several jobs share one
+          # Docker daemon: two concurrent e2e runs get the same free port and
+          # the second container cannot bind it ("pg_isready: rejecting
+          # connections" for a minute).
           #
           # A service container cannot be given arguments and the stock NATS
           # image starts without JetStream, which the backend needs for the
@@ -124,9 +121,9 @@ jobs:
       - name: Install the backend
         working-directory: ./backend
         run: |
-          # `--python` explícito: sin él, uv busca un `.venv` hacia arriba y en
-          # este runner encuentra /home/caro/Dev/.venv (Python 3.14, del host).
-          # Instalaba Poetry ahí, fuera del PATH, y el siguiente paso moría con
+          # Explicit `--python`: without it, uv looks for a `.venv` upwards and
+          # may find one that does not belong to the job (with another Python),
+          # install Poetry there, outside the PATH, and the next step dies with
           # `poetry: command not found`.
           ~/.local/bin/uv pip install --python "$RUNNER_TEMP/venv-3.12/bin/python" poetry >/dev/null
           poetry env use python
@@ -153,7 +150,7 @@ jobs:
           docker rm -f "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" || true
 
       - name: Keep the logs
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: e2e-logs-${{ matrix.sandbox }}
