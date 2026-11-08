@@ -170,16 +170,19 @@ async def startup(app):
 
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
-    try:
-        driver = get_neo4j_driver()
-        ensure_memory_graph_schema(driver)
-        app.state.memory_client = MemoryClient(neo4j_driver=driver)
-        logger.info("Neo4j connected — memory features enabled.")
-    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
-        logger.warning(
-            f"Neo4j unavailable at startup ({exc}). "
-            "Memory search and lineage endpoints will return errors until Neo4j is reachable."
-        )
+    if not settings.NEO4J_ENABLED:
+        logger.info("Neo4j disabled (NEO4J_ENABLED=false) — memory features off.")
+    else:
+        try:
+            driver = get_neo4j_driver()
+            ensure_memory_graph_schema(driver)
+            app.state.memory_client = MemoryClient(neo4j_driver=driver)
+            logger.info("Neo4j connected — memory features enabled.")
+        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
+            logger.warning(
+                f"Neo4j unavailable at startup ({exc}). "
+                "Memory search and lineage endpoints will return errors until Neo4j is reachable."
+            )
 
     app.state.llm_client = LLMProxyClient(
         os.getenv("LLM_PROXY_URL", "http://localhost:5100")
