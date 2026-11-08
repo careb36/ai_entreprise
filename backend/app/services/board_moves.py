@@ -35,7 +35,16 @@ first close is a full one.
 for a person is carried (``services.carry_over``: once only, the original
 marked, the new task told what blocked it) into another open sprint of the
 company or into a new one. A ``todo`` task is first blocked with a note
-saying a person moved it, and then carried the same way.
+saying a person moved it, and then carried the same way. Refused (409): a task
+whose dependencies are not all done (the clone would drop them and start at
+once), and a task its sprint's acceptance tests check (a sprint planned from a
+specification: the clone would lose the criterion checks and the protection
+of those test files, which ``acceptance.evidence_for`` reads from the task's
+own sprint). The carry runs under the task's lock and its company's
+``SPRINT_CLOSE`` lock (the one ``replicas.close_once`` takes), with the task,
+its sprint and the target read again under them and held through the commit:
+two requests never carry one task twice, and the worker cannot close the
+target between its check and the insertion. A lock held elsewhere is a 409.
 """
 
 from __future__ import annotations
@@ -50,8 +59,10 @@ from sqlalchemy import update
 from sqlmodel import Session, func, select
 
 from services import (
+    acceptance,
     carry_over,
     dependencies,
+    locks,
     sprint_archive,
     sprint_control,
     task_events,
@@ -224,6 +235,7 @@ def _target(
     target = session.get(Sprint, target_sprint_id)
     if target is None or target.company_id != source.company_id:
         raise BoardMoveError(404, "Target sprint not found in this company")
+    session.refresh(target)  # its state as committed, under the company's lock
     if target.id == source.id:
         raise BoardMoveError(409, "The task is already in that sprint")
     if target.archived_at is not None:
@@ -240,6 +252,22 @@ def _target(
     return target, False
 
 
+def _checked_by_acceptance_tests(
+    session: Session, item: BacklogItem, source: Sprint
+) -> bool:
+    """Whether a test task of *source* covers one of *item*'s criteria."""
+    covers = {str(c) for c in item.covers or []}
+    if source.specification_id is None or not covers:
+        return False
+    tests = session.exec(
+        select(BacklogItem).where(
+            BacklogItem.sprint_id == source.id,
+            BacklogItem.kind == acceptance.ACCEPTANCE_KIND,
+        )
+    ).all()
+    return any(covers & {str(c) for c in t.covers or []} for t in tests)
+
+
 def carry_to_sprint(
     session: Session,
     item: BacklogItem,
@@ -249,8 +277,36 @@ def carry_to_sprint(
 ) -> dict[str, Any]:
     """Carry *item* into another sprint (a new one when no id); the answer.
 
-    Raises ``BoardMoveError`` before writing. The caller commits.
+    Raises ``BoardMoveError`` before writing. Commits, under the task's and
+    the company's locks.
     """
+    engine = session.get_bind()
+    with locks.held(engine, locks.TASK, item.id) as task_free:
+        if not task_free:
+            raise BoardMoveError(
+                409, f"Task {item.id} is being worked on or moved; try again"
+            )
+        with locks.held(engine, locks.SPRINT_CLOSE, source.company_id) as free:
+            if not free:
+                raise BoardMoveError(
+                    409,
+                    "A sprint of this company is closing or a task is moving; try again",
+                )
+            # What another request or the worker committed before the locks.
+            session.refresh(item)
+            session.refresh(source)
+            answer = _carry(session, item, source, target_sprint_id, actor)
+            session.commit()
+            return answer
+
+
+def _carry(
+    session: Session,
+    item: BacklogItem,
+    source: Sprint,
+    target_sprint_id: int | None,
+    actor: str,
+) -> dict[str, Any]:
     if source.archived_at is not None:
         raise BoardMoveError(409, "The sprint is archived: unarchive it first")
     if item.status not in CARRY_SOURCES:
@@ -259,6 +315,18 @@ def carry_to_sprint(
         raise BoardMoveError(409, f"Task {item.id} was already carried over")
     if item.status == "blocked" and not carry_over.waits_for_a_person(item):
         raise BoardMoveError(409, f"Task {item.id} is not blocked waiting for a person")
+    if not dependencies.is_ready(session, item):
+        raise BoardMoveError(
+            409,
+            f"Task {item.id} waits for tasks of its sprint that are not done; "
+            "moving it would drop them",
+        )
+    if _checked_by_acceptance_tests(session, item, source):
+        raise BoardMoveError(
+            409,
+            f"Task {item.id} is checked by the acceptance tests of its sprint; "
+            "moving it would leave them behind: send it back to work here instead",
+        )
     target, created = _target(session, source, target_sprint_id)
     if item.status == "todo":
         # A person decided; the System signs the block, as a stop does.

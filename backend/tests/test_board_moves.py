@@ -24,13 +24,22 @@ from models import (
     BacklogItem,
     Company,
     OutboxEvent,
+    Specification,
     Sprint,
     TaskEvent,
 )
 from models.company import CompanyMember, User
-from services import board_moves, carry_over, replicas, sprint_close, task_worker
+from services import (
+    acceptance,
+    board_moves,
+    carry_over,
+    locks,
+    replicas,
+    sprint_close,
+    task_worker,
+)
 from services.board import is_send_back, rework_requests_by
-from sqlmodel import select
+from sqlmodel import Session, select
 from test_review_gate import _FakeNATS
 
 TRIAGE = "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: too short"
@@ -506,6 +515,129 @@ def test_another_companys_sprint_is_not_a_target(test_client, db):
     )
 
     assert response.status_code == 404
+
+
+def _clones(session, target):
+    session.expire_all()
+    return session.exec(
+        select(BacklogItem).where(BacklogItem.sprint_id == target.id)
+    ).all()
+
+
+def test_a_task_its_sprints_acceptance_tests_check_is_not_carried(test_client, db):
+    company = _company(db)
+    spec = Specification(company_id=company.id, title="Greeting", status="approved")
+    db.add(spec)
+    db.commit()
+    source = _sprint(db, company)
+    source.specification_id = spec.id
+    db.add(source)
+    db.commit()
+    target = _sprint(db, company, status="active", name="Sprint 1")
+    _item(
+        db,
+        source,
+        status="done",
+        comments=[],
+        title="Acceptance tests: REQ-1",
+        kind=acceptance.ACCEPTANCE_KIND,
+        covers=["REQ-1.1"],
+    )
+    item = _item(db, source, covers=["REQ-1.1"])
+
+    response = test_client.post(
+        f"/v1/backlog/{item.id}/carry_over", json={"target_sprint_id": target.id}
+    )
+
+    assert response.status_code == 409, response.text
+    assert "acceptance tests" in response.json()["detail"]
+    assert _clones(db, target) == []
+    assert not carry_over.carried_over(db.get(BacklogItem, item.id))
+
+
+def test_a_todo_task_waiting_for_unfinished_tasks_is_not_carried(test_client, db):
+    company = _company(db)
+    source = _sprint(db, company, status="active")
+    target = _sprint(db, company, status="active", name="Sprint 1")
+    first = _item(db, source, status="in_progress", comments=[], title="Schema")
+    item = _item(
+        db, source, status="todo", comments=[], title="API", depends_on=[first.id]
+    )
+
+    response = test_client.post(
+        f"/v1/backlog/{item.id}/carry_over", json={"target_sprint_id": target.id}
+    )
+
+    assert response.status_code == 409, response.text
+    assert "not done" in response.json()["detail"]
+    assert _clones(db, target) == []
+    assert db.get(BacklogItem, item.id).status == "todo"
+
+
+def test_a_carry_rereads_the_task_another_request_carried_meanwhile(db):
+    company = _company(db)
+    source = _sprint(db, company)
+    target = _sprint(db, company, status="active", name="Sprint 1")
+    item = _item(db, source)
+    engine = db.get_bind()
+    with Session(engine) as first, Session(engine) as second:
+        # Both requests loaded the task before either carried it.
+        stale = (second.get(BacklogItem, item.id), second.get(Sprint, source.id))
+        board_moves.carry_to_sprint(
+            first,
+            first.get(BacklogItem, item.id),
+            first.get(Sprint, source.id),
+            target.id,
+            "a",
+        )
+        with pytest.raises(board_moves.BoardMoveError) as refused:
+            board_moves.carry_to_sprint(second, *stale, target.id, "b")
+    assert refused.value.status == 409 and "already carried" in refused.value.detail
+    assert len(_clones(db, target)) == 1
+
+
+def test_a_carry_while_the_task_or_the_company_is_locked_is_refused(test_client, db):
+    company = _company(db)
+    source = _sprint(db, company)
+    target = _sprint(db, company, status="active", name="Sprint 1")
+    item = _item(db, source)
+    engine = db.get_bind()
+    url = f"/v1/backlog/{item.id}/carry_over"
+
+    for name, ident in ((locks.TASK, item.id), (locks.SPRINT_CLOSE, company.id)):
+        with locks.held(engine, name, ident) as mine:
+            assert mine
+            response = test_client.post(url, json={"target_sprint_id": target.id})
+        assert response.status_code == 409, response.text
+        assert "try again" in response.json()["detail"]
+    assert _clones(db, target) == []
+
+    assert (
+        test_client.post(url, json={"target_sprint_id": target.id}).status_code == 200
+    )
+
+
+def test_the_target_is_read_again_under_the_companys_lock(db):
+    company = _company(db)
+    source = _sprint(db, company)
+    target = _sprint(db, company, status="active", name="Sprint 1")
+    item = _item(db, source)
+    engine = db.get_bind()
+    with Session(engine) as request, Session(engine) as worker:
+        loaded = request.get(Sprint, target.id)  # the request saw it open
+        assert loaded.status == "active"
+        worker.get(Sprint, target.id).status = "completed"  # the worker closed it
+        worker.commit()
+        with pytest.raises(board_moves.BoardMoveError) as refused:
+            board_moves.carry_to_sprint(
+                request,
+                request.get(BacklogItem, item.id),
+                request.get(Sprint, source.id),
+                target.id,
+                "a",
+            )
+    assert refused.value.status == 409 and "completed" in refused.value.detail
+    assert _clones(db, target) == []
 
 
 # ── Who may move ─────────────────────────────────────────────────────────────

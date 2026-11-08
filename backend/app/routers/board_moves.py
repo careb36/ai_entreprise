@@ -8,7 +8,8 @@ Endpoints:
   into ``target_sprint_id``, or into a new sprint when it is empty (Manager).
   Once per task (409 after); 404 for an unknown task or another company's
   sprint; 409 for an archived sprint, a task that is not blocked for a person,
-  or a target that is not open.
+  a task waiting on unfinished tasks, a task its sprint's acceptance tests
+  check, a target that is not open, or a lock another request holds.
 
 Moving a card to To do (``PATCH /v1/backlog/{id}``, ``routers/sprint.py``)
 starts it; the rules are in the service.
@@ -70,5 +71,4 @@ async def carry_task_over(
     except board_moves.BoardMoveError as exc:
         session.rollback()
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
-    session.commit()
     return {"original_id": item_id, **answer}
