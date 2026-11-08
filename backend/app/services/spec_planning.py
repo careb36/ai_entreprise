@@ -81,6 +81,7 @@ def planning_context_of(
             "model": agent.model,
             "seniority": agent.seniority,
             "specialty": agent.specialty,
+            "company_id": company_id,
         }
         for agent in session.exec(
             select(Agent).where(Agent.company_id == company_id)

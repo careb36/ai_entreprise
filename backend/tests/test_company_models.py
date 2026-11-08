@@ -207,13 +207,14 @@ def test_the_reviewer_agent_asks_with_the_companys_reviewer_model(
     _pending_only(sqlite_session, {run.id})
     asked = []
 
-    def fake_ask(prompt, model=None):
-        asked.append(model)
+    def fake_ask(prompt, model=None, company_id=None):
+        asked.append((model, company_id))
         return APPROVE
 
     monkeypatch.setattr(reviewer_agent, "ask_llm", fake_ask)
     reviewer_agent.review_cycle(sqlite_session.get_bind())
-    assert asked == ["judge-model"]
+    # The company travels with the model, so a connection model routes with its key.
+    assert asked == [("judge-model", company.id)]
 
 
 @pytest.mark.usefixtures("enforcement")
@@ -251,3 +252,18 @@ def test_an_agent_runs_only_a_connection_of_its_company(sqlite_session, test_cli
             f"/v1/agents/{agent_id}", json={"model": model}, headers=manager
         )
         assert response.status_code == 200 and response.json()["model"] == model
+
+
+def test_the_planners_call_the_proxy_with_the_pos_company(sqlite_session):
+    """An agent's own model may be a connection; its company routes it."""
+    from services import spec_planning, sprint_planner
+
+    company = _company(sqlite_session)
+    sqlite_session.add(
+        Agent(company_id=company.id, name="PO", role="PO", model="conn:1:m")
+    )
+    sqlite_session.commit()
+    _, agents, _ = spec_planning.planning_context_of(sqlite_session, company.id)
+    po = sprint_planner._find_po_agent(agents)
+    assert po["model"] == "conn:1:m"
+    assert sprint_planner._client(po).company_id == company.id
