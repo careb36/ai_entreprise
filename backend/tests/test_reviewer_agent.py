@@ -1,7 +1,7 @@
 """The Reviewer agent suggests beside, never as, the approval a person records."""
 
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from config import settings
@@ -38,7 +38,13 @@ def _company(session, name="Reviewed"):
     return company
 
 
+def _utcnow():
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 def _run(session, company, producer="github", **fields):
+    # Ingested long enough ago that the wait for a verification is over.
+    fields.setdefault("ingested_at", _utcnow() - timedelta(hours=1))
     run = AgentRun(
         company_id=company.id,
         external_ref=f"pr-{secrets.token_hex(3)}",
@@ -346,3 +352,20 @@ def test_the_next_review_is_told_how_earlier_suggestions_fared(sqlite_session, e
         reviewer_agent.record_context(reviewer_agent.track_record(sqlite_session, 0))
         == ""
     )
+
+
+def test_an_unverified_run_waits_for_its_verification(sqlite_session, monkeypatch):
+    """A producer that ingests and then verifies is judged with the verdict."""
+    monkeypatch.setattr(reviewer_agent.settings, "REVIEWER_VERIFY_GRACE_SECONDS", 60)
+    company = _company(sqlite_session)
+    fresh = _run(sqlite_session, company, ingested_at=_utcnow())
+    _pending_only(sqlite_session, {fresh.id})
+    assert reviewer_agent.pending_runs(sqlite_session) == []
+    _verified(sqlite_session, fresh, "verified")
+    assert [r.id for r in reviewer_agent.pending_runs(sqlite_session)] == [fresh.id]
+    # An unverified run is reviewed once the wait is over.
+    other = _run(sqlite_session, company, ingested_at=_utcnow())
+    _pending_only(sqlite_session, {other.id})
+    later = _utcnow() + timedelta(seconds=61)
+    pending = reviewer_agent.pending_runs(sqlite_session, now=later)
+    assert [r.id for r in pending] == [other.id]
