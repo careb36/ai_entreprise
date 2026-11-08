@@ -14,31 +14,39 @@ _DOC_ROLES = ("TechWriter",)
 
 
 def _tool_call(m: dict[str, Any]) -> bool:
+    if "tool_call" in m:
+        return bool(m.get("tool_call"))
     caps = m.get("capabilities") or {}
     if isinstance(caps, dict):
         return bool(caps.get("tool_call") or caps.get("tool_calls"))
-    return bool(m.get("tool_call"))
+    return False
 
 
 def _reasoning(m: dict[str, Any]) -> bool:
+    if "reasoning" in m:
+        return bool(m.get("reasoning"))
     caps = m.get("capabilities") or {}
     if isinstance(caps, dict):
         return bool(caps.get("reasoning"))
-    return bool(m.get("reasoning"))
+    return False
 
 
 def _context(m: dict[str, Any]) -> int:
+    if "context" in m:
+        return int(m.get("context") or 0)
     limits = m.get("limit") or m.get("limits") or {}
     if isinstance(limits, dict):
         return int(limits.get("context") or limits.get("context_window") or 0)
-    return int(m.get("context") or 0)
+    return 0
 
 
 def _cost(m: dict[str, Any]) -> float:
+    if "cost_input" in m:
+        return float(m.get("cost_input") or 0.0)
     cost = m.get("cost") or {}
     if isinstance(cost, dict):
         return float(cost.get("input") or 0.0)
-    return float(m.get("cost_input") or 0.0)
+    return 0.0
 
 
 def suggest(models: list[dict[str, Any]]) -> dict[str, str | None]:
@@ -48,7 +56,9 @@ def suggest(models: list[dict[str, Any]]) -> dict[str, str | None]:
         return {}
 
     def best_for_deciding() -> str | None:
-        candidates = [m for m in usable if _reasoning(m)] or usable
+        candidates = [m for m in usable if _reasoning(m)]
+        if not candidates:
+            return None
         candidates = sorted(candidates, key=lambda m: (-_context(m), _cost(m)))
         return candidates[0]["id"] if candidates else None
 

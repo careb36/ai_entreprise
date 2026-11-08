@@ -263,7 +263,5 @@ async def company_model_suggestions(
     models: list[dict[str, Any]] = []
     for row in rows:
         for m in model_catalog.connection_models(row).get("models", []):
-            m = dict(m)
-            m.setdefault("id", f"{row.id}:{m.get('id')}")
-            models.append(m)
+            models.append(dict(m))
     return {"suggestions": model_suggestions.suggest(models)}
