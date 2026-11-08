@@ -13,6 +13,9 @@ vi.mock('../hooks/useQueries', () => ({
   useSprints: vi.fn(),
   useUpdateBacklogItem: vi.fn(),
 }))
+vi.mock('./ClientRequestBox', () => ({
+  ClientRequestBox: () => <p>request box</p>,
+}))
 vi.mock('../services/manager', () => ({
   useClientBrief: () => ({ data: undefined }),
   useOverrideManagerDecision: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),

@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore'
 import { ALL_ROLES, errorDetail, type AgentRunListItem, type InboxBlockedTask, type InboxProposal } from '../services/api'
 import type { InboxWithManager, ManagerDecision } from '../services/manager'
 import { ClientBriefCard, ManagerDecisions, ManagerSuggestion } from './ManagerDecisions'
+import { ClientRequestBox } from './ClientRequestBox'
 
 // The note written on the task when a person sends it back to work. Not
 // translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
@@ -211,6 +212,7 @@ function Inbox({ companyId }: { companyId: number }) {
   return (
     <div className="space-y-8">
       <ClientBriefCard companyId={companyId} />
+      {canManage && <ClientRequestBox companyId={companyId} />}
       <ManagerDecisions decisions={data?.agent_decisions ?? []} canManage={canManage} />
       {inbox.isError && (
         <div role="alert" className="alert-error flex items-center justify-between gap-3">

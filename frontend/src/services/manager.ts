@@ -40,10 +40,37 @@ export interface ClientBrief {
   cost: { tokens_since: number; tokens_total: number; over_budget: boolean }
 }
 
+/** One category's counts in the Manager agent's record (counted, never reported). */
+export interface ManagerRecordCounts {
+  suggested: number
+  decided: number
+  agreed: number
+  unusable: number
+  taken_alone: number
+  overridden: number
+  override_rate: number | null
+}
+
+/** `GET /v1/manager_record`: agreement with the client and overrides, by category. */
+export interface ManagerRecord {
+  categories: Record<string, ManagerRecordCounts>
+  total: ManagerRecordCounts
+  flagged_rules: string[]
+}
+
 export const managerApi = {
+  record: (companyId: number) => api.get<ManagerRecord>(`/v1/manager_record?company_id=${companyId}`),
   override: (decisionId: number) =>
     api.post<{ id: number; outcome: string }>(`/v1/manager_decisions/${decisionId}/override`, {}),
   brief: (companyId: number) => api.get<ClientBrief>(`/v1/companies/${companyId}/brief`),
+}
+
+export function useManagerRecord(companyId: number | null) {
+  return useQuery({
+    queryKey: ['manager-record', companyId ?? 0] as const,
+    queryFn: () => managerApi.record(companyId!),
+    enabled: companyId !== null,
+  })
 }
 
 export function useClientBrief(companyId: number | null) {

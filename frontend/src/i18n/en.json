@@ -2025,6 +2025,19 @@
     "overriddenBy": "Overridden by {{who}}",
     "overrideError": "Could not override: {{message}}",
     "override": "Override",
-    "decisionsTitle": "Decided by the Manager agent"
+    "decisionsTitle": "Decided by the Manager agent",
+    "requestTitle": "What do you need?",
+    "requestHint": "Say it in plain words. The PO writes a draft specification from it, and approving it stays yours.",
+    "requestPlaceholder": "For example: customers should be able to export their invoices as a spreadsheet.",
+    "requestSending": "The PO is writing the draft…",
+    "requestSend": "Ask the PO for a draft",
+    "requestError": "Could not draft it: {{message}}",
+    "requestDone": "Read and approve the draft: {{title}}",
+    "recordTitle": "The Manager agent's record",
+    "recordHint": "Counted from what you decided and what you overrode; a rule whose overrides rise is flagged and no longer applied.",
+    "recordAgreed": "matched your decision {{agreed}} of {{decided}}",
+    "recordOverridden": "overridden {{overridden}} of {{taken}} taken alone ({{rate}})",
+    "recordFlagged": "Flagged, not applied: {{rules}}",
+    "requestLabel": "Your request, in plain words"
   }
 }
