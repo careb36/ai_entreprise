@@ -19,11 +19,18 @@ from usage import reported_count, with_usage
 # Gemini's finishReason, as the OpenAI-compatible providers spell it.
 FINISH_REASONS = {"MAX_TOKENS": "length", "STOP": "stop"}
 
-# Gemini 2.5+ requires a thoughtSignature on every functionCall part that
-# continues a previous turn. The backend speaks OpenAI and does not carry it,
-# so the proxy remembers the signatures Gemini returns and reattaches them
-# when the same call reappears in a later request.
-_THOUGHT_SIGNATURES: dict[tuple[str, str], str] = {}
+# Gemini (2.5 and later, with thinking) puts a ``thoughtSignature`` on the
+# part that carries a functionCall, and refuses a later request whose history
+# replays that call without it. The signature travels with the call itself:
+# it comes back inside the OpenAI tool_call as
+# ``extra_content.google.thought_signature`` (the field Google's own
+# OpenAI-compatible endpoint uses), the backend sends its history back as it
+# received it, and the part gets it again here. No state in the proxy, so it
+# survives restarts and replicas and never mixes two conversations. A call
+# replayed with no signature at all (one another provider made, before a
+# fallback) gets the validator-skip value Google documents for calls the
+# model did not produce: https://ai.google.dev/gemini-api/docs/thought-signatures
+SIGNATURE_SKIP = "skip_thought_signature_validator"
 
 
 def _tool_declarations(tools: list | None) -> list[dict]:
@@ -50,6 +57,14 @@ def _without_schema_extras(schema):
     if isinstance(schema, list):
         return [_without_schema_extras(item) for item in schema]
     return schema
+
+
+def signature_of(tool_call: dict) -> str | None:
+    """The thought signature an OpenAI tool_call carries back, if any."""
+    extra = tool_call.get("extra_content")
+    google = extra.get("google") if isinstance(extra, dict) else None
+    signature = google.get("thought_signature") if isinstance(google, dict) else None
+    return signature if isinstance(signature, str) and signature else None
 
 
 def _contents(messages: list) -> list[dict]:
@@ -80,11 +95,9 @@ def _contents(messages: list) -> list[dict]:
                 except ValueError:
                     arguments = {"_raw": arguments}
             names_by_call_id[str(call.get("id"))] = function.get("name") or "tool"
-            fc = {"name": function.get("name") or "tool", "args": arguments or {}}
-            key = (fc["name"], json.dumps(fc["args"], sort_keys=True, default=str))
-            if key in _THOUGHT_SIGNATURES:
-                fc["thoughtSignature"] = _THOUGHT_SIGNATURES[key]
-            parts.append({"functionCall": fc})
+            part = {"functionCall": {"name": function.get("name") or "tool", "args": arguments or {}}}
+            part["thoughtSignature"] = signature_of(call) or SIGNATURE_SKIP
+            parts.append(part)
         if parts:
             contents.append({"role": "model" if m["role"] == "assistant" else "user", "parts": parts})
     return contents
@@ -98,13 +111,15 @@ def _message_from(parts: list) -> dict:
         call = part.get("functionCall") if isinstance(part, dict) else None
         if not isinstance(call, dict) or not call.get("name"):
             continue
-        tool_calls.append(
-            {
-                "id": f"call_{len(tool_calls) + 1}",
-                "type": "function",
-                "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
-            }
-        )
+        tool_call = {
+            "id": f"call_{len(tool_calls) + 1}",
+            "type": "function",
+            "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
+        }
+        signature = part.get("thoughtSignature") or call.get("thoughtSignature")
+        if isinstance(signature, str) and signature:
+            tool_call["extra_content"] = {"google": {"thought_signature": signature}}
+        tool_calls.append(tool_call)
     message: dict = {"role": "assistant", "content": text or None}
     if tool_calls:
         message["tool_calls"] = tool_calls
@@ -138,11 +153,6 @@ def call_gemini(
     try:
         candidate = res["candidates"][0]
         parts = candidate["content"]["parts"]
-        for part in parts:
-            call = part.get("functionCall") if isinstance(part, dict) else None
-            if isinstance(call, dict) and call.get("thoughtSignature") and call.get("name"):
-                key = (call["name"], json.dumps(call.get("args") or {}, sort_keys=True, default=str))
-                _THOUGHT_SIGNATURES[key] = call["thoughtSignature"]
         message = _message_from(parts)
         if message["content"] is None and not message.get("tool_calls"):
             raise KeyError("text")

@@ -84,7 +84,16 @@ def test_gemini_s_function_call_is_a_tool_call_and_the_answer_goes_back_as_a_fun
     )
     assert second.status_code == 200
     contents = upstream.calls[1]["json"]["contents"]
-    assert contents[1] == {"role": "model", "parts": [{"functionCall": {"name": "tracker__search", "args": {"q": "auth"}}}]}
+    # The answer carried no signature, so the replayed call gets the documented skip value.
+    assert contents[1] == {
+        "role": "model",
+        "parts": [
+            {
+                "functionCall": {"name": "tracker__search", "args": {"q": "auth"}},
+                "thoughtSignature": "skip_thought_signature_validator",
+            }
+        ],
+    }
     assert contents[2] == {"role": "user", "parts": [{"functionResponse": {"name": "tracker__search", "response": {"content": "found 3"}}}]}
     assert upstream.calls[1]["json"]["system_instruction"] == {"parts": [{"text": "sys"}]}
     assert second.get_json()["choices"][0]["message"]["content"] == "done"
@@ -94,3 +103,68 @@ def test_a_gemini_answer_with_neither_text_nor_a_call_is_an_upstream_error(clien
     upstream.set("gemini", FakeResponse(200, {"candidates": [{"content": {"parts": [{}]}, "finishReason": "STOP"}]}))
     resp = _chat(client, "gemini-3.8-flash", [{"role": "user", "content": "hi"}])
     assert resp.status_code == 502 and "no text" in resp.get_json()["message"]
+
+
+def _gemini_call(signature: str) -> FakeResponse:
+    return FakeResponse(
+        200,
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "functionCall": {"name": "workspace__list", "args": {}},
+                                "thoughtSignature": signature,
+                            }
+                        ]
+                    },
+                    "finishReason": "STOP",
+                }
+            ]
+        },
+    )
+
+
+def test_gemini_s_thought_signature_travels_with_the_call_and_comes_back_on_its_part(client, upstream):
+    """Gemini refuses a replayed functionCall without its thoughtSignature (a 400)."""
+    upstream.set("gemini", _gemini_call("sig-A"))
+    first = _chat(client, "gemini-3.8-flash", [{"role": "user", "content": "hi"}]).get_json()
+    call = first["choices"][0]["message"]["tool_calls"][0]
+    assert call["extra_content"] == {"google": {"thought_signature": "sig-A"}}
+
+    upstream.set("gemini", FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "done"}]}, "finishReason": "STOP"}]}))
+    _chat(
+        client,
+        "gemini-3.8-flash",
+        [
+            {"role": "user", "content": "hi"},
+            first["choices"][0]["message"],
+            {"role": "tool", "tool_call_id": call["id"], "content": "src/"},
+        ],
+    )
+    part = upstream.calls[1]["json"]["contents"][1]["parts"][0]
+    assert part["thoughtSignature"] == "sig-A"
+    assert "thoughtSignature" not in part["functionCall"]
+
+
+def test_two_conversations_with_the_same_call_keep_their_own_signatures(client, upstream):
+    """No state in the proxy: the same call in two tasks never borrows the other's signature."""
+    upstream.set("gemini", _gemini_call("sig-task-1"))
+    one = _chat(client, "gemini-3.8-flash", [{"role": "user", "content": "task 1"}]).get_json()
+    upstream.set("gemini", _gemini_call("sig-task-2"))
+    two = _chat(client, "gemini-3.8-flash", [{"role": "user", "content": "task 2"}]).get_json()
+
+    upstream.set("gemini", FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "ok"}]}, "finishReason": "STOP"}]}))
+    for answer, expected in ((one, "sig-task-1"), (two, "sig-task-2")):
+        message = answer["choices"][0]["message"]
+        _chat(
+            client,
+            "gemini-3.8-flash",
+            [
+                {"role": "user", "content": "go"},
+                message,
+                {"role": "tool", "tool_call_id": message["tool_calls"][0]["id"], "content": "x"},
+            ],
+        )
+        assert upstream.calls[-1]["json"]["contents"][1]["parts"][0]["thoughtSignature"] == expected
