@@ -43,6 +43,11 @@ class Company(SQLModel, table=True):
     # name (the values stay on the daemon's machine); none by default.
     delivery_sandbox: str | None = None
     sandbox_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The models the company's agents run when their own is empty
+    # (services/company_models.py): one per role ({"QA": "..."}), then one
+    # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.
+    default_model: str | None = None
+    role_models: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):
