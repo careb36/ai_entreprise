@@ -647,3 +647,23 @@ def test_the_worker_delivers_the_tool_edits_and_the_daemon_sees_a_modified_file(
     assert writes["src/greet.py"]["change"] == "modified"
     assert writes["src/greet.py"]["sha256"] == edit["sha256_after"]
     assert verification.verdict == "verified"
+
+
+def test_the_history_check_refuses_an_edit_recorded_without_its_hashes():
+    from history_check import _run_facts
+    from models.agent_run import Verification
+
+    def facts(*calls):
+        verification = Verification(
+            company_id=1,
+            agent_run_id=1,
+            verdict="verified",
+            checks=[],
+            evidence={"tool_calls": list(calls)},
+        )
+        return _run_facts(verification)["reads_without_hash"]
+
+    edit = {"server": "workspace", "tool": "edit", "path": "src/a.py"}
+    assert facts(edit | {"sha256_before": "aa", "sha256_after": "bb"}) == []
+    assert facts(edit | {"sha256_before": "aa"}) == ["src/a.py"]
+    assert facts(edit | {"is_error": True}) == []
