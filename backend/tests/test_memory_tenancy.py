@@ -51,7 +51,10 @@ def test_memory_search_filters_before_limit_and_marks_legacy(companies, legacy):
     assert [result["company_id"] for result in results] == [None, 7]
 
 
-def test_engram_company_propagates_without_trusting_metadata():
+def test_engram_company_propagates_without_trusting_metadata(monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
     processor = DeepSeekEngramProcessor()
     with (
         patch.object(processor, "_process_with_deepseek", return_value="summary"),

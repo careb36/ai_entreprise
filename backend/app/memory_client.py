@@ -4,8 +4,11 @@ MemoryClient — dual-store memory abstraction for pgvector and Neo4j.
 Provides a unified interface for:
 - **Vector memory** (Postgres + pgvector): Stores arbitrary text with dense
   vector embeddings for semantic similarity search.
-- **Graph memory** (Neo4j): Stores entities, relationships, and episodic
-  Engram nodes for structured knowledge retrieval.
+- **Graph memory** (Neo4j, optional): Stores entities, relationships, and
+  episodic Engram nodes for structured knowledge retrieval. Without a driver
+  (``NEO4J_ENABLED=false``, the default) the vector memory works alone, graph
+  writes are skipped and reported as not recorded, and graph reads raise
+  ``GraphNotRecorded``.
 
 The ``embed()`` call is delegated to ``LLMProxyClient`` (Gemini
 ``text-embedding-004``) so this module has no direct dependency on any LLM SDK.
@@ -14,8 +17,15 @@ The ``embed()`` call is delegated to ``LLMProxyClient`` (Gemini
 import json
 from typing import Any
 
-from database import engine, get_neo4j_driver
+from database import engine
 from sqlmodel import Session, text
+
+NOT_RECORDED = "not_recorded"
+STORED = "stored"
+
+
+class GraphNotRecorded(RuntimeError):
+    """Raised by a graph read or write when this client has no graph."""
 
 
 class MemoryClient:
@@ -23,13 +33,24 @@ class MemoryClient:
     Unified client for Postgres/pgvector and Neo4j memory operations.
 
     Args:
-        neo4j_driver: An initialised ``neo4j.Driver`` instance.  If ``None``,
-                      the driver is obtained from ``database.get_neo4j_driver()``.
+        neo4j_driver: An initialised ``neo4j.Driver`` instance, or ``None``
+                      when the knowledge graph is not recorded: the client
+                      then works on pgvector alone.
     """
 
     def __init__(self, neo4j_driver=None):
         self.engine = engine
-        self.neo4j_driver = neo4j_driver or get_neo4j_driver()
+        self.neo4j_driver = neo4j_driver
+
+    @property
+    def graph_enabled(self) -> bool:
+        """True when this client records and reads the knowledge graph."""
+        return self.neo4j_driver is not None
+
+    def _graph(self):
+        if self.neo4j_driver is None:
+            raise GraphNotRecorded("The knowledge graph is not recorded.")
+        return self.neo4j_driver
 
     def store(
         self,
@@ -37,14 +58,15 @@ class MemoryClient:
         metadata: dict | None = None,
         *,
         company_id: int | None = None,
-    ):
+    ) -> dict[str, str]:
         """
-        Persist content to both pgvector (semantic search) and Neo4j (graph).
+        Persist content to pgvector (semantic search) and, if kept, Neo4j.
 
         Workflow:
         1. Embed the content via the LLM proxy.
         2. Insert the vector into the ``vector_memory`` Postgres table.
-        3. Create a ``Memory`` node in Neo4j with a ``created`` timestamp.
+        3. With a graph, create a ``Memory`` node in Neo4j with a ``created``
+           timestamp.
 
         If embedding fails (proxy unavailable), the pgvector insert is skipped
         but the Neo4j node is still written.
@@ -52,11 +74,16 @@ class MemoryClient:
         Args:
             content:  Raw text to store.
             metadata: Arbitrary key-value metadata persisted as JSONB / JSON.
+
+        Returns:
+            ``{"vector": ..., "graph": ...}``, each ``"stored"`` or
+            ``"not_recorded"``: what was actually kept, never assumed.
         """
         from llm_proxy_client import LLMProxyClient
 
         client = LLMProxyClient()
         embedding = client.embed(content)
+        outcome = {"vector": NOT_RECORDED, "graph": NOT_RECORDED}
 
         if embedding:
             # Store vector representation for ANN similarity search.
@@ -76,8 +103,11 @@ class MemoryClient:
                     },
                 )
                 session.commit()
+            outcome["vector"] = STORED
 
-        # Always write the raw content to Neo4j for graph traversal.
+        if self.neo4j_driver is None:
+            return outcome
+        # Write the raw content to Neo4j for graph traversal.
         with self.neo4j_driver.session() as neo_session:
             neo_session.run(
                 """
@@ -92,6 +122,8 @@ class MemoryClient:
                 company_id=company_id,
                 metadata=json.dumps(metadata or {}),
             )
+        outcome["graph"] = STORED
+        return outcome
 
     def search_similar(
         self,
@@ -170,7 +202,7 @@ class MemoryClient:
             entity_type: Cypher label for the new node (e.g. ``"User"``, ``"Sprint"``).
             properties:  Dict of node properties.
         """
-        with self.neo4j_driver.session() as neo_session:
+        with self._graph().session() as neo_session:
             neo_session.run(f"CREATE (e:{entity_type} $props)", props=properties)
 
     def query_graph(self, cypher: str, **kwargs) -> list[dict[str, Any]]:
@@ -184,7 +216,7 @@ class MemoryClient:
         Returns:
             List of record dicts.
         """
-        with self.neo4j_driver.session() as neo_session:
+        with self._graph().session() as neo_session:
             result = neo_session.run(cypher, **kwargs)
             return [dict(record) for record in result]
 
@@ -213,6 +245,6 @@ class MemoryClient:
         else:
             cypher = f"MATCH (n:{node_type} {{id: $id}})-[r]->(m) RETURN n, r, m"
 
-        with self.neo4j_driver.session() as neo_session:
+        with self._graph().session() as neo_session:
             result = neo_session.run(cypher, id=node_id)
             return [dict(record) for record in result]

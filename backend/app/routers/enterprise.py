@@ -22,7 +22,7 @@ from auth_policy import (
     viewer_company_ids,
 )
 from config import settings
-from database import get_neo4j_driver, get_session
+from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from logging_config import logger
 from models import Agent, AuditLog, BusinessUnit, Sprint, User
@@ -37,6 +37,7 @@ from schemas import (
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
+from services import memory_graph
 from services.company_service import CompanyService
 from services.discovery_service import DiscoveryService
 from services.workspace_daemon import (
@@ -385,7 +386,10 @@ async def get_capabilities(request: Request) -> dict[str, bool | str | None]:
     """
     return {
         "agent_graph": bool(settings.AGENT_GRAPH_ENABLED),
+        # Memory search on pgvector, and the knowledge graph apart (issue #328).
         "memory": getattr(request.app.state, "memory_client", None) is not None,
+        "memory_graph": bool(getattr(request.app.state, "memory_graph", False))
+        and memory_graph.graph_enabled(),
         "github": bool(settings.GITHUB_TOKEN),
         "auth_required": bool(settings.AUTH_REQUIRED),
         "support_agent": bool(settings.SUPPORT_AGENT_ENABLED),
@@ -535,46 +539,16 @@ async def get_code_lineage(
     Queries the Neo4j Temporal Knowledge Graph for ``Episodic`` nodes connected
     to a ``Semantic`` node whose ``id`` ends with *file_path* via a
     ``MODIFIED_BY`` relationship.  Returns up to 10 most recent decisions.
+    Without the graph (``NEO4J_ENABLED=false``) the answer is ``recorded:
+    false`` with the reason (``services/memory_graph.lineage``).
     """
     require_authenticated(user)
     if company_id is not None:
         require_company_role(session, user, company_id, "Viewer")
     company_ids = viewer_company_ids(session, user) if user is not None else []
-    driver = get_neo4j_driver()
-    try:
-        company_filter = (
-            "AND e.company_id = $company_id"
-            if company_id is not None
-            else "AND (e.company_id IN $company_ids OR e.company_id IS NULL)"
-            if user is not None
-            else ""
-        )
-        cypher = f"""
-        MATCH (e:Episodic)-[r:MODIFIED_BY]->(s)
-        WHERE s.id ENDS WITH $file_path
-        {company_filter}
-        RETURN e.id AS engram_id, e.agent_role AS role, e.summary AS decision, e.created_at AS timestamp,
-               e.company_id AS company_id, e.company_id IS NULL AS legacy
-        ORDER BY e.created_at DESC LIMIT 10
-        """
-        with driver.session() as neo_session:
-            result = neo_session.run(
-                cypher,
-                file_path=file_path,
-                company_id=company_id,
-                company_ids=company_ids,
-            )
-            lineage = [dict(record) for record in result]
-        if not lineage:
-            return {
-                "file": file_path,
-                "status": "No historical engrams found.",
-                "lineage": [],
-            }
-        return {"file": file_path, "status": "success", "lineage": lineage}
-    except Exception as e:  # noqa: BLE001 - Translate graph failures to a sanitized API error.
-        logger.error(f"Lineage query failed: {e}")
-        raise HTTPException(status_code=500, detail="Neo4j Time Travel query failed.")
+    return memory_graph.lineage(
+        file_path, company_id, company_ids, scoped=user is not None
+    )
 
 
 # ---------------------------------------------------------------------------

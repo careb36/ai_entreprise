@@ -46,9 +46,9 @@ export default function Lineage() {
         </div>
       </div>
 
-      {capabilities && !capabilities.memory && (
+      {capabilities && !capabilities.memory_graph && (
         <p role="status" className="mb-4 text-sm text-amber-300">
-          {t('lineage.unavailable', { defaultValue: 'Lineage needs the knowledge graph (Neo4j), which is not connected.' })}
+          {t('lineage.unavailable', { defaultValue: 'File lineage needs the knowledge graph, which this deployment does not record.' })}
         </p>
       )}
 
@@ -72,6 +72,10 @@ export default function Lineage() {
           <span>{t('lineage.error', { message: errorDetail(lineage.error), defaultValue: 'Could not load the lineage: {{message}}' })}</span>
           <button type="button" onClick={() => lineage.refetch()} className="underline">{t('common.retry')}</button>
         </div>
+      ) : lineage.data?.recorded === false ? (
+        <p role="status" className="text-sm text-amber-300">
+          {t('lineage.notRecorded', { file, defaultValue: 'Not recorded: the knowledge graph is off, so no decisions are kept for {{file}}.' })}
+        </p>
       ) : entries.length === 0 ? (
         <p className="text-sm text-gray-400">
           {t('lineage.empty', { file, defaultValue: 'No decisions recorded for {{file}}.' })}

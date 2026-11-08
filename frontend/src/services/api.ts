@@ -55,6 +55,7 @@ export interface CompanyInfo {
 export interface Capabilities {
   agent_graph: boolean
   memory: boolean
+  memory_graph?: boolean // the knowledge graph is recorded (NEO4J_ENABLED), apart from pgvector memory
   github: boolean
   auth_required: boolean
   /** The Support agent triages new tickets (SUPPORT_AGENT_ENABLED). */
@@ -63,7 +64,7 @@ export interface Capabilities {
   public_api_url?: string | null
 }
 
-export type ComponentStatus = { status: 'up' | 'down'; reason?: string; detail?: string }
+export type ComponentStatus = { status: 'up' | 'down' | 'disabled'; reason?: string; detail?: string }
 
 export interface DeepHealth {
   status: 'healthy' | 'degraded' | 'down'
@@ -290,6 +291,7 @@ export interface LineageEntry {
 export interface LineageResponse {
   file: string
   status: string
+  recorded?: boolean; reason?: string // recorded: false when the graph is not kept, with the reason
   lineage: LineageEntry[]
 }
 
@@ -1001,11 +1003,10 @@ export const api = {
   planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>
     api.post<SprintPlanResponse>('/v1/plan_self_improvement_sprint', data),
 
-  // Agents & Memory
   generate: (data: { company_id: number; story: string; constraints?: string; interaction_id?: string }) =>
     api.post<any>('/v1/generate', data),
 
-  // Memory (pgvector + Neo4j). A 503 means the memory service is not connected.
+  // Memory on pgvector (the graph is not needed). A 503 means no vector store.
   searchMemory: (query: string, options: { limit?: number; companyId?: number | null } = {}) =>
     fetchApi<{ results: MemoryResult[] }>('/v1/memory/search', {
       method: 'GET',
@@ -1080,7 +1081,6 @@ export const api = {
       retryServerErrors: false,
     }),
 
-  // Decisions recorded for a file. Needs Neo4j; the API answers 500 without it.
   getLineage: (filePath: string, companyId?: number | null) =>
     fetchApi<LineageResponse>('/v1/enterprise/lineage', {
       method: 'GET',

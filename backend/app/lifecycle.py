@@ -116,6 +116,36 @@ async def _start_workers(app, client: NATSClient) -> None:
     )
 
 
+def _start_memory(app, has_vector_memory: bool) -> None:
+    """Memory search on pgvector, with the knowledge graph only when enabled.
+
+    The graph is optional and off by default (issue #328): without it the
+    memory client works on pgvector alone and graph readers answer "not
+    recorded". ``app.state.memory_graph`` says whether the graph is kept.
+    """
+    app.state.memory_client = None
+    app.state.memory_graph = False
+    driver = None
+    if not settings.NEO4J_ENABLED:
+        logger.info("Knowledge graph off (NEO4J_ENABLED=false): not recorded.")
+    else:
+        try:
+            driver = get_neo4j_driver()
+            ensure_memory_graph_schema(driver)
+            app.state.memory_graph = True
+            logger.info("Neo4j connected: the knowledge graph is recorded.")
+        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional graph fails.
+            driver = None
+            logger.warning(
+                f"Neo4j enabled but unavailable at startup ({exc}). "
+                "The knowledge graph is not recorded until the backend restarts with it reachable."
+            )
+    if has_vector_memory:
+        app.state.memory_client = MemoryClient(neo4j_driver=driver)
+    else:
+        logger.info("No vector_memory table: memory search and store are off.")
+
+
 async def startup(app):
     """
     Application startup handler.
@@ -137,7 +167,7 @@ async def startup(app):
     - ``process_backlog_tasks()`` — NATS consumer → backlog task execution.
     """
     logger.info("Initializing Enterprise Backend Components...")
-    prepare_database()
+    has_vector_memory = prepare_database()
 
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
@@ -191,21 +221,7 @@ async def startup(app):
         _background_tasks.add(manager_task)
         manager_task.add_done_callback(_on_task_done)
 
-    # Neo4j is used for memory search and lineage; degrade gracefully if absent.
-    app.state.memory_client = None
-    if not settings.NEO4J_ENABLED:
-        logger.info("Neo4j disabled (NEO4J_ENABLED=false) — memory features off.")
-    else:
-        try:
-            driver = get_neo4j_driver()
-            ensure_memory_graph_schema(driver)
-            app.state.memory_client = MemoryClient(neo4j_driver=driver)
-            logger.info("Neo4j connected — memory features enabled.")
-        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
-            logger.warning(
-                f"Neo4j unavailable at startup ({exc}). "
-                "Memory search and lineage endpoints will return errors until Neo4j is reachable."
-            )
+    _start_memory(app, has_vector_memory)
 
     app.state.llm_client = LLMProxyClient(
         os.getenv("LLM_PROXY_URL", "http://localhost:5100")

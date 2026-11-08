@@ -581,4 +581,33 @@ describe('service status', () => {
     fireEvent.pointerDown(document.body)
     expect(screen.queryByRole('dialog', { name: 'Service status' })).not.toBeInTheDocument()
   })
+
+  it('shows a knowledge graph switched off as off, not down', async () => {
+    useAuthStore.setState({
+      token: 'signed-token', expiresAt: Date.now() + 60_000, meLoaded: true, loadingMe: false,
+      memberships: [{ company_id: 1, human_role: 'Owner' }],
+    })
+    useAppStore.getState().setCompany(1, 'Example company')
+    vi.spyOn(api, 'health').mockResolvedValue({ status: 'healthy', timestamp: '' })
+    vi.spyOn(api, 'deepHealth').mockResolvedValue({
+      status: 'healthy',
+      components: {
+        postgres: { status: 'up' },
+        nats: { status: 'up' },
+        llm_proxy: { status: 'up' },
+        neo4j: { status: 'disabled', reason: 'NEO4J_ENABLED=false' },
+      },
+    })
+    window.history.replaceState(null, '', '/evidence')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Online' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Service status' })
+    expect(await within(dialog).findByText('All services are up.')).toBeInTheDocument()
+    const neo4j = within(dialog).getByText('Knowledge graph (Neo4j)').closest('li')!
+    expect(neo4j).toHaveTextContent('off')
+    expect(neo4j).not.toHaveTextContent('down')
+    expect(neo4j).not.toHaveTextContent('NEO4J_ENABLED')
+  })
 })

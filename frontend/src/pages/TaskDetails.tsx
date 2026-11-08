@@ -89,7 +89,7 @@ function TaskEvidence({ companyId, taskId }: { companyId: number; taskId: number
               <ul className="space-y-0.5">
                 {claimedFiles.map(file => (
                   <li key={file} className="font-mono text-xs text-gray-300 break-all">
-                    {capabilities?.memory
+                    {capabilities?.memory_graph
                       ? <Link to={lineagePath(file)} className="hover:text-brand-300 hover:underline"
                           title={t('lineage.open', { defaultValue: 'See the decisions recorded on this file' })}>{file}</Link>
                       : file}
