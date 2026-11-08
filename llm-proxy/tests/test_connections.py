@@ -95,3 +95,24 @@ def test_requests_without_a_connection_route_as_before(client, upstream):
     upstream.set("deepseek", openai_ok("from deepseek"))
     resp = _chat(client, {}, model="deepseek-v4-pro")
     assert resp.status_code == 200 and resp.get_json()["provider"] == "deepseek"
+
+
+def test_a_provider_error_that_echoes_the_secrets_is_redacted(client, recorder, proxy, monkeypatch):
+    echo = FakeResponse(401, {"error": {"message": "bad key sk-company for X-Title=La Fabrique"}})
+    monkeypatch.setattr(proxy.requests, "post", Recorder(echo))
+    resp = _chat(client, {"X-Provider-Connection": _conn(), "X-Internal-Token": TOKEN})
+    assert resp.status_code >= 400
+    text = json.dumps(resp.get_json())
+    assert "sk-company" not in text
+    assert "La Fabrique" not in text
+    assert "[redacted]" in text
+
+
+def test_a_transport_error_that_echoes_the_key_is_redacted(client, recorder, proxy, monkeypatch):
+    def boom(url, headers=None, json=None, timeout=None):
+        raise proxy.requests.RequestException("connection reset; Authorization: Bearer sk-company")
+
+    monkeypatch.setattr(proxy.requests, "post", boom)
+    resp = _chat(client, {"X-Provider-Connection": _conn(), "X-Internal-Token": TOKEN})
+    assert resp.status_code >= 400
+    assert "sk-company" not in json.dumps(resp.get_json())

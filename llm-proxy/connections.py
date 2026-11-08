@@ -76,12 +76,31 @@ def request_headers(conn: dict) -> dict[str, str]:
     return out
 
 
+def redact(conn: dict, text: str) -> str:
+    """*text* with the connection's key and header values replaced."""
+    secrets = [conn.get("api_key") or "", *(conn.get("headers") or {}).values()]
+    for secret in sorted({s for s in secrets if s}, key=len, reverse=True):
+        text = text.replace(secret, "[redacted]")
+    return text
+
+
 def call(conn: dict, model: str, data: dict, post, timeout: float) -> tuple[dict, int]:
-    """One chat completion on the connection's endpoint with its key."""
-    status, result = post(
-        conn["name"], model, f"{conn['base_url']}/chat/completions",
-        request_headers(conn), {**data, "model": model}, timeout,
-    )
+    """One chat completion on the connection's endpoint with its key.
+
+    A provider or transport error that echoes the key or a header value is
+    redacted before it travels on: the proxy answers and the backend logs it.
+    """
+    try:
+        status, result = post(
+            conn["name"], model, f"{conn['base_url']}/chat/completions",
+            request_headers(conn), {**data, "model": model}, timeout,
+        )
+    except UpstreamError as exc:
+        clean = UpstreamError(
+            exc.provider, exc.model, exc.status, redact(conn, str(exc.message)),
+            retriable=exc.retriable,
+        )
+        raise clean from None
     if not result.get("choices"):
         raise UpstreamError(conn["name"], model, status, "response contained no choices", retriable=False)
     return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))
