@@ -110,6 +110,22 @@ describe('Models', () => {
     expect(screen.getByText('Suggested: acme-router · Thinker')).toBeInTheDocument()
   })
 
+  it("says when the company's own record decided a suggestion", async () => {
+    const measured = { ...SUGGESTION, model: 'conn:7:coder', name: 'Coder', measured: { tasks: 4, done: 3, rework: 2 } }
+    stubApi({
+      'GET /v1/companies/4/model_suggestions': () => response(200, {
+        candidates: 2,
+        suggestions: Object.fromEntries(ROLES.map(role => [role,
+          role === 'Architect' ? SUGGESTION : role === 'Developer' ? measured : null])),
+      }),
+    })
+    renderAs('Viewer')
+
+    expect(await screen.findByText("Measured on 4 of the company's tasks: 3 done, 0.5 rework per task")).toBeInTheDocument()
+    // The rule's suggestion, with no record, says nothing of the kind.
+    expect(screen.getAllByText(/Measured on/)).toHaveLength(1)
+  })
+
   it('lets a Manager choose models, use the suggestions and save them', async () => {
     const fetch = stubApi({
       'PUT /v1/companies/4/model_settings': init => response(200, { ...SETTINGS, ...JSON.parse(String(init.body)) }),

@@ -2005,7 +2005,8 @@
         "role": "elegido para este rol",
         "company": "el de la empresa",
         "deployment": "el de la instalación"
-      }
+      },
+      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
     }
   }
 }

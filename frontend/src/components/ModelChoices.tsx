@@ -118,6 +118,15 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
                       {t('models.choices.suggested', { model: `${suggestion.connection} · ${suggestion.name}` })}
                     </div>
                   )}
+                  {suggestion?.measured && (
+                    <div className="text-xs text-gray-500">
+                      {t('models.choices.measured', {
+                        tasks: suggestion.measured.tasks,
+                        done: suggestion.measured.done,
+                        rework: (suggestion.measured.rework / suggestion.measured.tasks).toFixed(1),
+                      })}
+                    </div>
+                  )}
                 </td>
                 <td className="py-2 text-xs text-gray-400">
                   <div className="break-all text-gray-300">{effective?.model}</div>

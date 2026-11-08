@@ -50,11 +50,16 @@ export interface ModelSettings {
   effective: Record<string, { model: string; source: ModelSource }>
 }
 
+/** How a model did on the company's tasks in a role (completed sprints). */
+export interface ModelRecord { tasks: number; done: number; rework: number }
+
 export interface ModelSuggestion {
   model: string
   name: string
   connection: string
   reason: string
+  /** The company's own record with the suggested model; when present it decided the suggestion. */
+  measured?: ModelRecord | null
 }
 
 export interface NewConnection {
