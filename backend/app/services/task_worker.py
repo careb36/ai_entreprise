@@ -568,11 +568,11 @@ def _consult_architect(
     )
     prompt = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
-    )
-    prompt += edit_plan.request_section(item)
-    prompt += developer_tools.repository_section(
+    ) + edit_plan.request_section(item) + developer_tools.repository_section(
         sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
+>>>>>>> 7a1bc8f (feat(agents): repository map, lint after an edit and compressed tool history (#359))
+>>>>>>> eb32792 (feat(agents): repository map, lint after an edit and compressed tool history (#359))
 
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
