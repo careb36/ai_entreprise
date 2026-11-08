@@ -247,14 +247,18 @@ def test_hashes_of(session: Session, sprint_id: int) -> dict[str, str]:
 
 
 def test_sources_of(engine: Engine, sprint_id: int, paths: list[str]) -> dict[str, str]:
-    """The content of the acceptance test files *paths*, from QA's deliverables."""
+    """The content of the acceptance test files *paths*, from QA's deliverables.
+
+    A file QA delivered as SEARCH/REPLACE edits has no source here: it is
+    reported tampered and not restored, so ``check_untouched`` refutes."""
     from services.task_worker import parse_file_manifest
 
     sources: dict[str, str] = {}
     with Session(engine) as session:
         for _task, run in _test_tasks(session, sprint_id):
             for target in parse_file_manifest(run.artifact_text or "") if run else []:
-                if target["path"] in paths:
+                # Only a whole file can be restored: an edit is not the file.
+                if target["path"] in paths and "edits" not in target:
                     sources[target["path"]] = target["content"]
     return sources
 
