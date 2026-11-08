@@ -13,6 +13,6 @@ repos:
     hooks:
       - id: no-secrets
         name: no secrets in diff
-        entry: bash -c 'if git diff --cached --name-only | grep -qE "\\.env$"; then echo "Do not commit .env"; exit 1; fi'
+        entry: bash -c 'if git diff --cached --name-only | grep -qE "(^|/)\\.env(\\.|$)"; then echo "Do not commit .env files"; exit 1; fi'
         language: system
         pass_filenames: false
