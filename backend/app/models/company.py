@@ -43,6 +43,16 @@ class Company(SQLModel, table=True):
     # name (the values stay on the daemon's machine); none by default.
     delivery_sandbox: str | None = None
     sandbox_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The company's overrides of the detected stack profile
+    # (services/stack_profiles.py): install, test, lint, start, e2e, port,
+    # probe_path; an empty command turns that step off. A Manager writes it.
+    stack_profile: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The dependency manifests as the last successful install saw them, per
+    # folder ({root: {path: sha256}}, services/app_check.py): written only
+    # from the daemon's report, so an install runs when one changed.
+    dependency_installs: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON)
+    )
     # The models the company's agents run when their own is empty
     # (services/company_models.py): one per role ({"QA": "..."}), then one
     # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.

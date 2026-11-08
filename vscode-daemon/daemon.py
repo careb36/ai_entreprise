@@ -5,9 +5,8 @@ Runs natively on the developer's machine (macOS, Linux or Windows) — the one
 where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
-- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
-                          and the diff against what was there, file_diff.py; a snapshot to undo it); with a
-                          `git` spec, as a commit on the task's branch (git_workspace.py)
+- workspace.generate:     write files (per-file sha256 read back and the diff, file_diff.py; a snapshot to undo it);
+                          with a `git` spec, a commit on the task's branch (git_workspace.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
@@ -17,8 +16,9 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.list / read / search / find, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, workspace_edit.py)
 - workspace.git.publish / merge: push a branch and open its request (gh, glab), or merge it locally (local_merge.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
-- workspace.deliver:      (JetStream) files queued while this daemon was offline;
-                          the result goes to workspace.delivered
+- workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
+- workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
+- workspace.deliver:      (JetStream) files queued while offline; result on workspace.delivered
 
 Start it with scripts/start-daemon.sh (macOS/Linux) or .ps1 (Windows); it reconnects to NATS on its own.
 """
@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import app_run
 import delivery_journal
 import file_diff
 import file_edits
@@ -50,7 +51,7 @@ import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one lin
 import shell_exec
 import delivery_snapshot, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-_build_shell_command = shell_exec.build_shell_command  # An old private name; the logic is in shell_exec.
+_build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -96,11 +97,7 @@ def _resolve_target_path(workspace_path: str, relative_path: str) -> Optional[Pa
 
 def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
     """Protect curated root docs from blind overwrite by agent output."""
-    return (
-        target_path.is_file()
-        and target_path.parent == workspace_root
-        and target_path.name in PROTECTED_ROOT_DOCS
-    )
+    return target_path.is_file() and target_path.parent == workspace_root and target_path.name in PROTECTED_ROOT_DOCS
 
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
@@ -117,10 +114,7 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         # The project is not on this machine (wrong host, or the folder was
         # moved): never create it, and say so for every file.
         logger.warning("Workspace %s is not a folder on this machine", workspace_path)
-        return [
-            {"path": file_info.get("path", ""), "status": "workspace_missing"}
-            for file_info in files
-        ]
+        return [{"path": file_info.get("path", ""), "status": "workspace_missing"} for file_info in files]
     workspace_root = workspace_root.resolve()
     for file_info in files:
         requested = file_info.get("path", "")
@@ -229,7 +223,7 @@ async def handle_msg(nc, msg):
 
     elif subject == "workspace.execute":
         cmd = data.get("command")
-        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"))
+        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"))
 
         sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
         if sprint_id is not None and not shell_exec.is_assistant_command(cmd):
@@ -639,6 +633,7 @@ async def main():
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS)),
         *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
+        ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
         ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
