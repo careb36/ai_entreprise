@@ -367,7 +367,7 @@ def add_quota_warning_header(response):
 # --- Usage Tracking ---
 def track_usage_in_db(bu_id, tokens):
     """Track token usage in the database for a business unit."""
-    if not bu_id:
+    if not bu_id or not tokens:
         return
     try:
         with engine.connect() as conn:
@@ -539,7 +539,7 @@ def _complete_with_fallback(provider: str, model: str, data: dict) -> tuple[dict
                 if not exc.retriable:
                     break
                 continue
-            return result, tokens, fb_provider, fb_model, primary.as_dict()
+            return result, tokens, fb_provider, fb_model, upstream.fallback_record(primary)
         raise primary
 
 
@@ -580,10 +580,8 @@ def chat_completions():
         else:
             result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
     except UpstreamError as exc:
-        body = {"error": "upstream_error", **exc.as_dict(), "requested_model": requested}
-        if len(exc.attempts) > 1:
-            body["attempts"] = exc.attempts
-        return jsonify(body), 429 if exc.status == 429 else 502
+        track_usage_in_db(bu_id, upstream.failed_tokens(exc))
+        return jsonify(upstream.error_body(exc, requested)), 429 if exc.status == 429 else 502
     except Exception as exc:  # noqa: BLE001 - surface proxy bugs as JSON, not an HTML page
         logger.exception("chat_completions failed")
         return jsonify({"error": "proxy_error", "message": str(exc)}), 500
@@ -593,7 +591,7 @@ def chat_completions():
     result["requested_model"] = requested
     if fallback_from is not None:
         result["fallback_from"] = fallback_from
-    track_usage_in_db(bu_id, tokens)
+    track_usage_in_db(bu_id, tokens + upstream.failed_tokens(fallback_from))
     return jsonify(result)
 
 

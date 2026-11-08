@@ -7,6 +7,7 @@ timeout is not retried elsewhere: the request's time budget is already spent.
 """
 
 import requests
+from usage import openai_reported_count
 
 
 class UpstreamError(Exception):
@@ -26,18 +27,53 @@ class UpstreamError(Exception):
         self.status = status
         self.message = message
         self.attempts: list[dict] = []
+        # Tokens the provider reported for this failed call (an empty answer
+        # still costs them); charged to the quota, never shown as usage.
+        self.tokens = 0
         # 429 and 5xx may succeed elsewhere; so may a refused connection.
         if retriable is None:
             retriable = status is None or status == 429 or status >= 500
         self.retriable = retriable
 
     def as_dict(self) -> dict:
-        return {
+        record = {
             "provider": self.provider,
             "model": self.model,
             "status": self.status,
             "message": self.message,
         }
+        if self.tokens:
+            record["tokens"] = self.tokens
+        return record
+
+
+def failed_tokens(source) -> int:
+    """Tokens the failed calls behind *source* reported: an ``UpstreamError``
+    (every attempt it carries) or the ``fallback_from`` record of a served
+    answer. Charged to the quota apart from the served answer's usage."""
+    if isinstance(source, UpstreamError):
+        attempts = source.attempts or [source.as_dict()]
+        return sum(int(a.get("tokens") or 0) for a in attempts)
+    if isinstance(source, dict):
+        return int(source.get("failed_attempts_tokens") or 0)
+    return 0
+
+
+def fallback_record(primary: "UpstreamError") -> dict:
+    """What a served answer says about the failure it fell back from."""
+    record = primary.as_dict()
+    spent = failed_tokens(primary)
+    if spent:
+        record["failed_attempts_tokens"] = spent
+    return record
+
+
+def error_body(exc: "UpstreamError", requested: str) -> dict:
+    """The proxy's answer when no provider could answer."""
+    body = {"error": "upstream_error", **exc.as_dict(), "requested_model": requested}
+    if len(exc.attempts) > 1:
+        body["attempts"] = exc.attempts
+    return body
 
 
 def upstream_message(resp) -> str:
@@ -150,4 +186,6 @@ def check_openai_answer(provider: str, model: str, status: int, result: dict) ->
         return
     if choice.get("finish_reason") == "length":
         return
-    raise UpstreamError(provider, model, status, "empty response", retriable=True)
+    empty = UpstreamError(provider, model, status, "empty response", retriable=True)
+    empty.tokens = openai_reported_count(result) or 0
+    raise empty
