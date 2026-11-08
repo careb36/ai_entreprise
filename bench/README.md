@@ -44,6 +44,8 @@ bench/
 | Status | `completed`, `timeout`, or `error` when a step failed or a number could not be read: a missing observation is never a green zero. |
 | Tokens | The audit log's task-worker turns whose usage the provider reported (`tokens: reported`); turns without a reported count are counted apart, never estimated. |
 | Models | The model served per role, from the same turns. |
+| By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/routing_record.py` makes the split, the same one the Sprints page shows. |
+| Policy | The routing policy's label on the card (`policy`): `BENCH_POLICY`, else the `AGENT_MODEL_POLICY` the run passed to the backend, else `default`. |
 
 ## Running it
 
@@ -69,6 +71,31 @@ fails unless every specification completes and every criterion passes: that
 is the circuit check. With a real proxy it exits 0 once the scorecard is
 written, and `compare.py` judges the numbers (`--rate`, `--rework`,
 `--tokens` set the thresholds).
+
+## Comparing two routing policies
+
+Run the bench once per `AGENT_MODEL_POLICY` (it reaches the backend the run
+starts), each with its own label and output folder, then compare the two
+cards:
+
+```bash
+AGENT_MODEL_POLICY='' BENCH_POLICY=role-defaults \
+  scripts/bench/run.sh --out /tmp/bench-a
+AGENT_MODEL_POLICY='{"bands": {"1-2": "<cheaper model>", "3-5": "<stronger model>"}}' \
+  BENCH_POLICY=by-difficulty scripts/bench/run.sh --out /tmp/bench-b
+python3 scripts/bench/compare.py /tmp/bench-b/<stamp>.json --previous /tmp/bench-a/<stamp>.json
+```
+
+The diff judges the totals and each specification as for any two runs, and
+adds a table by difficulty: per band, tasks, the share done at the first
+attempt, rework per task, the blocked share, the reported tokens and the
+models that delivered, before → after. That table is shown, never judged: a
+policy is meant to move work between models, and whether it pays is read
+from first attempts and tokens per band. With the fake models every policy
+gets the same answers, so only a real proxy (`BENCH_LLM_URL`) tells two
+policies apart; the real-model run is not wired into CI yet. Schema v2 cards
+carry the split; a v1 card (the references kept before it) is still read and
+compared, without a table by difficulty.
 
 To keep a run as the new reference, copy its `<stamp>.json` and `<stamp>.md`
 into `bench/scorecards/` in a pull request.
