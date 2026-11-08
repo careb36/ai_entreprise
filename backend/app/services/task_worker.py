@@ -44,7 +44,6 @@ from nats_client import NATSClient
 from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
 
-from llm.model_factory import default_model_for_role
 from services import (
     acceptance,
     agent_run_service,
@@ -54,6 +53,7 @@ from services import (
     developer_tools,
     git_workflow,
     mcp_tools,
+    model_routing,
     procedures,
     retrospective,
     review_digest,
@@ -362,12 +362,6 @@ class LLMCallError(RuntimeError):
         self.credit_provider = credit_provider
 
 
-def _resolve_agent_model(agent: dict[str, Any], default_role: str = "Dev") -> str:
-    """The agent's configured model, or its role's default from model_factory."""
-    configured = (agent.get("model") or "").strip()
-    return configured or default_model_for_role(agent.get("role") or default_role)
-
-
 def _execute_task(
     item: dict[str, Any],
     agent: dict[str, Any],
@@ -468,7 +462,9 @@ def _execute_task(
             + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
         )
 
-    model = _resolve_agent_model(agent)
+    model = model_routing.resolve_agent_model(
+        agent, item=item, rework=bool(rework_feedback)
+    )
     role = agent.get("role", "Dev")
 
     who = agent.get("name") or role
@@ -569,7 +565,7 @@ def _consult_architect(
     architect = {
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": _resolve_agent_model(
+        "model": model_routing.resolve_agent_model(
             {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
         ),
         "seniority": architect_row.seniority,
@@ -1325,9 +1321,8 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                "model": _resolve_agent_model(
-                    {"model": agent_row.model, "role": agent_row.role}
-                ),
+                # Keep the configured model raw so difficulty routing can apply.
+                "model": (agent_row.model or "").strip(),
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
@@ -1337,7 +1332,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": default_model_for_role(item.assignee or "Dev"),
+                "model": "",
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -1352,6 +1347,7 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 "assignee": item.assignee,
                 "status": item.status,
                 "comments": item.comments or [],
+                "covers": item.covers if isinstance(item.covers, list) else [],
             },
             "sprint": {
                 "id": sprint.id,
@@ -2651,7 +2647,7 @@ async def _review_cycle(nats_client: NATSClient) -> None:
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
-                "model": _resolve_agent_model(
+                "model": model_routing.resolve_agent_model(
                     {"model": reviewer.model if reviewer else None, "role": "QA"}
                 ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
@@ -3313,7 +3309,7 @@ def _call_llm_for_review(
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
-    model = _resolve_agent_model(agent, default_role="QA")
+    model = model_routing.resolve_agent_model(agent, default_role="QA")
     result = client.chat(
         model=model,
         messages=messages,
