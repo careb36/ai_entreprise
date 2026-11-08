@@ -357,7 +357,10 @@ part of the daemon's attack surface, not plumbing behind it (issue #327).
 - **TLS.** With `nats/certs/server.crt` and `server.key` the broker requires
   TLS; `NATS_TLS=true` makes both components connect with it, `NATS_TLS_CA`
   pins the CA and `NATS_TLS_CERT`/`NATS_TLS_KEY` present a client
-  certificate (verified by the broker with `NATS_TLS_VERIFY=true`).
+  certificate (verified by the broker with `NATS_TLS_VERIFY=true`). TLS asked
+  for explicitly is TLS or nothing: with `NATS_TLS=true` or
+  `NATS_TLS_VERIFY=true`, a missing `server.crt`, `server.key` or (for
+  verification) `ca.crt` stops the broker instead of starting it in the clear.
   `docs/OPERATIONS.md`, "Securing the bus", generates a self-signed CA.
 - **Exposure.** Without credentials the broker is safe only on loopback; the
   backend warns at startup when `NATS_BIND` is anything else, and the daemon

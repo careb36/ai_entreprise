@@ -10,8 +10,10 @@
 # leave a component locked out or the bus half open.
 #
 # TLS: when certs/server.crt and certs/server.key exist, clients must connect
-# with TLS (NATS_TLS=true on the backend and the daemon); certs/ca.crt, when
-# present, also verifies client certificates if NATS_TLS_VERIFY=true.
+# with TLS (NATS_TLS=true on the backend and the daemon); with
+# NATS_TLS_VERIFY=true, certs/ca.crt verifies their client certificates.
+# NATS_TLS=true or NATS_TLS_VERIFY=true here make those files required: a
+# missing one stops the broker rather than run without the TLS asked for.
 # docs/OPERATIONS.md, "Securing the bus", generates them.
 set -eu
 
@@ -32,15 +34,39 @@ else
   echo "nats: no credentials; anything that reaches the broker can ask the daemon to run commands" >&2
 fi
 
-if [ -f "$CERTS/server.crt" ] && [ -f "$CERTS/server.key" ]; then
+truthy() { case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in 1|true|yes|on) return 0 ;; *) return 1 ;; esac; }
+refuse() { echo "nats: $1; refusing to start without the TLS that was asked for" >&2; exit 1; }
+
+# TLS asked for explicitly (NATS_TLS, NATS_TLS_VERIFY) must be what runs: a
+# missing file stops the broker instead of starting it in the clear or
+# without checking client certificates. Not asked for, TLS follows the files.
+WANT_TLS=false; WANT_VERIFY=false
+truthy "${NATS_TLS:-}" && WANT_TLS=true
+truthy "${NATS_TLS_VERIFY:-}" && WANT_VERIFY=true && WANT_TLS=true
+HAVE_CRT=false; HAVE_KEY=false
+[ -f "$CERTS/server.crt" ] && HAVE_CRT=true
+[ -f "$CERTS/server.key" ] && HAVE_KEY=true
+if [ "$HAVE_CRT" != "$HAVE_KEY" ]; then
+  refuse "$CERTS holds only one of server.crt and server.key"
+fi
+if [ "$WANT_TLS" = true ] && [ "$HAVE_CRT" = false ]; then
+  refuse "TLS requested but $CERTS/server.crt and $CERTS/server.key are missing"
+fi
+if [ "$WANT_VERIFY" = true ] && [ ! -f "$CERTS/ca.crt" ]; then
+  refuse "NATS_TLS_VERIFY=true but $CERTS/ca.crt is missing"
+fi
+
+if [ "$HAVE_CRT" = true ]; then
   set -- "$@" --tls --tlscert "$CERTS/server.crt" --tlskey "$CERTS/server.key"
   if [ -f "$CERTS/ca.crt" ]; then
     set -- "$@" --tlscacert "$CERTS/ca.crt"
-    if [ "${NATS_TLS_VERIFY:-false}" = "true" ]; then
-      set -- "$@" --tlsverify
-    fi
   fi
-  echo "nats: TLS on"
+  if [ "$WANT_VERIFY" = true ]; then
+    set -- "$@" --tlsverify
+    echo "nats: TLS on, client certificates required"
+  else
+    echo "nats: TLS on"
+  fi
 fi
 
 exec "${NATS_SERVER_BIN:-nats-server}" "$@"

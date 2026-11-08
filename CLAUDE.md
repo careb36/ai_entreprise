@@ -165,7 +165,9 @@ Copy `.env.example` to `.env` and fill in:
 - `NATS_TLS`, `NATS_TLS_CA`, `NATS_TLS_CERT`, `NATS_TLS_KEY`, `NATS_TLS_VERIFY`
   — optional. The broker requires TLS once `nats/certs` holds `server.crt` and
   `server.key` (`ca.crt` plus `NATS_TLS_VERIFY=true` also requires client
-  certificates); `NATS_TLS=true` makes the backend and the daemon connect with
+  certificates); `NATS_TLS=true` or `NATS_TLS_VERIFY=true` on the broker make
+  those files required (`nats/start.sh` refuses to start without one, never
+  falling back to plain text); `NATS_TLS=true` makes the backend and the daemon connect with
   TLS, `NATS_TLS_CA` pins the CA (the backend container reads
   `nats/certs/ca.crt`), `NATS_TLS_CERT`/`_KEY` present a client certificate.
   `docs/OPERATIONS.md`, "Securing the bus", generates a self-signed CA.

@@ -754,6 +754,50 @@ def test_start_sh_turns_tls_on_when_certificates_exist(tmp_path):
     assert "--tls --tlscert" in run.stdout and "--tlsverify" in run.stdout
 
 
+def _certs(tmp_path: Path, *names: str) -> None:
+    (tmp_path / "certs").mkdir(exist_ok=True)
+    for name in names:
+        (tmp_path / "certs" / name).write_text("x")
+
+
+def test_start_sh_without_certificates_or_a_request_runs_in_the_clear(tmp_path):
+    run = _start({}, tmp_path)
+    assert run.returncode == 0
+    assert "--tls" not in run.stdout
+
+
+def test_start_sh_turns_tls_on_from_the_files_without_verifying(tmp_path):
+    _certs(tmp_path, "server.crt", "server.key", "ca.crt")
+    run = _start({}, tmp_path)
+    assert run.returncode == 0
+    assert "--tls --tlscert" in run.stdout and "--tlsverify" not in run.stdout
+
+
+@pytest.mark.parametrize(
+    ("env", "files", "missing"),
+    [
+        ({"NATS_TLS": "true"}, (), "server.crt"),
+        ({"NATS_TLS": "TRUE"}, ("ca.crt",), "server.crt"),
+        ({"NATS_TLS_VERIFY": "true"}, (), "server.crt"),
+        ({"NATS_TLS_VERIFY": "true"}, ("server.crt", "server.key"), "ca.crt"),
+        (
+            {"NATS_TLS": "true", "NATS_TLS_VERIFY": "true"},
+            ("server.crt", "server.key"),
+            "ca.crt",
+        ),
+        ({}, ("server.crt",), "only one"),
+        ({"NATS_TLS": "true"}, ("server.key", "ca.crt"), "only one"),
+    ],
+)
+def test_start_sh_refuses_tls_it_cannot_provide(tmp_path, env, files, missing):
+    """TLS or client verification asked for and a file missing: no broker at all."""
+    _certs(tmp_path, *files)
+    run = _start(env, tmp_path)
+    assert run.returncode == 1
+    assert "ARGS" not in run.stdout
+    assert missing in run.stderr and "refusing" in run.stderr
+
+
 # ---------------------------------------------------------------------------
 # Live: a real nats-server with the generated configuration
 # ---------------------------------------------------------------------------

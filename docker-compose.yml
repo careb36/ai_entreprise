@@ -28,6 +28,8 @@ services:
     environment:
       NATS_BACKEND_PASSWORD: ${NATS_BACKEND_PASSWORD:-}
       NATS_DAEMON_PASSWORD: ${NATS_DAEMON_PASSWORD:-}
+      # Explicit TLS: nats/start.sh refuses to start if a certificate is missing.
+      NATS_TLS: ${NATS_TLS:-false}
       NATS_TLS_VERIFY: ${NATS_TLS_VERIFY:-false}
     ports:
       # The workspace daemon on this computer connects here. Only this machine
