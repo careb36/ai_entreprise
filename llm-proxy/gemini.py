@@ -19,6 +19,19 @@ from usage import reported_count, with_usage
 # Gemini's finishReason, as the OpenAI-compatible providers spell it.
 FINISH_REASONS = {"MAX_TOKENS": "length", "STOP": "stop"}
 
+# Gemini (2.5 and later, with thinking) puts a ``thoughtSignature`` on the
+# part that carries a functionCall, and refuses a later request whose history
+# replays that call without it. The signature travels with the call itself:
+# it comes back inside the OpenAI tool_call as
+# ``extra_content.google.thought_signature`` (the field Google's own
+# OpenAI-compatible endpoint uses), the backend sends its history back as it
+# received it, and the part gets it again here. No state in the proxy, so it
+# survives restarts and replicas and never mixes two conversations. A call
+# replayed with no signature at all (one another provider made, before a
+# fallback) gets the validator-skip value Google documents for calls the
+# model did not produce: https://ai.google.dev/gemini-api/docs/thought-signatures
+SIGNATURE_SKIP = "skip_thought_signature_validator"
+
 
 def _tool_declarations(tools: list | None) -> list[dict]:
     declarations = []
@@ -44,6 +57,19 @@ def _without_schema_extras(schema):
     if isinstance(schema, list):
         return [_without_schema_extras(item) for item in schema]
     return schema
+
+
+def signature_of(tool_call: dict) -> str | None:
+    """The thought signature an OpenAI tool_call carries back, if any."""
+    extra = tool_call.get("extra_content")
+    google = extra.get("google") if isinstance(extra, dict) else None
+    signature = google.get("thought_signature") if isinstance(google, dict) else None
+    if isinstance(signature, str) and signature:
+        return signature
+    # A call id from #411's format (``call_1::ts::<signature>``), for histories
+    # written before the signature moved to ``extra_content``.
+    cid = str(tool_call.get("id") or "")
+    return cid.split("::ts::", 1)[1] or None if "::ts::" in cid else None
 
 
 def _contents(messages: list) -> list[dict]:
@@ -74,13 +100,8 @@ def _contents(messages: list) -> list[dict]:
                 except ValueError:
                     arguments = {"_raw": arguments}
             names_by_call_id[str(call.get("id"))] = function.get("name") or "tool"
-            fc = {"name": function.get("name") or "tool", "args": arguments or {}}
-            # Recover a thoughtSignature embedded in the call id by a previous
-            # turn (stateless round-trip through the backend).
-            cid = str(call.get("id") or "")
-            part = {"functionCall": fc}
-            if "::ts::" in cid:
-                part["thoughtSignature"] = cid.split("::ts::", 1)[1]
+            part = {"functionCall": {"name": function.get("name") or "tool", "args": arguments or {}}}
+            part["thoughtSignature"] = signature_of(call) or SIGNATURE_SKIP
             parts.append(part)
         if parts:
             contents.append({"role": "model" if m["role"] == "assistant" else "user", "parts": parts})
@@ -95,17 +116,15 @@ def _message_from(parts: list) -> dict:
         call = part.get("functionCall") if isinstance(part, dict) else None
         if not isinstance(call, dict) or not call.get("name"):
             continue
-        cid = f"call_{len(tool_calls) + 1}"
-        sig = part.get("thoughtSignature") or call.get("thoughtSignature")
-        if sig:
-            cid = f"{cid}::ts::{sig}"
-        tool_calls.append(
-            {
-                "id": cid,
-                "type": "function",
-                "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
-            }
-        )
+        tool_call = {
+            "id": f"call_{len(tool_calls) + 1}",
+            "type": "function",
+            "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
+        }
+        signature = part.get("thoughtSignature")
+        if isinstance(signature, str) and signature:
+            tool_call["extra_content"] = {"google": {"thought_signature": signature}}
+        tool_calls.append(tool_call)
     message: dict = {"role": "assistant", "content": text or None}
     if tool_calls:
         message["tool_calls"] = tool_calls
