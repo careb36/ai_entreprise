@@ -189,7 +189,7 @@ def test_a_policy_is_validated():
 
 def test_a_rule_written_behind_the_api_is_never_applied(sqlite_session):
     company = _company(sqlite_session)
-    _policy(sqlite_session, company, "accept_high_risk", "accept_delivery", "x")
+    _policy(sqlite_session, company, "cancel_sprint", "accept_delivery", "x")
     assert manager_policy.load(sqlite_session, company.id).rules == ["accept_delivery"]
 
 
@@ -588,12 +588,11 @@ def test_a_manager_writes_the_policy_and_a_viewer_reads_it(
     url = f"/v1/companies/{company.id}/manager_policy"
 
     empty = test_client.get(url, headers=viewer).json()
-    assert empty["rules"] == [] and "accept_high_risk" in empty["always_escalate"]
+    assert empty["rules"] == [] and "cancel_sprint" in empty["always_escalate"]
+    assert "accept_high_risk" in empty["catalogue"]
     assert test_client.put(url, json={"rules": []}, headers=viewer).status_code == 403
     assert test_client.get(url, headers=outsider).status_code == 403
-    refused = test_client.put(
-        url, json={"rules": ["approve_specification"]}, headers=manager
-    )
+    refused = test_client.put(url, json={"rules": ["change_autonomy"]}, headers=manager)
     assert refused.status_code == 422 and "always decided" in refused.json()["detail"]
     saved = test_client.put(
         url, json={"rules": ["accept_delivery"], "max_files": 4}, headers=manager

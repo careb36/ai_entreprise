@@ -8,7 +8,12 @@ Each decision goes through the code a person's decision goes through:
   note, as a Manager's "Accept" does (``PATCH /v1/backlog/{id}``), authored
   by the Manager agent;
 - ``adopt_procedure``: ``procedures.adopt``, as ``POST /procedures/{id}/adopt``;
-- ``approve_run``: ``run_review.record_approval``, as ``POST /approve``.
+- ``approve_run``: ``run_review.record_approval``, as ``POST /approve``;
+- ``accept_high_risk`` (the strict rule): the same acceptance as
+  ``accept_delivery``, its note naming the rule ``history_check`` reads;
+- the rest of issue #394 (merge, undo, publish, send back, carry over,
+  answer, resume, approve a specification or an architecture):
+  ``services/manager_actions_extra.py``, which says what each override does.
 
 Every one is audited with ``decided_by: "Manager agent"`` and the rule that
 allowed it. An override (``POST /v1/manager_decisions/{id}/override``, a
@@ -26,7 +31,7 @@ from models.manager import ManagerDecision
 from sqlalchemy import update
 from sqlmodel import Session, select
 
-from services import locks, procedures, run_review
+from services import locks, manager_actions_extra, procedures, run_review
 from services.agent_service import AgentService
 from services.carry_over import carried_over
 
@@ -37,10 +42,10 @@ OVERRIDE_PREFIX = "Override:"
 
 
 OVERRIDE_LOCK = "manager-override"
-
-
-class Stale(Exception):
-    """The item is no longer as the agent saw it; nothing was changed."""
+# The item changed since it was read (or no daemon answered): nothing was
+# changed and the next cycle reads it again. The daemon or a check refused.
+Stale = manager_actions_extra.Stale
+Failed = manager_actions_extra.Failed
 
 
 class OverrideRefused(Exception):
@@ -122,7 +127,10 @@ def act(session: Session, row: ManagerDecision, rule: str) -> str:
     item untouched. Raises ``Stale`` when the item changed since it was read.
     """
     reason = row.suggested_reason or ""
-    if row.category == "accept_delivery":
+    facts: dict[str, Any] = {}
+    if row.category in manager_actions_extra.CATEGORIES:
+        outcome, facts = manager_actions_extra.act(session, row, rule)
+    elif row.category in ("accept_delivery", "accept_high_risk"):
         item = session.get(BacklogItem, row.item_id)
         if item is None:
             raise Stale("the task is gone")
@@ -165,7 +173,12 @@ def act(session: Session, row: ManagerDecision, rule: str) -> str:
         row,
         MANAGER_AGENT_NAME,
         f"manager_agent_{row.category}",
-        {"outcome": outcome, "decision": row.suggested_decision, "reason": reason},
+        {
+            "outcome": outcome,
+            "decision": row.suggested_decision,
+            "reason": reason,
+            "facts": facts,
+        },
     )
     row.audit_log_id = audit.id
     session.add(row)
@@ -246,7 +259,14 @@ def _override(session: Session, row: ManagerDecision, actor: str) -> dict[str, A
     )
     if claimed.rowcount != 1:
         raise OverrideRefused(409, "This decision was already overridden.")
-    if row.category == "accept_delivery":
+    note = None
+    if row.category in manager_actions_extra.CATEGORIES:
+        try:
+            outcome = manager_actions_extra.override(session, row, actor)
+        except manager_actions_extra.Refused as exc:
+            raise OverrideRefused(exc.status, exc.detail) from exc
+        note = manager_actions_extra.override_note(row)
+    elif row.category in ("accept_delivery", "accept_high_risk"):
         item = session.get(BacklogItem, row.item_id)
         if item is None or carried_over(item):
             raise OverrideRefused(409, "The task was carried into another sprint.")
@@ -309,10 +329,10 @@ def _override(session: Session, row: ManagerDecision, actor: str) -> dict[str, A
         row,
         f"human:{actor}",
         "manager_agent_override",
-        {"outcome": outcome, "overridden_by": actor},
+        {"outcome": outcome, "overridden_by": actor, "note": note},
     )
     row.override_audit_log_id = audit.id
     session.add(row)
     session.commit()
     session.refresh(row)
-    return {"id": row.id, "outcome": outcome, "overridden_by": actor}
+    return {"id": row.id, "outcome": outcome, "overridden_by": actor, "note": note}

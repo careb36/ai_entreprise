@@ -11,7 +11,11 @@ the item allows, the item's category and a reason. The category is the
 platform's, never the model's: an answer naming another one is unusable. The
 suggestion is stored in a ``ManagerDecision`` row apart from whatever the
 client decides (POSITIONING rule 1). Integrations that stopped at a conflict
-or a failing suite are always the client's and are not asked about.
+or a failing suite are always the client's and are not asked about. Issue
+#394 adds the rest of what a Manager decides (``services/manager_inbox_extra.py``):
+specifications and architectures to approve, open questions, sprints paused
+for lack of credit, and, when the policy names the rule, branches to merge
+or publish and refuted deliveries to undo.
 
 When the company's ``ManagerPolicy`` has a rule that holds for the item's
 observed facts and the suggestion is the decision that rule allows
@@ -53,6 +57,7 @@ from services import (
     company_models,
     locks,
     manager_actions,
+    manager_observe,
     manager_policy,
     manager_record,
 )
@@ -71,23 +76,33 @@ MODEL_ROLE = "ScrumMaster"
 MANAGER_ROLE = "Manager"
 # A suggestion row's action: waiting for the policy (resumed after a crash),
 # taken, refused by the policy, or the situation changed meanwhile.
-PENDING, DONE, NOT_ALLOWED, STALE, UNUSABLE = (
+# A daemon that refused the action leaves the row failed, for the client.
+PENDING, DONE, NOT_ALLOWED, STALE, UNUSABLE, FAILED = (
     "pending",
     "done",
     "not_allowed",
     "stale",
     "unusable",
+    "failed",
 )
 ANSWER_MAX_TOKENS = 400
 ITEMS_PER_CYCLE = 5
 REASON_LIMIT = 2000
 ESCALATE = "escalate"
+# The decisions each category allows; ``escalate`` leaves the item to the client.
 DECISIONS = {
     "accept_delivery": ("accept", "send_back", ESCALATE),
     "accept_high_risk": ("accept", "send_back", ESCALATE),
     "blocked_task": ("carry_over", "send_back", ESCALATE),
     "adopt_procedure": ("adopt", "reject", ESCALATE),
     "approve_run": ("approve", "reject", ESCALATE),
+    "merge_local": ("merge", ESCALATE),
+    "undo_delivery": ("undo", ESCALATE),
+    "answer_question": ("answer", ESCALATE),
+    "publish": ("publish", ESCALATE),
+    "resume_after_credit": ("resume", ESCALATE),
+    "approve_specification": ("approve", ESCALATE),
+    "approve_architecture": ("approve", ESCALATE),
 }
 _ANSWER = re.compile(
     r"^DECISION:\s*(?P<decision>[\w-]+)\s*$\s*"
@@ -294,24 +309,34 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
         return STALE
     record = manager_record.track_record(session, company.id)
     policy = manager_policy.load(session, company.id)
+    flagged = set(record.get("flagged_rules") or [])
     facts = {
         **current["facts"],
         "overridden_before": any(
             r.overridden_at for r in _seen(session, company.id, current)
         ),
     }
+    named = any(
+        manager_policy.RULE_DECISIONS[r] == (row.category, row.suggested_decision)
+        and r not in flagged
+        for r in policy.rules
+    )
+    facts = manager_observe.observe(session, company, row, facts, named)
     verdict = manager_policy.evaluate(
-        row.category,
-        row.suggested_decision,
-        facts,
-        policy,
-        flagged=set(record.get("flagged_rules") or []),
+        row.category, row.suggested_decision, facts, policy, flagged=flagged
     )
     if not verdict["allowed"]:
+        if _waits_for_a_probe(row, facts, policy, flagged):
+            return PENDING
         _settle(session, row, NOT_ALLOWED)
         return NOT_ALLOWED
     try:
         manager_actions.act(session, row, verdict["rule"])
+    except manager_actions.Failed as exc:
+        session.rollback()
+        logger.warning("Manager agent's action on decision %s failed: %s", row.id, exc)
+        _settle(session, session.get(ManagerDecision, row.id), FAILED)
+        return FAILED
     except manager_actions.Stale as exc:
         # The row moved under the agent without changing the situation (an
         # edit, a timestamp): left pending, the next cycle reads it again.
@@ -319,6 +344,19 @@ def decide(session: Session, company: Company, row: ManagerDecision) -> str:
         logger.info("Manager agent did not act on decision %s yet: %s", row.id, exc)
         return PENDING
     return DONE
+
+
+def _waits_for_a_probe(row, facts, policy, flagged) -> bool:
+    """The rule would hold but for a fact a probe left unknown (no credit call
+    yet, no daemon to read the remote): the row stays pending, to be decided
+    again on a later cycle without another model call."""
+    wait = manager_observe.WAIT_FACTS.get(row.category)
+    if wait is None or not wait[1](facts.get(wait[0])):
+        return False
+    hypothetical = {**facts, wait[0]: True}
+    return manager_policy.evaluate(
+        row.category, row.suggested_decision, hypothetical, policy, flagged=flagged
+    )["allowed"]
 
 
 def suggest_on(
@@ -440,8 +478,14 @@ def manager_cycle(engine, ask: Callable[[str], str] | None = None) -> int:
     return written
 
 
-async def run_manager_agent(engine) -> None:
-    """Background loop of the Manager agent (started when enabled)."""
+async def run_manager_agent(
+    engine, nats_client: Callable[[], Any] | None = None
+) -> None:
+    """Background loop of the Manager agent (started when enabled).
+
+    *nats_client* returns the backend's NATS client, for the actions that go
+    through the workspace daemon (a local merge, an undo, a publication)."""
+    manager_observe.bind(nats_client or (lambda: None), asyncio.get_running_loop())
     logger.info(
         "Manager agent started (every %ss)", settings.MANAGER_AGENT_INTERVAL_SECONDS
     )

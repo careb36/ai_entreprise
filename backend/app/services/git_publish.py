@@ -161,6 +161,7 @@ def record_publication(
     *,
     published_by: str,
     published_by_user_id: int | None,
+    agent_id: str | None = None,
 ) -> RunPublication:
     """Keep what the daemon answered, audited; an answer missing its facts is refused."""
     how = reply.get("how")
@@ -186,7 +187,7 @@ def record_publication(
         session=session,
         company_id=run.company_id,
         interaction_id=f"agent-run:{run.external_ref}",
-        agent_id=f"human:{published_by}",
+        agent_id=agent_id or f"human:{published_by}",
         action="run_published",
         details={
             "company_id": str(run.company_id),

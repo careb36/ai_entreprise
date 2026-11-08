@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Layers, Loader2, Play, Sparkles } from 'lucide-react'
 import type { SprintPlanResponse } from '../services/api'
+import type { InboxTaskWithManager } from '../services/manager'
 import { useAppStore } from '../store/useAppStore'
 import { useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useStartSprint, useInbox, useSprints } from '../hooks/useQueries'
 import { secondAttempts } from '../lib/learningTrend'
@@ -78,7 +79,9 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
     const room = Math.max(0, SCOPE_META[scope].limit - plannedSprint.tasks.length)
     setCarryOver(
       inbox.data.blocked_tasks
-        .filter(task => !task.frozen && task.triage?.decision === 'retry')
+        // The ScrumMaster's retries, and the tasks the Manager agent marked
+        // for the next sprint under the company's policy.
+        .filter(task => !task.frozen && (task.triage?.decision === 'retry' || (task as InboxTaskWithManager).marked_for_carry_over))
         .slice(0, room)
         .map(task => task.id),
     )

@@ -49,6 +49,9 @@ SCRUM_MASTER_ROLE = "ScrumMaster"
 # written as-is by the frontend, never translated). Rework budgets restart
 # after it.
 SEND_BACK_MARKER = "Sent back to work"
+# Who may send a task back: a person, or the Manager agent on the client's behalf.
+MANAGER_AGENT_AUTHOR = "manager agent"
+SEND_BACK_AUTHORS = {"user", MANAGER_AGENT_AUTHOR}
 # The carry-over notes on the original task and on its new attempt.
 CARRIED_TO_PREFIX = "Carried over to sprint"
 CARRIED_FROM_PREFIX = "Carried over from"
@@ -107,8 +110,11 @@ def is_console_advice_note(comment: dict[str, Any]) -> bool:
 
 
 def is_send_back(comment: dict[str, Any]) -> bool:
-    """A person's note sending the task back to work."""
-    return _author(comment) == "user" and _text(comment).startswith(SEND_BACK_MARKER)
+    """A person's note sending the task back to work, or the Manager agent's
+    when the company's policy lets it send one back for the client (issue #394)."""
+    return _author(comment) in SEND_BACK_AUTHORS and _text(comment).startswith(
+        SEND_BACK_MARKER
+    )
 
 
 def is_rework_request(comment: dict[str, Any]) -> bool:
@@ -200,10 +206,10 @@ def extract_latest_reviewable_comment(
             # A rework request after the latest deliverable makes it stale:
             # the task must run again before anything is reviewed.
             return ""
-        if author in GATE_AUTHORS_LOWER or author == "user":
+        if author in GATE_AUTHORS_LOWER or author in SEND_BACK_AUTHORS:
             # The gates write verdicts and a person on the board writes notes
-            # (``PATCH /v1/backlog`` records them as "user"); neither is a
-            # deliverable, so neither goes to review.
+            # (``PATCH /v1/backlog`` records them as "user"), as does the
+            # Manager agent; none is a deliverable, so none goes to review.
             continue
         if author == "qa" and assignee_normalized != "qa":
             continue

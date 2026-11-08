@@ -109,12 +109,14 @@ def _observed(reply: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _audit(session, company_id, interaction_id, who, action, details, result) -> int:
+def _audit(
+    session, company_id, interaction_id, who, action, details, result, agent_id=None
+) -> int:
     row = AgentService().audit_interaction(
         session=session,
         company_id=company_id,
         interaction_id=interaction_id,
-        agent_id=f"human:{who}",
+        agent_id=agent_id or f"human:{who}",
         action=action,
         details={"company_id": str(company_id), **details},
         result=result,
@@ -131,6 +133,7 @@ def record_run_merge(
     *,
     merged_by: str,
     merged_by_user_id: int | None,
+    agent_id: str | None = None,
 ) -> RunPublication:
     facts = _observed(reply)
     publication = RunPublication(
@@ -156,6 +159,7 @@ def record_run_merge(
         "run_merged_locally",
         {"agent_run_id": run.id, "publication_id": publication.id},
         facts,
+        agent_id,
     )
     session.add(publication)
     session.commit()
@@ -164,7 +168,12 @@ def record_run_merge(
 
 
 def record_integration_merge(
-    session: Session, row: SprintIntegration, reply: dict[str, Any], *, merged_by: str
+    session: Session,
+    row: SprintIntegration,
+    reply: dict[str, Any],
+    *,
+    merged_by: str,
+    agent_id: str | None = None,
 ) -> SprintIntegration:
     facts = _observed(reply)
     audit_id = _audit(
@@ -175,6 +184,7 @@ def record_integration_merge(
         "sprint_merged_locally",
         {"sprint_id": row.sprint_id, "integration_id": row.id},
         facts,
+        agent_id,
     )
     merged = {
         **facts,

@@ -33,6 +33,10 @@ from services.board import (
 )
 
 REASON_LIMIT = 500
+# The Manager agent's mark on a blocked task its policy lets it carry over
+# (``carry_over`` rule, issue #394), and a person's note taking it back.
+CARRY_MARK_PREFIX = "Marked for carry-over by the Manager agent"
+CARRY_UNMARK_PREFIX = "Carry-over mark taken back"
 
 
 class CarryOverError(ValueError):
@@ -57,6 +61,20 @@ def carried_over(item: BacklogItem) -> bool:
         str(c.get("text", "")).startswith(CARRIED_TO_PREFIX)
         for c in comment_list(item.comments)
     )
+
+
+def carry_mark(item: BacklogItem) -> bool | None:
+    """Whether the Manager agent marked the task for the next sprint: ``True``
+    marked, ``False`` a person took the mark back, ``None`` never marked."""
+    state: bool | None = None
+    for comment in comment_list(item.comments):
+        author = str(comment.get("author") or "").strip().lower()
+        text = str(comment.get("text") or "")
+        if author == "manager agent" and text.startswith(CARRY_MARK_PREFIX):
+            state = True
+        elif author == "user" and text.startswith(CARRY_UNMARK_PREFIX):
+            state = False
+    return state
 
 
 def is_carry_over(item: BacklogItem) -> bool:
@@ -262,6 +280,8 @@ def carry_over_on_the_companys_own(
         and not carried_over(item)
         and not is_carry_over(item)
         and not _left_for_a_person(triages.get(item.id))
+        # A person took back the Manager agent's mark: it waits for them.
+        and carry_mark(item) is not False
         # Approved, waiting for a person to accept it: not another attempt.
         and not awaits_risk_acceptance(item.comments)
     ][:room]

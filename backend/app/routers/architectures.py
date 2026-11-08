@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import BaseModel, Field
-from services import arch_author, arch_check
+from services import arch_author, arch_check, document_approval
 from services.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
 
@@ -292,31 +292,10 @@ async def approve_architecture(
     """Approve a draft; the version it revises, and any other approved one of the specification, become superseded."""
     arch, spec = _load(session, user, arch_id, "Manager")
     _only_draft(arch)
-    result = arch_check.check(
-        arch_author.content_of(arch), arch_author.requirement_ids(spec)
-    )
-    if not result["ok"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": f"{result['blocking']} finding(s) block the approval.",
-                "findings": [
-                    f for f in result["findings"] if f["severity"] == "blocking"
-                ],
-            },
-        )
-    for previous in session.exec(
-        select(Architecture).where(
-            Architecture.specification_id == spec.id, Architecture.status == "approved"
-        )
-    ).all():
-        previous.status = "superseded"
-        previous.updated_at = _now()
-        session.add(previous)
-    arch.status = "approved"
-    arch.approved_by = _actor(user)
-    arch.approved_at = _now()
-    arch.updated_at = arch.approved_at
+    try:
+        document_approval.approve_architecture(session, arch, spec, _actor(user))
+    except document_approval.ApprovalRefused as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
     return _saved(session, arch, spec)
 
 

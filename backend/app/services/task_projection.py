@@ -47,7 +47,11 @@ def _needs_work(event: TaskEvent) -> bool:
 
 
 def _is_person_send_back(event: TaskEvent) -> bool:
-    return event.event_type == "sent_back" and event.actor == task_events.PERSON
+    # A person's, or the Manager agent's on the client's behalf (issue #394).
+    return event.event_type == "sent_back" and (
+        event.actor == task_events.PERSON
+        or event.actor.lower() == board.MANAGER_AGENT_AUTHOR
+    )
 
 
 def covers(item: BacklogItem, events: list[TaskEvent]) -> bool:
