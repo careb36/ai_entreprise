@@ -731,8 +731,9 @@ Frontend changes are checked separately by
 `.github/workflows/frontend-build.yml` on every pull request that touches
 `frontend/` or the workflow itself, and on pushes to `main`.
 That job runs `npm ci`, `npx tsc --noEmit`, `npm run lint`, `npm run test:run`,
-and `npm run build` from the `frontend/` directory, using
-`frontend/package-lock.json` as the cache key.
+and `npm run build` from the `frontend/` directory, with no Actions cache: the
+self-hosted runner keeps `~/.npm` between jobs, and archiving it (1.8 GB)
+timed out and cancelled jobs whose steps had passed.
 `frontend-build.yml` is the only frontend workflow: `frontend-tests.yml` was a
 duplicate of the same checks on the same triggers and was removed.
 
