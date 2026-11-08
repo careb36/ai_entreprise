@@ -12,7 +12,8 @@ and reports histories the loop must never produce:
   worker's latest run of it was refuted, unverifiable or never recorded;
 - ``high_risk_done_without_person``: a high-risk hold closed with no note
   from a person after it (a hold only for autonomy level 1 may also close
-  with the Manager agent's acceptance under the company's policy);
+  with the Manager agent's acceptance under the company's policy, and any
+  hold with its acceptance under the strict rule ``accept_high_risk``);
 - ``carried_twice``: one task carried into another sprint more than once;
 - ``worked_before_dependency``: a task that delivered before every task it
   depends on was done: the dependency is not done, or it closed (its last
@@ -63,6 +64,8 @@ _TASK_WORKER = "le-fabrique-task-worker"
 _HUMAN_LED = "autonomy level 1: every approved task waits for a person"
 _MANAGER_AGENT = "manager agent"
 _AGENT_ACCEPTED = "Accepted by the Manager agent"
+# The strict rule a company may name to let the agent accept a high-risk hold.
+_HIGH_RISK_RULE = "(rule accept_high_risk,"
 
 
 def _author(comment: dict[str, Any]) -> str:
@@ -266,11 +269,13 @@ def check_task(
             if _author(c) == "system" and _text(c).startswith(_RISK_HOLD)
         ]
         agent_accepts = [i for i, c in enumerate(comments) if _is_agent_acceptance(c)]
+        strict = [i for i in agent_accepts if _HIGH_RISK_RULE in _text(comments[i])]
         human_led = bool(holds) and _HUMAN_LED in _text(comments[holds[-1]])
         if (
             holds
             and not any(i > holds[-1] for i in person_notes)
             and not (human_led and any(i > holds[-1] for i in agent_accepts))
+            and not any(i > holds[-1] for i in strict)
         ):
             violations.append("high_risk_done_without_person")
 

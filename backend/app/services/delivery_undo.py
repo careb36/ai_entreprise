@@ -96,6 +96,7 @@ def record_undo(
     reply: dict[str, Any],
     *,
     undone_by: str,
+    agent_id: str | None = None,
 ) -> dict[str, Any]:
     """Audit what the daemon answered and return it; an answer missing its facts is refused."""
     restored, removed = reply.get("restored"), reply.get("removed")
@@ -114,7 +115,7 @@ def record_undo(
         session=session,
         company_id=run.company_id,
         interaction_id=_interaction(run),
-        agent_id=f"human:{undone_by}",
+        agent_id=agent_id or f"human:{undone_by}",
         action=UNDO_ACTION,
         details={"company_id": str(run.company_id), "agent_run_id": run.id},
         result=result,

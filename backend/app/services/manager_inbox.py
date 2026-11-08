@@ -24,9 +24,10 @@ from services.board import (
     blocked_item_next_step,
     comment_list,
 )
-from services.carry_over import carried_over
-from services.manager_actions import MANAGER_AGENT_NAME
+from services.carry_over import carried_over, carry_mark, is_carry_over
 from services.sprint_control import HUMAN_LED_REASON
+
+MANAGER_AGENT_NAME = "Manager agent"
 
 FIELD_LIMIT = 1500
 # Comment authors whose notes do not change the situation the agent saw.
@@ -104,6 +105,7 @@ def run_facts(run: AgentRun | None, verification: Verification | None) -> dict:
         for check in checks:
             if check.get("name") == "risk_tier":
                 facts["risk_tier"] = check.get("tier")
+        facts.update(_criteria_and_standards(checks))
     known = [paths for paths in sources if paths is not None]
     facts["files"] = len({p for paths in known for p in paths}) if known else None
     facts["checks"] = [
@@ -111,6 +113,28 @@ def run_facts(run: AgentRun | None, verification: Verification | None) -> dict:
         for c in checks
     ]
     return facts
+
+
+def _criteria_and_standards(checks: list[dict]) -> dict[str, Any]:
+    """What the ``criteria_tests`` and ``standards`` checks observed.
+
+    ``criteria_results``: the result per criterion the run's tests spoke for
+    (empty without the check); ``standards_secret``: whether the standards
+    check found a secret, ``None`` when it did not run.
+    """
+    results: dict[str, str] = {}
+    secret: bool | None = None
+    for check in checks:
+        if check.get("name") == "criteria_tests" and isinstance(
+            check.get("results"), dict
+        ):
+            results = {str(k): str(v) for k, v in check["results"].items()}
+        if check.get("name") == "standards":
+            findings = [f for f in check.get("findings") or [] if isinstance(f, dict)]
+            secret = check.get("outcome") == "refuted" or any(
+                f.get("standard") == "STD-SEC-1" for f in findings
+            )
+    return {"criteria_results": results, "standards_secret": secret}
 
 
 def _task_run(session: Session, company_id: int, item_id: int) -> AgentRun | None:
@@ -165,8 +189,21 @@ def _task_item(session: Session, company: Company, item: BacklogItem, triage) ->
     facts["human_led_hold"] = hold and HUMAN_LED_REASON in _hold_note(item.comments)
     # An operator froze it: still suggested on, never accepted alone.
     facts["frozen"] = blocked_item_next_step(item.comments, item.assignee) == "frozen"
-    facts["criteria"] = len(item.covers) if isinstance(item.covers, list) else 0
+    covers = [c for c in item.covers or [] if isinstance(c, str)]
+    facts["criteria"] = len(covers)
+    results = facts.get("criteria_results") or {}
+    facts["all_criterion_tests_pass"] = (
+        all(results.get(c) == "pass" for c in covers) if covers else None
+    )
     facts["autonomy_level"] = company.autonomy_level
+    sprint = session.get(Sprint, item.sprint_id)
+    facts["sprint_status"] = sprint.status if sprint else None
+    facts["triage_decision"] = (triage or {}).get("decision")
+    facts["triage_brief"] = bool((triage or {}).get("brief"))
+    facts["blocked"] = item.status == "blocked"
+    facts["carried"] = carried_over(item)
+    facts["second_attempt"] = is_carry_over(item)
+    facts["marked_for_carry_over"] = carry_mark(item) is True
     if hold:
         high = facts["risk_tier"] == "high" or not facts["human_led_hold"]
         category = "accept_high_risk" if high else "accept_delivery"
@@ -274,6 +311,9 @@ def inbox_items(session: Session, company: Company) -> list[dict[str, Any]]:
             .order_by(AgentRun.id)
         ).all()
     ]
+    from services.manager_inbox_extra import extra_items
+
+    items += extra_items(session, company)
     budget = over_budget(session, company.id)
     for item in items:
         item["facts"]["over_budget"] = budget

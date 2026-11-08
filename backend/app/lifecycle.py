@@ -186,7 +186,8 @@ async def startup(app):
         from services.manager_agent import run_manager_agent
 
         manager_task = asyncio.create_task(
-            run_manager_agent(engine), name="manager_agent"
+            run_manager_agent(engine, lambda: app.state.nats_client),
+            name="manager_agent",
         )
         _background_tasks.add(manager_task)
         manager_task.add_done_callback(_on_task_done)

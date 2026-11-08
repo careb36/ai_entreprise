@@ -84,10 +84,13 @@ def _run_decision(session: Session, row: ManagerDecision) -> str | None:
 
 def client_decision(session: Session, row: ManagerDecision) -> str | None:
     """What the client decided on the item the agent suggested on, or ``None``."""
+    from services.manager_record_extra import READERS
+
     reader = {
         "task": _task_decision,
         "procedure": _procedure_decision,
         "run": _run_decision,
+        **READERS,
     }.get(row.item_kind)
     return reader(session, row) if reader else None
 

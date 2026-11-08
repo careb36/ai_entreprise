@@ -27,7 +27,7 @@ from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, U
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
 from services import integration, scrum_master, task_events, task_projection
-from services.carry_over import carried_over
+from services.carry_over import carried_over, carry_mark
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -108,6 +108,9 @@ async def inbox(
                     session, item, histories
                 ),
                 "suggestion": suggestions.get(("task", item.id)),
+                # The Manager agent marked it for the next sprint (issue #394):
+                # the "Plan a sprint" form ticks it; a person may untick it.
+                "marked_for_carry_over": carry_mark(item) is True,
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )
