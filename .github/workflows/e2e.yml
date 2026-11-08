@@ -147,6 +147,38 @@ jobs:
           E2E_PYTHON="$(cd backend && poetry run python -c 'import sys; print(sys.executable)')" \
             bash scripts/e2e/run.sh
 
+      # Issue #328: the backup script against the database the loop just
+      # filled, restored into a scratch database that must hold the same
+      # tables and the same audit chain length.
+      - name: Back up and restore the e2e database
+        if: matrix.sandbox == 'host'
+        env:
+          PG_CONTAINER: pg-e2e-${{ github.run_id }}-${{ matrix.sandbox }}
+          POSTGRES_USER: factory
+          POSTGRES_PASSWORD: factorypw
+          BACKUP_DIR: ${{ runner.temp }}/backups
+        run: |
+          POSTGRES_DB=factory_e2e bash scripts/backup.sh
+          dump="$(ls "$BACKUP_DIR"/postgres-factory_e2e-*.dump | tail -1)"
+          docker exec "$PG_CONTAINER" psql -U factory -d factory -qc 'CREATE DATABASE factory_restore'
+          POSTGRES_DB=factory_restore bash scripts/backup.sh restore "$dump" --yes
+          count() {
+            docker exec "$PG_CONTAINER" psql -U factory -d "$1" -tAc \
+              "SELECT (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public') || '/' || (SELECT count(*) FROM audit_log)"
+          }
+          echo "source $(count factory_e2e) / restored $(count factory_restore)"
+          test "$(count factory_e2e)" = "$(count factory_restore)"
+
+      # Issue #328: two workers racing on one sprint, on Postgres, where the
+      # advisory locks and the conditional updates are real (the backend
+      # suite runs the same races on SQLite).
+      - name: Two workers on Postgres
+        if: matrix.sandbox == 'host'
+        working-directory: ./backend
+        run: |
+          REPLICAS_POSTGRES_URL="postgresql://factory:factorypw@127.0.0.1:${E2E_POSTGRES_PORT}/factory_e2e" \
+            PYTHONPATH=.:app poetry run python -m pytest tests/test_replicas.py -q -k postgres
+
       - name: Stop the containers
         if: always()
         run: |

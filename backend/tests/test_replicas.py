@@ -15,6 +15,7 @@ way a second process would meet them.
 """
 
 import asyncio
+import os
 import secrets
 import threading
 import time
@@ -398,3 +399,55 @@ def test_one_review_cycle_at_a_time(engine, monkeypatch):
         asyncio.run(task_worker._review_cycle("other replica"))
     asyncio.run(task_worker._review_cycle("this replica"))
     assert ran == ["this replica"]
+
+
+# --- on a real Postgres, when one is given ---------------------------------
+#
+# ``REPLICAS_POSTGRES_URL`` (a migrated database, e.g. the e2e one) runs the
+# advisory locks and the conditional updates where they matter. Skipped
+# without it: the suite needs no external service.
+
+PG_URL = os.environ.get("REPLICAS_POSTGRES_URL")
+needs_postgres = pytest.mark.skipif(not PG_URL, reason="REPLICAS_POSTGRES_URL unset")
+
+
+@pytest.fixture()
+def pg(monkeypatch):
+    engine = create_engine(PG_URL, pool_size=5, max_overflow=5)
+    monkeypatch.setattr(task_worker, "engine", engine)
+    yield engine
+    engine.dispose()
+
+
+@needs_postgres
+def test_postgres_advisory_lock_is_refused_to_another_connection(pg):
+    assert locks.is_postgres(pg)
+    with locks.held(pg, "pg-test", 1) as first:
+        _, second = _race(lambda: None, lambda: _held_now(pg, "pg-test", 1))
+        assert first and second is False
+    assert _held_now(pg, "pg-test", 1) is True
+
+
+def _held_now(engine, name, ident):
+    with locks.held(engine, name, ident) as mine:
+        return mine
+
+
+@needs_postgres
+def test_postgres_two_workers_claim_and_close_once(pg):
+    company_id = _company(pg)
+    sprint_id = _sprint(pg, company_id, items=("todo",))
+    item_id = _items(pg, sprint_id)[0].id
+
+    claims = _race(*[lambda: replicas.claim_todo(pg, item_id)] * 4)
+    assert sorted(claims) == [False, False, False, True]
+
+    with Session(pg) as session:
+        session.get(BacklogItem, item_id).status = "done"
+        session.commit()
+
+    def close_without_the_lock():
+        return task_worker._complete_sprint_and_plan_follow_up(sprint_id)
+
+    results = _race(*[close_without_the_lock] * 4)
+    assert sorted(r["completed"] for r in results) == [False, False, False, True]
