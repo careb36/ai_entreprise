@@ -337,27 +337,11 @@ class CompanyService:
             activity[str(agent_id)] = {
                 "total_tasks": total_int,
                 "last_run_at": last_at.isoformat() if last_at else None,
-                "total_cost_usd": 0.0,
+                "total_cost_usd": 0.0,  # AuditLog stores cost_tokens only; USD not tracked here.
                 "total_tokens": tokens_int,
                 "avg_tokens": avg,
                 "last_model": None,
             }
-
-        recent_rows = self.session.exec(
-            select(AuditLog.agent_id)
-            .where(AuditLog.company_id == company_id)
-            .where(AuditLog.action == "task.execute")
-            .order_by(AuditLog.created_at.desc())
-            .limit(500)
-        ).all()
-        seen: set[str] = set()
-        for (agent_id,) in recent_rows:
-            if agent_id is None:
-                continue
-            key = str(agent_id)
-            if key in seen:
-                continue
-            seen.add(key)
 
         return activity
 
@@ -465,7 +449,7 @@ class CompanyService:
             or {
                 "total_tasks": 0,
                 "last_run_at": None,
-                "total_cost_usd": 0.0,
+                "total_cost_usd": 0.0,  # AuditLog stores cost_tokens only; USD not tracked here.
                 "total_tokens": 0,
                 "avg_tokens": 0,
                 "last_model": None,
