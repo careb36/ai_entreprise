@@ -19,10 +19,12 @@ from uuid import uuid4
 import pytest
 from models import AgentRun, BacklogItem, Company, Sprint, Verification
 from services import (
+    board,
     carry_over,
     dependencies,
     procedures,
     scrum_master,
+    sprint_control,
     task_events,
     task_projection,
     task_worker,
@@ -402,3 +404,177 @@ def test_qa_approval_and_a_persons_note_are_read_from_the_events(db):
     db.commit()
     record = task_projection.record_of(db, item)
     assert manager_inbox_extra.person_since(item.comments, before, record)
+
+
+# --- review findings ------------------------------------------------------------
+
+
+def _risk_hold(session, item, reason="high tier"):
+    task_events.record(
+        session,
+        item,
+        "risk_hold",
+        "system",
+        status="blocked",
+        text=f"{board.RISK_HOLD_PREFIX} ({reason}). Mark it done to accept it.",
+    )
+    session.commit()
+
+
+def test_the_agents_acceptance_takes_the_chain_lock_before_claiming_the_row(
+    db, monkeypatch
+):
+    from services import manager_actions
+    from sqlalchemy import event
+
+    item = _item(db, _sprint(db, _company(db, autonomy=1)), status="blocked")
+    _risk_hold(db, item)
+    order: list[str] = []
+    real = task_events.lock_chain
+
+    def spied(session, key):
+        order.append(f"lock:{key}")
+        real(session, key)
+
+    def seen(conn, cursor, statement, *_a):
+        if statement.lstrip().upper().startswith("UPDATE BACKLOG_ITEMS"):
+            order.append("update")
+
+    monkeypatch.setattr(task_events, "lock_chain", spied)
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", seen)
+    try:
+        manager_actions._accept(db, item, "Accepted by the Manager agent.")
+        db.commit()
+    finally:
+        event.remove(bind, "before_cursor_execute", seen)
+
+    assert order[0] == f"lock:{item.id}"
+    assert order.index("update") > 0
+    assert db.get(BacklogItem, item.id).status == "done"
+
+
+def test_an_integration_note_never_hides_a_risk_hold(db):
+    from models.integration import SprintIntegration
+    from services import integration_events
+
+    sprint = _sprint(db, _company(db, autonomy=1))
+    item = _item(db, sprint, status="blocked")
+    _risk_hold(db, item, sprint_control.HUMAN_LED_REASON)
+    # The agent accepts it, the sprint is integrated, the client overrides.
+    task_events.record(
+        db,
+        item,
+        "moved",
+        "Manager agent",
+        author="Manager agent",
+        status="done",
+        text="Accepted by the Manager agent.",
+    )
+    row = SprintIntegration(
+        company_id=sprint.company_id,
+        sprint_id=sprint.id,
+        trigger="manual",
+        requested_by="ana",
+        base="main",
+        branch=f"fabrique/sprint-{sprint.id}",
+        status="untested",
+        tasks=[{"task_id": item.id, "state": "merged", "merge_commit": "abc"}],
+    )
+    db.add(row)
+    db.flush()
+    assert integration_events.record_for_tasks(db, row) == [item.id]
+    task_events.record(
+        db,
+        item,
+        "moved",
+        "person",
+        status="blocked",
+        text="Override: ana took back the Manager agent's acceptance.",
+    )
+    db.commit()
+    item = db.get(BacklogItem, item.id)
+    record = task_projection.record_of(db, item)
+
+    assert record.source == "events"
+    assert record.awaits_risk_acceptance()
+    assert record.block_reason().startswith(board.RISK_HOLD_PREFIX)
+    assert not carry_over.carried_over(item, record)
+    # The comments say the same where the events do not cover the thread.
+    assert board.awaits_risk_acceptance(item.comments)
+    assert board.block_reason(item.comments).startswith(board.RISK_HOLD_PREFIX)
+    legacy = task_projection.TaskRecord(item.comments, [], item.assignee)
+    assert legacy.awaits_risk_acceptance()
+
+
+def test_an_autonomy_one_hold_is_told_from_its_event(db):
+    from services import manager_inbox
+
+    company = _company(db, autonomy=1)
+    item = _item(db, _sprint(db, company), status="blocked")
+    _risk_hold(db, item, sprint_control.HUMAN_LED_REASON)
+    _alter(db, item.id, 0, text=f"{board.RISK_HOLD_PREFIX} (high tier).")
+    item = db.get(BacklogItem, item.id)
+    record = task_projection.record_of(db, item)
+
+    entry = manager_inbox._task_item(db, company, item, None, record)
+
+    assert entry["facts"]["human_led_hold"] is True
+    assert entry["category"] == "accept_delivery"
+
+
+def test_a_backfilled_carry_over_event_still_tells_its_direction(db):
+    company = _company(db)
+    sprint = _sprint(db, company, status="completed")
+    original = _item(db, sprint, status="blocked")
+    clone = _item(db, _sprint(db, company))
+    # As migration 0014 wrote them: the comment's text, no direction.
+    for item, text_ in (
+        (original, f'{board.CARRIED_TO_PREFIX} 9 ("S") as task {clone.id} by ana.'),
+        (clone, f'{board.CARRIED_FROM_PREFIX} task {original.id} ("S"), blocked.'),
+    ):
+        task_events.record(
+            db,
+            item,
+            "carried_over",
+            "system",
+            text=text_,
+            payload={"backfilled": True},
+        )
+    db.commit()
+    original = db.get(BacklogItem, original.id)
+    clone = db.get(BacklogItem, clone.id)
+    first = task_projection.record_of(db, original)
+    second = task_projection.record_of(db, clone)
+
+    assert first.source == second.source == "events"
+    assert carry_over.carried_over(original, first)
+    assert not carry_over.is_carry_over(original, first)
+    assert carry_over.is_carry_over(clone, second)
+    assert not carry_over.carried_over(clone, second)
+
+
+def test_histories_survive_a_commit_without_a_query_per_task(db):
+    from sqlalchemy import event
+
+    sprint = _sprint(db, _company(db))
+    items = [_blocked_for_a_person(db, sprint) for _ in range(3)]
+    histories = task_projection.histories_for(db, items)
+    db.commit()  # what the review loop does after each task
+    queried: list[str] = []
+
+    def seen(conn, cursor, statement, *_a):
+        if "task_events" in statement:
+            queried.append(statement)
+
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", seen)
+    try:
+        for item in items:
+            record = task_projection.record_of(db, item, histories)
+            assert record.source == "events"
+            assert record.is_settled("blocked")
+    finally:
+        event.remove(bind, "before_cursor_execute", seen)
+
+    assert queried == []

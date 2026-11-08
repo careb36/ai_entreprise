@@ -68,6 +68,10 @@ CONSOLE_ADVICE_PREFIX = "External assistant context used for this task:"
 RISK_HOLD_PREFIX = (
     "High-risk delivery approved by QA, waiting for a person to accept it"
 )
+# The System's note on a task's part in its sprint's integration
+# (services/integration_events.py): what happened to its branch, never a
+# verdict on the task.
+INTEGRATION_PREFIX = "Integration #"
 
 
 def comment_list(comments: Any) -> list[dict[str, Any]]:
@@ -109,6 +113,13 @@ def is_console_advice_note(comment: dict[str, Any]) -> bool:
     )
 
 
+def is_integration_note(comment: dict[str, Any]) -> bool:
+    """The System's integration note: it moves branches, not the task."""
+    return _author(comment) == "system" and _text(comment).startswith(
+        INTEGRATION_PREFIX
+    )
+
+
 def is_send_back(comment: dict[str, Any]) -> bool:
     """A person's note sending the task back to work, or the Manager agent's
     when the company's policy lets it send one back for the client (issue #394)."""
@@ -129,6 +140,7 @@ def verdict_comments(comments: Any) -> list[dict[str, Any]]:
         if not is_lineage_comment(c)
         and not is_console_advice_note(c)
         and not is_architect_consult_comment(c)
+        and not is_integration_note(c)
     ]
 
 
@@ -341,13 +353,8 @@ def is_risk_hold_note(comment: dict[str, Any]) -> bool:
     return _author(comment) == "system" and _text(comment).startswith(RISK_HOLD_PREFIX)
 
 
-def awaits_risk_acceptance(comments: Any) -> bool:
-    """The task's latest verdict is a high-risk hold: approved, waiting for a person.
-
-    Not a failure: the sprint's blocked share and the procedures' numbers
-    leave it out, and it is never carried into another sprint on the
-    company's own.
-    """
+def risk_hold_note(comments: Any) -> str:
+    """The hold note when the task's latest verdict is a high-risk hold, else ``""``."""
     for comment in reversed(verdict_comments(comments)):
         text = _text(comment)
         author = _author(comment)
@@ -357,8 +364,18 @@ def awaits_risk_acceptance(comments: Any) -> bool:
             or is_rework_request(comment)
             or is_send_back(comment)
         ):
-            return is_risk_hold_note(comment)
-    return False
+            return text if is_risk_hold_note(comment) else ""
+    return ""
+
+
+def awaits_risk_acceptance(comments: Any) -> bool:
+    """The task's latest verdict is a high-risk hold: approved, waiting for a person.
+
+    Not a failure: the sprint's blocked share and the procedures' numbers
+    leave it out, and it is never carried into another sprint on the
+    company's own.
+    """
+    return bool(risk_hold_note(comments))
 
 
 def block_reason(comments: Any) -> str:

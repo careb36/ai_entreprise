@@ -18,7 +18,7 @@ from models.company import BusinessUnit
 from sqlmodel import Session, select
 
 from services import task_projection
-from services.board import RISK_HOLD_PREFIX, comment_list
+from services.board import comment_list
 from services.carry_over import carried_over, carry_mark, is_carry_over
 from services.sprint_control import HUMAN_LED_REASON
 
@@ -150,14 +150,6 @@ def _task_run(session: Session, company_id: int, item_id: int) -> AgentRun | Non
     ).first()
 
 
-def _hold_note(comments: Any) -> str:
-    for comment in reversed(comment_list(comments)):
-        text = str(comment.get("text") or "")
-        if text.startswith(RISK_HOLD_PREFIX):
-            return text
-    return ""
-
-
 def _task_state(item: BacklogItem, facts: dict[str, Any] | None = None) -> str:
     """The situation: the last comment the agents or the system wrote, and
     the latest run and verification, so new evidence is looked at afresh."""
@@ -194,7 +186,7 @@ def _task_item(
     facts = run_facts(run, _latest_verification(session, run.id) if run else None)
     record = record or task_projection.record_of(session, item)
     hold = record.awaits_risk_acceptance()
-    facts["human_led_hold"] = hold and HUMAN_LED_REASON in _hold_note(item.comments)
+    facts["human_led_hold"] = hold and HUMAN_LED_REASON in record.risk_hold_note()
     # An operator froze it: still suggested on, never accepted alone.
     facts["frozen"] = record.next_step() == "frozen"
     covers = [c for c in item.covers or [] if isinstance(c, str)]

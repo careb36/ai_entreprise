@@ -217,7 +217,7 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
 
     def write(item: BacklogItem, text: str, **fields: Any) -> None:
         event = note(session, item, text, **fields)
-        histories.setdefault(item.id, []).append(event)
+        histories.setdefault(item.id, []).append(task_events.as_dict(event))
 
     done = {i for i, item in items.items() if item.status == "done"}
     held = {

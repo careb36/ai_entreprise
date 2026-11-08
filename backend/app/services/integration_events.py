@@ -19,6 +19,7 @@ from models.integration import SprintIntegration
 from sqlmodel import Session
 
 from services import task_events
+from services.board import INTEGRATION_PREFIX
 
 # The states a task's event is written for, and how its comment says it.
 _SAID = {
@@ -46,7 +47,7 @@ def text_for(row: SprintIntegration, task: dict[str, Any]) -> str | None:
         task_branch=task.get("branch") or "",
         files=f" ({', '.join(str(f) for f in files[:10])})" if files else "",
     )
-    return f"Integration #{row.id} of sprint {row.sprint_id}: {said}"
+    return f"{INTEGRATION_PREFIX}{row.id} of sprint {row.sprint_id}: {said}"
 
 
 def record_for_tasks(session: Session, row: SprintIntegration) -> list[int]:

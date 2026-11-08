@@ -32,7 +32,9 @@ from sqlmodel import Session
 
 from services import board, task_events
 
-_ADVICE_KINDS = {"carried_over", "advised"}
+# Events that never say anything about the task's own state: lineage, advice,
+# and the System's integration note (it moves branches, not the task).
+_ADVICE_KINDS = {"carried_over", "advised", "integration"}
 # A dependency hold (``services/dependencies.py``) says so in its payload.
 DEPENDENCY_HOLD = "dependency"
 
@@ -100,6 +102,19 @@ def _since_send_back(events: list[Event]) -> list[Event]:
         if _is_person_send_back(events[index]):
             return events[index + 1 :]
     return events
+
+
+def _carry_direction(event: Event) -> str | None:
+    """``to`` or ``from``: the payload's, else (an event migration 0014
+    backfilled from a carry-over comment) the rendered lineage prefix."""
+    direction = _payload(event).get("direction")
+    if direction:
+        return str(direction)
+    if _text(event).startswith(board.CARRIED_TO_PREFIX):
+        return "to"
+    if _text(event).startswith(board.CARRIED_FROM_PREFIX):
+        return "from"
+    return None
 
 
 # --- Coverage -----------------------------------------------------------------
@@ -184,12 +199,17 @@ def block_reason_from_events(events: list[Event]) -> str:
     return ""
 
 
-def awaits_risk_acceptance_from_events(events: list[Event]) -> bool:
-    """The latest verdict is a high-risk hold, approved and waiting for a person."""
+def risk_hold_from_events(events: list[Event]) -> Event | None:
+    """The hold event when the latest verdict is a high-risk hold, else ``None``."""
     for event in reversed(_verdict_events(events)):
         if _is_verdict(event) or _is_person_send_back(event):
-            return _kind(event) == "risk_hold"
-    return False
+            return event if _kind(event) == "risk_hold" else None
+    return None
+
+
+def awaits_risk_acceptance_from_events(events: list[Event]) -> bool:
+    """The latest verdict is a high-risk hold, approved and waiting for a person."""
+    return risk_hold_from_events(events) is not None
 
 
 def frozen_from_events(events: list[Event]) -> bool:
@@ -308,6 +328,14 @@ class TaskRecord:
             return board.awaits_risk_acceptance(self.comments)
         return awaits_risk_acceptance_from_events(self.events)
 
+    def risk_hold_note(self) -> str:
+        """The text of the hold behind ``awaits_risk_acceptance`` (its reasons
+        say whether it is autonomy level 1's or a high tier), else ``""``."""
+        if self.events is None:
+            return board.risk_hold_note(self.comments)
+        hold = risk_hold_from_events(self.events)
+        return _text(hold) if hold is not None else ""
+
     def is_settled(self, status: str | None) -> bool:
         """Done, or blocked until a person acts (``board.item_is_settled``)."""
         if status == "done":
@@ -351,7 +379,7 @@ class TaskRecord:
             )
             return any(str(c.get("text", "")).startswith(prefix) for c in self.comments)
         return any(
-            _kind(e) == "carried_over" and _payload(e).get("direction") == direction
+            _kind(e) == "carried_over" and _carry_direction(e) == direction
             for e in self.events
         )
 
@@ -433,9 +461,16 @@ class TaskRecord:
                 c
                 for c in self.comments
                 if str(c.get("author") or "").strip().lower() == "system"
+                and not board.is_integration_note(c)
             ]
             return bool(notes) and str(notes[-1].get("text") or "").startswith(prefix)
-        notes = [e for e in self.events if _actor(e) == task_events.SYSTEM and _text(e)]
+        notes = [
+            e
+            for e in self.events
+            if _actor(e) == task_events.SYSTEM
+            and _text(e)
+            and _kind(e) != "integration"
+        ]
         if not notes:
             return False
         last = notes[-1]
@@ -447,14 +482,22 @@ class TaskRecord:
 
 # Histories loaded at once (``task_events.for_tasks``), by task id; a caller
 # answering for many tasks passes them so no question queries per task.
-Histories = dict[int, list[TaskEvent]]
+Histories = dict[int, list[Event]]
 
 
 def histories_for(session: Session, items: list[BacklogItem]) -> Histories:
-    """The events of *items* in one query."""
-    return task_events.for_tasks(
+    """The events of *items* in one query, as plain dicts.
+
+    Dicts, not rows: a loop that commits after each task expires the rows the
+    session holds, and reading an expired row queries it again.
+    """
+    loaded = task_events.for_tasks(
         session, [item.id for item in items if item.id is not None]
     )
+    return {
+        task_id: [task_events.as_dict(e) for e in events]
+        for task_id, events in loaded.items()
+    }
 
 
 def record_of(

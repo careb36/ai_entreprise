@@ -74,8 +74,11 @@ def _accept(session: Session, item: BacklogItem, text: str) -> None:
     One conditional ``UPDATE … WHERE status = 'blocked' AND updated_at = …``
     claims it: a person's send-back, comment or acceptance in between changes
     the row, and the agent changes nothing (``Stale``). The acceptance is then
-    the task's event (issue #324), rendered as the agent's note.
+    the task's event (issue #324), rendered as the agent's note. The task's
+    chain lock is taken first, as every comment writer takes it before the
+    row, so the claim and the event are written under it in one lock order.
     """
+    task_events.lock_chain(session, item.id)
     result = session.exec(  # type: ignore[call-overload]
         update(BacklogItem)
         .where(
