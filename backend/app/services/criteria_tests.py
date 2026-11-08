@@ -21,10 +21,20 @@ CHECK_UNTOUCHED = "acceptance_tests_untouched"
 RESULT_PASS, RESULT_FAIL, RESULT_MISSING = "pass", "fail", "missing"
 
 # Per-test lines of the runners the daemon may run: the test's name and
-# whether it passed. pytest ``-v`` (``path::name PASSED``), its short summary
-# (``FAILED path::name - …``), jest and vitest (``✓ name`` / ``✕ name``, ``×``),
-# go (``--- PASS: Name``), cargo (``test name ... ok``), mocha (``✓``/``N)``).
+# whether it passed. Playwright's list reporter (``✓  1 [project] ›
+# e2e/req_1_2.spec.ts:3:5 › REQ-1.2 title (1.2s)``, ``✘``; ``ok`` and ``x``
+# where the terminal has no UTF-8), pytest ``-v`` (``path::name PASSED``),
+# its short summary (``FAILED path::name - …``), jest and vitest (``✓ name``
+# / ``✕ name``, ``×``), go (``--- PASS: Name``), cargo (``test name ...
+# ok``), mocha (``✓``/``N)``).
 _LINE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"^\s*(✓|✔|✘|ok|x)\s+\d+\s+(.*\S:\d+:\d+\s+›\s+.+?)"
+            r"(?:\s+\(\d+(?:\.\d+)?\s*m?s\))?\s*$"
+        ),
+        "playwright",
+    ),
     (re.compile(r"^\s*(\S+::\S+)\s+(PASSED|FAILED|ERROR|XPASS|XFAIL)\b"), "pytest"),
     (re.compile(r"^\s*(PASSED|FAILED|ERROR)\s+(\S+::\S+)"), "pytest-summary"),
     (re.compile(r"^\s*[✓✔]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$"), "tick"),
@@ -58,6 +68,19 @@ def names_criterion(test_name: str, criterion_id: str) -> bool:
     )
 
 
+def _playwright_name(text: str) -> str:
+    """A Playwright test's title (``[project] › file:line:col › title``); its
+    file when the title carries no number, so ``e2e/req_1_2.spec.ts`` still
+    names the criterion. Never both: a file holding another criterion's test
+    must not speak for it."""
+    parts = [p.strip() for p in text.split(" › ")]
+    at = next(
+        (i for i, p in enumerate(parts) if re.search(r":\d+:\d+$", p)), len(parts) - 1
+    )
+    title = " › ".join(parts[at + 1 :])
+    return title if re.search(r"\d", title) else parts[at].rsplit(":", 2)[0]
+
+
 def test_lines(output: str) -> list[tuple[str, bool]]:
     """The per-test lines of a runner's output: ``(test name, passed)``."""
     found: list[tuple[str, bool]] = []
@@ -67,7 +90,14 @@ def test_lines(output: str) -> list[tuple[str, bool]]:
             match = pattern.match(line)
             if not match:
                 continue
-            if kind == "pytest":
+            if kind == "playwright":
+                found.append(
+                    (
+                        _playwright_name(match.group(2)),
+                        match.group(1) in ("✓", "✔", "ok"),
+                    )
+                )
+            elif kind == "pytest":
                 found.append((match.group(1), match.group(2) in _PASS_WORDS))
             elif kind == "pytest-summary":
                 found.append((match.group(2), match.group(1) in _PASS_WORDS))
@@ -145,8 +175,17 @@ def record_results(evidence: dict[str, Any], output: str) -> None:
 def excused_failures(evidence: dict[str, Any]) -> tuple[bool, list[str]]:
     """Whether every failing test is an acceptance test of an excused criterion,
     and those criteria. A run whose failures could not be read excuses none."""
-    acceptance = evidence.get("acceptance") or {}
-    failing = (evidence.get("test_run") or {}).get("failing_tests") or []
+    return excused_among(
+        (evidence.get("test_run") or {}).get("failing_tests") or [],
+        evidence.get("acceptance") or {},
+    )
+
+
+def excused_among(
+    failing: list[str], acceptance: dict[str, Any]
+) -> tuple[bool, list[str]]:
+    """``excused_failures`` over any list of failing test names (a unit run's
+    or a browser run's)."""
     if not failing:
         return False, []
     excused: list[str] = []
@@ -160,6 +199,16 @@ def excused_failures(evidence: dict[str, Any]) -> tuple[bool, list[str]]:
         if cid not in excused:
             excused.append(cid)
     return True, excused
+
+
+def _combined(unit: str | None, browser: str | None) -> str:
+    """One criterion's result over its unit and browser tests: a failure in
+    either fails it; otherwise a pass in either passes it."""
+    if RESULT_FAIL in (unit, browser):
+        return RESULT_FAIL
+    if RESULT_PASS in (unit, browser):
+        return RESULT_PASS
+    return RESULT_MISSING
 
 
 def check_criteria(evidence: dict[str, Any]) -> dict[str, Any] | None:
@@ -180,7 +229,10 @@ def check_criteria(evidence: dict[str, Any]) -> dict[str, Any] | None:
             "observation": f"{', '.join(tested)}: {reason}",
             "results": {c: RESULT_MISSING for c in tested},
         }
-    own = {c: results.get(c, RESULT_MISSING) for c in tested}
+    # A browser smoke test of the criterion (``services/browser_smoke.py``),
+    # read from the e2e run's output: a failure there fails the criterion.
+    browser = ((evidence.get("app_run") or {}).get("e2e") or {}).get("criteria") or {}
+    own = {c: _combined(results.get(c), browser.get(c)) for c in tested}
     words = ", ".join(f"{c} {r}" for c, r in own.items())
     if acceptance.get("kind") == ACCEPTANCE_KIND:
         missing = [c for c, r in own.items() if r == RESULT_MISSING]

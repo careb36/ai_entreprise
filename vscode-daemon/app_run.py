@@ -227,6 +227,10 @@ def _e2e_record(req: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
     if record["timed_out"]:
         record["timeout_seconds"] = req["e2e_seconds"]
     record.update(_tail(text))
+    if record["output_truncated"]:
+        # A list reporter prints one line per test first and the failures'
+        # details after: the head keeps the lines the backend reads back.
+        record["output_head"] = text[:LOG_TAIL_CHARS]
     return record
 
 

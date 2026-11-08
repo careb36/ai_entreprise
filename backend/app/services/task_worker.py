@@ -2154,8 +2154,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 asyncio.to_thread(
                     _load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
-                asyncio.to_thread(
-                    spec_planning.requirements_context, engine, item["id"]
+                spec_planning.task_requirements_context(
+                    nats_client, engine, item["id"], _resolve_workspace_root
                 ),
                 console_assistants.collect_advice(
                     nats_client, item, agent, sprint, _resolve_workspace_root

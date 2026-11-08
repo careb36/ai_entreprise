@@ -43,6 +43,15 @@
 #      low-risk delivery at autonomy level 1, it accepts one alone (audited,
 #      with the rule), a high-risk one still waits for the client, and the
 #      client's override is counted in its record.
+#  9c. A web project (issue #315): QA's test-writing task also writes a
+#      Playwright smoke test per criterion, and the application check runs
+#      them against the running app. The daemon is given no browser
+#      (PLAYWRIGHT_BROWSERS_PATH points at an empty folder; the runner may
+#      have no Playwright at all), so the run checks the plumbing and that a
+#      missing browser is reported unverifiable with its reason, never a pass
+#      or a refutation; the greeting, approved on that unverifiable run,
+#      waits for a person (autonomy level 1 once QA's verified tests are
+#      done). tests/test_browser_smoke.py drives a real browser.
 #  10. Every task's history is legal, read by app/history_check.py, which
 #      shares no code with the readers it checks.
 #  11. QA only reviewed delivered work (the fake model's order check).
@@ -62,6 +71,7 @@
 #   E2E_PYTHON [python]            the backend's interpreter (poetry env)
 #   E2E_WORKDIR [mktemp]           logs and the project folder
 #   E2E_TIMEOUT [300]              seconds to wait for each sprint to close
+#   E2E_WEB_PORT [18765]           the port the web project's application uses
 #
 # Exit status is 0 only when every check passed. Logs stay in E2E_WORKDIR.
 set -u
@@ -81,6 +91,7 @@ BACKEND_PORT=${E2E_BACKEND_PORT:-18000}
 LLM_PORT=${E2E_LLM_PORT:-15100}
 PY=${E2E_PYTHON:-python}
 TIMEOUT=${E2E_TIMEOUT:-300}
+WEB_PORT=${E2E_WEB_PORT:-18765}
 WORK=${E2E_WORKDIR:-$(mktemp -d -t fabrique-e2e-XXXXXX)}
 mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
@@ -168,7 +179,8 @@ printf '#!/bin/sh\necho "%s"\n' "$ADVICE" > "$WORK/bin/e2e-copilot"
 chmod +x "$WORK/bin/e2e-copilot"
 FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATIONS \
   FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
-env $DAEMON_NATS_ENV PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot \
+mkdir -p "$WORK/no-browsers"
+env $DAEMON_NATS_ENV PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot PLAYWRIGHT_BROWSERS_PATH="$WORK/no-browsers" \
   NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
 trap cleanup EXIT
@@ -189,7 +201,7 @@ grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see
     AUTH_REQUIRED=false JWT_SECRET_KEY=e2e-secret-e2e-secret-e2e-secret-e2e \
     CONSOLE_ASSISTANTS_ENABLED=true COPILOT_CLI_COMMAND_TEMPLATE='e2e-copilot -p {prompt}' CLAUDE_CLI_COMMAND_TEMPLATE= \
     SUPPORT_AGENT_ENABLED=true SUPPORT_AGENT_INTERVAL_SECONDS=2 \
-    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" \
+    DELIVERY_TESTS_ENABLED=true DELIVERY_TEST_COMMAND="$TEST_COMMAND" DELIVERY_APP_CHECK_ENABLED=true \
     DELIVERY_SANDBOX=$SANDBOX DELIVERY_SANDBOX_IMAGE=$SANDBOX_IMAGE \
     REVIEWER_AGENT_ENABLED=true REVIEWER_AGENT_INTERVAL_SECONDS=2 REVIEWER_VERIFY_GRACE_SECONDS=5 LLM_PROXY_INTERNAL_TOKEN=$INTERNAL_TOKEN \
     MANAGER_AGENT_ENABLED=true MANAGER_AGENT_INTERVAL_SECONDS=2 \
@@ -473,6 +485,42 @@ check "the agent's record counts the override" test "$(manager_record)" = "(1, 1
 ACCEPTED5=$(api -X PATCH "$API/v1/backlog/$AUDITED" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "High-risk delivery accepted by the client."}' | json "d.get('status', '')")
 check "the client accepts the high-risk delivery" test "$ACCEPTED5" = done
 check "and the record counts that decision against the agent's suggestion" test "$(api "$API/v1/manager_record?company_id=$CID" | json "(lambda c: c['decided'] >= 1 and c['agreed'] == c['decided'] and c['taken_alone'] == 0)(d['categories']['accept_high_risk'])")" = True
+
+echo "9c. a web project: QA's browser smoke tests, run by the application check"
+mkdir -p "$WORK/web"
+echo "<html><body><h1>Greetings</h1></body></html>" > "$WORK/web/index.html"
+WEB=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d "{
+  \"company_name\": \"Web Co\", \"project_path\": \"$WORK/web\", \"autonomy_level\": 2, \"start_now\": false,
+  \"agents\": [{\"role\": \"Developer\", \"name\": \"Dev Wen\"}, {\"role\": \"QA\", \"name\": \"QA Wes\"}, {\"role\": \"PO\", \"name\": \"Po Wu\"}]}")
+WCID=$(echo "$WEB" | json "d.get('company_id', '')")
+check "a Manager says the project serves pages, started on a port" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$WCID/stack_profile" -d "{\"profile\": {\"start\": \"python3 -m http.server \$PORT --bind 127.0.0.1\", \"port\": $WEB_PORT, \"web\": true}}" | json "d['overrides']['web']")" = True
+WSPEC=$(api "$API/v1/specifications/$SPEC_ID?company_id=$CID" | json "json.dumps({'company_id': $WCID, **{k: d[k] for k in ('title', 'summary', 'requirements', 'quality', 'constraints')}})" | api -X POST "$API/v1/specifications" -H 'Content-Type: application/json' -d @- | json "d.get('id', '')")
+check "its specification is approved" test "$(api -X POST "$API/v1/specifications/$WSPEC/approve" | json "d['status']")" = approved
+WPLAN=$(api -X POST "$API/v1/plan_sprint" -H 'Content-Type: application/json' -d "{\"company_id\": $WCID, \"scope_size\": \"S\", \"specification_id\": $WSPEC}")
+NEW6=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
+  \"company_id\": $WCID, \"sprint_name\": \"Web 1\", \"start_date\": \"2026-01-07\", \"scope_size\": \"S\", \"specification_id\": $WSPEC,
+  \"backlog_items\": $(echo "$WPLAN" | json "json.dumps(d['tasks'])")}")
+S6=$(echo "$NEW6" | json "d.get('sprint_id', '')")
+WGREETING=$(echo "$NEW6" | json "d['backlog_item_ids'][2]")
+web_board() { api "$API/v1/sprints/$S6/board" | json "' '.join(sorted(f\"{i['id']}={i['status']}\" for c in d['columns'].values() for i in c))"; }
+tests_done() { api "$API/v1/sprints/$S6/board" | json "sum(1 for c in d['columns'].values() for i in c if i['kind'] == 'acceptance_tests' and i['status'] == 'done')"; }
+# QA's tests are verified and close on QA's approval. The greeting's run will
+# be unverifiable (no browser), so no agent may close it: at autonomy level 1
+# it waits for a person, who accepts it having read the evidence.
+check "QA's two test-writing tasks are done" wait_value "$TIMEOUT" 2 tests_done
+check "the company moves to autonomy level 1 before the greeting is reviewed" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$WCID/autonomy" -d '{"autonomy_level": 1}' | json "d['autonomy_level']")" = 1
+web_status() { api "$API/v1/sprints?company_id=$WCID" | json "next((s['status'] for s in d if s['id'] == $S6), '')"; }
+check "Web 1 closes around the greeting waiting for a person" wait_value "$TIMEOUT" completed web_status
+check "the greeting waits for a person, QA having approved it" test "$(api "$API/v1/inbox?company_id=$WCID" | json "[t['risk_hold'] for t in d['blocked_tasks'] if t['id'] == $WGREETING]")" = "[True]"
+check "a person accepts it" test "$(api -X PATCH "$API/v1/backlog/$WGREETING" -H 'Content-Type: application/json' -d '{"status": "done", "comment": "Accepted by a person who read the evidence."}' | json "d.get('status', '')")" = done
+echo "     board: $(web_board)"
+check "QA was asked for a browser test per criterion here, and not in the project that serves no page" test "$(grep '## Task: Acceptance tests for REQ-1' "$PROMPTS" | tail -1 | grep -c 'Browser checks to write.*REQ-1.1 → e2e/req_1_1.spec.ts.*REQ-1.2 → e2e/req_1_2.spec.ts')" = 1 -a "$(grep '## Task: Acceptance tests for REQ-1' "$PROMPTS" | head -1 | grep -c 'Browser checks to write')" = 0
+check "QA wrote one Playwright smoke test per criterion, titled with its id" test "$(cat "$WORK"/web/e2e/req_*.spec.ts | grep -c "test('REQ-[12]\.[12] shows")" = 3 -a ! -e "$WORK/project/e2e"
+WRUN=$(api "$API/v1/agent_runs?company_id=$WCID&external_ref=task-$WGREETING" | json "max((r['id'] for r in d['agent_runs']), default='')")
+web_check() { api "$API/v1/agent_runs/$WRUN/verifications?company_id=$WCID" | json "(lambda c: ($2))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$1'))"; }
+check "the greeting's application was started and answered on its port" test "$(web_check application_started "c['outcome']")" = pass
+check "the smoke suite ran as the e2e command, and the missing browser is unverifiable with its reason, never a pass or a refutation" test "$(web_check e2e_run "c['outcome'], c.get('runtime_missing'), 'npx --no-install playwright test' in c['observation'], 'observed nothing in a browser' in c['observation']")" = "('unverifiable', True, True, True)"
+check "the unit tests still decided the greeting's criteria" test "$(web_check criteria_tests "c['outcome'], c['results']")" = "('pass', {'REQ-1.1': 'pass', 'REQ-1.2': 'pass'})"
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.
