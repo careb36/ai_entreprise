@@ -15,11 +15,7 @@ from typing import Any
 from models import BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services.board import (
-    awaits_risk_acceptance,
-    block_reason,
-    extract_latest_reviewable_comment,
-)
+from services import task_projection
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -35,6 +31,9 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
                 return {}
 
             sprint = session.get(Sprint, sprint_id)
+            # The tasks' events in one query; each answer reads them when they
+            # cover the thread (services/task_projection.py).
+            records = task_projection.records_for(session, list(items))
             total = len(items)
             done = sum(1 for i in items if i.status == "done")
             # An approved high-risk delivery waiting for a person is not a
@@ -42,7 +41,7 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
             awaiting_person = sum(
                 1
                 for i in items
-                if i.status == "blocked" and awaits_risk_acceptance(i.comments)
+                if i.status == "blocked" and records[i.id].awaits_risk_acceptance()
             )
             blocked = sum(1 for i in items if i.status == "blocked") - awaiting_person
             rework_count = 0
@@ -65,12 +64,9 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
                         or "qa review failed" in text.lower()
                     ):
                         qa_fail_count += 1
-                if item.status == "blocked" and not awaits_risk_acceptance(comments):
-                    reason = block_reason(comments) or (
-                        extract_latest_reviewable_comment(
-                            comments, assignee_role=item.assignee
-                        )
-                    )
+                record = records[item.id]
+                if item.status == "blocked" and not record.awaits_risk_acceptance():
+                    reason = record.block_reason() or record.deliverable()
                     if reason:
                         blocked_reasons.append(f"{item.title[:60]}: {reason[:120]}")
 

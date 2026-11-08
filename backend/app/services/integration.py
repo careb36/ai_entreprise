@@ -41,7 +41,7 @@ from models.agent_run import TASK_WORKER_PRODUCER
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, create_engine, select
 
-from services import locks, workspace_daemon
+from services import integration_events, locks, workspace_daemon
 from services.agent_service import AgentService
 from services.spec_planning import acceptance_summaries
 
@@ -446,6 +446,9 @@ def record(
     else:
         for key, value in fields.items():
             setattr(row, key, value)
+    session.add(row)
+    session.flush()  # each task's part becomes its event (issue #324)
+    integration_events.record_for_tasks(session, row)
     _audit(session, row, "sprint_integrated")
     return row
 

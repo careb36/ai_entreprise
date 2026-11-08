@@ -22,8 +22,7 @@ from models import BacklogItem, Sprint
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from services import task_events
-from services.board import comment_list, item_is_settled
+from services import task_events, task_projection
 
 WAITING_PREFIX = "Waits for task"
 BLOCKED_BY_DEPENDENCY_PREFIX = "Blocked: waits for task"
@@ -140,25 +139,26 @@ def note(
     text: str,
     kind: str = "note",
     status: str | None = None,
-) -> None:
+    payload: dict[str, Any] | None = None,
+) -> Any:
     """The System's note on *item*, written as its event (``task_events.record``)."""
-    task_events.record(
-        session, item, kind, task_events.SYSTEM, text=text, status=status
+    return task_events.record(
+        session,
+        item,
+        kind,
+        task_events.SYSTEM,
+        text=text,
+        status=status,
+        payload=payload,
     )
 
 
-def _last_system_note(item: BacklogItem) -> str:
-    """The System's latest note; a comment anyone else appends does not count."""
-    notes = [
-        c
-        for c in comment_list(item.comments)
-        if str(c.get("author") or "").strip().lower() == SYSTEM.lower()
-    ]
-    return str(notes[-1].get("text") or "") if notes else ""
-
-
-def _blocked_by_dependency(item: BacklogItem) -> bool:
-    return item.status == "blocked" and _last_system_note(item).startswith(
+def _blocked_by_dependency(
+    item: BacklogItem, record: task_projection.TaskRecord
+) -> bool:
+    """Held by a dependency: the System's latest note is the hold (from its event
+    when the events cover the thread); a comment anyone else appends does not count."""
+    return item.status == "blocked" and record.held_by_dependency(
         BLOCKED_BY_DEPENDENCY_PREFIX
     )
 
@@ -209,12 +209,26 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
     Returns ``{"blocked": [...], "released": [...]}``; the caller commits.
     """
     items = sprint_items(session, sprint_id)
+    # Every task's events in one query; the decisions below read them.
+    histories = task_projection.histories_for(session, list(items.values()))
+
+    def record(item: BacklogItem) -> task_projection.TaskRecord:
+        return task_projection.record_of(session, item, histories)
+
+    def write(item: BacklogItem, text: str, **fields: Any) -> None:
+        event = note(session, item, text, **fields)
+        histories.setdefault(item.id, []).append(event)
+
     done = {i for i, item in items.items() if item.status == "done"}
-    held = {i for i, item in items.items() if _blocked_by_dependency(item)}
+    held = {
+        i for i, item in items.items() if _blocked_by_dependency(item, record(item))
+    }
     stuck = {
         i
         for i, item in items.items()
-        if item.status == "blocked" and item_is_settled(item) and i not in held
+        if item.status == "blocked"
+        and record(item).is_settled(item.status)
+        and i not in held
     }
     # A task already held stays a blocker for its own dependents while what it
     # waits for is still stuck; one whose wait ended is released below.
@@ -241,20 +255,20 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
                     for d in pending
                     if d in items and (d in stuck or d in blocked)
                 ]
-                note(
-                    session,
+                write(
                     item,
                     f"{BLOCKED_BY_DEPENDENCY_PREFIX}{'s' if len(holding) > 1 else ''} "
                     + ", ".join(f'{d.id} ("{d.title}")' for d in holding)
                     + ", which waits for a person.",
                     kind="blocked",
                     status="blocked",
+                    payload={"hold": task_projection.DEPENDENCY_HOLD},
                 )
                 session.add(item)
                 blocked.append(item.id)
                 changed = True
             elif (
-                _blocked_by_dependency(item)
+                _blocked_by_dependency(item, record(item))
                 and item.id not in blocked
                 and item.id not in stuck
                 and not any(dep in stuck or dep in blocked for dep in pending)
@@ -262,8 +276,7 @@ def settle(session: Session, sprint_id: int) -> dict[str, list[int]]:
                 # Its wait ended: the tasks got done, or are back in work (a
                 # person sent one back); the worker queues it once they are done.
                 plural = "s" if len(depends_on_of(item)) > 1 else ""
-                note(
-                    session,
+                write(
                     item,
                     f"{RELEASED_PREFIX}{plural} it waited for got done."
                     if not pending
@@ -283,10 +296,15 @@ def sprint_settled(session: Session, sprint_id: int) -> bool:
     are reconciled: a hold whose wait ended is released first, so a sprint
     never closes over a task that could run. A sprint without tasks is not."""
     settle(session, sprint_id)
-    items = session.exec(
-        select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
-    ).all()
-    return bool(items) and all(item_is_settled(item) for item in items)
+    items = list(
+        session.exec(
+            select(BacklogItem).where(BacklogItem.sprint_id == sprint_id)
+        ).all()
+    )
+    records = task_projection.records_for(session, items)
+    return bool(items) and all(
+        records[item.id].is_settled(item.status) for item in items
+    )
 
 
 def settle_active(engine: Engine) -> dict[str, list[int]]:

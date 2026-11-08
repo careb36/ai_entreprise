@@ -47,8 +47,7 @@ from sqlalchemy import update
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from services import locks, scrum_master, task_events
-from services.board import comment_list, has_manual_freeze_marker
+from services import locks, scrum_master, task_events, task_projection
 from services.glassroom import publish_glassroom
 
 logger = setup_logger("fabrique-replicas")
@@ -105,7 +104,7 @@ def recover_inflight(engine: Engine) -> list[dict[str, Any]]:
                 if item.status != "in_progress":
                     continue
                 # Every transition is an event first (issue #324).
-                if has_manual_freeze_marker(comment_list(item.comments)):
+                if task_projection.record_of(session, item).frozen():
                     task_events.record(
                         session, item, "blocked", "system", status="blocked"
                     )

@@ -19,9 +19,10 @@ from pathlib import Path
 
 import pytest
 from config import settings
+from history_check import check_events
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import integration, integration_jobs, locks
+from services import integration, integration_jobs, locks, task_events
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -666,6 +667,96 @@ def test_an_unchanged_rerun_still_describes_every_task(
     assert f"### Task {first.id}: Constants" in text
     assert f"### Task {second.id}: Use them" in text
     assert "already in" in text
+
+
+def _approved(session, *items):
+    for item in items:
+        task_events.record(
+            session,
+            item,
+            "reviewed",
+            "QA",
+            author="QA",
+            text="APPROVED: fine",
+            status="done",
+        )
+    session.commit()
+
+
+def _event_dicts(session, item_id):
+    return [
+        {
+            "id": e.id,
+            "kind": e.event_type,
+            "task_status": e.task_status,
+            "payload": e.payload,
+        }
+        for e in task_events.for_task(session, item_id)
+    ]
+
+
+def test_each_task_s_part_in_an_integration_is_its_event(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    """Merged, then skipped on a second run: an ``integration`` event per task,
+    by the System, rendered as its comment; the status stays done; the task
+    left out gets none."""
+    root, _, _ = published_repo
+    _, sprint, first, second, left = _two_done_tasks(sqlite_session, root)
+    _approved(sqlite_session, first, second)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+
+    row = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+    again = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+
+    sqlite_session.expire_all()
+    for item in (first, second):
+        events = [
+            e
+            for e in task_events.for_task(sqlite_session, item.id)
+            if e.event_type == "integration"
+        ]
+        assert [(e.actor, e.payload["state"]) for e in events] == [
+            ("system", "merged"),
+            ("system", "already_merged"),
+        ]
+        assert [e.payload["integration_id"] for e in events] == [row["id"], again["id"]]
+        assert all(e.task_status is None for e in events)
+        task = sqlite_session.get(BacklogItem, item.id)
+        assert task.status == "done"
+        assert [c["event_id"] for c in task.comments[-2:]] == [e.id for e in events]
+        assert task.comments[-1]["author"] == "System"
+        assert "skipped" in task.comments[-1]["text"]
+        assert (
+            check_events(task.comments, "done", _event_dicts(sqlite_session, item.id))
+            == []
+        )
+    assert task_events.for_task(sqlite_session, left.id) == []
+
+
+def test_a_conflict_is_an_event_on_the_task_whose_branch_conflicted(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    _, sprint, first, second, _ = _two_done_tasks(sqlite_session, root, conflict=True)
+    _approved(sqlite_session, first, second)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+
+    row = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+
+    assert row["status"] == "conflict"
+    sqlite_session.expire_all()
+    states = {
+        item.id: [
+            e.payload["state"]
+            for e in task_events.for_task(sqlite_session, item.id)
+            if e.event_type == "integration"
+        ]
+        for item in (first, second)
+    }
+    assert states == {first.id: ["merged"], second.id: ["conflict"]}
+    comment = sqlite_session.get(BacklogItem, second.id).comments[-1]
+    assert "conflict" in comment["text"] and "app.py" in comment["text"]
 
 
 def test_a_done_task_without_its_branch_makes_the_integration_incomplete(

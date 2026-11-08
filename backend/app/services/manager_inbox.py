@@ -17,13 +17,8 @@ from models.agent_run import IN_HOUSE_PRODUCERS, TASK_WORKER_PRODUCER, Verificat
 from models.company import BusinessUnit
 from sqlmodel import Session, select
 
-from services.board import (
-    RISK_HOLD_PREFIX,
-    awaits_risk_acceptance,
-    block_reason,
-    blocked_item_next_step,
-    comment_list,
-)
+from services import task_projection
+from services.board import RISK_HOLD_PREFIX, comment_list
 from services.carry_over import carried_over
 from services.manager_actions import MANAGER_AGENT_NAME
 from services.sprint_control import HUMAN_LED_REASON
@@ -41,11 +36,13 @@ def waiting_tasks(session: Session, company_id: int) -> list[BacklogItem]:
         .where(Sprint.company_id == company_id, BacklogItem.status == "blocked")
         .order_by(BacklogItem.id)
     ).all()
+    # From the tasks' events when they cover the thread, loaded in one query.
+    records = task_projection.records_for(session, list(rows))
     return [
         item
         for item in rows
-        if blocked_item_next_step(item.comments, item.assignee) in (None, "frozen")
-        and not carried_over(item)
+        if records[item.id].waits_for_a_person(item.status)
+        and not carried_over(item, records[item.id])
     ]
 
 
@@ -158,13 +155,20 @@ def over_budget(session: Session, company_id: int) -> bool:
     )
 
 
-def _task_item(session: Session, company: Company, item: BacklogItem, triage) -> dict:
+def _task_item(
+    session: Session,
+    company: Company,
+    item: BacklogItem,
+    triage,
+    record: task_projection.TaskRecord | None = None,
+) -> dict:
     run = _task_run(session, company.id, item.id)
     facts = run_facts(run, _latest_verification(session, run.id) if run else None)
-    hold = awaits_risk_acceptance(item.comments)
+    record = record or task_projection.record_of(session, item)
+    hold = record.awaits_risk_acceptance()
     facts["human_led_hold"] = hold and HUMAN_LED_REASON in _hold_note(item.comments)
     # An operator froze it: still suggested on, never accepted alone.
-    facts["frozen"] = blocked_item_next_step(item.comments, item.assignee) == "frozen"
+    facts["frozen"] = record.next_step() == "frozen"
     facts["criteria"] = len(item.covers) if isinstance(item.covers, list) else 0
     facts["autonomy_level"] = company.autonomy_level
     if hold:
@@ -175,7 +179,7 @@ def _task_item(session: Session, company: Company, item: BacklogItem, triage) ->
     lines = [
         f"Task #{item.id}: {item.title}",
         f"Description (data): {(item.description or '')[:FIELD_LIMIT]}",
-        f"Why it waits: {block_reason(item.comments)[:FIELD_LIMIT]}",
+        f"Why it waits: {record.block_reason()[:FIELD_LIMIT]}",
         f"Latest run verdict: {facts['verdict'] or 'no run recorded'}",
         f"Risk tier: {facts['risk_tier'] or 'unknown'}",
         f"Files: {facts['files']}; criteria covered: {facts['criteria']}",
@@ -251,8 +255,11 @@ def inbox_items(session: Session, company: Company) -> list[dict[str, Any]]:
     from services import scrum_master
 
     tasks = waiting_tasks(session, company.id)
-    triages = scrum_master.triages_for(session, tasks)
-    items = [_task_item(session, company, t, triages.get(t.id)) for t in tasks]
+    records = task_projection.records_for(session, tasks)
+    triages = scrum_master.triages_for(session, tasks, records)
+    items = [
+        _task_item(session, company, t, triages.get(t.id), records[t.id]) for t in tasks
+    ]
     items += [
         _procedure_item(session, company, p)
         for p in session.exec(

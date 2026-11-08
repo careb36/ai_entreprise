@@ -24,6 +24,7 @@ from services import (
     manager_policy,
     manager_record,
     run_review,
+    task_events,
 )
 from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, awaits_risk_acceptance
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
@@ -305,10 +306,26 @@ def test_a_low_risk_hold_is_accepted_alone_and_audited(sqlite_session):
     assert audit.details["decided_by"] == MANAGER_AGENT_NAME
     assert audit.details["rule"] == "accept_delivery"
     # The independent history checker accepts an autonomy-1 hold the agent closed.
+    # The acceptance is the task's event; the legacy hold before it is not.
     run = {"version": 1, "status": "verified"}
+    events = [
+        {
+            "id": e.id,
+            "kind": e.event_type,
+            "task_status": e.task_status,
+            "payload": e.payload,
+        }
+        for e in task_events.for_task(sqlite_session, item.id)
+    ]
+    assert [e["kind"] for e in events] == ["moved"]
+    assert events[0]["payload"]["accepted_by"] == MANAGER_AGENT_NAME
+    assert note["event_id"] == events[0]["id"]
     assert (
         check_task(
-            {"id": item.id, "status": "done", "comments": item.comments}, [run], []
+            {"id": item.id, "status": "done", "comments": item.comments},
+            [run],
+            [],
+            events=events,
         )
         == []
     )
