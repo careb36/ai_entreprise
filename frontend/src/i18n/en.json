@@ -1951,5 +1951,12 @@
     "fetched": "{{status}} · {{hash}} · {{date}}",
     "failed": "failed ({{status}})",
     "refused": "refused: {{host}} is not on the company's list of sources"
+  },
+  "models": {
+    "title": "Models",
+    "subtitle": "Models your company's agents run.",
+    "suggestions": "Suggestions",
+    "none": "none",
+    "modelsCount": "models"
   }
 }

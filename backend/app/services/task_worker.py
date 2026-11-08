@@ -531,8 +531,8 @@ def _consult_architect(
                 Agent.role == KPI_ROLE_ARCHITECT,
             )
         ).first()
-        # How tasks went after its earlier briefs, counted from the boards. A
-        # failed count leaves the record out; it never blocks the Developer.
+        cm = model_routing.company_model(session, sprint["company_id"], "Architect")
+        # Its record from the boards; a failed count only leaves it out.
         record = ""
         if architect_row:
             try:
@@ -558,7 +558,7 @@ def _consult_architect(
         "role": architect_row.role or KPI_ROLE_ARCHITECT,
         "name": architect_row.name or KPI_ROLE_ARCHITECT,
         "model": model_routing.resolve_agent_model(
-            {"model": architect_row.model, "role": KPI_ROLE_ARCHITECT}
+            {"model": architect_row.model or cm, "role": KPI_ROLE_ARCHITECT}
         ),
         "seniority": architect_row.seniority,
         "specialty": architect_row.specialty,
@@ -1305,31 +1305,29 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             )
             return None
 
-        # Find the agent matching this assignee role within the company.
         agent_row = session.exec(
             select(Agent).where(
                 Agent.company_id == sprint.company_id,
                 Agent.role == (item.assignee or "Dev"),
             )
         ).first()
-
+        cm = model_routing.company_model(session, sprint.company_id, item.assignee)
         agent_dict = {}
         if agent_row:
             agent_dict = {
                 "role": agent_row.role,
                 "name": agent_row.name,
-                # Keep the configured model raw so difficulty routing can apply.
-                "model": (agent_row.model or "").strip(),
+                # The agent's, else the company's; empty lets difficulty routing apply.
+                "model": (agent_row.model or "").strip() or cm,
                 "seniority": agent_row.seniority,
                 "specialty": agent_row.specialty,
                 "system_prompt": agent_row.system_prompt,
             }
         else:
-            # Fallback: use default config if no matching agent found.
             agent_dict = {
                 "role": item.assignee or "Dev",
                 "name": "",
-                "model": "",
+                "model": cm,
                 "seniority": "Senior",
                 "specialty": "general software engineering",
                 "system_prompt": None,
@@ -2641,12 +2639,14 @@ async def _review_cycle(nats_client: NATSClient) -> None:
                     Agent.role == "QA",
                 )
             ).first()
-
+            qa_model = getattr(reviewer, "model", None) or model_routing.company_model(
+                session, sprint.company_id, "QA"
+            )
             reviewer_dict = {
                 "role": reviewer.role if reviewer else "QA",
                 "name": reviewer.name if reviewer else "QA",
                 "model": model_routing.resolve_agent_model(
-                    {"model": reviewer.model if reviewer else None, "role": "QA"}
+                    {"model": qa_model, "role": "QA"}
                 ),
                 "seniority": reviewer.seniority if reviewer else "Senior",
                 "system_prompt": reviewer.system_prompt if reviewer else None,

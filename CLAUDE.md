@@ -206,7 +206,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Key Components
 
-**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`, `providers`).
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`, `providers`, `model_settings`).
 
 **`backend/app/migrations.py`** / **`backend/alembic/`** — The schema's version. Alembic owns it: `alembic.ini` and `alembic/env.py` (the models are the target metadata; the URL is the backend's `POSTGRES_*`, or `ALEMBIC_DATABASE_URL`), `alembic/versions/0001_baseline.py` (the baseline: creates each table the models define and the database lacks, adds each column a table lacks, and repeats the old startup's `ALTER TABLE` fixes, indexes and backfills on Postgres, so an empty database, one from `db/init-db/init.sql` and one patched by an older backend all converge). `database.prepare_database` (startup) runs `require_schema_at_head`: a database behind head stops the start with both versions in the error; `DB_AUTO_UPGRADE=true` runs `upgrade_to_head` first. `schema_differences` is what `alembic check` reports (`include_object` leaves `vector_memory` and init.sql's other tables out). The container's `CMD` runs `alembic upgrade head` before uvicorn; the e2e runs `upgrade head` then `check` on Postgres; `backend-tests.yml` runs both on a SQLite file. How to write a migration: `CONTRIBUTING.md` §5.
 
@@ -498,6 +498,7 @@ Test files:
 | `test_provider_connections.py` | A company's model provider connections (issue #356): a Manager connects, changes and removes them, a Viewer reads them, nobody outside the company does; the key is encrypted at rest and never returned, an omitted key keeps the stored one and an empty one clears it; base URLs and headers are checked (local servers allowed on purpose); the validation lists the provider's models with the key and records the outcome, which a later change to the key or URL clears |
 | `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
 | `test_proxy_connections.py` | A company's provider connection reaches the LLM proxy (issue #356): `conn:<id>:<model>` resolves into the model the proxy calls and the headers carrying the connection with the shared internal token; only the company's own enabled connection is used, never another company's; without the token or the company the call fails with the reason; plain model ids are untouched |
+| `test_company_models.py` | A company's models (issue #356, step 4): the agent's model, then the company's for the role, then its default, then the deployment's; the Reviewer follows QA unless it has its own; a Manager sets them and a Viewer reads them with what each role runs, an empty value clears one, an unknown role, a malformed id or another company's connection refused; the ScrumMaster, PO, Architect, the worker's task, Architect consultation and the Reviewer agent run the company's choice, and the agent's own model still wins |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -666,7 +667,15 @@ fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
 reads them through `default_model_for_role` → `ModelFactory.model_for_role`,
 which applies, most specific first, `AGENT_MODEL_<ROLE>`, `NEMOTRON_ROLES`,
 `AGENT_MODEL` (one model for the whole team, e.g. DeepSeek alone), then the
-map. An agent's own `model` (the Agents page) wins over all of them.
+map. Above those sit the company's own choice and the agent's: an agent's
+`model` (the Agents page) wins, then the company's model for the role
+(`Company.role_models`), then its default (`Company.default_model`;
+`services/company_models.py`, `GET`/`PUT /v1/companies/{id}/model_settings`,
+Viewer / Manager). The ScrumMaster, the PO, the Architect, the task worker's
+Developer, Architect consultation and QA review, and the Reviewer agent (its
+own entry, else QA's) all read it; difficulty routing (`AGENT_MODEL_POLICY`)
+refines only the deployment's default, never a model a person chose. A model
+may be one of the company's provider connections (`conn:<id>:<model>`).
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 

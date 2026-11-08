@@ -30,6 +30,7 @@ from routers import (
     inbox_router,
     mcp_router,
     messages_router,
+    model_settings_router,
     procedures_router,
     providers_router,
     reviews_router,
@@ -112,6 +113,7 @@ app.include_router(architectures_router)
 app.include_router(workspace_router)
 app.include_router(mcp_router)
 app.include_router(providers_router)
+app.include_router(model_settings_router)
 
 # Register exception handlers
 register_exception_handlers(app)

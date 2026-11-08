@@ -64,15 +64,15 @@ def business_unit_id(session: Session, company_id: int) -> int | None:
 
 
 def po_profile(session: Session, company_id: int) -> tuple[str, str | None, str]:
-    """The company's PO agent: its model (or the role's default), system prompt and name."""
-    from llm.model_factory import default_model_for_role
+    """The company's PO agent: its model (or the company's, or the role's default), system prompt and name."""
+    from services import company_models
 
     po = session.exec(
         select(Agent).where(Agent.company_id == company_id, Agent.role == PO_ROLE)
     ).first()
     configured = (po.model if po else "") or ""
     return (
-        configured.strip() or default_model_for_role(PO_ROLE),
+        company_models.resolve(session, company_id, PO_ROLE, configured),
         (po.system_prompt if po else None) or None,
         (po.name if po else "") or PO_ROLE,
     )

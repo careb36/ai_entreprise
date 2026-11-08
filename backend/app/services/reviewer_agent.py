@@ -21,6 +21,7 @@ Enabled with ``REVIEWER_AGENT_ENABLED``.
 """
 
 import asyncio
+import functools
 import json
 import os
 import re
@@ -39,6 +40,7 @@ from models.agent_run import (
 from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
+from services import company_models
 
 REVIEWER_AGENT_NAME = "Reviewer agent"
 REVIEWER_ROLE = "Reviewer"
@@ -236,13 +238,17 @@ def parse_review(text: str) -> dict[str, str | None] | None:
     }
 
 
-def ask_llm(prompt: str) -> str:
-    """One call through the LLM proxy as the Reviewer role; raises on no answer."""
+def ask_llm(prompt: str, model: str | None = None) -> str:
+    """One call through the LLM proxy as the Reviewer role; raises on no answer.
+
+    *model* is the company's choice for the Reviewer (``company_models``);
+    without one, the deployment's default for the role.
+    """
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.max_tokens = ANSWER_MAX_TOKENS
-    model = default_model_for_role(REVIEWER_ROLE)
+    model = model or default_model_for_role(REVIEWER_ROLE)
     result = client.chat(
         messages=[{"role": "user", "content": prompt}], model=model, role=REVIEWER_ROLE
     )
@@ -268,7 +274,7 @@ def pending_runs(session: Session, limit: int = RUNS_PER_CYCLE) -> list[AgentRun
     ).all()
 
 
-def review_cycle(engine, ask: Callable[[str], str] = ask_llm) -> int:
+def review_cycle(engine, ask: Callable[[str], str] | None = None) -> int:
     """Review up to ``RUNS_PER_CYCLE`` pending runs; returns how many got a suggestion.
 
     A run whose answer is not in the expected form is marked reviewed without
@@ -288,8 +294,13 @@ def review_cycle(engine, ask: Callable[[str], str] = ask_llm) -> int:
             prompt = build_prompt(
                 run, verifications.get(run.id), records[run.company_id]
             )
+            if ask is not None:
+                call = ask
+            else:
+                chosen = company_models.resolve(session, run.company_id, REVIEWER_ROLE)
+                call = functools.partial(ask_llm, model=chosen)
             try:
-                answer = ask(prompt)
+                answer = call(prompt)
             except Exception as exc:  # noqa: BLE001 - The next cycle retries.
                 logger.warning(
                     "Reviewer agent could not review run %s: %s", run.id, exc
