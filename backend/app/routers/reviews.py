@@ -17,6 +17,7 @@ from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication, RunReview
 from schemas import ReviewCommentCreate, RunReviewCreate
 from services.git_publish import PublishRefused, publish_spec, record_publication
+from services.local_merge import record_run_merge, run_merge_spec
 from services.review_sync import SyncRefused, import_comments, sync_spec
 from services.run_review import ReviewRefused, check_comment_target, submit_review
 from services.workspace_daemon import (
@@ -218,6 +219,39 @@ async def publish_run(
             reply,
             published_by=author_name,
             published_by_user_id=author_id,
+        )
+    except PublishRefused as refused:
+        session.rollback()
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
+    except DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from exc
+    except DaemonError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message) from exc
+
+
+@router.post("/{run_id}/merge", status_code=201)
+async def merge_run(
+    run_id: int,
+    request: Request,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Merge the run's task branch into the base branch, locally (``services/local_merge``)."""
+    require_company_role(session, user, company_id, "Manager")
+    run = _run(session, run_id, company_id)
+    author_name, author_id = _author(user, None)
+    try:
+        reply = await daemon_request(
+            getattr(request.app.state, "nats_client", None),
+            "workspace.git.merge",
+            run_merge_spec(session, run),
+            timeout=PUBLISH_TIMEOUT_SECONDS,
+        )
+        return record_run_merge(
+            session, run, reply, merged_by=author_name, merged_by_user_id=author_id
         )
     except PublishRefused as refused:
         session.rollback()

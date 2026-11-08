@@ -95,6 +95,12 @@ class Context:
         own = self.company().get("overrides") or {}
         if "test" in own and own["test"] is not None and not str(own["test"]).strip():
             return None, "tests turned off by the company's stack profile"
+        # A command a person named needs no look at the project.
+        named = (
+            str(own.get("test") or "").strip() or settings.DELIVERY_TEST_COMMAND.strip()
+        )
+        if named:
+            return named, ""
         command = (await self.profile()).get("test")
         if not command:
             from services import workspace_daemon

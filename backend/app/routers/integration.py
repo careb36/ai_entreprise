@@ -17,6 +17,7 @@ from models.integration import SprintIntegration
 from services import integration
 from services.git_publish import PublishRefused
 from services.integration_publish import publish_spec, record_publication
+from services.local_merge import integration_merge_spec, record_integration_merge
 from services.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
@@ -128,6 +129,33 @@ async def publish_sprint_integration(
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
         return record_publication(session, row, reply, published_by=_who(user))
+    except (PublishRefused, DaemonUnavailable, DaemonError) as exc:
+        session.rollback()
+        raise _refused(exc) from exc
+
+
+@router.post("/sprints/{sprint_id}/integration/merge", status_code=201)
+async def merge_sprint_integration(
+    sprint_id: int,
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Merge the latest integration branch into the base branch, locally: nothing is pushed."""
+    sprint = _sprint(session, user, sprint_id, "Manager")
+    row = integration.latest(session, sprint.id)
+    if row is None or row.company_id != sprint.company_id:
+        raise HTTPException(
+            status_code=409, detail="This sprint has not been integrated"
+        )
+    try:
+        reply = await daemon_request(
+            getattr(request.app.state, "nats_client", None),
+            "workspace.git.merge",
+            integration_merge_spec(session, row),
+            timeout=PUBLISH_TIMEOUT_SECONDS,
+        )
+        return record_integration_merge(session, row, reply, merged_by=_who(user))
     except (PublishRefused, DaemonUnavailable, DaemonError) as exc:
         session.rollback()
         raise _refused(exc) from exc
