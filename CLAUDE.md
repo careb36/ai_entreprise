@@ -47,8 +47,8 @@ docker compose up backend -d
 docker compose up frontend -d
 docker compose up llm-proxy -d
 
-# Optional knowledge graph (Neo4j), off by default
-NEO4J_ENABLED=true docker compose --profile memory-graph up -d
+# The knowledge graph (Neo4j) is optional and on by default; without it:
+NEO4J_ENABLED=false docker compose up -d --scale neo4j=0
 
 # Workspace daemon: runs natively on the computer that holds your projects
 ./scripts/start-daemon.sh        # macOS / Linux
@@ -82,10 +82,13 @@ Copy `.env.example` to `.env` and fill in:
 - `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
 - `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
-- `NEO4J_ENABLED` — optional, default `false` (issue #328). The knowledge
-  graph (Neo4j) is optional: off, the backend never connects to it, the
-  compose file does not start it (it is under the `memory-graph` profile:
-  `NEO4J_ENABLED=true docker compose --profile memory-graph up -d`), memory
+- `NEO4J_ENABLED` — optional, default `true` (issue #328). The knowledge
+  graph (Neo4j) is optional: the backend never depends on it (compose starts
+  it, but the backend does not wait for it; enabled and not reachable yet,
+  the backend tries again every `GRAPH_RETRY_SECONDS` for ten minutes,
+  `lifecycle._connect_graph_later`, and records the graph from then on).
+  Off (`NEO4J_ENABLED=false docker compose up -d --scale neo4j=0`), the
+  backend never connects to it, memory
   search and store run on pgvector alone (`POST /v1/memory/store` answers
   what each store kept, `vector` and `graph`, `stored` or `not_recorded`),
   an engram is kept in pgvector with `graph: not_recorded`, the task
@@ -588,7 +591,7 @@ the LangGraph graph is only an optional kickoff conversation.
 ### Memory Architecture
 
 - **pgvector (Postgres)** — RAG short-term semantic memory. Used for code snippet retrieval and context injection. API: `GET /v1/memory/search`, `POST /v1/memory/store`. It needs only Postgres with `vector_memory` (`db/init-db/init.sql`); without that table the memory routes answer 503 with the reason and `/v1/capabilities` says `memory: false`.
-- **Neo4j** (optional, `NEO4J_ENABLED`, off by default) — Temporal knowledge graph. Immutable "Engram" nodes record every agent decision with timestamps. Used for file lineage and the graph half of the RAG context. Queried via APOC plugin. Off, nothing is written to it and its readers answer "not recorded" (`services/memory_graph.py`); `MemoryClient(neo4j_driver=None)` works on pgvector alone and raises `GraphNotRecorded` on a graph read. Memory is prompt context, never evidence.
+- **Neo4j** (optional, `NEO4J_ENABLED`, on by default) — Temporal knowledge graph. Immutable "Engram" nodes record every agent decision with timestamps. Used for file lineage and the graph half of the RAG context. Queried via APOC plugin. Off, nothing is written to it and its readers answer "not recorded" (`services/memory_graph.py`); `MemoryClient(neo4j_driver=None)` works on pgvector alone and raises `GraphNotRecorded` on a graph read. Memory is prompt context, never evidence.
 
 ### Auth & Multi-tenancy
 
@@ -692,7 +695,7 @@ Test files:
 | `test_model_suggestions.py` | The model suggested per role (issue #356, step 6): the catalogue's real fields decide, the deciding roles get a model that reasons, the coding roles the largest context with tools, the TechWriter the cheapest; no tools, no suggestion; a validated provider only suggests what it listed; an unpriced model is not taken for free; each suggestion is the connection's own reference; once the company ran a model on three of its tasks in a role, more done than not, its record decides (least rework per task), counted for the model of each task's last delivery in completed sprints, a record of mostly blocked tasks never outranks the rule; a Viewer reads them, an outsider does not |
 | `test_replicas.py` | Two workers against one database (threads on a file-backed SQLite): a todo task claimed once and a task given to both run once, a restarting worker leaves the tasks another holds, a surviving worker's review cycle recovers and re-queues the task of one that died mid-task (and leaves one a live worker holds), a sprint closed once with one follow-up, one retrospective, one procedure measurement and one proposal round, one triage per escalation (a new escalation gets its own), one review cycle and one Support/Reviewer cycle at a time; with `REPLICAS_POSTGRES_URL` the advisory lock and the conditional updates on Postgres (the e2e workflow runs these) |
 | `test_retention.py` | The janitor's retention over `sqlite3`: delivered outbox events go and pending or failed stay, a superseded run version goes with its verifications while the latest and one a person decided on stay, a decision recorded after the batch was picked keeps its run, a failing batch rolls back with the verifications in place, an autocommit connection refused, KPI turns outside the audit chain go and a chained one is never deleted (counted as kept), nor one a run points at, task events of closed sprints only, `0` keeps everything, settings from the environment with safe defaults |
-| `test_memory_graph.py` | The knowledge graph optional (issue #328): off by default; lineage answers `recorded: false` with the reason without asking Neo4j, and an enabled graph that fails is still a 500; the engram history and a client's graph reads raise `GraphNotRecorded` instead of answering empty; memory store and search on pgvector alone (the store reports `vector` and `graph`, an engram kept in pgvector with `graph: not_recorded`, the RAG context from pgvector alone), the memory routes through the API, a 503 naming `vector_memory` without pgvector; the company seed skips the graph; startup never asks Neo4j when it is off, keeps memory search when it is unreachable; `/health/deep` shows `neo4j` as `disabled` and stays healthy, and degrades only for an enabled graph that is down |
+| `test_memory_graph.py` | The knowledge graph optional (issue #328): on by default; lineage answers `recorded: false` with the reason without asking Neo4j, and an enabled graph that fails is still a 500; the engram history and a client's graph reads raise `GraphNotRecorded` instead of answering empty; memory store and search on pgvector alone (the store reports `vector` and `graph`, an engram kept in pgvector with `graph: not_recorded`, the RAG context from pgvector alone), the memory routes through the API, a 503 naming `vector_memory` without pgvector; the company seed skips the graph; startup never asks Neo4j when it is off, keeps memory search when it is unreachable and connects it once Neo4j answers, giving up after the retry bound; `/health/deep` shows `neo4j` as `disabled` and stays healthy, and degrades only for an enabled graph that is down |
 | `test_capabilities.py` | `GET /v1/capabilities` is public and reports the optional features: `memory` (pgvector) and `memory_graph` (the knowledge graph, only while `NEO4J_ENABLED` and connected) apart |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 | `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema |

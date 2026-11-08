@@ -66,14 +66,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # The knowledge graph (Neo4j) is optional and off by default: the backend
-  # starts without it and memory search runs on Postgres (pgvector) alone.
-  # To record the graph (engrams, file lineage):
-  #   NEO4J_ENABLED=true docker compose --profile memory-graph up -d
+  # The knowledge graph (Neo4j) is optional and on by default. The backend
+  # does not depend on it: it starts without it and connects once Neo4j
+  # answers. To run without the graph (memory search stays on Postgres, file
+  # lineage says "not recorded"):
+  #   NEO4J_ENABLED=false docker compose up -d --scale neo4j=0
   neo4j:
     image: neo4j:5.26-enterprise
     container_name: factory-neo4j
-    profiles: ["memory-graph"]
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/factory}
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "eval"
@@ -142,7 +142,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-factory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-factory}
-      NEO4J_ENABLED: ${NEO4J_ENABLED:-false}
+      NEO4J_ENABLED: ${NEO4J_ENABLED:-true}
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}

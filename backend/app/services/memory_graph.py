@@ -1,6 +1,6 @@
 """Whether the knowledge graph (Neo4j) is recorded, and how its absence reads.
 
-The graph is optional and off by default (``NEO4J_ENABLED``, issue #328).
+The graph is optional and on by default (``NEO4J_ENABLED``, issue #328).
 Off, nothing is written to it and every reader that needs it answers
 "not recorded" with the reason, never an error and never a silent empty
 list: an empty answer would read as "no decisions were made", which the

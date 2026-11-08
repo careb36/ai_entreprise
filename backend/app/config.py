@@ -226,7 +226,7 @@ class Settings(BaseSettings):
     # The knowledge graph is optional (issue #328): off, nothing is recorded
     # in it and its readers answer "not recorded"; memory search runs on
     # pgvector alone.
-    NEO4J_ENABLED: bool = False
+    NEO4J_ENABLED: bool = True
     AGENT_MODEL_POLICY: str = ""
     # The Manager agent (services/manager_agent.py): suggests each inbox
     # decision and takes alone only what the company's policy allows.

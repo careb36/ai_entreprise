@@ -31,8 +31,8 @@ def graph_on(monkeypatch):
     monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
 
 
-def test_graph_is_off_by_default():
-    assert Settings.model_fields["NEO4J_ENABLED"].default is False
+def test_graph_is_on_by_default_and_optional():
+    assert Settings.model_fields["NEO4J_ENABLED"].default is True
 
 
 # ── Readers ─────────────────────────────────────────────────────────────
@@ -333,3 +333,49 @@ def test_health_is_degraded_by_an_enabled_graph_that_is_down(graph_on, monkeypat
     assert document["status"] == "degraded"
     assert document["components"]["neo4j"]["status"] == "down"
     probe.assert_called_once()
+
+
+def test_an_unreachable_graph_is_connected_once_neo4j_answers(graph_on, monkeypatch):
+    """Neo4j starts slower than the backend: the graph comes on without a restart."""
+    import asyncio
+
+    driver = MagicMock()
+    attempts = []
+
+    def flaky():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise RuntimeError("bolt refused")
+        return driver
+
+    monkeypatch.setattr(lifecycle, "get_neo4j_driver", flaky)
+    monkeypatch.setattr(lifecycle, "ensure_memory_graph_schema", lambda d: None)
+    monkeypatch.setattr(lifecycle, "GRAPH_RETRY_SECONDS", 0)
+
+    async def scenario():
+        app = SimpleNamespace(state=SimpleNamespace())
+        lifecycle._start_memory(app, True)
+        assert app.state.memory_graph is False
+        assert app.state.memory_client.graph_enabled is False
+        connected = await lifecycle._connect_graph_later(app, True)
+        return app.state, connected
+
+    state, connected = asyncio.run(scenario())
+    assert connected is True
+    assert state.memory_graph is True
+    assert state.memory_client.neo4j_driver is driver
+
+
+def test_the_retry_gives_up_and_leaves_memory_search(graph_on, monkeypatch):
+    import asyncio
+
+    def unreachable():
+        raise RuntimeError("bolt refused")
+
+    monkeypatch.setattr(lifecycle, "get_neo4j_driver", unreachable)
+    monkeypatch.setattr(lifecycle, "GRAPH_RETRY_SECONDS", 0)
+    monkeypatch.setattr(lifecycle, "GRAPH_RETRY_ATTEMPTS", 2)
+    app = SimpleNamespace(state=SimpleNamespace(memory_graph=False, memory_client=None))
+
+    assert asyncio.run(lifecycle._connect_graph_later(app, True)) is False
+    assert app.state.memory_graph is False
