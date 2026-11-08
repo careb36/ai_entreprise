@@ -120,6 +120,9 @@ Copy `.env.example` to `.env` and fill in:
   suggests the decision in a fixed format: approve or reject, a category and
   a reason, stored on the run (`suggested_*`, `reviewed_by`) apart from the
   approval a Manager records; an unusable answer leaves the run to people.
+  A run not verified yet waits `REVIEWER_VERIFY_GRACE_SECONDS` (60) after
+  its ingestion, so a producer that verifies right after is judged with the
+  verdict.
   `GET /v1/agent_runs/reviewer_record` counts how often its suggestions
   matched the decisions (unusable answers as misses) beside how often the
   Verifier's verdict alone would have (verified → approved, refuted →
