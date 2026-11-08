@@ -54,6 +54,7 @@ from models.mcp import McpServer
 from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
+from models.run_secret import RunSecret
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
@@ -155,6 +156,7 @@ SQLModel.metadata.create_all(
         Architecture.__table__,
         ApiToken.__table__,
         TaskEvent.__table__,
+        RunSecret.__table__,
     ],
 )
 

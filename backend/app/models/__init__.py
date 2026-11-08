@@ -28,6 +28,7 @@ from .mcp import McpServer
 from .procedure import Procedure
 from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
+from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
@@ -57,6 +58,7 @@ __all__ = [
     "ReviewComment",
     "RunPublication",
     "RunReview",
+    "RunSecret",
     "Specification",
     "Sprint",
     "TaskEvent",

@@ -34,6 +34,7 @@ from routers import (
     procedures_router,
     providers_router,
     reviews_router,
+    run_secrets_router,
     specifications_router,
     sprint_control_router,
     sprint_router,
@@ -108,6 +109,7 @@ app.include_router(inbox_router)
 app.include_router(messages_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
+app.include_router(run_secrets_router)
 app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(workspace_router)
