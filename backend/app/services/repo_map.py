@@ -14,6 +14,11 @@ its budget (``REPO_MAP_MAX_CHARS`` for the definitions; ``0`` leaves them
 out). It is context, never evidence: the reads the tools make are the
 observations.
 
+The daemon redacts secret-looking literals in the signatures it maps; the
+map is redacted again here, line by line, as the read replies are
+(``context_read.redact_secrets``), so an older daemon's map or a pattern only
+the backend knows never reaches a prompt with the value.
+
 A daemon that does not answer ``workspace.map`` (an older one) leaves the
 tree alone in the section; one that cannot list the project leaves the
 section out.
@@ -26,6 +31,8 @@ from collections.abc import Callable
 from typing import Any
 
 from config import settings
+
+from services.context_read import redact_secrets
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -70,7 +77,7 @@ def map_text(reply: dict[str, Any] | None) -> str:
     """The daemon's map, saying how many definitions it left out."""
     if not isinstance(reply, dict):
         return ""
-    text = str(reply.get("map") or "").strip()
+    text = redact_secrets("repository map", str(reply.get("map") or "")).strip()
     if not text:
         return ""
     total, shown = reply.get("definitions"), reply.get("shown")

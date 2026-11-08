@@ -329,3 +329,99 @@ def test_the_architecture_draft_reads_the_map_through_the_backends_nats(project)
     assert "class Store(dict)" in section and "workspace tools" not in section
     assert asyncio.run(prompt_map.fetch_section(None, str(project))) == ""
     assert asyncio.run(prompt_map.fetch_section(_Nats(), None)) == ""
+
+
+# --- hardening after review ---------------------------------------------------
+
+
+def test_secrets_in_signatures_never_reach_the_map_its_cache_or_a_prompt(
+    project, map_state
+):
+    import hashlib
+
+    source = (
+        'def connect(host, password="hunter2-very-secret", port=5432):\n    pass\n\n\n'
+        'def call(api_key: str = "sk-abcdefghijklmnopqrstuvwxyz", mode="r"):\n    pass\n'
+    )
+    (project / "src" / "db.py").write_text(source)
+    # An older, unredacted cache at the same project is not reused.
+    root = workspace_read._root(str(project))
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    map_state.mkdir(parents=True, exist_ok=True)
+    cache = map_state / (hashlib.sha256(str(root).encode()).hexdigest()[:32] + ".json")
+    cache.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "parses": {
+                    f".py:{digest}": {
+                        "defs": [
+                            [
+                                "connect",
+                                'def connect(password="hunter2-very-secret")',
+                                1,
+                                0,
+                            ]
+                        ],
+                        "refs": {},
+                    }
+                },
+                "maps": {},
+            }
+        )
+    )
+    text = daemon_map.build_map(str(project), 3000)["map"]
+    assert 'def connect(host, password="[redacted]", port=5432)' in text
+    assert "def call(api_key: str=\"[redacted]\", mode='r')" in text
+    on_disk = cache.read_text()
+    assert "hunter2" not in text + on_disk and "sk-abcdefghij" not in text + on_disk
+    # The backend redacts again at the prompt, for an older daemon's map.
+    shown = prompt_map.map_text(
+        {
+            "map": 'src/db.py:\n    1| def connect(password="hunter2-very-secret")\n    5| def ok()'
+        }
+    )
+    assert "hunter2" not in shown and "def ok()" in shown
+    assert "[line redacted: it looks like a secret]" in shown
+
+
+def test_an_ambiguous_name_gives_no_edges_and_ranking_keeps_to_the_deadline():
+    import time
+
+    parsed = {
+        f"pkg/m{i}.py": {
+            "defs": [["handle", "def handle()", 1, 0]],
+            "refs": {"handle": 1},
+        }
+        for i in range(daemon_map.MAP_MAX_DEFINERS + 5)
+    }
+    parsed["pkg/user.py"] = {"defs": [], "refs": {"handle": 3}}
+    ranked, late = daemon_map.rank_definitions(parsed)
+    assert late is False and all(d["refs"] == 0 for d in ranked)
+    ranked, late = daemon_map.rank_definitions(parsed, time.monotonic() - 1)
+    assert late is True and len(ranked) == len(parsed) - 1
+    ranks, cut = daemon_map._pagerank(
+        ["a", "b"], {"a": {"b": 1.0}}, time.monotonic() - 1
+    )
+    assert cut is True and set(ranks) == {"a", "b"}
+
+
+def test_a_fifo_named_like_source_is_never_read(project):
+    import os
+    import threading
+
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("no FIFOs here")
+    os.mkfifo(project / "src" / "events.py")
+    results = []
+    worker = threading.Thread(
+        target=lambda: results.append(daemon_map.build_map(str(project), 3000)),
+        daemon=True,
+    )
+    worker.start()
+    worker.join(15)
+    if worker.is_alive():  # unblock the reader so the suite can end
+        with open(project / "src" / "events.py", "w"):
+            pass
+        pytest.fail("the map blocked on a FIFO")
+    assert "class Store" in results[0]["map"]

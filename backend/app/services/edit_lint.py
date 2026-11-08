@@ -16,6 +16,20 @@ does a project whose profile names none (the syntax check is then the only
 one). The run is part of the edit's observation (``lint``: the command, the
 exit status, whether it was available, the sha256 of its output), never a
 verdict: the delivery's own checks decide.
+
+The lint never writes: a file it rewrote would sit outside the edit's
+working copy (``workspace.edit.finish`` would neither restore nor deliver
+it, and the next edit of it would fail the saved-hash check). A command
+naming an autofix or write option (``--fix``, ``--write``, ``-w``,
+``rubocop -a``, ``ruff format``, ``cargo fix``, ``dotnet format`` without
+``--verify-no-changes``…), or the package's ``lint`` script when its text
+names one (``npm run lint`` with ``eslint . --fix``), is not run, and the
+result says why; dry runs (``--fix-dry-run``) are fine. What else a company's
+own wrapper does is not visible here.
+
+What the linter printed is shown with every secret-looking line redacted
+(``context_read.redact_secrets``, as the read replies are), before it is
+cut; the observation keeps the sha256 of the output as it was.
 """
 
 from __future__ import annotations
@@ -27,6 +41,8 @@ import re
 from typing import Any
 
 from config import settings
+
+from services.context_read import redact_secrets
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -54,6 +70,42 @@ _UNAVAILABLE = (
     "missing script",
 )
 _UNSET = object()
+# Options that make a linter rewrite files, and commands that only format.
+_WRITE_FLAGS = {
+    "--fix",
+    "--fix-only",
+    "--unsafe-fixes",
+    "--write",
+    "-w",
+    "--apply",
+    "--autofix",
+    "--autocorrect",
+    "--auto-correct",
+    "--autocorrect-all",
+    "--auto-correct-all",
+    "--in-place",
+}
+# Short options that write only for the linter that defines them
+# (``cargo clippy -- -A lint`` allows a lint; ``rubocop -A`` rewrites).
+_WRITE_SHORT = {"rubocop": {"-a", "-A"}}
+# Formatters that rewrite unless told to check (``--check``, ``--diff``).
+_WRITE_COMMANDS = (
+    ("ruff", "format"),
+    ("black",),
+    ("isort",),
+    ("prettier",),
+    ("rustfmt",),
+    ("cargo", "fmt"),
+    ("go", "fmt"),
+    ("cargo", "fix"),
+)
+_SCRIPT_RUNNERS = (
+    ("npm", "run", "lint"),
+    ("yarn", "lint"),
+    ("yarn", "run", "lint"),
+    ("pnpm", "lint"),
+    ("pnpm", "run", "lint"),
+)
 
 
 def load_profile(
@@ -91,6 +143,41 @@ def profile_of(box: Any) -> dict[str, Any] | None:
             logger.warning("Could not read the stack profile for the lint: %s", exc)
     box._lint_profile = profile
     return profile
+
+
+def writes_files(command: str, profile: dict[str, Any] | None = None) -> str:
+    """Why *command* (or the package ``lint`` script it runs) may rewrite
+    files, or ``""``."""
+    words = command.split()
+    for word in words:
+        flag = word.split("=", 1)[0]
+        if flag in _WRITE_FLAGS:
+            return f"it names `{word}`, which rewrites files"
+    bare = [w.rsplit("/", 1)[-1] for w in words if "=" not in w or w.startswith("-")]
+    for tool, shorts in _WRITE_SHORT.items():
+        if tool in bare and shorts.intersection(bare):
+            return (
+                f"`{tool} {' '.join(sorted(shorts.intersection(bare)))}` rewrites files"
+            )
+    for i in range(len(bare)):
+        for verb in _WRITE_COMMANDS:
+            if tuple(bare[i : i + len(verb)]) == verb:
+                if verb[:2] not in (("go", "fmt"), ("cargo", "fix")) and (
+                    "--check" in bare or "--diff" in bare
+                ):
+                    continue
+                return f"`{' '.join(verb)}` rewrites files"
+        if (
+            bare[i : i + 2] == ["dotnet", "format"]
+            and "--verify-no-changes" not in bare
+        ):
+            return "`dotnet format` without --verify-no-changes rewrites files"
+    script = str((profile or {}).get("lint_script") or "")
+    if script and any(tuple(bare[: len(r)]) == r for r in _SCRIPT_RUNNERS):
+        why = writes_files(script)
+        if why:
+            return f"the package's lint script (`{script[:120]}`): {why}"
+    return ""
 
 
 def narrowed(command: str, path: str) -> tuple[str, bool]:
@@ -141,6 +228,13 @@ def after_edit(
     run, narrow = narrowed(command, path)
     record: dict[str, Any] = {"ran": False, "command": run, "narrowed": narrow}
     extra["lint"] = record
+    writes = writes_files(run, profile)
+    if writes:
+        record["reason"] = f"the lint command may rewrite files: {writes}"
+        return (
+            f"\n\nLint not run: `{run}` may rewrite files outside the edit ({writes}); "
+            f"the syntax check ({checked}) is the only check."
+        )
     if getattr(box, "sandbox_error", None):
         record["reason"] = box.sandbox_error
         return f"\n\nLint not run: {box.sandbox_error}"
@@ -170,6 +264,9 @@ def after_edit(
     )
     if isinstance(result.get("sandbox"), dict):
         record["sandbox"] = result["sandbox"]
+    # What the model sees, without the values of secret-looking lines; the
+    # hash above is of the output as it was.
+    output = redact_secrets(path, output)
     if result.get("refused"):
         record["refused"] = True
         return f"\n\nLint refused by the command policy: {result.get('error')}"

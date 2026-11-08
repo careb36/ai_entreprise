@@ -245,6 +245,8 @@ def _refine(profile: dict[str, Any], root: str, names: list[str]) -> dict[str, A
             profile["start"] = None
         if not str(scripts.get("lint") or "").strip():
             profile["lint"] = None
+        else:  # What `npm run lint` runs: the lint after an edit never writes.
+            profile["lint_script"] = str(scripts["lint"]).strip()
         for script in _NPM_E2E_SCRIPTS:
             if str(scripts.get(script) or "").strip():
                 profile["e2e"] = f"npm run {script} --silent"

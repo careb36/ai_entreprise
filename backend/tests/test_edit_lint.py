@@ -340,3 +340,77 @@ def test_the_worker_s_toolbox_lints_only_where_it_may_edit(project, monkeypatch)
         assert editor.lint_profile.args[1:3] == (1, str(project))
     finally:
         developer_tools.unbind()
+
+
+# --- hardening after review ---------------------------------------------------
+
+
+def test_a_secret_the_linter_prints_is_redacted_and_the_hash_kept(project, daemon):
+    secret = 'password = "hunter2-very-secret"'
+    (project / "leak.py").write_text(
+        "import sys\n"
+        f"print('src/greet.py:1:1: S105 hardcoded: ' + {secret!r})\n"
+        "print('src/greet.py:2:5: E501 line too long')\n"
+        "sys.exit(1)\n"
+    )
+    box = _box(daemon, project, f"{PY} leak.py .")
+    observation, text = box.call(
+        _call(
+            "workspace__edit",
+            path="src/greet.py",
+            search="return name",
+            replace="return name.upper()",
+        ),
+        1,
+    )
+    assert "hunter2-very-secret" not in text
+    assert "[line redacted: it looks like a secret]" in text
+    assert "src/greet.py:2:5: E501 line too long" in text
+    # The observation's hash is of what the linter printed, unredacted.
+    import hashlib
+
+    printed = f"src/greet.py:1:1: S105 hardcoded: {secret}\nsrc/greet.py:2:5: E501 line too long\n"
+    assert (
+        observation["lint"]["output_sha256"]
+        == hashlib.sha256(printed.encode()).hexdigest()
+    )
+    box.close()
+
+
+def test_a_lint_command_that_rewrites_files_is_not_run(project, daemon):
+    box = _box(daemon, project, f"{PY} lint.py --fix .")
+    observation, text = box.call(
+        _call(
+            "workspace__edit",
+            path="src/greet.py",
+            search="return name",
+            replace="return name.lower()",
+        ),
+        1,
+    )
+    assert text.startswith(
+        f"Lint not run: `{PY} lint.py --fix src/greet.py` may rewrite"
+    )
+    assert (
+        observation["lint"]["ran"] is False and "--fix" in observation["lint"]["reason"]
+    )
+    assert "workspace.execute" not in [s for s, _p, _t in box.requester.requests]
+    # A later edit of the same file still passes the saved-hash check, and
+    # finish restores the original.
+    again, _text = box.call(
+        _call("workspace__edit", path="src/greet.py", search="lower", replace="strip"),
+        2,
+    )
+    assert again["is_error"] is False
+    box.close()
+    assert (
+        project / "src" / "greet.py"
+    ).read_text() == "def greet(name):\n    return name\n"
+    # The package's lint script is read too; dry runs and checks are fine.
+    w = edit_lint.writes_files
+    assert w("npm run lint --if-present", {"lint_script": "eslint . --fix"})
+    assert not w("npm run lint --if-present", {"lint_script": "eslint ."})
+    assert w("bundle exec rubocop -A") and not w("cargo clippy -- -D warnings -A x")
+    assert w("dotnet format") and not w("dotnet format --verify-no-changes")
+    assert w("ruff format src") and not w("ruff format --check src")
+    assert not w("ruff check --fix-dry-run .") and not w("python -m ruff check .")
