@@ -84,8 +84,11 @@ def extract_claimed_paths(claims: dict | None) -> list[str]:
     return paths
 
 
-def check_claimed_files_present(run: AgentRun) -> dict:
-    paths = extract_claimed_paths(run.claims)
+def check_claimed_files_present(run: AgentRun, evidence: dict | None = None) -> dict:
+    # A file the workspace edit tool changed comes from the tool's record (an
+    # observation, ``services/workspace_edits.py``), not from the answer's text.
+    edited = context_read.files_edited((evidence or {}).get("tool_calls"))
+    paths = [p for p in extract_claimed_paths(run.claims) if p not in edited]
     if not paths:
         return {
             "name": "claimed_files_present",
@@ -392,7 +395,7 @@ def verify_agent_run(
 ) -> Verification:
     checks = [
         check_artifact_nonempty(run),
-        check_claimed_files_present(run),
+        check_claimed_files_present(run, evidence),
         check_claimed_tests_evidenced(run, evidence),
     ]
     # A claim that files were written is only settleable against a daemon

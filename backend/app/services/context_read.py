@@ -47,6 +47,19 @@ def files_read(tool_calls: Any) -> dict[str, str | None]:
     return read
 
 
+def files_edited(tool_calls: Any) -> set[str]:
+    """The files the workspace edit tool changed in a run, by the daemon's record."""
+    return {
+        call["path"]
+        for call in tool_calls or []
+        if isinstance(call, dict)
+        and call.get("server") == SERVER
+        and call.get("tool") == "edit"
+        and not call.get("is_error")
+        and isinstance(call.get("path"), str)
+    }
+
+
 def check_context_read(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     """The Verifier's ``context_read`` check: of the files the delivery
     modified (the daemon says which existed before), which the Developer had

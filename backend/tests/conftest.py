@@ -106,6 +106,8 @@ def daemon_state_in_tmp(monkeypatch, tmp_path):
     writes under ``FABRIQUE_DAEMON_STATE``; each test gets its own, never
     the developer's home."""
     monkeypatch.setenv("FABRIQUE_DAEMON_STATE", str(tmp_path / "daemon-state"))
+    # The edit tool's originals (``vscode-daemon/workspace_edit.py``) too.
+    monkeypatch.setenv("FABRIQUE_EDIT_STATE", str(tmp_path / "edit-state"))
 
 
 @pytest.fixture(autouse=True)
