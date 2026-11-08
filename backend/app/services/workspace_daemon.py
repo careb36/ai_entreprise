@@ -326,9 +326,12 @@ def detect_install_command(workspace_root: str) -> str | None:
                 text = fh.read()
         except OSError:
             text = ""
+        # A Poetry project installs its dependencies with Poetry, whether it
+        # is a package or not (``package-mode = false`` cannot be built by
+        # pip); an editable pip install is for a PEP 621 package.
+        if "[tool.poetry]" in text:
+            return "poetry install"
         if "[project]" in text:
-            return "pip install -e ."
-        if "[tool.poetry]" in text and "package-mode = false" not in text:
             return "pip install -e ."
     if os.path.isfile(os.path.join(root, "Cargo.toml")):
         return "cargo build"

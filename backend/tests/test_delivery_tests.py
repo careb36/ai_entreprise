@@ -84,6 +84,39 @@ def test_install_command_detection(no_override, tmp_path):
     )
 
 
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("[project]\nname = 'x'\n", "pip install -e ."),
+        ("[tool.poetry]\nname = 'x'\n", "poetry install"),
+        # This repository's backend: Poetry without a package to build.
+        ("[tool.poetry]\npackage-mode = false\n", "poetry install"),
+        ("[project]\n[tool.poetry]\npackage-mode=false\n", "poetry install"),
+        ("[tool.pytest.ini_options]\n", None),
+    ],
+)
+def test_a_python_project_gets_the_installer_its_metadata_names(
+    no_override, tmp_path, content, expected
+):
+    (tmp_path / "pyproject.toml").write_text(content)
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == expected
+
+
+def test_a_pyproject_that_is_not_utf8_does_not_break_detection(no_override, tmp_path):
+    (tmp_path / "pyproject.toml").write_bytes(b"[project]\nname = '\xff\xfe'\n")
+    assert workspace_daemon.detect_install_command(str(tmp_path)) == "pip install -e ."
+
+
+@pytest.mark.parametrize("marker", ["build.gradle", "build.gradle.kts"])
+def test_gradle_installs_by_compiling_the_tests(no_override, tmp_path, marker):
+    # `gradle dependencies` only reports; resolving what the tests need fails
+    # on a missing artifact.
+    (tmp_path / marker).write_text("")
+    assert (
+        workspace_daemon.detect_install_command(str(tmp_path)) == "gradle testClasses"
+    )
+
+
 def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
     assert task_worker._detect_test_command(str(tmp_path)) is None
