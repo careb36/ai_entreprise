@@ -24,6 +24,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 
 from config import settings
+
+# The tests never call models.dev: the catalogue stays on its snapshot.
+settings.MODELS_CATALOG_REFRESH_HOURS = 0
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification
@@ -49,6 +52,7 @@ from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.mcp import McpServer
 from models.procedure import Procedure
+from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
@@ -135,6 +139,7 @@ SQLModel.metadata.create_all(
         AgentMessage.__table__,
         Procedure.__table__,
         McpServer.__table__,
+        ProviderConnection.__table__,
         RunReview.__table__,
         ReviewComment.__table__,
         RunPublication.__table__,
