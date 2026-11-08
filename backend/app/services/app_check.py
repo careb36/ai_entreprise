@@ -7,11 +7,15 @@ Around the delivery test run (``workspace_daemon.run_delivery_tests``):
   install in that folder saw (the sha256 in the daemon's write report against
   ``Company.dependency_installs``), the profile's install command runs through
   ``workspace.execute`` in the same sandbox as the tests, bounded by
-  ``DELIVERY_INSTALL_TIMEOUT_SECONDS``, with the network open unless
-  ``DELIVERY_INSTALL_NETWORK`` is false (a registry is needed). The daemon's
-  reply is ``evidence["dependency_install"]``; the Verifier's
-  ``dependencies_installed`` check reads it. The manifests are recorded as
-  installed only after an install that exited 0, so a failed one is retried.
+  ``DELIVERY_INSTALL_TIMEOUT_SECONDS``, with the network as
+  ``DELIVERY_INSTALL_NETWORK`` says whatever the sandbox's own setting (open
+  by default: a registry is needed). The daemon's reply is
+  ``evidence["dependency_install"]``; the Verifier's
+  ``dependencies_installed`` check reads it. Only the manifests that install
+  covers (``stack_profiles.installed_by``: a detected command, its own
+  stack's manifests in the root; a named one, all) are recorded as installed,
+  and only after it exited 0, so a failed one is retried and a manifest no
+  install ran for (``not_covered``) is never taken as installed.
 - **Run the application** (``DELIVERY_APP_CHECK_ENABLED``, off by default:
   it runs agent-written code): the profile's start command runs in the
   sandbox (``workspace.app.check``, ``vscode-daemon/app_run.py``), the daemon
@@ -44,6 +48,11 @@ CHECK_E2E = "e2e_run"
 OUTPUT_TAIL_CHARS = 2000
 # What the backend adds to the daemon's own bounds before it stops waiting.
 _REPLY_MARGIN_SECONDS = 30.0
+# The application check's bounded phases beyond the ready and e2e bounds, as
+# ``vscode-daemon/app_run.py`` sets them: ``docker run -d`` (LAUNCH_SECONDS,
+# 120 s, a cold image is pulled), the last inspect and probe and the teardown
+# (logs, removal), each a runtime call of RUNTIME_CALL_SECONDS (30 s).
+_APP_OVERHEAD_SECONDS = 120.0 + 4 * 30.0
 
 
 class Context:
@@ -74,6 +83,26 @@ class Context:
                 detected, self.company().get("overrides")
             )
         return self._profile
+
+    async def test_command(self) -> tuple[str | None, str]:
+        """The delivery's test command and, without one, why.
+
+        An empty ``test`` in the company's profile turns the tests off; a
+        command the company or the deployment named runs as named; otherwise
+        the detected profile's, which is absent when the project has no suite
+        (npm's placeholder script, nothing for pytest to collect), and then
+        the older detector (another runner's suite beside the root stack)."""
+        own = self.company().get("overrides") or {}
+        if "test" in own and own["test"] is not None and not str(own["test"]).strip():
+            return None, "tests turned off by the company's stack profile"
+        command = (await self.profile()).get("test")
+        if not command:
+            from services import workspace_daemon
+
+            command = await workspace_daemon.detect_project_test_command(
+                self.nats, self.evidence.get("workspace_root") or ""
+            )
+        return (command or None), "no test command found"
 
 
 def _read_company(sprint: dict[str, Any], engine: Any) -> dict[str, Any]:
@@ -200,16 +229,28 @@ async def install_if_needed(ctx: Context) -> None:
         return
     profile = await ctx.profile()
     command = profile.get("install")
-    base = {
-        "manifests": changed,
+    covered = [m for m in changed if stack_profiles.installed_by(profile, m["path"])]
+    base: dict[str, Any] = {
+        "manifests": covered if command else changed,
         "stack": profile.get("stack"),
         "source": (profile.get("source") or {}).get("install"),
     }
+    if command and len(covered) < len(changed):
+        # Changed, but not what this install installs: never recorded as installed.
+        base["not_covered"] = [m for m in changed if m not in covered]
     if not command:
         evidence["dependency_install"] = {
             **base,
             "command": None,
             "reason": "no install command for this project's stack",
+        }
+        return
+    if not covered:
+        paths = ", ".join(m["path"] for m in changed)
+        evidence["dependency_install"] = {
+            **base,
+            "command": None,
+            "reason": f"`{command}` in the project's root does not install {paths}",
         }
         return
     from services import sandbox
@@ -221,8 +262,9 @@ async def install_if_needed(ctx: Context) -> None:
     except sandbox.PolicyUnavailable as e:
         evidence["dependency_install"] = {**base, "command": command, "reason": str(e)}
         return
-    if settings.DELIVERY_INSTALL_NETWORK:
-        box = {**box, "network": True}
+    # The install's own setting, both ways: a registry may be needed, and a
+    # lifecycle script must not reach the network when it is turned off.
+    box = {**box, "network": bool(settings.DELIVERY_INSTALL_NETWORK)}
     timeout = float(settings.DELIVERY_INSTALL_TIMEOUT_SECONDS)
     try:
         reply = await ctx.nats.request(
@@ -254,7 +296,7 @@ async def install_if_needed(ctx: Context) -> None:
                     ctx.engine,
                     company_id,
                     evidence["workspace_root"],
-                    changed,
+                    covered,
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install: %s", e)
@@ -325,7 +367,10 @@ async def check_application(ctx: Context) -> None:
                 "sandbox": box,
                 "sprint_id": ctx.sprint.get("id"),
             },
-            timeout=ready + (e2e_timeout if e2e else 0) + _REPLY_MARGIN_SECONDS,
+            timeout=ready
+            + (e2e_timeout if e2e else 0)
+            + _APP_OVERHEAD_SECONDS
+            + _REPLY_MARGIN_SECONDS,
         )
     except Exception as e:  # noqa: BLE001 - A silent daemon leaves it unverified.
         evidence["app_run"] = {

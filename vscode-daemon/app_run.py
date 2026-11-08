@@ -46,6 +46,12 @@ PROBE_TIMEOUT_SECONDS = 10
 STOP_GRACE_SECONDS = 5
 LOG_TAIL_CHARS = 4000
 POLL_SECONDS = 0.2
+# Container mode: how long ``docker run -d`` may take (a cold image is pulled),
+# and each later runtime call (inspect, exec, logs, rm). The backend's reply
+# wait (``services/app_check.py``) adds these to the ready and e2e bounds.
+LAUNCH_SECONDS = 120
+RUNTIME_CALL_SECONDS = 30
+_WINDOWS = os.name == "nt"
 
 # Run inside a container to probe the application there: whichever HTTP
 # client the image has. Prints the status code; fails when nothing answers.
@@ -124,34 +130,36 @@ def _await_group(pgid: int) -> None:
             time.sleep(POLL_SECONDS / 5)
 
 
-def _stop_host(process: subprocess.Popen) -> bool:
-    """Stop the application and everything it started."""
+def _stop_host(process: subprocess.Popen, port: int) -> bool:
+    """Stop the application and everything it started; ``True`` only once the
+    port no longer answers, so a program that outlived the stop is reported."""
     stopped = _signal_leader(process)
-    if os.name != "nt":
+    if not _WINDOWS:
         _await_group(process.pid)
-    return stopped
+    return stopped and not port_in_use(port)
 
 
 def _signal_leader(process: subprocess.Popen) -> bool:
+    if _WINDOWS:
+        # terminate() would stop only the cmd/PowerShell wrapper: kill the tree.
+        sandbox.kill_tree(process)
+        try:
+            process.wait(timeout=STOP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            return False
+        return True
     if process.poll() is not None:
-        if os.name != "nt":
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                pass
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
         return True
     try:
-        if os.name == "nt":
-            process.terminate()
-        else:
-            os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(process.pid, signal.SIGTERM)
         process.wait(timeout=STOP_GRACE_SECONDS)
     except (subprocess.TimeoutExpired, ProcessLookupError, PermissionError):
         try:
-            if os.name == "nt":
-                process.kill()
-            else:
-                os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(process.pid, signal.SIGKILL)
             process.wait(timeout=STOP_GRACE_SECONDS)
         except (subprocess.TimeoutExpired, ProcessLookupError, PermissionError):
             return False
@@ -169,7 +177,7 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
         process = subprocess.Popen(
             shell_exec.build_shell_command(req["start"]),
             cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
-            start_new_session=os.name != "nt",
+            start_new_session=not _WINDOWS,
         )
         out["started"] = True
         began = time.monotonic()
@@ -188,12 +196,14 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
             if out.get("listening"):
                 out["probe"] = http_probe(req["app_url"] + req["probe_path"])
                 if req.get("e2e"):
+                    # Its own group: a timed-out runner's children go with it.
                     run = sandbox.run_bounded(
-                        shell_exec.build_shell_command(req["e2e"]), req["e2e_seconds"], cwd=cwd, env=env
+                        shell_exec.build_shell_command(req["e2e"]), req["e2e_seconds"],
+                        cwd=cwd, env=env, own_group=True,
                     )
                     out["e2e"] = _e2e_record(req, run)
         finally:
-            out["stopped"] = _stop_host(process)
+            out["stopped"] = _stop_host(process, port)
         log.seek(0, os.SEEK_END)
         size = log.tell()
         log.seek(max(0, size - LOG_TAIL_CHARS))
@@ -210,8 +220,15 @@ def _e2e_record(req: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
     return record
 
 
-def _docker(runtime: str, *args: str, timeout: float = 30) -> subprocess.CompletedProcess:
+def _docker(runtime: str, *args: str, timeout: float = RUNTIME_CALL_SECONDS) -> subprocess.CompletedProcess:
     return subprocess.run([runtime, *args], capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def _remove(runtime: str, name: str) -> bool:
+    try:
+        return _docker(runtime, "rm", "-f", name).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
@@ -221,43 +238,63 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     argv.remove("--rm")  # Kept until its log is read; removed below.
     argv[2:2] = ["-d", "-e", f"PORT={req['port']}", "-e", f"APP_URL={req['app_url']}"]
     out: Dict[str, Any] = {"sandbox": sandbox.report(box, runtime)}
-    started = subprocess.run(argv, capture_output=True, text=True, timeout=120, check=False)
-    if started.returncode != 0:
-        _docker(runtime, "rm", "-f", name)
-        return {"error": f"{os.path.basename(runtime)} could not start the container: "
-                         f"{started.stderr.strip()[-500:] or 'no message'}"}
-    out["started"] = True
+    # From the launch on, the container is removed by name whatever happens:
+    # a launch that timed out may still have created it, and a log that cannot
+    # be read must not leave it running with the worktree mounted.
+    try:
+        try:
+            started = subprocess.run(argv, capture_output=True, text=True, timeout=LAUNCH_SECONDS, check=False)
+        except subprocess.TimeoutExpired:
+            out["error"] = f"{os.path.basename(runtime)} did not start the container within {LAUNCH_SECONDS}s"
+            return out
+        if started.returncode != 0:
+            out["error"] = (f"{os.path.basename(runtime)} could not start the container: "
+                            f"{started.stderr.strip()[-500:] or 'no message'}")
+            return out
+        out["started"] = True
+        try:
+            _watch_container(runtime, name, req, out)
+        except subprocess.SubprocessError as exc:
+            out["error"] = f"the container runtime did not answer: {exc}"
+    finally:
+        try:
+            if out.get("started"):
+                logs = _docker(runtime, "logs", "--tail", "400", name)
+                out["log"] = _tail(f"{logs.stdout}{logs.stderr}")
+        except (OSError, subprocess.SubprocessError) as exc:
+            out["log"] = _tail(f"(the container's log could not be read: {exc})")
+        finally:
+            out["stopped"] = _remove(runtime, name)
+    return out
+
+
+def _watch_container(runtime: str, name: str, req: Dict[str, Any], out: Dict[str, Any]) -> None:
+    """Wait for the application inside the container to answer, then run the e2e command."""
     env_args = ["-e", f"APP_URL={req['app_url']}", "-e", f"PROBE_PATH={req['probe_path']}"]
     began = time.monotonic()
-    try:
-        while True:
-            state = _docker(runtime, "inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", name).stdout.split()
-            if state and state[0] != "true":
-                out["exit_code"] = int(state[1]) if len(state) > 1 and state[1].lstrip("-").isdigit() else None
-                break
-            probe = _docker(runtime, "exec", *env_args, name, "/bin/sh", "-c", _CONTAINER_PROBE)
-            status = probe.stdout.strip().splitlines()[-1:] if probe.returncode == 0 else []
-            if status and status[0].isdigit():
-                out["listening"] = True
-                out["ready_seconds"] = round(time.monotonic() - began, 2)
-                out["probe"] = {"url": req["app_url"] + req["probe_path"], "status": int(status[0])}
-                break
-            if probe.returncode == 2:
-                out["error"] = "the sandbox image has no HTTP client (curl, python3 or node) to probe with"
-                break
-            if time.monotonic() - began > req["ready_seconds"]:
-                break
-            time.sleep(POLL_SECONDS)
-        if out.get("listening") and req.get("e2e"):
-            run = sandbox.run_bounded(
-                [runtime, "exec", *env_args, name, "/bin/sh", "-c", req["e2e"]], req["e2e_seconds"]
-            )
-            out["e2e"] = _e2e_record(req, run)
-    finally:
-        logs = _docker(runtime, "logs", "--tail", "400", name)
-        out["log"] = _tail(f"{logs.stdout}{logs.stderr}")
-        out["stopped"] = _docker(runtime, "rm", "-f", name).returncode == 0
-    return out
+    while True:
+        state = _docker(runtime, "inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", name).stdout.split()
+        if state and state[0] != "true":
+            out["exit_code"] = int(state[1]) if len(state) > 1 and state[1].lstrip("-").isdigit() else None
+            break
+        probe = _docker(runtime, "exec", *env_args, name, "/bin/sh", "-c", _CONTAINER_PROBE)
+        status = probe.stdout.strip().splitlines()[-1:] if probe.returncode == 0 else []
+        if status and status[0].isdigit():
+            out["listening"] = True
+            out["ready_seconds"] = round(time.monotonic() - began, 2)
+            out["probe"] = {"url": req["app_url"] + req["probe_path"], "status": int(status[0])}
+            break
+        if probe.returncode == 2:
+            out["error"] = "the sandbox image has no HTTP client (curl, python3 or node) to probe with"
+            break
+        if time.monotonic() - began > req["ready_seconds"]:
+            break
+        time.sleep(POLL_SECONDS)
+    if out.get("listening") and req.get("e2e"):
+        run = sandbox.run_bounded(
+            [runtime, "exec", *env_args, name, "/bin/sh", "-c", req["e2e"]], req["e2e_seconds"]
+        )
+        out["e2e"] = _e2e_record(req, run)
 
 
 def check_application(data: Dict[str, Any]) -> Dict[str, Any]:

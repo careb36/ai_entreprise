@@ -165,6 +165,8 @@ PROFILES: tuple[dict[str, Any], ...] = (
 )
 
 _NPM_E2E_SCRIPTS = ("test:e2e", "e2e")
+# The ``test`` script ``npm init`` writes: it fails on purpose, no suite.
+NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
 
 
 def _matches(relative: str, patterns: tuple[str, ...]) -> bool:
@@ -188,6 +190,24 @@ def manifest_patterns() -> tuple[str, ...]:
 def is_manifest(path: str) -> bool:
     """Whether *path* is a dependency manifest of some stack."""
     return bool(path) and _matches(path.replace("\\", "/"), manifest_patterns())
+
+
+def installed_by(profile: dict[str, Any], path: str) -> bool:
+    """Whether the profile's install command, run in the project's root,
+    installs the manifest at *path*. A command the company or the deployment
+    named is taken to install every manifest (a person chose it for that);
+    a detected one only its own stack's manifests in the root folder:
+    ``backend/requirements.txt`` is not what ``npm ci`` at the root installs."""
+    if (profile.get("source") or {}).get("install") in ("company", "deployment"):
+        return True
+    relative = (path or "").replace("\\", "/")
+    for pattern in profile.get("manifests") or ():
+        if "/" in pattern:
+            if fnmatch.fnmatchcase(relative, pattern):
+                return True
+        elif "/" not in relative and fnmatch.fnmatchcase(relative, pattern):
+            return True
+    return False
 
 
 def _root_files(root: str) -> list[str]:
@@ -218,6 +238,9 @@ def _refine(profile: dict[str, Any], root: str, names: list[str]) -> dict[str, A
     stack = profile["stack"]
     if stack == "node":
         scripts = _package_scripts(root)
+        test = str(scripts.get("test") or "").strip()
+        if not test or test == NPM_DEFAULT_TEST:
+            profile["test"] = None
         if not str(scripts.get("start") or "").strip():
             profile["start"] = None
         if not str(scripts.get("lint") or "").strip():
@@ -234,32 +257,66 @@ def _refine(profile: dict[str, Any], root: str, names: list[str]) -> dict[str, A
             profile["install"] = "npm ci --no-audit --no-fund"
     elif stack == "python":
         pyproject = _read(root, "pyproject.toml") if "pyproject.toml" in names else ""
+        # Poetry and Pipenv install into an environment of their own: the
+        # commands that need the dependencies run inside it.
+        runner = ""
         if "requirements.txt" in names:
             profile["install"] = "python -m pip install -r requirements.txt"
         elif "[tool.poetry]" in pyproject:
             profile["install"] = "poetry install"
+            runner = "poetry run "
         elif "[project]" in pyproject or "setup.py" in names:
             profile["install"] = "python -m pip install -e ."
         elif "Pipfile" in names:
             profile["install"] = "pipenv install --dev"
+            runner = "pipenv run "
+        profile["test"] = (
+            f"{runner}python -m pytest -q"
+            if _has_pytest_suite(root, names, pyproject)
+            else None
+        )
+        profile["lint"] = f"{runner}python -m ruff check ."
         if "manage.py" in names:
-            profile["start"] = "python manage.py runserver 0.0.0.0:$PORT --noreload"
+            profile["start"] = (
+                f"{runner}python manage.py runserver 0.0.0.0:$PORT --noreload"
+            )
         else:
             for entry in ("app.py", "main.py", "server.py"):
                 if entry in names:
-                    profile["start"] = f"python {entry}"
+                    profile["start"] = f"{runner}python {entry}"
                     break
     elif stack == "ruby":
         if os.path.isdir(os.path.join(root, "spec")):
             profile["test"] = "bundle exec rspec"
+        elif "Rakefile" not in names:
+            profile["test"] = None
         if os.path.isfile(os.path.join(root, "bin", "rails")):
             profile["start"] = "bin/rails server -b 0.0.0.0 -p $PORT"
             profile["port"] = 3000
         elif "config.ru" in names:
             profile["start"] = "bundle exec rackup -o 0.0.0.0 -p $PORT"
-    elif stack == "php" and "public" not in names:
+    elif stack == "php" and not (
+        {"phpunit.xml", "phpunit.xml.dist"} & set(names)
+        or os.path.isdir(os.path.join(root, "tests"))
+    ):
+        profile["test"] = None
+    if stack == "php" and "public" not in names:
         profile["start"] = "php -S 0.0.0.0:$PORT"
     return profile
+
+
+def _has_pytest_suite(root: str, names: list[str], pyproject: str) -> bool:
+    """pytest configuration, or a ``tests/`` folder with ``test_*.py`` files:
+    without either, ``pytest`` finds nothing and exits 5."""
+    if "pytest.ini" in names or "[tool.pytest" in pyproject:
+        return True
+    if "setup.cfg" in names and "[tool:pytest" in _read(root, "setup.cfg"):
+        return True
+    return any(
+        name.startswith("test_") and name.endswith(".py")
+        for _dir, _subdirs, files in os.walk(os.path.join(root, "tests"))
+        for name in files
+    )
 
 
 def detect(root: str) -> dict[str, Any] | None:

@@ -102,7 +102,7 @@ def _files(root, names: dict[str, str]) -> str:
             {"pyproject.toml": "[tool.poetry]\nname='x'\n", "manage.py": ""},
             "python",
             "poetry install",
-            "python manage.py runserver 0.0.0.0:$PORT --noreload",
+            "poetry run python manage.py runserver 0.0.0.0:$PORT --noreload",
             8000,
         ),
         ({"go.mod": "module x\n"}, "go", "go mod download", "go run .", 8080),
@@ -159,7 +159,69 @@ def test_each_stack_is_detected_with_its_commands(
     assert profile["install"] == install
     assert profile["start"] == start
     assert profile["port"] == port
-    assert profile["test"] and profile["probe_path"] == "/"
+    assert profile["probe_path"] == "/"
+
+
+@pytest.mark.parametrize(
+    ("files", "test", "start"),
+    [
+        (
+            {"package.json": json.dumps({"scripts": {"test": "jest"}})},
+            "npm test --silent",
+            None,
+        ),
+        (
+            {
+                "package.json": json.dumps(
+                    {"scripts": {"test": stack_profiles.NPM_DEFAULT_TEST}}
+                )
+            },
+            None,
+            None,
+        ),
+        ({"package.json": "{}"}, None, None),
+        ({"requirements.txt": "", "tests/test_a.py": ""}, "python -m pytest -q", None),
+        ({"requirements.txt": "", "app.py": ""}, None, "python app.py"),
+        (
+            {
+                "pyproject.toml": "[tool.poetry]\n[tool.pytest.ini_options]\n",
+                "main.py": "",
+            },
+            "poetry run python -m pytest -q",
+            "poetry run python main.py",
+        ),
+        (
+            {"Pipfile": "", "tests/test_a.py": "", "manage.py": ""},
+            "pipenv run python -m pytest -q",
+            "pipenv run python manage.py runserver 0.0.0.0:$PORT --noreload",
+        ),
+        (
+            {"Api.csproj": "<Project/>"},
+            "dotnet test",
+            "dotnet run --urls http://0.0.0.0:$PORT",
+        ),
+        (
+            {"composer.json": "{}", "phpunit.xml": ""},
+            "vendor/bin/phpunit",
+            "php -S 0.0.0.0:$PORT",
+        ),
+        ({"composer.json": "{}"}, None, "php -S 0.0.0.0:$PORT"),
+        ({"Gemfile": "", "Rakefile": ""}, "bundle exec rake test", None),
+        ({"Gemfile": "", "spec/a_spec.rb": ""}, "bundle exec rspec", None),
+        ({"Gemfile": ""}, None, None),
+    ],
+)
+def test_the_test_and_start_commands_follow_the_project_s_suite_and_environment(
+    tmp_path, files, test, start
+):
+    """No suite, no test command (npm's placeholder, nothing for pytest to
+    collect); Poetry and Pipenv run inside their own environment."""
+    profile = stack_profiles.detect(_files(tmp_path, files))
+    assert profile["test"] == test
+    assert profile["start"] == start
+    if "Pipfile" in files:
+        assert profile["install"] == "pipenv install --dev"
+        assert profile["lint"] == "pipenv run python -m ruff check ."
 
 
 def test_node_e2e_and_lint_scripts_come_from_package_json(tmp_path):
@@ -193,7 +255,7 @@ def test_overrides_deployment_then_company_and_empty_turns_a_step_off(
     tmp_path, monkeypatch
 ):
     detected = stack_profiles.detect(
-        _files(tmp_path, {"requirements.txt": "", "app.py": ""})
+        _files(tmp_path, {"requirements.txt": "", "app.py": "", "tests/test_a.py": ""})
     )
     monkeypatch.setattr(settings, "DELIVERY_START_COMMAND", "gunicorn app:app")
     monkeypatch.setattr(settings, "DELIVERY_APP_PORT", 9000)
@@ -253,6 +315,25 @@ def test_only_a_written_manifest_whose_hash_changed_calls_for_an_install():
         )
         == []
     )
+
+
+def test_only_the_manifests_the_install_covers_count_as_installed():
+    node = stack_profiles.resolve(
+        {
+            "stack": "node",
+            "install": "npm ci",
+            "manifests": ["package.json", "package-lock.json"],
+        },
+        {},
+    )
+    assert stack_profiles.installed_by(node, "package.json")
+    assert not stack_profiles.installed_by(node, "web/package.json")
+    assert not stack_profiles.installed_by(node, "backend/requirements.txt")
+    gradle = stack_profiles.template_for("java-gradle")
+    gradle["source"] = {"install": "detected"}
+    assert stack_profiles.installed_by(gradle, "gradle/libs.versions.toml")
+    named = stack_profiles.resolve(node, {"install": "make deps"})
+    assert stack_profiles.installed_by(named, "backend/requirements.txt")
 
 
 class _Daemon:
@@ -897,3 +978,325 @@ def test_a_manager_sets_the_stack_profile_and_a_viewer_reads_it(
     assert sqlite_session.get(Company, company.id).stack_profile["port"] == 8080
     cleared = test_client.put(url, json={"profile": {}}, headers=manager).json()
     assert cleared["overrides"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Review findings: install network and coverage, the resolved test command,
+# the integration's tests-only path, the reply budget and process cleanup
+# ---------------------------------------------------------------------------
+
+
+def _install(session, daemon, company, root, writes, profile=None):
+    evidence = {"workspace_root": str(root), "workspace_writes": writes}
+    ctx = app_check.Context(
+        daemon, {"company_id": company.id}, evidence, session.get_bind()
+    )
+    ctx._company = {"id": company.id, "overrides": {}, "installs": {}}
+    if profile is not None:
+        ctx._profile = profile
+    return ctx, evidence
+
+
+def test_install_network_follows_its_own_setting_both_ways(
+    sqlite_session, tmp_path, monkeypatch
+):
+    company = _company(sqlite_session)
+    monkeypatch.setattr(settings, "DELIVERY_INSTALL_COMMAND", f'{PY} -c "pass"')
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
+    monkeypatch.setattr(app_check, "_record_installed", lambda *a: None)
+    for allowed in (False, True):
+        monkeypatch.setattr(settings, "DELIVERY_INSTALL_NETWORK", allowed)
+        daemon = _Daemon()
+        ctx, _evidence = _install(
+            sqlite_session, daemon, company, tmp_path, [_write("requirements.txt", "a")]
+        )
+        asyncio.run(app_check.install_if_needed(ctx))
+        _subject, payload = daemon.requests[-1]
+        assert payload["sandbox"]["network"] is allowed
+
+
+def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
+    sqlite_session, tmp_path, monkeypatch
+):
+    """A root npm install says nothing of ``backend/requirements.txt``."""
+    company = _company(sqlite_session)
+    recorded = []
+    monkeypatch.setattr(
+        app_check, "_record_installed", lambda _e, _c, _r, m: recorded.append(m)
+    )
+    profile = stack_profiles.resolve(
+        {
+            "stack": "node",
+            "install": f"{PY} -c \"open('ran', 'a').write('x')\"",
+            "manifests": ["package.json", "package-lock.json"],
+        },
+        {},
+    )
+    writes = [_write("package.json", "p1"), _write("backend/requirements.txt", "r1")]
+    ctx, evidence = _install(
+        sqlite_session, _Daemon(), company, tmp_path, writes, profile
+    )
+    asyncio.run(app_check.install_if_needed(ctx))
+    record = evidence["dependency_install"]
+    assert record["exit_code"] == 0
+    assert [m["path"] for m in record["manifests"]] == ["package.json"]
+    assert [m["path"] for m in record["not_covered"]] == ["backend/requirements.txt"]
+    assert [[m["path"] for m in batch] for batch in recorded] == [["package.json"]]
+
+    daemon = _Daemon()
+    only = [_write("backend/requirements.txt", "r1")]
+    ctx, evidence = _install(sqlite_session, daemon, company, tmp_path, only, profile)
+    asyncio.run(app_check.install_if_needed(ctx))
+    record = evidence["dependency_install"]
+    assert (
+        record["command"] is None
+        and "does not install backend/requirements.txt" in record["reason"]
+    )
+    assert daemon.requests == [] and len(recorded) == 1
+    assert app_check.check_install(evidence)["outcome"] == "unverifiable"
+    assert (tmp_path / "ran").read_text() == "x"
+
+
+def _test_ctx(root, overrides=None):
+    evidence = {"workspace_root": str(root)}
+    ctx = app_check.Context(_Daemon(), {}, evidence, None)
+    ctx._company = {"id": None, "overrides": overrides or {}, "installs": {}}
+    return ctx
+
+
+def test_the_delivery_tests_run_the_resolved_profile_s_command(tmp_path):
+    php = tmp_path / "php"
+    _files(php, {"composer.json": "{}", "phpunit.xml": ""})
+    assert asyncio.run(_test_ctx(php).test_command())[0] == "vendor/bin/phpunit"
+    ruby = tmp_path / "ruby"
+    _files(ruby, {"Gemfile": "", "Rakefile": ""})
+    assert asyncio.run(_test_ctx(ruby).test_command())[0] == "bundle exec rake test"
+    # A company that names only the stack gets that stack's runner.
+    switched = asyncio.run(_test_ctx(ruby, {"stack": "go"}).test_command())
+    assert switched[0] == "go test ./..."
+    off = asyncio.run(_test_ctx(php, {"test": ""}).test_command())
+    assert off == (None, "tests turned off by the company's stack profile")
+    # npm's placeholder is no suite; another runner's suite still is.
+    mixed = tmp_path / "mixed"
+    _files(
+        mixed,
+        {
+            "package.json": json.dumps(
+                {"scripts": {"test": stack_profiles.NPM_DEFAULT_TEST}}
+            ),
+            "tests/test_a.py": "",
+        },
+    )
+    assert asyncio.run(_test_ctx(mixed).test_command())[0] == "python -m pytest -q"
+    bare = tmp_path / "bare"
+    _files(bare, {"package.json": "{}"})
+    assert asyncio.run(_test_ctx(bare).test_command()) == (
+        None,
+        "no test command found",
+    )
+
+
+def test_a_delivery_runs_the_profile_s_test_command(
+    sqlite_session, tmp_path, monkeypatch
+):
+    company = _company(sqlite_session)
+    monkeypatch.setattr(settings, "DELIVERY_INSTALL_ENABLED", False)
+    _files(tmp_path, {"Gemfile": "", "Rakefile": ""})
+    daemon = _Daemon()
+    evidence = {"workspace_root": str(tmp_path)}
+    from services import workspace_daemon
+
+    asyncio.run(
+        workspace_daemon.run_delivery_tests(
+            daemon,
+            {"id": None, "company_id": company.id},
+            evidence,
+            sqlite_session.get_bind(),
+        )
+    )
+    assert evidence["test_run"]["command"] == "bundle exec rake test"
+    executed = [p["command"] for s, p in daemon.requests if s == "workspace.execute"]
+    assert executed == ["bundle exec rake test"]
+
+
+def test_the_integration_runs_the_tests_alone(sqlite_session, tmp_path, monkeypatch):
+    company = _company(sqlite_session)
+    monkeypatch.setattr(settings, "DELIVERY_APP_CHECK_ENABLED", True)
+    monkeypatch.setattr(settings, "DELIVERY_TESTS_ENABLED", True)
+    monkeypatch.setattr(
+        settings, "DELIVERY_TEST_COMMAND", f"{PY} -c \"print('1 passed')\""
+    )
+    from services import integration
+
+    daemon = _Daemon()
+    test_run = asyncio.run(
+        integration._run_suite(
+            daemon,
+            sqlite_session.get_bind(),
+            {"sprint_id": None, "company_id": company.id},
+            str(tmp_path),
+        )
+    )
+    assert test_run["exit_code"] == 0
+    assert "workspace.app.check" not in daemon.subjects()
+
+
+def test_the_reply_wait_covers_the_container_launch_and_teardown(monkeypatch):
+    monkeypatch.setattr(settings, "DELIVERY_APP_CHECK_ENABLED", True)
+    monkeypatch.setattr(settings, "DELIVERY_APP_READY_TIMEOUT_SECONDS", 60)
+    waits = {}
+
+    class _Nats:
+        async def request(self, subject, payload, timeout=5.0):
+            waits[subject] = timeout
+            return {"started": True}
+
+    ctx = app_check.Context(_Nats(), {}, {"workspace_root": "/p"}, None)
+    ctx._company = {"id": None, "overrides": {}, "installs": {}}
+    ctx._profile = stack_profiles.resolve(
+        {"stack": "node", "start": "npm start", "port": 3000}, {}
+    )
+    monkeypatch.setattr(
+        "services.sandbox.request_for_sprint", lambda *_a: {"mode": "container"}
+    )
+    asyncio.run(app_check.check_application(ctx))
+    # docker run (120 s) and the runtime calls after the ready bound (4 x 30 s).
+    assert (
+        waits["workspace.app.check"]
+        >= 60 + app_run.LAUNCH_SECONDS + 4 * app_run.RUNTIME_CALL_SECONDS
+    )
+
+
+def test_a_launch_that_times_out_still_removes_the_container(
+    tmp_path, fake_docker, monkeypatch
+):
+    real_run = app_run.subprocess.run
+
+    def slow_run(argv, *a, **kw):
+        if argv[1:2] == ["run"]:
+            raise app_run.subprocess.TimeoutExpired(argv, kw.get("timeout"))
+        return real_run(argv, *a, **kw)
+
+    monkeypatch.setattr(app_run.subprocess, "run", slow_run)
+    reply = app_run.check_application(
+        {
+            "workspace_root": str(tmp_path),
+            "start_command": SERVE,
+            "port": _free_port(),
+            "sandbox": {"mode": "container"},
+        }
+    )
+    assert "did not start the container within" in reply["error"]
+    assert "started" not in reply
+    assert any(
+        line.startswith("rm -f fabrique-app-")
+        for line in fake_docker.read_text().splitlines()
+    )
+
+
+def test_a_log_that_cannot_be_read_still_removes_the_container(
+    tmp_path, fake_docker, monkeypatch
+):
+    work = tmp_path / "work"
+    work.mkdir()
+    real = app_run._docker
+
+    def failing_logs(runtime, *args, **kw):
+        if args[0] == "logs":
+            raise app_run.subprocess.TimeoutExpired([runtime, *args], 30)
+        return real(runtime, *args, **kw)
+
+    monkeypatch.setattr(app_run, "_docker", failing_logs)
+    port = _free_port()
+    reply = app_run.check_application(
+        {
+            "workspace_root": str(work),
+            "start_command": SERVE,
+            "port": port,
+            "ready_timeout_seconds": 20,
+            "sandbox": {"mode": "container"},
+        }
+    )
+    assert reply["listening"] and reply["stopped"], reply
+    assert "could not be read" in reply["log"]["output_tail"]
+    assert any(
+        line.startswith("rm -f ") for line in fake_docker.read_text().splitlines()
+    )
+
+
+def test_on_windows_the_whole_process_tree_is_killed(monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+
+    import sandbox as daemon_sandbox
+
+    calls = []
+    monkeypatch.setattr(daemon_sandbox, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(
+        daemon_sandbox,
+        "subprocess",
+        SimpleNamespace(run=lambda argv, **kw: calls.append(argv)),
+    )
+
+    class _Process:
+        pid = 4242
+        killed = False
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            self.killed = True
+
+    daemon_sandbox.kill_tree(_Process())
+    assert calls == [["taskkill", "/T", "/F", "/PID", "4242"]]
+    monkeypatch.undo()
+
+    # The application's stop asks for the tree, never terminate() alone.
+    trees = []
+    process = subprocess.Popen([PY, "-c", "import time; time.sleep(30)"])
+    monkeypatch.setattr(app_run, "_WINDOWS", True)
+    monkeypatch.setattr(
+        app_run.sandbox, "kill_tree", lambda p: (trees.append(p.pid), p.kill())
+    )
+    monkeypatch.setattr(
+        process, "terminate", lambda: (_ for _ in ()).throw(AssertionError("terminate"))
+    )
+    assert app_run._signal_leader(process)
+    assert trees == [process.pid]
+
+
+def _gone(pid: int) -> bool:
+    import time
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        try:
+            with open(f"/proc/{pid}/stat") as fh:
+                if fh.read().split(")")[-1].split()[0] == "Z":
+                    return True
+        except OSError:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="process groups are POSIX")
+def test_a_timed_out_e2e_command_leaves_no_child_running(tmp_path):
+    import sandbox as daemon_sandbox
+
+    pid_file = tmp_path / "child.pid"
+    hung = daemon_sandbox.run_bounded(
+        ["/bin/sh", "-c", f"sleep 60 & echo $! > {pid_file}; wait"], 1, own_group=True
+    )
+    assert hung["timed_out"]
+    assert _gone(int(pid_file.read_text()))
+    left = daemon_sandbox.run_bounded(
+        ["/bin/sh", "-c", f"sleep 60 & echo $! > {pid_file}"], 10, own_group=True
+    )
+    assert left["exit_code"] == 0
+    assert _gone(int(pid_file.read_text()))

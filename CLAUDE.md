@@ -186,24 +186,41 @@ Copy `.env.example` to `.env` and fill in:
   the profile's), `DELIVERY_APP_PROBE_PATH` (`/`) and `DELIVERY_TEST_COMMAND`
   override it for the deployment, and the company's own
   (`Company.stack_profile`, `GET`/`PUT /v1/companies/{id}/stack_profile`,
-  Viewer / Manager) override both; an empty command turns that step off. With
+  Viewer / Manager) override both; an empty command turns that step off.
+  The delivery tests run the resolved profile's test command (a company
+  naming only `stack` gets that stack's runner); a detected profile has none
+  without a suite (npm's placeholder `test` script, nothing for pytest to
+  collect, no `phpunit.xml` or `tests/`, no `Rakefile` or `spec/`), and then
+  the older detector looks for another runner's suite. Poetry and Pipenv
+  projects run their test, lint and start commands through `poetry run` /
+  `pipenv run`. With
   `DELIVERY_TESTS_ENABLED`: `DELIVERY_INSTALL_ENABLED` (true) installs the
   dependencies before the tests when a manifest the daemon wrote has a sha256
   other than the last successful install's in that folder
-  (`Company.dependency_installs`, written only after an exit 0), through
-  `workspace.execute` in the same sandbox, bounded by
+  (`Company.dependency_installs`, written only after an exit 0 and only for
+  the manifests that install covers, `stack_profiles.installed_by`: a
+  detected command its own stack's manifests in the project's root, a
+  command the company or deployment named every one; the rest are kept as
+  `not_covered`, and a delivery that changed only those runs no install and
+  says why), through `workspace.execute` in the same sandbox, bounded by
   `DELIVERY_INSTALL_TIMEOUT_SECONDS` (600; the daemon caps a requested
-  `timeout_seconds` at 900), with the network open for the registry unless
-  `DELIVERY_INSTALL_NETWORK` is false: the Verifier's `dependencies_installed`
-  check. `DELIVERY_APP_CHECK_ENABLED` (false: it runs agent code) has the
+  `timeout_seconds` at 900), with the network as `DELIVERY_INSTALL_NETWORK`
+  says (true, for the registry) whatever `DELIVERY_SANDBOX_NETWORK` says:
+  the Verifier's `dependencies_installed` check. `DELIVERY_APP_CHECK_ENABLED` (false: it runs agent code) has the
   daemon (`workspace.app.check`) start the application in the sandbox (host
   or container; bwrap and a port already in use are refused, a required
   sandbox is never replaced by the host, the command policy applies), wait
   for its port (`DELIVERY_APP_READY_TIMEOUT_SECONDS`, 60), GET the probe path
   (below 500 passes), run the profile's e2e command with `APP_URL`
   (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and reply with the log's
-  tail: the `application_started` and `e2e_run` checks. It is skipped after a
-  failed install or failed tests. A refuted install, start or e2e run sends
+  tail: the `application_started` and `e2e_run` checks. The backend waits
+  for the reply beyond those bounds for the container's launch (120 s) and
+  teardown; the container is removed by name whatever happens after its
+  launch; on the host the application's process group (its process tree on
+  Windows, `taskkill /T /F`) is stopped, `stopped` holds only once the port
+  no longer answers, and a host e2e command runs in a group of its own that
+  is killed at its timeout and when it ends. It is skipped after a failed
+  install or failed tests, and a sprint's integration runs the tests alone. A refuted install, start or e2e run sends
   the task back like failed tests (`delivery_gate.CODE_PROBLEMS`). In a
   container an install keeps only what it writes into the worktree.
 - `MCP_MAX_TOOL_ROUNDS` (6), `MCP_TOOL_TIMEOUT_SECONDS` (60),
@@ -541,7 +558,7 @@ Test files:
 | `test_workspace_host.py` | Daemon folder browsing, git remote/branch inspection, snapshots, Windows shell/roots; `/v1/workspace/*` relay and discovery through the daemon |
 | `test_audit_chain.py` | The audit hash chain per company: numbered and linked rows, each company its own chain, a deleted, altered or moved row breaks it where it was, a chain rewritten without the key does not verify, unkeyed chains say so, rows without a company stay unchained, KPI turn rows are signed and chained too |
 | `test_command_policy.py` | The daemon's command policy: `$(...)` and nested substitutions checked without recursing forever (too deep is refused), allow matches whole words as an argv prefix (`git status` never allows `git push`, `ls` never `lsof`), backticks also inside double quotes and never inside single ones, file redirections refused in allow mode (`2>&1`, `/dev/null` pass) and inspected in deny mode, quotes do not hide a denied word, unreadable text and unknown modes refused; through the daemon's `workspace.execute`, nothing runs without a policy changing, a refused command never reaches the shell and says why, an unreadable policy is refused, `FABRIQUE_COMMAND_DENY` wins over the request; syntax the scanner does not model is refused (here-documents, `$'…'` quotes, comments, backslashes inside backticks, a non-ASCII stream number), a line continuation inside double quotes is read as the shell does, allow patterns are case-sensitive, an empty or malformed policy and a command that is not text are refused, and on Windows a policy refuses rather than read `cmd.exe` syntax with POSIX rules |
-| `test_app_check.py` | The execution environment (issue #315): each stack's profile detected (Node, Python, Go, Rust, Maven, Gradle, .NET, PHP, Ruby) with its install, start and port, e2e and lint from `package.json`, manifests recognised at any depth, the deployment's then the company's overrides with an empty command turning a step off, bad overrides refused; an install only for a written manifest whose hash changed, recorded after an exit 0 and not run again for the same bytes, a failed one refuted and retried, off when disabled, the daemon bounding a requested timeout; a real `http.server` started, probed and stopped, an app that exits before listening refuted with its log, one that never listens stopped at the bound, a 500 refuted, the e2e command against the running app, the command policy, a busy port and a required sandbox refusing before anything runs, container mode through a fake runtime; through the task worker the install, tests and application checks recorded, a failing start or install sent back, no start after failed tests, the check opt-in, a company turning its tests off; a Manager sets the profile and a Viewer reads it |
+| `test_app_check.py` | The execution environment (issue #315): each stack's profile detected (Node, Python, Go, Rust, Maven, Gradle, .NET, PHP, Ruby) with its install, start and port, e2e and lint from `package.json`, manifests recognised at any depth, the deployment's then the company's overrides with an empty command turning a step off, bad overrides refused; an install only for a written manifest whose hash changed, recorded after an exit 0 and not run again for the same bytes, a failed one refuted and retried, off when disabled, the install's network setting applied both ways, a manifest the install does not cover (a root npm install and `backend/requirements.txt`) never recorded as installed, the resolved profile's test command run (no suite, no command; a stack override's runner; Poetry and Pipenv through their runners), the integration's tests alone, the reply wait covering the container's launch and teardown, a launch timeout or an unreadable log still removing the container, the process tree killed on Windows, a timed-out e2e command's children killed, the daemon bounding a requested timeout; a real `http.server` started, probed and stopped, an app that exits before listening refuted with its log, one that never listens stopped at the bound, a 500 refuted, the e2e command against the running app, the command policy, a busy port and a required sandbox refusing before anything runs, container mode through a fake runtime; through the task worker the install, tests and application checks recorded, a failing start or install sent back, no start after failed tests, the check opt-in, a company turning its tests off; a Manager sets the profile and a Viewer reads it |
 | `test_sandbox.py` | Sandboxed execution: container mode through a fake runtime (worktree mounted, network off, limits, capabilities dropped, only the listed variables, the daemon's report), a mode that cannot run is an error and never a host run, host reports itself unisolated and the daemon can force a container, a hung sandboxed command is killed, limits are bounded, the company's mode in the delivery test run and the Developer's test runs, the evidence keeps the daemon's report and the Verifier records it (host and an older daemon as findings), a Manager sets the company's sandbox |
 | `test_research_tools.py` | The research tools: a page read as text and recorded with its hash, a host off the list refused and the refusal recorded (a redirect that leaves the list too; plain http only for a host named explicitly), an error page and a binary as errors the model sees, a package looked up at each registry, advisories from OSV with the version asked, the tools for the roles that decide and the `## Sources` prompt section, `research` a reserved MCP name, the combined toolbox without a workspace root, the Verifier's `sources` check naming the dependencies nobody looked up, a Manager adds hosts and a Viewer reads them, the PO's draft keeps the source it consulted |
 | `test_developer_tools.py` | The Developer's workspace tools: the daemon lists the tree without dependencies or VCS data, reads a file numbered with its hash and tells a binary apart, cuts a long file and says how long it is, searches and refuses a bad pattern, answers over NATS in the reply shape; the toolbox offers the read tools and the test run only with a command, records a read with the file's hash, turns errors into results, runs the project's command or a narrower one on the same runner (shell syntax falls back), the combined toolbox dispatches by prefix and caps the rounds, the tools go to the roles that deliver files when the project is known, the prompt carries the repository map; the Verifier says which modified files were read first and the tier follows; the worker offers the tools, reads through the daemon and keeps the reads as evidence; the history check refuses a read recorded without a hash; a narrower test command must be the same runner exactly, files that may hold secrets are never read nor searched, a secret-looking line is redacted, a symlink out of the project is never opened, a large file is hashed whole but only its head read, a search that backtracks forever is stopped at the deadline and one over more files than the bound still scans the bound, a test run with no sprint is reported to nobody, the tools look at the task's worktree once it delivered there |
