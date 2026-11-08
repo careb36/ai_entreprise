@@ -121,7 +121,7 @@ def _message_from(parts: list) -> dict:
             "type": "function",
             "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
         }
-        signature = part.get("thoughtSignature") or call.get("thoughtSignature")
+        signature = part.get("thoughtSignature")
         if isinstance(signature, str) and signature:
             tool_call["extra_content"] = {"google": {"thought_signature": signature}}
         tool_calls.append(tool_call)
