@@ -70,6 +70,8 @@ opt-in Linux-only alternative that mounts `PROJECTS_ROOT` instead.
 cd frontend && npm install && npm run dev
 ```
 
+**Local git hooks** (`.pre-commit-config.yaml`): `pip install pre-commit && pre-commit install --hook-type pre-commit --hook-type post-merge --hook-type post-rewrite`. Before a commit, ruff and the `.env` check run; after a pull, merge or rebase that changed `frontend/package-lock.json`, `scripts/hooks/sync-frontend-deps.sh` runs `npm ci` in `frontend/` (it never fails the git command, and says so when npm is missing or the install failed).
+
 **Frontend production build:**
 ```bash
 cd frontend && npm run build
