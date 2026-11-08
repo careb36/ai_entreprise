@@ -45,8 +45,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "max-age=31536000; includeSubDomains"
         )
 
-        # Content security policy
-        if request.url.path in {"/docs", "/redoc", "/openapi.json"}:
+        # Content security policy. A route that set its own (the generated
+        # project previews of /v1/voice/build, which are sandboxed) keeps it:
+        # overwriting it here would silently drop the sandbox.
+        if response.headers.get("Content-Security-Policy"):
+            pass
+        elif request.url.path in {"/docs", "/redoc", "/openapi.json"}:
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
                 "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "

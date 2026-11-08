@@ -106,13 +106,16 @@ class LLMProxyClient:
         bu_id: int | None = None,
         max_tokens: int | None = None,
         tools: list[dict[str, Any]] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
 
         ``max_tokens`` caps the answer; without it the provider's own limit
         applies. ``tools`` is the OpenAI ``tools`` list; the answer may then
-        carry ``tool_calls`` in its message instead of content. Only a request
+        carry ``tool_calls`` in its message instead of content. ``extra``
+        carries provider-specific switches (``chat_template_kwargs``, used by
+        the voice build) that the proxy forwards untouched. Only a request
         that never reached the proxy is retried: an error the proxy answered
         has already cost its upstream call (and the proxy's own fallbacks), so
         sending it again would bill it again.
@@ -122,6 +125,8 @@ class LLMProxyClient:
         if refused:
             return refused
         payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
+        if extra:
+            payload.update(extra)
 
         for attempt in range(self.max_retries + 1):
             try:
