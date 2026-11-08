@@ -6,6 +6,11 @@ Engrams are immutable episodic memory nodes that capture architectural decisions
 PRs, test results, and other critical state changes in the LangGraph workflow.
 
 The DeepSeek LLM processes and summarizes decisions before writing to Neo4j.
+
+The graph is optional and off by default (``NEO4J_ENABLED``, issue #328).
+Off, an engram is still kept in pgvector for semantic RAG, its graph node is
+not recorded (the result says ``graph: not_recorded``), and the RAG context
+comes from pgvector alone. Memory is prompt context, never evidence.
 """
 
 import os
@@ -20,7 +25,7 @@ from pydantic import BaseModel
 import neo4j
 
 from llm.model_factory import get_llm_for_role, AgentRole
-from app.memory_client import MemoryClient
+from memory_client import GraphNotRecorded, MemoryClient
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,13 @@ class DeepSeekEngramProcessor:
         self.neo4j_password = neo4j_password or os.getenv("NEO4J_PASSWORD")
         
         self._driver: Optional[neo4j.Driver] = None
+
+    @property
+    def graph_enabled(self) -> bool:
+        """True when this deployment records the knowledge graph."""
+        from config import settings
+
+        return bool(settings.NEO4J_ENABLED)
     
     @property
     def driver(self) -> neo4j.Driver:
@@ -116,15 +128,19 @@ class DeepSeekEngramProcessor:
         # Use DeepSeek to process and summarize the decision
         processed_summary = self._process_with_deepseek(decision_summary, engram_type)
         
-        # 1. Create the Engram in Neo4j
-        engram_id = self._create_engram_node(
-            engram_type=engram_type,
-            agent_id=agent_id,
-            agent_role=role,
-            summary=processed_summary,
-            metadata=metadata,
-            company_id=company_id,
-        )
+        # 1. Create the Engram in Neo4j, when the graph is kept.
+        graph = self.graph_enabled
+        if graph:
+            engram_id = self._create_engram_node(
+                engram_type=engram_type,
+                agent_id=agent_id,
+                agent_role=role,
+                summary=processed_summary,
+                metadata=metadata,
+                company_id=company_id,
+            )
+        else:
+            engram_id = self._new_engram_id(agent_id)
         
         # 2. Store in pgvector for semantic RAG
         try:
@@ -140,7 +156,7 @@ class DeepSeekEngramProcessor:
             logger.warning(f"Failed to store engram vector: {e}")
 
         # 3. Create temporal edges to related Semantic nodes
-        if related_semantic_refs:
+        if related_semantic_refs and graph:
             self._create_temporal_edges(engram_id, related_semantic_refs)
         
         logger.info(f"Burned Engram {engram_id} for agent {agent_id} ({role})")
@@ -149,8 +165,13 @@ class DeepSeekEngramProcessor:
             "engram_id": engram_id,
             "engram_type": engram_type.value,
             "status": "burned",
+            "graph": "stored" if graph else "not_recorded",
             "summary": processed_summary[:200]
         }
+
+    @staticmethod
+    def _new_engram_id(agent_id: str) -> str:
+        return f"engram_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{agent_id}"
 
     def _store_in_vector_db(self, content: str, metadata: Dict[str, Any], company_id: Optional[int] = None):
         """Helper to store in pgvector only."""
@@ -229,7 +250,7 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         company_id: Optional[int] = None,
     ) -> str:
         """Create an Episodic node in Neo4j."""
-        engram_id = f"engram_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{agent_id}"
+        engram_id = self._new_engram_id(agent_id)
         
         cypher = f"""
         CREATE (e:Episodic:{engram_type.value} {{
@@ -316,7 +337,13 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
 
         Returns:
             List of property dicts for each matching Episodic node.
+
+        Raises:
+            GraphNotRecorded: the graph is not kept on this deployment, so
+            there is nothing to read (not an empty history).
         """
+        if not self.graph_enabled:
+            raise GraphNotRecorded("The knowledge graph is not recorded.")
         cypher = "MATCH (e:Episodic) "
 
         conditions = []
@@ -352,12 +379,14 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
         Improved RAG: Combined Semantic (pgvector) + Structural (Neo4j) search.
         
         Decisions are ranked by semantic similarity to the story and 
-        complemented by the architectural context from the graph.
+        complemented by the architectural context from the graph, when the
+        graph is kept; without it the context comes from pgvector alone.
         """
+        graph = self.graph_enabled
         # 1. Semantic Search via pgvector
         semantic_results = []
         try:
-            mem_client = MemoryClient(neo4j_driver=self.driver)
+            mem_client = MemoryClient(neo4j_driver=self.driver if graph else None)
             semantic_results = mem_client.search_similar(
                 story, limit=limit, company_ids=[company_id] if company_id is not None else []
             )
@@ -365,7 +394,11 @@ Output as JSON with keys: patterns, entities, impact. Keep it concise."""
             logger.warning(f"Semantic engram search failed: {e}")
 
         # 2. Structural/Keyword Search via Neo4j
-        graph_context = self._query_graph_rag(story, limit=limit, role_filter=role_filter, company_id=company_id)
+        graph_context = (
+            self._query_graph_rag(story, limit=limit, role_filter=role_filter, company_id=company_id)
+            if graph
+            else ""
+        )
         
         # 3. Combine and Format
         if not semantic_results and not graph_context:

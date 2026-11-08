@@ -14,9 +14,9 @@ Factory leaves local or cloud execution of its Droids to the operator.
    keys (`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`), or plan a provider connection
    per company. `CLAUDE.md` lists every variable.
 2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
-   the backend, the frontend and the janitor. Neo4j is optional: with
-   `NEO4J_ENABLED=false` the backend starts without it and the memory
-   features are off.
+   the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
+   on by default: the backend does not wait for it and connects once it
+   answers; the Neo4j section below says how to run without it.
 3. Start the workspace daemon on the computer that holds the projects:
    `./scripts/start-daemon.sh` (or `.ps1` on Windows). That is the local
    choice. The daemon may instead run on a server that holds the checkouts
@@ -74,9 +74,10 @@ each key.
   below makes harmless.
 - `GET /health/deep` probes Postgres, the LLM proxy, NATS and Neo4j. It says
   `down` when Postgres or the proxy is unreachable (no agent work at all),
-  `degraded` when NATS or Neo4j is (API reads work, but without NATS no
-  sprint moves), and `healthy` otherwise. Each component carries its
-  `reason`.
+  `degraded` when NATS is, or Neo4j while it is enabled (API reads work, but
+  without NATS no sprint moves), and `healthy` otherwise. Each component
+  carries its `reason`. Neo4j switched off (`NEO4J_ENABLED=false`) is
+  reported as `disabled`, is not probed and degrades nothing.
 - `GET /metrics` is Prometheus text: `fabrique_requests_total` and
   `fabrique_request_duration_seconds` by route template,
   `fabrique_agent_runs_ingested_total` by producer,
@@ -268,9 +269,38 @@ step.
 
 ## Neo4j
 
-Neo4j is optional: `NEO4J_ENABLED=false` skips it, the backend starts
-without it, and memory search and lineage are off. `scripts/backup.sh`
-exports it only while it is enabled.
+Neo4j (the knowledge graph) is optional and on by default (issue #328):
+`docker compose up -d` starts it with `NEO4J_PASSWORD` (and
+`NEO4J_AUTH=neo4j/<password>`) from `.env`. The backend does not depend on
+it: it starts without waiting, and while Neo4j is enabled but not reachable
+yet it tries again every 15 seconds for ten minutes and records the graph
+from the moment it connects. If Neo4j stays unreachable longer, memory
+search keeps working, `memory_graph` stays false until a restart with Neo4j
+up, and `/health/deep` reports the stack `degraded`.
+
+To run without it (less memory; the Enterprise image in compose runs under
+an evaluation licence, so a production deployment either licenses it, moves
+to the Community image, or turns the graph off):
+
+```bash
+NEO4J_ENABLED=false docker compose up -d --scale neo4j=0
+```
+
+With `NEO4J_ENABLED=false` the backend never connects to it:
+
+- memory search and store (`/v1/memory/*`) run on Postgres with pgvector
+  alone; the store's answer says what each store kept (`vector`, `graph`:
+  `stored` or `not_recorded`);
+- engrams (sprint retrospectives, the kickoff) are kept in pgvector only,
+  and the agents' memory of past decisions comes from there;
+- file lineage (`GET /v1/enterprise/lineage`) answers `recorded: false`
+  with the reason, which the Lineage page shows as "not recorded" rather
+  than "no decisions";
+- `/v1/capabilities` says `memory_graph: false` beside `memory`, and
+  `/health/deep` shows `neo4j` as `disabled`.
+
+Nothing recorded while the graph was off is backfilled into it.
+`scripts/backup.sh` exports it only while it is enabled.
 
 ## Securing the bus
 Anything that can publish on NATS can ask the workspace daemon to run commands, so give each component its own user and, when the bus leaves the machine, TLS (issue #327; SECURITY.md §8.6).

@@ -26,6 +26,8 @@ from database import engine, get_neo4j_driver
 from logging_config import logger
 from sqlmodel import Session, text
 
+from services.memory_graph import graph_enabled
+
 _PROBE_TIMEOUT_SECONDS = 3.0
 
 
@@ -93,6 +95,10 @@ def _sync_probe_neo4j() -> dict[str, Any]:
 
 
 async def probe_neo4j() -> dict[str, Any]:
+    # Off by configuration (the default) is not a fault: nothing is probed and
+    # the component does not degrade the stack (issue #328).
+    if not graph_enabled():
+        return {"status": "disabled", "reason": "NEO4J_ENABLED=false"}
     return await asyncio.to_thread(_sync_probe_neo4j)
 
 
@@ -140,12 +146,13 @@ async def aggregate(nats_client: Any, nats_state: str | None = None) -> dict[str
 
     # Postgres and the LLM proxy are required for any agent work. Without NATS
     # we can still serve API reads but cannot run sprints. Without Neo4j we lose
-    # episodic memory but kickoff still works. Surface the nuance instead of a
+    # episodic memory but kickoff still works; Neo4j disabled by configuration
+    # is reported as such and degrades nothing. Surface the nuance instead of a
     # single boolean so operators can read the reason at a glance.
     required = {"postgres", "llm_proxy"}
     severity = "healthy"
     for name, comp in components.items():
-        if comp.get("status") != "up":
+        if comp.get("status") not in ("up", "disabled"):
             if name in required:
                 severity = "down"
                 break

@@ -131,6 +131,10 @@ docker compose up -d          # backend :8000 · frontend :5173 · LLM proxy :51
 ./scripts/start-daemon.sh     # on the computer that holds your projects (.\scripts\start-daemon.ps1 on Windows)
 ```
 
+Neo4j (the knowledge graph behind file lineage) is optional and on by
+default; the backend does not wait for it. To run without it (memory search
+stays on Postgres): `NEO4J_ENABLED=false docker compose up -d --scale neo4j=0`.
+
 The default team runs on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
 and DeepSeek (Developer, QA), so it needs both keys. `AGENT_MODEL` puts the whole
 team on one model instead (`AGENT_MODEL=deepseek-v4-pro` needs only
