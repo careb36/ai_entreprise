@@ -149,6 +149,10 @@ Copy `.env.example` to `.env` and fill in:
   check (`services/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
   for everything (`vscode-daemon/sandbox.py`).
+  `FABRIQUE_DAEMON_STATE` (daemon side, default `~/.fabrique-daemon/deliveries`)
+  is where the daemon keeps each queued delivery's result until the job is
+  acknowledged (`vscode-daemon/delivery_journal.py`): a redelivered job replays
+  it instead of applying SEARCH/REPLACE edits a second time.
   In a sprint planned from a specification it also decides the **acceptance
   tests per criterion** (`services/acceptance.py`): the runner's per-test lines
   are read back into criterion ids (pytest gets `-v`; name a verbose command
