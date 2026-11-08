@@ -12,7 +12,7 @@ import hashlib
 
 import file_edits
 import pytest
-from services import verification
+from services import edit_blocks, research_tools, standards, verification
 from services.task_worker import parse_file_manifest
 from test_task_delivery import _load_daemon
 
@@ -54,6 +54,45 @@ def test_the_manifest_reads_an_edit_block_as_edits():
     assert "edits" not in by_path["src/edit.py"] and by_path["a.py"]["edits"] == []
 
 
+def test_an_edit_block_with_text_outside_its_edits_is_refused_whole():
+    """A second edit left unclosed must not let the first through alone."""
+    body = (
+        "<<<<<<< SEARCH\nx = 1\n=======\nx = 2\n>>>>>>> REPLACE\n"
+        "<<<<<<< SEARCH\ny = 1\n=======\ny = 2\n"
+    )
+    assert edit_blocks.parse(body) == []
+    assert edit_blocks.parse(
+        "<<<<<<< SEARCH\nx = 1\n=======\nx = 2\n>>>>>>> REPLACE\n\n"
+    ) == [{"search": "x = 1\n", "replace": "x = 2\n"}]
+
+
+def test_checks_read_what_an_edit_adds_not_what_it_removes():
+    secret = "AKIA" + "ABCDEFGHIJKLMNOP"
+    removal = (
+        "```python path=src/conf.py edit\n<<<<<<< SEARCH\n"
+        f'KEY = "{secret}"\n=======\nKEY = os.environ["KEY"]\n>>>>>>> REPLACE\n```\n'
+    )
+    assert not standards.check_delivery(removal)["findings"] or all(
+        f["standard"] != "STD-SEC-1"
+        for f in standards.check_delivery(removal)["findings"]
+    )
+    addition = removal.replace(secret, "x").replace('os.environ["KEY"]', f'"{secret}"')
+    assert any(
+        f["standard"] == "STD-SEC-1"
+        for f in standards.check_delivery(addition)["findings"]
+    )
+    # A package.json edit is a fragment: its dependencies are still read.
+    manifest = parse_file_manifest(
+        '```json path=package.json edit\n<<<<<<< SEARCH\n    "react": "18.2.0"\n=======\n'
+        '    "react": "18.2.0",\n    "left-pad": "*",\n    "test": "vitest"\n'
+        ">>>>>>> REPLACE\n```\n"
+    )
+    assert standards.unpinned_in(
+        "package.json", edit_blocks.scanned_text(manifest[0])
+    ) == ["left-pad@*"]
+    assert research_tools.packages_in(manifest)["npm"] == {"react", "left-pad"}
+
+
 def test_apply_edits_needs_one_exact_match():
     assert (
         file_edits.apply_edits("a\nb\nc\n", [{"search": "b\n", "replace": "B\n"}])
@@ -63,6 +102,11 @@ def test_apply_edits_needs_one_exact_match():
         file_edits.apply_edits("a\n", [{"search": "z", "replace": "y"}])
     with pytest.raises(file_edits.EditError, match="appears 2 times"):
         file_edits.apply_edits("x\nx\n", [{"search": "x", "replace": "y"}])
+    # Overlapping matches count: "pass\npass\n" starts at two places here.
+    with pytest.raises(file_edits.EditError, match="appears 2 times"):
+        file_edits.apply_edits(
+            "pass\npass\npass\n", [{"search": "pass\npass\n", "replace": "x\n"}]
+        )
     with pytest.raises(file_edits.EditError, match="no edits"):
         file_edits.apply_edits("a", [])
     with pytest.raises(file_edits.EditError, match="empty search"):

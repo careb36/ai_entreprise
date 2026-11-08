@@ -27,6 +27,16 @@ class EditError(ValueError):
     """An edit that cannot be applied as given; the message says why."""
 
 
+def occurrences(text: str, search: str) -> int:
+    """How many positions *search* starts at in *text*, overlaps included
+    (``str.count`` skips them, so ``"a\na\n"`` in ``"a\na\na\n"`` would read as once)."""
+    count, start = 0, text.find(search)
+    while start != -1:
+        count += 1
+        start = text.find(search, start + 1)
+    return count
+
+
 def apply_edits(original: str, edits: Any) -> str:
     """Apply SEARCH/REPLACE *edits* to *original*, in order."""
     if not isinstance(edits, list) or not edits:
@@ -39,7 +49,7 @@ def apply_edits(original: str, edits: Any) -> str:
         replace = str(edit.get("replace") or "")
         if not search:
             raise EditError(f"edit {number} has an empty search text")
-        count = text.count(search)
+        count = occurrences(text, search)
         if count == 0:
             raise EditError(f"edit {number}: the search text is not in the file")
         if count > 1:
