@@ -42,7 +42,7 @@ export function Models() {
           <div className="font-medium">{c.name}</div>
           <div className="text-xs text-gray-400">{c.provider}</div>
           <div className="text-xs text-gray-500 mt-1">
-            {c.models.length} {t('models.modelsCount')}
+            {(c.models ?? []).length} {t('models.modelsCount')}
           </div>
         </div>
       ))}
