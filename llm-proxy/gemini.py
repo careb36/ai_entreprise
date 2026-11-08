@@ -64,7 +64,12 @@ def signature_of(tool_call: dict) -> str | None:
     extra = tool_call.get("extra_content")
     google = extra.get("google") if isinstance(extra, dict) else None
     signature = google.get("thought_signature") if isinstance(google, dict) else None
-    return signature if isinstance(signature, str) and signature else None
+    if isinstance(signature, str) and signature:
+        return signature
+    # A call id from #411's format (``call_1::ts::<signature>``), for histories
+    # written before the signature moved to ``extra_content``.
+    cid = str(tool_call.get("id") or "")
+    return cid.split("::ts::", 1)[1] or None if "::ts::" in cid else None
 
 
 def _contents(messages: list) -> list[dict]:

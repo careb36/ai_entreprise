@@ -168,3 +168,18 @@ def test_two_conversations_with_the_same_call_keep_their_own_signatures(client, 
             ],
         )
         assert upstream.calls[-1]["json"]["contents"][1]["parts"][0]["thoughtSignature"] == expected
+
+
+def test_a_signature_in_an_older_call_id_is_still_sent_back(client, upstream):
+    upstream.set("gemini", FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "ok"}]}, "finishReason": "STOP"}]}))
+    call = {"id": "call_1::ts::sig-old", "type": "function", "function": {"name": "workspace__list", "arguments": "{}"}}
+    _chat(
+        client,
+        "gemini-3.8-flash",
+        [
+            {"role": "user", "content": "go"},
+            {"role": "assistant", "content": None, "tool_calls": [call]},
+            {"role": "tool", "tool_call_id": call["id"], "content": "x"},
+        ],
+    )
+    assert upstream.calls[-1]["json"]["contents"][1]["parts"][0]["thoughtSignature"] == "sig-old"
