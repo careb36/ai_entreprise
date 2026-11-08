@@ -149,12 +149,22 @@ async def publish_credit_pause(nats_client: Any, sprint_id: int, provider: str) 
 
 
 def dispatch_todo(session: Session, sprint: Sprint) -> int:
-    """Queue every ``todo`` item of *sprint* on ``task.assign``; the count."""
-    items = session.exec(
-        select(BacklogItem).where(
-            BacklogItem.sprint_id == sprint.id, BacklogItem.status == "todo"
-        )
-    ).all()
+    """Queue every ready ``todo`` item of *sprint* on ``task.assign``; the count.
+
+    One that waits for other tasks (``services.dependencies``) is queued by
+    the worker once they are done.
+    """
+    from services import dependencies
+
+    items = [
+        item
+        for item in session.exec(
+            select(BacklogItem).where(
+                BacklogItem.sprint_id == sprint.id, BacklogItem.status == "todo"
+            )
+        ).all()
+        if dependencies.is_ready(session, item)
+    ]
     for item in items:
         session.add(
             OutboxEvent(

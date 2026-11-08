@@ -200,7 +200,7 @@ def test_the_triage_is_a_message_the_conversation_keeps(
     item = _blocked(sqlite_session, sprint)
     asked = []
 
-    def _ask(model, system_prompt, prompt):
+    def _ask(model, system_prompt, prompt, company_id=None):
         asked.append((model, prompt))
         return RETRY_ANSWER
 

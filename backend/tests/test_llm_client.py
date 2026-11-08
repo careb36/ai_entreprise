@@ -48,6 +48,22 @@ def test_the_default_wait_covers_the_proxy_s_upstream_budget():
     assert LLMProxyClient("http://p").timeout == DEFAULT_TIMEOUT_SECONDS
 
 
+def test_extra_switches_travel_in_the_payload(monkeypatch):
+    """The voice build asks NVIDIA models not to think first; the proxy
+    forwards the switch untouched, so the client puts it in the body."""
+    ok = {"choices": [{"message": {"content": "hi"}}]}
+    calls = _posting(monkeypatch, [_Response(200, ok), _Response(200, ok)])
+    client = LLMProxyClient("http://p")
+    client.max_retries = 0
+
+    switches = {"chat_template_kwargs": {"enable_thinking": False}}
+    client.chat([{"role": "user", "content": "q"}], model="m", extra=switches)
+    client.chat([{"role": "user", "content": "q"}], model="m")
+
+    assert calls[0]["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+    assert "chat_template_kwargs" not in calls[1]["json"]
+
+
 def test_max_tokens_travels_only_when_set(monkeypatch):
     ok = {"choices": [{"message": {"content": "hi"}}]}
     calls = _posting(

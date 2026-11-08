@@ -5,11 +5,13 @@ Importing from this package gives access to every table model without
 needing to know which sub-module it lives in.  SQLModel registers each
 model with the shared ``MetaData`` object automatically when the module is
 imported, so this ``__init__`` must be imported before
-``database.create_db_and_tables()`` is called.
+``database.prepare_database()`` (or a migration) is called.
 """
 
 from .agent_message import AgentMessage
 from .agent_run import AgentRun, AgentRunApproval, Verification
+from .api_token import ApiToken
+from .architecture import Architecture
 from .audit import AuditLog
 from .company import (
     Agent,
@@ -20,9 +22,15 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .event import TaskEvent
 from .github import GitHubRepoBinding
+from .mcp import McpServer
 from .procedure import Procedure
+from .provider import ProviderConnection
+from .review import ReviewComment, RunPublication, RunReview
+from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
+from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .support import BugReport
 
@@ -31,6 +39,8 @@ __all__ = [
     "AgentMessage",
     "AgentRun",
     "AgentRunApproval",
+    "ApiToken",
+    "Architecture",
     "AssistantRuntimeState",
     "AuditLog",
     "BacklogItem",
@@ -39,11 +49,19 @@ __all__ = [
     "Company",
     "CompanyMember",
     "GitHubRepoBinding",
+    "McpServer",
     "OutboxEvent",
     "Procedure",
     "ProjectCredential",
     "ProjectDiscovery",
+    "ProviderConnection",
+    "ReviewComment",
+    "RunPublication",
+    "RunReview",
+    "RunSecret",
+    "Specification",
     "Sprint",
+    "TaskEvent",
     "User",
     "Verification",
 ]

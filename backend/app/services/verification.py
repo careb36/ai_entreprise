@@ -4,7 +4,16 @@ from typing import Any
 from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
-from services import risk
+from services import (
+    context_read,
+    criteria_tests,
+    mcp_tools,
+    research_tools,
+    risk,
+    sandbox,
+    secops_checks,
+    standards,
+)
 from services.agent_service import AgentService
 from services.orchestration_metrics import (
     ACTION_AGENT_RUN_VERIFIED,
@@ -215,7 +224,8 @@ def evaluate_workspace_writes(
         if write is None:
             problems.append(f"{path} not reported")
         elif write.get("status") != "written":
-            problems.append(f"{path} {write.get('status') or 'not written'}")
+            reason = f": {write['error']}" if write.get("error") else ""
+            problems.append(f"{path} {write.get('status') or 'not written'}{reason}")
         elif path in expected and write.get("sha256") != expected[path]:
             problems.append(f"{path} content on disk differs from what was sent")
     if problems:
@@ -279,6 +289,19 @@ def check_tests_run(evidence: dict) -> dict:
                 "outcome": "pass",
                 "observation": f"{target} passed{truncated}",
             }
+        all_excused, excused = criteria_tests.excused_failures(evidence)
+        if all_excused:
+            # An acceptance test fails before its implementation, by design;
+            # only those failed here (``services.acceptance``).
+            return {
+                "name": "tests_run",
+                "outcome": "pass",
+                "observation": (
+                    f"{target} exited {exit_code}: only the acceptance tests of "
+                    f"criteria not implemented yet failed ({', '.join(excused)})"
+                    f"{truncated}"
+                ),
+            }
         tail = (run.get("output_tail") or "").strip()[-400:]
         return {
             "name": "tests_run",
@@ -315,6 +338,10 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
     result = risk.classify(
         [*written, *declared, *extract_claimed_paths(claims)], claims.get("risk")
     )
+    result = risk.raise_for_tool_calls(result, (evidence or {}).get("tool_calls"))
+    result = risk.raise_for_unread_changes(
+        result, context_read.check_context_read(evidence)
+    )
     observation = result["tier"]
     if result["reasons"]:
         observation += " — " + "; ".join(result["reasons"])
@@ -327,6 +354,24 @@ def check_risk_tier(run: AgentRun, evidence: dict | None) -> dict:
     }
 
 
+def check_tools_used(evidence: dict) -> dict:
+    """
+    The MCP tool calls the backend made for the producer (``mcp_tools``).
+
+    A record, not a verdict: the outcome is always ``pass``. Each call in
+    ``evidence["tool_calls"]`` names the server and tool, its arguments,
+    whether it erred and the sha256 of what came back; the producer's account
+    of what the tools told it stays in its claims.
+    """
+    calls = [c for c in evidence.get("tool_calls") or [] if isinstance(c, dict)]
+    return {
+        "name": "tools_used",
+        "outcome": "pass",
+        "observation": mcp_tools.summarize(calls),
+        "calls": calls,
+    }
+
+
 def aggregate_verdict(checks: list[dict]) -> str:
     outcomes = {check["outcome"] for check in checks}
     if VERDICT_REFUTED in outcomes:
@@ -334,6 +379,12 @@ def aggregate_verdict(checks: list[dict]) -> str:
     if VERDICT_UNVERIFIABLE in outcomes:
         return VERDICT_UNVERIFIABLE
     return VERDICT_VERIFIED
+
+
+def _declared_files(artifact: str | None) -> list[dict]:
+    from services.task_worker import parse_file_manifest
+
+    return parse_file_manifest(artifact or "")
 
 
 def verify_agent_run(
@@ -354,6 +405,48 @@ def verify_agent_run(
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
         checks.append(check_tests_run(evidence))
+        # Where the tests ran, as the daemon reported it (services/sandbox.py);
+        # a record, never the verdict.
+        sandbox_check = sandbox.check_sandbox(evidence)
+        if sandbox_check:
+            checks.append(sandbox_check)
+    if evidence and evidence.get("acceptance"):
+        # The acceptance tests per criterion (``services.acceptance``): what the
+        # observed run said of this task's criteria, and that an implementation
+        # task left the test files alone.
+        for check in (
+            criteria_tests.check_criteria(evidence),
+            criteria_tests.check_untouched(
+                [p for p in claimed_files if isinstance(p, str)], evidence
+            ),
+        ):
+            if check:
+                checks.append(check)
+    if evidence and "tool_calls" in evidence:
+        checks.append(check_tools_used(evidence))
+        # Which of the files the delivery modified the Developer read first
+        # (``services/context_read.py``); a record, never the verdict.
+        context = context_read.check_context_read(evidence)
+        if context:
+            checks.append(context)
+        # The sources the run consulted (``services/research_tools.py``) and
+        # the dependencies it named without a registry lookup; a record.
+        sources = research_tools.check_sources(
+            evidence, _declared_files(run.artifact_text)
+        )
+        if sources:
+            checks.append(sources)
+    # The factory's standards over the files the deliverable declares
+    # (``services.standards``): a secret refutes, the rest is for the reviewer.
+    standards_check = standards.check_delivery(run.artifact_text)
+    if standards_check:
+        checks.append(standards_check)
+    # SecOps scans (``services/secops_checks``): dependency audit, secret scan,
+    # SAST. Only the ones that reported a result become checks.
+    if evidence and any(
+        k in evidence for k in ("dependency_audit", "secret_scan", "sast")
+    ):
+        checks.extend(secops_checks.check_all(evidence))
     checks.append(check_risk_tier(run, evidence))
     verdict = aggregate_verdict(checks)
     verification = Verification(

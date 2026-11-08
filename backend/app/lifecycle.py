@@ -9,7 +9,7 @@ from audit_signing import is_signing_enabled
 from auth_tokens import is_auth_configured
 from config import settings
 from crypto import is_encryption_enabled
-from database import create_db_and_tables, ensure_memory_graph_schema, get_neo4j_driver
+from database import ensure_memory_graph_schema, get_neo4j_driver, prepare_database
 from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from memory_client import MemoryClient
@@ -25,12 +25,6 @@ _background_tasks: set[asyncio.Task] = set()
 # NATS connection state exposed by the health endpoints.
 NATS_STATE_CONNECTING = "connecting"
 NATS_STATE_CONNECTED = "connected"
-NATS_STATE_DISABLED = "disabled"
-
-
-def _nats_disabled() -> bool:
-    return os.getenv("NATS_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}
-
 
 # Reconnect backoff for the initial NATS connection: 1s, 2s, 4s, ... capped.
 NATS_CONNECT_BACKOFF_BASE_SECONDS = 1.0
@@ -134,33 +128,23 @@ async def startup(app):
     - ``process_backlog_tasks()`` — NATS consumer → backlog task execution.
     """
     logger.info("Initializing Enterprise Backend Components...")
-    create_db_and_tables()
+    prepare_database()
 
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
     # even when the NATS broker is not yet running.  ``app.state.nats_client``
     # stays ``None`` until the connection succeeds.
     app.state.nats_client = None
+    app.state.nats_state = NATS_STATE_CONNECTING
     app.state.nats_workers_started = False
     app.state.jetstream = False
-    if _nats_disabled():
-        # Desktop/single-node installs have no broker: skip the reconnect loop
-        # so the console is not flooded with tracebacks every few seconds.
-        app.state.nats_state = NATS_STATE_DISABLED
-        app.state.nats_connect_task = None
-        logger.warning(
-            "NATS disabled (NATS_DISABLED=true): agents, outbox publishing and "
-            "SSE fanout are off; board endpoints work from the database only."
-        )
-    else:
-        app.state.nats_state = NATS_STATE_CONNECTING
-        client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
-        connect_task = asyncio.create_task(
-            _connect_nats_and_start_workers(app, client), name="nats_connector"
-        )
-        app.state.nats_connect_task = connect_task
-        _background_tasks.add(connect_task)
-        connect_task.add_done_callback(_on_task_done)
+    client = NATSClient(os.getenv("NATS_URL", "nats://localhost:4222"))
+    connect_task = asyncio.create_task(
+        _connect_nats_and_start_workers(app, client), name="nats_connector"
+    )
+    app.state.nats_connect_task = connect_task
+    _background_tasks.add(connect_task)
+    connect_task.add_done_callback(_on_task_done)
 
     # The Support agent needs only the database and the LLM proxy.
     if settings.SUPPORT_AGENT_ENABLED:
@@ -186,16 +170,19 @@ async def startup(app):
 
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
-    try:
-        driver = get_neo4j_driver()
-        ensure_memory_graph_schema(driver)
-        app.state.memory_client = MemoryClient(neo4j_driver=driver)
-        logger.info("Neo4j connected — memory features enabled.")
-    except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
-        logger.warning(
-            f"Neo4j unavailable at startup ({exc}). "
-            "Memory search and lineage endpoints will return errors until Neo4j is reachable."
-        )
+    if not settings.NEO4J_ENABLED:
+        logger.info("Neo4j disabled (NEO4J_ENABLED=false) — memory features off.")
+    else:
+        try:
+            driver = get_neo4j_driver()
+            ensure_memory_graph_schema(driver)
+            app.state.memory_client = MemoryClient(neo4j_driver=driver)
+            logger.info("Neo4j connected — memory features enabled.")
+        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
+            logger.warning(
+                f"Neo4j unavailable at startup ({exc}). "
+                "Memory search and lineage endpoints will return errors until Neo4j is reachable."
+            )
 
     app.state.llm_client = LLMProxyClient(
         os.getenv("LLM_PROXY_URL", "http://localhost:5100")

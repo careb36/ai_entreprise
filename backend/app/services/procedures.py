@@ -2,8 +2,8 @@
 Procedures: proposing, adopting, measuring, and putting them in prompts.
 
 The company learns by changing its procedures, and the board decides whether
-a change helped (deterministic checks decide, a model may only propose).
-After adoption, the next ``MEASURE_AFTER_SPRINTS`` completed
+a change helped (POSITIONING rule 5: deterministic checks decide, a model may
+only propose). After adoption, the next ``MEASURE_AFTER_SPRINTS`` completed
 sprints are compared with the ones before it. A procedure under which rework
 per task or the share of blocked tasks got clearly worse is reverted, and the
 version it replaced comes back; otherwise it is kept.
@@ -15,6 +15,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from logging_config import logger
 from models import BacklogItem, Procedure, Sprint
 from models.procedure import ALL_ROLES
 from sqlmodel import Session, select
@@ -101,6 +102,21 @@ def active_procedures(
             .order_by(Procedure.id)
         ).all()
     )
+
+
+def prompt_context(engine: Any, company_id: int | None, role: str | None) -> str:
+    """The company's active procedures for *role* as a prompt section, read with *engine*.
+
+    Procedures are context: a failed read logs and the task goes on without them.
+    """
+    if company_id is None:
+        return ""
+    try:
+        with Session(engine) as session:
+            return procedures_prompt(active_procedures(session, company_id, role))
+    except Exception as exc:  # noqa: BLE001 - Procedures are context; the task goes on without them.
+        logger.debug("Procedures fetch failed for company=%s: %s", company_id, exc)
+        return ""
 
 
 def procedures_prompt(procedures: list[Procedure]) -> str:

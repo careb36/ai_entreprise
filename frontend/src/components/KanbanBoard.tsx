@@ -19,7 +19,7 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   Circle, ArrowRight, GitPullRequest,
   CheckCircle2, AlertTriangle, AlertCircle, RefreshCw,
-  Loader2, GripVertical
+  Loader2, GripVertical, Hourglass
 } from 'lucide-react'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -109,6 +109,9 @@ function ItemCard({
   }
 
   const qaMetrics = getQaMetrics(item)
+  // Tasks of the sprint this one must come after that are not done yet.
+  const waitingFor = item.waiting_for?.length ?? 0
+  const waitingLabel = t('kanban.waitsFor', { count: waitingFor, defaultValue: 'Waits for {{count}} tasks' })
 
   return (
     <div
@@ -136,8 +139,17 @@ function ItemCard({
       <div className="flex items-center gap-1.5 flex-wrap mt-2 ml-5">
         <span className={`badge badge-priority-${item.priority}`}>{item.priority}</span>
         {evidenceRun && <DeliveryBadge run={evidenceRun} />}
+        {waitingFor > 0 && (
+          <span className="badge border bg-amber-900/40 text-amber-300 border-amber-700/40 inline-flex items-center gap-0.5"
+            role="img" aria-label={waitingLabel} title={waitingLabel}>
+            <Hourglass size={10} aria-hidden="true" />{waitingFor}
+          </span>
+        )}
         {item.assignee && (
           <span className="badge bg-brand-900/50 text-brand-300 border-brand-700/40">{item.assignee}</span>
+        )}
+        {item.kind === 'acceptance_tests' && (
+          <span className="badge border bg-violet-900/40 text-violet-300 border-violet-700/40">{t('kanban.acceptanceTests')}</span>
         )}
         {qaMetrics.reworks > 0 && (
           <span

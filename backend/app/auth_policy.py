@@ -32,6 +32,15 @@ def require_company_role(
 ) -> None:
     if user is None:
         return
+    # API token callers carry their company and role on the synthetic user.
+    token_company = getattr(user, "_api_token_company_id", None)
+    if token_company is not None:
+        if token_company != company_id:
+            raise HTTPException(status_code=403, detail="Not a member of this company")
+        token_role = getattr(user, "_api_token_role", "Manager")
+        if ROLE_RANK.get(token_role, 0) < ROLE_RANK[minimum]:
+            raise HTTPException(status_code=403, detail=f"Requires {minimum} role")
+        return
     member = session.exec(
         select(CompanyMember).where(
             CompanyMember.user_id == user.id,
@@ -54,6 +63,9 @@ def require_authenticated(user: User | None) -> None:
 
 
 def viewer_company_ids(session: Session, user: User) -> list[int]:
+    token_company = getattr(user, "_api_token_company_id", None)
+    if token_company is not None:
+        return [token_company]
     return list(
         session.exec(
             select(CompanyMember.company_id).where(
