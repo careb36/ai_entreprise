@@ -506,9 +506,15 @@ def check_files(files: list[dict[str, str]]) -> dict[str, Any]:
     }
 
 
-def check_delivery(artifact: str | None) -> dict[str, Any] | None:
-    """``check_files`` over the files an artifact declares; ``None`` when it declares none."""
+def check_delivery(
+    artifact: str | None, edited: list[dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
+    """``check_files`` over the files an artifact declares and the ones the
+    edit tool changed (*edited*, the daemon's read-back; a file the artifact
+    declares itself keeps its block, as in the delivery); ``None`` without files."""
     from services.task_worker import parse_file_manifest
 
     files = parse_file_manifest(artifact or "")
+    have = {f["path"] for f in files}
+    files += [f for f in edited or [] if f.get("path") not in have]
     return check_files(files) if files else None

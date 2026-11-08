@@ -13,6 +13,8 @@ from services import mcp_tools
 
 SERVER = "workspace"
 RUN_TESTS = "run_tests"
+EDIT = "edit"
+FIND = "find_file"
 
 SCHEMAS: list[dict[str, Any]] = [
     {
@@ -44,8 +46,9 @@ SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}read",
             "description": (
-                "Read a file of the project as it is on disk, with line numbers, "
-                "at most 400 lines from `start_line`. Read a file before you change it."
+                "Read a file of the project as it is on disk: a window of 100 "
+                "numbered lines from `start_line`, headed `lines X–Y of N`. Page "
+                "on with the `start_line` the reply names. Read a file before you change it."
             ),
             "parameters": {
                 "type": "object",
@@ -69,7 +72,9 @@ SCHEMAS: list[dict[str, Any]] = [
             "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}search",
             "description": (
                 "Find the lines matching a regular expression (case-insensitive) "
-                "in the project or under a path: `file:line: text`, at most 60 matches."
+                "in the project or under a path: `file:line: text`, at most 60 matches. "
+                "Past that the reply says how many there are and in which files: "
+                "refine the pattern or the path."
             ),
             "parameters": {
                 "type": "object",
@@ -81,6 +86,30 @@ SCHEMAS: list[dict[str, Any]] = [
                     "path": {
                         "type": "string",
                         "description": "A folder or file to search in (default: the root).",
+                    },
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{FIND}",
+            "description": (
+                "Find files by name (`greet.py`) or glob (`test_*.py`, "
+                "`src/**/models/*.ts`); at most 50 listed, past that the count."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "A file name or a glob; with a `/` it matches the path.",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "A folder to look in (default: the root).",
                     },
                 },
                 "required": ["pattern"],
@@ -108,3 +137,52 @@ SCHEMAS: list[dict[str, Any]] = [
         },
     },
 ]
+
+# Offered only where an edit may touch the files: the task's worktree, or a
+# project without the Git workflow (``developer_tools.toolbox_for``).
+EDIT_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": f"{SERVER}{mcp_tools.TOOL_NAME_SEP}{EDIT}",
+        "description": (
+            "Change an existing file now: replace lines `start_line`..`end_line` "
+            "with `new_text` (empty deletes them; `end_line` = `start_line` - 1 "
+            "inserts), or replace one `search` text that appears exactly once "
+            "with `replace`. Applied only if the file still parses (Python, JSON, "
+            "JavaScript), else refused with the error and the file unchanged. "
+            "Later reads and test runs see the edit, and every edited file is "
+            "delivered as it is on disk when you finish: do not repeat it in "
+            "your answer. Read the lines before you edit them."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The file, relative to the project root.",
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "First line to replace (line mode).",
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "Last line to replace, inclusive (default start_line).",
+                },
+                "new_text": {
+                    "type": "string",
+                    "description": "The lines that take their place (line mode).",
+                },
+                "search": {
+                    "type": "string",
+                    "description": "Exact text to find, once (search mode).",
+                },
+                "replace": {
+                    "type": "string",
+                    "description": "Its replacement (search mode).",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+}
