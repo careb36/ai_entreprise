@@ -44,9 +44,12 @@ async def create_run_secret(
     task_company = _task_company(session, req.task_id)
     if task_company is None or task_company != req.company_id:
         raise HTTPException(status_code=404, detail="Task not found")
-    secret = run_secrets.create(
-        session, req.company_id, req.task_id, req.name, req.value
-    )
+    try:
+        secret = run_secrets.create(
+            session, req.company_id, req.task_id, req.name, req.value
+        )
+    except run_secrets.RunSecretError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"id": secret.id, "name": secret.name, "task_id": secret.task_id}
 
 
@@ -60,7 +63,7 @@ async def list_run_secrets(
     if company_id is None:
         raise HTTPException(status_code=404, detail="Task not found")
     require_company_role(session, user, company_id, "Viewer")
-    rows = run_secrets.list_for_task(session, task_id)
+    rows = run_secrets.list_for_task(session, task_id, company_id)
     return {
         "secrets": [{"id": s.id, "name": s.name, "task_id": s.task_id} for s in rows]
     }

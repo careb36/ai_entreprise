@@ -38,6 +38,10 @@ dev-all:
 
 clean:
 	@echo "$(GREEN)🧹 Limpiando cachés y entornos...$(RESET)"
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	find . -type d -name "node_modules" -exec rm -rf {} +
+	@echo "$(GREEN)✨ Entorno limpio.$(RESET)"
 
 ci:
 	@echo "$(GREEN)🧪 CI local (backend + frontend + proxy)...$(RESET)"
@@ -61,7 +65,3 @@ ci-frontend:
 ci-proxy:
 	@echo "$(GREEN)🤖 LLM proxy: pytest...$(RESET)"
 	cd llm-proxy && poetry run python -m pytest tests -q
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name "node_modules" -exec rm -rf {} +
-	@echo "$(GREEN)✨ Entorno limpio.$(RESET)"
