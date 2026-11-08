@@ -226,3 +226,73 @@ async def test_the_person_s_deny_list_wins_over_the_request(
     reply = await _execute(daemon, tmp_path, "pytest")
     assert reply["success"] is True
     assert ran == ["pytest"]
+
+
+# Review findings on #373: syntax the scanner does not model is refused while a
+# policy is active, rather than read in a way the shell does not.
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo hi >&'١'",  # a Unicode digit is not a stream number
+        "echo hi >&'1\n'",  # nor is one followed by a newline
+        'echo "$(echo hi #)\nprintf marker\n)"',  # a commented ')'
+        'echo `echo "\\$(printf marker)"`',  # backtick escapes decoded again
+        "echo <<EOF\n'$(printf marker)'\nEOF",  # here-document body
+        "echo $'a\\'b'; printf POLICY_BYPASS # '",  # ANSI-C quotes
+    ],
+)
+def test_syntax_the_scanner_does_not_model_is_refused(command):
+    ok, reason = command_policy.check_command(command, mode="allow", allow=["echo"])
+    assert ok is False, reason
+
+
+def test_a_line_continuation_inside_double_quotes_is_read_as_the_shell_does():
+    ok, reason = command_policy.check_command(
+        '"pri\\\nntf" hi', mode="deny", deny=["printf"]
+    )
+    assert ok is False and "printf" in reason
+
+
+def test_allow_patterns_are_case_sensitive():
+    allow = ["git branch -d"]
+    assert command_policy.check_command("git branch -d old", "allow", allow)[0]
+    assert not command_policy.check_command("git branch -D old", "allow", allow)[0]
+    assert not command_policy.check_command("GIT branch -d old", "allow", allow)[0]
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {},
+        False,
+        0,
+        "",
+        [],
+        {"mode": "deny", "deny": "sudo"},
+        {"mode": "allow", "allow": ["ls", 3]},
+    ],
+)
+def test_a_policy_that_cannot_be_read_refuses(policy):
+    assert command_policy.refusal("ls", policy) is not None
+
+
+def test_no_policy_still_runs_everything():
+    assert command_policy.refusal("ls -la", None) is None
+
+
+@pytest.mark.parametrize("command", [42, {}, ["ls"]])
+def test_a_command_that_is_not_text_is_refused(command):
+    reason = command_policy.refusal(command, {"mode": "deny", "deny": ["sudo"]})
+    assert reason and "not text" in reason
+
+
+def test_a_policy_on_windows_refuses_rather_than_misread(monkeypatch):
+    monkeypatch.setattr(command_policy.os, "name", "nt")
+    reason = command_policy.refusal(
+        "echo 'ok & whoami & echo end'", {"mode": "allow", "allow": ["echo"]}
+    )
+    assert reason and "POSIX shell" in reason
+    # Without a policy, Windows runs commands as before.
+    assert command_policy.refusal("dir", None) is None

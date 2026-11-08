@@ -32,6 +32,14 @@ every part must pass:
 Substitutions are checked as commands of their own, each strictly shorter
 than the text it came from, and no deeper than ``MAX_DEPTH``. Text the
 scanner cannot read (an unclosed quote or parenthesis) is refused.
+
+The scanner reads POSIX ``sh`` syntax and fails closed on what it does not
+model. While a policy is active, a command is refused when it carries a
+here-document or here-string (``<<``), Bash ANSI-C or locale quotes
+(``$'…'``, ``$"…"``), a comment (a ``#`` starting a word), or a backslash
+inside a backtick body (its escapes are decoded again before running); and
+on Windows, where ``cmd.exe`` and PowerShell quote differently, a policy
+refuses every command rather than read it with the wrong rules.
 """
 
 from __future__ import annotations
@@ -58,7 +66,8 @@ SUGGESTED_DENY = [
 
 _OPERATORS = ("&&", "||", "|&", ";;", ";", "&", "|", "\n", "(", ")")
 _REDIRECTS = ("&>>", "&>", ">>", ">&", ">|", "<<<", "<<-", "<<", "<&", "<>", ">", "<")
-_STREAM_DUP = re.compile(r"^(\d+-?|-)$")
+_STREAM_DUP = re.compile(r"(?:[0-9]+-?|-)")
+_STREAM_NUMBER = re.compile(r"[0-9]+")
 
 
 class _Unreadable(ValueError):
@@ -75,8 +84,8 @@ def _closing_backtick(text: str, start: int) -> int:
     j = start
     while j < len(text):
         if text[j] == "\\":
-            j += 2
-            continue
+            # The shell decodes a backtick body's escapes before parsing it.
+            raise _Unreadable("a backslash inside backticks; use $(...)")
         if text[j] == "`":
             return j
         j += 1
@@ -123,6 +132,8 @@ def _closing_paren(text: str, open_index: int, depth: int = 0) -> int:
         if ch == "`":
             j = _closing_backtick(text, j + 1) + 1
             continue
+        if ch == "#" and (j == open_index + 1 or text[j - 1] in " \t\n;&|()"):
+            raise _Unreadable("a comment inside a command substitution")
         if ch == "(":
             level += 1
         elif ch == ")":
@@ -188,7 +199,12 @@ class _Scanner:
             if ch == '"':
                 break
             if ch == "\\" and j + 1 < len(t):
-                parts.append(t[j + 1] if t[j + 1] in '$`"\\' else t[j : j + 2])
+                if t[j + 1] == "\n":
+                    pass  # a line continuation: gone before the shell runs it
+                elif t[j + 1] in '$`"\\':
+                    parts.append(t[j + 1])
+                else:
+                    parts.append(t[j : j + 2])
                 j += 2
             elif t.startswith("$(", j):
                 end = _closing_paren(t, j + 1)
@@ -211,7 +227,11 @@ class _Scanner:
         if t[i] not in "<>" and not t.startswith("&>", i):
             return False
         op = next(o for o in _REDIRECTS if t.startswith(o, i))
-        if t[i] in "<>" and self.in_word and "".join(self.word).isdigit():
+        if (
+            t[i] in "<>"
+            and self.in_word
+            and _STREAM_NUMBER.fullmatch("".join(self.word))
+        ):
             self.word, self.in_word = [], False  # the stream number, as in 2>
         else:
             self._end_word()
@@ -262,14 +282,15 @@ def _pattern_words(pattern: str) -> list[str]:
         words = shlex.split(pattern)
     except ValueError:
         words = pattern.split()
-    return [w.lower() for w in words]
+    return words
 
 
 def _allowed(words: list[str], allow: list[str]) -> bool:
-    lowered = [w.lower() for w in words]
+    # Case matters: executables are case-sensitive, and so are flags
+    # (``git branch -d`` must not allow ``git branch -D``).
     for pattern in allow:
         prefix = _pattern_words(pattern)
-        if prefix and lowered[: len(prefix)] == prefix:
+        if prefix and words[: len(prefix)] == prefix:
             return True
     return False
 
@@ -280,7 +301,7 @@ def _denied(text: str, deny: list[str]) -> str | None:
 
 
 def _redirect_refusal(op: str, target: str) -> str | None:
-    if op in (">&", "<&") and _STREAM_DUP.match(target):
+    if op in (">&", "<&") and _STREAM_DUP.fullmatch(target):
         return None
     if target == "/dev/null":
         return None
@@ -308,6 +329,17 @@ def _refusal(
     return None
 
 
+def _unsupported(command: str) -> str | None:
+    """Syntax the scanner does not model, refused rather than misread."""
+    if "<<" in command:
+        return "here-documents and here-strings are not supported"
+    if "$'" in command or '$"' in command:
+        return "ANSI-C and locale quotes ($'...', $\"...\") are not supported"
+    if re.search(r"(?:^|[\s;&|()])#", command):
+        return "comments are not supported"
+    return None
+
+
 def check_command(
     command: str,
     mode: str = "deny",
@@ -319,6 +351,8 @@ def check_command(
     """``(True, "ok")`` when every part of ``command`` passes, else the reason."""
     allow = [p for p in (allow or []) if isinstance(p, str) and p.strip()]
     deny = [p for p in (deny or []) if isinstance(p, str) and p.strip()]
+    if command is not None and not isinstance(command, str):
+        return False, "the command is not text"
     command = (command or "").strip()
     if not command:
         return False, "empty command"
@@ -326,6 +360,9 @@ def check_command(
         return False, f"unknown policy mode {mode!r}"
     if _depth > MAX_DEPTH:
         return False, f"command substitution nested deeper than {MAX_DEPTH}"
+    unsupported = _unsupported(command)
+    if unsupported:
+        return False, f"cannot read the command: {unsupported}"
     try:
         commands, substitutions = _Scanner(command).parse()
     except _Unreadable as exc:
@@ -345,8 +382,17 @@ def check_command(
     return True, "ok"
 
 
-def _patterns(value: Any) -> list[str]:
-    return [str(p) for p in value] if isinstance(value, list) else []
+class _BadPolicy(ValueError):
+    """A command policy the daemon cannot read."""
+
+
+def _patterns(request: dict[str, Any], key: str) -> list[str]:
+    value = request.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
+        raise _BadPolicy(f"{key} must be a list of strings")
+    return value
 
 
 def local_deny() -> list[str]:
@@ -362,18 +408,25 @@ def refusal(command: str, request: Any = None) -> str | None:
     The daemon's own deny list applies first and whatever the request says.
     """
     own = local_deny()
+    if os.name == "nt" and (own or request is not None):
+        return (
+            "refused: a command policy is enforced only with a POSIX shell, "
+            "and this computer runs commands through cmd.exe or PowerShell"
+        )
     if own:
         ok, reason = check_command(command, "deny", deny=own)
         if not ok:
             return f"refused by this computer's {LOCAL_DENY_ENV}: {reason}"
-    if not request:
+    if request is None:
         return None
     if not isinstance(request, dict):
         return "refused: the command policy is not an object"
     mode = str(request.get("mode") or "").strip().lower()
-    ok, reason = check_command(
-        command, mode, _patterns(request.get("allow")), _patterns(request.get("deny"))
-    )
+    try:
+        allow, deny = _patterns(request, "allow"), _patterns(request, "deny")
+    except _BadPolicy as exc:
+        return f"refused: the command policy cannot be read: {exc}"
+    ok, reason = check_command(command, mode, allow, deny)
     if ok:
         return None
     return f"refused by the company's command policy ({mode or 'no mode'}): {reason}"
