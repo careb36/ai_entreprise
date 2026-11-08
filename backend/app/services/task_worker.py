@@ -519,14 +519,10 @@ def _consult_architect(
     sprint: dict[str, Any],
     prior_feedback: list[str] | None = None,
 ) -> str:
-    """
-    Ask the company's Architect agent for a short technical brief on *item*.
-
-    Runs synchronously (called via ``asyncio.to_thread``).  Returns the advice
-    text, or ``""`` when no Architect agent exists or the call fails; callers
-    treat an empty brief as "no consultation happened".  Successful calls are
-    written to ``audit_log`` with ``role=Architect``.
-    """
+    """Ask the company's Architect agent for a short brief on *item*, with the
+    repository map. Synchronous (via ``asyncio.to_thread``); ``""`` when no
+    Architect exists or the call fails (no consultation happened). Successful
+    calls are written to ``audit_log`` with ``role=Architect``."""
     with Session(engine) as session:
         architect_row = session.exec(
             select(Agent).where(
@@ -574,6 +570,8 @@ def _consult_architect(
     )
     prompt = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
+    ) + developer_tools.repository_section(
+        sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
 
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
