@@ -86,6 +86,17 @@ def model_for(
     return None
 
 
+def company_model(session: Any, company_id: int | None, role: str | None) -> str:
+    """The company's model for *role*, or its default (``company_models``); ``""``.
+
+    The task worker puts it where the agent's own model is empty, so a choice
+    the company made is never re-routed by difficulty.
+    """
+    from services import company_models
+
+    return company_models.model_for(session, company_id, role) or ""
+
+
 def resolve_agent_model(
     agent: dict[str, Any],
     default_role: str = "Dev",

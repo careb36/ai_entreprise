@@ -42,8 +42,8 @@ class ArchAuthorError(Exception):
 
 
 def architect_profile(session: Session, company_id: int) -> tuple[str, str | None, str]:
-    """The company's Architect agent: its model (or the role's default), system prompt and name."""
-    from llm.model_factory import default_model_for_role
+    """The company's Architect agent: its model (or the company's, or the role's default), system prompt and name."""
+    from services import company_models
 
     architect = session.exec(
         select(Agent).where(
@@ -52,7 +52,7 @@ def architect_profile(session: Session, company_id: int) -> tuple[str, str | Non
     ).first()
     configured = (architect.model if architect else "") or ""
     return (
-        configured.strip() or default_model_for_role(ARCHITECT_ROLE),
+        company_models.resolve(session, company_id, ARCHITECT_ROLE, configured),
         (architect.system_prompt if architect else None) or None,
         (architect.name if architect else "") or ARCHITECT_ROLE,
     )

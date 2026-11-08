@@ -27,8 +27,7 @@ from logging_config import setup_logger
 from models import Agent, AgentMessage, BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from llm.model_factory import default_model_for_role
-from services import procedures
+from services import company_models, procedures
 from services.board import (
     BRIEF_PREFIX,
     SCRUM_MASTER_ROLE,
@@ -197,7 +196,7 @@ def profile(session: Session, company_id: int) -> tuple[str, str | None]:
         )
     ).first()
     configured = (scrum_master.model if scrum_master else "") or ""
-    model = configured.strip() or default_model_for_role(SCRUM_MASTER_ROLE)
+    model = company_models.resolve(session, company_id, SCRUM_MASTER_ROLE, configured)
     return model, (scrum_master.system_prompt if scrum_master else None) or None
 
 
