@@ -105,6 +105,7 @@ ALWAYS_ESCALATE = frozenset(
         "approve_architecture",
         "accept_high_risk",
         "cancel_sprint",
+        "delete_sprint",
         "change_autonomy",
         "spend_above_budget",
     }

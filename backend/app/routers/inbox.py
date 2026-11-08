@@ -9,7 +9,8 @@ the agent runs of other producers nobody has approved or rejected (the
 company's own task worker and kickoff runs are decided by the review loop),
 and the sprints whose integration stopped at a merge conflict or a failing
 suite, missed a task's branch or could not start (``integrations``, listed up
-to the limit and counted in full; ``services/integration.py``).
+to the limit and counted in full; ``services/integration.py``). An archived
+sprint's tasks and integrations are left out (``services/sprint_archive.py``).
 
 With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
 ``suggestion`` (a claim, ``services/manager_agent.py``), and
@@ -26,7 +27,13 @@ from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
-from services import integration, scrum_master, task_events, task_projection
+from services import (
+    integration,
+    scrum_master,
+    sprint_archive,
+    task_events,
+    task_projection,
+)
 from services.carry_over import carried_over
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -66,7 +73,11 @@ async def inbox(
     rows = session.exec(
         select(BacklogItem, Sprint)
         .join(Sprint, Sprint.id == BacklogItem.sprint_id)
-        .where(Sprint.company_id == company_id, BacklogItem.status == "blocked")
+        .where(
+            Sprint.company_id == company_id,
+            BacklogItem.status == "blocked",
+            sprint_archive.listed(),
+        )
         .order_by(BacklogItem.updated_at.desc(), BacklogItem.id.desc())
     ).all()
     blocked_tasks = []

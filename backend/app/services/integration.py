@@ -560,7 +560,7 @@ def waiting_for_a_person(session: Session, company_id: int) -> list[dict[str, An
     rows = session.exec(
         select(SprintIntegration, Sprint)
         .join(Sprint, Sprint.id == SprintIntegration.sprint_id)
-        .where(SprintIntegration.company_id == company_id)
+        .where(SprintIntegration.company_id == company_id, Sprint.archived_at.is_(None))
         .order_by(SprintIntegration.created_at.desc(), SprintIntegration.id.desc())
     ).all()
     seen: set[int] = set()

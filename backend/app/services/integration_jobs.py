@@ -163,10 +163,12 @@ def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
 async def retry_pending(nats_client: Any, engine: Any) -> int:
     """Try again each sprint whose latest integration is open; how many were tried here."""
     with Session(engine) as session:
+        # An archived sprint's open integration waits until it is unarchived.
         rows = session.exec(
-            select(SprintIntegration).order_by(
-                SprintIntegration.created_at.desc(), SprintIntegration.id.desc()
-            )
+            select(SprintIntegration)
+            .join(Sprint, Sprint.id == SprintIntegration.sprint_id)
+            .where(Sprint.archived_at.is_(None))
+            .order_by(SprintIntegration.created_at.desc(), SprintIntegration.id.desc())
         ).all()
         latest_of: dict[int, str] = {}
         for row in rows:

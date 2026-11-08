@@ -2052,5 +2052,24 @@
     "recordOverridden": "overridden {{overridden}} of {{taken}} taken alone ({{rate}})",
     "recordFlagged": "Flagged, not applied: {{rules}}",
     "requestLabel": "Your request, in plain words"
+  },
+  "sprintAdmin": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "unarchive": "Unarchive",
+    "editTitle": "Edit sprint",
+    "name": "Name",
+    "goal": "Goal",
+    "duration": "Days",
+    "nameRequired": "The sprint needs a name.",
+    "durationRange": "Duration is a whole number of days from 1 to {{max}}.",
+    "saved": "Sprint updated",
+    "deleteConfirm": "Delete \"{{name}}\"? A sprint with recorded work is archived, not deleted: its evidence stays and an Owner can unarchive it. A sprint nothing was recorded on is deleted with its tasks.",
+    "deleted": "Sprint deleted",
+    "archived": "Sprint archived: it had recorded work, which stays",
+    "unarchived": "Sprint unarchived",
+    "stopFirst": "Stop the sprint first",
+    "archivedBy": "Archived by {{who}}",
+    "showArchived": "Show archived sprints"
   }
 }
