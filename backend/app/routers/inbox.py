@@ -26,12 +26,7 @@ from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
-from services import integration, scrum_master
-from services.board import (
-    awaits_risk_acceptance,
-    block_reason,
-    blocked_item_next_step,
-)
+from services import integration, scrum_master, task_events, task_projection
 from services.carry_over import carried_over
 from sqlalchemy import func
 from sqlmodel import Session, select
@@ -79,8 +74,12 @@ async def inbox(
     # The ScrumMaster's answers to the escalations, one query for the page.
     triages = scrum_master.triages_for(session, [item for item, _ in rows])
     suggestions = _suggestions(session, company_id)
+    # Every candidate's events, one query, shared by the three projections.
+    histories = task_events.for_tasks(session, [item.id for item, _ in rows])
     for item, sprint in rows:
-        next_step = blocked_item_next_step(item.comments, item.assignee)
+        # From the task's events when they render its whole thread, else
+        # from its comments (services/task_projection.py).
+        next_step = task_projection.blocked_item_next_step(session, item, histories)
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own
         if carried_over(item):
@@ -96,14 +95,18 @@ async def inbox(
                 "sprint_id": sprint.id,
                 "sprint_name": sprint.sprint_name,
                 "sprint_status": sprint.status,
-                "reason": block_reason(item.comments)[:REASON_LIMIT],
+                "reason": task_projection.block_reason(session, item, histories)[
+                    :REASON_LIMIT
+                ],
                 # The ScrumMaster's answer to the escalation, a claim for the
                 # person to weigh: another attempt (with a brief) or a person.
                 "triage": triages.get(item.id),
                 "frozen": next_step == "frozen",
                 # Approved by QA, but high risk (services/risk.py): a person
                 # accepts it (marks it done) or sends it back to work.
-                "risk_hold": awaits_risk_acceptance(item.comments),
+                "risk_hold": task_projection.awaits_risk_acceptance(
+                    session, item, histories
+                ),
                 "suggestion": suggestions.get(("task", item.id)),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
