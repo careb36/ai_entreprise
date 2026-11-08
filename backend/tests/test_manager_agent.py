@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import secrets
 import threading
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import auth_tokens
 import pytest
@@ -21,10 +23,12 @@ from services import (
     manager_agent,
     manager_policy,
     manager_record,
+    run_review,
 )
 from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, awaits_risk_acceptance
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 from services.sprint_control import HUMAN_LED_REASON
+from sqlalchemy import update
 from sqlmodel import Session, SQLModel, create_engine, select
 
 
@@ -795,3 +799,359 @@ def test_the_brief_is_company_scoped(sqlite_session, test_client, auth_on):
     url = f"/v1/companies/{company.id}/brief"
     assert test_client.get(url, headers=other).status_code == 403
     assert test_client.get(url, headers=viewer).status_code == 200
+
+
+# ── Acting alone safely (review of #388) ──────────────────────────────────────
+
+
+def test_a_frozen_hold_is_suggested_on_but_never_accepted_alone(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    item.comments = [
+        *item.comments,
+        {"author": "user", "text": "Freeze after the outage: leave it to me."},
+    ]
+    sqlite_session.add(item)
+    sqlite_session.commit()
+    _policy(sqlite_session, company, "accept_delivery")
+    assert _cycle(sqlite_session, company, answer("accept", "accept_delivery")) == 1
+    (row,) = _rows(sqlite_session, company)
+    assert row.suggested_decision == "accept" and row.decided_by is None
+    assert row.action_state == manager_agent.NOT_ALLOWED
+    sqlite_session.refresh(item)
+    assert item.status == "blocked"
+
+
+def test_a_send_back_during_the_call_wins_over_the_answer(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery")
+
+    def person_acts_meanwhile(prompt):
+        item.status = "todo"
+        item.comments = [*item.comments, {"author": "System", "text": "Sent back."}]
+        sqlite_session.add(item)
+        sqlite_session.commit()
+        return answer("accept", "accept_delivery")
+
+    _cycle(sqlite_session, company, person_acts_meanwhile)
+    (row,) = _rows(sqlite_session, company)
+    assert row.decided_by is None and row.action_state == manager_agent.STALE
+    sqlite_session.refresh(item)
+    assert item.status == "todo"
+
+
+def test_a_policy_revoked_during_the_call_is_honoured(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery")
+
+    def revoke(prompt):
+        manager_policy.save(
+            sqlite_session, company.id, manager_policy.Policy(rules=[]), "ana"
+        )
+        sqlite_session.commit()
+        return answer("accept", "accept_delivery")
+
+    _cycle(sqlite_session, company, revoke)
+    (row,) = _rows(sqlite_session, company)
+    assert row.decided_by is None and row.action_state == manager_agent.NOT_ALLOWED
+    sqlite_session.refresh(item)
+    assert item.status == "blocked"
+
+
+def test_the_acceptance_is_conditional_on_the_task_as_it_was_read(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    sqlite_session.refresh(item)
+    # What the agent read, before a person commented on the task.
+    stale = SimpleNamespace(
+        id=item.id, comments=list(item.comments), updated_at=item.updated_at
+    )
+    sqlite_session.exec(  # type: ignore[call-overload]
+        update(BacklogItem)
+        .where(BacklogItem.id == item.id)
+        .values(updated_at=datetime(2030, 1, 1))
+    )
+    sqlite_session.commit()
+    with pytest.raises(manager_actions.Stale):
+        manager_actions._accept(sqlite_session, stale, "Accepted by the Manager agent")
+    sqlite_session.rollback()
+    assert sqlite_session.get(BacklogItem, item.id).status == "blocked"
+
+
+def test_a_pending_action_left_by_a_stopped_replica_is_resumed(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery")
+    (situation,) = manager_agent.inbox_items(sqlite_session, company)
+    # The suggestion was stored, then the replica stopped before acting.
+    sqlite_session.add(
+        ManagerDecision(
+            company_id=company.id,
+            item_kind="task",
+            item_id=item.id,
+            item_state=situation["state"],
+            category="accept_delivery",
+            suggested_decision="accept",
+            suggested_reason="Verified, low risk.",
+            action_state=manager_agent.PENDING,
+        )
+    )
+    sqlite_session.commit()
+
+    def never(prompt):
+        raise AssertionError("a pending action needs no new model call")
+
+    _cycle(sqlite_session, company, never)
+    (row,) = _rows(sqlite_session, company)
+    assert row.action_state == manager_agent.DONE
+    assert row.decided_by == MANAGER_AGENT_NAME
+    sqlite_session.refresh(item)
+    assert item.status == "done"
+
+
+def test_the_cycle_budget_counts_failed_calls_across_companies(sqlite_session):
+    calls = []
+
+    def boom(prompt):
+        calls.append(prompt)
+        raise RuntimeError("proxy timing out")
+
+    budget = manager_agent.Budget(3)
+    for _ in range(2):
+        company = _company(sqlite_session)
+        for _ in range(3):
+            _hold(sqlite_session, company)
+        manager_agent.company_cycle(sqlite_session, company, boom, budget)
+    assert len(calls) == 3 and budget.left == 0
+
+
+def test_the_call_is_billed_to_the_company_and_its_tokens_audited(
+    sqlite_session, monkeypatch
+):
+    company = _company(sqlite_session)
+    unit = BusinessUnit(company_id=company.id, unit_name="Main", token_quota_limit=1000)
+    sqlite_session.add(unit)
+    sqlite_session.commit()
+    seen = {}
+
+    def fake_ask(prompt, model=None, company_id=None, bu_id=None):
+        seen.update(company_id=company_id, bu_id=bu_id)
+        return {
+            "choices": [{"message": {"content": answer("escalate", "blocked_task")}}],
+            "usage": {"prompt_tokens": 30, "completion_tokens": 12, "total_tokens": 42},
+            "usage_status": "reported",
+            "served_model": "fake",
+        }
+
+    monkeypatch.setattr(manager_agent, "ask_llm", fake_ask)
+    call = manager_agent._billed_call(sqlite_session, company.id, None)
+    assert "DECISION: escalate" in call("prompt")
+    assert seen == {"company_id": company.id, "bu_id": unit.id}
+    (audit,) = sqlite_session.exec(
+        select(AuditLog).where(
+            AuditLog.company_id == company.id,
+            AuditLog.action == "manager_agent_call",
+        )
+    ).all()
+    assert audit.cost_tokens == 42 and audit.details["bu_id"] == unit.id
+
+
+def test_the_prompt_carries_the_standards_and_the_company_s_procedures(
+    sqlite_session,
+):
+    company = _company(sqlite_session)
+    _hold(sqlite_session, company)
+    sqlite_session.add(
+        Procedure(
+            company_id=company.id,
+            role="All",
+            title="Name the evidence",
+            body="Cite the verdict in every decision.",
+            status="active",
+            proposed_by="ScrumMaster",
+        )
+    )
+    sqlite_session.commit()
+    _cycle(sqlite_session, company, answer("escalate", "accept_delivery"))
+    prompt = _cycle.prompts[0]
+    assert "## Quality standards" in prompt and "STD-SEC-1" in prompt
+    assert "## Company Procedures" in prompt
+    assert "Cite the verdict in every decision." in prompt
+
+
+def test_an_imported_run_counts_its_changed_files_and_unknown_size_never_passes():
+    imported = AgentRun(
+        producer="github",
+        subject={"changed_files": [f"f{i}.py" for i in range(12)]},
+        claims={"files": ["f0.py"]},
+    )
+    verified = Verification(verdict="verified", checks=[])
+    assert manager_agent.run_facts(imported, verified)["files"] == 12
+    silent = AgentRun(producer="github", subject={}, claims={})
+    facts = {
+        **manager_agent.run_facts(silent, verified),
+        "risk_tier": "low",
+    }
+    assert facts["files"] is None
+    assert "over the limit" in manager_policy._rule_holds(
+        "approve_run", facts, manager_policy.Policy(rules=["approve_run"])
+    )
+
+
+def test_new_evidence_on_a_run_is_looked_at_afresh(sqlite_session):
+    company = _company(sqlite_session)
+    run = _outside_run(sqlite_session, company, verdict="refuted")
+    _cycle(sqlite_session, company, answer("reject", "approve_run"))
+    assert _cycle(sqlite_session, company, answer("reject", "approve_run")) == 0
+    sqlite_session.add(
+        Verification(
+            company_id=company.id,
+            agent_run_id=run.id,
+            verdict="verified",
+            checks=[{"name": "risk_tier", "outcome": "pass", "tier": "low"}],
+        )
+    )
+    sqlite_session.commit()
+    assert _cycle(sqlite_session, company, answer("approve", "approve_run")) == 1
+    assert [r.suggested_decision for r in _rows(sqlite_session, company)] == [
+        "reject",
+        "approve",
+    ]
+
+
+def test_an_override_already_running_is_refused(sqlite_session):
+    company = _company(sqlite_session)
+    _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery")
+    _cycle(sqlite_session, company, answer("accept", "accept_delivery"))
+    (row,) = _rows(sqlite_session, company)
+    engine = sqlite_session.get_bind()
+    with (
+        locks.held(engine, manager_actions.OVERRIDE_LOCK, row.id),
+        pytest.raises(manager_actions.OverrideRefused) as refused,
+    ):
+        manager_actions.override(sqlite_session, row, "ana")
+    assert refused.value.status == 409
+    assert manager_actions.override(sqlite_session, row, "ana")["outcome"] == (
+        "waits_for_a_person"
+    )
+
+
+def test_an_override_never_undoes_a_later_decision(sqlite_session):
+    company = _company(sqlite_session)
+    item = _hold(sqlite_session, company)
+    _policy(sqlite_session, company, "accept_delivery", "approve_run")
+    run = _outside_run(sqlite_session, company)
+    replies = {"accept_delivery": "accept", "approve_run": "approve"}
+    _cycle(
+        sqlite_session,
+        company,
+        lambda p: next(
+            answer(d, c) for c, d in replies.items() if f"CATEGORY: {c}" in p
+        ),
+    )
+    rows = {r.item_kind: r for r in _rows(sqlite_session, company)}
+    task_row, run_row = rows["task"], rows["run"]
+    assert task_row.decided_by == run_row.decided_by == MANAGER_AGENT_NAME
+    # A person reopened and accepted the task again; a person decided the run.
+    sqlite_session.refresh(item)
+    item.comments = [
+        *item.comments,
+        {"author": "user", "text": "Reopened and accepted again by a person."},
+    ]
+    sqlite_session.add(item)
+    run_review.record_approval(
+        sqlite_session, run, approver_name="ana", decision="approved", feedback="ok"
+    )
+    sqlite_session.commit()
+    for row in (task_row, run_row):
+        with pytest.raises(manager_actions.OverrideRefused) as refused:
+            manager_actions.override(sqlite_session, row, "ana")
+        assert refused.value.status == 409
+        sqlite_session.rollback()
+        sqlite_session.refresh(row)
+        assert row.overridden_at is None
+
+
+def test_the_history_check_dates_a_dependency_by_the_agent_s_acceptance():
+    dependency = {
+        "status": "done",
+        "comments": [
+            {
+                "author": "Developer",
+                "text": "the work",
+                "created_at": "2026-01-01T10:00:00",
+            },
+            {
+                "author": "QA",
+                "text": "APPROVED: ok",
+                "created_at": "2026-01-01T11:00:00",
+            },
+            {
+                "author": "System",
+                "text": f"{RISK_HOLD_PREFIX} ({HUMAN_LED_REASON}).",
+                "created_at": "2026-01-01T11:00:01",
+            },
+            {
+                "author": MANAGER_AGENT_NAME,
+                "text": f"{ACCEPTED_PREFIX} under the company's policy.",
+                "created_at": "2026-01-01T13:00:00",
+            },
+        ],
+    }
+    task = {
+        "id": 2,
+        "status": "in_review",
+        "depends_on": [1],
+        "comments": [
+            {
+                "author": "Developer",
+                "text": "early work",
+                "created_at": "2026-01-01T12:00:00",
+            }
+        ],
+    }
+    violations = check_task(task, [], [], {1: dependency})
+    assert any(v.startswith("worked_before_dependency") for v in violations)
+
+
+def test_the_brief_dates_work_and_decisions_by_their_own_moments(
+    sqlite_session, test_client
+):
+    company = _company(sqlite_session)
+    old = _hold(sqlite_session, company)
+    old.status = "done"
+    old.comments = [
+        *old.comments,
+        {"author": "user", "text": "Accepted.", "created_at": "2026-01-01T09:00:00"},
+    ]
+    sqlite_session.add(old)
+    sqlite_session.commit()
+    # Commented on today, done long ago: not done in the window.
+    old.priority = "low"
+    old.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    sqlite_session.add(old)
+    sqlite_session.commit()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    sqlite_session.add(
+        ManagerDecision(
+            company_id=company.id,
+            item_kind="task",
+            item_id=old.id,
+            item_state="done:old",
+            category="accept_delivery",
+            suggested_decision="accept",
+            suggested_at=now - timedelta(days=10),
+            decided_by=MANAGER_AGENT_NAME,
+            decided_at=now - timedelta(days=10),
+            overridden_by="ana",
+            overridden_at=now,
+        )
+    )
+    sqlite_session.commit()
+    brief = test_client.get(f"/v1/companies/{company.id}/brief").json()
+    assert brief["done"]["count"] == 0
+    assert brief["agent"]["overridden"] == 1
+    assert brief["agent"]["suggested"] == 0 and brief["agent"]["taken_alone"] == 0

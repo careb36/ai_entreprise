@@ -55,13 +55,29 @@ export function useClientBrief(companyId: number | null) {
   })
 }
 
+/** The query families an override can change. */
+export const OVERRIDE_INVALIDATES = [
+  'inbox',
+  'company',
+  'sprint',
+  'sprints',
+  'procedures',
+  'agent-runs',
+  'agent-run',
+  'audit-verification',
+  'manager-record',
+] as const
+
 export function useOverrideManagerDecision() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: managerApi.override,
+    // An override changes a task (the boards), a procedure or a run's
+    // approval, so every view of those is read again, with the record.
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inbox'] })
-      queryClient.invalidateQueries({ queryKey: ['company'] })
+      for (const key of OVERRIDE_INVALIDATES) {
+        queryClient.invalidateQueries({ queryKey: [key] })
+      }
     },
   })
 }

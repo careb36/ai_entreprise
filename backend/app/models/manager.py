@@ -59,6 +59,10 @@ class ManagerDecision(SQLModel, table=True):
     suggested_reason: str | None = None
     suggested_by: str = "Manager agent"
     suggested_at: datetime = Field(default_factory=_utcnow)
+    # What became of the suggestion: pending (the policy not applied yet; a
+    # replica that stopped leaves it to be decided again), done, not_allowed,
+    # stale (the situation changed before acting) or unusable.
+    action_state: str | None = None
     # Set only when the policy let the agent decide alone.
     decided_by: str | None = None
     rule: str | None = None

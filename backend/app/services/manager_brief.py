@@ -26,11 +26,12 @@ from models import (
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.company import BusinessUnit
 from models.manager import ManagerDecision
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from services import integration, manager_agent, manager_record
-from services.board import awaits_risk_acceptance
+from services.board import awaits_risk_acceptance, comment_list
+from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 
 LIST_LIMIT = 20
 DEFAULT_WINDOW = timedelta(days=1)
@@ -44,8 +45,35 @@ def _iso(moment: datetime | None) -> str | None:
     return moment.isoformat() if moment else None
 
 
+def _completed_at(item: BacklogItem) -> datetime | None:
+    """When the task got done: its last closing comment (an ``APPROVED:``
+    verdict, a person's note or the Manager agent's acceptance), the same
+    transition ``history_check`` reads; ``updated_at`` moves on any edit."""
+    closing = None
+    for comment in comment_list(item.comments):
+        author = str(comment.get("author") or "").strip().lower()
+        text = str(comment.get("text") or "").strip()
+        if (
+            author == "user"
+            or text.upper().startswith("APPROVED:")
+            or (
+                author == MANAGER_AGENT_NAME.lower()
+                and text.startswith(ACCEPTED_PREFIX)
+            )
+        ):
+            closing = comment
+    if closing is None:
+        return None
+    try:
+        return _naive(datetime.fromisoformat(str(closing.get("created_at") or "")))
+    except ValueError:
+        # A closing comment written without its time: the last edit is all we have.
+        return _naive(item.updated_at) if item.updated_at else None
+
+
 def _done(session: Session, company_id: int, since: datetime) -> dict[str, Any]:
-    rows = session.exec(
+    # A task done in the window was last edited in it too; the comments say when.
+    candidates = session.exec(
         select(BacklogItem)
         .join(Sprint, Sprint.id == BacklogItem.sprint_id)
         .where(
@@ -53,32 +81,52 @@ def _done(session: Session, company_id: int, since: datetime) -> dict[str, Any]:
             BacklogItem.status == "done",
             BacklogItem.updated_at >= since,
         )
-        .order_by(BacklogItem.updated_at.desc(), BacklogItem.id.desc())
     ).all()
+    done = sorted(
+        (
+            (moment, item)
+            for item in candidates
+            if (moment := _completed_at(item)) is not None and moment >= since
+        ),
+        key=lambda pair: (pair[0], pair[1].id),
+        reverse=True,
+    )
     return {
-        "count": len(rows),
+        "count": len(done),
         "tasks": [
-            {"id": i.id, "title": i.title, "sprint_id": i.sprint_id}
-            for i in rows[:LIST_LIMIT]
+            {
+                "id": i.id,
+                "title": i.title,
+                "sprint_id": i.sprint_id,
+                "completed_at": _iso(moment),
+            }
+            for moment, i in done[:LIST_LIMIT]
         ],
     }
 
 
 def _decisions(session: Session, company_id: int, since: datetime) -> dict[str, Any]:
+    """Suggestions, decisions and overrides, each counted by its own moment."""
     rows = session.exec(
         select(ManagerDecision)
         .where(
             ManagerDecision.company_id == company_id,
-            ManagerDecision.suggested_at >= since,
+            or_(
+                ManagerDecision.suggested_at >= since,
+                ManagerDecision.decided_at >= since,
+                ManagerDecision.overridden_at >= since,
+            ),
         )
         .order_by(ManagerDecision.id.desc())
     ).all()
-    alone = [r for r in rows if r.decided_by]
+    suggested = [r for r in rows if r.suggested_at and r.suggested_at >= since]
+    alone = [r for r in rows if r.decided_by and r.decided_at and r.decided_at >= since]
+    overridden = [r for r in rows if r.overridden_at and r.overridden_at >= since]
     return {
-        "suggested": sum(1 for r in rows if r.suggested_decision),
-        "unusable": sum(1 for r in rows if r.suggested_decision is None),
+        "suggested": sum(1 for r in suggested if r.suggested_decision),
+        "unusable": sum(1 for r in suggested if r.suggested_decision is None),
         "taken_alone": len(alone),
-        "overridden": sum(1 for r in alone if r.overridden_at),
+        "overridden": len(overridden),
         "decisions": [
             {
                 "id": r.id,

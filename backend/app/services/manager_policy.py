@@ -161,6 +161,8 @@ def _rule_holds(rule: str, facts: dict[str, Any], policy: Policy) -> str | None:
     tier = facts.get("risk_tier")
     files = facts.get("files")
     if rule == "accept_delivery":
+        if facts.get("frozen"):
+            return "an operator froze the task"
         if not facts.get("human_led_hold"):
             return "the hold is not only the autonomy level's"
         if facts.get("verdict") != "verified":

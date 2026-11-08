@@ -53,6 +53,7 @@ def upgrade() -> None:
         sa.Column("suggested_reason", text(), nullable=True),
         sa.Column("suggested_by", text(), nullable=False),
         sa.Column("suggested_at", sa.DateTime(), nullable=False),
+        sa.Column("action_state", text(), nullable=True),
         sa.Column("decided_by", text(), nullable=True),
         sa.Column("rule", text(), nullable=True),
         sa.Column("outcome", text(), nullable=True),

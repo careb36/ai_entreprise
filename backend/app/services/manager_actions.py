@@ -21,11 +21,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from models import AgentRun, BacklogItem, Procedure
+from models import AgentRun, AgentRunApproval, BacklogItem, Procedure
 from models.manager import ManagerDecision
+from sqlalchemy import update
 from sqlmodel import Session, select
 
-from services import procedures, run_review
+from services import locks, procedures, run_review
 from services.agent_service import AgentService
 from services.carry_over import carried_over
 
@@ -33,6 +34,13 @@ MANAGER_AGENT_NAME = "Manager agent"
 # The note on a task the agent accepted; history_check.py restates it.
 ACCEPTED_PREFIX = "Accepted by the Manager agent"
 OVERRIDE_PREFIX = "Override:"
+
+
+OVERRIDE_LOCK = "manager-override"
+
+
+class Stale(Exception):
+    """The item is no longer as the agent saw it; nothing was changed."""
 
 
 class OverrideRefused(Exception):
@@ -53,6 +61,33 @@ def _note(item: BacklogItem, author: str, text: str) -> None:
     comments.append({"author": author, "text": text, "created_at": str(_now())})
     item.comments = comments
     item.updated_at = _now()
+
+
+def _accept(session: Session, item: BacklogItem, text: str) -> None:
+    """Mark the held task done only if nobody touched it since it was read.
+
+    One conditional ``UPDATE … WHERE status = 'blocked' AND updated_at = …``:
+    a person's send-back, comment or acceptance in between changes the row,
+    and the agent changes nothing (``Stale``).
+    """
+    now = _now()
+    comments = [dict(c) for c in item.comments or [] if isinstance(c, dict)]
+    comments.append(
+        {"author": MANAGER_AGENT_NAME, "text": text, "created_at": str(now)}
+    )
+    result = session.exec(  # type: ignore[call-overload]
+        update(BacklogItem)
+        .where(
+            BacklogItem.id == item.id,
+            BacklogItem.status == "blocked",
+            BacklogItem.updated_at == item.updated_at,
+        )
+        .values(status="done", comments=comments, updated_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        raise Stale(f"task {item.id} changed since the agent read it")
+    session.expire(item)
 
 
 def _audit(
@@ -80,25 +115,34 @@ def _audit(
 
 
 def act(session: Session, row: ManagerDecision, rule: str) -> str:
-    """Take the decision *row* suggests, as *rule* allowed; returns the outcome."""
+    """Take the decision *row* suggests, as *rule* allowed; returns the outcome.
+
+    One transaction: the change, the decision row and the audit commit
+    together, so a replica that stops midway leaves the row pending and the
+    item untouched. Raises ``Stale`` when the item changed since it was read.
+    """
     reason = row.suggested_reason or ""
     if row.category == "accept_delivery":
         item = session.get(BacklogItem, row.item_id)
-        item.status = "done"
-        _note(
+        if item is None:
+            raise Stale("the task is gone")
+        _accept(
+            session,
             item,
-            MANAGER_AGENT_NAME,
             f"{ACCEPTED_PREFIX} under the company's policy (rule {rule}, "
             f"decision #{row.id}): {reason}",
         )
-        session.add(item)
         outcome = "accepted"
     elif row.category == "adopt_procedure":
         procedure = session.get(Procedure, row.item_id)
+        if procedure is None or procedure.status != "proposed":
+            raise Stale("the procedure is no longer proposed")
         procedures.adopt(session, procedure, MANAGER_AGENT_NAME)
         outcome = "adopted"
     elif row.category == "approve_run":
         run = session.get(AgentRun, row.item_id)
+        if run is None or _latest_approval(session, row.item_id) is not None:
+            raise Stale("the run was decided meanwhile")
         run_review.record_approval(
             session,
             run,
@@ -114,6 +158,7 @@ def act(session: Session, row: ManagerDecision, rule: str) -> str:
     row.rule = rule
     row.outcome = outcome
     row.decided_at = _now()
+    row.action_state = "done"
     session.add(row)
     audit = _audit(
         session,
@@ -150,11 +195,56 @@ def _restore_superseded(session: Session, procedure: Procedure) -> int:
     return restored
 
 
+def _latest_approval(session: Session, run_id: int) -> AgentRunApproval | None:
+    return session.exec(
+        select(AgentRunApproval)
+        .where(AgentRunApproval.agent_run_id == run_id)
+        .order_by(AgentRunApproval.decided_at.desc(), AgentRunApproval.id.desc())
+    ).first()
+
+
+def _acceptance_is_latest(item: BacklogItem, row: ManagerDecision) -> bool:
+    """The agent's acceptance of decision *row* is the last thing a person or
+    the agent wrote on the task: nobody reopened or decided it since."""
+    marker = f"decision #{row.id})"
+    for comment in reversed([c for c in item.comments or [] if isinstance(c, dict)]):
+        author = str(comment.get("author") or "").strip().lower()
+        if author not in ("user", MANAGER_AGENT_NAME.lower()):
+            continue
+        text = str(comment.get("text") or "")
+        return text.startswith(ACCEPTED_PREFIX) and marker in text
+    return False
+
+
 def override(session: Session, row: ManagerDecision, actor: str) -> dict[str, Any]:
-    """The client takes back a decision the agent took alone."""
+    """The client takes back a decision the agent took alone.
+
+    Once: the override holds a lock on the decision and claims it with a
+    conditional update, so a second request at the same time gets a 409. And
+    only while the agent's decision is still the latest on the item: a later
+    acceptance, approval or retirement is not undone through an older one.
+    """
+    with locks.held(session.get_bind(), OVERRIDE_LOCK, row.id) as mine:
+        if not mine:
+            raise OverrideRefused(409, "This decision is being overridden already.")
+        session.refresh(row)
+        return _override(session, row, actor)
+
+
+def _override(session: Session, row: ManagerDecision, actor: str) -> dict[str, Any]:
     if row.decided_by != MANAGER_AGENT_NAME:
         raise OverrideRefused(409, "The Manager agent did not decide this item.")
-    if row.overridden_at is not None:
+    now = _now()
+    claimed = session.exec(  # type: ignore[call-overload]
+        update(ManagerDecision)
+        .where(
+            ManagerDecision.id == row.id,
+            ManagerDecision.overridden_at.is_(None),
+        )
+        .values(overridden_by=actor, overridden_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
         raise OverrideRefused(409, "This decision was already overridden.")
     if row.category == "accept_delivery":
         item = session.get(BacklogItem, row.item_id)
@@ -163,6 +253,10 @@ def override(session: Session, row: ManagerDecision, actor: str) -> dict[str, An
         if item.status != "done":
             raise OverrideRefused(
                 409, f"The task is {item.status} now, no longer as the agent left it."
+            )
+        if not _acceptance_is_latest(item, row):
+            raise OverrideRefused(
+                409, "The task was decided again after the agent's acceptance."
             )
         # Back to waiting for a person: the hold note is still the latest verdict.
         item.status = "blocked"
@@ -176,7 +270,11 @@ def override(session: Session, row: ManagerDecision, actor: str) -> dict[str, An
         outcome = "waits_for_a_person"
     elif row.category == "adopt_procedure":
         procedure = session.get(Procedure, row.item_id)
-        if procedure is None or procedure.status != "active":
+        if (
+            procedure is None
+            or procedure.status != "active"
+            or procedure.decided_by != MANAGER_AGENT_NAME
+        ):
             raise OverrideRefused(
                 409, "The procedure is no longer active as the agent left it."
             )
@@ -185,6 +283,16 @@ def override(session: Session, row: ManagerDecision, actor: str) -> dict[str, An
         outcome = f"retired, {restored} restored"
     elif row.category == "approve_run":
         run = session.get(AgentRun, row.item_id)
+        latest = _latest_approval(session, row.item_id)
+        if (
+            run is None
+            or latest is None
+            or latest.approver_name != MANAGER_AGENT_NAME
+            or latest.decision != "approved"
+        ):
+            raise OverrideRefused(
+                409, "The run was decided again after the agent's approval."
+            )
         run_review.record_approval(
             session,
             run,
@@ -195,9 +303,7 @@ def override(session: Session, row: ManagerDecision, actor: str) -> dict[str, An
         outcome = "rejected"
     else:  # pragma: no cover
         raise OverrideRefused(409, "Nothing to override.")
-    row.overridden_by = actor
-    row.overridden_at = _now()
-    session.add(row)
+    session.refresh(row)
     audit = _audit(
         session,
         row,

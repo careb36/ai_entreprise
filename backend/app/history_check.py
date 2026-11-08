@@ -67,10 +67,17 @@ def _is_approval(comment: dict[str, Any]) -> bool:
     ).upper().startswith("APPROVED:")
 
 
+def _is_agent_acceptance(comment: dict[str, Any]) -> bool:
+    return _author(comment) == _MANAGER_AGENT and _text(comment).startswith(
+        _AGENT_ACCEPTED
+    )
+
+
 def _is_deliverable(comment: dict[str, Any]) -> bool:
     text = _text(comment)
     return (
         bool(text)
+        and not _is_agent_acceptance(comment)
         and _author(comment) not in _GATE_AUTHORS | {"system", _PERSON}
         and not text.upper().startswith(("APPROVED:", "NEEDS WORK:"))
         and not text.startswith("ARCHITECT_CONSULTED:")
@@ -104,8 +111,13 @@ def _started_at(comments: list[dict[str, Any]]) -> datetime | None:
 
 
 def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
-    """When the task was closed: its last approval or person's note."""
-    closing = [c for c in comments if _is_approval(c) or _author(c) == _PERSON]
+    """When the task was closed: its last approval, person's note or the
+    Manager agent's acceptance (which releases an autonomy-1 hold)."""
+    closing = [
+        c
+        for c in comments
+        if _is_approval(c) or _author(c) == _PERSON or _is_agent_acceptance(c)
+    ]
     return _when(closing[-1]) if closing else None
 
 
@@ -158,11 +170,7 @@ def check_task(
             for i, c in enumerate(comments)
             if _author(c) == "system" and _text(c).startswith(_RISK_HOLD)
         ]
-        agent_accepts = [
-            i
-            for i, c in enumerate(comments)
-            if _author(c) == _MANAGER_AGENT and _text(c).startswith(_AGENT_ACCEPTED)
-        ]
+        agent_accepts = [i for i, c in enumerate(comments) if _is_agent_acceptance(c)]
         human_led = bool(holds) and _HUMAN_LED in _text(comments[holds[-1]])
         if (
             holds
