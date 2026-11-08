@@ -130,6 +130,18 @@ class Settings(BaseSettings):
     # only with ``DELIVERY_TESTS_ENABLED``.
     DEVELOPER_TOOLS_ENABLED: bool = True
     DEVELOPER_TOOL_ROUNDS: int = 8
+    # The repository map in the Developer's, QA's and the Architect's prompts
+    # (``services/repo_map.py``): at most this many characters of ranked
+    # definitions beside the tree; 0 leaves them out.
+    REPO_MAP_MAX_CHARS: int = 3000
+    # After a ``workspace__edit``, the stack profile's lint command for that
+    # file, its errors in the edit's result (``services/edit_lint.py``).
+    EDIT_LINT_ENABLED: bool = True
+    EDIT_LINT_TIMEOUT_SECONDS: float = 60.0
+    # The tool loop (``services/tool_history.py``): results older than the
+    # last this many rounds go to the model as one line each; the evidence
+    # keeps them whole. 0 keeps every result whole.
+    TOOL_HISTORY_KEEP_ROUNDS: int = 3
     # The research tools (``services/research_tools.py``): the roles that
     # decide read official sources (documentation, registries, OSV) through
     # the backend's own egress, from the default hosts plus these; every
@@ -228,6 +240,12 @@ class Settings(BaseSettings):
     # pgvector alone.
     NEO4J_ENABLED: bool = True
     AGENT_MODEL_POLICY: str = ""
+    # Architect and editor mode (services/edit_plan.py, from Aider): off, the
+    # Architect's brief stays free text. On, a Developer task at or above
+    # ARCHITECT_EDITOR_MIN_DIFFICULTY gets a numbered edit plan from the
+    # Architect and runs on the policy's cheapest band model.
+    ARCHITECT_EDITOR_MODE: bool = False
+    ARCHITECT_EDITOR_MIN_DIFFICULTY: int = 4
     # The Manager agent (services/manager_agent.py): suggests each inbox
     # decision and takes alone only what the company's policy allows.
     MANAGER_AGENT_ENABLED: bool = False
