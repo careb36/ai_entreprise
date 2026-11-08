@@ -19,12 +19,6 @@ from usage import reported_count, with_usage
 # Gemini's finishReason, as the OpenAI-compatible providers spell it.
 FINISH_REASONS = {"MAX_TOKENS": "length", "STOP": "stop"}
 
-# Gemini 2.5+ requires a thoughtSignature on every functionCall part that
-# continues a previous turn. The backend speaks OpenAI and does not carry it,
-# so the proxy remembers the signatures Gemini returns and reattaches them
-# when the same call reappears in a later request.
-_THOUGHT_SIGNATURES: dict[tuple[str, str], str] = {}
-
 
 def _tool_declarations(tools: list | None) -> list[dict]:
     declarations = []
@@ -81,10 +75,13 @@ def _contents(messages: list) -> list[dict]:
                     arguments = {"_raw": arguments}
             names_by_call_id[str(call.get("id"))] = function.get("name") or "tool"
             fc = {"name": function.get("name") or "tool", "args": arguments or {}}
-            key = (fc["name"], json.dumps(fc["args"], sort_keys=True, default=str))
-            if key in _THOUGHT_SIGNATURES:
-                fc["thoughtSignature"] = _THOUGHT_SIGNATURES[key]
-            parts.append({"functionCall": fc})
+            # Recover a thoughtSignature embedded in the call id by a previous
+            # turn (stateless round-trip through the backend).
+            cid = str(call.get("id") or "")
+            part = {"functionCall": fc}
+            if "::ts::" in cid:
+                part["thoughtSignature"] = cid.split("::ts::", 1)[1]
+            parts.append(part)
         if parts:
             contents.append({"role": "model" if m["role"] == "assistant" else "user", "parts": parts})
     return contents
@@ -98,9 +95,13 @@ def _message_from(parts: list) -> dict:
         call = part.get("functionCall") if isinstance(part, dict) else None
         if not isinstance(call, dict) or not call.get("name"):
             continue
+        cid = f"call_{len(tool_calls) + 1}"
+        sig = part.get("thoughtSignature") or call.get("thoughtSignature")
+        if sig:
+            cid = f"{cid}::ts::{sig}"
         tool_calls.append(
             {
-                "id": f"call_{len(tool_calls) + 1}",
+                "id": cid,
                 "type": "function",
                 "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {})},
             }
@@ -138,11 +139,6 @@ def call_gemini(
     try:
         candidate = res["candidates"][0]
         parts = candidate["content"]["parts"]
-        for part in parts:
-            call = part.get("functionCall") if isinstance(part, dict) else None
-            if isinstance(call, dict) and call.get("thoughtSignature") and call.get("name"):
-                key = (call["name"], json.dumps(call.get("args") or {}, sort_keys=True, default=str))
-                _THOUGHT_SIGNATURES[key] = call["thoughtSignature"]
         message = _message_from(parts)
         if message["content"] is None and not message.get("tool_calls"):
             raise KeyError("text")
