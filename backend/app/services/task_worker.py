@@ -568,7 +568,9 @@ def _consult_architect(
     )
     prompt = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
-    ) + edit_plan.request_section(item) + developer_tools.repository_section(
+    )
+    prompt += edit_plan.request_section(item)
+    prompt += developer_tools.repository_section(
         sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
 
