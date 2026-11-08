@@ -583,7 +583,29 @@
     "qaFailures": "QA fail {{count}}/{{limit}}",
     "waitsFor_one": "Waits for {{count}} task",
     "waitsFor_other": "Waits for {{count}} tasks",
-    "acceptanceTests": "Acceptance tests"
+    "acceptanceTests": "Acceptance tests",
+    "moveQueued": "Back to work: the task was queued for its agent.",
+    "moveReopened": "The sprint was reopened and the task was queued for its agent.",
+    "moveReopenedWaiting": "The sprint was reopened; the task waits for other tasks of the sprint to be done.",
+    "moveWaits": {
+      "paused": "The sprint is paused: resume it to run this task.",
+      "planned": "The sprint has not started: start it to run this task.",
+      "dependencies": "The task waits for other tasks of the sprint to be done."
+    },
+    "moveToSprint": "Move to sprint…",
+    "moveTarget": "Sprint to move the task to",
+    "moveChoose": "Choose a sprint",
+    "moveTargetOption": "{{name}} ({{status}})",
+    "moveNewSprint": "A new sprint",
+    "moveConfirm": "Move",
+    "moveCancel": "Cancel",
+    "movedToSprint": "Task moved to \"{{name}}\".",
+    "sprintStatus": {
+      "active": "active",
+      "planned": "planned",
+      "paused": "paused",
+      "needs_split": "needs split"
+    }
   },
   "glassroom": {
     "title": "Glassroom",
@@ -2091,7 +2113,13 @@
         "approve_specification": "Approve a specification the check does not block",
         "approve_architecture": "Approve an architecture that covers every requirement",
         "accept_high_risk": "Accept a high-risk delivery with every criterion test passing"
-      }
+      },
+      "saving": "Saving…",
+      "unsaved": "Unsaved changes",
+      "saved": "Saved. The Manager agent applies it from its next cycle.",
+      "noChanges": "No changes to save",
+      "lastSaved": "Last saved {{when}} by {{who}}",
+      "reconfirm": "Suspended after overrides: {{rules}}. Saving the policy puts them back in force."
     }
   },
   "sprintAdmin": {
@@ -2112,5 +2140,22 @@
     "stopFirst": "Stop the sprint first",
     "archivedBy": "Archived by {{who}}",
     "showArchived": "Show archived sprints"
+  },
+  "routing": {
+    "title": "Difficulty and model",
+    "hint": "Closed sprints, by the difficulty each task was routed by and the model of its last delivery.",
+    "caption": "Tasks by difficulty and model",
+    "difficulty": "Difficulty",
+    "model": "Model",
+    "tasks": "Tasks",
+    "firstAttempt": "First attempt",
+    "rework": "Rework / task",
+    "blocked": "Blocked",
+    "tokens": "Reported tokens",
+    "difficultyBand": "{{difficulty}} (band {{band}})",
+    "noDelivery": "no delivery",
+    "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
+    "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
+    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
   }
 }

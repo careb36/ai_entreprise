@@ -1,8 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { BacklogItem, type AgentRunListItem } from '../services/api'
-import { useAgentRuns, useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
+import { useAgentRuns, useCurrentRole, useSprintBoard, useUpdateBacklogItem } from '../hooks/useQueries'
+import { errorDetail } from '../services/api'
+import type { BoardMoveResult, CarryResult } from '../services/boardMoves'
+import { MoveToSprint } from './MoveToSprint'
 import { useAppStore } from '../store/useAppStore'
 import { Verdict } from './Verdict'
 import { TASK_WORKER_PRODUCER, latestRunsByTask } from '../lib/taskEvidence'
@@ -33,6 +36,30 @@ const COLUMNS = [
 ]
 
 const VALID_STATUSES: BacklogItem['status'][] = ['todo', 'in_progress', 'in_review', 'done', 'blocked']
+
+// The cards a Manager may move to another sprint.
+const MOVABLE_STATUSES = ['blocked', 'todo']
+
+type Translate = ReturnType<typeof useTranslation>['t']
+
+/** What a move to To do did, in the person's language (the backend's reason is English). */
+function describeMove(t: Translate, result: BoardMoveResult): string | null {
+  if (result.queued === undefined) return null
+  if (result.queued) return t(result.reopened ? 'kanban.moveReopened' : 'kanban.moveQueued')
+  if (result.sprint_status === 'paused' || result.sprint_status === 'planned') {
+    return t(`kanban.moveWaits.${result.sprint_status}`)
+  }
+  return t(result.reopened ? 'kanban.moveReopenedWaiting' : 'kanban.moveWaits.dependencies')
+}
+
+function describeCarry(t: Translate, result: CarryResult): string {
+  const moved = t('kanban.movedToSprint', { name: result.sprint_name })
+  if (result.queued) return moved
+  const waits = result.sprint_status === 'paused' || result.sprint_status === 'planned'
+    ? t(`kanban.moveWaits.${result.sprint_status}`)
+    : t('kanban.moveWaits.dependencies')
+  return `${moved} ${waits}`
+}
 
 const QA_REWORK_LIMIT = 2
 const QA_FAILURE_LIMIT = 3
@@ -90,7 +117,7 @@ function DeliveryBadge({ run }: { run: AgentRunListItem }) {
 // ── SortableCard ───────────────────────────────────────────────────────────────
 
 function ItemCard({
-  item, sprintId, onStatusChange, updating, isDragging = false, evidenceRun
+  item, sprintId, onStatusChange, updating, isDragging = false, evidenceRun, actions
 }: {
   item: BacklogItem
   sprintId: number
@@ -98,6 +125,7 @@ function ItemCard({
   updating: boolean
   isDragging?: boolean
   evidenceRun?: AgentRunListItem
+  actions?: ReactNode
 }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id })
@@ -183,6 +211,7 @@ function ItemCard({
           <option key={s} value={s}>{t(`kanban.status.${s}`, s)}</option>
         ))}
       </select>
+      {actions}
     </div>
   )
 }
@@ -199,6 +228,7 @@ function ColumnDropZone({
   updating,
   activeItemId,
   evidenceRuns,
+  cardActions,
 }: {
   columnId: string
   sprintId: number
@@ -211,6 +241,7 @@ function ColumnDropZone({
   updating: ReturnType<typeof useUpdateBacklogItem>
   activeItemId: number | null
   evidenceRuns: Map<number, AgentRunListItem>
+  cardActions: (item: BacklogItem) => ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId })
 
@@ -247,6 +278,7 @@ function ColumnDropZone({
                 updating={updating.isPending && updating.variables?.itemId === item.id}
                 isDragging={activeItemId === item.id}
                 evidenceRun={evidenceRuns.get(item.id)}
+                actions={cardActions(item)}
               />
             ))
           )}
@@ -274,6 +306,10 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   const evidenceRuns = useMemo(() => latestRunsByTask(sprintRuns?.agent_runs ?? []), [sprintRuns])
 
   const [activeItem, setActiveItem] = useState<BacklogItem | null>(null)
+  // What the last move did: queued, reopened, or why the task waits.
+  const [notice, setNotice] = useState<{ text: string; error?: boolean } | null>(null)
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
@@ -288,8 +324,20 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
   }, [])
 
   const handleStatusChange = (itemId: number, newStatus: BacklogItem['status']) => {
-    updateMutation.mutate({ itemId, data: { status: newStatus } })
+    setNotice(null)
+    updateMutation.mutate({ itemId, data: { status: newStatus } }, {
+      onSuccess: result => {
+        const text = describeMove(t, result as BoardMoveResult)
+        setNotice(text ? { text } : null)
+      },
+      onError: error => setNotice({ text: errorDetail(error), error: true }),
+    })
   }
+
+  const cardActions = (item: BacklogItem) => (canManage && idNum && MOVABLE_STATUSES.includes(item.status) ? (
+    <MoveToSprint item={item} sprintId={idNum} companyId={companyId}
+      onMoved={result => setNotice({ text: describeCarry(t, result) })} />
+  ) : null)
 
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as number
@@ -372,6 +420,13 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
         </button>
       </div>
 
+      {notice && (
+        <p role={notice.error ? 'alert' : 'status'}
+          className={`mx-4 mt-2 rounded border px-3 py-1.5 text-xs ${notice.error ? 'border-red-700/40 text-red-300' : 'border-brand-700/40 text-brand-200'}`}>
+          {notice.text}
+        </p>
+      )}
+
       {/* Board */}
       {board ? (
         <DndContext
@@ -398,6 +453,7 @@ export default function KanbanBoard({ sprintId }: { sprintId: string | null }) {
                     updating={updateMutation}
                     activeItemId={activeItem?.id ?? null}
                     evidenceRuns={evidenceRuns}
+                    cardActions={cardActions}
                   />
                 )
               })}

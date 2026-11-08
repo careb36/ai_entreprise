@@ -296,7 +296,7 @@ def test_the_scorecard_totals_and_its_schema():
 @pytest.mark.parametrize(
     ("change", "problem"),
     [
-        (lambda c: c.update(schema_version=2), "schema_version"),
+        (lambda c: c.update(schema_version=3), "schema_version"),
         (lambda c: c.update(commit=""), "commit"),
         (lambda c: c["specs"][0].update(status="done"), "status"),
         (lambda c: c["specs"][0]["criteria"].update(passed=7), "criteria.passed"),
@@ -423,6 +423,137 @@ def test_the_command_exits_by_what_it_found(tmp_path, capsys):
 def test_the_committed_reference_compares_clean_with_itself():
     latest = max((BENCH / "scorecards").glob("*.json"))
     assert compare.main([str(latest), "--previous", str(latest)]) == 0
+
+
+# ---------------------------------------------------------------------------
+# By difficulty and model, and two routing policies (issue #319)
+# ---------------------------------------------------------------------------
+
+ROUTED_ITEMS = [
+    {"id": 1, "status": "done", "comments": [], "covers": ["REQ-1.1"]},
+    {
+        "id": 2,
+        "status": "blocked",
+        "comments": [_comment("QA", "NEEDS WORK: a.")],
+        "covers": ["REQ-1.1", "REQ-1.2", "REQ-2.1"],
+    },
+]
+
+
+def _routed(models, reported=(10, 30), policy=None):
+    return scorecard.routing_rows(
+        ROUTED_ITEMS,
+        {1: models[0], 2: models[1]},
+        {1: 1, 2: 2},
+        {
+            1: [("reported", reported[0])],
+            2: [("reported", reported[1]), ("estimated", 0)],
+        },
+        policy,
+    )
+
+
+def test_the_entry_splits_tasks_by_difficulty_and_model():
+    rows = _routed(["cheap", "strong"], policy={"bands": {"1-3": "a", "4-5": "b"}})
+    assert [(r["difficulty"], r["band"], r["model"]) for r in rows] == [
+        (2, "1-3", "cheap"),
+        (4, "4-5", "strong"),
+    ]
+    easy, hard = rows
+    assert easy["done_first_attempt"] == 1 and easy["tokens"]["reported"] == 10
+    assert hard["blocked_share"] == 1.0 and hard["rework_per_task"] == 1.0
+    assert hard["tokens"] == {
+        "reported": 30,
+        "turns_reported": 1,
+        "turns_unreported": 1,
+    }
+    entry = _entry()
+    entry["routing"] = rows
+    card = scorecard.build_scorecard(
+        [entry], stamp="20260101T000000Z", commit="c", llm="fake", policy="bands-a"
+    )
+    assert card["policy"] == "bands-a" and scorecard.validate(card) == []
+    text = scorecard.render_markdown(card)
+    assert "routing policy `bands-a`" in text
+    assert "- Difficulty 4, strong: 0/1 at the first attempt, 0 done" in text
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        (lambda c: c.pop("policy"), "policy must be a non-empty string"),
+        (lambda c: c["specs"][0].pop("routing"), "routing must be a list"),
+        (lambda c: c["specs"][0]["routing"][0].update(difficulty=9), "difficulty"),
+        (
+            lambda c: c["specs"][0]["routing"][0].update(done=5),
+            "done_first_attempt <= done",
+        ),
+        (
+            lambda c: c["specs"][0]["routing"][0]["tokens"].pop("reported"),
+            "routing[0].tokens.reported must be a count",
+        ),
+        (
+            lambda c: c["specs"][0]["routing"][0].update(blocked_share=float("nan")),
+            "blocked_share must be a finite number",
+        ),
+    ],
+)
+def test_the_schema_checks_the_split(change, problem):
+    entry = _entry()
+    entry["routing"] = _routed(["cheap", "strong"])
+    card = _card(entry)
+    change(card)
+    assert any(problem in p for p in scorecard.validate(card)), scorecard.validate(card)
+
+
+def test_a_version_1_card_is_still_read_without_the_split():
+    card = _card()
+    card["schema_version"] = 1
+    card.pop("policy")
+    for spec in card["specs"]:
+        spec.pop("routing")
+    assert scorecard.validate(card) == []
+
+
+def test_two_policies_compare_band_by_band(tmp_path, capsys):
+    before, after = _entry(), _entry()
+    before["routing"] = _routed(["strong", "strong"], reported=(40, 60))
+    after["routing"] = _routed(["cheap", "strong"], reported=(10, 60))
+    old = _card(before, stamp="20260101T000000Z")
+    old["policy"] = "all-strong"
+    new = _card(after, stamp="20260102T000000Z")
+    new["policy"] = "cheap-easy"
+    bands = compare.by_difficulty(new)
+    assert bands[2]["models"] == {"cheap"} and bands[2]["tokens"] == 10
+    text = compare.render(old, new, compare.compare(old, new))
+    assert "routing policy `all-strong` → `cheap-easy`" in text
+    assert "### By difficulty (policy `all-strong` → `cheap-easy`)" in text
+    assert (
+        "| 2 | 1 → 1 | 1.00 → 1.00 | 0.00 → 0.00 | 0.00 → 0.00 | 40 → 10 | strong → cheap |"
+        in text
+    )
+    # Written with --policy and compared from the command line.
+    entries = []
+    for name, entry in (("old", before), ("new", after)):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(entry))
+        entries.append(path)
+    out = tmp_path / "cards"
+    for stamp, path, policy in (
+        ("20260101T000000Z", entries[0], "all-strong"),
+        ("20260102T000000Z", entries[1], "cheap-easy"),
+    ):
+        args = ["write", "--out-dir", str(out), "--stamp", stamp, "--policy", policy]
+        assert scorecard.main([*args, str(path)]) == 0
+    capsys.readouterr()
+    assert compare.main([str(out / "20260102T000000Z.json"), "--dir", str(out)]) == 0
+    assert "### By difficulty" in capsys.readouterr().out
+    # Against a card from before the split, the table shows the new side only;
+    # two such cards show none.
+    legacy = copy.deepcopy(old)
+    legacy["specs"][0].pop("routing")
+    assert "By difficulty" in compare.render(legacy, new, compare.compare(legacy, new))
+    assert compare.render_bands(legacy, legacy) == []
 
 
 # ---------------------------------------------------------------------------

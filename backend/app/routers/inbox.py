@@ -82,18 +82,21 @@ async def inbox(
     ).all()
     blocked_tasks = []
     blocked_total = 0
-    # The ScrumMaster's answers to the escalations, one query for the page.
-    triages = scrum_master.triages_for(session, [item for item, _ in rows])
-    suggestions = _suggestions(session, company_id)
-    # Every candidate's events, one query, shared by the three projections.
+    # Every candidate's events, one query, shared by the projections below.
     histories = task_events.for_tasks(session, [item.id for item, _ in rows])
+    records = {
+        item.id: task_projection.record_of(session, item, histories) for item, _ in rows
+    }
+    # The ScrumMaster's answers to the escalations, one query for the page.
+    triages = scrum_master.triages_for(session, [item for item, _ in rows], records)
+    suggestions = _suggestions(session, company_id)
     for item, sprint in rows:
         # From the task's events when they render its whole thread, else
         # from its comments (services/task_projection.py).
-        next_step = task_projection.blocked_item_next_step(session, item, histories)
+        next_step = records[item.id].next_step()
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own
-        if carried_over(item):
+        if carried_over(item, records[item.id]):
             continue  # it got another attempt in a later sprint
         blocked_total += 1
         if len(blocked_tasks) == limit:
@@ -106,22 +109,18 @@ async def inbox(
                 "sprint_id": sprint.id,
                 "sprint_name": sprint.sprint_name,
                 "sprint_status": sprint.status,
-                "reason": task_projection.block_reason(session, item, histories)[
-                    :REASON_LIMIT
-                ],
+                "reason": records[item.id].block_reason()[:REASON_LIMIT],
                 # The ScrumMaster's answer to the escalation, a claim for the
                 # person to weigh: another attempt (with a brief) or a person.
                 "triage": triages.get(item.id),
                 "frozen": next_step == "frozen",
                 # Approved by QA, but high risk (services/risk.py): a person
                 # accepts it (marks it done) or sends it back to work.
-                "risk_hold": task_projection.awaits_risk_acceptance(
-                    session, item, histories
-                ),
+                "risk_hold": records[item.id].awaits_risk_acceptance(),
                 "suggestion": suggestions.get(("task", item.id)),
                 # The Manager agent marked it for the next sprint (issue #394):
                 # the "Plan a sprint" form ticks it; a person may untick it.
-                "marked_for_carry_over": carry_mark(item) is True,
+                "marked_for_carry_over": carry_mark(item, records[item.id]) is True,
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )

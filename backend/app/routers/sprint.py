@@ -37,6 +37,7 @@ from schemas import (
 )
 from services import (
     acceptance,
+    board_moves,
     dependencies,
     spec_check,
     spec_planning,
@@ -542,10 +543,9 @@ async def update_backlog_item(
 
     Supports updating ``status``, ``priority``, ``assignee``, or appending a
     new comment.  All fields are optional; only provided fields are changed.
-    A comment is recorded as a person's note (author ``user``): it is never
-    taken for a deliverable to review, and one starting with
-    ``services.board.SEND_BACK_MARKER`` restarts the task's rework budgets.
-    Invalid ``status`` or ``priority`` values return HTTP 422.
+    A comment is a person's note (author ``user``), never a deliverable; one
+    starting with ``board.SEND_BACK_MARKER`` restarts the rework budgets. A
+    move to ``todo`` starts the task (``services/board_moves.py``).
     """
     if req.status and req.status not in VALID_STATUSES:
         raise HTTPException(
@@ -559,31 +559,34 @@ async def update_backlog_item(
     item = session.get(BacklogItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Backlog item not found")
-
+    sprint = session.get(Sprint, item.sprint_id)
     if user is not None:
-        sprint = session.get(Sprint, item.sprint_id)
         if not sprint:
             raise HTTPException(status_code=404, detail="Sprint not found")
         require_company_role(session, user, sprint.company_id, "Manager")
+    try:  # A move to To do starts the task (services/board_moves.py).
+        starts, comment = board_moves.prepare(sprint, item, req.status, req.comment)
+    except board_moves.BoardMoveError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
     if req.priority:
         item.priority = req.priority
     if req.assignee is not None:
         item.assignee = req.assignee
-    if req.status or req.comment:
+    if req.status or comment:
         # A person's transition: its event first, the comment its rendering.
         task_events.record(
             session,
             item,
-            task_events.person_kind(req.status, req.comment),
+            task_events.person_kind(req.status, comment),
             task_events.PERSON,
             status=req.status or None,
-            text=req.comment or None,
+            text=comment or None,
             created_at=str(datetime.now(UTC).replace(tzinfo=None)),
         )
     item.updated_at = datetime.now(UTC).replace(tzinfo=None)
-
     session.add(item)
+    started = board_moves.start_moved_task(session, item, sprint, user, starts)
     session.commit()
     session.refresh(item)
     return {
@@ -593,4 +596,5 @@ async def update_backlog_item(
         "priority": item.priority,
         "assignee": item.assignee,
         "comments": item.comments,
+        **started,
     }

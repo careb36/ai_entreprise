@@ -62,6 +62,33 @@ def _policy() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def current_policy() -> dict[str, Any]:
+    """The deployment's ``AGENT_MODEL_POLICY``, parsed; ``{}`` when none or unreadable."""
+    return _policy()
+
+
+_TIERS = {"fast", "balanced", "code", "strategic", "powerful", "preview"}
+
+
+def _bands(policy: dict[str, Any] | None) -> list[tuple[int, int, str, str]]:
+    """The policy's readable bands as ``(lo, hi, key, model)``, lowest first."""
+    pol = policy if policy is not None else _policy()
+    bands = pol.get("bands") if isinstance(pol.get("bands"), dict) else {}
+    out = []
+    for band, model in bands.items():
+        try:
+            lo, hi = band.split("-", 1)
+            out.append((int(lo), int(hi), band, str(model).strip() if model else ""))
+        except (ValueError, AttributeError):
+            continue
+    return sorted(out)
+
+
+def _concrete(value: str) -> str | None:
+    """A model id, never a proxy tier name (those fall back to the role default)."""
+    return None if not value or value.lower() in _TIERS else value
+
+
 def model_for(
     role: str, difficulty: int, policy: dict[str, Any] | None = None
 ) -> str | None:
@@ -70,20 +97,20 @@ def model_for(
     *policy* maps ``{"bands": {"1-2": "fast", "3-5": "powerful"}}`` or
     ``{"bands": {"1-2": "<model id>"}}``. Band keys are ``"lo-hi"``.
     """
-    pol = policy if policy is not None else _policy()
-    bands = pol.get("bands") if isinstance(pol.get("bands"), dict) else {}
-    _TIERS = {"fast", "balanced", "code", "strategic", "powerful", "preview"}
-    for band, model in bands.items():
-        try:
-            lo, hi = band.split("-", 1)
-            if int(lo) <= difficulty <= int(hi):
-                value = str(model).strip() if model else ""
-                if not value or value.lower() in _TIERS:
-                    return None
-                return value
-        except (ValueError, AttributeError):
-            continue
+    for lo, hi, _key, model in _bands(policy):
+        if lo <= difficulty <= hi:
+            return _concrete(model)
     return None
+
+
+def band_of(difficulty: int, policy: dict[str, Any] | None = None) -> str | None:
+    """The policy's band key holding *difficulty* (``"3-5"``), or None."""
+    return next((k for lo, hi, k, _m in _bands(policy) if lo <= difficulty <= hi), None)
+
+
+def cheapest_model(policy: dict[str, Any] | None = None) -> str | None:
+    """The model of the policy's lowest band that names one: the editor's."""
+    return next((m for *_r, m in _bands(policy) if _concrete(m)), None)
 
 
 def company_model(session: Any, company_id: int | None, role: str | None) -> str:
@@ -102,7 +129,14 @@ def resolve_agent_model(
     default_role: str = "Dev",
     item: dict[str, Any] | None = None,
     rework: bool = False,
+    editor: bool = False,
 ) -> str:
+    """The agent's model, else the company's, else routed by difficulty.
+
+    *editor*: the task carries an Architect's edit plan to apply
+    (``services/edit_plan.py``), so the policy's cheapest band model runs it.
+    A model a person chose is never re-routed.
+    """
     from llm.model_factory import default_model_for_role
 
     configured = (agent.get("model") or "").strip()
@@ -112,6 +146,9 @@ def resolve_agent_model(
     base = default_model_for_role(role)
     if item is None:
         return base
+    editor_model = cheapest_model() if editor else None
+    if editor_model:
+        return editor_model
     difficulty = estimate_difficulty(item, rework=rework)
     routed = model_for(role, difficulty)
     if routed:

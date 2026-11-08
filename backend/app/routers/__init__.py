@@ -11,6 +11,7 @@ from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
 from routers.architectures import router as architectures_router
 from routers.auth import router as auth_router
+from routers.board_moves import router as board_moves_router
 from routers.enterprise import router as enterprise_router
 from routers.events import router as events_router
 from routers.github import router as github_router
@@ -38,6 +39,7 @@ __all__ = [
     "api_tokens_router",
     "architectures_router",
     "auth_router",
+    "board_moves_router",
     "enterprise_router",
     "events_router",
     "github_router",

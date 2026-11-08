@@ -21,14 +21,11 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
-from services import dependencies, scrum_master, task_events
+from services import dependencies, scrum_master, task_events, task_projection
 from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
     SCRUM_MASTER_ROLE,
-    awaits_risk_acceptance,
-    block_reason,
-    blocked_item_next_step,
     comment_list,
 )
 
@@ -48,46 +45,55 @@ class CarryOverError(ValueError):
         self.detail = detail
 
 
-def waits_for_a_person(item: BacklogItem) -> bool:
-    """Blocked, and nothing the worker does on its own will move it."""
-    return item.status == "blocked" and blocked_item_next_step(
-        item.comments, item.assignee
-    ) in (None, "frozen")
+def _record(
+    item: BacklogItem, record: task_projection.TaskRecord | None
+) -> task_projection.TaskRecord:
+    return record if record is not None else task_projection.TaskRecord(item.comments)
 
 
-def carried_over(item: BacklogItem) -> bool:
+def waits_for_a_person(
+    item: BacklogItem, record: task_projection.TaskRecord | None = None
+) -> bool:
+    """Blocked, and nothing the worker does on its own will move it.
+
+    Read from *record* (``task_projection.record_of``: the events when they
+    cover the thread), else from the comments.
+    """
+    return _record(item, record).waits_for_a_person(item.status)
+
+
+def carried_over(
+    item: BacklogItem, record: task_projection.TaskRecord | None = None
+) -> bool:
     """Already given to another sprint: it no longer waits for a person."""
-    return any(
-        str(c.get("text", "")).startswith(CARRIED_TO_PREFIX)
-        for c in comment_list(item.comments)
-    )
+    return _record(item, record).carried("to")
 
 
-def carry_mark(item: BacklogItem) -> bool | None:
+def carry_mark(
+    item: BacklogItem, record: task_projection.TaskRecord | None = None
+) -> bool | None:
     """Whether the Manager agent marked the task for the next sprint: ``True``
-    marked, ``False`` a person took the mark back, ``None`` never marked."""
-    state: bool | None = None
-    for comment in comment_list(item.comments):
-        author = str(comment.get("author") or "").strip().lower()
-        text = str(comment.get("text") or "")
-        if author == "manager agent" and text.startswith(CARRY_MARK_PREFIX):
-            state = True
-        elif author == "user" and text.startswith(CARRY_UNMARK_PREFIX):
-            state = False
-    return state
+    marked, ``False`` a person took the mark back, ``None`` never marked.
+
+    Read from *record* (the events when they cover the thread), else from the
+    comments.
+    """
+    return _record(item, record).carry_mark(CARRY_MARK_PREFIX, CARRY_UNMARK_PREFIX)
 
 
-def is_carry_over(item: BacklogItem) -> bool:
+def is_carry_over(
+    item: BacklogItem, record: task_projection.TaskRecord | None = None
+) -> bool:
     """This task is itself a second attempt at an earlier one."""
-    return any(
-        str(c.get("text", "")).startswith(CARRIED_FROM_PREFIX)
-        for c in comment_list(item.comments)
-    )
+    return _record(item, record).carried("from")
 
 
 def left_for_a_person(session: Session, item: BacklogItem) -> bool:
     """The ScrumMaster's triage said a person must decide, not another attempt."""
-    return _left_for_a_person(scrum_master.triages_for(session, [item]).get(item.id))
+    records = {item.id: task_projection.record_of(session, item)}
+    return _left_for_a_person(
+        scrum_master.triages_for(session, [item], records).get(item.id)
+    )
 
 
 def _left_for_a_person(triage: dict[str, Any] | None) -> bool:
@@ -108,7 +114,7 @@ def carry_over(
     waiting for a person or already carried over) before writing anything.
     The caller commits.
     """
-    originals: list[tuple[BacklogItem, Sprint]] = []
+    rows: list[tuple[BacklogItem, Sprint]] = []
     for item_id in dict.fromkeys(item_ids):
         row = session.exec(
             select(BacklogItem, Sprint)
@@ -117,29 +123,39 @@ def carry_over(
         ).first()
         if row is None:
             raise CarryOverError(404, f"Task {item_id} not found in this company")
-        item, sprint = row
+        rows.append((row[0], row[1]))
+    # Every task's events in one query; the checks read them (issue #324).
+    records = task_projection.records_for(session, [item for item, _ in rows])
+    originals: list[tuple[BacklogItem, Sprint, task_projection.TaskRecord]] = []
+    for item, sprint in rows:
+        item_id = item.id
+        record = records[item.id]
         if sprint.archived_at is not None:
             raise CarryOverError(
                 409, f"Task {item_id} belongs to an archived sprint; unarchive it first"
             )
-        if not waits_for_a_person(item):
+        if not waits_for_a_person(item, record):
             raise CarryOverError(
                 409, f"Task {item_id} is not blocked waiting for a person"
             )
-        if carried_over(item):
+        if carried_over(item, record):
             raise CarryOverError(409, f"Task {item_id} was already carried over")
-        originals.append((item, sprint))
+        originals.append((item, sprint, record))
 
     now = datetime.now(UTC)
     created: list[BacklogItem] = []
-    triages = scrum_master.triages_for(session, [item for item, _ in originals])
+    triages = scrum_master.triages_for(
+        session,
+        [item for item, _, _ in originals],
+        {item.id: record for item, _, record in originals},
+    )
     # A dependency between carried tasks is kept between their new attempts;
     # one on a task not carried is dropped (it is done, or a person's).
-    carried_ids = {item.id for item, _ in originals}
+    carried_ids = {item.id for item, _, _ in originals}
     clones_by_original: dict[int, BacklogItem] = {}
     held: dict[int, list[int]] = {}
-    for item, sprint in originals:
-        reason = block_reason(item.comments)[:REASON_LIMIT]
+    for item, sprint, record in originals:
+        reason = record.block_reason()[:REASON_LIMIT]
         brief = (triages.get(item.id) or {}).get("brief") or ""
         clone = BacklogItem(
             sprint_id=new_sprint.id,
@@ -272,18 +288,20 @@ def carry_over_on_the_companys_own(
         )
         .order_by(BacklogItem.id)
     ).all()
-    triages = scrum_master.triages_for(session, list(candidates))
+    candidates = list(candidates)
+    records = task_projection.records_for(session, candidates)
+    triages = scrum_master.triages_for(session, candidates, records)
     ids = [
         item.id
         for item in candidates
-        if waits_for_a_person(item)
-        and not carried_over(item)
-        and not is_carry_over(item)
+        if waits_for_a_person(item, records[item.id])
+        and not carried_over(item, records[item.id])
+        and not is_carry_over(item, records[item.id])
         and not _left_for_a_person(triages.get(item.id))
         # A person took back the Manager agent's mark: it waits for them.
-        and carry_mark(item) is not False
+        and carry_mark(item, records[item.id]) is not False
         # Approved, waiting for a person to accept it: not another attempt.
-        and not awaits_risk_acceptance(item.comments)
+        and not records[item.id].awaits_risk_acceptance()
     ][:room]
     if not ids:
         return []

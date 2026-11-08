@@ -214,3 +214,17 @@ def stop(session: Session, sprint: Sprint) -> int:
 def needs_person_acceptance(autonomy_level: int | None) -> bool:
     """At the human-led level, an approved task waits for a person to accept it."""
     return (autonomy_level or 2) <= HUMAN_LED_LEVEL
+
+
+def person_acceptance_reason(
+    autonomy_level: int | None, engine: Any, company_id: int, item_id: int
+) -> str | None:
+    """Why an approved task waits for a person whatever the autonomy level
+    allows, or ``None``: the human-led level, or a delivery whose browser
+    checks could not run (``browser_smoke.unobserved_reason``), which no
+    agent may close on its own."""
+    if needs_person_acceptance(autonomy_level):
+        return HUMAN_LED_REASON
+    from services import browser_smoke
+
+    return browser_smoke.unobserved_reason(engine, company_id, item_id)

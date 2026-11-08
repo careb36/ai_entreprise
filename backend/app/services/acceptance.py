@@ -44,6 +44,7 @@ from services.criteria_tests import (
     ACCEPTANCE_KIND,
     CHECK_CRITERIA,
     RESULT_PASS,
+    is_test_file,
     token,
 )
 from services.orchestration_metrics import VERDICT_VERIFIED
@@ -217,7 +218,9 @@ def test_files_of(
             continue
         named += [c for c in covers if c in its and c not in named]
         for path in (run.claims or {}).get("files") or [] if run else []:
-            if isinstance(path, str) and path not in files:
+            # Only test files are guarded: a manifest QA delivered stays the
+            # implementation's to change.
+            if is_test_file(path) and path not in files:
                 files.append(path)
     return files, named
 
@@ -239,7 +242,7 @@ def test_hashes_of(session: Session, sprint_id: int) -> dict[str, str]:
             if (
                 isinstance(write, dict)
                 and write.get("status") == "written"
-                and isinstance(write.get("path"), str)
+                and is_test_file(write.get("path"))
                 and isinstance(write.get("sha256"), str)
             ):
                 hashes[write["path"]] = write["sha256"]
