@@ -19,14 +19,18 @@ skipped, so a published integration branch only ever moves forward.
 
 ``sources`` names the commit each task branch pointed at when it was read
 (once: that commit is the one checked and merged),
-and ``test_worktree`` is a detached worktree at the integrated commit: the
-suite runs there, so a later integration that moves the branch never changes
-what an earlier one tested.
+and ``test_worktree`` is a detached worktree at the integrated commit, of
+this attempt only (the backend's ``attempt`` token): the suite runs there, so
+neither a later integration nor a retry of this one changes what it tested.
 """
 
 from __future__ import annotations
 
 import asyncio
+import re
+import secrets
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -39,6 +43,11 @@ MAX_HUNKS_CHARS = 20_000
 MAX_BRANCHES = 200
 # Detached worktrees kept per sprint branch, the newest first.
 KEEP_SNAPSHOTS = 3
+# A snapshot this recent is never removed: its suite may be about to start.
+SNAPSHOT_GRACE_SECONDS = 600
+# Snapshot paths a command is running in now (``while_active``), with a count.
+_ACTIVE: Dict[str, int] = {}
+_ACTIVE_LOCK = threading.Lock()
 
 
 def _resolve(root: Path, worktree: Path, ref: str):
@@ -58,32 +67,64 @@ def _resolve(root: Path, worktree: Path, ref: str):
     return "todo", commit
 
 
-def snapshot_worktree(worktree: Path, root: Path, commit: str) -> Path:
-    """A detached worktree at *commit* beside the branch's.
+def _snapshot_key(path) -> str:
+    return str(Path(path).expanduser().resolve())
 
-    The most recent ``KEEP_SNAPSHOTS`` of the branch are kept, so a suite
-    still running at an earlier commit is not pulled from under it. One
-    already at *commit* is reset and cleaned first: a previous suite may have
-    changed or left files there, and the files tested must be the commit's.
-    The backend runs one integration of a sprint at a time, so no suite is
-    running in it.
+
+def while_active(path, fn, *args):
+    """``fn(*args)`` with *path* marked in use, so no integration prunes it meanwhile.
+
+    The daemon runs every ``workspace.execute`` through this: a suite whose
+    backend went away keeps its snapshot until it ends.
     """
-    path = worktree.parent / f"{worktree.name}@{commit[:12]}"
+    key = _snapshot_key(path) if path else None
+    if key:
+        with _ACTIVE_LOCK:
+            _ACTIVE[key] = _ACTIVE.get(key, 0) + 1
+    try:
+        return fn(*args)
+    finally:
+        if key:
+            with _ACTIVE_LOCK:
+                _ACTIVE[key] -= 1
+                if not _ACTIVE[key]:
+                    del _ACTIVE[key]
+
+
+def _prunable(path: Path) -> bool:
+    with _ACTIVE_LOCK:
+        if _snapshot_key(path) in _ACTIVE:
+            return False
+    try:
+        return time.time() - path.stat().st_mtime > SNAPSHOT_GRACE_SECONDS
+    except OSError:
+        return True
+
+
+def snapshot_worktree(worktree: Path, root: Path, commit: str, attempt: str = "") -> Path:
+    """A detached worktree at *commit* beside the branch's, of this attempt only.
+
+    Each attempt gets its own (``<branch worktree>@<commit>-<attempt>``), so
+    no other attempt resets, cleans or removes the files its suite runs on.
+    Beyond the newest ``KEEP_SNAPSHOTS``, older ones are removed, never one a
+    command is running in (``while_active``) or one younger than
+    ``SNAPSHOT_GRACE_SECONDS`` (its suite may not have started yet).
+    """
+    if not re.fullmatch(r"[0-9a-z]{1,32}", attempt or ""):
+        attempt = secrets.token_hex(4)
+    path = worktree.parent / f"{worktree.name}@{commit[:12]}-{attempt}"
     run_git(["worktree", "prune"], root, check=False)
     if (path / ".git").exists():
-        run_git(["checkout", "--detach", "--force", commit], path)
-        run_git(["reset", "--hard", commit], path)
-        run_git(["clean", "-ffdx"], path)
-    else:
-        run_git(["worktree", "add", "--detach", str(path), commit], root)
-    path.touch()
+        raise GitError(f"the snapshot of attempt {attempt} already exists")
+    run_git(["worktree", "add", "--detach", str(path), commit], root)
     older = sorted(
         (p for p in worktree.parent.glob(f"{worktree.name}@*") if p != path),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
     for old in older[KEEP_SNAPSHOTS - 1 :]:
-        run_git(["worktree", "remove", "--force", str(old)], root, check=False)
+        if _prunable(old):
+            run_git(["worktree", "remove", "--force", str(old)], root, check=False)
     return path
 
 
@@ -158,7 +199,7 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         "commit": commit,
         # Every requested branch merged or already in: nothing missing or refused.
         "complete": conflict is None and not missing and not refused,
-        "test_worktree": str(snapshot_worktree(worktree, root, commit)) if conflict is None else None,
+        "test_worktree": str(snapshot_worktree(worktree, root, commit, str(spec.get("attempt") or ""))) if conflict is None else None,
         "sources": sources,
         "merged": merged,
         "already_merged": already,

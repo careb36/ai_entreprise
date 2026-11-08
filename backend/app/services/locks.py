@@ -38,6 +38,7 @@ TRIAGE = "scrum-master-triage"
 TASK = "task"
 SUPPORT_AGENT = "support-agent"
 REVIEWER_AGENT = "reviewer-agent"
+SPRINT_INTEGRATION = "sprint-integration"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()

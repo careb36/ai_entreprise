@@ -23,7 +23,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from collections.abc import AsyncIterator, Iterator
+import secrets
+import weakref
+from collections.abc import AsyncIterator
 from typing import Any
 
 from config import settings
@@ -37,12 +39,11 @@ from models import (
 )
 from models.agent_run import TASK_WORKER_PRODUCER
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
-from sqlalchemy import text
-from sqlmodel import Session, select
+from sqlmodel import Session, create_engine, select
 
-from services import workspace_daemon
+from services import locks, workspace_daemon
 from services.agent_service import AgentService
-from services.spec_planning import acceptance_summary
+from services.spec_planning import acceptance_summaries
 
 BRANCH_PREFIX = "fabrique/task-"
 INTEGRATION_BRANCH_PREFIX = "fabrique/sprint-"
@@ -130,8 +131,11 @@ TRIGGERS = ("sprint_closed", "manual")
 # One integration of a sprint at a time: merge, test and record together.
 # In this process an asyncio lock; across replicas a Postgres advisory lock.
 _LOCKS: dict[int, asyncio.Lock] = {}
-# The advisory-lock namespace for integrations ("intg" in ASCII).
-_LOCK_NAMESPACE = 0x696E7467
+# Integrations running at once in this process, each holding a lock connection.
+MAX_CONCURRENT = max(1, int(os.getenv("INTEGRATION_MAX_CONCURRENT", "2")))
+_SLOTS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+# Postgres engines for lock connections only, by database URL.
+_LOCK_ENGINES: dict[str, Any] = {}
 
 
 class IntegrationRefused(Exception):
@@ -141,43 +145,65 @@ class IntegrationRefused(Exception):
         self.detail = detail
 
 
-@contextlib.contextmanager
-def _database_lock(engine: Any, sprint_id: int) -> Iterator[bool]:
+def _lock_engine(engine: Any) -> Any:
+    """The engine lock connections come from: on Postgres a small pool of its
+    own, so integrations waiting on the daemon never hold the application's."""
+    if not locks.is_postgres(engine):
+        return engine
+    key = engine.url.render_as_string(hide_password=False)
+    if key not in _LOCK_ENGINES:
+        _LOCK_ENGINES[key] = create_engine(
+            engine.url,
+            pool_size=MAX_CONCURRENT,
+            max_overflow=0,
+            pool_pre_ping=True,
+        )
+    return _LOCK_ENGINES[key]
+
+
+@contextlib.asynccontextmanager
+async def _database_lock(engine: Any, sprint_id: int) -> AsyncIterator[bool]:
     """Whether this process owns the sprint's integration across replicas.
 
-    A session advisory lock on its own connection, held for the attempt and
-    released if the process dies; always owned on a database without them.
+    ``locks.held``: a session advisory lock on Postgres, held for the attempt
+    and released if the process dies. Taken and released in a thread, so a
+    connection checkout never blocks the event loop.
     """
-    if engine.dialect.name != "postgresql":
-        yield True
-        return
-    key = {"namespace": _LOCK_NAMESPACE, "sprint_id": sprint_id}
-    with engine.connect() as conn:
-        owned = bool(
-            conn.execute(
-                text("SELECT pg_try_advisory_lock(:namespace, :sprint_id)"), key
-            ).scalar()
-        )
-        conn.commit()
-        try:
-            yield owned
-        finally:
-            if owned:
-                try:
-                    conn.execute(
-                        text("SELECT pg_advisory_unlock(:namespace, :sprint_id)"), key
-                    )
-                    conn.commit()
-                except Exception:  # noqa: BLE001 - Never return a locked connection to the pool.
-                    conn.invalidate()
+    held = locks.held(_lock_engine(engine), locks.SPRINT_INTEGRATION, sprint_id)
+    entering = asyncio.ensure_future(asyncio.to_thread(held.__enter__))
+    try:
+        owned = await asyncio.shield(entering)
+    except asyncio.CancelledError:
+        # Cancelled while the lock was being taken: release it once it is.
+        with contextlib.suppress(Exception):
+            await entering
+            await asyncio.to_thread(held.__exit__, None, None, None)
+        raise
+    try:
+        yield owned
+    finally:
+        await asyncio.to_thread(held.__exit__, None, None, None)
+
+
+def _slots() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    if loop not in _SLOTS:
+        _SLOTS[loop] = asyncio.Semaphore(MAX_CONCURRENT)
+    return _SLOTS[loop]
 
 
 @contextlib.asynccontextmanager
 async def sprint_lock(engine: Any, sprint_id: int) -> AsyncIterator[bool]:
-    """Hold the sprint's integration; yields False when another replica holds it."""
-    async with _LOCKS.setdefault(sprint_id, asyncio.Lock()):
-        with _database_lock(engine, sprint_id) as owned:
-            yield owned
+    """Hold the sprint's integration; yields False when another replica holds it.
+
+    At most ``MAX_CONCURRENT`` integrations run at a time in this process.
+    """
+    async with (
+        _LOCKS.setdefault(sprint_id, asyncio.Lock()),
+        _slots(),
+        _database_lock(engine, sprint_id) as owned,
+    ):
+        yield owned
 
 
 def _project_path(session: Session, company_id: int) -> str | None:
@@ -236,12 +262,18 @@ def integration_spec(
     done = [t for t in tasks if t["status"] == "done"]
     if not done:
         raise IntegrationRefused(409, "No task of this sprint is done")
+    # As it stood at integration; a later run does not rewrite it.
+    acceptance = acceptance_summaries(
+        session, [session.get(BacklogItem, t["task_id"]) for t in done]
+    )
     spec = {
         "workspace_root": root,
         "branch": integration_branch(sprint),
         "base": company.git_base_branch or "",
         # Dependencies first: a task's branch already holds the ones it built on.
         "merge": [t["branch"] for t in done],
+        # This attempt's own snapshot worktree on the daemon; a retry gets another.
+        "attempt": secrets.token_hex(8),
     }
     context = {
         "company_id": company.id,
@@ -258,10 +290,7 @@ def integration_spec(
                         strict=True,
                     )
                 ),
-                # As it stood at integration; a later run does not rewrite it.
-                "acceptance": acceptance_summary(
-                    session, session.get(BacklogItem, t["task_id"])
-                ),
+                "acceptance": acceptance.get(t["task_id"], ""),
             }
             for t in done
         ],

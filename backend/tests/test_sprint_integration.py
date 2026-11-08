@@ -13,13 +13,15 @@ import asyncio
 import contextlib
 import shlex
 import sys
+import threading
+import weakref
 from pathlib import Path
 
 import pytest
 from config import settings
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import integration, integration_jobs
+from services import integration, integration_jobs, locks
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -296,7 +298,7 @@ def test_a_manager_integrates_the_suite_runs_on_the_result_and_one_request_is_pu
     # The suite ran at the integrated commit, in a worktree detached there.
     tested_in = nats.requests[1][1]["workspace_root"]
     assert tested_in == body["test_run"]["workspace_root"]
-    assert tested_in.endswith("@" + body["commit"][:12])
+    assert "@" + body["commit"][:12] + "-" in tested_in
     assert git(Path(tested_in), "rev-parse", "HEAD") == body["commit"]
     assert body["tested_commit"] == body["commit"]
     assert [(t["task_id"], t["state"]) for t in body["tasks"]] == [
@@ -788,19 +790,20 @@ def test_a_daemon_that_refuses_at_close_leaves_an_error_for_a_person(
 def test_the_suite_never_runs_on_files_a_previous_suite_left(repo):
     _deliver(repo, 1, {"a.py": "A = 1\n"})
     spec = {"branch": "fabrique/sprint-9", "merge": ["fabrique/task-1"]}
-    first = sprint_integration.integrate(str(repo), spec)
+    first = sprint_integration.integrate(str(repo), {**spec, "attempt": "one"})
     snapshot = Path(first["test_worktree"])
     (snapshot / "a.py").write_text("A = 'changed by a test'\n")
     (snapshot / "generated_test.py").write_text("assert True\n")
-    (snapshot / "cache").mkdir()
 
-    again = sprint_integration.integrate(str(repo), spec)
+    again = sprint_integration.integrate(str(repo), {**spec, "attempt": "two"})
 
     assert again["commit"] == first["commit"]
-    assert Path(again["test_worktree"]) == snapshot
-    assert (snapshot / "a.py").read_text() == "A = 1\n"
-    assert not (snapshot / "generated_test.py").exists()
-    assert not (snapshot / "cache").exists()
+    fresh = Path(again["test_worktree"])
+    assert fresh != snapshot and fresh.name.endswith("-two")
+    assert (fresh / "a.py").read_text() == "A = 1\n"
+    assert not (fresh / "generated_test.py").exists()
+    # The first attempt's files are its own: a retry never resets them under it.
+    assert (snapshot / "a.py").read_text() == "A = 'changed by a test'\n"
 
 
 def test_a_task_branch_is_read_once_checked_merged_and_recorded_at_that_commit(
@@ -890,8 +893,8 @@ def test_a_sprint_another_replica_integrates_is_left_to_it(
     nats = _Daemon()
     monkeypatch.setattr(test_client.app.state, "nats_client", nats)
 
-    @contextlib.contextmanager
-    def held_elsewhere(engine, sprint_id):
+    @contextlib.asynccontextmanager
+    async def held_elsewhere(engine, sprint_id):
         yield False
 
     monkeypatch.setattr(integration, "_database_lock", held_elsewhere)
@@ -911,19 +914,17 @@ def test_a_sprint_another_replica_integrates_is_left_to_it(
 
 class _Conn:
     def __init__(self, owned):
-        self.owned, self.sql = owned, []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
+        self.owned, self.sql, self.threads = owned, [], set()
 
     def execute(self, statement, params):
+        self.threads.add(threading.get_ident())
         self.sql.append((str(statement), params))
         return type("R", (), {"scalar": lambda _self: self.owned})()
 
     def commit(self):
+        return None
+
+    def close(self):
         return None
 
     def invalidate(self):
@@ -931,23 +932,210 @@ class _Conn:
 
 
 @pytest.mark.parametrize("owned", [True, False])
-def test_on_postgres_the_sprint_is_held_with_an_advisory_lock(owned):
+def test_on_postgres_the_sprint_is_held_with_an_advisory_lock_off_the_loop(
+    owned, monkeypatch
+):
     conn = _Conn(owned)
     engine = type(
         "E",
         (),
         {"dialect": type("D", (), {"name": "postgresql"})(), "connect": lambda _: conn},
     )()
+    monkeypatch.setattr(integration, "_lock_engine", lambda _engine: engine)
 
-    with integration._database_lock(engine, 42) as got:
-        assert got is owned
+    async def hold():
+        async with integration._database_lock(engine, 42) as got:
+            return got, threading.get_ident()
 
+    got, loop_thread = asyncio.run(hold())
+
+    assert got is owned
     calls = [sql.split("(")[0] for sql, _ in conn.sql]
     expected = ["SELECT pg_try_advisory_lock"] + (
         ["SELECT pg_advisory_unlock"] if owned else []
     )
     assert calls == expected
-    assert all(p["sprint_id"] == 42 for _, p in conn.sql)
+    key = locks.lock_key(locks.SPRINT_INTEGRATION, 42)
+    assert all(p["k"] == key for _, p in conn.sql)
+    # Taken and released in a thread: a checkout never blocks the event loop.
+    assert loop_thread not in conn.threads
+
+
+def test_lock_connections_come_from_a_small_pool_of_their_own():
+    from sqlalchemy.engine import make_url
+
+    app = type(
+        "E",
+        (),
+        {
+            "dialect": type("D", (), {"name": "postgresql"})(),
+            "url": make_url("postgresql://u:p@db.invalid/fabrique"),
+        },
+    )()
+
+    lock_engine = integration._lock_engine(app)
+
+    assert lock_engine is integration._lock_engine(app)
+    assert lock_engine.pool.size() == integration.MAX_CONCURRENT
+    assert lock_engine.pool._max_overflow == 0
+    assert lock_engine.url.password == "p"
+    # SQLite has no advisory locks: the same engine, never a pool.
+    sqlite = type("E", (), {"dialect": type("D", (), {"name": "sqlite"})()})()
+    assert integration._lock_engine(sqlite) is sqlite
+
+
+class _CountingDaemon(_Daemon):
+    def __init__(self):
+        super().__init__()
+        self.in_flight = self.most = 0
+
+    async def request(self, subject, payload, timeout=5.0):
+        self.in_flight += 1
+        self.most = max(self.most, self.in_flight)
+        try:
+            await asyncio.sleep(0.05)
+            return await super().request(subject, payload, timeout)
+        finally:
+            self.in_flight -= 1
+
+
+def test_integrations_of_different_sprints_run_within_the_limit(
+    sqlite_session, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    sprints = [_two_done_tasks(sqlite_session, root)[1] for _ in range(3)]
+    engine = sqlite_session.get_bind()
+    monkeypatch.setattr(integration, "MAX_CONCURRENT", 1)
+    monkeypatch.setattr(integration, "_SLOTS", weakref.WeakKeyDictionary())
+    nats = _CountingDaemon()
+
+    async def all_at_once():
+        return await asyncio.gather(
+            *(
+                integration.integrate(
+                    nats, engine, s.id, trigger="manual", requested_by="human:A"
+                )
+                for s in sprints
+            )
+        )
+
+    rows = asyncio.run(all_at_once())
+
+    assert [r.status for r in rows] == ["tests_passed"] * 3
+    assert nats.most == 1
+    attempts = [
+        p["attempt"] for s, p in nats.requests if s == "workspace.git.integrate"
+    ]
+    assert len(set(attempts)) == 3
+    assert all(r.test_run["workspace_root"].endswith(a) for r, a in zip(rows, attempts))
+
+
+def test_a_snapshot_a_command_runs_in_is_never_removed(repo, monkeypatch):
+    monkeypatch.setattr(sprint_integration, "SNAPSHOT_GRACE_SECONDS", 0)
+    monkeypatch.setattr(sprint_integration, "KEEP_SNAPSHOTS", 1)
+    _deliver(repo, 1, {"a.py": "A = 1\n"})
+    spec = {"branch": "fabrique/sprint-11", "merge": ["fabrique/task-1"]}
+    busy = Path(
+        sprint_integration.integrate(str(repo), {**spec, "attempt": "busy"})[
+            "test_worktree"
+        ]
+    )
+
+    def retried_meanwhile():
+        # The backend restarted; another replica retries while this suite still runs.
+        return Path(
+            sprint_integration.integrate(str(repo), {**spec, "attempt": "retry"})[
+                "test_worktree"
+            ]
+        )
+
+    retry = sprint_integration.while_active(busy, retried_meanwhile)
+
+    assert busy.is_dir() and (busy / "a.py").read_text() == "A = 1\n"
+    assert retry.is_dir()
+    # Once its command ended, the busy snapshot is removed like any other.
+    sprint_integration.integrate(str(repo), {**spec, "attempt": "later"})
+    assert not busy.exists() and not retry.exists()
+
+
+def test_a_snapshot_younger_than_the_grace_is_kept(repo, monkeypatch):
+    monkeypatch.setattr(sprint_integration, "KEEP_SNAPSHOTS", 1)
+    _deliver(repo, 1, {"a.py": "A = 1\n"})
+    spec = {"branch": "fabrique/sprint-12", "merge": ["fabrique/task-1"]}
+    first = Path(
+        sprint_integration.integrate(str(repo), {**spec, "attempt": "a"})[
+            "test_worktree"
+        ]
+    )
+    sprint_integration.integrate(str(repo), {**spec, "attempt": "b"})
+    # Its suite may not have started yet.
+    assert first.is_dir()
+
+
+def test_the_daemon_marks_each_command_s_folder_in_use():
+    seen = []
+
+    def run(folder):
+        seen.append(dict(sprint_integration._ACTIVE))
+        return "done"
+
+    folder = Path(__file__).parent
+    assert sprint_integration.while_active(folder, run, folder) == "done"
+    assert seen == [{str(folder.resolve()): 1}]
+    assert sprint_integration._ACTIVE == {}
+    daemon_source = (
+        Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
+    ).read_text()
+    assert (
+        "sprint_integration.while_active, workspace_path, execute_shell_command"
+        in daemon_source
+    )
+
+
+def test_the_acceptance_coverage_is_read_once_per_specification(
+    sqlite_session, monkeypatch
+):
+    from models.specification import Specification
+    from services import spec_planning
+
+    company = _company(sqlite_session)
+    spec = Specification(company_id=company.id, title="Auth", status="approved")
+    sqlite_session.add(spec)
+    sqlite_session.commit()
+    sprint = Sprint(company_id=company.id, sprint_name="S", specification_id=spec.id)
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    items = [
+        BacklogItem(sprint_id=sprint.id, title=f"T{i}", covers=[f"REQ-1.{i}"])
+        for i in (1, 2, 3)
+    ]
+    sqlite_session.add_all(items)
+    sqlite_session.commit()
+    calls = []
+
+    def coverage(session, spec):
+        calls.append(spec.id)
+        return {
+            "total": 3,
+            "verified": 1,
+            "criteria": [
+                {"id": "REQ-1.1", "verified": True},
+                {"id": "REQ-1.2", "verified": False},
+                {"id": "REQ-1.3", "verified": False},
+            ],
+        }
+
+    monkeypatch.setattr(spec_planning, "coverage", coverage)
+
+    lines = spec_planning.acceptance_summaries(sqlite_session, items)
+
+    assert calls == [spec.id]
+    assert lines[items[0].id].endswith("this task's: 1 of 1.")
+    assert lines[items[1].id].endswith("this task's: 0 of 1.")
+    assert '1 of 3 criteria of "Auth"' in lines[items[2].id]
+    assert (
+        spec_planning.acceptance_summary(sqlite_session, items[0]) == lines[items[0].id]
+    )
 
 
 def test_an_integration_recorded_without_its_tasks_evidence_is_not_published(
@@ -978,13 +1166,15 @@ def test_the_acceptance_line_is_the_one_seen_at_integration(
     monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
     monkeypatch.setattr(
         integration,
-        "acceptance_summary",
-        lambda s, item: "**Acceptance:** AT INTEGRATION",
+        "acceptance_summaries",
+        lambda s, items: {i.id: "**Acceptance:** AT INTEGRATION" for i in items},
     )
     assert test_client.post(f"/v1/sprints/{sprint.id}/integrate").status_code == 201
     # A later run changes the specification's coverage; the integration does not.
     monkeypatch.setattr(
-        integration, "acceptance_summary", lambda s, item: "**Acceptance:** LATER"
+        integration,
+        "acceptance_summaries",
+        lambda s, items: {i.id: "**Acceptance:** LATER" for i in items},
     )
 
     test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
