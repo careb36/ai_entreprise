@@ -1932,6 +1932,19 @@
       "mergeHint": "Merging puts {{branch}} into the base branch of the repository on this computer; nothing is pushed and no remote is needed.",
       "merged": "{{name}} merged {{commit}} from {{branch}} into {{base}}",
       "alreadyIn": "already in the base branch"
+    },
+    "undo": {
+      "title": "Undo this delivery",
+      "button": "Undo this delivery",
+      "hint_one": "Puts back the {{count}} file this delivery changed, as the workspace daemon kept it before writing, in a store of its own outside the project; a file this delivery created is removed. Refused if the file changed since.",
+      "hint_other": "Puts back the {{count}} files this delivery changed, as the workspace daemon kept them before writing, in a store of its own outside the project; files this delivery created are removed. Refused if any of them changed since.",
+      "confirm_one": "Undo this delivery? Its {{count}} file goes back to what it was before on the project's computer.",
+      "confirm_other": "Undo this delivery? Its {{count}} files go back to what they were before on the project's computer.",
+      "done": "Undone. Restored: {{restored}}; removed: {{removed}}.",
+      "restored": "restored {{path}}",
+      "removed": "removed {{path}}",
+      "statusStays": "The task's status did not change; send it back with a review if it should be done again.",
+      "undoneAt": "This delivery was undone on {{when}}."
     }
   },
   "standards": {

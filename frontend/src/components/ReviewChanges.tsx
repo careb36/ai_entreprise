@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, FileDiff, Plus } from 'lucide-react'
 import { patchRows, type PatchRow } from '../lib/patch'
 import { PublishBranch } from './PublishBranch'
+import { UndoDelivery } from './UndoDelivery'
 import { CommentForm, CommentThread, LineReviewProvider, rowTarget, targetKey, useFileComments } from './LineComments'
 import { type FileChange, type RunChanges, useRunChanges } from '../services/reviewChanges'
 
@@ -230,6 +231,9 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
         {changes.git && (
           <PublishBranch companyId={companyId} runId={runId} branch={changes.git.branch} canPublish={canComment}
             shownPaths={changes.files.filter(file => patchRows(file.patch).length > 0).map(file => file.path)} />
+        )}
+        {!changes.git && changes.snapshot && canComment && (
+          <UndoDelivery key={`${companyId}-${runId}-${changes.snapshot.id}`} companyId={companyId} runId={runId} snapshot={changes.snapshot} />
         )}
         {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
       </LineReviewProvider>

@@ -24,6 +24,21 @@ export interface FileChange {
   omitted: DiffOmitted | null
 }
 
+/** One file a snapshot covers, with the sha256 the daemon read before and after the delivery. */
+export interface SnapshotFile {
+  path: string
+  existed: boolean
+  before_sha256: string | null
+  after_sha256: string | null
+}
+
+export interface DeliverySnapshot {
+  id: string
+  files: SnapshotFile[]
+  /** When a Manager undid the delivery, from the audit log. */
+  undone_at: string | null
+}
+
 export interface RunChanges {
   run_id: number
   /** `artifact`: a diff the producer sent, with no observation of a disk. */
@@ -31,6 +46,11 @@ export interface RunChanges {
   observed_by: { verification_id: number; observed_at: string } | null
   /** With the Git workflow: the branch and commit the delivery landed on, as the daemon's git said. */
   git?: { branch: string; base: string; commit: string | null; parent: string; worktree: string; repository: string } | null
+  /**
+   * Without the Git workflow: the snapshot the daemon kept before writing, in
+   * a store of its own outside the project, which undoes the delivery.
+   */
+  snapshot?: DeliverySnapshot | null
   reason: string | null
   files: FileChange[]
   files_not_shown: number

@@ -145,7 +145,7 @@ if [ -z "$NATS_URL" ]; then
 fi
 # Before the bench's own daemon joins: nobody else may answer on this broker.
 "$PY" "$REPO/scripts/bench/broker.py" check "$NATS_URL" || exit 2
-NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/projects" \
+NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/projects" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" \
   "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
 grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }

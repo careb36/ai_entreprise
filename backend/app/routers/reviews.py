@@ -4,7 +4,8 @@ Viewers of the run's company read them; its Managers write them, since a
 review can send a task back to work or accept a delivery
 (``services/run_review.py``). A Manager also publishes a run's task branch
 as a pull or merge request on the repository's platform
-(``services/git_publish.py``).
+(``services/git_publish.py``), or, without the Git workflow, undoes its
+delivery from the daemon's snapshot (``services/delivery_undo.py``).
 """
 
 from datetime import UTC, datetime
@@ -16,6 +17,7 @@ from models import User
 from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication, RunReview
 from schemas import ReviewCommentCreate, RunReviewCreate
+from services.delivery_undo import UndoRefused, record_undo, undo_spec
 from services.git_publish import PublishRefused, publish_spec, record_publication
 from services.local_merge import record_run_merge, run_merge_spec
 from services.review_sync import SyncRefused, import_comments, sync_spec
@@ -32,6 +34,8 @@ router = APIRouter(prefix="/v1/agent_runs", tags=["Reviews"])
 
 # A push and the platform's CLI run on the person's machine; give them time.
 PUBLISH_TIMEOUT_SECONDS = 150.0
+# Restoring a few files from the daemon's own store.
+UNDO_TIMEOUT_SECONDS = 60.0
 # Three paginated API reads (line comments, reviews, conversation) on GitHub.
 SYNC_TIMEOUT_SECONDS = 200.0
 
@@ -254,6 +258,38 @@ async def merge_run(
             session, run, reply, merged_by=author_name, merged_by_user_id=author_id
         )
     except PublishRefused as refused:
+        session.rollback()
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
+    except DaemonUnavailable as exc:
+        raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from exc
+    except DaemonError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message) from exc
+
+
+@router.post("/{run_id}/undo")
+async def undo_run_delivery(
+    run_id: int,
+    request: Request,
+    company_id: int = Query(...),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Put back the files the run's delivery changed (``services/delivery_undo``); the task's status stays."""
+    require_company_role(session, user, company_id, "Manager")
+    run = _run(session, run_id, company_id)
+    author_name, _ = _author(user, None)
+    try:
+        spec = undo_spec(session, run)
+        reply = await daemon_request(
+            getattr(request.app.state, "nats_client", None),
+            "workspace.undo",
+            spec,
+            timeout=UNDO_TIMEOUT_SECONDS,
+        )
+        return record_undo(session, run, reply, undone_by=author_name)
+    except UndoRefused as refused:
         session.rollback()
         raise HTTPException(
             status_code=refused.status, detail=refused.detail
