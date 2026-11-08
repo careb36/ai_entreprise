@@ -1,19 +1,37 @@
-"""Integration of a sprint's task branches into one branch.
+"""Integration of a sprint's task branches into one branch (issue #314).
 
 With the Git workflow on, each task is a branch (``fabrique/task-<id>``) and
 nobody joins them. A sprint is not delivered until its work is integrated
-and the whole suite passes on the integrated result. This module plans that
-step: which branches, in which order, and whether the dependencies are met.
-The actual merge and test run happen on the daemon (real git); here we only
-describe the plan and record its result, so the backend never shells out.
+and the whole suite passes on the integrated result.
+
+``plan`` says which branches, in which order (dependencies first).
+``integrate`` carries it out when a sprint closes, or when a Manager asks:
+the workspace daemon merges the done tasks' branches into
+``fabrique/sprint-<id>`` with real git (``vscode-daemon/sprint_integration.py``,
+``workspace.git.integrate``), and, with ``DELIVERY_TESTS_ENABLED``, runs the
+project's test command on the integrated worktree through the same path and
+sandbox as a delivery's tests (``workspace_daemon.run_delivery_tests``). The
+backend never shells out. What the daemon answered is kept as a
+``SprintIntegration``: the merges, the conflict (files and hunks) at the
+first merge git could not make, and the test run. A conflict or a failing
+suite waits for a person (``GET /v1/inbox``, ``integrations``). The branch is
+published as one request for the sprint by ``services/integration_publish.py``.
 """
 
 from __future__ import annotations
 
+import asyncio
+import os
 from typing import Any
 
-from models import BacklogItem, Sprint
+from config import settings
+from logging_config import logger
+from models import BacklogItem, Company, ProjectDiscovery, Sprint
+from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, select
+
+from services import workspace_daemon
+from services.agent_service import AgentService
 
 BRANCH_PREFIX = "fabrique/task-"
 INTEGRATION_BRANCH_PREFIX = "fabrique/sprint-"
@@ -91,3 +109,295 @@ def plan(session: Session, sprint_id: int) -> dict[str, Any]:
         "merge_order": [i.id for i in ordered],
         "unmet_dependencies": unmet,
     }
+
+
+# --- the integration itself ------------------------------------------------
+
+# A merge per task branch and, on a large repository, a worktree to create.
+INTEGRATE_TIMEOUT_SECONDS = 150.0
+TRIGGERS = ("sprint_closed", "manual")
+# The background integrations started when a sprint closed, kept until done.
+_RUNNING: set[asyncio.Task] = set()
+
+
+class IntegrationRefused(Exception):
+    def __init__(self, status: int, detail: str):
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+
+
+def _project_path(session: Session, company_id: int) -> str | None:
+    discovery = session.exec(
+        select(ProjectDiscovery)
+        .where(ProjectDiscovery.company_id == company_id)
+        .order_by(ProjectDiscovery.created_at.desc(), ProjectDiscovery.id.desc())
+    ).first()
+    if discovery is not None and discovery.project_path:
+        return discovery.project_path
+    return os.getenv("AGENT_WORKSPACE_ROOT") or None
+
+
+def integration_spec(
+    session: Session, sprint_id: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The ``workspace.git.integrate`` request for the sprint, and what to record it against."""
+    sprint = session.get(Sprint, sprint_id)
+    if sprint is None:
+        raise IntegrationRefused(404, "Sprint not found")
+    company = session.get(Company, sprint.company_id)
+    if company is None or not company.git_workflow:
+        raise IntegrationRefused(
+            409, "The company's Git workflow is off: its tasks have no branches"
+        )
+    root = _project_path(session, company.id)
+    if not root:
+        raise IntegrationRefused(409, "The company has no project folder")
+    tasks = plan(session, sprint_id)["task_branches"]
+    done = [t for t in tasks if t["status"] == "done"]
+    if not done:
+        raise IntegrationRefused(409, "No task of this sprint is done")
+    spec = {
+        "workspace_root": root,
+        "branch": integration_branch(sprint),
+        "base": company.git_base_branch or "",
+        # Dependencies first: a task's branch already holds the ones it built on.
+        "merge": [t["branch"] for t in done],
+    }
+    context = {
+        "company_id": company.id,
+        "sprint_id": sprint.id,
+        "task_of": {t["branch"]: t["task_id"] for t in done},
+        "left_out": [
+            {"task_id": t["task_id"], "title": t["title"], "status": t["status"]}
+            for t in tasks
+            if t["status"] != "done"
+        ],
+    }
+    return spec, context
+
+
+async def _run_suite(
+    nats_client: Any, engine: Any, context: dict[str, Any], worktree: str
+) -> dict[str, Any]:
+    """The project's test command on the integrated worktree, as a delivery's tests run."""
+    if not settings.DELIVERY_TESTS_ENABLED:
+        return {"command": None, "reason": "DELIVERY_TESTS_ENABLED is off"}
+    # An empty acceptance asks for per-test lines, so the failing tests are named.
+    evidence: dict[str, Any] = {"workspace_root": worktree, "acceptance": {"all": []}}
+    await workspace_daemon.run_delivery_tests(
+        nats_client,
+        {"id": context["sprint_id"], "company_id": context["company_id"]},
+        evidence,
+        engine,
+    )
+    test_run = dict(evidence.get("test_run") or {})
+    test_run.pop("criteria", None)
+    return test_run
+
+
+def status_of(conflict: Any, test_run: dict[str, Any] | None) -> str:
+    if conflict:
+        return "conflict"
+    test_run = test_run or {}
+    exit_code = test_run.get("exit_code")
+    if test_run.get("timed_out") or (isinstance(exit_code, int) and exit_code != 0):
+        return "tests_failed"
+    return "tests_passed" if exit_code == 0 else "untested"
+
+
+def record(
+    session: Session,
+    spec: dict[str, Any],
+    context: dict[str, Any],
+    reply: dict[str, Any],
+    test_run: dict[str, Any] | None,
+    *,
+    trigger: str,
+    requested_by: str,
+) -> SprintIntegration:
+    """Keep the daemon's answer, audited; an answer that is not about this branch is refused."""
+    if reply.get("branch") != spec["branch"] or not reply.get("commit"):
+        raise IntegrationRefused(502, "The workspace daemon sent an unreadable answer")
+    task_of = context["task_of"]
+    conflict = reply.get("conflict")
+    if isinstance(conflict, dict):
+        conflict = {**conflict, "task_id": task_of.get(conflict.get("branch"))}
+    else:
+        conflict = None
+    merged = [
+        {
+            "task_id": task_of.get(m.get("branch")),
+            "branch": m.get("branch"),
+            "commit": m.get("commit"),
+        }
+        for m in reply.get("merged") or []
+        if isinstance(m, dict)
+    ]
+    row = SprintIntegration(
+        company_id=context["company_id"],
+        sprint_id=context["sprint_id"],
+        trigger=trigger,
+        requested_by=requested_by,
+        status=status_of(conflict, test_run),
+        branch=spec["branch"],
+        base=str(reply.get("base") or spec["base"] or ""),
+        repository=reply.get("repository"),
+        worktree=reply.get("worktree"),
+        start_commit=reply.get("start"),
+        commit=str(reply["commit"]),
+        merged=merged,
+        conflict=conflict,
+        test_run=test_run,
+        details={
+            key: [
+                {"task_id": task_of.get(b), "branch": b}
+                for b in reply.get(key) or []
+                if isinstance(b, str)
+            ]
+            for key in ("already_merged", "missing", "refused", "not_attempted")
+        }
+        | {"left_out": context["left_out"]},
+    )
+    session.add(row)
+    session.flush()
+    audit_log = AgentService().audit_interaction(
+        session=session,
+        company_id=row.company_id,
+        interaction_id=f"sprint:{row.sprint_id}:integration",
+        agent_id=requested_by
+        if requested_by.startswith("human:")
+        else f"system:{requested_by}",
+        action="sprint_integrated",
+        details={
+            "company_id": str(row.company_id),
+            "sprint_id": row.sprint_id,
+            "integration_id": row.id,
+            "trigger": trigger,
+        },
+        result={
+            "status": row.status,
+            "branch": row.branch,
+            "commit": row.commit,
+            "merged": [m["branch"] for m in merged],
+            "conflict_files": (conflict or {}).get("files"),
+            "tests_exit_code": (test_run or {}).get("exit_code"),
+        },
+        decision_signature=None,
+        cost_tokens=0,
+    )
+    row.audit_log_id = audit_log.id
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+async def integrate(
+    nats_client: Any,
+    engine: Any,
+    sprint_id: int,
+    *,
+    trigger: str,
+    requested_by: str,
+) -> SprintIntegration:
+    """Merge the sprint's done task branches, run the suite on the result, record both.
+
+    Raises ``IntegrationRefused`` when there is nothing to integrate, and
+    ``workspace_daemon.DaemonUnavailable`` / ``DaemonError`` when the daemon
+    could not do it; nothing is recorded then.
+    """
+    with Session(engine) as session:
+        spec, context = integration_spec(session, sprint_id)
+    reply = await workspace_daemon.daemon_request(
+        nats_client, "workspace.git.integrate", spec, INTEGRATE_TIMEOUT_SECONDS
+    )
+    test_run = None
+    if reply.get("ok") and reply.get("worktree"):
+        test_run = await _run_suite(nats_client, engine, context, reply["worktree"])
+    with Session(engine) as session:
+        return record(
+            session,
+            spec,
+            context,
+            reply,
+            test_run,
+            trigger=trigger,
+            requested_by=requested_by,
+        )
+
+
+async def _after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
+    try:
+        await integrate(
+            nats_client,
+            engine,
+            sprint_id,
+            trigger="sprint_closed",
+            requested_by="task_worker",
+        )
+    except IntegrationRefused as refused:
+        logger.info("Sprint %s not integrated: %s", sprint_id, refused.detail)
+    except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
+        logger.warning("Integration of sprint %s failed: %s", sprint_id, exc)
+
+
+def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
+    """Integrate a sprint that just closed, in the background, when its company uses the Git workflow."""
+    try:
+        with Session(engine) as session:
+            sprint = session.get(Sprint, sprint_id)
+            company = session.get(Company, sprint.company_id) if sprint else None
+            if company is None or not company.git_workflow:
+                return
+        task = asyncio.get_running_loop().create_task(
+            _after_close(nats_client, engine, sprint_id)
+        )
+    except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
+        logger.warning("Integration of sprint %s not started: %s", sprint_id, exc)
+        return
+    _RUNNING.add(task)
+    task.add_done_callback(_RUNNING.discard)
+
+
+# --- what people read --------------------------------------------------------
+
+
+def latest(session: Session, sprint_id: int) -> SprintIntegration | None:
+    return session.exec(
+        select(SprintIntegration)
+        .where(SprintIntegration.sprint_id == sprint_id)
+        .order_by(SprintIntegration.created_at.desc(), SprintIntegration.id.desc())
+    ).first()
+
+
+def waiting_for_a_person(session: Session, company_id: int) -> list[dict[str, Any]]:
+    """Each sprint whose latest integration stopped at a conflict or a failing suite."""
+    rows = session.exec(
+        select(SprintIntegration, Sprint)
+        .join(Sprint, Sprint.id == SprintIntegration.sprint_id)
+        .where(SprintIntegration.company_id == company_id)
+        .order_by(SprintIntegration.created_at.desc(), SprintIntegration.id.desc())
+    ).all()
+    seen: set[int] = set()
+    waiting = []
+    for row, sprint in rows:
+        if row.sprint_id in seen:
+            continue
+        seen.add(row.sprint_id)
+        if row.status not in WAITS_FOR_A_PERSON:
+            continue
+        waiting.append(
+            {
+                "id": row.id,
+                "sprint_id": sprint.id,
+                "sprint_name": sprint.sprint_name,
+                "status": row.status,
+                "branch": row.branch,
+                "conflict_task_id": (row.conflict or {}).get("task_id"),
+                "conflict_files": (row.conflict or {}).get("files") or [],
+                "failing_tests": (row.test_run or {}).get("failing_tests") or [],
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    return waiting

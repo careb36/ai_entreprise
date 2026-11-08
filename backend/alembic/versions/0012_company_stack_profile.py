@@ -5,8 +5,8 @@ manifests' sha256 as the last successful install saw them, per folder). Both
 nullable: an existing company keeps the detected profile and installs on the
 next manifest change.
 
-Revision ID: 0011
-Revises: 0010
+Revision ID: 0012
+Revises: 0011
 Create Date: 2026-11-08 18:00:00 UTC
 """
 
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0011"
-down_revision = "0010"
+revision = "0012"
+down_revision = "0011"
 branch_labels = None
 depends_on = None
 

@@ -5,9 +5,8 @@ Runs natively on the developer's machine (macOS, Linux or Windows) — the one
 where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
-- workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
-                          and the diff against what was there, file_diff.py); with a
-                          `git` spec, as a commit on the task's branch (git_workspace.py)
+- workspace.generate:     write files (per-file sha256 read back and the diff, file_diff.py);
+                          with a `git` spec, a commit on the task's branch (git_workspace.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
@@ -18,8 +17,8 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
-- workspace.deliver:      (JetStream) files queued while this daemon was offline;
-                          the result goes to workspace.delivered
+- workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
+- workspace.deliver:      (JetStream) files queued while offline; result on workspace.delivered
 
 Start it with scripts/start-daemon.sh (macOS/Linux) or .ps1 (Windows); it reconnects to NATS on its own.
 """
@@ -49,6 +48,7 @@ from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported f
 import nats
 import nats_scope
 import platform_reviews
+import sprint_integration
 import shell_exec
 import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
@@ -73,8 +73,7 @@ ASSISTANT_FALLBACK_PATHS = {
 # Every daemon instance answers in this queue group, so a request is handled once.
 QUEUE_GROUP = "workspace-daemon"
 
-# The JetStream streams for queued deliveries are declared by the backend
-# (backend/app/nats_client.py); nats_scope applies NATS_NAMESPACE to both.
+# Queued-delivery streams: declared by the backend (nats_client.py), namespaced by nats_scope.
 
 
 def confirm_workspace_path() -> str:
@@ -669,6 +668,7 @@ async def main():
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
+        ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 

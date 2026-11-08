@@ -24,6 +24,7 @@ from .company import (
 )
 from .event import TaskEvent
 from .github import GitHubRepoBinding
+from .integration import SprintIntegration
 from .mcp import McpServer
 from .procedure import Procedure
 from .provider import ProviderConnection
@@ -63,6 +64,7 @@ __all__ = [
     "RunSecret",
     "Specification",
     "Sprint",
+    "SprintIntegration",
     "TaskEvent",
     "User",
     "Verification",

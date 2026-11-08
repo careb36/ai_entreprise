@@ -28,6 +28,7 @@ from routers import (
     events_router,
     github_router,
     inbox_router,
+    integration_router,
     mcp_router,
     messages_router,
     model_settings_router,
@@ -110,6 +111,7 @@ app.include_router(api_tokens_router)
 app.include_router(support_router)
 app.include_router(github_router)
 app.include_router(inbox_router)
+app.include_router(integration_router)
 app.include_router(messages_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
