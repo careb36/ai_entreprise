@@ -154,6 +154,10 @@ Copy `.env.example` to `.env` and fill in:
   check (`services/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
   for everything (`vscode-daemon/sandbox.py`).
+  `FABRIQUE_DAEMON_STATE` (daemon side, default `~/.fabrique-daemon/deliveries`)
+  is where the daemon keeps each queued delivery's result until the job is
+  acknowledged (`vscode-daemon/delivery_journal.py`): a redelivered job replays
+  it instead of applying SEARCH/REPLACE edits a second time.
   In a sprint planned from a specification it also decides the **acceptance
   tests per criterion** (`services/acceptance.py`): the runner's per-test lines
   are read back into criterion ids (pytest gets `-v`; name a verbose command
@@ -269,7 +273,10 @@ the LangGraph graph is only an optional kickoff conversation.
    requests from the company's last two completed sprints, read from the board
    (`_load_recent_lessons`), and the **Company Procedures** in force for the
    agent's role (QA's go into its review prompt).
-3. `parse_file_manifest` turns the answer into files. The worker sends them to the
+3. `parse_file_manifest` turns the answer into files (a block marked `edit`
+   carries SEARCH/REPLACE edits instead, `services/edit_blocks.py`; the daemon
+   applies them exactly and writes a `.py` or `.json` file only if it still
+   parses, `vscode-daemon/file_edits.py`). The worker sends them to the
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
    `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the
@@ -487,6 +494,7 @@ Test files:
 | `test_mcp_router.py` | `/v1/mcp/servers`: a Manager adds (by name, replacing), disables, restricts and removes servers, a Viewer reads, an outsider gets 403 and no token 401; no answer carries a secret; the tools endpoint reports what the server advertises or why it could not be reached |
 | `test_work_control.py` | Sprint 0 starts only when asked and never at autonomy 1; a planned sprint starts once and dispatches its tasks; pause, resume and stop (Manager only; stop blocks unfinished tasks); the autonomy level read by a Viewer and changed by a Manager; a planned, paused or cancelled sprint's task is not loaded, dispatched or reviewed; a credit answer is told from a passing error; no credit pauses the sprint and the task waits as todo; the execute call names the provider without credit; at autonomy 1 every approved task waits for a person |
 | `test_tenant_scoping.py` | Every table carries a required `company_id` that references `companies`, or is listed with its reason (the tenant, users, help-desk tickets, the outbox, backlog items through their sprint); `audit_log` alone may hold rows without a company; the lists hold no stale names |
+| `test_edit_blocks.py` | SEARCH/REPLACE edits in a deliverable and the syntax check before writing (issue #359, from Aider and SWE-agent): a block marked `edit` is read as edits, with no expected hash; the daemon applies an edit only when its search text appears exactly once, refuses a missing or ambiguous one, and writes a `.py` or `.json` file only when it still parses (parsed, never run); the Verifier names the daemon's reason |
 | `test_provider_connections.py` | A company's model provider connections (issue #356): a Manager connects, changes and removes them, a Viewer reads them, nobody outside the company does; the key is encrypted at rest and never returned, an omitted key keeps the stored one and an empty one clears it; base URLs and headers are checked (local servers allowed on purpose); the validation lists the provider's models with the key and records the outcome, which a later change to the key or URL clears |
 | `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
 | `test_proxy_connections.py` | A company's provider connection reaches the LLM proxy (issue #356): `conn:<id>:<model>` resolves into the model the proxy calls and the headers carrying the connection with the shared internal token; only the company's own enabled connection is used, never another company's; without the token or the company the call fails with the reason; plain model ids are untouched |

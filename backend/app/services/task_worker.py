@@ -1,19 +1,10 @@
 """
-Task Worker — NATS consumer for backlog item execution by AI agents.
+Task Worker: the NATS consumer that has an AI agent execute each backlog item.
 
-Listens for ``task.assign`` events published by the transactional outbox
-and dispatches each task to the appropriate AI agent based on the backlog
-item's ``assignee`` field.  The agent's LLM model and system prompt are
-loaded from the ``agents`` table so each role uses its configured model.
-
-Workflow per task:
-1. Receive ``task.assign`` NATS message with ``backlog_item_id`` and ``sprint_id``.
-2. Load the BacklogItem from Postgres (title, description, assignee).
-3. Look up the Agent row matching the assignee role + company.
-4. Call the LLM proxy with the agent's model and system prompt.
-5. Update the backlog item: status → ``in_progress`` → ``in_review``,
-   append a comment with the agent's deliverable.
-6. Publish a Glassroom event so the UI shows real-time progress.
+Per task: receive ``task.assign`` (from the outbox), load the item and the agent
+for its ``assignee`` (role and company, with its configured model and prompt),
+call the LLM proxy, move the item to ``in_review`` with the deliverable as a
+comment, and publish to Glassroom.
 """
 
 import asyncio
@@ -51,6 +42,7 @@ from services import (
     delivery_gate,
     dependencies,
     developer_tools,
+    edit_blocks,
     git_workflow,
     mcp_tools,
     model_routing,
@@ -209,7 +201,7 @@ FILE_MANIFEST_INSTRUCTIONS = (
     "Use one block per file, give the complete content (not a diff or an excerpt), and "
     "keep explanations outside the blocks. Files are written to the project exactly as "
     "given."
-)
+) + edit_blocks.INSTRUCTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -759,12 +751,12 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
     """
     Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
 
-    Each block becomes one ``{"path", "content"}`` entry with its own content.
+    Each block becomes one ``{"path", "content"}`` entry (plus ``edits`` when marked ``edit``).
     Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
     the same path appears twice the last block wins, keeping the position of
     the first.  Returns ``[]`` when the answer declares no files.
     """
-    files: dict[str, str] = {}
+    files: dict[str, dict] = {}
     for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
         match = _MANIFEST_PATH.search(block.group("info"))
         if not match:
@@ -774,8 +766,15 @@ def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
             continue
         if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
             continue
-        files[rel] = block.group("body")
-    return [{"path": path, "content": content} for path, content in files.items()]
+        files[rel] = {"path": rel, "content": block.group("body")}
+        if edit_blocks.is_edit_block(block.group("info"), match):
+            files[rel]["edits"] = edit_blocks.parse(block.group("body"))
+    return list(files.values())
+
+
+def expected_hashes(targets: list[dict[str, Any]]) -> dict[str, str]:
+    """The sha256 of what was sent; none for an edit, whose result only the daemon knows."""
+    return {t["path"]: _sha256_text(t["content"]) for t in targets if "edits" not in t}
 
 
 def _build_review_payload(
@@ -1935,7 +1934,7 @@ async def _deliver_artifacts(
         )
         evidence = {
             "workspace_root": workspace_root,
-            "expected": {t["path"]: _sha256_text(t["content"]) for t in targets},
+            "expected": expected_hashes(targets),
             "workspace_writes": None,
         }
         if not workspace_root:

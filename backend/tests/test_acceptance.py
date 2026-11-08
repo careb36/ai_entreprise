@@ -502,6 +502,47 @@ def test_an_implementation_that_edits_an_acceptance_test_is_refuted_and_the_test
     assert spec_planning.coverage(session, _spec)["verified"] == 2
 
 
+def test_an_acceptance_test_delivered_as_edits_is_never_restored_from_the_edit_text(
+    factory, tmp_path
+):
+    """Only a whole file can be put back: SEARCH/REPLACE text is not the test."""
+    session, _spec, sprint, nats, tests_task, board_task, _move = factory
+    _deliver(nats, tests_task, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
+    edited = ACCEPTANCE_TESTS.replace('== ["a", "b"]', '== ["a", "b"]  # REQ-1.1')
+    asyncio.run(
+        task_worker._deliver_artifacts(
+            nats,
+            {"id": tests_task.id, "title": tests_task.title},
+            {"role": tests_task.assignee or "QA", "served_model": "m"},
+            {"id": sprint.id, "company_id": sprint.company_id},
+            "Delivered.\n\n```python path=tests/test_req_1.py edit\n"
+            '<<<<<<< SEARCH\n    assert tasks_of("acme") == ["a", "b"]\n=======\n'
+            '    assert tasks_of("acme") == ["a", "b"]  # REQ-1.1\n'
+            ">>>>>>> REPLACE\n```\n",
+        )
+    )
+    test_file = tmp_path / "project" / "tests" / "test_req_1.py"
+    assert test_file.read_text() == edited
+    tests_task.status = "done"
+    session.add(tests_task)
+    session.commit()
+
+    weakened = edited.replace("== 2", "== 1")
+    _deliver(
+        nats,
+        board_task,
+        sprint,
+        {"src/__init__.py": "", "src/board.py": BOARD, "tests/test_req_1.py": weakened},
+    )
+    verification, checks = _checks(session, board_task)
+    acceptance = verification.evidence["acceptance"]
+    assert acceptance["tampered"] == ["tests/test_req_1.py"]
+    assert acceptance["restored"] == []
+    assert "<<<<<<<" not in test_file.read_text()
+    assert checks["acceptance_tests_untouched"]["outcome"] == "refuted"
+    assert verification.verdict == "refuted"
+
+
 def test_the_latest_run_across_tasks_speaks_for_a_criterion(factory):
     session, spec, sprint, nats, tests_task, board_task, _move = factory
     _deliver(nats, tests_task, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
