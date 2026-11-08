@@ -160,7 +160,7 @@ jobs:
           BACKUP_DIR: ${{ runner.temp }}/backups
         run: |
           POSTGRES_DB=factory_e2e bash scripts/backup.sh
-          dump="$(ls "$BACKUP_DIR"/postgres-factory_e2e-*.dump | tail -1)"
+          dump="$(find "$BACKUP_DIR" -maxdepth 1 -name 'postgres-factory_e2e-*.dump' | sort | tail -1)"
           docker exec "$PG_CONTAINER" psql -U factory -d factory -qc 'CREATE DATABASE factory_restore'
           POSTGRES_DB=factory_restore bash scripts/backup.sh restore "$dump" --yes
           count() {
