@@ -2028,7 +2028,10 @@
       },
       "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task",
       "search": "Filter models…"
-    }
+    },
+    "statConnections": "Connections",
+    "statModels": "Models",
+    "statValidated": "Validated"
   },
   "manager": {
     "suggestion": "Manager agent suggests: {{decision}}",
