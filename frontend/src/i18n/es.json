@@ -2055,5 +2055,24 @@
     "recordOverridden": "revertidas {{overridden}} de {{taken}} tomadas solo ({{rate}})",
     "recordFlagged": "Marcadas, no se aplican: {{rules}}",
     "requestLabel": "Tu pedido, con tus palabras"
+  },
+  "sprintAdmin": {
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "unarchive": "Desarchivar",
+    "editTitle": "Editar sprint",
+    "name": "Nombre",
+    "goal": "Objetivo",
+    "duration": "Días",
+    "nameRequired": "El sprint necesita un nombre.",
+    "durationRange": "La duración es un número entero de días entre 1 y {{max}}.",
+    "saved": "Sprint actualizado",
+    "deleteConfirm": "¿Eliminar «{{name}}»? Un sprint con trabajo registrado se archiva, no se elimina: su evidencia se conserva y un Owner puede desarchivarlo. Un sprint sin nada registrado se elimina con sus tareas.",
+    "deleted": "Sprint eliminado",
+    "archived": "Sprint archivado: tenía trabajo registrado, que se conserva",
+    "unarchived": "Sprint desarchivado",
+    "stopFirst": "Detené el sprint primero",
+    "archivedBy": "Archivado por {{who}}",
+    "showArchived": "Mostrar sprints archivados"
   }
 }

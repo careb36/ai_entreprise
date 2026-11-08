@@ -58,6 +58,12 @@ class Sprint(SQLModel, table=True):
     pause_reason: str | None = None
     # The approved specification this sprint was planned from, if any.
     specification_id: int | None = Field(default=None, foreign_key="specifications.id")
+    # Archived by its Owner (``services/sprint_archive.py``): a halted sprint
+    # with recorded work leaves the lists, the inbox and carry-over, and its
+    # board, runs, events and audit rows stay readable by id. Empty: listed.
+    archived_at: datetime | None = None
+    archived_by: str | None = None
+    archive_reason: str | None = None
 
 
 class BacklogItem(SQLModel, table=True):

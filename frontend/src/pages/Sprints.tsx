@@ -5,9 +5,12 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { CalendarDays, Layers } from 'lucide-react'
+import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import { useSprints } from '../hooks/useQueries'
+import { useCurrentRole, useSprints } from '../hooks/useQueries'
 import type { SprintSummary } from '../services/api'
+import { useSprintsWithArchived, type ManagedSprint } from '../services/sprintAdmin'
+import { SprintAdminActions } from '../components/SprintAdminActions'
 import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
 import { LearningTrend } from '../components/LearningTrend'
@@ -21,12 +24,12 @@ const STATUS_TONE: Record<string, string> = {
   cancelled: 'bg-red-500/10 text-red-300 border-red-500/20',
 }
 
-function activeFirst(sprints: SprintSummary[]) {
+function activeFirst<T extends SprintSummary>(sprints: T[]): T[] {
   // Array.prototype.sort is stable, so the API's newest-first order survives within each group.
   return [...sprints].sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active'))
 }
 
-function SprintRow({ sprint, current }: { sprint: SprintSummary; current: boolean }) {
+function SprintRow({ sprint, current, companyId, role }: { sprint: ManagedSprint; current: boolean; companyId: number; role: string | null }) {
   const { t } = useTranslation()
   const pct = sprint.total > 0 ? Math.round((sprint.done / sprint.total) * 100) : 0
   return (
@@ -38,6 +41,11 @@ function SprintRow({ sprint, current }: { sprint: SprintSummary; current: boolea
         {sprint.goal && <p className="mt-0.5 truncate text-xs text-gray-500">{sprint.goal}</p>}
         {current && (
           <p className="mt-0.5 text-[11px] text-brand-300">{t('sprints.lastOpened', { defaultValue: 'Last opened' })}</p>
+        )}
+        {sprint.archived_at && (
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            {t('sprintAdmin.archivedBy', { defaultValue: 'Archived by {{who}}', who: sprint.archived_by ?? '—' })}
+          </p>
         )}
       </div>
       <span className={`w-fit rounded-full border px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE[sprint.status] ?? STATUS_TONE.completed}`}>
@@ -64,6 +72,7 @@ function SprintRow({ sprint, current }: { sprint: SprintSummary; current: boolea
         <CalendarDays size={12} className="shrink-0" />
         {sprint.start_date ?? t('sprints.noStartDate', { defaultValue: 'Not started' })}
       </p>
+      <SprintAdminActions sprint={sprint} companyId={companyId} role={role} />
     </li>
   )
 }
@@ -73,8 +82,15 @@ export default function Sprints() {
   const companyId = useAppStore(state => state.companyId)
   const activeSprintId = useAppStore(state => state.activeSprintId)
   const setActiveSprint = useAppStore(state => state.setActiveSprint)
-  const { data, isLoading, isError, refetch } = useSprints(companyId)
-  const sprints = activeFirst(data ?? [])
+  const role = useCurrentRole()
+  const [showArchived, setShowArchived] = useState(false)
+  const listed = useSprints(companyId)
+  const withArchived = useSprintsWithArchived(companyId, showArchived)
+  const shown = showArchived ? withArchived : listed
+  const { isLoading, isError, refetch } = shown
+  const sprints = activeFirst<ManagedSprint>(shown.data ?? [])
+  // The learning trend reads the company's listed sprints, never the archived ones.
+  const trend = activeFirst<SprintSummary>(listed.data ?? [])
 
   return (
     <div className="page-container max-w-6xl space-y-6">
@@ -83,6 +99,12 @@ export default function Sprints() {
           <h1 className="page-title">{t('nav.sprints', { defaultValue: 'Sprints' })}</h1>
           <p className="page-subtitle">{t('sprints.subtitle', { defaultValue: 'Every sprint of this company, active ones first.' })}</p>
         </div>
+        {companyId !== null && (
+          <label className="flex items-center gap-2 text-xs text-gray-400">
+            <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
+            {t('sprintAdmin.showArchived', { defaultValue: 'Show archived sprints' })}
+          </label>
+        )}
       </header>
 
       {companyId === null ? (
@@ -111,10 +133,12 @@ export default function Sprints() {
         </div>
       ) : (
         <>
-          <LearningTrend sprints={sprints} />
+          <LearningTrend sprints={trend} />
           <ManagerRecordCard companyId={companyId} />
           <ul className="space-y-2" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })}>
-            {sprints.map(sprint => <SprintRow key={sprint.id} sprint={sprint} current={sprint.id === activeSprintId} />)}
+            {sprints.map(sprint => (
+              <SprintRow key={sprint.id} sprint={sprint} current={sprint.id === activeSprintId} companyId={companyId} role={role} />
+            ))}
           </ul>
         </>
       )}

@@ -35,7 +35,14 @@ from schemas import (
     SprintPlanRequest,
     SprintStartRequest,
 )
-from services import acceptance, dependencies, spec_check, spec_planning, task_events
+from services import (
+    acceptance,
+    dependencies,
+    spec_check,
+    spec_planning,
+    sprint_archive,
+    task_events,
+)
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -348,6 +355,7 @@ async def start_sprint(
 @router.get("/sprints")
 async def list_sprints(
     company_id: int,
+    include_archived: bool = False,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -363,12 +371,13 @@ async def list_sprints(
     assistant advised on and those none did, with how many got done and how
     many rework requests each group drew, so whether that advice helps is a
     number too. ``architect_advice`` does the same for the Architect's
-    briefs.
+    briefs. Archived sprints are left out unless ``include_archived``.
     """
     require_company_role(session, user, company_id, "Viewer")
-    sprints = session.exec(
-        select(Sprint).where(Sprint.company_id == company_id).order_by(Sprint.id.desc())
-    ).all()
+    query = select(Sprint).where(Sprint.company_id == company_id)
+    if not include_archived:
+        query = query.where(sprint_archive.listed())
+    sprints = session.exec(query.order_by(Sprint.id.desc())).all()
     sprint_ids = [s.id for s in sprints]
     counts: dict[int, tuple[int, int, int]] = {}
     rework: dict[int, int] = {}
@@ -418,6 +427,9 @@ async def list_sprints(
             "start_date": s.start_date,
             "scope_size": s.scope_size,
             "specification_id": s.specification_id,
+            "duration_days": s.duration_days,
+            "archived_at": s.archived_at.isoformat() if s.archived_at else None,
+            "archived_by": s.archived_by,
             "total": counts.get(s.id, (0, 0, 0))[0],
             "done": counts.get(s.id, (0, 0, 0))[1],
             "blocked": counts.get(s.id, (0, 0, 0))[2],
@@ -482,6 +494,7 @@ async def get_sprint_board(
         "pause_reason": sprint.pause_reason,
         "goal": sprint.goal,
         "specification_id": sprint.specification_id,
+        "archived_at": sprint.archived_at.isoformat() if sprint.archived_at else None,
     }
 
     items_db = session.exec(
