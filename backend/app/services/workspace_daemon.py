@@ -322,11 +322,13 @@ def detect_install_command(workspace_root: str) -> str | None:
     pyproject = os.path.join(root, "pyproject.toml")
     if os.path.isfile(pyproject):
         try:
-            with open(pyproject, encoding="utf-8") as fh:
+            with open(pyproject, encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
         except OSError:
             text = ""
-        if "[project]" in text or "[tool.poetry]" in text:
+        if "[project]" in text:
+            return "pip install -e ."
+        if "[tool.poetry]" in text and "package-mode = false" not in text:
             return "pip install -e ."
     if os.path.isfile(os.path.join(root, "Cargo.toml")):
         return "cargo build"
@@ -337,7 +339,7 @@ def detect_install_command(workspace_root: str) -> str | None:
     if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
         os.path.join(root, "build.gradle.kts")
     ):
-        return "gradle --offline dependencies 2>/dev/null || gradle dependencies"
+        return "gradle testClasses"
     if os.path.isfile(os.path.join(root, "Gemfile")):
         return "bundle install"
     return None
