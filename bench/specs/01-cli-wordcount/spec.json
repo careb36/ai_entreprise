@@ -1,0 +1,49 @@
+{
+  "title": "Word counter",
+  "summary": "A small command-line word counter, like wc: lines, words and characters of a text file.",
+  "requirements": [
+    {
+      "title": "Count a text",
+      "description": "The package wordcount exposes count(text: str) -> dict with the integer keys lines, words and chars. lines is the number of newline characters, words the number of whitespace-separated words, chars the number of characters.",
+      "criteria": [
+        {
+          "given": "the text \"one two\\nthree\\n\"",
+          "when": "count is called with it",
+          "then": "it returns lines 2, words 3 and chars 14"
+        },
+        {
+          "given": "an empty text",
+          "when": "count is called with it",
+          "then": "it returns lines 0, words 0 and chars 0"
+        }
+      ]
+    },
+    {
+      "title": "Count a file from the command line",
+      "description": "python -m wordcount <file> prints the three counts and the file name, separated by single spaces, on one line.",
+      "criteria": [
+        {
+          "given": "a file holding \"one two\\nthree\\n\"",
+          "when": "python -m wordcount is run with its path",
+          "then": "it prints \"2 3 14 <path>\" and exits with status 0"
+        },
+        {
+          "given": "a path where no file exists",
+          "when": "python -m wordcount is run with it",
+          "then": "it exits with status 1, prints nothing on stdout and names the path on stderr"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "count answers for a 1 MB text in under 1 second"
+    }
+  ],
+  "constraints": [
+    "Python 3.11 or later, standard library only.",
+    "The package is wordcount/ at the project root: wordcount/__init__.py defines count, wordcount/__main__.py the command line.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}

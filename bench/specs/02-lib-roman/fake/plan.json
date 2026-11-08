@@ -1,0 +1,20 @@
+{
+  "sprint_name": "Roman numerals 1",
+  "goal": "Write and read Roman numerals",
+  "tasks": [
+    {
+      "title": "Write and read Roman numerals",
+      "description": "romannum.to_roman and romannum.from_roman with their unit tests.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-1.1", "REQ-1.2", "REQ-2.1", "REQ-2.2", "REQ-3.1"],
+      "depends_on": [],
+      "files": ["romannum/__init__.py", "tests/test_romannum.py"]
+    }
+  ],
+  "acceptance": {
+    "REQ-1": "tests/test_req_1.py",
+    "REQ-2": "tests/test_req_2.py",
+    "REQ-3": "tests/test_req_3.py"
+  }
+}

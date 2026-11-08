@@ -530,6 +530,7 @@ Test files:
 | `test_company_models.py` | A company's models (issue #356, step 4): the agent's model, then the company's for the role, then its default, then the deployment's; the Reviewer follows QA unless it has its own; a Manager sets them and a Viewer reads them with what each role runs, an empty value clears one, an unknown role, a malformed id or another company's connection refused; the ScrumMaster, PO, Architect, the worker's task, Architect consultation and the Reviewer agent run the company's choice, and the agent's own model still wins; an agent's model may be a connection of its own company only |
 | `test_model_suggestions.py` | The model suggested per role (issue #356, step 6): the catalogue's real fields decide, the deciding roles get a model that reasons, the coding roles the largest context with tools, the TechWriter the cheapest; no tools, no suggestion; a validated provider only suggests what it listed; an unpriced model is not taken for free; each suggestion is the connection's own reference; once the company ran a model on three of its tasks in a role, more done than not, its record decides (least rework per task), counted for the model of each task's last delivery in completed sprints, a record of mostly blocked tasks never outranks the rule; a Viewer reads them, an outsider does not |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
+| `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
 the workspace daemon and a fake LLM proxy (`scripts/e2e/fake_llm.py`,
@@ -593,6 +594,47 @@ too (`.github/workflows/e2e.yml`) on every pull request that touches
 pushes to `main`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
 artifact.
+
+**The bench** (issue #316, `bench/README.md`): `scripts/bench/run.sh`, on
+the e2e's stack (`BENCH_*` variables; Postgres falls back to the `E2E_*`
+ones, with its own database `factory_bench`) on a NATS broker of its own
+(it starts `nats-server` when installed; `scripts/bench/broker.py` refuses
+port 4222 and a broker where a daemon already answers, since the daemon's
+request subjects are not namespaced), drives each
+reference specification in `bench/specs/<name>/` through the factory: a
+company (autonomy 2, Sprint 0 left planned) with a PO, a Developer, QA and a
+ScrumMaster, the specification posted as data (`spec.json`, `POST
+/v1/specifications`) and approved, the PO's plan from it, the sprint run to
+its close (`BENCH_TIMEOUT`, after which it is stopped). Then the acceptance
+tests a person wrote (`<spec>/acceptance/`, never shown to the agents) run on
+the produced folder and decide each criterion (`scripts/bench/scorecard.py
+grade`: a test named `test_req_1_2_...` decides REQ-1.2, read back from
+pytest's JUnit report; pytest starts with `-I`, the project only at the end
+of `sys.path`, the report in a random folder of the grader's, read only after
+an exit of 0 or 1), and `scorecard.py collect` records tasks done at the
+first attempt (done, no `NEEDS WORK:` or send-back on the board per
+`services/board.py`, at most one delivery), rework requests per task,
+blocked share, wall-clock and
+the tokens of the audit log's turns whose usage the provider reported, with
+the models served and the factory's own verified criteria beside the grade.
+A failed collection marks the entry `error`, and a failed grade or
+collection stops the run. `scorecard.py write` checks the scorecard against
+its schema (`scripts/bench/schema.py`: every counter present, every number
+finite; exit 2 otherwise) and writes `<stamp>.json` and `<stamp>.md`; the references
+kept live in `bench/scorecards/`. `scripts/bench/compare.py` diffs a
+scorecard with the newest earlier one and exits 1 beyond a threshold
+(criteria, first attempts or blocked share by `--rate`, rework per task by
+`--rework`, reported tokens by `--tokens`, a spec that stopped completing).
+By default the models are `scripts/bench/fake_llm.py`, which answers each
+spec from its `fake/` folder (the PO's plan, QA's tests, the Developer's
+files, every review approved), and the run fails unless every spec completes
+with every criterion passed; `BENCH_LLM_URL` points it at a real proxy
+instead. `.github/workflows/bench.yml` runs the fake circuit on demand and
+nightly on the self-hosted runner, compares with the committed reference,
+puts both in the job summary (also when the run failed, if a scorecard was written), opens an issue on a nightly regression and
+removes its containers; the real-model run is not wired yet. The idea is
+taken from SWE-bench Verified (graded by tests a person wrote) and OpenHands'
+evaluation harness (the version beside every number).
 
 `scripts/check_file_sizes.py` is a ratchet on file size: a source file
 (backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
@@ -738,3 +780,4 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
 - [`docs/STANDARDS.md`](docs/STANDARDS.md) — The quality standards every project is held to, and which the loop checks without a model
+- [`bench/README.md`](bench/README.md) — The bench: reference specifications graded by person-written tests, scorecards, and how to add a specification
