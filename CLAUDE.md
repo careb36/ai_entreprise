@@ -499,6 +499,7 @@ Test files:
 | `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
 | `test_proxy_connections.py` | A company's provider connection reaches the LLM proxy (issue #356): `conn:<id>:<model>` resolves into the model the proxy calls and the headers carrying the connection with the shared internal token; only the company's own enabled connection is used, never another company's; without the token or the company the call fails with the reason; plain model ids are untouched |
 | `test_company_models.py` | A company's models (issue #356, step 4): the agent's model, then the company's for the role, then its default, then the deployment's; the Reviewer follows QA unless it has its own; a Manager sets them and a Viewer reads them with what each role runs, an empty value clears one, an unknown role, a malformed id or another company's connection refused; the ScrumMaster, PO, Architect, the worker's task, Architect consultation and the Reviewer agent run the company's choice, and the agent's own model still wins |
+| `test_model_suggestions.py` | The model suggested per role (issue #356, step 6): the catalogue's real fields decide, the deciding roles get a model that reasons, the coding roles the largest context with tools, the TechWriter the cheapest; no tools, no suggestion; a validated provider only suggests what it listed; an unpriced model is not taken for free; each suggestion is the connection's own reference; a Viewer reads them, an outsider does not |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -630,6 +631,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/components/ReviewPanel.test.tsx` | Submitting a review (the decision picked, the text trimmed, how many line comments go with it), the backend's refusal shown, what a review did, the history, a Viewer reads only |
 | `src/lib/patch.test.ts` | A file's hunks as review rows with their old and new line numbers |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
+| `src/pages/Models.test.tsx` | The Models page: a Viewer reads the connections and the models per role with nothing to change; only what a validated provider listed is offered, the suggestion in its own group; a Manager chooses models, takes the suggestions and saves them; a Manager connects (a refusal shown, the catalogue's base URL as placeholder, the key sent and cleared), validates and removes a provider |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 | `src/store/agentStore.test.ts` | The Glassroom connection asks for a stream ticket on every connection, opens without one when none is needed or none could be had, and opens nothing once disconnected; an event the backend replays on a reconnection is shown once |
 
@@ -676,6 +678,15 @@ Developer, Architect consultation and QA review, and the Reviewer agent (its
 own entry, else QA's) all read it; difficulty routing (`AGENT_MODEL_POLICY`)
 refines only the deployment's default, never a model a person chose. A model
 may be one of the company's provider connections (`conn:<id>:<model>`).
+`GET /v1/companies/{id}/model_suggestions` (Viewer, `services/model_suggestions.py`)
+suggests one per role by a fixed rule over the catalogue (the deciding roles: a
+model that reasons and calls tools, largest context, then cheapest; Developer, QA
+and the Reviewer: tools, largest context; TechWriter: the cheapest with tools),
+only among what a validated provider listed, never applied on its own. The
+company's **Models** page (`/company/models`, `pages/Models.tsx`,
+`components/ModelConnections.tsx`, `components/ModelChoices.tsx`) is where a
+Manager connects, validates and removes providers and picks the default and
+per-role models with the suggestions beside them; a Viewer reads it.
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 

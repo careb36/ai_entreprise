@@ -25,7 +25,8 @@
     "github": "GitHub",
     "helpDesk": "Help desk",
     "procedures": "Procedures",
-    "specifications": "Specifications"
+    "specifications": "Specifications",
+    "models": "Models"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1954,9 +1955,55 @@
   },
   "models": {
     "title": "Models",
-    "subtitle": "Models your company's agents run.",
-    "suggestions": "Suggestions",
-    "none": "none",
-    "modelsCount": "models"
+    "subtitle": "The providers your company's agents reach and the models they run. An agent's own model, set on the Agents page, still wins.",
+    "noCompany": "Choose a company first.",
+    "connections": {
+      "title": "Provider connections",
+      "subtitle": "Connect the providers your agents use, with your company's own key. Validating lists the provider's models with the key and spends no tokens.",
+      "none": "No provider connected yet.",
+      "off": "off",
+      "validate": "Validate",
+      "turnOff": "Turn off",
+      "turnOn": "Turn on",
+      "removeNamed": "Remove {{name}}",
+      "confirmRemove": "Remove the connection {{name}}? Agents and model choices that use its models will fail until you choose another model for them.",
+      "validated_one": "Validated: the provider listed {{count}} model",
+      "validated_other": "Validated: the provider listed {{count}} models",
+      "failed": "Validation failed: {{detail}}",
+      "notValidated": "Not validated yet",
+      "add": "Connect a provider",
+      "provider": "Provider",
+      "providerPlaceholder": "deepseek, openrouter, ollama…",
+      "openaiCompatible": "Any OpenAI-compatible endpoint",
+      "name": "Name",
+      "namePlaceholder": "defaults to the provider",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "required for an OpenAI-compatible endpoint",
+      "apiKey": "API key",
+      "keyNote": "The key is encrypted at rest and never shown again. Local servers (Ollama, LM Studio, vLLM) need no key.",
+      "connect": "Connect"
+    },
+    "choices": {
+      "title": "Models per role",
+      "subtitle": "The model each role runs when its agent has none of its own. Without a choice here, the deployment's settings apply.",
+      "useSuggestions": "Use the suggestions",
+      "noConnections": "Connect and validate a provider to choose among its models.",
+      "default": "Company default",
+      "deploymentDefault": "The deployment's default",
+      "companyDefault": "Company default",
+      "role": "Role",
+      "model": "Model",
+      "runs": "Runs now",
+      "suggested": "Suggested: {{model}}",
+      "suggestedGroup": "Suggested",
+      "others": "Others",
+      "current": "Current",
+      "saved": "Saved.",
+      "source": {
+        "role": "chosen for this role",
+        "company": "the company's default",
+        "deployment": "the deployment's setting"
+      }
+    }
   }
 }

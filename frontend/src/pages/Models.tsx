@@ -1,53 +1,39 @@
 import { useTranslation } from 'react-i18next'
+import { Boxes } from 'lucide-react'
+import ModelChoices from '../components/ModelChoices'
+import ModelConnections from '../components/ModelConnections'
+import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
-import { providersApi } from '../services/providers'
-import { useQuery } from '@tanstack/react-query'
 
-export function Models() {
+/**
+ * The company's Models screen (issue #356): the providers its agents can
+ * reach and the models they run. A Manager changes them; a Viewer reads them.
+ */
+export default function Models() {
   const { t } = useTranslation()
-  const companyId = useAppStore((s) => s.companyId)
-  const { data: modelsData, isError: modelsError, isLoading: modelsLoading } = useQuery({
-    queryKey: ['company-models', companyId],
-    queryFn: () => providersApi.models(companyId!),
-    enabled: companyId !== null,
-  })
-  const { data: suggestions } = useQuery({
-    queryKey: ['company-model-suggestions', companyId],
-    queryFn: () => providersApi.suggestions(companyId!),
-    enabled: companyId !== null,
-  })
+  const companyId = useAppStore(state => state.companyId)
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
 
   return (
-    <div className="page-container">
-      <h1 className="text-2xl font-semibold mb-4">{t('models.title')}</h1>
-      <p className="text-sm text-gray-400 mb-6">{t('models.subtitle')}</p>
-      {modelsError && (
-        <div className="text-sm text-red-400 mb-4">{t('models.loadError', { defaultValue: 'Failed to load models.' })}</div>
-      )}
-      {modelsLoading && <div className="text-sm text-gray-400">{t('models.loading', { defaultValue: 'Loading...' })}</div>}
-      {suggestions?.suggestions && (
-        <div className="mb-6">
-          <h2 className="text-lg font-medium mb-2">{t('models.suggestions')}</h2>
-          <ul className="text-sm space-y-1">
-            {Object.entries(suggestions.suggestions).map(([role, model]) => (
-              <li key={role}>
-                <span className="font-medium">{role}:</span> {model ?? t('models.none')}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {modelsData?.connections?.map((c) => (
-        <div key={c.connection_id} className="mb-4 border border-gray-700 rounded p-3">
-          <div className="font-medium">{c.name}</div>
-          <div className="text-xs text-gray-400">{c.provider}</div>
-          <div className="text-xs text-gray-500 mt-1">
-            {(c.models ?? []).length} {t('models.modelsCount')}
+    <div className="page-container max-w-4xl space-y-6">
+      <div className="page-header">
+        <div>
+          <div className="flex items-center gap-2">
+            <Boxes className="text-brand-400" size={22} />
+            <h1 className="page-title">{t('models.title')}</h1>
           </div>
+          <p className="text-gray-400 mt-1">{t('models.subtitle')}</p>
         </div>
-      ))}
+      </div>
+      {companyId === null ? (
+        <p className="text-sm text-gray-400">{t('models.noCompany')}</p>
+      ) : (
+        <>
+          <ModelConnections companyId={companyId} canManage={canManage} />
+          <ModelChoices companyId={companyId} canManage={canManage} />
+        </>
+      )}
     </div>
   )
 }
-
-export default Models
