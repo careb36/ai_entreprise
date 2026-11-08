@@ -17,6 +17,7 @@ import math
 from flask import Flask, request, jsonify
 import requests
 from sqlalchemy import create_engine, text
+import connections
 import upstream
 from catalogue import fetch_model_ids
 from gemini import call_gemini
@@ -79,8 +80,6 @@ NEBIUS_PROXY_URL = os.getenv("NEBIUS_PROXY_URL", "https://api.tokenfactory.nebiu
 # (with an error if need be) before the caller gives up on it.
 LLM_UPSTREAM_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110"))
 
-# --- API Key Validation (deferred to after logger is defined) ---
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-proxy")
 if endpoint_base:
@@ -132,9 +131,7 @@ def _build_database_url() -> str:
 engine = create_engine(_build_database_url(), pool_pre_ping=True)
 
 # --- Dynamic Model Catalogue ---
-
-# Preference order for fallback resolution (most preferred first).
-# Only used when the exact requested model is not in the live catalogue.
+# Preference order (most preferred first) when the exact model is not in the catalogue.
 _PREFERENCE_TIERS = {
     "fast":     ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
                  "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"],
@@ -142,8 +139,7 @@ _PREFERENCE_TIERS = {
                  "gemini-2.5-pro"],
 }
 
-# Tier classification rules applied in order — first match wins.
-# Tuple: (substring_tests, tier_name, description)
+# Tier rules, first match wins: (substring_tests, tier_name, description).
 _TIER_RULES: list[tuple[list[str], str, str]] = [
     (["preview"],            "preview",    "Experimental preview — may be unstable"),
     (["flash-lite", "lite"], "fast",       "Lightweight, fastest responses"),
@@ -223,10 +219,8 @@ _GEMINI_ALIASES = {
 # Models that are no longer available to new users (Google deprecation).
 _GEMINI_DEPRECATED = {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"}
 
-# A model id names its provider by prefix.  The id must also be in that
-# provider's fetched catalogue before a request is sent anywhere.
-# Nebius ids carry a vendor segment ("nvidia/…", "meta-llama/…"), hence the
-# vendor/ prefix rather than a bare model-name prefix.
+# A model id names its provider by prefix and must be in that provider's catalogue;
+# Nebius ids carry a vendor segment ("nvidia/…", "meta-llama/…"), hence vendor/ prefixes.
 _PROVIDER_PREFIXES: dict[str, tuple[str, ...]] = {
     "gemini": ("gemini-", "gemma-"),
     "deepseek": ("deepseek-",),
@@ -441,8 +435,7 @@ def list_models():
             models.append({"id": mid, "provider": "qwen", "tier": tier,
                            "description": f"Qwen {mid}"})
 
-    # Nebius models host the NVIDIA open models (Nemotron) and are available
-    # only when the API key is configured.
+    # Nebius hosts the NVIDIA open models (Nemotron); listed only with its key.
     if NEBIUS_API_KEY:
         for mid in sorted(_provider_catalogue("nebius")):
             lower = mid.lower()
@@ -455,8 +448,7 @@ def list_models():
             models.append({"id": mid, "provider": "nebius", "tier": tier,
                            "description": f"NVIDIA/Nebius {mid}"})
 
-    # Pick the best non-preview balanced/fast model for orchestration tasks
-    # (team suggestion, routing decisions) — prefer stability over power.
+    # The best non-preview balanced/fast model for orchestration: stability over power.
     orchestrator = _pick_orchestrator(models)
 
     return jsonify({"models": models, "orchestrator": orchestrator, "refreshed_at": _last_refresh})
@@ -566,7 +558,11 @@ def chat_completions():
             "available": available_model_ids(),
         }), 400
 
-    resolved = resolve_model(requested)
+    try:
+        conn = connections.from_headers(request.headers)
+    except connections.ConnectionRefused as exc:
+        return jsonify({"error": "connection_refused", "message": str(exc)}), 403
+    resolved = ("connection", requested) if conn else resolve_model(requested)
     if resolved is None:
         available = available_model_ids()
         return jsonify({
@@ -579,7 +575,11 @@ def chat_completions():
 
     provider, model = resolved
     try:
-        result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
+        if conn:  # The company's own key: no fallback to the deployment's providers.
+            result, tokens = connections.call(conn, model, data, _post_upstream, LLM_UPSTREAM_TIMEOUT_SECONDS)
+            served_provider, served_model, fallback_from = f"connection:{conn['name']}", model, None
+        else:
+            result, tokens, served_provider, served_model, fallback_from = _complete_with_fallback(provider, model, data)
     except UpstreamError as exc:
         body = {"error": "upstream_error", **exc.as_dict(), "requested_model": requested}
         if len(exc.attempts) > 1:

@@ -217,6 +217,7 @@ def prepare(
     )
     return {
         "specification_id": spec.id,
+        "company_id": spec.company_id,
         "model": model,
         "system_prompt": system_prompt,
         "prompt": prompt
@@ -247,6 +248,7 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
             role=ARCHITECT_ROLE,
             bu_id=request["bu_id"],
             toolbox=research_tools.toolbox_for_request(ARCHITECT_ROLE, request),
+            company_id=request.get("company_id"),
         )
     except spec_author.SpecAuthorError as exc:
         raise ArchAuthorError(str(exc)) from exc

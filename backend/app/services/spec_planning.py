@@ -263,6 +263,7 @@ def prepare_plan(
 
     return {
         "specification_id": spec.id,
+        "company_id": spec.company_id,
         "title": spec.title,
         "summary": spec.summary,
         "content": content,
@@ -297,6 +298,7 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
             request["prompt"],
             max_tokens=PLAN_MAX_TOKENS,
             bu_id=request["bu_id"],
+            company_id=request.get("company_id"),
         )
         parsed = json.loads(spec_author._strip_fences(answer))
         if not isinstance(parsed, dict):

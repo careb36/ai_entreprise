@@ -17,7 +17,6 @@ A model may be a plain id or one of the company's own provider connections
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from models import Company, ProviderConnection
@@ -37,7 +36,6 @@ ROLES: tuple[str, ...] = (
 )
 _FALLBACK = {"Reviewer": "QA"}
 MAX_MODEL_CHARS = 200
-_CONNECTION_REF = re.compile(r"^conn:(\d+):(.+)$")
 
 
 class InvalidModelSettings(ValueError):
@@ -97,14 +95,19 @@ def _clean_model(
         return None
     if len(text) > MAX_MODEL_CHARS or any(ch in text for ch in "\r\n\t"):
         raise InvalidModelSettings(f"{field}: not a model id")
-    match = _CONNECTION_REF.match(text)
-    if text.startswith("conn:") and not match:
-        raise InvalidModelSettings(f"{field}: a connection model is conn:<id>:<model>")
-    if match:
-        conn = session.get(ProviderConnection, int(match.group(1)))
+    from services import provider_connections
+
+    try:
+        ref = provider_connections.parse_model_ref(text)
+    except provider_connections.ProviderConfigError as exc:
+        raise InvalidModelSettings(
+            f"{field}: a connection model is conn:<id>:<model>"
+        ) from exc
+    if ref is not None:
+        conn = session.get(ProviderConnection, ref[0])
         if conn is None or conn.company_id != company_id:
             raise InvalidModelSettings(
-                f"{field}: connection {match.group(1)} is not one of the company's"
+                f"{field}: connection {ref[0]} is not one of the company's"
             )
     return text
 

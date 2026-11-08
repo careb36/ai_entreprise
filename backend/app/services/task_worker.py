@@ -377,8 +377,8 @@ def _execute_task(
     on a failed or empty call. With ``company_id`` the turn goes to
     ``audit_log`` (role, company, token cost) for the KPIs.
     """
-    llm_url = os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    client = LLMProxyClient(base_url=llm_url)
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.company_id = company_id
 
     system_prompt = agent.get("system_prompt") or (
         f"You are a {agent.get('seniority', 'Senior')} {agent.get('role', 'Developer')} "
@@ -573,10 +573,8 @@ def _consult_architect(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
     )
 
-    client = LLMProxyClient(
-        base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
-    )
-    client.max_tokens = BRIEF_MAX_TOKENS
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
     try:
         result = client.chat(
             messages=[
@@ -1474,7 +1472,7 @@ def _triage_blocked_task(
                 session, company_id, item, reason
             )
         decision = scrum_master.decide(
-            scrum_master.ask_triage(model, system_prompt, prompt), item_id
+            scrum_master.ask_triage(model, system_prompt, prompt, company_id), item_id
         )
         if decision is None:
             return
@@ -1570,9 +1568,9 @@ def _ask_scrum_master_for_procedures(
             "change what made it fail.\n\n" + procedures.proposal_format(roles)
         )
         model, system_prompt = scrum_master.profile(session, company_id)
-    # Asked outside the session, with the client's usual retries: a sprint
-    # closes once, and a transient proxy error should not lose its proposals.
-    return scrum_master.ask_model(model, system_prompt, prompt), roles
+    # Outside the session, usual retries: a transient error must not lose proposals.
+    answer = scrum_master.ask_model(model, system_prompt, prompt, company_id=company_id)
+    return answer, roles
 
 
 def _propose_procedures(
@@ -3304,7 +3302,7 @@ def _call_llm_for_review(
     reads from the audit trail instead of its comment-scan fallback.
     """
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens = REVIEW_MAX_TOKENS
+    client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
     messages = [{"role": "user", "content": prompt}]
     if agent.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": agent["system_prompt"]})

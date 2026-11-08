@@ -184,3 +184,72 @@ def _record(row: ProviderConnection, ok: bool, detail: str) -> dict[str, Any]:
     row.validation_ok = ok
     row.validation_detail = detail[:500]
     return {"ok": ok, "detail": row.validation_detail, "models": []}
+
+
+# A model of a company's connection, as an agent stores it: ``conn:<id>:<model>``.
+CONNECTION_PREFIX = "conn:"
+
+
+def model_ref(connection_id: int, model: str) -> str:
+    return f"{CONNECTION_PREFIX}{connection_id}:{model}"
+
+
+def parse_model_ref(model: str) -> tuple[int, str] | None:
+    """``(connection_id, model)`` for a connection's model, else ``None``."""
+    if not (model or "").startswith(CONNECTION_PREFIX):
+        return None
+    rest = model[len(CONNECTION_PREFIX) :]
+    conn_id, _, name = rest.partition(":")
+    if not conn_id.isdigit() or not name:
+        raise ProviderConfigError(f"{model!r} is not conn:<id>:<model>")
+    return int(conn_id), name
+
+
+def proxy_route(
+    model: str, company_id: int | None, engine: Any = None
+) -> tuple[str, dict[str, str]]:
+    """The model to send the proxy and the headers that route it.
+
+    A plain model id passes through with no header. ``conn:<id>:<model>``
+    loads the connection, checks it belongs to *company_id* and is enabled,
+    and returns the headers that make the proxy call it with the company's
+    key (``llm-proxy/connections.py``). Raises ``ProviderConfigError`` when
+    that cannot be done, so the call fails with the reason instead of falling
+    back to another provider."""
+    import base64
+
+    from config import settings
+
+    ref = parse_model_ref(model)
+    if ref is None:
+        return model, {}
+    conn_id, name = ref
+    token = (settings.LLM_PROXY_INTERNAL_TOKEN or "").strip()
+    if not token:
+        raise ProviderConfigError(
+            "company provider connections need LLM_PROXY_INTERNAL_TOKEN (backend and proxy)"
+        )
+    if company_id is None:
+        raise ProviderConfigError(
+            "a connection's model needs the company it belongs to"
+        )
+    from database import engine as default_engine
+    from sqlmodel import Session
+
+    with Session(engine or default_engine) as session:
+        row = session.get(ProviderConnection, conn_id)
+        if row is None or row.company_id != company_id:
+            raise ProviderConfigError(
+                f"provider connection {conn_id} is not this company's"
+            )
+        if not row.enabled:
+            raise ProviderConfigError(f"provider connection {row.name!r} is disabled")
+        key, headers = read_secrets(row)
+        payload = {
+            "name": row.name,
+            "base_url": row.base_url,
+            "api_key": key or "",
+            "headers": headers,
+        }
+    encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    return name, {"X-Provider-Connection": encoded, "X-Internal-Token": token}

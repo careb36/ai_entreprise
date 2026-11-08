@@ -79,6 +79,11 @@ Copy `.env.example` to `.env` and fill in:
 - `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
 - `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
+- `LLM_PROXY_INTERNAL_TOKEN` — optional, shared by the backend and the LLM proxy.
+  An agent whose model is `conn:<id>:<model>` uses that company provider
+  connection: the backend sends its URL and key in `X-Provider-Connection`, and
+  the proxy (`llm-proxy/connections.py`) honours it only with this token, with
+  no fallback to the deployment's own keys. Empty disables company connections.
 - `MODELS_CATALOG_URL`, `MODELS_CATALOG_REFRESH_HOURS` — optional. The model
   catalogue (models.dev, `services/model_catalog.py`) starts from the snapshot in
   `backend/app/data/models_dev.json` (`scripts/update_models_snapshot.py`) and
@@ -492,6 +497,7 @@ Test files:
 | `test_edit_blocks.py` | SEARCH/REPLACE edits in a deliverable and the syntax check before writing (issue #359, from Aider and SWE-agent): a block marked `edit` is read as edits, with no expected hash; the daemon applies an edit only when its search text appears exactly once, refuses a missing or ambiguous one, and writes a `.py` or `.json` file only when it still parses (parsed, never run); the Verifier names the daemon's reason |
 | `test_provider_connections.py` | A company's model provider connections (issue #356): a Manager connects, changes and removes them, a Viewer reads them, nobody outside the company does; the key is encrypted at rest and never returned, an omitted key keeps the stored one and an empty one clears it; base URLs and headers are checked (local servers allowed on purpose); the validation lists the provider's models with the key and records the outcome, which a later change to the key or URL clears |
 | `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
+| `test_proxy_connections.py` | A company's provider connection reaches the LLM proxy (issue #356): `conn:<id>:<model>` resolves into the model the proxy calls and the headers carrying the connection with the shared internal token; only the company's own enabled connection is used, never another company's; without the token or the company the call fails with the reason; plain model ids are untouched |
 | `test_company_models.py` | A company's models (issue #356, step 4): the agent's model, then the company's for the role, then its default, then the deployment's; the Reviewer follows QA unless it has its own; a Manager sets them and a Viewer reads them with what each role runs, an empty value clears one, an unknown role, a malformed id or another company's connection refused; the ScrumMaster, PO, Architect, the worker's task, Architect consultation and the Reviewer agent run the company's choice, and the agent's own model still wins |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
