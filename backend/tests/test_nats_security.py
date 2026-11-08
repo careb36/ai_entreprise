@@ -1043,3 +1043,40 @@ def test_live_tls_with_a_pinned_ca(tmp_path, monkeypatch, certs):
     finally:
         process.kill()
         process.wait()
+
+
+# ---------------------------------------------------------------------------
+# docker-compose.yml hands each container its client certificate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("service", "owner"), [("backend", "BACKEND"), ("vscode-daemon", "DAEMON")]
+)
+def test_compose_forwards_the_client_certificate_inside_the_mounted_folder(
+    service, owner
+):
+    import yaml
+
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text())["services"][
+        service
+    ]
+    env = compose["environment"]
+    folder = "/etc/fabrique-nats/certs"
+    assert f"./nats/certs:{folder}:ro" in compose["volumes"]
+    assert env["NATS_TLS_CA"] == f"{folder}/ca.crt"
+    for variable, suffix in (("NATS_TLS_CERT", "CERT"), ("NATS_TLS_KEY", "KEY")):
+        name = f"NATS_{owner}_TLS_{suffix}"
+        # Empty unless the file is named, then a path in the mounted folder.
+        assert env[variable] == f"${{{name}:+{folder}/${{{name}}}}}"
+
+
+def test_empty_forwarded_certificate_settings_mean_no_client_certificate(certs):
+    env = {
+        "NATS_TLS": "true",
+        "NATS_TLS_CA": str(certs["ca"]),
+        "NATS_TLS_CERT": "",
+        "NATS_TLS_KEY": "",
+    }
+    for module in (nats_auth, nats_connect):
+        assert isinstance(module.connect_options(env)["tls"], ssl.SSLContext)

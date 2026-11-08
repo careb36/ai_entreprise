@@ -155,7 +155,13 @@ services:
       NATS_PASSWORD: ${NATS_BACKEND_PASSWORD:-}
       NATS_BIND: ${NATS_BIND:-127.0.0.1}
       NATS_TLS: ${NATS_TLS:-false}
+      # Inside the container nats/certs is /etc/fabrique-nats/certs: the CA
+      # there, and a client certificate when NATS_BACKEND_TLS_CERT and
+      # NATS_BACKEND_TLS_KEY name its files in nats/certs (for the broker's
+      # NATS_TLS_VERIFY=true).
       NATS_TLS_CA: /etc/fabrique-nats/certs/ca.crt
+      NATS_TLS_CERT: ${NATS_BACKEND_TLS_CERT:+/etc/fabrique-nats/certs/${NATS_BACKEND_TLS_CERT}}
+      NATS_TLS_KEY: ${NATS_BACKEND_TLS_KEY:+/etc/fabrique-nats/certs/${NATS_BACKEND_TLS_KEY}}
       LLM_PROXY_URL: http://llm-proxy:5100
       LLM_PROXY_INTERNAL_TOKEN: ${LLM_PROXY_INTERNAL_TOKEN:-}
       AUDIT_LOG_PATH: /app/.factory/logs
@@ -235,7 +241,11 @@ services:
       NATS_USER: ${NATS_DAEMON_PASSWORD:+daemon}
       NATS_PASSWORD: ${NATS_DAEMON_PASSWORD:-}
       NATS_TLS: ${NATS_TLS:-false}
+      # nats/certs is mounted at /etc/fabrique-nats/certs (see volumes); the
+      # client certificate's files are named by NATS_DAEMON_TLS_CERT / _KEY.
       NATS_TLS_CA: /etc/fabrique-nats/certs/ca.crt
+      NATS_TLS_CERT: ${NATS_DAEMON_TLS_CERT:+/etc/fabrique-nats/certs/${NATS_DAEMON_TLS_CERT}}
+      NATS_TLS_KEY: ${NATS_DAEMON_TLS_KEY:+/etc/fabrique-nats/certs/${NATS_DAEMON_TLS_KEY}}
       WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     working_dir: /app
