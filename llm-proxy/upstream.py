@@ -71,7 +71,12 @@ def post_upstream(
     except requests.RequestException as exc:
         raise UpstreamError(provider, model, None, f"request failed: {exc}")
     if not 200 <= resp.status_code < 300:
-        raise UpstreamError(provider, model, resp.status_code, upstream_message(resp))
+        message = upstream_message(resp)
+        retriable = resp.status_code == 429 or resp.status_code >= 500
+        low = (message or "").lower()
+        if resp.status_code in (402, 403) or "credit" in low or "insufficient" in low or "balance" in low:
+            retriable = True
+        raise UpstreamError(provider, model, resp.status_code, message, retriable=retriable)
     try:
         body = resp.json()
     except ValueError:
@@ -87,7 +92,10 @@ def post_upstream(
             retriable=False,
         )
     if body.get("error"):
+        message = upstream_message(resp)
+        low = (message or "").lower()
+        retriable = "credit" in low or "insufficient" in low or "balance" in low
         raise UpstreamError(
-            provider, model, resp.status_code, upstream_message(resp), retriable=False
+            provider, model, resp.status_code, message, retriable=retriable
         )
     return resp.status_code, body
