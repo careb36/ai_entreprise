@@ -23,7 +23,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, ProviderConnection, User
 from pydantic import BaseModel
-from services import company_models, model_suggestions
+from services import company_models, model_record, model_suggestions
 from sqlmodel import Session, select
 
 logger = logging.getLogger("fabrique")
@@ -94,6 +94,8 @@ def get_model_suggestions(
     ).all()
     models = model_suggestions.candidates(list(rows))
     return {
-        "suggestions": model_suggestions.suggest(models),
+        "suggestions": model_suggestions.suggest(
+            models, model_record.record(session, company_id)
+        ),
         "candidates": len(models),
     }

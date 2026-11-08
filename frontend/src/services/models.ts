@@ -50,11 +50,16 @@ export interface ModelSettings {
   effective: Record<string, { model: string; source: ModelSource }>
 }
 
+/** How a model did on the company's tasks in a role (completed sprints). */
+export interface ModelRecord { tasks: number; done: number; rework: number }
+
 export interface ModelSuggestion {
   model: string
   name: string
   connection: string
   reason: string
+  /** The company's own record with the suggested model; when present it decided the suggestion. */
+  measured?: ModelRecord | null
 }
 
 export interface NewConnection {
@@ -70,6 +75,25 @@ export const OPENAI_COMPATIBLE = 'openai-compatible'
 /** A connection's model as an agent's model: `conn:<id>:<model>`. */
 export function connectionModelRef(connectionId: number, modelId: string) {
   return `conn:${connectionId}:${modelId}`
+}
+
+export interface ModelOption { value: string; label: string; connection: string }
+
+/**
+ * The models the company's enabled connections confirmed, as `conn:<id>:<model>`:
+ * only a connection validated with success, and only what its provider listed.
+ * The catalogue says what a model can do, never that the provider serves it.
+ */
+export function connectionModelOptions(connections: ConnectionModels[]): ModelOption[] {
+  return connections
+    .filter(conn => conn.validation_ok === true)
+    .flatMap(conn => conn.models
+      .filter(m => m.listed)
+      .map(m => ({
+        value: connectionModelRef(conn.connection_id, m.id),
+        label: `${conn.name} · ${m.name ?? m.id}`,
+        connection: conn.name,
+      })))
 }
 
 const base = (companyId: number) => `/v1/companies/${companyId}`

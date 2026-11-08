@@ -20,7 +20,11 @@ prompt's section headers, so one run exercises the whole loop:
   convention (with one open question the first time, answered before the
   revision);
 - the Developer of the counter reads the greeting's module through the
-  workspace tools before delivering (one ``workspace__read`` call).
+  workspace tools before delivering (one ``workspace__read`` call);
+- it also plays a company's own provider: ``/provider/v1/models`` lists two
+  models for the key ``e2e-provider-key``, and a request that arrives with
+  the company's connection (``X-Provider-Connection``) is answered only with
+  the internal token, and written to ``FAKE_LLM_CONNECTIONS``.
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -33,6 +37,7 @@ answered as usual and written to ``FAKE_LLM_VIOLATIONS``; the run fails if
 that file is not empty.
 """
 
+import base64
 import json
 import os
 import re
@@ -51,6 +56,9 @@ REVIEWED: set[str] = set()
 REVIEWED_LOCK = threading.Lock()
 PROMPT_LOG = os.environ.get("FAKE_LLM_PROMPTS", "fake_llm.prompts.log")
 VIOLATIONS_LOG = os.environ.get("FAKE_LLM_VIOLATIONS", "fake_llm.violations.log")
+CONNECTIONS_LOG = os.environ.get("FAKE_LLM_CONNECTIONS", "fake_llm.connections.log")
+INTERNAL_TOKEN = os.environ.get("FAKE_LLM_INTERNAL_TOKEN", "")
+PROVIDER_KEY = "e2e-provider-key"
 # The module each requirement's implementation task writes (its slug), so
 # QA's acceptance tests, written first, import what the Developer will deliver.
 ACCEPTANCE_MODULES = {"REQ-1": "add_greeting", "REQ-2": "add_greeting_counter"}
@@ -302,6 +310,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, PYPI_RECORD)
         if self.path.startswith("/pypi/"):
             return self._send(404, {"message": "Not Found"})
+        if self.path == "/provider/v1/models":
+            if self.headers.get("Authorization") != f"Bearer {PROVIDER_KEY}":
+                return self._send(401, {"error": "invalid key"})
+            models = [{"id": "deepseek-v4-flash"}, {"id": "e2e-unlisted-elsewhere"}]
+            return self._send(200, {"object": "list", "data": models})
         if self.path.startswith("/v1/models"):
             return self._send(
                 200,
@@ -318,6 +331,22 @@ class Handler(BaseHTTPRequestHandler):
                 (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
                 "",
             )
+            connection = self.headers.get("X-Provider-Connection")
+            if connection:
+                # The proxy honours a company's connection only with the shared
+                # token; record what reached it, never the key itself.
+                if not INTERNAL_TOKEN or self.headers.get("X-Internal-Token") != INTERNAL_TOKEN:
+                    _violation("a company connection arrived without the internal token")
+                    return self._send(403, {"error": "connection without the internal token"})
+                conn = json.loads(base64.b64decode(connection))
+                run = re.search(r"RUN (\S+)", prompt)
+                with open(CONNECTIONS_LOG, "a") as log:
+                    log.write(json.dumps({
+                        "model": body.get("model"),
+                        "base_url": conn.get("base_url"),
+                        "key_ok": conn.get("api_key") == PROVIDER_KEY,
+                        "run": run.group(1) if run else None,
+                    }) + "\n")
             tool_call = tool_call_for(prompt, messages, body.get("tools") or [])
             if tool_call:
                 message = {"role": "assistant", "content": None, "tool_calls": [tool_call]}

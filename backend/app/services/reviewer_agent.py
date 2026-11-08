@@ -238,16 +238,19 @@ def parse_review(text: str) -> dict[str, str | None] | None:
     }
 
 
-def ask_llm(prompt: str, model: str | None = None) -> str:
+def ask_llm(
+    prompt: str, model: str | None = None, company_id: int | None = None
+) -> str:
     """One call through the LLM proxy as the Reviewer role; raises on no answer.
 
     *model* is the company's choice for the Reviewer (``company_models``);
-    without one, the deployment's default for the role.
+    without one, the deployment's default for the role. *company_id* lets a
+    model of the company's own provider connections route with its key.
     """
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
-    client.max_tokens = ANSWER_MAX_TOKENS
+    client.max_tokens, client.company_id = ANSWER_MAX_TOKENS, company_id
     model = model or default_model_for_role(REVIEWER_ROLE)
     result = client.chat(
         messages=[{"role": "user", "content": prompt}], model=model, role=REVIEWER_ROLE
@@ -298,7 +301,9 @@ def review_cycle(engine, ask: Callable[[str], str] | None = None) -> int:
                 call = ask
             else:
                 chosen = company_models.resolve(session, run.company_id, REVIEWER_ROLE)
-                call = functools.partial(ask_llm, model=chosen)
+                call = functools.partial(
+                    ask_llm, model=chosen, company_id=run.company_id
+                )
             try:
                 answer = call(prompt)
             except Exception as exc:  # noqa: BLE001 - The next cycle retries.

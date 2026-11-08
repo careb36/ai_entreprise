@@ -18,13 +18,19 @@ what a model can do, the provider says whether it serves it. A connection not
 validated, or whose validation failed, suggests nothing, and one that listed
 no model suggests nothing either. Each suggestion is the connection's model reference
 (``conn:<id>:<model>``), so choosing it routes through the company's key.
+
+Once the company has run a candidate on enough of its tasks in a role
+(``model_record.MIN_TASKS``, more done than not), its own record decides that
+role instead: the least rework per task, then the most done
+(``services/model_record.py``, counted from the boards of completed sprints).
+The suggestion says which: the rule, or the record with its numbers.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from services import model_catalog, provider_connections
+from services import model_catalog, model_record, provider_connections
 
 DECIDING_ROLES = ("PO", "Architect", "ScrumMaster", "SecOps")
 CODE_ROLES = ("Developer", "QA", "Reviewer")
@@ -62,41 +68,75 @@ def _cost(model: dict[str, Any]) -> float:
     return float(value) if value is not None else float("inf")
 
 
-def _pick(models: list[dict[str, Any]], key, reason: str) -> dict[str, Any] | None:
+def _pick(
+    models: list[dict[str, Any]],
+    key,
+    reason: str,
+    role: str,
+    record: dict[tuple[str, str], dict[str, int]],
+) -> dict[str, Any] | None:
     if not models:
         return None
-    best = min(models, key=lambda m: (*key(m), m["ref"]))
+    # The company's own record decides once it has one: the least rework per
+    # task, then the most done; the catalogue rule breaks the remaining ties.
+    proven = [m for m in models if model_record.measured(record.get((role, m["id"])))]
+
+    def track(m: dict[str, Any]) -> tuple[float, float]:
+        row = record[(role, m["id"])]
+        return row["rework"] / row["tasks"], -row["done"] / row["tasks"]
+
+    if proven:
+        best = min(proven, key=lambda m: (*track(m), *key(m), m["ref"]))
+        reason = model_record.describe(role, record[(role, best["id"])])
+    else:
+        best = min(models, key=lambda m: (*key(m), m["ref"]))
     return {
         "model": best["ref"],
         "name": best.get("name") or best["id"],
         "connection": best["connection"],
         "reason": reason,
+        "measured": record.get((role, best["id"])),
     }
 
 
-def suggest(models: list[dict[str, Any]]) -> dict[str, dict[str, Any] | None]:
-    """``{role: suggestion or None}`` for every role a company can set."""
+def suggest(
+    models: list[dict[str, Any]],
+    record: dict[tuple[str, str], dict[str, int]] | None = None,
+) -> dict[str, dict[str, Any] | None]:
+    """``{role: suggestion or None}`` for every role a company can set.
+
+    *record* is ``model_record.record``: how each model did on the company's
+    tasks per role. Without one, the catalogue rule alone.
+    """
+    record = record or {}
     reasoning = [m for m in models if m.get("reasoning")]
-    deciding = _pick(
-        reasoning,
-        lambda m: (-_context(m), _cost(m)),
-        "reasons and calls tools; largest context, then cheapest",
-    )
-    coding = _pick(
-        models,
-        lambda m: (-_context(m), _cost(m)),
-        "calls tools; largest context, then cheapest",
-    )
-    writing = _pick(
-        models,
-        lambda m: (_cost(m), -_context(m)),
-        "the cheapest that calls tools",
-    )
-    out: dict[str, dict[str, Any] | None] = {}
-    for role in DECIDING_ROLES:
-        out[role] = deciding
-    for role in CODE_ROLES:
-        out[role] = coding
-    for role in WRITING_ROLES:
-        out[role] = writing
-    return out
+    rules = {
+        **dict.fromkeys(
+            DECIDING_ROLES,
+            (
+                reasoning,
+                lambda m: (-_context(m), _cost(m)),
+                "reasons and calls tools; largest context, then cheapest",
+            ),
+        ),
+        **dict.fromkeys(
+            CODE_ROLES,
+            (
+                models,
+                lambda m: (-_context(m), _cost(m)),
+                "calls tools; largest context, then cheapest",
+            ),
+        ),
+        **dict.fromkeys(
+            WRITING_ROLES,
+            (
+                models,
+                lambda m: (_cost(m), -_context(m)),
+                "the cheapest that calls tools",
+            ),
+        ),
+    }
+    return {
+        role: _pick(pool, key, reason, role, record)
+        for role, (pool, key, reason) in rules.items()
+    }

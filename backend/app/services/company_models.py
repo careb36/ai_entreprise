@@ -87,9 +87,10 @@ def resolve(
     )
 
 
-def _clean_model(
+def clean_model(
     session: Session, company_id: int, value: Any, field: str
 ) -> str | None:
+    """*value* as a model id the company may use; ``None`` when empty."""
     text = str(value or "").strip()
     if not text:
         return None
@@ -125,10 +126,10 @@ def apply(
             raise InvalidModelSettings(
                 f"unknown role {name!r}; one of {', '.join(ROLES)}"
             )
-        model = _clean_model(session, company.id, value, name)
+        model = clean_model(session, company.id, value, name)
         if model:
             roles[name] = model
-    company.default_model = _clean_model(session, company.id, default_model, "default")
+    company.default_model = clean_model(session, company.id, default_model, "default")
     company.role_models = roles or None
 
 

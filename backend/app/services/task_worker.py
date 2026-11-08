@@ -977,27 +977,14 @@ def _complete_sprint_and_plan_follow_up(
             session.commit()
             return result
 
-        discovery = session.exec(
-            select(ProjectDiscovery)
-            .where(ProjectDiscovery.company_id == company.id)
-            .order_by(text("created_at DESC"))
-        ).first()
+        # The agents carry their company, so a connection model routes with its key.
+        _, agent_dicts, discovery = spec_planning.planning_context_of(
+            session, company.id
+        )
         detected_stack = _coerce_json_dict(
             discovery.detected_stack if discovery else None
         )
         project_path = discovery.project_path if discovery else None
-
-        agents = session.exec(select(Agent).where(Agent.company_id == company.id)).all()
-        agent_dicts = [
-            {
-                "role": agent.role,
-                "name": agent.name,
-                "model": agent.model,
-                "seniority": agent.seniority,
-                "specialty": agent.specialty,
-            }
-            for agent in agents
-        ]
 
         scope_size = (company.default_scope_size or "M").upper()
         if scope_size not in {"S", "M", "L"}:

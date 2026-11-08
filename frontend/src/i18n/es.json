@@ -1157,7 +1157,9 @@
       "support": "Prioriza modelos rápidos y equilibrados para respuestas claras y una clasificación ágil.",
       "generalist": "Usa un modelo general y equilibrado cuando el rol no requiere claramente un especialista."
     },
-    "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia."
+    "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia.",
+    "connectionGroup": "Conexión de la empresa: {{connection}}",
+    "connectionModelHint": "Corre por la conexión {{connection}} de la empresa; la clave queda en la empresa."
   },
   "common": {
     "loading": "Cargando...",
@@ -2003,7 +2005,8 @@
         "role": "elegido para este rol",
         "company": "el de la empresa",
         "deployment": "el de la instalación"
-      }
+      },
+      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
     }
   }
 }

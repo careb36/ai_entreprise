@@ -144,3 +144,120 @@ def test_a_viewer_reads_the_suggestions(sqlite_session, test_client, catalog):
     data = response.json()
     assert data["candidates"] == 3
     assert data["suggestions"]["QA"]["model"] == f"conn:{conn.id}:coder"
+
+
+REWORK = {"author": "QA", "text": "NEEDS WORK: cover the empty case"}
+
+
+def _delivered(session, company, sprint_status, model, outcomes, role="Developer"):
+    """A sprint whose tasks the task worker delivered with *model*."""
+    from models import BacklogItem, Sprint
+    from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
+
+    sprint = Sprint(company_id=company.id, sprint_name="S", status=sprint_status)
+    session.add(sprint)
+    session.commit()
+    for status, rework in outcomes:
+        item = BacklogItem(
+            sprint_id=sprint.id, title="T", status=status, comments=[REWORK] * rework
+        )
+        session.add(item)
+        session.commit()
+        session.add(
+            AgentRun(
+                company_id=company.id,
+                external_ref=f"task-{item.id}",
+                producer=TASK_WORKER_PRODUCER,
+                agent_role=role,
+                model=model,
+                artifact_digest="x",
+                artifact_size=1,
+            )
+        )
+    session.commit()
+
+
+def test_the_companys_record_decides_once_it_has_one(sqlite_session, catalog):
+    """``model_record``: counted from completed sprints, by the last delivery."""
+    from services import model_record
+
+    company = _company(sqlite_session)
+    conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
+    models = model_suggestions.candidates([conn])
+    # "coder" leads the rule for the Developer; the company's tasks say "cheap"
+    # reworks less. Two tasks are not enough; an open sprint does not count.
+    _delivered(sqlite_session, company, "completed", "coder", [("done", 2)] * 3)
+    _delivered(sqlite_session, company, "completed", "cheap", [("done", 0)] * 2)
+    _delivered(sqlite_session, company, "active", "cheap", [("done", 0)] * 5)
+    record = model_record.record(sqlite_session, company.id)
+    assert record[("Developer", "coder")] == {"tasks": 3, "done": 3, "rework": 6}
+    assert record[("Developer", "cheap")]["tasks"] == 2
+    first = model_suggestions.suggest(models, record)["Developer"]
+    assert first["model"] == f"conn:{conn.id}:coder"
+    assert first["reason"] == (
+        "on 3 of the company's Developer tasks: 3 done, 2.0 rework per task"
+    )
+    _delivered(sqlite_session, company, "completed", "cheap", [("done", 1)])
+    record = model_record.record(sqlite_session, company.id)
+    suggestions = model_suggestions.suggest(models, record)
+    assert suggestions["Developer"]["model"] == f"conn:{conn.id}:cheap"
+    assert suggestions["Developer"]["measured"] == {
+        "tasks": 3,
+        "done": 3,
+        "rework": 1,
+    }
+    # Other roles have no record: the rule stays.
+    assert suggestions["QA"]["model"] == f"conn:{conn.id}:coder"
+    assert "tools" in suggestions["QA"]["reason"]
+
+
+def test_a_record_of_mostly_blocked_tasks_never_outranks_the_rule(
+    sqlite_session, catalog
+):
+    from services import model_record
+
+    company = _company(sqlite_session)
+    conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
+    _delivered(
+        sqlite_session,
+        company,
+        "completed",
+        "cheap",
+        [("blocked", 0), ("blocked", 0), ("done", 0)],
+    )
+    record = model_record.record(sqlite_session, company.id)
+    developer = model_suggestions.suggest(model_suggestions.candidates([conn]), record)[
+        "Developer"
+    ]
+    assert developer["model"] == f"conn:{conn.id}:coder"
+
+
+def test_a_task_counts_for_the_model_of_its_last_delivery(sqlite_session):
+    from models import BacklogItem, Sprint
+    from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
+    from services import model_record
+
+    company = _company(sqlite_session)
+    sprint = Sprint(company_id=company.id, sprint_name="S", status="completed")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    item = BacklogItem(sprint_id=sprint.id, title="T", status="done")
+    sqlite_session.add(item)
+    sqlite_session.commit()
+    for version, model in enumerate(("first", "second"), start=1):
+        sqlite_session.add(
+            AgentRun(
+                company_id=company.id,
+                external_ref=f"task-{item.id}",
+                version=version,
+                producer=TASK_WORKER_PRODUCER,
+                agent_role="Dev",
+                model=model,
+                artifact_digest="x",
+                artifact_size=1,
+            )
+        )
+    sqlite_session.commit()
+    assert model_record.record(sqlite_session, company.id) == {
+        ("Developer", "second"): {"tasks": 1, "done": 1, "rework": 0}
+    }
