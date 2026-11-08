@@ -15,11 +15,11 @@ def default_settings(monkeypatch):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", True)
     monkeypatch.setattr(settings, "PUBLIC_API_URL", None)
     monkeypatch.setattr(settings, "SUPPORT_AGENT_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
 
 
-@pytest.fixture
-def memory_client():
-    """Sets ``app.state.memory_client`` for a test and puts the old value back.
+def _state_setter(name, initial):
+    """Sets ``app.state.<name>`` for a test and puts the old value back.
 
     Not through monkeypatch: since pytest 9.2 it records an instance attribute
     from ``__dict__``, and starlette's ``State`` keeps its values elsewhere, so
@@ -27,18 +27,28 @@ def memory_client():
     raises ``KeyError``.
     """
     missing = object()
-    previous = getattr(app.state, "memory_client", missing)
+    previous = getattr(app.state, name, missing)
 
-    def set_client(value):
-        app.state.memory_client = value
+    def set_value(value):
+        setattr(app.state, name, value)
 
-    set_client(None)
-    yield set_client
+    set_value(initial)
+    yield set_value
     if previous is missing:
-        if hasattr(app.state, "memory_client"):
-            del app.state.memory_client
+        if hasattr(app.state, name):
+            delattr(app.state, name)
     else:
-        app.state.memory_client = previous
+        setattr(app.state, name, previous)
+
+
+@pytest.fixture
+def memory_client():
+    yield from _state_setter("memory_client", None)
+
+
+@pytest.fixture
+def memory_graph():
+    yield from _state_setter("memory_graph", False)
 
 
 def test_default_capabilities(test_client, default_settings):
@@ -48,6 +58,7 @@ def test_default_capabilities(test_client, default_settings):
     assert response.json() == {
         "agent_graph": False,
         "memory": False,
+        "memory_graph": False,
         "github": False,
         "auth_required": True,
         "support_agent": False,
@@ -70,6 +81,22 @@ def test_memory_follows_memory_client(test_client, default_settings, memory_clie
 
     memory_client(None)
     assert test_client.get("/v1/capabilities").json()["memory"] is False
+
+
+def test_memory_graph_is_reported_apart_from_memory(
+    test_client, default_settings, memory_client, memory_graph, monkeypatch
+):
+    # Memory search on pgvector alone: the graph is off by default.
+    memory_client(MagicMock())
+    body = test_client.get("/v1/capabilities").json()
+    assert body["memory"] is True
+    assert body["memory_graph"] is False
+
+    # Connected at startup, but only while the setting keeps it on.
+    memory_graph(True)
+    assert test_client.get("/v1/capabilities").json()["memory_graph"] is False
+    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
+    assert test_client.get("/v1/capabilities").json()["memory_graph"] is True
 
 
 def test_github_token_enables_github(test_client, default_settings, monkeypatch):

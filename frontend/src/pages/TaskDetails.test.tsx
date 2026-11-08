@@ -280,7 +280,7 @@ describe('task delivery evidence', () => {
   })
 
   it('links each claimed file to its lineage when the knowledge graph is connected', () => {
-    capabilitiesQuery.mockReturnValue({ data: { memory: true } } as never)
+    capabilitiesQuery.mockReturnValue({ data: { memory: true, memory_graph: true } } as never)
     runsQuery.mockReturnValue({
       data: { agent_runs: [{ id: 31, version: 1, status: 'verified', claims: { files: ['src/a b.py'] } }] },
       isLoading: false,

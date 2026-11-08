@@ -26,10 +26,10 @@ function renderAt(path: string) {
   )
 }
 
-function stubApi(lineage: () => Response, memory = true) {
+function stubApi(lineage: () => Response, memoryGraph = true) {
   const fetch = vi.fn(async (url: string) => {
     const { pathname } = new URL(url)
-    if (pathname === '/v1/capabilities') return response(200, { agent_graph: false, memory, github: false, auth_required: true })
+    if (pathname === '/v1/capabilities') return response(200, { agent_graph: false, memory: true, memory_graph: memoryGraph, github: false, auth_required: true })
     if (pathname === '/v1/enterprise/lineage') return lineage()
     return response(404)
   })
@@ -86,6 +86,18 @@ describe('Lineage', () => {
 
     expect(await screen.findByText('No decisions recorded for x.ts.')).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('/lineage?file=x.ts')
+  })
+
+  it('says the lineage is not recorded when the graph is off, never that nothing was decided', async () => {
+    stubApi(() => response(200, {
+      file: 'a.py', status: 'not_recorded', recorded: false,
+      reason: 'The knowledge graph is not recorded on this deployment (NEO4J_ENABLED=false).', lineage: [],
+    }), false)
+    renderAt('/lineage?file=a.py')
+
+    expect(await screen.findByText(/does not record/)).toBeInTheDocument()
+    expect(await screen.findByText('Not recorded: the knowledge graph is off, so no decisions are kept for a.py.')).toBeInTheDocument()
+    expect(screen.queryByText('No decisions recorded for a.py.')).not.toBeInTheDocument()
   })
 
   it('warns when the graph is not connected and offers a retry on failure', async () => {

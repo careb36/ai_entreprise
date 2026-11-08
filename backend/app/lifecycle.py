@@ -116,6 +116,76 @@ async def _start_workers(app, client: NATSClient) -> None:
     )
 
 
+def _start_memory(app, has_vector_memory: bool) -> None:
+    """Memory search on pgvector, with the knowledge graph only when enabled.
+
+    The graph is optional (issue #328), on by default: without it the memory
+    client works on pgvector alone and graph readers answer "not recorded".
+    ``app.state.memory_graph`` says whether the graph is kept. Enabled but not
+    reachable yet (it starts slower than the backend), it is tried again in
+    the background (``_connect_graph_later``) instead of staying off until a
+    restart; the backend never waits for it.
+    """
+    app.state.memory_client = None
+    app.state.memory_graph = False
+    driver = None
+    if not settings.NEO4J_ENABLED:
+        logger.info("Knowledge graph off (NEO4J_ENABLED=false): not recorded.")
+    else:
+        try:
+            driver = get_neo4j_driver()
+            ensure_memory_graph_schema(driver)
+            app.state.memory_graph = True
+            logger.info("Neo4j connected: the knowledge graph is recorded.")
+        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional graph fails.
+            driver = None
+            logger.warning(
+                f"Neo4j enabled but unavailable at startup ({exc}). "
+                "Trying again in the background; the graph is not recorded meanwhile."
+            )
+            try:
+                task = asyncio.get_running_loop().create_task(
+                    _connect_graph_later(app, has_vector_memory),
+                    name="memory_graph_connect",
+                )
+            except RuntimeError:  # no event loop (a synchronous caller)
+                task = None
+            if task is not None:
+                _background_tasks.add(task)
+                task.add_done_callback(_on_task_done)
+    if has_vector_memory:
+        app.state.memory_client = MemoryClient(neo4j_driver=driver)
+    else:
+        logger.info("No vector_memory table: memory search and store are off.")
+
+
+GRAPH_RETRY_SECONDS = 15.0
+GRAPH_RETRY_ATTEMPTS = 40  # ten minutes, then the graph stays off until a restart
+
+
+async def _connect_graph_later(app, has_vector_memory: bool) -> bool:
+    """Connect the enabled graph once Neo4j answers; ``True`` when it did."""
+    for _ in range(GRAPH_RETRY_ATTEMPTS):
+        await asyncio.sleep(GRAPH_RETRY_SECONDS)
+        try:
+            driver = await asyncio.to_thread(get_neo4j_driver)
+            await asyncio.to_thread(ensure_memory_graph_schema, driver)
+        except Exception as exc:  # noqa: BLE001 - Keep trying while Neo4j starts.
+            logger.debug("Neo4j still unavailable: %s", exc)
+            continue
+        if has_vector_memory:
+            app.state.memory_client = MemoryClient(neo4j_driver=driver)
+        app.state.memory_graph = True
+        logger.info("Neo4j connected: the knowledge graph is recorded from now on.")
+        return True
+    logger.warning(
+        "Neo4j stayed unavailable for %.0f minutes: the graph is not recorded "
+        "until the backend restarts with it reachable.",
+        GRAPH_RETRY_SECONDS * GRAPH_RETRY_ATTEMPTS / 60,
+    )
+    return False
+
+
 async def startup(app):
     """
     Application startup handler.
@@ -137,7 +207,7 @@ async def startup(app):
     - ``process_backlog_tasks()`` — NATS consumer → backlog task execution.
     """
     logger.info("Initializing Enterprise Backend Components...")
-    prepare_database()
+    has_vector_memory = prepare_database()
 
     # NATS is required for agent workflow and SSE streaming, but the DB-only
     # endpoints (discovery, init_company, sprints, etc.) must remain available
@@ -202,21 +272,7 @@ async def startup(app):
             _background_tasks.add(brief_task)
             brief_task.add_done_callback(_on_task_done)
 
-    # Neo4j is used for memory search and lineage; degrade gracefully if absent.
-    app.state.memory_client = None
-    if not settings.NEO4J_ENABLED:
-        logger.info("Neo4j disabled (NEO4J_ENABLED=false) — memory features off.")
-    else:
-        try:
-            driver = get_neo4j_driver()
-            ensure_memory_graph_schema(driver)
-            app.state.memory_client = MemoryClient(neo4j_driver=driver)
-            logger.info("Neo4j connected — memory features enabled.")
-        except Exception as exc:  # noqa: BLE001 - Start in degraded mode if the optional memory backend fails.
-            logger.warning(
-                f"Neo4j unavailable at startup ({exc}). "
-                "Memory search and lineage endpoints will return errors until Neo4j is reachable."
-            )
+    _start_memory(app, has_vector_memory)
 
     app.state.llm_client = LLMProxyClient(
         os.getenv("LLM_PROXY_URL", "http://localhost:5100")

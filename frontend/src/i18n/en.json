@@ -1354,7 +1354,8 @@
   "lineage": {
     "title": "File lineage",
     "subtitle": "The agent decisions recorded on a file, newest first (up to 10).",
-    "unavailable": "Lineage needs the knowledge graph (Neo4j), which is not connected.",
+    "unavailable": "File lineage needs the knowledge graph, which this deployment does not record.",
+    "notRecorded": "Not recorded: the knowledge graph is off, so no decisions are kept for {{file}}.",
     "file": "File path",
     "filePlaceholder": "src/app/main.py",
     "search": "Show",
@@ -1435,6 +1436,7 @@
     "error": "Could not check the services.",
     "up": "up",
     "down": "down",
+    "disabled": "off",
     "overall": {
       "healthy": "All services are up.",
       "degraded": "Degraded: an optional service is down.",

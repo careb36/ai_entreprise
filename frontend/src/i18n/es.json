@@ -1354,7 +1354,8 @@
   "lineage": {
     "title": "Linaje del archivo",
     "subtitle": "Las decisiones de agentes registradas sobre un archivo, de la más reciente a la más antigua (hasta 10).",
-    "unavailable": "El linaje necesita el grafo de conocimiento (Neo4j), que no está conectado.",
+    "unavailable": "El linaje de archivos necesita el grafo de conocimiento, que este despliegue no registra.",
+    "notRecorded": "No registrado: el grafo de conocimiento está apagado, así que no se guardan decisiones para {{file}}.",
     "file": "Ruta del archivo",
     "filePlaceholder": "src/app/main.py",
     "search": "Ver",
@@ -1435,6 +1436,7 @@
     "error": "No se pudieron comprobar los servicios.",
     "up": "activo",
     "down": "caído",
+    "disabled": "apagado",
     "overall": {
       "healthy": "Todos los servicios están activos.",
       "degraded": "Degradado: un servicio opcional está caído.",

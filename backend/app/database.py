@@ -60,7 +60,7 @@ engine = create_engine(
 )
 
 
-def prepare_database() -> None:
+def prepare_database() -> bool:
     """The schema as the migrations define it (``app/migrations.py``).
 
     The backend starts only on a database at the migrations' head. The
@@ -68,6 +68,8 @@ def prepare_database() -> None:
     ``DB_AUTO_UPGRADE=true`` does it here, for a local database. A database
     behind head stops the start with both versions in the error, instead of
     being patched in place as the old startup did.
+
+    Returns whether the vector memory (pgvector's ``vector_memory``) is there.
     """
     from config import settings
     from migrations import require_schema_at_head, upgrade_to_head
@@ -77,14 +79,14 @@ def prepare_database() -> None:
         upgrade_to_head(engine)
     head = require_schema_at_head(engine)
     logger.info("Database schema at %s", head)
-    _check_vector_memory()
+    return _check_vector_memory()
 
 
-def _check_vector_memory() -> None:
+def _check_vector_memory() -> bool:
     # vector_memory is created by db/init-db/init.sql (it needs pgvector), not
     # by the models, so a database set up without that script has no such table.
     if engine.dialect.name != "postgresql":
-        return
+        return False
     with engine.connect() as connection:
         has_vector_memory = connection.exec_driver_sql(
             "SELECT to_regclass('vector_memory') IS NOT NULL"
@@ -94,6 +96,7 @@ def _check_vector_memory() -> None:
             "Table vector_memory is missing: memory search and RAG are "
             "unavailable until db/init-db/init.sql is applied to this database."
         )
+    return bool(has_vector_memory)
 
 
 def get_session() -> Generator[Session, None, None]:

@@ -30,6 +30,7 @@ from models import (
 from sqlmodel import Session, func, select
 
 from services import company_models, sprint_control
+from services.memory_graph import graph_enabled
 from services.sprint_planner import plan_foundation_sprint
 
 
@@ -206,6 +207,8 @@ class CompanyService:
 
     def _seed_neo4j(self, company_id: int, company_name: str):
         """Seed a root Company node in Neo4j (Temporal Knowledge Graph)."""
+        if not graph_enabled():
+            return  # The graph is not recorded on this deployment.
         try:
             driver = get_neo4j_driver()
             with driver.session() as neo_session:

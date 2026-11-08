@@ -393,3 +393,64 @@ def test_gemini_reports_its_own_count_or_the_estimate_stays_apart(client, upstre
     estimated = client.post("/v1/chat/completions", json={"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "hi"}]}).get_json()
     assert "usage" not in estimated
     assert estimated["usage_status"] == "estimated"
+
+
+def _empty_with_usage(tokens: int) -> FakeResponse:
+    return FakeResponse(
+        200,
+        {
+            "choices": [{"message": {"role": "assistant", "content": ""}, "finish_reason": "stop"}],
+            "usage": {"total_tokens": tokens},
+        },
+    )
+
+
+def test_an_empty_answer_s_reported_tokens_are_charged_apart(client, upstream, proxy, monkeypatch):
+    charged = []
+    monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
+    upstream.set("deepseek", _empty_with_usage(1000))
+    upstream.set("qwen", openai_ok("answer from qwen"))
+
+    body = client.post(
+        "/v1/chat/completions",
+        json={"model": "deepseek-v4-pro", "messages": [{"role": "user", "content": "hi"}]},
+        headers={"X-Business-Unit-ID": "7"},
+    ).get_json()
+
+    # The served answer's usage is its own; the empty call's tokens are charged beside it.
+    assert body["usage"]["total_tokens"] == 12
+    assert body["fallback_from"]["failed_attempts_tokens"] == 1000
+    assert charged == [1012]
+
+
+def test_when_every_provider_fails_their_reported_tokens_are_still_charged(client, upstream, proxy, monkeypatch):
+    charged = []
+    monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
+    upstream.set("deepseek", _empty_with_usage(300))
+    upstream.set("qwen", _empty_with_usage(200))
+    upstream.set("gemini", FakeResponse(503, {"message": "gemini down"}))
+
+    resp = client.post(
+        "/v1/chat/completions",
+        json={"model": "deepseek-v4-pro", "messages": [{"role": "user", "content": "hi"}]},
+        headers={"X-Business-Unit-ID": "7"},
+    )
+
+    assert resp.status_code == 502
+    body = resp.get_json()
+    assert body["tokens"] == 300
+    assert [a.get("tokens") for a in body["attempts"]] == [300, 200, None]
+    assert charged == [500]
+
+
+def test_a_failure_that_reported_no_tokens_charges_nothing(client, upstream, proxy, monkeypatch):
+    charged = []
+    monkeypatch.setattr(proxy, "track_usage_in_db", lambda bu_id, tokens: charged.append(tokens))
+    for provider in ("deepseek", "qwen", "gemini"):
+        upstream.set(provider, FakeResponse(503, {"message": "down"}))
+
+    resp = _chat(client, "deepseek-v4-pro")
+
+    assert resp.status_code == 502
+    assert "tokens" not in resp.get_json()
+    assert charged == [0]
