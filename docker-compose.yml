@@ -285,6 +285,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-factory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-factory}
+      # Retention in days, 0 keeps everything (backend/janitor/retention.py).
+      RETENTION_OUTBOX_DAYS: ${RETENTION_OUTBOX_DAYS:-7}
+      RETENTION_AGENT_RUNS_DAYS: ${RETENTION_AGENT_RUNS_DAYS:-0}
+      RETENTION_KPI_TURNS_DAYS: ${RETENTION_KPI_TURNS_DAYS:-0}
+      RETENTION_GLASSROOM_DAYS: ${RETENTION_GLASSROOM_DAYS:-0}
     networks:
       - factory-network
     depends_on:

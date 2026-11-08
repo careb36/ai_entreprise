@@ -132,6 +132,13 @@ nats-data/
 backup_*.sql
 dump_*.sql
 *_dump.sql
+# scripts/backup.sh output (BACKUP_DIR defaults to ./backups): every tenant's data
+/backups/
+*.dump
+*.dump.partial
+*.dump.sha256
+neo4j-*.cypher
+neo4j-*.cypher.partial
 *.tar
 *.gz
 
