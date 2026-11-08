@@ -1,5 +1,8 @@
 /**
- * Publishing a run's task branch the way a pull request starts: the
+ * What a Manager does with a run's task branch. Merging it into the base
+ * branch of the local repository needs no remote and pushes nothing: a
+ * company that works only with local repositories stops there. Publishing is
+ * optional, for when a person decides to: the
  * workspace daemon pushes it to the repository's origin with the person's
  * own Git credentials and opens a draft pull request (`gh`) or merge request
  * (`glab`), or gives the page where one is opened. The description carries
@@ -7,9 +10,9 @@
  * and bring back the comments people left on the request there.
  */
 import { useTranslation } from 'react-i18next'
-import { ExternalLink, GitPullRequest, Loader2, Download } from 'lucide-react'
+import { ExternalLink, GitMerge, GitPullRequest, Loader2, Download } from 'lucide-react'
 import { errorDetail } from '../services/api'
-import { type RunPublication, usePublishRun, useReviewComments, useRunPublications, useSyncComments } from '../services/runReviews'
+import { type RunPublication, useMergeRun, usePublishRun, useReviewComments, useRunPublications, useSyncComments } from '../services/runReviews'
 import { CommentThread } from './LineComments'
 
 function Publication({ publication, companyId, runId, canPublish }: {
@@ -22,14 +25,16 @@ function Publication({ publication, companyId, runId, canPublish }: {
   return (
     <li className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
       <span className="font-mono">
-        {t('review.publish.pushed', {
+        {t(publication.how === 'local' ? 'review.publish.merged' : 'review.publish.pushed', {
           name: publication.published_by,
           commit: publication.commit.slice(0, 7),
           branch: publication.branch,
           base: publication.base,
         })}
       </span>
-      {publication.url ? (
+      {publication.how === 'local' ? (
+        <span>{publication.updated ? t('review.publish.alreadyIn') : t('review.publish.how.local')}</span>
+      ) : publication.url ? (
         <a href={publication.url} target="_blank" rel="noopener noreferrer"
           className="flex items-center gap-1 text-brand-300 hover:underline">
           {t(`review.publish.how.${publication.how}`)}
@@ -68,6 +73,7 @@ export function PublishBranch({ companyId, runId, branch, canPublish, shownPaths
   const shown = new Set(shownPaths)
   const elsewhere = comments.filter(c => c.source && (c.path === null || c.line === null || !shown.has(c.path)))
   const publish = usePublishRun(companyId, runId)
+  const merge = useMergeRun(companyId, runId)
   if (!canPublish && publications.length === 0) return null
   return (
     <section aria-label={t('review.publish.title')} className="card space-y-2 p-3">
@@ -86,14 +92,20 @@ export function PublishBranch({ companyId, runId, branch, canPublish, shownPaths
       )}
       {canPublish && (
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => publish.mutate()} disabled={publish.isPending}
+          <button type="button" onClick={() => merge.mutate()} disabled={merge.isPending}
             className="btn btn-primary btn-sm flex items-center gap-1.5">
+            {merge.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitMerge size={13} aria-hidden="true" />}
+            {t('review.publish.merge')}
+          </button>
+          <button type="button" onClick={() => publish.mutate()} disabled={publish.isPending}
+            className="btn btn-ghost btn-sm flex items-center gap-1.5">
             {publish.isPending ? <Loader2 size={13} className="animate-spin" /> : <GitPullRequest size={13} aria-hidden="true" />}
             {publications.length > 0 ? t('review.publish.again') : t('review.publish.button')}
           </button>
-          <p className="min-w-0 flex-1 text-xs text-gray-500">{t('review.publish.hint', { branch })}</p>
+          <p className="min-w-0 flex-1 text-xs text-gray-500">{t('review.publish.mergeHint', { branch })} {t('review.publish.hint', { branch })}</p>
         </div>
       )}
+      {merge.isError && <p role="alert" className="text-sm text-red-300">{errorDetail(merge.error)}</p>}
       {publish.isError && <p role="alert" className="text-sm text-red-300">{errorDetail(publish.error)}</p>}
     </section>
   )

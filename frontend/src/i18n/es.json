@@ -1911,22 +1911,27 @@
     "gitCommit": "En la rama {{branch}}, commit {{commit}} (sobre {{parent}})",
     "gitNoCommit": "En la rama {{branch}}: sin commit nuevo, no cambió nada",
     "publish": {
-      "title": "Publicar la rama",
-      "button": "Publicar como pull request",
+      "title": "Integrar o publicar la rama",
+      "button": "Publicar como pull request (opcional)",
       "again": "Publicar de nuevo",
-      "hint": "Sube {{branch}} a origin con las credenciales de Git de esta computadora y abre una pull request (gh) o merge request (glab) en borrador; sin ellas, da la página para abrirla. La descripción lleva la evidencia de esta ejecución.",
+      "hint": "Publicar sube {{branch}} a origin con las credenciales de Git de esta computadora y abre una pull request (gh) o merge request (glab) en borrador; sin ellas, da la página para abrirla. La descripción lleva la evidencia de esta ejecución.",
       "pushed": "{{name}} subió {{commit}} en {{branch}} → {{base}}",
       "how": {
         "gh": "Pull request en borrador",
         "glab": "Merge request en borrador",
-        "compare": "Abrir la solicitud"
+        "compare": "Abrir la solicitud",
+        "local": "Integrado en local, sin subir nada"
       },
       "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud",
       "updated": "descripción actualizada con esta ejecución",
       "sync": "Traer comentarios",
       "synced": "{{added}} nuevos, {{updated}} actualizados",
       "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
-      "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
+      "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá",
+      "merge": "Integrar en local",
+      "mergeHint": "Integrar lleva {{branch}} a la rama base del repositorio de esta computadora; no se sube nada ni hace falta un remoto.",
+      "merged": "{{name}} integró {{commit}} de {{branch}} en {{base}}",
+      "alreadyIn": "ya estaba en la rama base"
     }
   },
   "standards": {
