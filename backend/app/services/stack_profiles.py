@@ -24,7 +24,7 @@ from config import settings
 
 # The fields a profile carries, and the ones a company may override.
 COMMAND_FIELDS = ("install", "test", "lint", "start", "e2e")
-FIELDS = ("stack", *COMMAND_FIELDS, "port", "probe_path")
+FIELDS = ("stack", *COMMAND_FIELDS, "port", "probe_path", "web")
 
 # Detected in this order: the first stack whose marker files exist wins.
 # ``manifests`` are the files whose change calls for an install (exact names
@@ -165,6 +165,27 @@ PROFILES: tuple[dict[str, Any], ...] = (
 )
 
 _NPM_E2E_SCRIPTS = ("test:e2e", "e2e")
+# What says a project serves pages a browser renders (``web``): an HTML page
+# where a site keeps one, or a dependency on a browser framework.
+_PAGE_FOLDERS = ("", "public", "static", "src", "templates", "www")
+WEB_PACKAGES = frozenset(
+    {
+        "react",
+        "react-dom",
+        "vue",
+        "svelte",
+        "@sveltejs/kit",
+        "@angular/core",
+        "next",
+        "nuxt",
+        "vite",
+        "solid-js",
+        "preact",
+        "lit",
+        "astro",
+        "@remix-run/react",
+    }
+)
 # The ``test`` script ``npm init`` writes: it fails on purpose, no suite.
 NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
 
@@ -231,6 +252,32 @@ def _package_scripts(root: str) -> dict[str, Any]:
     except (ValueError, AttributeError):
         return {}
     return scripts if isinstance(scripts, dict) else {}
+
+
+def serves_pages(root: str, names: list[str]) -> bool:
+    """Whether the project in *root* serves pages a browser renders: an
+    ``.html`` file in the root or in ``public/``, ``static/``, ``src/``,
+    ``templates/`` or ``www/``, or a browser framework among the
+    ``package.json`` dependencies (``WEB_PACKAGES``). A project that does
+    without either (a greenfield folder) says so in its stack profile
+    (``web``)."""
+    for folder in _PAGE_FOLDERS:
+        listing = names if not folder else _root_files(os.path.join(root, folder))
+        if any(name.lower().endswith((".html", ".htm")) for name in listing):
+            return True
+    if "package.json" not in names:
+        return False
+    try:
+        manifest = json.loads(_read(root, "package.json") or "{}")
+    except ValueError:
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    for key in ("dependencies", "devDependencies"):
+        deps = manifest.get(key)
+        if isinstance(deps, dict) and WEB_PACKAGES & set(deps):
+            return True
+    return False
 
 
 def _refine(profile: dict[str, Any], root: str, names: list[str]) -> dict[str, Any]:
@@ -330,6 +377,7 @@ def detect(root: str) -> dict[str, Any] | None:
             profile = {k: v for k, v in template.items() if k != "markers"}
             profile["manifests"] = list(template["manifests"])
             profile["probe_path"] = "/"
+            profile["web"] = serves_pages(root, names)
             return _refine(profile, root, names)
     return None
 
@@ -357,7 +405,8 @@ def validate_overrides(raw: Any) -> dict[str, Any]:
     """A company's overrides, checked. Raises ``ValueError`` with the reason.
 
     Commands are strings (empty turns the step off), ``port`` an integer
-    between 1 and 65535, ``probe_path`` a path starting with ``/``; unknown
+    between 1 and 65535, ``probe_path`` a path starting with ``/``, ``web``
+    a boolean (the project serves pages a browser renders); unknown
     keys are refused rather than ignored. Raises ``TypeError`` for a value
     that is not an object."""
     if raw is None:
@@ -369,6 +418,11 @@ def validate_overrides(raw: Any) -> dict[str, Any]:
         if key not in FIELDS:
             raise ValueError(f"unknown stack profile field: {key}")
         if value is None:
+            continue
+        if key == "web":
+            if not isinstance(value, bool):
+                raise ValueError("web must be true or false")
+            out[key] = value
             continue
         if key == "port":
             if isinstance(value, bool) or not isinstance(value, int):
@@ -421,6 +475,7 @@ def resolve(detected: dict[str, Any] | None, company_overrides: Any) -> dict[str
         for field, value in overrides.items():
             profile[field] = value if value != "" else None
             source[field] = origin
+    profile["web"] = bool(profile.get("web"))
     profile.setdefault("stack", None)
     profile.setdefault("manifests", list(manifest_patterns()))
     profile.setdefault("probe_path", "/")

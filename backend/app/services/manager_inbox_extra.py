@@ -30,7 +30,7 @@ from models.review import RunPublication
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from services import arch_author, arch_check, spec_check, spec_planning
+from services import arch_author, arch_check, spec_check, spec_planning, task_projection
 from services.board import GATE_AUTHORS_LOWER, comment_list, is_rework_request
 from services.manager_inbox import (
     FIELD_LIMIT,
@@ -260,8 +260,11 @@ def _credit_items(session: Session, company: Company) -> list[dict]:
     return items
 
 
-def qa_approved(comments: Any) -> bool:
-    """QA's latest verdict on the task is ``APPROVED:``, with no rework after it."""
+def qa_approved(comments: Any, record: Any = None) -> bool:
+    """QA's latest verdict on the task is ``APPROVED:``, with no rework after it
+    (from *record*'s events when they cover the thread, issue #324)."""
+    if record is not None and (answer := record.qa_approved()) is not None:
+        return answer
     for comment in reversed(comment_list(comments)):
         author = str(comment.get("author") or "").strip().lower()
         text = str(comment.get("text") or "").strip()
@@ -304,7 +307,9 @@ def _branch_items(
     session: Session, company: Company, category: str, publishing_on: bool = False
 ) -> list[dict]:
     items = []
-    for item in _done_tasks(session, company):
+    done = list(_done_tasks(session, company))
+    records = task_projection.records_for(session, done)
+    for item in done:
         run = _task_run(session, company.id, item.id)
         if run is None:
             continue
@@ -318,7 +323,7 @@ def _branch_items(
             target="task",
             task_id=item.id,
             has_branch=bool(git.get("repository")),
-            qa_approved=qa_approved(item.comments),
+            qa_approved=qa_approved(item.comments, records[item.id]),
             publishing_on=publishing_on,
         )
         local = category == "merge_local"
@@ -393,11 +398,14 @@ def _moment(value: Any) -> datetime | None:
     return moment.astimezone(UTC).replace(tzinfo=None) if moment.tzinfo else moment
 
 
-def person_since(comments: Any, since: datetime | None) -> bool:
-    """A person wrote on the task after *since* (or when, cannot be read)."""
+def person_since(comments: Any, since: datetime | None, record: Any = None) -> bool:
+    """A person wrote on the task after *since* (or when, cannot be read), from
+    *record*'s events when they cover the thread (issue #324)."""
     if since is None:
         return True
     since = since.astimezone(UTC).replace(tzinfo=None) if since.tzinfo else since
+    if record is not None and (answer := record.person_since(since)) is not None:
+        return answer
     for comment in comment_list(comments):
         if str(comment.get("author") or "").strip().lower() != "user":
             continue
@@ -440,7 +448,11 @@ def _undo_items(session: Session, company: Company) -> list[dict]:
             task_id=item.id,
             on_branch=bool(report and (report.evidence or {}).get("git")),
             has_snapshot=bool(snapshot and snapshot["undone_at"] is None),
-            person_touched=person_since(item.comments, verification.observed_at),
+            person_touched=person_since(
+                item.comments,
+                verification.observed_at,
+                task_projection.record_of(session, item),
+            ),
         )
         if snapshot is None or snapshot["undone_at"] is not None:
             continue

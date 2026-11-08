@@ -1,0 +1,18 @@
+# Pre-commit hooks: enforce the same gates CI runs, locally, before commit.
+# Install: pip install pre-commit && pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/(app|tests)/.*\.py$
+      - id: ruff-format
+        files: ^backend/(app|tests)/.*\.py$
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: no secrets in diff
+        entry: bash -c 'if git diff --cached --name-only | grep -qE "(^|/)\\.env(\\.|$)"; then echo "Do not commit .env files"; exit 1; fi'
+        language: system
+        pass_filenames: false
