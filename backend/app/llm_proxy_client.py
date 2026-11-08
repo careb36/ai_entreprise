@@ -247,7 +247,7 @@ class LLMProxyClient:
         Returns an empty dict on error so callers can fall back gracefully.
         """
         try:
-            response = requests.get(f"{self.base_url}/v1/models", timeout=10)
+            response = requests.get(f"{self.base_url}/v1/models", timeout=60)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
