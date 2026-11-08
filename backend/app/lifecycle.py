@@ -14,7 +14,7 @@ from llm_proxy_client import LLMProxyClient
 from logging_config import logger
 from memory_client import MemoryClient
 from nats_client import NATSClient
-from services import console_capabilities
+from services import console_capabilities, integration
 from services.agent_worker import process_agent_tasks
 from services.outbox_service import process_outbox
 from services.task_worker import process_backlog_tasks
@@ -79,6 +79,12 @@ async def _connect_nats_and_start_workers(app, client: NATSClient) -> None:
     await _start_workers(app, client)
 
 
+def _engine():
+    from database import engine
+
+    return engine
+
+
 async def _start_workers(app, client: NATSClient) -> None:
     """Start the NATS-dependent background workers, at most once per app."""
     if getattr(app.state, "nats_workers_started", False):
@@ -95,6 +101,8 @@ async def _start_workers(app, client: NATSClient) -> None:
         "outbox_processor": process_outbox(client),
         "agent_worker": process_agent_tasks(client),
         "task_worker": process_backlog_tasks(client),
+        # Sprint integrations the daemon could not take at close (issue #314).
+        "integration_retry": integration.retry_loop(client, _engine()),
     }
     for name, coro in worker_coros.items():
         task = asyncio.create_task(coro, name=name)
