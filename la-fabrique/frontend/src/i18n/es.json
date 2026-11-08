@@ -24,7 +24,9 @@
     "members": "Miembros",
     "github": "GitHub",
     "helpDesk": "Mesa de ayuda",
-    "procedures": "Procedimientos"
+    "procedures": "Procedimientos",
+    "specifications": "Especificaciones",
+    "models": "Modelos"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -493,6 +495,9 @@
     "carriedFrom": "Otro intento de una tarea bloqueada en {{sprint}}:",
     "carriedTo": "Tiene otro intento en {{sprint}}:",
     "taskNumber": "tarea #{{id}}",
+    "taskWithTitle": "tarea #{{id}}: {{title}}",
+    "waitsFor": "Espera a",
+    "dependedOn": "Dependía de",
     "invalidId": "ID de tarea no válido: {{taskId}}.",
     "noSprint": "Selecciona un sprint para buscar la tarea #{{taskId}}.",
     "notFound": "No se encontró la tarea #{{taskId}} en el sprint #{{sprintId}}.",
@@ -575,7 +580,10 @@
     "qaReworksTitle": "Retrabajos de QA: {{count}}/{{limit}}",
     "qaReworks": "Retrabajo QA {{count}}/{{limit}}",
     "qaFailuresTitle": "Fallos de QA: {{count}}/{{limit}}",
-    "qaFailures": "Fallo QA {{count}}/{{limit}}"
+    "qaFailures": "Fallo QA {{count}}/{{limit}}",
+    "waitsFor_one": "Espera a {{count}} tarea",
+    "waitsFor_other": "Espera a {{count}} tareas",
+    "acceptanceTests": "Tests de aceptación"
   },
   "glassroom": {
     "title": "Sala de Cristal",
@@ -1149,7 +1157,9 @@
       "support": "Prioriza modelos rápidos y equilibrados para respuestas claras y una clasificación ágil.",
       "generalist": "Usa un modelo general y equilibrado cuando el rol no requiere claramente un especialista."
     },
-    "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia."
+    "readOnly": "Puedes ver los agentes. Solo un Manager o el Owner los cambia.",
+    "connectionGroup": "Conexión de la empresa: {{connection}}",
+    "connectionModelHint": "Corre por la conexión {{connection}} de la empresa; la clave queda en la empresa."
   },
   "common": {
     "loading": "Cargando...",
@@ -1461,6 +1471,264 @@
       "proposal": "Procedimiento"
     }
   },
+  "specifications": {
+    "title": "Especificaciones",
+    "subtitle": "Lo que los agentes construyen. Cada criterio de aceptación se convierte en una prueba, y un sprint planificado desde una especificación aprobada dice qué tarea cubre cada uno.",
+    "selectCompany": "Elegí una empresa para ver sus especificaciones.",
+    "loading": "Cargando especificaciones…",
+    "loadError": "No se pudieron cargar las especificaciones: {{message}}",
+    "loadingOne": "Cargando la especificación…",
+    "loadOneError": "No se pudo cargar la especificación: {{message}}",
+    "invalidId": "ID de especificación inválido: {{id}}",
+    "back": "Todas las especificaciones",
+    "empty": "Todavía no hay especificaciones",
+    "emptyHint": "Pedile un borrador al PO a partir de una consigna corta, o escribí una vos.",
+    "emptyViewer": "Un Manager le pide un borrador al PO, o escribe una.",
+    "version": "v{{version}}",
+    "status": {
+      "draft": "Borrador",
+      "approved": "Aprobada",
+      "superseded": "Reemplazada"
+    },
+    "draftedBy": "Redactada por {{who}}",
+    "approvedBy": "Aprobada por {{who}} el {{date}}",
+    "supersedes": "Revisión de #{{id}}",
+    "checkSummary": "{{blocking}} bloqueantes · {{warnings}} advertencias",
+    "ready": "Lista para aprobar",
+    "summary": "Resumen",
+    "askPO": "Pedile un borrador al PO",
+    "briefLabel": "Consigna",
+    "briefPlaceholder": "Qué hay que construir, para quién y por qué…",
+    "briefHint": "El PO escribe los requisitos, sus criterios de aceptación y las preguntas que no pudo responder. Tarda un minuto.",
+    "drafting": "El PO está redactando…",
+    "draftError": "El PO no pudo redactarla: {{message}}",
+    "writeYourself": "Escribila vos",
+    "taskCovers": "Cubre",
+    "check": {
+      "title": "Verificación",
+      "ok": "Nada bloquea esta especificación: está lista para aprobar.",
+      "blocking": "Bloqueantes",
+      "warnings": "Advertencias"
+    },
+    "questions": {
+      "title": "Preguntas abiertas",
+      "none": "El PO no dejó preguntas.",
+      "unanswered": "Sin responder",
+      "answered": "Respuesta: {{answer}}",
+      "answer": "Responder",
+      "edit": "Editar respuesta",
+      "answerLabel": "Respuesta a la pregunta {{n}}",
+      "save": "Guardar respuesta",
+      "error": "No se pudo guardar la respuesta: {{message}}"
+    },
+    "requirements": {
+      "title": "Requisitos",
+      "none": "Sin requisitos.",
+      "criteria": "Criterios de aceptación",
+      "criteriaOf": "Criterios de aceptación de {{id}}",
+      "given": "Dado",
+      "when": "Cuando",
+      "then": "Entonces"
+    },
+    "coverage": {
+      "uncovered": "Sin cubrir",
+      "planned": "Planificado",
+      "blocked": "Bloqueado",
+      "done": "Hecho",
+      "summary": "{{covered}} de {{total}} criterios cubiertos, {{done}} hechos",
+      "task": "tarea #{{id}}",
+      "verified": "Verificado",
+      "verifiedSummary": "{{verified}} de {{total}} verificados por un test que pasa",
+      "testPlanned": "Test planificado",
+      "testTask": "tests #{{id}}",
+      "testResult": {
+        "pass": "Test pasó",
+        "fail": "Test falla",
+        "missing": "Test no corrió"
+      }
+    },
+    "quality": {
+      "title": "Atributos de calidad",
+      "none": "Sin atributos de calidad.",
+      "attribute": "Atributo",
+      "target": "Meta",
+      "targetIs": "Meta: {{target}}"
+    },
+    "constraints": {
+      "title": "Restricciones",
+      "none": "Sin restricciones."
+    },
+    "actions": {
+      "title": "Acciones",
+      "edit": "Editar",
+      "revise": "Revisar",
+      "reviseHint": "Una nueva versión en borrador; esta sigue aprobada hasta que se apruebe la nueva.",
+      "reviseError": "No se pudo iniciar la revisión: {{message}}",
+      "revisePO": "Pedile al PO que la revise",
+      "reviseBrief": "Qué debería cambiar",
+      "sendToPO": "Enviar al PO",
+      "answerFirst_one": "Queda {{count}} pregunta sin responder: si la respondés primero, la revisión sale mejor.",
+      "answerFirst_other": "Quedan {{count}} preguntas sin responder: si las respondés primero, la revisión sale mejor.",
+      "approve": "Aprobar",
+      "approveBlocked": "Corregí primero los hallazgos bloqueantes.",
+      "approveError": "No se pudo aprobar: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Editor de especificación",
+      "newTitle": "Nueva especificación",
+      "idsNote": "Los ids (REQ-1, REQ-1.1, NFR-1) se asignan al guardar.",
+      "title": "Título",
+      "summary": "Resumen",
+      "requirements": "Requisitos",
+      "requirement": "Requisito {{n}}",
+      "requirementTitle": "Título",
+      "requirementTitleOf": "Título del requisito {{n}}",
+      "description": "Descripción",
+      "descriptionOf": "Descripción del requisito {{n}}",
+      "criterionField": "{{field}} del criterio {{r}}.{{n}}",
+      "addRequirement": "Agregar un requisito",
+      "removeRequirement": "Quitar el requisito {{n}}",
+      "addCriterion": "Agregar un criterio",
+      "removeCriterion": "Quitar el criterio {{r}}.{{n}}",
+      "quality": "Atributos de calidad",
+      "qualityHint": "Cada meta lleva un número, para que se pueda medir.",
+      "attributeOf": "Atributo {{n}}",
+      "targetOf": "Meta del atributo {{n}}",
+      "addQuality": "Agregar un atributo de calidad",
+      "removeQuality": "Quitar el atributo {{n}}",
+      "constraints": "Restricciones",
+      "constraintOf": "Restricción {{n}}",
+      "addConstraint": "Agregar una restricción",
+      "removeConstraint": "Quitar la restricción {{n}}",
+      "incomplete": "Cada requisito necesita un título y criterios completos.",
+      "save": "Guardar",
+      "saving": "Guardando…"
+    },
+    "plan": {
+      "label": "Planificar desde una especificación",
+      "none": "Ninguna: planificar desde el objetivo",
+      "option": "{{title}} (v{{version}})",
+      "goalPlaceholder": "La especificación es el objetivo; si querés, agregá una nota para el PO.",
+      "covers": "Cubre",
+      "after": "Después de: {{titles}}",
+      "uncovered_one": "{{count}} criterio queda sin cubrir: {{ids}}. El sprint igual puede empezar.",
+      "uncovered_other": "{{count}} criterios quedan sin cubrir: {{ids}}. El sprint igual puede empezar."
+    }
+  },
+  "architectures": {
+    "title": "Arquitectura",
+    "loading": "Cargando la arquitectura…",
+    "loadError": "No se pudo cargar la arquitectura: {{message}}",
+    "loadingOne": "Cargando la arquitectura…",
+    "loadOneError": "No se pudo cargar la arquitectura: {{message}}",
+    "invalidId": "ID de arquitectura inválido: {{id}}",
+    "back": "Volver a la especificación",
+    "managerOnly": "Solo un Manager escribe una arquitectura.",
+    "noneHint": "Todavía no hay arquitectura. Pedile un diseño al Arquitecto a partir de esta especificación, o escribila vos.",
+    "noneViewer": "Todavía no hay arquitectura. Un Manager le pide un diseño al Arquitecto, o escribe una.",
+    "askArchitect": "Pedile un diseño al Arquitecto",
+    "writeYourself": "Escribila vos",
+    "drafting": "El Arquitecto está diseñando…",
+    "draftError": "El Arquitecto no pudo diseñarla: {{message}}",
+    "overview": "Panorama",
+    "writtenTo": "Escrita en {{path}} el {{date}}, sha256 {{hash}}",
+    "check": {
+      "ok": "Nada bloquea esta arquitectura: está lista para aprobar."
+    },
+    "questions": {
+      "none": "El Arquitecto no dejó preguntas."
+    },
+    "kinds": {
+      "http": "HTTP",
+      "function": "Función",
+      "event": "Evento",
+      "cli": "CLI",
+      "schema": "Esquema",
+      "other": "Otro"
+    },
+    "modules": {
+      "title": "Módulos",
+      "none": "Sin módulos.",
+      "dependsOn": "Depende de",
+      "covers": "Cubre"
+    },
+    "interfaces": {
+      "title": "Interfaces",
+      "none": "Sin interfaces.",
+      "providedBy": "Provista por",
+      "consumers": "Consumida por"
+    },
+    "decisions": {
+      "title": "Decisiones",
+      "none": "Sin decisiones.",
+      "context": "Contexto",
+      "decision": "Decisión",
+      "consequences": "Consecuencias"
+    },
+    "conventions": {
+      "title": "Convenciones",
+      "none": "Sin convenciones."
+    },
+    "markdown": {
+      "title": "Documento",
+      "view": "Ver como Markdown",
+      "loading": "Cargando el documento…",
+      "error": "No se pudo cargar el documento: {{message}}"
+    },
+    "actions": {
+      "reviseArchitect": "Pedile al Arquitecto que la revise",
+      "reviseHint": "Una nueva versión en borrador; esta sigue aprobada hasta que se apruebe la nueva.",
+      "write": "Escribir en el repositorio",
+      "writing": "Escribiendo…",
+      "written": "Escrita en {{path}}, sha256 {{hash}}",
+      "writeError": "No se pudo escribir: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Editor de arquitectura",
+      "newTitle": "Nueva arquitectura",
+      "idsNote": "Los ids (MOD-1, IF-1, ADR-1) se asignan al guardar; acá los módulos se nombran y los nombres se convierten en ids.",
+      "title": "Título",
+      "overview": "Panorama",
+      "module": "Módulo {{n}}",
+      "moduleName": "Nombre",
+      "moduleNameOf": "Nombre del módulo {{n}}",
+      "modulePath": "Ruta",
+      "modulePathOf": "Ruta del módulo {{n}}",
+      "responsibility": "Responsabilidad",
+      "responsibilityOf": "Responsabilidad del módulo {{n}}",
+      "dependsOn": "Depende de",
+      "dependsOnItem": "El módulo {{n}} depende de {{name}}",
+      "covers": "Cubre",
+      "coversItem": "El módulo {{n}} cubre {{id}}",
+      "addModule": "Agregar un módulo",
+      "removeModule": "Quitar el módulo {{n}}",
+      "nothingToPick": "Todavía no hay nada para elegir.",
+      "interface": "Interfaz {{n}}",
+      "interfaceName": "Nombre",
+      "interfaceNameOf": "Nombre de la interfaz {{n}}",
+      "kind": "Tipo",
+      "kindOf": "Tipo de la interfaz {{n}}",
+      "providedBy": "Provista por",
+      "providedByOf": "Módulo que provee la interfaz {{n}}",
+      "pickModule": "Elegí un módulo…",
+      "contract": "Contrato",
+      "contractOf": "Contrato de la interfaz {{n}}",
+      "consumers": "Consumida por",
+      "consumersItem": "La interfaz {{n}} es consumida por {{name}}",
+      "addInterface": "Agregar una interfaz",
+      "removeInterface": "Quitar la interfaz {{n}}",
+      "decision": "Decisión {{n}}",
+      "decisionTitle": "Título",
+      "decisionTitleOf": "Título de la decisión {{n}}",
+      "decisionField": "{{field}} de la decisión {{n}}",
+      "addDecision": "Agregar una decisión",
+      "removeDecision": "Quitar la decisión {{n}}",
+      "conventionOf": "Convención {{n}}",
+      "addConvention": "Agregar una convención",
+      "removeConvention": "Quitar la convención {{n}}",
+      "incomplete": "Cada módulo necesita un nombre y una ruta, cada interfaz un nombre y su módulo, cada decisión un título."
+    }
+  },
   "procedures": {
     "title": "Procedimientos",
     "subtitle": "Las reglas que sigue cada rol. El ScrumMaster las propone después de un sprint con rework; los números del tablero las mantienen o las revierten.",
@@ -1549,6 +1817,196 @@
     },
     "startNow": "Iniciar el Sprint 0 apenas se cree la compañía",
     "startNowHint": "Dejalo sin marcar para revisar el plan primero e iniciarlo desde la página del sprint.",
-    "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos."
+    "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos.",
+    "git": "Rama de Git por tarea",
+    "gitHint": "Las entregas de cada tarea son commits en su propia rama, fabrique/task-<id>, en un worktree: tu checkout, tu índice y tu rama nunca se tocan."
+  },
+  "review": {
+    "tabs": {
+      "overview": "Resumen",
+      "files": "Archivos modificados",
+      "label": "Secciones de la corrida"
+    },
+    "loading": "Cargando los archivos modificados",
+    "loadError": "No se pudieron cargar los archivos que cambió esta corrida.",
+    "summary_one": "{{count}} archivo modificado",
+    "summary_other": "{{count}} archivos modificados",
+    "sourceWorkspace": "Observado por el daemon del workspace al escribir los archivos (verificación #{{id}}): los bytes de antes y de después, nunca lo que cuenta el agente.",
+    "sourcePullRequest": "El diff del pull request, tal como lo devolvió GitHub.",
+    "sourceArtifact": "El diff que el productor mandó como artefacto: lo que propone, no un cambio observado en un disco.",
+    "nothingObserved": "No se observó ningún cambio en esta corrida.",
+    "declaredNotObserved": "Declarado por el productor, pero ninguna observación lo cubre: {{files}}",
+    "fileList": "Archivos de esta revisión",
+    "filesNotShown_one": "No se muestra {{count}} archivo más.",
+    "filesNotShown_other": "No se muestran {{count}} archivos más.",
+    "viewed": "Visto",
+    "expand": "Mostrar los cambios del archivo",
+    "collapse": "Ocultar los cambios del archivo",
+    "showAllLines_one": "Mostrar la {{count}} línea",
+    "showAllLines_other": "Mostrar las {{count}} líneas",
+    "unchanged": "Sin cambios: el archivo ya tenía exactamente estos bytes.",
+    "notWritten": "No se escribió ({{status}}).",
+    "noHunks": "No cambió ninguna línea.",
+    "omitted": {
+      "binary": "Archivo binario: no se muestra el diff.",
+      "too_large": "El archivo es demasiado grande para mostrar su diff.",
+      "reply_size": "El diff quedó afuera para que la respuesta del daemon no pase su límite de tamaño; los conteos son igualmente del daemon.",
+      "not_recorded": "Entregado antes de que el daemon informara diffs: el archivo se escribió, pero no quedó registrado qué cambió."
+    },
+    "change": {
+      "added": "Agregado",
+      "modified": "Modificado",
+      "deleted": "Eliminado",
+      "renamed": "Renombrado",
+      "unchanged": "Sin cambios",
+      "not_written": "No escrito",
+      "unknown": "Escrito"
+    },
+    "comment": {
+      "add": "Comentar la línea {{line}}",
+      "label": "Tu comentario en la línea {{line}}",
+      "submit": "Comentar",
+      "pending": "Espera la revisión",
+      "resolved": "Resuelto",
+      "resolve": "Resolver",
+      "inReview": "En la revisión #{{id}}",
+      "elsewhere": "Comentarios en líneas que este diff no muestra",
+      "on": {
+        "github": "en GitHub",
+        "gitlab": "en GitLab"
+      },
+      "state": {
+        "CHANGES_REQUESTED": "Pidió cambios",
+        "APPROVED": "Aprobó",
+        "COMMENTED": "Comentó",
+        "DISMISSED": "Descartada"
+      }
+    },
+    "panel": {
+      "title": "Revisión",
+      "history": "Revisiones enviadas",
+      "bodyLabel": "Dejá un comentario para toda la revisión",
+      "decision": "Decisión",
+      "submit": "Enviar revisión",
+      "pendingComments_one": "{{count}} comentario de línea va con esta revisión",
+      "pendingComments_other": "{{count}} comentarios de línea van con esta revisión",
+      "none": "Todavía no hay revisiones.",
+      "hint": {
+        "comment": "Registra la revisión y sus comentarios; no cambia nada más.",
+        "approve": "En una tarea que entregaron los agentes: acepta una entrega que QA aprobó y que espera a una persona. En el run de otro productor: registra la aprobación.",
+        "request_changes": "En una tarea que entregaron los agentes: la devuelve al trabajo, con este texto y los comentarios de línea como lo que hay que cambiar. En el run de otro productor: registra el rechazo."
+      }
+    },
+    "event": {
+      "comment": "Comentar",
+      "approve": "Aprobar",
+      "request_changes": "Pedir cambios"
+    },
+    "outcome": {
+      "recorded": "Registrada.",
+      "sent_back": "La tarea volvió al trabajo con los comentarios.",
+      "accepted": "La entrega quedó aceptada y la tarea, terminada.",
+      "approval_recorded": "La decisión quedó registrada en el run."
+    },
+    "gitCommit": "En la rama {{branch}}, commit {{commit}} (sobre {{parent}})",
+    "gitNoCommit": "En la rama {{branch}}: sin commit nuevo, no cambió nada",
+    "publish": {
+      "title": "Publicar la rama",
+      "button": "Publicar como pull request",
+      "again": "Publicar de nuevo",
+      "hint": "Sube {{branch}} a origin con las credenciales de Git de esta computadora y abre una pull request (gh) o merge request (glab) en borrador; sin ellas, da la página para abrirla. La descripción lleva la evidencia de esta ejecución.",
+      "pushed": "{{name}} subió {{commit}} en {{branch}} → {{base}}",
+      "how": {
+        "gh": "Pull request en borrador",
+        "glab": "Merge request en borrador",
+        "compare": "Abrir la solicitud"
+      },
+      "noUrl": "Subida; este remoto no tiene página web para abrir una solicitud",
+      "updated": "descripción actualizada con esta ejecución",
+      "sync": "Traer comentarios",
+      "synced": "{{added}} nuevos, {{updated}} actualizados",
+      "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
+      "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
+    }
+  },
+  "standards": {
+    "title": "Estándares de calidad",
+    "subtitle": "A qué se atiene la fábrica en cada proyecto, por disciplina. Obligan a todos los roles antes de cualquier tarea; un procedimiento los amplía, nunca los relaja. Los marcados como verificados se comprueban sin un modelo.",
+    "loading": "Cargando los estándares…",
+    "loadError": "No se pudieron cargar los estándares: {{message}}",
+    "checked": "Verificado",
+    "checkedBy": "Verificado: {{how}}.",
+    "areas": {
+      "architecture": "Arquitectura",
+      "development": "Desarrollo",
+      "qa": "QA",
+      "security": "Seguridad",
+      "audit": "Evidencia y auditoría",
+      "documentation": "Documentación",
+      "operations": "Operaciones",
+      "product": "Producto"
+    }
+  },
+  "sources": {
+    "title_one": "{{count}} fuente consultada",
+    "title_other": "{{count}} fuentes consultadas",
+    "hint": "Lo que el agente leyó al redactar, registrado por el backend: la página, cuándo, el estado y el hash de lo que volvió. Lo que concluyó es su afirmación.",
+    "fetched": "{{status}} · {{hash}} · {{date}}",
+    "failed": "falló ({{status}})",
+    "refused": "rechazada: {{host}} no está en la lista de fuentes de la compañía"
+  },
+  "models": {
+    "title": "Modelos",
+    "subtitle": "Los proveedores a los que llegan los agentes de tu empresa y los modelos con los que corren. El modelo propio de un agente, en la página Agentes, sigue teniendo prioridad.",
+    "noCompany": "Elegí una empresa primero.",
+    "connections": {
+      "title": "Conexiones con proveedores",
+      "subtitle": "Conectá los proveedores que usan tus agentes, con la clave de tu empresa. Validar lista los modelos del proveedor con la clave y no gasta tokens.",
+      "none": "Todavía no hay proveedores conectados.",
+      "off": "apagada",
+      "validate": "Validar",
+      "turnOff": "Apagar",
+      "turnOn": "Encender",
+      "removeNamed": "Quitar {{name}}",
+      "confirmRemove": "¿Quitar la conexión {{name}}? Los agentes y las elecciones de modelo que usan sus modelos van a fallar hasta que les elijas otro modelo.",
+      "validated_one": "Validada: el proveedor listó {{count}} modelo",
+      "validated_other": "Validada: el proveedor listó {{count}} modelos",
+      "failed": "La validación falló: {{detail}}",
+      "notValidated": "Todavía sin validar",
+      "add": "Conectar un proveedor",
+      "provider": "Proveedor",
+      "providerPlaceholder": "deepseek, openrouter, ollama…",
+      "openaiCompatible": "Cualquier endpoint compatible con OpenAI",
+      "name": "Nombre",
+      "namePlaceholder": "por defecto, el del proveedor",
+      "baseUrl": "URL base",
+      "baseUrlPlaceholder": "obligatoria para un endpoint compatible con OpenAI",
+      "apiKey": "Clave de API",
+      "keyNote": "La clave se guarda cifrada y no se vuelve a mostrar. Los servidores locales (Ollama, LM Studio, vLLM) no necesitan clave.",
+      "connect": "Conectar"
+    },
+    "choices": {
+      "title": "Modelos por rol",
+      "subtitle": "El modelo con el que corre cada rol cuando su agente no tiene uno propio. Si acá no se elige nada, se usa la configuración de la instalación.",
+      "useSuggestions": "Usar las sugerencias",
+      "noConnections": "Conectá y validá un proveedor para elegir entre sus modelos.",
+      "default": "Modelo por defecto de la empresa",
+      "deploymentDefault": "El de la instalación",
+      "companyDefault": "El de la empresa",
+      "role": "Rol",
+      "model": "Modelo",
+      "runs": "Corre ahora con",
+      "suggested": "Sugerido: {{model}}",
+      "suggestedGroup": "Sugeridos",
+      "others": "Otros",
+      "current": "Actual",
+      "saved": "Guardado.",
+      "source": {
+        "role": "elegido para este rol",
+        "company": "el de la empresa",
+        "deployment": "el de la instalación"
+      },
+      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
+    }
   }
 }

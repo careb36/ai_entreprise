@@ -102,9 +102,7 @@ import {
   MAX_MESSAGES,
 } from '../lib/constants'
 
-import { API_BASE } from '../lib/apiBase'
-
-const BACKEND_URL = API_BASE
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const RECONNECT_DELAY_MS     = SSE_RECONNECT_DELAY_MS
 const MAX_RECONNECT_ATTEMPTS = SSE_MAX_RECONNECT_ATTEMPTS
 const MAX_RECONNECT_DELAY_MS = SSE_MAX_RECONNECT_DELAY_MS

@@ -29,14 +29,8 @@ COPY llm/     /app/llm/
 COPY agents/  /app/agents/
 COPY memory/  /app/memory/
 COPY telemetry.py /app/telemetry.py
-
-# Run as an unprivileged user, never as root: a flaw in the app then cannot
-# rewrite the image or reach what root reaches on a shared volume.
-RUN useradd --create-home --uid 1000 --user-group app
-# The audit log volume (factory-logs) and the generated builds are written at
-# run time; a named volume mounted on an existing directory takes its owner.
-RUN mkdir -p /app/.factory/logs /workspace/builds && chown -R app:app /app/.factory /workspace
-USER app
+COPY alembic.ini /app/alembic.ini
+COPY alembic/  /app/alembic/
 
 EXPOSE 8000
 
@@ -44,4 +38,6 @@ EXPOSE 8000
 # /app/app  — FastAPI application package (routers, models, services, …)
 ENV PYTHONPATH="/app:/app/app"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# The schema first: the migrations to head (backend/alembic/), then the app,
+# which refuses a database behind head.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

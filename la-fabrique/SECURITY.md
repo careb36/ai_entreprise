@@ -1,25 +1,21 @@
 # SECURITY.md — La Fabrique Multi-Agent Platform
 
 **Version:** 1.0
-**Owner:** the project maintainer
-**Applies to:** FastAPI control plane, React/Vite frontend, LangGraph agents, PostgreSQL, Neo4j, the Docker Compose stack and the sample Kubernetes manifest in `deployment/k8s/`
-**Last reviewed:** October 2026
+**Owner:** Security Engineering
+**Applies to:** FastAPI control plane, React/Vite frontend, LangGraph agents, PostgreSQL, Neo4j, Kubernetes deployments
+**Last reviewed:** Sprint 0 — Foundations
 
 ---
 
 ## 1. Purpose and Scope
 
-This document defines the security requirements, secure coding rules, and review process for the La Fabrique multi-agent orchestration platform. It applies to pull requests that touch:
+This document defines the security requirements, secure coding rules, and review process for the La Fabrique multi-agent orchestration platform. It is binding for all agents, services, and pull requests that touch:
 
 - FastAPI APIs and middleware
 - React/Vite frontend and static asset delivery
 - LangGraph agent graphs, prompts, and tool definitions
 - PostgreSQL and Neo4j persistence layers
-- Kubernetes manifests, container images, and CI/CD pipelines
-
-Sections 3, 4.2, 4.3, 5.2, 5.4, 6.1 and 8.3 describe what the code in this
-repository does today. The other rules are the standard a deployment or a pull
-request is reviewed against.
+- Kubernetes manifests, Helm charts, container images, and CI/CD pipelines
 
 The goal is to ensure the platform is secure by default, auditable, and resilient against both classic web/API attacks and LLM-specific risks such as prompt injection and tool-call abuse.
 
@@ -48,61 +44,34 @@ Reference frameworks:
 
 ## 3. Authentication and Authorization
 
-### 3.1 Identity
+### 3.1 Identity Provider
 
-- Accounts are local to the backend. `POST /v1/auth/register` stores a bcrypt
-  hash (`backend/app/passwords.py`); `POST /v1/auth/login` returns an HS256 JWT
-  signed with `JWT_SECRET_KEY` and valid for `ACCESS_TOKEN_EXPIRE_MINUTES`
-  (60 by default). Until `JWT_SECRET_KEY` is set, login answers 503. There is
-  no external identity provider and no refresh token.
-- Every route is rate-limited per client address (`RATE_LIMIT_DEFAULT`,
-  `300/minute` by default; health, metrics and the Glassroom stream are exempt),
-  and registration, login and the desktop key exchange more tightly
-  (`AUTH_RATE_LIMIT`, `10/minute` by default).
-- Security headers are set on every response, the 500 handler's included;
-  `SECURITY_HEADERS_ENABLED=false` turns them off for a reverse proxy that sets
-  them itself.
-- The desktop launcher never puts a session token in a URL. With the voice key
-  it asks `POST /v1/auth/desktop/handoff` for a single-use code that expires in
-  60 seconds; the React app trades it once at `POST /v1/auth/desktop/redeem`.
-  The session it gets belongs to a desktop operator account on the reserved
-  `@fabrica.local` domain (registration refuses that domain), which is an Owner
-  only of the company the voice key reaches.
+- Use **OIDC/OAuth 2.1** with a trusted IdP for all human users.
+- Frontend uses **Authorization Code with PKCE** for SPAs. Never use implicit flow.
+- Backend validates JWT access tokens on every request. Accept only tokens signed by the configured IdP and with correct `iss`, `aud`, `exp`, `nbf`.
+- Short-lived access tokens: **≤ 15 minutes**.
+- Refresh tokens are server-side, rotated on use, and bound to the client.
 
 ### 3.2 API Authorization
 
-- `AUTH_REQUIRED` is `true` by default (`backend/app/config.py`). Protected
-  routes then require a bearer JWT, and company roles rank Owner > Manager >
-  Viewer (`backend/app/auth_policy.py`), checked server-side by each route.
-  Setting `AUTH_REQUIRED=false` is meant only for a local demo without a login.
-- Public routes: `/health`, `/health/deep`, `/metrics`, registration and login,
-  the HMAC-signed GitHub webhook, support bug reporting and chat, `/v1/models`,
-  `/v1/capabilities` (feature flags only), the retired `/v1/approve_task` (410)
-  and the generated project previews under `/v1/voice/build/`.
-- The Glassroom SSE stream cannot carry an Authorization header; with
-  authentication required it takes a five-minute ticket for one sprint from
-  `POST /v1/sprints/{id}/stream_ticket`, and re-checks membership when used.
-- `/v1/voice/*` accepts the `X-Voice-Key` shared secret (`VOICE_API_KEY`) or a
-  user's JWT. With no key configured and `AUTH_REQUIRED` on, it answers 503
-  rather than opening anonymously. A sprint created by voice starts paused and
-  runs only when the person asks to resume it.
+- Enforce **RBAC/ReBAC** at the FastAPI layer.
+- Define roles: `admin`, `operator`, `agent-developer`, `viewer`.
+- Use a **deny-by-default** policy: no endpoint is public unless explicitly declared.
+- Route-level authorization must be enforced by middleware or dependencies, not only in UI.
+- Each LangGraph agent run must inherit the caller’s identity and permissions. Never let an agent perform actions the calling user cannot perform.
+- Service-to-service calls use **mTLS** or a hardened service mesh identity. Do not share user tokens between services.
 
 ### 3.3 Frontend Exposure
 
-- Frontend route guards are UX only; authorization is enforced by the backend.
-- The React app keeps the access token in `localStorage` (the persisted auth
-  store, `fabrique-auth-storage`) and discards it once it expires.
-- The backend sets these headers on every response (`backend/app/security.py`):
-  - `Content-Security-Policy: default-src 'self'` (the `/docs` and `/redoc`
-    pages also allow `cdn.jsdelivr.net` and `'unsafe-inline'`)
-  - `X-Frame-Options: DENY`, replaced by a `frame-ancestors` list when
-    `FRAME_ANCESTORS` names the desktop panel's origin
+- Protect all frontend routes with authentication guards; that is UX only, not security.
+- Store tokens in **memory only** or secure, `HttpOnly`, `SameSite=Lax/Strict` cookies. Never in `localStorage` or `sessionStorage`.
+- Configure Vite and ingress with:
+  - `Content-Security-Policy` without `unsafe-inline` for scripts
   - `X-Content-Type-Options: nosniff`
-  - `Referrer-Policy: strict-origin-when-cross-origin`
-  - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
-  - `Strict-Transport-Security` and `X-XSS-Protection`
-- CORS allows the origins in `CORS_ORIGINS` (default
-  `http://localhost:5173,http://localhost:3000`) with credentials.
+  - `Referrer-Policy: no-referrer`
+  - `Permissions-Policy` limited to required features
+  - `Cross-Origin-Opener-Policy: same-origin`
+- CORS: allow only known frontend origins. Never use `*` with credentials.
 - Build-time environment variables must **not** contain secrets. They are embedded in the bundle.
 
 ---
@@ -121,14 +90,13 @@ Reference frameworks:
 
 ### 4.2 Development
 
-- `.env` and `.env.*` are ignored by git (`.gitignore`) and must never be committed; `.env.example` holds placeholders only.
-- Secrets reach the containers as environment variables from `.env` (`${POSTGRES_PASSWORD}` and the like in `docker-compose.yml`).
-- `FERNET_SECRET_KEY` encrypts stored project credentials; without it they are stored with a `plaintext:` prefix and the backend warns at startup. `AUDIT_SIGNING_KEY` signs audit rows and keys each company's audit hash chain; without it rows carry an `unsigned:` prefix.
+- `.env` files are ignored by git and must never be committed.
+- Use a pre-commit hook and CI check for secrets: `gitleaks`, `trufflehog`, or `detect-secrets`.
+- Example placeholders: `${DB_PASSWORD}` from secret manager. No default fallback in production.
 
 ### 4.3 Detection
 
-- `.github/workflows/security-baseline.yml` runs `gitleaks` over the full history (configured by `.gitleaks.toml`) every Monday and on demand.
-- `.github/workflows/security-scan.yml` runs a Trivy filesystem scan on pull requests into `main` and weekly.
+- CI scans all PRs for secrets and high-entropy strings.
 - Alerts on secret exposure trigger the incident response process.
 
 ---
@@ -145,16 +113,13 @@ Reference frameworks:
 
 ### 5.2 Scanning
 
-- On pull requests into `main`, `security-scan.yml` runs `trivy fs` over the
-  repository and a `safety check` of the backend's Python dependencies (the
-  latter reports without failing the job).
-- `security-baseline.yml` adds Semgrep and another Trivy filesystem scan, weekly
-  and on demand.
-- `docker-build.yml` builds the five images on pull requests into `main` and
-  smoke-tests the backend, LLM proxy and daemon images.
-- The SLSA workflow builds the backend, frontend and LLM proxy images on a
-  release and generates provenance for their tarballs.
-- Dependabot (`.github/dependabot.yml`) opens weekly grouped updates.
+- CI must run on every PR:
+  - `pip-audit` or `pipenv check` for Python
+  - `npm audit --omit=dev` for Node
+  - `trivy fs` or `grype` for OS and language packages
+- Container images scanned with `trivy image` or `grype` before push and before deploy.
+- Generate an **SBOM** for each production image (CycloneDX/SPDX).
+- Dependency update automation: Renovate or Dependabot enabled with security updates.
 
 ### 5.3 Supply Chain
 
@@ -163,20 +128,55 @@ Reference frameworks:
 - Build from pinned, minimal base images. Do not pull `latest` base images.
 - Restrict CI/CD pipeline permissions. Approval required for changes to `.github/workflows` or deploy files.
 
-### 5.4 Advisories
+### 5.4 Open advisories and their triage
 
-`npm audit --omit=dev`, the surface a browser actually receives, reports no
-known vulnerabilities. React Router 7, Vite 8, Vitest 5 and Electron 45 are
-the versions in use.
+Dependabot reports 64 open alerts on `main`. That number mixes what reaches a
+browser with what only runs on a build machine, so it is worth separating:
 
-Build and lint tooling carries one moderate advisory, GHSA-g3hv-75wg-m249
-(`minimatch`, denial of service through crafted glob patterns), reached only
-through `eslint`, `typescript-eslint` and `electron-builder`. Those run on a
-developer's or CI machine against the repository's own patterns; none of them
-is in the `dist/` bundle the frontend ships.
+| Surface | Advisories | Manifest |
+|---|---|---|
+| Shipped to the browser | 1 (`react-router`, moderate) | `frontend/package-lock.json` |
+| Build and test only | 62 — 2 critical, 15 high, 35 medium, 10 low | `frontend/package-lock.json` |
+| Test tooling | 1 (`pytest`, medium) | `backend/poetry.lock` |
 
-`pip-audit` over `backend/poetry.lock` and the LLM proxy's lock reports nothing.
-Each `ignore` in `.github/dependabot.yml` carries its reason next to it.
+`npm audit --omit=dev`, which is the surface a user actually receives, returns
+two entries for a single advisory.
+
+**Build-only.** `vitest` and its worker pool `tinypool` (the two criticals),
+`vite`, `esbuild`, `electron` and `extract-zip` do not appear in the `dist/`
+bundle: the frontend is a Vite SPA built to static assets. The `frontend`
+service in `docker-compose.yml` runs the Vite dev server with bind mounts — it
+is a development container, not a deployment artifact, and it is the only place
+where these packages execute. They matter for a compromised build agent, not for
+a visitor.
+
+**`react-router` — GHSA-wrjc-x8rr-h8h6 (open redirect via a backslash in
+`<Link>` / `useNavigate`) and GHSA-337j-9hxr-rhxg (constructor injection in
+`deserializeErrors()`).** Neither is fixed inside v6; both are patched in
+`react-router-dom` 7.18.5, a major migration.
+
+- The `deserializeErrors()` advisory requires **SSR hydration**. This frontend
+  mounts with `createRoot`; there is no `hydrateRoot` and no `renderToString`,
+  so the vulnerable path does not exist here.
+- The open-redirect advisory needs a user-controlled destination reaching
+  `<Link>` or `useNavigate`. Every such call site — `Login`, `Register`,
+  `CompanySelect` — passes through `safeReturnPath()` in
+  `frontend/src/lib/returnPath.ts`, which accepts only a path starting with a
+  single `/` and rejects `//`, `/\`, any backslash, control characters, their
+  percent-encoded forms, and the auth-loop paths. Ten unit tests cover it, and
+  the advisory's own vector, a backslash, is one of the rejected cases.
+
+That is a compensating control, not a fix: the v7 migration stays on the
+roadmap.
+
+**`pytest` — GHSA-6w46-j5rx-g56g (temporary directory handling).** Patched in
+9.0.3, and the pin is `^8.1.1`. This one is worth taking: it is test tooling
+only.
+
+**Why the majors are not taken blind.** `vite` 5→8, `vitest` 3→5, `electron`
+→45 and `react-router` 6→7 each change APIs the build depends on. Each `ignore`
+in `.github/dependabot.yml` carries its reason next to it, so an upgrade is a
+planned piece of work with its own tests instead of a red PR every Monday.
 
 ---
 
@@ -184,15 +184,12 @@ Each `ignore` in `.github/dependabot.yml` carries its reason next to it.
 
 ### 6.1 Container Images
 
-- The backend, janitor and LLM proxy images build from `python:3.12-slim` and
-  run as a non-root `app` user (UID 1000); the frontend image builds from
-  `node:26-alpine` and runs as `node`.
-- The optional Linux daemon container (`--profile docker-daemon`) runs as
-  `DAEMON_UID:DAEMON_GID` (1000 by default) and mounts `PROJECTS_ROOT`, because
-  its job is to write into the user's projects.
-- Every port `docker-compose.yml` publishes binds to `BIND_ADDRESS` (NATS to
-  `NATS_BIND`), both `127.0.0.1` by default.
-- No service mounts `docker.sock`.
+- Use **distroless** or minimal Alpine images. No shells, compilers, or debug tools in production.
+- Run as **non-root** user with a fixed UID, ideally > 10000.
+- Set `readOnlyRootFilesystem: true` except for volumes.
+- Drop all Linux capabilities; add only explicitly required ones.
+- Define `resources.requests` and `resources.limits`.
+- Avoid mounting `docker.sock` or host paths.
 
 ### 6.2 Kubernetes Deployments
 
@@ -269,28 +266,49 @@ Core rules:
 - For tools that modify state, require idempotency keys and maintain an audit trail.
 - Never expose raw database connection or Kubernetes API as a tool.
 
-### 8.3 Workspace Command Execution
+### 8.3 Workspace Command Execution — a Known Limitation
 
-`vscode-daemon/daemon.py` runs workspace commands through the host shell, with
-the privileges of the person who started it. It is not a sandbox, and it keeps
-no command blocklist: a blocklist screens a string and cannot fence a process
-(`rm -rf`, `rm -r -f` and `rm --recursive --force` are one intent spelled three
-ways).
+`vscode-daemon/daemon.py` runs workspace commands through the host shell
+(`subprocess.run(_build_shell_command(command), shell=...)`, `daemon.py:270`).
+There is **no sandbox** and **no command blocklist** under it.
+
+The missing blocklist is deliberate. A blocklist screens a string; it cannot
+fence a process. `rm -rf` and `rm  -rf` (two spaces), `rm -r -f` (split flags)
+and `rm --recursive --force` are the same intent with different spellings, so
+any list that catches the first three misses the fourth, while blocking the
+benign `touch rm-rf-notes.txt`. DeepCode reached the same conclusion and wrote
+it down in `core/harness/command_guard.py`:
+
+> A blocklist can never be a security boundary; the sandbox is. But if we keep a
+> blocklist at all, it should honestly catch what it *claims* to, rather than
+> offering a false sense of coverage.
+
+That project ships a sandbox (seatbelt on macOS, bwrap on Linux) as the actual
+boundary and keeps its screened blocklist as a shallow first pass in front of
+it. **We have neither.** Adding the blocklist without the sandbox would buy the
+false sense of coverage and nothing else, so the gap stays visible here instead.
+
+What this means today, and what it does not:
 
 - The daemon is **host-side, by design** (`./scripts/start-daemon.sh`, not in
-  Docker), so a workspace command runs as the developer who started it.
+  Docker), so a workspace command runs with the privileges of the developer who
+  started it. An agent that emits `curl … | sh` gets a shell on that machine.
 - The commands the pipeline runs on its own are **not** model output:
-  `_detect_test_command` in `backend/app/services/task_worker.py` derives the
-  test command from repository markers (`package.json`, `pytest.ini`,
+  `_detect_test_command` in `backend/app/services/task_worker.py:1901` derives
+  the test command from repository markers (`package.json`, `pytest.ini`,
   `pyproject.toml`, a `tests/` folder) or from `DELIVERY_TEST_COMMAND`. No LLM
   picks it, so prompt injection cannot reach that string.
-- The subjects the daemon accepts are a fixed list (six `workspace.*` request
-  subjects and the JetStream delivery queue, whose names `NATS_NAMESPACE` can
-  scope), and NATS binds to `127.0.0.1` by default (`NATS_BIND`).
+- The exposure is a **human or agent** invoking `workspace.execute` with an
+  arbitrary command, and the mitigations are the ones already in place: the
+  daemon listens on NATS with a scoped namespace, and the subjects it accepts
+  are a fixed list.
 
-Treat `workspace.execute` as privileged: connect the daemon only to brokers you
-trust, and do not point it at a workspace whose commands you would not run
-yourself.
+Tracked as a limitation, not a fixed issue. Closing it means running the
+workspace inside a container or a kernel sandbox with the project bind-mounted
+and egress restricted — a change to how the daemon is deployed, not a check
+added to it. Until then, treat `workspace.execute` as privileged: connect the
+daemon to brokers you trust, and do not point it at a workspace whose commands
+you would not run yourself.
 
 ### 8.4 LangGraph-Specific
 
@@ -312,7 +330,7 @@ yourself.
 
 ### 9.1 Reporting
 
-- Report security incidents privately to the repository owner, `careb36` on GitHub.
+- Report security incidents to `security@your-org.example` immediately.
 - Do **not** open a public issue for suspected vulnerabilities.
 - Include affected component, timestamp, impact, and any reproduce steps.
 
@@ -474,5 +492,6 @@ When auditing the platform, verify the following controls:
 
 ## 14. Contact
 
-Maintainer: `careb36` on GitHub. Report vulnerabilities to the maintainer privately.
+Security team: `security@your-org.example`
+Responsible disclosure: see `SECURITY.md` in repository root or contact the address above.
 Do not include sensitive details in public issues.

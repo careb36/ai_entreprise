@@ -22,9 +22,15 @@ from logging_config import logger
 PLAN_MAX_TOKENS = 4096
 
 
-# ---------------------------------------------------------------------------
+def _client(po: dict[str, Any]) -> LLMProxyClient:
+    """The proxy client for the PO's call; its company routes a connection model."""
+    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
+    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
+    client.company_id = po.get("company_id")
+    return client
+
+
 # Prompt template — the PO agent plans the foundation sprint
-# ---------------------------------------------------------------------------
 
 _FOUNDATION_PROMPT = """\
 You are {agent_name}, a {seniority} Product Owner at an AI software factory.
@@ -349,9 +355,7 @@ def build_self_improvement_objective(
     return base
 
 
-# ---------------------------------------------------------------------------
 # Fallback tasks when the LLM is unavailable
-# ---------------------------------------------------------------------------
 
 _FALLBACK_TASKS = [
     {
@@ -511,9 +515,7 @@ def _build_self_improvement_fallback(
     }
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 
 def plan_foundation_sprint(
@@ -547,8 +549,7 @@ def plan_foundation_sprint(
             "tasks": _filter_fallback_tasks(agents),
         }
 
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
+    client = _client(po)
 
     stack_summary = _build_stack_summary(detected_stack)
     file_listing = (
@@ -658,8 +659,7 @@ def plan_execution_sprint(
         logger.info("No planning model available — using execution fallback")
         return _build_execution_fallback(objective, team, normalized_scope)
 
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
+    client = _client(po)
 
     prompt = _EXECUTION_PROMPT.format(
         agent_name=po.get("name") or "PO",
@@ -767,8 +767,7 @@ def plan_self_improvement_sprint(
         logger.info("No planning model available — using self-improvement fallback")
         return _build_self_improvement_fallback(company_name, team, normalized_scope)
 
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens, client.max_retries = PLAN_MAX_TOKENS, 0
+    client = _client(po)
 
     prompt = _SELF_IMPROVEMENT_PROMPT.format(
         agent_name=po.get("name") or "PO",

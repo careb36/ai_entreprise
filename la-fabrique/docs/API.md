@@ -57,20 +57,13 @@ Passwords are hashed with bcrypt directly, capped at 72 bytes, because bcrypt
 silently ignores anything past that length. A longer password is rejected at
 registration with 422 rather than accepted and truncated.
 
-Registration, login and the desktop key exchange are limited to
-`AUTH_RATE_LIMIT` requests per client address (`10/minute` by default).
-
-The authentication endpoints:
+The three authentication endpoints:
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/v1/auth/register` | Create the user; a company membership comes from `init_company` or an invitation |
+| `POST` | `/v1/auth/register` | Create the user and its first company membership |
 | `POST` | `/v1/auth/login` | Issue the JWT |
 | `GET` | `/v1/auth/me` | The caller's identity and memberships |
-| `POST` | `/v1/auth/desktop` | Trade the desktop's `X-Voice-Key` for the desktop operator's session |
-| `POST` | `/v1/auth/desktop/handoff` | With `X-Voice-Key`: a single-use code, valid 60 s, to open the browser signed in |
-| `POST` | `/v1/auth/desktop/redeem` | Trade that code, once, for the operator's session |
-| `POST` | `/v1/company/invite` | Add a registered user to a company (Owner); 409 for an existing member |
 
 ### Roles and scope
 
@@ -83,13 +76,8 @@ pass the `company_id` query parameter where the endpoint accepts one.
 
 A short, deliberate list: `/health`, `/health/deep`, `/metrics`,
 `/openapi.json`, `/docs`, `/redoc`, register and login, the HMAC-signed GitHub
-webhook, the support bug form and chat, `/v1/models`, `/v1/capabilities`, the
-generated project previews under `/v1/voice/build/{slug}/`, and the retired
-`/v1/approve_task` (410).
-
-The desktop routes take the voice key or a one-time code instead of a JWT, and
-`/v1/voice/*` takes either `X-Voice-Key` or a JWT; with no `VOICE_API_KEY` and
-`AUTH_REQUIRED` on, the voice routes answer 503.
+webhook, the support bug form and chat, `/v1/models`, `/v1/capabilities`, and
+the retired `/v1/approve_task` (410).
 
 Glassroom SSE cannot carry an `Authorization` header, because `EventSource`
 sends none. With `AUTH_REQUIRED` it takes a short-lived `ticket` for one sprint
@@ -98,12 +86,12 @@ membership when the ticket is used.
 
 ## Route index
 
-76 operations: 73 across the 13 routers in `backend/app/routers/`, plus
-`/health`, `/health/deep` and `/metrics`. Grouped here by area; the module that
-owns each group is named in its heading, and the OpenAPI tags do not follow the
-module boundaries.
+72 route entries across 11 routers, which is 68 operations in the OpenAPI
+schema (`/health` answers `HEAD` as well, and `HEAD` is not an operation).
+Grouped here by the module that owns them, which is how the code is organised;
+the OpenAPI tags do not follow the module boundaries.
 
-### Core — `routers/sprint.py`, `routers/enterprise.py`, `routers/agents.py`
+### Core — `routers/sprint.py`, `routers/enterprise.py`
 
 | Method | Path | Notes |
 |---|---|---|
@@ -119,7 +107,7 @@ module boundaries.
 | `POST` | `/v1/sprints/{sprint_id}/stream_ticket` | Ticket for the SSE stream |
 | `PATCH` | `/v1/backlog/{item_id}` | Move or edit a backlog item |
 | `POST` | `/v1/discover_team` | Propose a team for a project |
-| `POST` | `/v1/generate` | Run the optional LangGraph workflow (409 unless `AGENT_GRAPH_ENABLED`) |
+| `POST` | `/v1/generate` | Free-form generation through the proxy |
 
 ### Agent runs and verification — `routers/agent_runs.py`
 
@@ -132,25 +120,26 @@ module boundaries.
 | `GET` | `/v1/agent_runs/{run_id}/verifications` | Every verdict for the run |
 | `POST` | `/v1/agent_runs/{run_id}/approve` | A person decides (Manager) |
 | `GET` | `/v1/agent_runs/{run_id}/approvals` | The decisions |
-| `GET` | `/v1/agent_runs/reviewer_record` | How often the Reviewer agent's suggestions matched the decisions people recorded |
+| `GET` | `/v1/agent_runs/reviewer_record` | What the reviewer has ruled |
 
-### Agents — `routers/enterprise.py`, `routers/agents.py`, `routers/procedures.py`
+### Agents — `routers/agents.py`
 
 | Method | Path | Notes |
 |---|---|---|
-| `GET` `POST` | `/v1/agents` | List (Viewer), create (Manager) |
-| `PATCH` `DELETE` | `/v1/agents/{agent_id}` | Update, remove (Manager) |
+| `GET` `POST` | `/v1/agents` | List, create |
+| `PATCH` `DELETE` | `/v1/agents/{agent_id}` | Update, remove |
 | `POST` | `/v1/agents/generate_prompt` | Draft a role prompt |
 | `GET` | `/v1/glassroom/stream` | SSE of agent events for a sprint |
-| `GET` | `/v1/memory/search` | Similarity search over the stored embeddings |
+| `GET` | `/v1/memory/search` | pgvector plus Neo4j |
 | `POST` | `/v1/memory/store` | Persist content and embedding |
 | `POST` | `/v1/audit` | Append a signed audit entry |
-| `GET` | `/v1/audit/chain` | Walk the company's hash chain (Viewer) |
-| `GET` | `/v1/audit/verify` | Check the signature of every audit row of one interaction |
+| `GET` | `/v1/audit/chain` | The hash chain |
+| `GET` | `/v1/audit/verify` | Recheck the chain |
 | `GET` `POST` | `/v1/procedures` | Learnt procedures |
 | `POST` | `/v1/procedures/{procedure_id}/adopt` | |
 | `POST` | `/v1/procedures/{procedure_id}/reject` | |
 | `POST` | `/v1/procedures/{procedure_id}/retire` | |
+| `GET` | `/v1/messages` | Message log |
 
 ### Enterprise — `routers/enterprise.py`
 
@@ -164,6 +153,7 @@ module boundaries.
 | `GET` | `/v1/analytics/orchestration_health` | |
 | `GET` | `/v1/capabilities` | Which features are configured, no company data |
 | `GET` | `/v1/models` | Models the proxy exposes, by tier |
+| `POST` | `/v1/company/invite` | |
 
 ### GitHub — `routers/github.py`
 
@@ -182,7 +172,7 @@ module boundaries.
 | `GET` | `/v1/support/tickets` | Admins see all; others see their own |
 | `GET` `PATCH` | `/v1/support/tickets/{ticket_num}` | |
 | `GET` | `/v1/support/logs` | Admin only |
-| `GET` | `/v1/support/agent_record` | Admin only: how often the Support agent's suggestions matched the admins' decisions |
+| `GET` | `/v1/support/agent_record` | What the support agent did |
 
 ### Workspace — `routers/workspace.py`
 
@@ -192,8 +182,8 @@ observations, never agent claims.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/v1/workspace/status` | Is a daemon reachable |
-| `GET` | `/v1/workspace/inspect` | Canonical path, existence, git remote and branch of a project folder |
-| `GET` | `/v1/workspace/browse` | Sub-folders of a path on the daemon's machine |
+| `GET` | `/v1/workspace/inspect` | Trees, files |
+| `GET` | `/v1/workspace/browse` | Browse a path |
 
 ### Inbox and messages — `routers/inbox.py`, `routers/messages.py`
 
@@ -202,20 +192,7 @@ observations, never agent claims.
 | `GET` | `/v1/inbox` |
 | `GET` | `/v1/messages` |
 
-### Voice — `routers/voice.py`, `routers/build.py`
-
-The desktop assistant's door to the same operations. Authenticated with
-`X-Voice-Key` or a JWT.
-
-| Method | Path | Notes |
-|---|---|---|
-| `GET` | `/v1/voice/ping` | Credential check |
-| `GET` | `/v1/voice/status` | What the factory is doing, as one sentence plus its numbers |
-| `POST` | `/v1/voice/command` | One instruction from a small fixed vocabulary; a sprint created this way starts paused |
-| `POST` | `/v1/voice/build` | Write a small project from one sentence into `FABRICA_BUILDS_DIR` |
-| `GET` | `/v1/voice/build/{slug}/{file_path}` | Serve a generated file, sandboxed; public |
-
-### Operational — `main.py`, `metrics.py`
+### Operational — `main.py`
 
 | Method | Path | Notes |
 |---|---|---|
@@ -254,11 +231,9 @@ curl -X POST http://localhost:8000/v1/start_sprint \
 
 ### 3. Let the agents work
 
-`start_sprint` already queued one outbox event per task on `task.assign`;
-`POST /v1/sprints/{sprint_id}/dispatch` queues again the tasks still in `todo`.
-The transactional outbox stores them in NATS JetStream, and the task worker
-picks each one up, calls the model through the proxy, and hands the work to the
-daemon.
+`POST /v1/sprints/{sprint_id}/dispatch` sends the sprint through the
+transactional outbox to NATS JetStream. The worker picks it up, calls the model
+through the proxy, and hands the work to the daemon.
 
 Watch it on `GET /v1/glassroom/stream?sprint_id=...&ticket=...`.
 
@@ -285,7 +260,7 @@ curl -X POST http://localhost:8000/v1/agent_runs/7/verify \
 
 For a run whose `claims` are `{"files": ["src/login.tsx"], "tests": "ran
 `npm run test:run`"}`, `artifact_size` 512 and `artifact_text` containing that
-path, the verdict and checks in the response are:
+path, the response is:
 
 ```json
 {
@@ -341,15 +316,12 @@ No model decides any of these. The checks are deterministic; see
 ```bash
 curl -X POST http://localhost:8000/v1/agent_runs/7/approve \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"company_id": 1, "approver_name": "Ana", "decision": "rejected",
-       "rejection_category": "quality",
-       "feedback": "The cap must count bytes, not characters"}'
+  -d '{"company_id": 1, "decision": "reject", "feedback": "The cap must count bytes, not characters"}'
 ```
 
-`decision` is `approved` or `rejected`; a rejection needs `feedback`, and may
-carry a `rejection_category` (`scope`, `quality`, `security` or `other`). The
-decision is stored in `AgentRunApproval` and recorded in the audit log, signed
-when `AUDIT_SIGNING_KEY` is set.
+The decision, the feedback and the rejection category are stored in
+`AgentRunApproval` and signed in the audit log. The feedback reaches the agent
+as a correction on the next attempt.
 
 ## Retired
 
@@ -374,12 +346,9 @@ when `AUDIT_SIGNING_KEY` is set.
 
 ## Rate limiting
 
-Every route gets 300 requests per minute per client address
-(`RATE_LIMIT_DEFAULT`), counted in memory by default (`RATE_LIMIT_STORAGE_URI`),
-so the counter is per process. Registration, login and the three desktop routes
-have their own, tighter limit (`AUTH_RATE_LIMIT`, `10/minute` by default).
-`/health`, `/health/deep`, `/metrics` and the Glassroom stream are never
-limited. Exceeding a limit returns **429**.
+100 requests per minute per client address (`RATE_LIMIT_DEFAULT`), in memory by
+default (`RATE_LIMIT_STORAGE_URI`), so the counter is per process. Exceeding it
+returns **429**.
 
 No `X-RateLimit-*` headers are sent: `slowapi` is configured without
 `headers_enabled`, so a client cannot read the remaining budget from the

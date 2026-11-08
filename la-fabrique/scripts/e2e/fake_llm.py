@@ -11,7 +11,20 @@ prompt's section headers, so one run exercises the whole loop:
 - the ScrumMaster answers an escalation with "retry" and a brief, and
   proposes one procedure in the fixed format;
 - the Architect answers every consultation with the same short brief;
-- the Support agent triages every ticket as a high-severity bug.
+- the Support agent triages every ticket as a high-severity bug;
+- the PO drafts a specification (with a quality target without a number
+  and one open question the first time, both fixed on the revision) and
+  plans a sprint from it, one task per requirement with its criteria, the
+  counter after the greeting;
+- the Architect designs it: two modules, an interface, a decision and a
+  convention (with one open question the first time, answered before the
+  revision);
+- the Developer of the counter reads the greeting's module through the
+  workspace tools before delivering (one ``workspace__read`` call);
+- it also plays a company's own provider: ``/provider/v1/models`` lists two
+  models for the key ``e2e-provider-key``, and a request that arrives with
+  the company's connection (``X-Provider-Connection``) is answered only with
+  the internal token, and written to ``FAKE_LLM_CONNECTIONS``.
 
 Every prompt it receives is appended, one per line, to the file named by
 ``FAKE_LLM_PROMPTS`` so the run can assert what the agents were told.
@@ -24,6 +37,7 @@ answered as usual and written to ``FAKE_LLM_VIOLATIONS``; the run fails if
 that file is not empty.
 """
 
+import base64
 import json
 import os
 import re
@@ -42,6 +56,13 @@ REVIEWED: set[str] = set()
 REVIEWED_LOCK = threading.Lock()
 PROMPT_LOG = os.environ.get("FAKE_LLM_PROMPTS", "fake_llm.prompts.log")
 VIOLATIONS_LOG = os.environ.get("FAKE_LLM_VIOLATIONS", "fake_llm.violations.log")
+CONNECTIONS_LOG = os.environ.get("FAKE_LLM_CONNECTIONS", "fake_llm.connections.log")
+INTERNAL_TOKEN = os.environ.get("FAKE_LLM_INTERNAL_TOKEN", "")
+PROVIDER_KEY = "e2e-provider-key"
+# The module each requirement's implementation task writes (its slug), so
+# QA's acceptance tests, written first, import what the Developer will deliver.
+ACCEPTANCE_MODULES = {"REQ-1": "add_greeting", "REQ-2": "add_greeting_counter"}
+
 # Per task title: how many deliveries the fake wrote, how many reviews it was
 # asked for, and the paths of the last delivery.
 DELIVERED: dict[str, int] = {}
@@ -76,6 +97,67 @@ def answer(prompt: str) -> str:
     with open(PROMPT_LOG, "a") as log:
         # Long enough for a task prompt with every section the checks read.
         log.write(prompt.replace("\n", " ")[:20000] + "\n")
+    if ", the PO of an AI software factory. Write the specification" in prompt:
+        revision = "## Answers to your questions" in prompt
+        return json.dumps(
+            {
+                "title": "Greeting service",
+                "summary": "A tiny service that greets people by name, for the e2e run.",
+                "requirements": [
+                    {
+                        "title": "Greet by name",
+                        "description": "The service answers a greeting that carries the caller's name.",
+                        "criteria": [
+                            {"given": "a name", "when": "greet is called with it", "then": "the answer contains the name"},
+                            {"given": "an empty name", "when": "greet is called", "then": "the answer greets the world"},
+                        ],
+                    },
+                    {
+                        "title": "Count the greetings",
+                        "description": "The service counts how many greetings it answered since it started.",
+                        "criteria": [
+                            {"given": "two greetings answered", "when": "the count is read", "then": "it reads 2"},
+                        ],
+                    },
+                ],
+                "quality": [
+                    {"attribute": "performance", "target": "a greeting answers in under 50 ms" if revision else "fast"}
+                ],
+                "constraints": ["Python, standard library only"],
+                "questions": [] if revision else ["Should the greeting be localized?"],
+            }
+        )
+    if ", the Architect of an AI software factory. Design how the specification" in prompt:
+        revision = "## Answers to your questions" in prompt
+        return json.dumps(
+            {
+                "title": "Greeting service design",
+                "overview": "One module greets, another counts; a function interface joins them.",
+                "modules": [
+                    {"name": "Greeter", "responsibility": "Builds the greeting text.", "path": "src/greeting.py", "depends_on": [], "covers": ["REQ-1"]},
+                    {"name": "Counter", "responsibility": "Counts the greetings answered.", "path": "src/greeting_counter.py", "depends_on": ["Greeter"], "covers": ["REQ-2"]},
+                ],
+                "interfaces": [
+                    {"name": "greet", "kind": "function", "module": "Greeter", "contract": "greet(name: str) -> str", "consumers": ["Counter"]}
+                ],
+                "decisions": [
+                    {"title": "Standard library only", "context": "The constraint says so.", "decision": "No third-party package.", "consequences": "Nothing to install."}
+                ],
+                "conventions": ["Every module has a test file beside it."],
+                "questions": [] if revision else ["Is the counter per process or shared?"],
+            }
+        )
+    if ", the PO. Plan a sprint from the specification below" in prompt:
+        return json.dumps(
+            {
+                "sprint_name": "Greeting 1",
+                "goal": "Greet and count",
+                "tasks": [
+                    {"title": "Add greeting", "description": "greet(name) with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
+                    {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"], "depends_on": ["Add greeting"]},
+                ],
+            }
+        )
     if "You are the ScrumMaster. A task was blocked" in prompt:
         return (
             "DECISION: retry\n"
@@ -120,12 +202,35 @@ def answer(prompt: str) -> str:
             return "NEEDS WORK: add a test for empty input."
         return "APPROVED: the module and its test match the task."
     task = re.search(r"## Task: (.+)", prompt)
+    if task and task.group(1).startswith("Acceptance tests for REQ-"):
+        # QA writes one failing test per criterion, named after it, importing
+        # the module the implementation task will write inside each test.
+        title = task.group(1).strip()
+        req = re.match(r"Acceptance tests for (REQ-\d+)", title).group(1)
+        module = ACCEPTANCE_MODULES[req]
+        criteria = list(dict.fromkeys(re.findall(rf"\b({req}\.\d+):", prompt)))
+        path = f"tests/test_{req.lower().replace('-', '_')}.py"
+        tests = "".join(
+            f"def test_{c.lower().replace('-', '_').replace('.', '_')}_holds():\n"
+            f"    from src.{module} import {module}\n\n"
+            f'    assert {module}() == "{module} done"\n\n\n'
+            for c in criteria
+        )
+        with REVIEWED_LOCK:
+            DELIVERED[title] = DELIVERED.get(title, 0) + 1
+            LAST_PATHS[title] = [path]
+        return f"Acceptance tests of {req}.\n\n```python path={path}\n{tests}```\n\n{PADDING}\n"
     if task:
         name = _slug(task.group(1))
         with REVIEWED_LOCK:
             title = task.group(1).strip()
             DELIVERED[title] = DELIVERED.get(title, 0) + 1
             LAST_PATHS[title] = [f"src/{name}.py", f"tests/test_{name}.py"]
+            # The counter's first delivery rewrites an acceptance test: the
+            # Verifier must refuse it, and the next delivery leaves it alone.
+            edits_test = title == "Add greeting counter" and DELIVERED[title] == 1
+            if edits_test:
+                LAST_PATHS[title].append("tests/test_req_2.py")
         return (
             f"Implemented {task.group(1)}.\n\n"
             f"```python path=src/{name}.py\n"
@@ -133,9 +238,58 @@ def answer(prompt: str) -> str:
             f"```python path=tests/test_{name}.py\n"
             f"from src.{name} import {name}\n\n\n"
             f'def test_{name}():\n    assert {name}() == "{name} done"\n```\n\n'
-            f"{PADDING}\n"
+            + (
+                "```python path=tests/test_req_2.py\ndef test_req_2_1_holds():\n    assert True\n```\n\n"
+                if edits_test
+                else ""
+            )
+            + f"{PADDING}\n"
         )
     return "Keep the implementation minimal and covered by a unit test."
+
+
+# The task whose Developer reads the project before delivering: the counter
+# depends on the greeting, so the greeting's module is on disk by then.
+READS_FIRST = "Add greeting counter"
+READS_PATH = "src/add_greeting.py"
+
+
+ARCHITECT_PROMPT = ", the Architect of an AI software factory. Design how the specification"
+LOOKS_UP = {"name": "pytest", "ecosystem": "pypi"}
+PYPI_RECORD = {
+    "info": {"name": "pytest", "version": "9.0.1", "summary": "testing framework", "requires_python": ">=3.9"},
+    "releases": {
+        "9.0.0": [{"upload_time_iso_8601": "2026-09-15T00:00:00Z"}],
+        "9.0.1": [{"upload_time_iso_8601": "2026-10-20T00:00:00Z"}],
+    },
+}
+
+
+def tool_call_for(prompt: str, messages: list, tools: list) -> dict | None:
+    """One ``workspace__read`` call before the counter's delivery, when the
+    backend offered the workspace tools and no tool has answered yet; the
+    fake then delivers as usual, so the run's evidence carries the read.
+    Likewise one ``research__package`` lookup before the Architect's design,
+    when the research tools are offered, so the draft keeps its source."""
+    offered = {t.get("function", {}).get("name") for t in tools if isinstance(t, dict)}
+    if any(m.get("role") == "tool" for m in messages):
+        return None
+    if "research__package" in offered and ARCHITECT_PROMPT in prompt:
+        return {
+            "id": "call_lookup_pytest",
+            "type": "function",
+            "function": {"name": "research__package", "arguments": json.dumps(LOOKS_UP)},
+        }
+    if "workspace__read" not in offered:
+        return None
+    task = re.search(r"## Task: (.+)", prompt)
+    if not task or task.group(1).strip() != READS_FIRST:
+        return None
+    return {
+        "id": "call_read_greeting",
+        "type": "function",
+        "function": {"name": "workspace__read", "arguments": json.dumps({"path": READS_PATH})},
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -151,6 +305,16 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        # A PyPI look-alike for the research tools (RESEARCH_PYPI_URL points here).
+        if self.path == "/pypi/pytest/json":
+            return self._send(200, PYPI_RECORD)
+        if self.path.startswith("/pypi/"):
+            return self._send(404, {"message": "Not Found"})
+        if self.path == "/provider/v1/models":
+            if self.headers.get("Authorization") != f"Bearer {PROVIDER_KEY}":
+                return self._send(401, {"error": "invalid key"})
+            models = [{"id": "deepseek-v4-flash"}, {"id": "e2e-unlisted-elsewhere"}]
+            return self._send(200, {"object": "list", "data": models})
         if self.path.startswith("/v1/models"):
             return self._send(
                 200,
@@ -162,13 +326,36 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
         if self.path.startswith("/v1/chat/completions"):
-            prompt = (body.get("messages") or [{}])[-1].get("content", "")
+            messages = body.get("messages") or [{}]
+            prompt = next(
+                (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+                "",
+            )
+            connection = self.headers.get("X-Provider-Connection")
+            if connection:
+                # The proxy honours a company's connection only with the shared
+                # token; record what reached it, never the key itself.
+                if not INTERNAL_TOKEN or self.headers.get("X-Internal-Token") != INTERNAL_TOKEN:
+                    _violation("a company connection arrived without the internal token")
+                    return self._send(403, {"error": "connection without the internal token"})
+                conn = json.loads(base64.b64decode(connection))
+                run = re.search(r"RUN (\S+)", prompt)
+                with open(CONNECTIONS_LOG, "a") as log:
+                    log.write(json.dumps({
+                        "model": body.get("model"),
+                        "base_url": conn.get("base_url"),
+                        "key_ok": conn.get("api_key") == PROVIDER_KEY,
+                        "run": run.group(1) if run else None,
+                    }) + "\n")
+            tool_call = tool_call_for(prompt, messages, body.get("tools") or [])
+            if tool_call:
+                message = {"role": "assistant", "content": None, "tool_calls": [tool_call]}
+            else:
+                message = {"role": "assistant", "content": answer(prompt)}
             return self._send(
                 200,
                 {
-                    "choices": [
-                        {"message": {"role": "assistant", "content": answer(prompt)}}
-                    ],
+                    "choices": [{"message": message}],
                     "usage": {
                         "prompt_tokens": 10,
                         "completion_tokens": 50,

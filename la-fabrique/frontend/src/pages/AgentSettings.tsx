@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useAgents, useCreateAgent, useCurrentRole, useDeleteAgent, useGenerateAgentPrompt, useModels, useUpdateAgentConfig } from '../hooks/useQueries'
 import type { AgentActivity, ManagedAgent, ModelCatalogEntry } from '../services/api'
+import { ConnectionModelOptgroups, useConnectionModelOptions } from '../components/ConnectionModelOptions'
 import { useAppStore } from '../store/useAppStore'
 import { useToast } from '../store/toastStore'
 
@@ -410,6 +411,8 @@ function ModelSelector({
 }) {
   const { t } = useTranslation()
   const modelInfo = models.find(model => model.id === draft.model)
+  const connectionOptions = useConnectionModelOptions()
+  const connectionChoice = connectionOptions.find(option => option.value === draft.model)
   const recommendation = useMemo(
     () => recommendModelForRole(models, draft.role, draft.seniority),
     [models, draft.role, draft.seniority],
@@ -432,7 +435,7 @@ function ModelSelector({
           onChange={e => setDraft(prev => ({ ...prev, model: e.target.value }))}
         >
           <option value="">{t('agentsConfig.defaultForRole', { defaultValue: 'Default for role' })}</option>
-          {draft.model && !modelInfo && (
+          {draft.model && !modelInfo && !connectionChoice && (
             <option value={draft.model}>
               {t('agentsConfig.modelNotInCatalog', { model: draft.model, defaultValue: '{{model}} (not in catalog)' })}
             </option>
@@ -448,8 +451,11 @@ function ModelSelector({
               </optgroup>
             )
           })}
+          <ConnectionModelOptgroups options={connectionOptions} />
         </select>
-        {modelInfo ? (
+        {connectionChoice ? (
+          <p className="mt-2 text-[11px] text-gray-500">{t('agentsConfig.connectionModelHint', { connection: connectionChoice.connection })}</p>
+        ) : modelInfo ? (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className={`rounded-full px-2 py-0.5 text-[10px] ${tierClass(modelInfo.tier)}`}>
               {modelInfo.provider} · {modelInfo.tier}
@@ -770,8 +776,6 @@ export default function AgentSettings() {
   const toast = useToast()
   const companyId = useAppStore(state => state.companyId)
   const companyName = useAppStore(state => state.companyName)
-  const companies = companyId ? [{ id: companyId, company_name: companyName ?? '' }] : []
-  const selectCompany = (_id: number) => {}
   const { data, isLoading, isError, refetch } = useAgents(companyId)
   const { data: modelsData } = useModels()
   const createAgent = useCreateAgent(companyId)
@@ -952,17 +956,8 @@ export default function AgentSettings() {
           </div>
           <div className="flex items-stretch gap-3 flex-wrap">
             <div className="rounded-xl border border-surface-700 bg-surface-900 px-4 py-3 text-xs text-gray-400 min-w-[14rem]">
-              <label className="flex items-center gap-2"><Users size={14} className="text-brand-400" /> {t('agentsConfig.factory')}</label>
-              <select
-                className="select mt-2 w-full text-sm"
-                value={companyId ?? ''}
-                onChange={e => selectCompany(Number(e.target.value))}
-                disabled={!companies.length}
-              >
-                {companies.map(company => (
-                  <option key={company.id} value={company.id}>{company.company_name}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2"><Users size={14} className="text-brand-400" /> {t('agentsConfig.factory')}</div>
+              <div className="mt-2 text-sm text-gray-200">{companyName || '—'}</div>
             </div>
             <div className="rounded-xl border border-surface-700 bg-surface-900 px-4 py-3 text-xs text-gray-400">
               <div className="flex items-center gap-2"><Cpu size={14} className="text-brand-400" /> {t('agentsConfig.orchestrator')}</div>
@@ -971,7 +966,7 @@ export default function AgentSettings() {
           </div>
         </div>
 
-        {!companies.length ? (
+        {companyId === null ? (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
             {t('agentsConfig.noCompany')}
           </div>

@@ -5,7 +5,7 @@ Delivery deadline: **30 October 2026, 14:00 GMT-3**.
 
 - Repository: <https://github.com/careb36/la-fabrique>
 - License: Apache 2.0 — see [LICENSE](../LICENSE)
-- Many commit messages are written in Spanish
+- Commits are written in Spanish (the team's convention)
 
 ## The pitch
 
@@ -38,51 +38,19 @@ claim holds.
 
 Every model call goes through `llm-proxy/`, and the proxy routes NVIDIA open
 models to **Nebius Token Factory** over its OpenAI-compatible endpoint. The
-model catalogue is fetched live when the proxy starts and every hour after,
-so new Nemotron releases appear without a code change:
+model catalogue is fetched live at startup and hourly, so new Nemotron releases
+appear without a code change:
 
 | Route | Setting | Example model |
 | --- | --- | --- |
-| strategic | `NEMOTRON_MODEL_STRATEGIC` | `nvidia/nemotron-3-ultra-550b-a55b` |
+| strategic | `NEMOTRON_MODEL_STRATEGIC` | `nvidia/Nemotron-3-Ultra-550b-a55b` |
 | default | `NEMOTRON_MODEL` | `nvidia/nemotron-3-super-120b-a12b` |
-| fast | `NEMOTRON_MODEL_FAST` | `nvidia/nemotron-3-super-120b-a12b` (a Nano id once your catalogue lists one) |
+| fast | `NEMOTRON_MODEL_FAST` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` |
 
-`NEMOTRON_ROLES` says which agent roles run on Nemotron. The shipped
-`.env.example` opts **every role** in, so a stack started from it with a
-`NEBIUS_API_KEY` runs PO, Architect and SecOps on Nemotron 3 Ultra and every other role on
-Nemotron 3 Super (point `NEMOTRON_MODEL_FAST` at a Nano id to move the
-TechWriter). A role `NEMOTRON_ROLES` does not name gets `AGENT_MODEL`, which the
-shipped file also sets to Nemotron 3 Super; clearing both falls back to the
-Qwen/DeepSeek defaults. `scripts/verify-nebius.sh`
-proves the three layers separately so a failure points at the broken one. See
+Agent roles opt in with `NEMOTRON_ROLES`; unset, the Qwen/DeepSeek defaults are
+untouched. `scripts/verify-nebius.sh` proves the three layers separately so a
+failure points at the broken one. See
 [Model Providers](../README.md#model-providers-nebius--nvidia-nemotron).
-
-### Running a sprint on Nemotron
-
-```bash
-cp .env.example .env            # Nemotron is already on for every role
-# set NEBIUS_API_KEY, POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY in .env
-docker compose up -d
-NEBIUS_API_KEY=... PROXY_URL=http://localhost:5100 ./scripts/verify-nebius.sh
-curl -s http://localhost:5100/v1/models | jq '.models[] | select(.provider=="nebius") | .id'
-```
-
-Then start the workspace daemon (`scripts/start-daemon.sh`), create a company
-and a sprint from the frontend, and open the sprint's Glassroom: each agent
-turn names the model that served it (`served_model` on the run, the model id in
-the audit rows), so a Nemotron sprint is distinguishable from any other.
-
-## Hosted demo
-
-There is no public deployment: the workspace daemon writes to the folder of the
-person running it, so a shared instance would write to nobody's project. The
-stack runs on any Linux machine with Docker with the commands above
-(frontend on `:5173`, API and Swagger on `:8000/docs`, proxy on `:5100`). The
-published ports listen on `BIND_ADDRESS` (NATS on `NATS_BIND`), `127.0.0.1` by
-default; set `PUBLIC_API_URL` to the machine's public address if GitHub
-webhooks should reach it. The demo video walks through a stack filled by the
-end-to-end run (`scripts/e2e/run.sh`, the same run CI executes on pull requests
-that touch `backend/`, `vscode-daemon/` or `scripts/e2e/`).
 
 ## The 5-minute demo (no API keys)
 
@@ -94,11 +62,8 @@ that tells them apart. No model or collector key is needed.
 2. Seed the evidence layer:
 
    ```bash
-   python3 scripts/seed_demo_evidence.py --company-id 1 --token <access token>
+   python3 scripts/seed_demo_evidence.py --company-id 1
    ```
-
-   Authentication is on by default (`AUTH_REQUIRED=true`), so the script needs
-   a Manager's access token (`--token` or `FABRIQUE_TOKEN`).
 
 3. Open `/evidence`. Three runs, one per verdict: **verified**, **refuted**,
    **unverifiable**. Open each to see the claim on one side and the independent
@@ -115,39 +80,16 @@ with its real result, not estimated.
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Backend tests | `cd backend && PYTHONPATH=.:app python3 -m pytest tests -q` | 857 passed |
+| Backend tests | `cd backend && PYTHONPATH=.:app python3 -m pytest tests -q` | 771 passed |
 | Backend lint | `cd backend && ruff check app tests && ruff format --check app tests` | clean |
-| Frontend tests | `cd frontend && npm run test:run` | 396 passed (50 files) |
+| Frontend tests | `cd frontend && npm run test:run` | 392 passed (49 files) |
 | Frontend typecheck | `cd frontend && npx tsc --noEmit` | clean |
 | Frontend lint | `cd frontend && npm run lint` | clean |
 | Frontend build | `cd frontend && npm run build` | built |
-| LLM proxy tests | `cd llm-proxy && poetry run python -m pytest tests -q` | 35 passed |
+| LLM proxy tests | `cd llm-proxy && poetry run python -m pytest tests -q` | 24 passed |
 
-The workflows in `.github/workflows/` run on pull requests and on pushes to
-`main` (path-filtered backend, frontend, proxy, e2e, security and file-size jobs) on
-GitHub-hosted runners (`ubuntu-latest`).
-
-## Built during the hackathon
-
-The repository predates the hackathon; this is what was added for it (details
-in the [CHANGELOG](../CHANGELOG.md)):
-
-- **Nebius Token Factory as a model provider** in the LLM proxy: prefix
-  routing for `nvidia/` and the other vendor ids, the catalogue fetched live
-  at startup and every hour after, `GET /v1/models` listing what it found, and each
-  answer saying whether its token count was reported by the provider or
-  estimated.
-- **Per-role Nemotron opt-in** (`NEMOTRON_ROLES`, `NEMOTRON_MODEL`,
-  `_STRATEGIC`, `_FAST`), on for every role in the shipped `.env.example`,
-  and `scripts/verify-nebius.sh` to prove the key, the catalogue and a
-  completion separately.
-- **The Architect consultation step** and the orchestration KPIs that read
-  real data (Developer tokens per turn, QA rework rate, Architect consult
-  frequency).
-- **Public-repository hygiene**: CI on GitHub-hosted runners, no personal data
-  in the tree, an error handler that only claims a report it sent.
-- **Documentation**: this page, the README's model-provider and Nebius
-  sections, the evidence-page screenshots and the responsible-use notes.
+Continuous integration runs on every pull request (path-filtered backend,
+frontend, proxy, e2e, security and file-size jobs) on a self-hosted runner.
 
 ## What the judges should look at
 

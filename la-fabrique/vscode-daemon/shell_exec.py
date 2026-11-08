@@ -17,6 +17,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import command_policy
+
 logger = logging.getLogger("fabrique-daemon.shell")
 
 IS_WINDOWS = os.name == "nt"
@@ -67,12 +69,36 @@ def build_shell_command(command: str) -> list[str]:
     return [shell_path, "-c", command]
 
 
-def execute_shell_command(command: str, cwd: str = ".") -> dict[str, Any]:
+def is_assistant_command(command: str) -> bool:
+    """A console assistant's run: its output is advice, not a status line."""
+    normalized = (command or "").lower()
+    return "copilot" in normalized or "claude" in normalized
+
+
+def summarize_command_result(command: str, result: dict[str, Any]) -> str:
+    """One Glassroom line for a finished workspace command."""
+    command_preview = " ".join((command or "").strip().split())[:180]
+    exit_code = result.get("exit_code", -1)
+    output = (result.get("stdout") or result.get("stderr") or result.get("error") or "").strip()
+    if result.get("success"):
+        return f"Workspace command finished successfully (exit {exit_code}): {command_preview}"
+    if output:
+        return f"Workspace command failed (exit {exit_code}): {output[:240]}"
+    return f"Workspace command failed (exit {exit_code}): {command_preview}"
+
+
+def execute_shell_command(
+    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None
+) -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 
     Args:
         command: Shell command string (passed to the host shell).
         cwd:     Working directory for the command.
+        policy:  The request's ``command_policy``; with it, or with the
+                 daemon's ``FABRIQUE_COMMAND_DENY``, a command the policy
+                 refuses is not run (``command_policy.py``) and the result
+                 says ``refused`` with the reason.
 
     Returns:
         Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
@@ -81,6 +107,27 @@ def execute_shell_command(command: str, cwd: str = ".") -> dict[str, Any]:
         captured before the kill, so the caller can tell "hung" from "ran and
         failed".
     """
+    refused = command_policy.refusal(command, policy)
+    if refused:
+        logger.warning(f"Not running {command!r}: {refused}")
+        return {"success": False, "refused": True, "error": refused}
+    if sandbox is not None:
+        # Agent-written code: run it as the request's sandbox says
+        # (``sandbox.py``), and report what was applied. A mode that cannot
+        # run is an error, never a quiet run on the host.
+        import sandbox as sandbox_runner
+
+        try:
+            box = sandbox_runner.normalize(sandbox)
+            if box["mode"] != "host":
+                return sandbox_runner.run_sandboxed(
+                    command, cwd, sandbox, COMMAND_TIMEOUT_SECONDS
+                )
+        except sandbox_runner.SandboxUnavailable as exc:
+            return {"success": False, "error": f"sandbox unavailable: {exc}"}
+        result = execute_shell_command(command, cwd)
+        result["sandbox"] = sandbox_runner.report(box)
+        return result
     logger.info(f"Executing: {command} in {cwd}")
     try:
         result = subprocess.run(
