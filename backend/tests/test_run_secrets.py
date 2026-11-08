@@ -35,10 +35,14 @@ def _task(session):
 
 def test_create_encrypts_and_the_run_gets_the_value(sqlite_session):
     company, item = _task(sqlite_session)
-    secret = run_secrets.create(sqlite_session, company.id, item.id, "TOKEN", "s3")
+    secret = run_secrets.create(
+        sqlite_session, company.id, item.id, "TOKEN", "plain secret!"
+    )
     stored = sqlite_session.get(RunSecret, secret.id).encrypted_value
-    assert stored.startswith(crypto.FERNET_PREFIX) and "s3" not in stored
-    assert run_secrets.env_for_task(sqlite_session, item.id) == {"TOKEN": "s3"}
+    assert stored.startswith(crypto.FERNET_PREFIX) and "plain secret!" not in stored
+    assert run_secrets.env_for_task(sqlite_session, item.id) == {
+        "TOKEN": "plain secret!"
+    }
 
 
 def test_nothing_is_stored_without_a_key(sqlite_session, monkeypatch):
