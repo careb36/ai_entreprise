@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
 from crypto import decrypt_value, encrypt_value
 from models import RunSecret
 from sqlmodel import Session, select
+
+_logger = logging.getLogger(__name__)
 
 
 def create(
@@ -43,6 +47,12 @@ def env_for_task(session: Session, task_id: int) -> dict[str, str]:
     for s in list_for_task(session, task_id):
         try:
             out[s.name] = decrypt_value(s.encrypted_value)
-        except Exception:  # noqa: BLE001, S112
-            continue
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning(
+                "run secret %s (%s) for task %s could not be decrypted: %s",
+                s.id,
+                s.name,
+                task_id,
+                type(exc).__name__,
+            )
     return out
