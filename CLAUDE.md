@@ -79,6 +79,10 @@ Copy `.env.example` to `.env` and fill in:
 - `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
 - `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
+- `MODELS_CATALOG_URL`, `MODELS_CATALOG_REFRESH_HOURS` — optional. The model
+  catalogue (models.dev, `services/model_catalog.py`) starts from the snapshot in
+  `backend/app/data/models_dev.json` (`scripts/update_models_snapshot.py`) and
+  refreshes in the background every 24 hours by default; `0` never calls out.
 - `FERNET_SECRET_KEY` — optional. Encrypts `ProjectCredential.encrypted_value`
   at rest. Without it those values are stored with a `plaintext:` prefix and the
   backend warns at startup. Generate one with:
@@ -479,6 +483,7 @@ Test files:
 | `test_work_control.py` | Sprint 0 starts only when asked and never at autonomy 1; a planned sprint starts once and dispatches its tasks; pause, resume and stop (Manager only; stop blocks unfinished tasks); the autonomy level read by a Viewer and changed by a Manager; a planned, paused or cancelled sprint's task is not loaded, dispatched or reviewed; a credit answer is told from a passing error; no credit pauses the sprint and the task waits as todo; the execute call names the provider without credit; at autonomy 1 every approved task waits for a person |
 | `test_tenant_scoping.py` | Every table carries a required `company_id` that references `companies`, or is listed with its reason (the tenant, users, help-desk tickets, the outbox, backlog items through their sprint); `audit_log` alone may hold rows without a company; the lists hold no stale names |
 | `test_provider_connections.py` | A company's model provider connections (issue #356): a Manager connects, changes and removes them, a Viewer reads them, nobody outside the company does; the key is encrypted at rest and never returned, an omitted key keeps the stored one and an empty one clears it; base URLs and headers are checked (local servers allowed on purpose); the validation lists the provider's models with the key and records the outcome, which a later change to the key or URL clears |
+| `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,

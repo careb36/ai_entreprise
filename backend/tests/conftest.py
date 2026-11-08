@@ -24,6 +24,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 
 from config import settings
+
+# The tests never call models.dev: the catalogue stays on its snapshot.
+settings.MODELS_CATALOG_REFRESH_HOURS = 0
 from fastapi.testclient import TestClient
 from models.agent_message import AgentMessage
 from models.agent_run import AgentRun, AgentRunApproval, Verification

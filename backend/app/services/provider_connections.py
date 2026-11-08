@@ -5,9 +5,9 @@ shows of it, and the check that its key works. The key and the headers are
 encrypted at rest (``crypto.py``) and never serialized: the API says whether
 a key is set, and which header names are configured.
 
-The base URL is the provider's own when the provider is known
-(``KNOWN_BASE_URLS``, the OpenAI-compatible endpoints from models.dev) and
-whatever the Manager gives for ``openai-compatible``. Local addresses are
+The base URL is the provider's own when the catalogue knows it
+(``model_catalog.base_url_for``, from models.dev) and whatever the Manager
+gives for ``openai-compatible``. Local addresses are
 allowed on purpose: Ollama, LM Studio and vLLM usually run on the same
 computer or network.
 """
@@ -24,28 +24,10 @@ import httpx
 from crypto import decrypt_value, encrypt_value
 from models.provider import ProviderConnection
 
+from services import model_catalog
+
 OPENAI_COMPATIBLE = "openai-compatible"
 
-# OpenAI-compatible base URLs of well-known providers (from models.dev's
-# ``api`` field). A connection to one of these may omit ``base_url``; the
-# catalogue (issue #356, step 2) extends this list.
-KNOWN_BASE_URLS: dict[str, str] = {
-    "deepseek": "https://api.deepseek.com/v1",
-    "openai": "https://api.openai.com/v1",
-    "openrouter": "https://openrouter.ai/api/v1",
-    "google": "https://generativelanguage.googleapis.com/v1beta/openai",
-    "anthropic": "https://api.anthropic.com/v1",
-    "alibaba": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-    "nebius": "https://api.tokenfactory.nebius.com/v1",
-    "groq": "https://api.groq.com/openai/v1",
-    "mistral": "https://api.mistral.ai/v1",
-    "togetherai": "https://api.together.xyz/v1",
-    "xai": "https://api.x.ai/v1",
-    "fireworks-ai": "https://api.fireworks.ai/inference/v1",
-    "cerebras": "https://api.cerebras.ai/v1",
-    "ollama": "http://localhost:11434/v1",
-    "lmstudio": "http://localhost:1234/v1",
-}
 
 VALIDATION_TIMEOUT_SECONDS = 15.0
 _PROVIDER_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -72,7 +54,7 @@ def normalize_base_url(provider: str, base_url: str | None) -> str:
     """The URL requests go to: the given one, else the known provider's."""
     url = (base_url or "").strip().rstrip("/")
     if not url:
-        known = KNOWN_BASE_URLS.get(provider)
+        known = model_catalog.base_url_for(provider)
         if not known:
             raise ProviderConfigError(f"base_url is required for provider {provider!r}")
         return known
@@ -145,6 +127,7 @@ def serialize(row: ProviderConnection) -> dict[str, Any]:
         "validated_at": row.validated_at.isoformat() if row.validated_at else None,
         "validation_ok": row.validation_ok,
         "validation_detail": row.validation_detail,
+        "listed_models": list(row.listed_models or []),
         "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -191,6 +174,7 @@ def validate(
     except (ValueError, AttributeError, TypeError):
         return _record(row, False, "the provider's /models answer is not a model list")
     result = _record(row, True, f"{len(models)} models listed")
+    row.listed_models = models
     result["models"] = models
     return result
 

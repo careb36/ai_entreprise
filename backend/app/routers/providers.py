@@ -22,6 +22,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import ProviderConnection, User
 from pydantic import BaseModel, Field
+from services import model_catalog
 from services import provider_connections as connections
 from sqlmodel import Session, select
 
@@ -96,7 +97,7 @@ async def list_providers(
     ).all()
     return {
         "providers": [connections.serialize(row) for row in rows],
-        "known_providers": sorted(connections.KNOWN_BASE_URLS),
+        "known_providers": [p["id"] for p in model_catalog.providers_summary()],
     }
 
 
@@ -193,3 +194,51 @@ async def validate_provider(
     session.commit()
     session.refresh(row)
     return {**result, "provider": connections.serialize(row)}
+
+
+@router.get("/models/catalog")
+async def model_catalog_providers():
+    """The providers the catalogue knows (models.dev; public, no company data)."""
+    return {
+        "origin": model_catalog.origin(),
+        "providers": model_catalog.providers_summary(),
+    }
+
+
+@router.get("/models/catalog/{provider_id}")
+async def model_catalog_models(provider_id: str):
+    """One provider's models and what each can do (public)."""
+    entry = model_catalog.provider(provider_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="provider not in the catalogue")
+    return {
+        "provider": provider_id,
+        "name": entry["name"],
+        "base_url": entry["base_url"],
+        "models": model_catalog.models_for(provider_id),
+    }
+
+
+@router.get("/companies/{company_id}/models")
+async def company_models(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The models the company can use: per enabled connection, the
+    catalogue's models for its provider merged with what the provider itself
+    listed at its last validation. ``listed`` says the provider served the id
+    when asked; ``in_catalog`` says the catalogue describes it."""
+    require_company_role(session, user, company_id, "Viewer")
+    rows = session.exec(
+        select(ProviderConnection)
+        .where(
+            ProviderConnection.company_id == company_id,
+            ProviderConnection.enabled.is_(True),
+        )
+        .order_by(ProviderConnection.name)
+    ).all()
+    return {
+        "origin": model_catalog.origin(),
+        "connections": [model_catalog.connection_models(row) for row in rows],
+    }
