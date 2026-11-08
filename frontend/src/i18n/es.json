@@ -2108,7 +2108,13 @@
         "approve_specification": "Aprobar una especificación que el control no bloquea",
         "approve_architecture": "Aprobar una arquitectura que cubre todos los requisitos",
         "accept_high_risk": "Aceptar una entrega de alto riesgo con todas las pruebas de criterio en verde"
-      }
+      },
+      "saving": "Guardando…",
+      "unsaved": "Hay cambios sin guardar",
+      "saved": "Guardada. El agente Manager la aplica desde su próximo ciclo.",
+      "noChanges": "No hay cambios para guardar",
+      "lastSaved": "Guardada por última vez el {{when}} por {{who}}",
+      "reconfirm": "Suspendidas después de correcciones: {{rules}}. Guardar la política las vuelve a poner en vigor."
     }
   },
   "sprintAdmin": {

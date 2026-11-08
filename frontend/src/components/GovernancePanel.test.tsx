@@ -20,6 +20,7 @@ vi.mock('../services/manager', () => ({
   useClientBrief: () => ({ data: undefined }),
   useOverrideManagerDecision: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useManagerPolicy: () => ({ data: undefined }),
+  useManagerRecord: () => ({ data: undefined }),
   useSaveManagerPolicy: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   MANAGER_RULES: [],
 }))

@@ -133,7 +133,9 @@ export function useSaveManagerPolicy(companyId: number) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (data: ManagerPolicyUpdate) => managerApi.savePolicy(companyId, data),
-    onSuccess: () => {
+    onSuccess: saved => {
+      // The PUT answers with the stored policy: the panel shows it without waiting for a GET.
+      queryClient.setQueryData(['company', companyId, 'manager-policy'], saved)
       queryClient.invalidateQueries({ queryKey: ['company', companyId, 'manager-policy'] })
       queryClient.invalidateQueries({ queryKey: ['manager-record'] })
     },
