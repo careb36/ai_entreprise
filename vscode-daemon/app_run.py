@@ -31,11 +31,12 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import command_policy
 import sandbox
 import shell_exec
+import win_job
 
 # Bounds on what a request may ask for, and on what the reply keeps.
 MAX_READY_SECONDS = 300
@@ -130,19 +131,25 @@ def _await_group(pgid: int) -> None:
             time.sleep(POLL_SECONDS / 5)
 
 
-def _stop_host(process: subprocess.Popen, port: int) -> bool:
+def _stop_host(process: subprocess.Popen, port: int, job: Optional[int] = None) -> bool:
     """Stop the application and everything it started; ``True`` only once the
-    port no longer answers, so a program that outlived the stop is reported."""
-    stopped = _signal_leader(process)
+    port no longer answers, so a program that outlived the stop is reported.
+
+    On Windows *job* is the Job Object the application runs in (``win_job``):
+    terminating it reaches every process it started, also after the wrapper
+    exited; without one the stop falls back to ``taskkill /T``."""
+    stopped = _signal_leader(process, job)
     if not _WINDOWS:
         _await_group(process.pid)
     return stopped and not port_in_use(port)
 
 
-def _signal_leader(process: subprocess.Popen) -> bool:
+def _signal_leader(process: subprocess.Popen, job: Optional[int] = None) -> bool:
     if _WINDOWS:
-        # terminate() would stop only the cmd/PowerShell wrapper: kill the tree.
-        sandbox.kill_tree(process)
+        # terminate() would stop only the cmd/PowerShell wrapper: end the job,
+        # which holds orphans too, else kill the tree while the wrapper lives.
+        if not win_job.terminate(job):
+            sandbox.kill_tree(process)
         try:
             process.wait(timeout=STOP_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
@@ -178,7 +185,10 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
             shell_exec.build_shell_command(req["start"]),
             cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
             start_new_session=not _WINDOWS,
+            creationflags=win_job.creationflags(),
         )
+        # Windows: contained in a kill-on-close job before it may start anything.
+        job = win_job.contain(process)
         out["started"] = True
         began = time.monotonic()
         try:
@@ -203,7 +213,7 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
                     )
                     out["e2e"] = _e2e_record(req, run)
         finally:
-            out["stopped"] = _stop_host(process, port)
+            out["stopped"] = _stop_host(process, port, job)
         log.seek(0, os.SEEK_END)
         size = log.tell()
         log.seek(max(0, size - LOG_TAIL_CHARS))
