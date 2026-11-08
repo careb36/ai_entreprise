@@ -29,7 +29,7 @@ from config import settings
 from database import engine as default_engine
 from sqlmodel import Session
 
-from services import mcp_client, mcp_config
+from services import mcp_client, mcp_config, tool_history
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -253,7 +253,12 @@ def chat_with_tools(
     )
     observations: list[dict[str, Any]] = []
     history = list(messages)
+    # (index in history, round, observation) of each tool result, so the old
+    # ones go to the model as one line (``services/tool_history.py``).
+    results: list[tuple[int, int, dict[str, Any]]] = []
+    keep = settings.TOOL_HISTORY_KEEP_ROUNDS
     for round_no in range(1, rounds + 1):
+        tool_history.compress(history, results, round_no, keep)
         result = client.chat(
             messages=history, model=model, role=role, tools=schemas, **billing
         )
@@ -266,6 +271,7 @@ def chat_with_tools(
         for call in calls:
             observation, text = toolbox.call(call, round_no)
             observations.append(observation)
+            results.append((len(history), round_no, observation))
             history.append(
                 {
                     "role": "tool",
@@ -273,6 +279,7 @@ def chat_with_tools(
                     "content": text,
                 }
             )
+    tool_history.compress(history, results, rounds + 1, keep)
     history.append({"role": "user", "content": ROUNDS_EXHAUSTED_NOTE})
     return client.chat(
         messages=history, model=model, role=role, **billing

@@ -43,6 +43,7 @@ from services import (
     dependencies,
     developer_tools,
     edit_blocks,
+    edit_plan,
     git_workflow,
     integration_jobs,
     locks,
@@ -434,13 +435,7 @@ def _execute_task(
             f"{external_advice[:4000]}"
         )
 
-    if architect_advice:
-        user_prompt += (
-            "\n\n## Architect Guidance\n"
-            "The team Architect reviewed this task before implementation. "
-            "Follow this brief unless it conflicts with the task requirements.\n\n"
-            f"{architect_advice[:3000]}"
-        )
+    user_prompt += edit_plan.prompt_section(architect_advice)  # A plan, or guidance.
 
     rework_feedback = task_projection.record_from_dict(item).pending_rework_feedback()
     if rework_feedback:
@@ -452,7 +447,10 @@ def _execute_task(
         )
 
     model = model_routing.resolve_agent_model(
-        agent, item=item, rework=bool(rework_feedback)
+        agent,
+        item=item,
+        rework=bool(rework_feedback),
+        editor=bool(edit_plan.plan_in(architect_advice)),
     )
     role = agent.get("role", "Dev")
 
@@ -514,14 +512,10 @@ def _consult_architect(
     sprint: dict[str, Any],
     prior_feedback: list[str] | None = None,
 ) -> str:
-    """
-    Ask the company's Architect agent for a short technical brief on *item*.
-
-    Runs synchronously (called via ``asyncio.to_thread``).  Returns the advice
-    text, or ``""`` when no Architect agent exists or the call fails; callers
-    treat an empty brief as "no consultation happened".  Successful calls are
-    written to ``audit_log`` with ``role=Architect``.
-    """
+    """Ask the company's Architect agent for a short brief on *item*, with the
+    repository map. Synchronous (via ``asyncio.to_thread``); ``""`` when no
+    Architect exists or the call fails (no consultation happened). Successful
+    calls are written to ``audit_log`` with ``role=Architect``."""
     with Session(engine) as session:
         architect_row = session.exec(
             select(Agent).where(
@@ -569,6 +563,10 @@ def _consult_architect(
     )
     prompt = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
+    )
+    prompt += edit_plan.request_section(item)
+    prompt += developer_tools.repository_section(
+        sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
     )
 
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
@@ -2182,7 +2180,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             architect_advice = ""
             if should_consult_architect(
                 item, agent, item.get("comments"), enabled=ARCHITECT_CONSULT_ENABLED
-            ):
+            ) or (ARCHITECT_CONSULT_ENABLED and edit_plan.wanted(item, agent)):
                 prior_feedback = [
                     str(c.get("text", ""))
                     for c in (item.get("comments") or [])

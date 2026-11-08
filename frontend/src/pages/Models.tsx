@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next'
-import { Boxes } from 'lucide-react'
+import { Boxes, Cpu, Plug } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import ModelChoices from '../components/ModelChoices'
 import ModelConnections from '../components/ModelConnections'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
+import { modelsApi } from '../services/models'
 
 /**
  * The company's Models screen (issue #356): the providers its agents can
@@ -14,6 +16,15 @@ export default function Models() {
   const companyId = useAppStore(state => state.companyId)
   const role = useCurrentRole()
   const canManage = role === 'Owner' || role === 'Manager'
+
+  const models = useQuery({
+    queryKey: ['company-models', companyId],
+    queryFn: () => modelsApi.companyModels(companyId!),
+    enabled: companyId !== null,
+  })
+  const connections = models.data?.connections ?? []
+  const modelCount = connections.reduce((n, c) => n + (c.models?.length ?? 0), 0)
+  const validated = connections.filter(c => c.validation_ok === true).length
 
   return (
     <div className="page-container max-w-4xl space-y-6">
@@ -30,6 +41,23 @@ export default function Models() {
         <p className="text-sm text-gray-400">{t('models.noCompany')}</p>
       ) : (
         <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="card p-3 text-center">
+              <Plug size={16} className="mx-auto mb-1 text-brand-400" />
+              <div className="text-2xl font-bold text-white">{connections.length}</div>
+              <div className="text-xs text-gray-400">{t('models.statConnections', { defaultValue: 'Connections' })}</div>
+            </div>
+            <div className="card p-3 text-center">
+              <Cpu size={16} className="mx-auto mb-1 text-brand-400" />
+              <div className="text-2xl font-bold text-white">{modelCount}</div>
+              <div className="text-xs text-gray-400">{t('models.statModels', { defaultValue: 'Models' })}</div>
+            </div>
+            <div className="card p-3 text-center">
+              <Boxes size={16} className="mx-auto mb-1 text-emerald-400" />
+              <div className="text-2xl font-bold text-white">{validated}</div>
+              <div className="text-xs text-gray-400">{t('models.statValidated', { defaultValue: 'Validated' })}</div>
+            </div>
+          </div>
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
         </>

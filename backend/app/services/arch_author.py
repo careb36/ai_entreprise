@@ -226,6 +226,9 @@ def prepare(
         "bu_id": spec_author.business_unit_id(session, spec.company_id),
         "questions": (existing.questions if existing is not None else []) or [],
         "research_hosts": research_tools.company_hosts(session, spec.company_id),
+        # The repository map is added by the caller that holds NATS
+        # (``repo_map.fetch_section``): this function reads only the database.
+        "project_path": discovery.project_path if discovery else None,
     }
 
 

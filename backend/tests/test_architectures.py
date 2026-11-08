@@ -319,6 +319,7 @@ def test_the_architect_drafts_from_the_approved_specification_asks_and_a_person_
         "bu_id",
         "questions",
         "research_hosts",
+        "project_path",
     }
     assert prepared["specification_id"] == spec.id and "REQ-1.1" in prepared["prompt"]
     assert (
