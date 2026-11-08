@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, call
+from unittest.mock import ANY, MagicMock, call
 
 import pytest
 from audit_signing import verify_audit_row
@@ -325,15 +325,20 @@ def test_task_queue_model_is_removed():
 def test_janitor_drops_retired_queue_before_cleanup(monkeypatch, sqlite_session):
     from janitor import main as janitor
 
+    for name in janitor.retention.DEFAULTS:
+        monkeypatch.delenv(name, raising=False)
     connection = MagicMock()
     cursor = connection.cursor.return_value
     monkeypatch.setattr(janitor, "get_db_connection", lambda: connection)
     janitor.run_janitor_tasks()
     janitor.run_janitor_tasks()
+    # Retention (janitor/retention.py) runs with its defaults: only the outbox.
     expected = [
         call("DROP TABLE IF EXISTS task_queue"),
+        call("SET TIME ZONE 'UTC'"),
         call(
-            "DELETE FROM outbox_events WHERE status = 'completed' AND processed_at < NOW() - INTERVAL '7 days'"
+            "DELETE FROM outbox_events WHERE status = 'completed' AND processed_at < %s",
+            (ANY,),
         ),
         call("REINDEX INDEX CONCURRENTLY vector_memory_idx"),
     ]
