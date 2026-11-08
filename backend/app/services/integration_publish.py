@@ -11,7 +11,7 @@ The description is the record of what ran, as a pull request opened by a
 coding agent carries it: what was observed first (the integration's merges,
 the suite's result on the integrated branch, and each task's verdict,
 checks, criteria verified and files written, as the Verifier observed
-them), then each producer's own account, labelled as a claim. The per-task
+them, with the acceptance line as it stood at integration), then each producer's own account, labelled as a claim. The per-task
 publication stays available beside it.
 """
 
@@ -32,12 +32,12 @@ from services.git_publish import (
     _cell,
 )
 from services.review_changes import _workspace_file, run_changes
-from services.spec_planning import acceptance_summary
 
 MAX_FILES_PER_TASK = 30
 REFUSALS = {
     "conflict": "The integration stopped at a conflict: integrate again once it is resolved",
     "incomplete": "A done task's branch was missing from the integration: it is not the whole sprint",
+    "running": "The integration is still running",
     "pending": "The integration has not run yet: the workspace daemon did not answer",
     "error": "The integration could not run: integrate again",
 }
@@ -152,7 +152,8 @@ def _task_lines(
                 f"{_cell(c.get('name'))} {_cell(c.get('outcome'))}" for c in checks
             )
         )
-    acceptance = acceptance_summary(session, item) if item is not None else None
+    # As it stood at integration, never the specification's coverage now.
+    acceptance = task.get("acceptance")
     if acceptance:
         observed.append(acceptance)
     # Files the workspace daemon read back, as that verification recorded them.
@@ -213,6 +214,12 @@ def publish_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
         )
     if not row.repository or not row.commit:
         raise PublishRefused(409, "This integration names no commit to publish")
+    if row.tasks is None:
+        # Recorded before each task's evidence was kept (migration 0012).
+        raise PublishRefused(
+            409,
+            "This integration did not record its tasks' evidence: integrate again",
+        )
     sprint = session.get(Sprint, row.sprint_id)
     title = f"Sprint {row.sprint_id}: {sprint.sprint_name if sprint else ''}".strip(
         ": "

@@ -475,29 +475,44 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
     }
 
 
+def acceptance_summaries(session: Session, items: list[Any]) -> dict[int, str]:
+    """``{item id: line}`` for a publication: how many criteria of each
+    item's specification are verified by an observed passing test. The
+    coverage is read once per specification, however many items share it;
+    an item whose sprint was not planned from a specification gets ""."""
+    lines: dict[int, str] = {}
+    covered: dict[int, tuple[Specification | None, dict[str, Any] | None]] = {}
+    for item in items:
+        if item is None or item.id is None:
+            continue
+        sprint = session.get(Sprint, item.sprint_id)
+        spec_id = sprint.specification_id if sprint is not None else None
+        if spec_id is None:
+            lines[item.id] = ""
+            continue
+        if spec_id not in covered:
+            spec = session.get(Specification, spec_id)
+            covered[spec_id] = (spec, coverage(session, spec) if spec else None)
+        spec, cov = covered[spec_id]
+        if spec is None or not cov or not cov["total"]:
+            lines[item.id] = ""
+            continue
+        own = [c for c in cov["criteria"] if c["id"] in set(covers_of(item))]
+        mine = (
+            f"; this task's: {sum(1 for c in own if c['verified'])} of {len(own)}"
+            if own
+            else ""
+        )
+        lines[item.id] = (
+            f"**Acceptance:** {cov['verified']} of {cov['total']} criteria of "
+            f'"{spec.title}" verified by a passing test in an observed run '
+            f"({round(100 * cov['verified'] / cov['total'])} %){mine}."
+        )
+    return lines
+
+
 def acceptance_summary(session: Session, item: Any) -> str:
-    """One line for a publication: how many criteria of the task's
-    specification are verified by an observed passing test. Empty when the
-    sprint was not planned from a specification."""
+    """One item's line of ``acceptance_summaries``."""
     if item is None:
         return ""
-    sprint = session.get(Sprint, item.sprint_id)
-    if sprint is None or sprint.specification_id is None:
-        return ""
-    spec = session.get(Specification, sprint.specification_id)
-    if spec is None:
-        return ""
-    cov = coverage(session, spec)
-    if not cov["total"]:
-        return ""
-    own = [c for c in cov["criteria"] if c["id"] in set(covers_of(item))]
-    mine = (
-        f"; this task's: {sum(1 for c in own if c['verified'])} of {len(own)}"
-        if own
-        else ""
-    )
-    return (
-        f"**Acceptance:** {cov['verified']} of {cov['total']} criteria of "
-        f'"{spec.title}" verified by a passing test in an observed run '
-        f"({round(100 * cov['verified'] / cov['total'])} %){mine}."
-    )
+    return acceptance_summaries(session, [item]).get(item.id, "")

@@ -41,6 +41,7 @@ SUPPORT_AGENT = "support-agent"
 REVIEWER_AGENT = "reviewer-agent"
 MANAGER_AGENT = "manager-agent"
 MANAGER_ITEM = "manager-item"
+SPRINT_INTEGRATION = "sprint-integration"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()
