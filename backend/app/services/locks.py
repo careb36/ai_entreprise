@@ -2,7 +2,8 @@
 
 Several backend replicas may run the task worker, the review cycle and the
 agents' loops against one database. Work that must happen once (a review
-cycle, closing a sprint, a ScrumMaster triage, a Support or Reviewer cycle)
+cycle, closing a sprint, a ScrumMaster triage, a Support, Reviewer or Manager
+cycle, the Manager agent's look at one inbox item)
 runs under a lock named here.
 
 On Postgres the lock is a session-level advisory lock taken with
@@ -38,6 +39,8 @@ TRIAGE = "scrum-master-triage"
 TASK = "task"
 SUPPORT_AGENT = "support-agent"
 REVIEWER_AGENT = "reviewer-agent"
+MANAGER_AGENT = "manager-agent"
+MANAGER_ITEM = "manager-item"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()

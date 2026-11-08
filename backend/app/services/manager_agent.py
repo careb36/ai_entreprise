@@ -24,10 +24,12 @@ Nothing it decides changes a verdict.
 client's decisions and how often the client overrode it; the next prompt
 carries those numbers. Enabled with ``MANAGER_AGENT_ENABLED``.
 
-Across replicas: one row per situation (``item_state``) under a unique
-constraint, committed before acting, so two replicas never act twice on one
-situation. TODO: once ``services/locks.py`` exists, take its lock per cycle
-so the second replica does not spend an LLM call on an item the first took.
+Across replicas (issue #328): the background loop runs under
+``locks.MANAGER_AGENT``, one replica a round, and each item is looked at under
+its own lock (``locks.MANAGER_ITEM``), held from the check that the situation
+is new through the model call to the decision, so two replicas never ask
+about, or decide, the same inbox item. The unique constraint on the situation
+(``item_state``) stays as the database's invariant behind the lock.
 """
 
 from __future__ import annotations
@@ -51,7 +53,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from llm.model_factory import default_model_for_role
-from services import company_models, manager_actions, manager_policy, manager_record
+from services import (
+    company_models,
+    locks,
+    manager_actions,
+    manager_policy,
+    manager_record,
+)
 from services.board import (
     RISK_HOLD_PREFIX,
     awaits_risk_acceptance,
@@ -373,17 +381,20 @@ def ask_llm(
 
 
 def _seen(session: Session, company_id: int, item: dict) -> list[ManagerDecision]:
+    # Read again from the database: another replica may have just written one.
     return session.exec(
-        select(ManagerDecision).where(
+        select(ManagerDecision)
+        .where(
             ManagerDecision.company_id == company_id,
             ManagerDecision.item_kind == item["kind"],
             ManagerDecision.item_id == item["id"],
         )
+        .execution_options(populate_existing=True)
     ).all()
 
 
 def _claim(session: Session, row: ManagerDecision) -> bool:
-    """Commit the row for this situation; ``False`` when another replica did."""
+    """Commit the row for this situation; ``False`` if one exists (the invariant behind the lock)."""
     session.add(row)
     try:
         session.commit()
@@ -402,7 +413,25 @@ def suggest_on(
     record: dict[str, Any],
     policy: manager_policy.Policy,
 ) -> ManagerDecision | None:
-    """Ask about one item, store the suggestion, and act when the policy allows."""
+    """Ask about one item, store the suggestion, and act when the policy allows.
+
+    Runs under the item's lock: a replica that does not get it skips the item.
+    """
+    ident = f"{company.id}:{item['kind']}:{item['id']}"
+    with locks.held(session.get_bind(), locks.MANAGER_ITEM, ident) as mine:
+        if not mine:
+            return None
+        return _suggest_on(session, company, item, call, record, policy)
+
+
+def _suggest_on(
+    session: Session,
+    company: Company,
+    item: dict[str, Any],
+    call: Callable[[str], str],
+    record: dict[str, Any],
+    policy: manager_policy.Policy,
+) -> ManagerDecision | None:
     earlier = _seen(session, company.id, item)
     if any(r.item_state == item["state"] for r in earlier):
         return None
@@ -499,7 +528,10 @@ async def run_manager_agent(engine) -> None:
     )
     while True:
         try:
-            count = await asyncio.to_thread(manager_cycle, engine)
+            # One replica a round (issue #328); each item has its own lock too.
+            count = await asyncio.to_thread(
+                locks.run_exclusive, engine, locks.MANAGER_AGENT, manager_cycle, engine
+            )
             if count:
                 logger.info("Manager agent looked at %s item(s)", count)
         except Exception as exc:  # noqa: BLE001 - Keep the loop alive.

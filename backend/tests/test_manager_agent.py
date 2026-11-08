@@ -5,6 +5,7 @@ overridable, its record against the client's decisions, and the brief."""
 from __future__ import annotations
 
 import secrets
+import threading
 
 import auth_tokens
 import pytest
@@ -14,11 +15,17 @@ from models import AgentRun, AgentRunApproval, AuditLog, BacklogItem, Procedure,
 from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.company import BusinessUnit, Company, CompanyMember, User
 from models.manager import ManagerDecision, ManagerPolicy
-from services import manager_actions, manager_agent, manager_policy, manager_record
+from services import (
+    locks,
+    manager_actions,
+    manager_agent,
+    manager_policy,
+    manager_record,
+)
 from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, awaits_risk_acceptance
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 from services.sprint_control import HUMAN_LED_REASON
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 
 def answer(decision: str, category: str, reason: str = "The run is verified.") -> str:
@@ -388,7 +395,7 @@ def test_a_failed_call_writes_nothing(sqlite_session):
     assert _rows(sqlite_session, company) == []
 
 
-def test_one_situation_gets_one_row_across_replicas(sqlite_session):
+def test_one_situation_gets_one_row_behind_the_lock(sqlite_session):
     company = _company(sqlite_session)
     item = _hold(sqlite_session, company)
     fields = {
@@ -401,6 +408,73 @@ def test_one_situation_gets_one_row_across_replicas(sqlite_session):
     assert manager_agent._claim(sqlite_session, ManagerDecision(**fields))
     assert not manager_agent._claim(sqlite_session, ManagerDecision(**fields))
     assert len(_rows(sqlite_session, company)) == 1
+
+
+def test_two_replicas_never_decide_the_same_item(tmp_path):
+    """The second replica skips an item the first is asking about, and asks no model."""
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'manager.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        company = _company(session)
+        _hold(session, company)
+        _policy(session, company, "accept_delivery")
+        company_id = company.id
+
+    asking = threading.Event()
+    second_done = threading.Event()
+    calls = []
+
+    def slow(prompt):
+        calls.append("first")
+        asking.set()
+        second_done.wait(timeout=30)
+        return answer("accept", "accept_delivery")
+
+    def fast(prompt):
+        calls.append("second")
+        return answer("accept", "accept_delivery")
+
+    results = {}
+
+    def replica(name, ask):
+        with Session(engine) as session:
+            company = session.get(Company, company_id)
+            results[name] = manager_agent.company_cycle(session, company, ask)
+
+    first = threading.Thread(target=replica, args=("first", slow))
+    first.start()
+    assert asking.wait(timeout=30)
+    replica("second", fast)
+    second_done.set()
+    first.join(timeout=30)
+
+    assert results == {"first": 1, "second": 0}
+    assert calls == ["first"]
+    with Session(engine) as session:
+        rows = session.exec(select(ManagerDecision)).all()
+        assert len(rows) == 1 and rows[0].decided_by == MANAGER_AGENT_NAME
+        # Once the first is done, a later round sees the situation and asks nothing.
+        company = session.get(Company, company_id)
+        assert manager_agent.company_cycle(session, company, fast) == 0
+    assert calls == ["first"]
+
+
+def test_the_loop_skips_a_round_another_replica_runs(sqlite_session, monkeypatch):
+    engine = sqlite_session.get_bind()
+    ran = []
+    monkeypatch.setattr(manager_agent, "manager_cycle", lambda e: ran.append(e) or 1)
+    with locks.held(engine, locks.MANAGER_AGENT) as mine:
+        assert mine
+        assert (
+            locks.run_exclusive(
+                engine, locks.MANAGER_AGENT, manager_agent.manager_cycle, engine
+            )
+            is None
+        )
+    assert ran == []
 
 
 def test_a_procedure_is_adopted_alone_only_at_level_3(sqlite_session):
