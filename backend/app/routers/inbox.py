@@ -5,8 +5,10 @@ Inbox router — what the company needs a person for.
 take: tasks blocked until someone acts (with the ScrumMaster's triage of each,
 when it answered the escalation; ``risk_hold`` marks an approved high-risk
 delivery waiting for a person to accept it), procedure proposals waiting for a Manager,
-and the agent runs of other producers nobody has approved or rejected (the
-company's own task worker and kickoff runs are decided by the review loop).
+the agent runs of other producers nobody has approved or rejected (the
+company's own task worker and kickoff runs are decided by the review loop),
+and the sprints whose integration stopped at a merge conflict or a failing
+suite (``integrations``, ``services/integration.py``).
 The agents do the rest on their own, so this is the whole of a person's
 queue.
 """
@@ -17,7 +19,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
-from services import manager_agent, scrum_master
+from services import integration, manager_agent, scrum_master
 from services.board import (
     awaits_risk_acceptance,
     block_reason,
@@ -118,6 +120,8 @@ async def inbox(
             .limit(20)
         ).all()
 
+    integrations = integration.waiting_for_a_person(session, company_id)[:limit]
+
     return {
         "blocked_tasks": blocked_tasks,
         "proposals": [
@@ -145,6 +149,10 @@ async def inbox(
             }
             for r in pending_run_rows
         ],
+        "integrations": integrations,
         "blocked_total": blocked_total,
-        "total": blocked_total + len(proposals) + int(pending_runs or 0),
+        "total": blocked_total
+        + len(proposals)
+        + int(pending_runs or 0)
+        + len(integrations),
     }
