@@ -16,7 +16,6 @@ unknown task, a task that depends on itself or a cycle is refused.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from models import BacklogItem, Sprint
@@ -143,7 +142,9 @@ def note(
     status: str | None = None,
 ) -> None:
     """The System's note on *item*, written as its event (``task_events.record``)."""
-    task_events.record(session, item, kind, task_events.SYSTEM, text=text, status=status)
+    task_events.record(
+        session, item, kind, task_events.SYSTEM, text=text, status=status
+    )
 
 
 def _last_system_note(item: BacklogItem) -> str:

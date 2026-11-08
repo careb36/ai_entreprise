@@ -27,8 +27,8 @@ from models.review import ReviewComment, RunReview
 from models.sprint import BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services.agent_service import AgentService
 from services import task_events, task_projection
+from services.agent_service import AgentService
 from services.board import SEND_BACK_MARKER
 from services.carry_over import carried_over
 from services.review_changes import run_changes

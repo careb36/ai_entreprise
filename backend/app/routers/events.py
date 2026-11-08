@@ -49,7 +49,9 @@ async def task_event_log(
         raise HTTPException(status_code=404, detail="Task not found")
     require_company_role(session, user, sprint.company_id, "Viewer")
     rows = [
-        e for e in task_events.for_task(session, task_id) if e.company_id == sprint.company_id
+        e
+        for e in task_events.for_task(session, task_id)
+        if e.company_id == sprint.company_id
     ]
     return {
         "task_id": task_id,

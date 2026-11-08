@@ -9,7 +9,10 @@ Adds to ``task_events`` what an event of a task's life carries (``actor``,
 chain ``seq`` / ``prev_hash`` / ``chain_hash``), then reads every existing
 task thread back into events: each comment whose kind it can tell becomes an
 event marked ``legacy`` (written by the migration, not by the transition, and
-left out of the chain), with the event's id put on the comment. A thread
+left out of the chain), with the event's id put on the comment; the last one
+carries the task's status, and on a done task the person's note that closed it
+(after its last approval, as ``history_check`` reads it) is read as
+``approved_by_person``. A thread
 holding a comment it cannot tell gets one ``legacy`` event of kind
 ``legacy`` too, so the board keeps reading that task from its comments.
 
@@ -177,6 +180,7 @@ def _backfill() -> None:
         "backlog_items",
         sa.column("id", sa.Integer),
         sa.column("sprint_id", sa.Integer),
+        sa.column("status", sa.String),
         sa.column("comments", sa.JSON),
     )
     sprints = sa.table(
@@ -192,6 +196,7 @@ def _backfill() -> None:
         sa.column("payload", sa.JSON),
         sa.column("created_at", sa.DateTime),
         sa.column("actor", sa.String),
+        sa.column("task_status", sa.String),
         sa.column("legacy", sa.Boolean),
     )
     already = {
@@ -201,28 +206,39 @@ def _backfill() -> None:
         )
     }
     rows = bind.execute(
-        sa.select(items.c.id, items.c.sprint_id, items.c.comments, sprints.c.company_id)
+        sa.select(
+            items.c.id,
+            items.c.sprint_id,
+            items.c.status,
+            items.c.comments,
+            sprints.c.company_id,
+        )
         .select_from(items.join(sprints, sprints.c.id == items.c.sprint_id))
         .order_by(items.c.id)
     ).all()
-    for item_id, sprint_id, raw, company_id in rows:
+    for item_id, sprint_id, status, raw, company_id in rows:
         comments = _comments(raw)
         if item_id in already or company_id is None or not comments:
             continue
-        unread = 0
-        changed = []
-        for comment in comments:
+        read: list[tuple[int, str, str, dict]] = []
+        for index, comment in enumerate(comments):
             if not isinstance(comment, dict):
-                changed.append(comment)
                 continue
-            author = str(comment.get("author") or "")
             text = str(comment.get("text") or "").strip()
-            found = _classify(author, text) if text else None
-            if found is None:
-                unread += 1
-                changed.append(comment)
-                continue
-            kind, actor, flags = found
+            found = _classify(str(comment.get("author") or ""), text) if text else None
+            if found is not None:
+                read.append((index, *found))
+        unread = sum(1 for c in comments if isinstance(c, dict)) - len(read)
+        if status == "done":
+            # Closed by a person when their note came after the last approval.
+            approvals = [i for i, r in enumerate(read) if r[3]["verdict"] == "approved"]
+            notes = [i for i, r in enumerate(read) if r[2] == "person"]
+            if notes and (not approvals or notes[-1] > approvals[-1]):
+                index, _kind, actor, flags = read[notes[-1]]
+                read[notes[-1]] = (index, "approved_by_person", actor, flags)
+        changed = list(comments)
+        for position, (index, kind, actor, flags) in enumerate(read):
+            comment = comments[index]
             event_id = bind.execute(
                 events.insert()
                 .values(
@@ -231,18 +247,20 @@ def _backfill() -> None:
                     task_id=item_id,
                     event_type=kind,
                     payload={
-                        "author": author,
-                        "text": text[:4000],
+                        "author": str(comment.get("author") or ""),
+                        "text": str(comment.get("text") or "").strip()[:4000],
                         "backfilled": True,
                         **flags,
                     },
                     created_at=_when(comment.get("created_at")),
                     actor=actor,
+                    # The last event read back carries the status the task had.
+                    task_status=status if position == len(read) - 1 else None,
                     legacy=True,
                 )
                 .returning(events.c.id)
             ).scalar_one()
-            changed.append({**comment, "event_id": event_id})
+            changed[index] = {**comment, "event_id": event_id}
         if unread:
             bind.execute(
                 events.insert().values(
@@ -253,6 +271,7 @@ def _backfill() -> None:
                     payload={"unread_comments": unread},
                     created_at=datetime.now(UTC).replace(tzinfo=None),
                     actor="system",
+                    task_status=status,
                     legacy=True,
                 )
             )

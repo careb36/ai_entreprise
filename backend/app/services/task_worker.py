@@ -837,7 +837,6 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
 def _recover_inflight_items_for_restart() -> list[dict[str, Any]]:
     """Return unfinished in-progress work to todo so the worker can resume after restart."""
     recovered: list[dict[str, Any]] = []
-    recovery_time = datetime.now(UTC)
 
     with Session(engine) as session:
         inflight_items = session.exec(
@@ -1339,9 +1338,7 @@ def _append_item_comment(
     item_id: int, text: str, author: str, kind: str = "note", **fields: Any
 ) -> None:
     """Record an event on a backlog item, rendered as a comment, without changing its status."""
-    task_events.record_by_id(
-        engine, item_id, kind, text=text, author=author, **fields
-    )
+    task_events.record_by_id(engine, item_id, kind, text=text, author=author, **fields)
 
 
 def _update_item_status(

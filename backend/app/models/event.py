@@ -23,7 +23,9 @@ class TaskEvent(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     company_id: int = Field(foreign_key="companies.id", index=True)
     sprint_id: int = Field(foreign_key="sprints.id", index=True)
-    task_id: int | None = Field(default=None, foreign_key="backlog_items.id", index=True)
+    task_id: int | None = Field(
+        default=None, foreign_key="backlog_items.id", index=True
+    )
     event_type: str
     payload: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

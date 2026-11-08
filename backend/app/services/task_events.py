@@ -158,7 +158,8 @@ def flags_for(author: str, text: str) -> dict[str, Any]:
             )
         ),
         "retry": system and "retry" in lowered,
-        "frozen": "sleep-induced churn" in lowered or lowered.startswith("freeze after"),
+        "frozen": "sleep-induced churn" in lowered
+        or lowered.startswith("freeze after"),
     }
 
 
@@ -340,9 +341,7 @@ def for_task(session: Session, task_id: int) -> list[TaskEvent]:
     """A task's events, in the order they happened."""
     return list(
         session.exec(
-            select(TaskEvent)
-            .where(TaskEvent.task_id == task_id)
-            .order_by(TaskEvent.id)  # type: ignore[arg-type]
+            select(TaskEvent).where(TaskEvent.task_id == task_id).order_by(TaskEvent.id)  # type: ignore[arg-type]
         ).all()
     )
 
