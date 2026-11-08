@@ -17,6 +17,7 @@ from routers.inbox import router as inbox_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
 from routers.procedures import router as procedures_router
+from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
@@ -36,6 +37,7 @@ __all__ = [
     "mcp_router",
     "messages_router",
     "procedures_router",
+    "providers_router",
     "reviews_router",
     "specifications_router",
     "sprint_control_router",

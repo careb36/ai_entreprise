@@ -30,6 +30,7 @@ from routers import (
     mcp_router,
     messages_router,
     procedures_router,
+    providers_router,
     reviews_router,
     specifications_router,
     sprint_control_router,
@@ -108,6 +109,7 @@ app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(workspace_router)
 app.include_router(mcp_router)
+app.include_router(providers_router)
 
 # Register exception handlers
 register_exception_handlers(app)

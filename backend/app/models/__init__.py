@@ -25,6 +25,7 @@ from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .mcp import McpServer
 from .procedure import Procedure
+from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .runtime import AssistantRuntimeState
 from .specification import Specification
@@ -50,6 +51,7 @@ __all__ = [
     "Procedure",
     "ProjectCredential",
     "ProjectDiscovery",
+    "ProviderConnection",
     "ReviewComment",
     "RunPublication",
     "RunReview",
