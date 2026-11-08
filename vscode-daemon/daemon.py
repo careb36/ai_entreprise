@@ -6,14 +6,14 @@ where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
 - workspace.generate:     write files (request/reply, per-file sha256 of the bytes on disk
-                          and the diff against what was there, file_diff.py); with a
+                          and the diff against what was there, file_diff.py; a snapshot to undo it); with a
                           `git` spec, as a commit on the task's branch (git_workspace.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
 - workspace.browse:       list the sub-folders of a folder, for the folder picker
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
-- workspace.hash:         sha256 of named files as they are on disk (file_hash.py)
+- workspace.hash:         sha256 of named files as they are on disk (file_hash.py); workspace.undo: undo a delivery (delivery_snapshot.py)
 - workspace.list / read / search / find, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, workspace_edit.py)
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
@@ -49,7 +49,7 @@ import nats_scope
 import platform_reviews
 import sprint_integration
 import shell_exec
-import workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
+import delivery_snapshot, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
 _build_shell_command = shell_exec.build_shell_command  # An old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -161,16 +161,11 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
 
 
 def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """``write_files`` wrapped in the reply shape the backend reads; a commit on the task's branch when *git* names it."""
+    """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else with a snapshot to undo it."""
     try:
         if git:
             return git_workspace.deliver(workspace_path, git, files, write_files)
-        write_results = write_files(workspace_path, files)
-        return {
-            "ok": all(r["status"] == "written" for r in write_results),
-            "workspace_root": workspace_path,
-            "files": write_results,
-        }
+        return delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path)
     except (OSError, git_workspace.GitError) as e:
         logger.error("Writing files under %s failed: %s", workspace_path, e)
         return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
@@ -670,6 +665,7 @@ async def main():
         ("workspace.browse", bound(handle_browse)),
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
+        ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS)),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),

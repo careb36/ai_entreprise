@@ -1927,6 +1927,19 @@
       "synced": "{{added}} nuevos, {{updated}} actualizados",
       "truncated": "Llegó solo una parte de los comentarios: abrí el pedido en la plataforma para ver el resto",
       "fromPlatform": "Comentarios de la solicitud que no están en una línea de las que se ven acá"
+    },
+    "undo": {
+      "title": "Deshacer esta entrega",
+      "button": "Deshacer esta entrega",
+      "hint_one": "Vuelve a poner el {{count}} archivo que cambió esta entrega tal como el daemon lo guardó antes de escribir, en un almacén propio fuera del proyecto; si la entrega lo creó, lo borra. Se rechaza si el archivo cambió desde entonces.",
+      "hint_other": "Vuelve a poner los {{count}} archivos que cambió esta entrega tal como el daemon los guardó antes de escribir, en un almacén propio fuera del proyecto; los que la entrega creó se borran. Se rechaza si alguno cambió desde entonces.",
+      "confirm_one": "¿Deshacer esta entrega? Su {{count}} archivo vuelve a como estaba antes en la computadora del proyecto.",
+      "confirm_other": "¿Deshacer esta entrega? Sus {{count}} archivos vuelven a como estaban antes en la computadora del proyecto.",
+      "done": "Deshecha. Restaurados: {{restored}}; borrados: {{removed}}.",
+      "restored": "restaurado {{path}}",
+      "removed": "borrado {{path}}",
+      "statusStays": "El estado de la tarea no cambió; mandala de vuelta con una revisión si hay que hacerla de nuevo.",
+      "undoneAt": "Esta entrega se deshizo el {{when}}."
     }
   },
   "standards": {

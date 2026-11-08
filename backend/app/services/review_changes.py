@@ -131,7 +131,7 @@ def _workspace_file(write: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _latest_workspace_report(session: Session, run: AgentRun) -> Verification | None:
+def latest_workspace_report(session: Session, run: AgentRun) -> Verification | None:
     verifications = session.exec(
         select(Verification)
         .where(
@@ -163,7 +163,7 @@ def run_changes(session: Session, run: AgentRun) -> dict[str, Any]:
     if (run.subject or {}).get("pr_url"):
         source = "pull_request"
     else:
-        report = _latest_workspace_report(session, run)
+        report = latest_workspace_report(session, run)
         if report is None and _is_diff(run.artifact_text):
             source = "artifact"
     if source is not None:

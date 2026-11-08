@@ -6,6 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fetchApi } from './api'
 import { QUERY_KEYS } from '../hooks/useQueries'
+import { runChangesKey } from './reviewChanges'
 
 export type CommentSide = 'new' | 'old'
 export type ReviewEvent = 'comment' | 'approve' | 'request_changes'
@@ -66,6 +67,16 @@ export interface RunPublication {
   created_at: string
 }
 
+/** What undoing a delivery put back (`restored`) and removed (files the delivery created). */
+export interface UndoResult {
+  run_id: number
+  snapshot: string
+  restored: { path: string; sha256: string }[]
+  removed: { path: string }[]
+  undone_by: string
+  audit_log_id: number | null
+}
+
 export interface NewComment {
   path: string | null
   line: number | null
@@ -92,6 +103,9 @@ export const reviewsApi = {
   /** Reads the request's comments on the platform through the daemon: a few paginated calls. */
   syncComments: (companyId: number, runId: number, publicationId: number) =>
     fetchApi<SyncResult>(`/v1/agent_runs/${runId}/publications/${publicationId}/sync?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 240_000 }),
+  /** Restores files on the person's machine: sent once, never retried. */
+  undo: (companyId: number, runId: number) =>
+    fetchApi<UndoResult>(`/v1/agent_runs/${runId}/undo?company_id=${companyId}`, { method: 'POST', body: '{}', once: true, timeoutMs: 90_000 }),
 }
 
 const commentsKey = (companyId: number, runId: number) => ['agent-run', companyId, runId, 'comments'] as const
@@ -154,5 +168,14 @@ export function useSyncComments(companyId: number, runId: number) {
   return useMutation({
     mutationFn: (publicationId: number) => reviewsApi.syncComments(companyId, runId, publicationId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: commentsKey(companyId, runId) }),
+  })
+}
+
+/** Undo the run's delivery from the daemon's snapshot (Managers); the task's status stays. */
+export function useUndoDelivery(companyId: number, runId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => reviewsApi.undo(companyId, runId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: runChangesKey(companyId, runId) }),
   })
 }

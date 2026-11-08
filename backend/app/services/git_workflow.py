@@ -72,9 +72,14 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
     """Keep the daemon's Git answer on *evidence*, or why it could not write at all.
 
     With a branch, the tests run where the files are: the task's worktree.
+    Without one, the daemon's snapshot that undoes the delivery
+    (``services/delivery_undo.py``), or why it kept none, is kept too.
     """
     if not isinstance(reply, dict):
         return
+    for key in ("snapshot", "snapshot_error"):
+        if reply.get(key):
+            evidence[key] = reply[key]
     git = reply.get("git")
     if isinstance(git, dict):
         evidence["git"] = git

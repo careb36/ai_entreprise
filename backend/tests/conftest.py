@@ -109,6 +109,8 @@ def daemon_state_in_tmp(monkeypatch, tmp_path):
     monkeypatch.setenv("FABRIQUE_DAEMON_STATE", str(tmp_path / "daemon-state"))
     # The edit tool's originals (``vscode-daemon/workspace_edit.py``) too.
     monkeypatch.setenv("FABRIQUE_EDIT_STATE", str(tmp_path / "edit-state"))
+    # And the snapshots that undo a delivery (``vscode-daemon/delivery_snapshot.py``).
+    monkeypatch.setenv("FABRIQUE_SNAPSHOT_STATE", str(tmp_path / "snapshot-state"))
 
 
 @pytest.fixture(autouse=True)
