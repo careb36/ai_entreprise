@@ -9,6 +9,7 @@ export function SprintIntegration({ sprintId }: { sprintId: number }) {
     queryKey: ['sprint-integration', sprintId],
     queryFn: () => api.sprintIntegration(sprintId),
   })
+  const integration = data as any
 
   if (isLoading) return <div role="status" className="text-sm text-gray-400">{t('common.loading')}</div>
   if (isError || !data) return (
@@ -25,15 +26,15 @@ export function SprintIntegration({ sprintId }: { sprintId: number }) {
         <h3 className="font-semibold">{t('sprint.integration', { defaultValue: 'Sprint integration' })}</h3>
       </div>
       <p className="text-xs text-gray-400">
-        {t('sprint.integrationBranch', { defaultValue: 'Integration branch' })}: <code className="text-gray-200">{data.integration_branch}</code>
+        {t('sprint.integrationBranch', { defaultValue: 'Integration branch' })}: <code className="text-gray-200">{integration?.integration_branch}</code>
       </p>
-      {data.unmet_dependencies?.length > 0 && (
+      {integration?.unmet_dependencies?.length > 0 && (
         <div role="alert" className="alert-error text-xs">
-          {t('sprint.unmetDeps', { defaultValue: 'Unmet dependencies' })}: {data.unmet_dependencies.map(d => `#${d.task_id}→#${d.missing_dependency}`).join(', ')}
+          {t('sprint.unmetDeps', { defaultValue: 'Unmet dependencies' })}: {integration.unmet_dependencies.map((d: any) => `#${d.task_id}→#${d.missing_dependency}`).join(', ')}
         </div>
       )}
       <ol className="space-y-1 text-xs">
-        {data.task_branches.map((b, i) => (
+        {integration?.task_branches?.map((b: any, i: number) => (
           <li key={b.task_id} className="flex items-center gap-2">
             <span className="text-gray-500">{i + 1}.</span>
             <code className="text-gray-300">{b.branch}</code>

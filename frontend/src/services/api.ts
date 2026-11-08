@@ -870,7 +870,7 @@ export const api = {
 
   /** The sprint's task branches and their merge order (Viewer). */
   sprintIntegration: (sprintId: number) =>
-    api.get<{ sprint_id: number; integration_branch: string; task_branches: { task_id: number; title: string; status: string; branch: string }[]; merge_order: number[]; unmet_dependencies: { task_id: number; missing_dependency: number }[] }>(`/v1/sprints/${sprintId}/integration`),
+    api.get<any>(`/v1/sprints/${sprintId}/integration`),
 
   login: (email: string, password: string) =>
     fetchApi<LoginResponse>('/v1/auth/login', {
