@@ -19,6 +19,12 @@ from usage import reported_count, with_usage
 # Gemini's finishReason, as the OpenAI-compatible providers spell it.
 FINISH_REASONS = {"MAX_TOKENS": "length", "STOP": "stop"}
 
+# Gemini 2.5+ requires a thoughtSignature on every functionCall part that
+# continues a previous turn. The backend speaks OpenAI and does not carry it,
+# so the proxy remembers the signatures Gemini returns and reattaches them
+# when the same call reappears in a later request.
+_THOUGHT_SIGNATURES: dict[tuple[str, str], str] = {}
+
 
 def _tool_declarations(tools: list | None) -> list[dict]:
     declarations = []
@@ -74,7 +80,11 @@ def _contents(messages: list) -> list[dict]:
                 except ValueError:
                     arguments = {"_raw": arguments}
             names_by_call_id[str(call.get("id"))] = function.get("name") or "tool"
-            parts.append({"functionCall": {"name": function.get("name") or "tool", "args": arguments or {}}})
+            fc = {"name": function.get("name") or "tool", "args": arguments or {}}
+            key = (fc["name"], json.dumps(fc["args"], sort_keys=True, default=str))
+            if key in _THOUGHT_SIGNATURES:
+                fc["thoughtSignature"] = _THOUGHT_SIGNATURES[key]
+            parts.append({"functionCall": fc})
         if parts:
             contents.append({"role": "model" if m["role"] == "assistant" else "user", "parts": parts})
     return contents
@@ -128,6 +138,11 @@ def call_gemini(
     try:
         candidate = res["candidates"][0]
         parts = candidate["content"]["parts"]
+        for part in parts:
+            call = part.get("functionCall") if isinstance(part, dict) else None
+            if isinstance(call, dict) and call.get("thoughtSignature") and call.get("name"):
+                key = (call["name"], json.dumps(call.get("args") or {}, sort_keys=True, default=str))
+                _THOUGHT_SIGNATURES[key] = call["thoughtSignature"]
         message = _message_from(parts)
         if message["content"] is None and not message.get("tool_calls"):
             raise KeyError("text")
