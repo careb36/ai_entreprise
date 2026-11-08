@@ -72,6 +72,18 @@ def test_pytest_configuration_is_detected(no_override, tmp_path, name, content):
     assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
 
 
+def test_install_command_detection(no_override, tmp_path):
+    (tmp_path / "package.json").write_text("{}")
+    assert task_worker._detect_install_command(str(tmp_path)) == "npm install"
+    (tmp_path / "requirements.txt").write_text("x")
+    # package.json wins only if present; remove to test pip
+    (tmp_path / "package.json").unlink()
+    assert (
+        task_worker._detect_install_command(str(tmp_path))
+        == "pip install -r requirements.txt"
+    )
+
+
 def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
     assert task_worker._detect_test_command(str(tmp_path)) is None

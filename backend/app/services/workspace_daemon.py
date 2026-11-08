@@ -312,6 +312,30 @@ def detect_test_command(workspace_root: str) -> str | None:
     return None
 
 
+def detect_install_command(workspace_root: str) -> str | None:
+    """The command that installs this project's dependencies, or None."""
+    root = os.path.abspath(workspace_root)
+    if os.path.isfile(os.path.join(root, "package.json")):
+        return "npm install"
+    if os.path.isfile(os.path.join(root, "requirements.txt")):
+        return "pip install -r requirements.txt"
+    if os.path.isfile(os.path.join(root, "pyproject.toml")):
+        return "pip install -e ."
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo build"
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go mod download"
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q dependency:resolve"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle dependencies"
+    if os.path.isfile(os.path.join(root, "Gemfile")):
+        return "bundle install"
+    return None
+
+
 async def run_delivery_tests(
     nats_client: Any,
     sprint: dict[str, Any],
