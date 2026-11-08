@@ -17,7 +17,8 @@ conflicted one), and the branch stays at the last clean merge. Running the
 same request again picks up where it stopped: a branch already merged is
 skipped, so a published integration branch only ever moves forward.
 
-``sources`` names the commit each task branch pointed at when it was read,
+``sources`` names the commit each task branch pointed at when it was read
+(once: that commit is the one checked and merged),
 and ``test_worktree`` is a detached worktree at the integrated commit: the
 suite runs there, so a later integration that moves the branch never changes
 what an earlier one tested.
@@ -29,7 +30,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict
 
-from git_workspace import GitError, merge_one, merge_state, run_git, valid_branch, worktree_for
+from git_workspace import GitError, merge_one, run_git, valid_branch, worktree_for
 
 SPRINT_BRANCH_PREFIX = "fabrique/sprint-"
 TASK_BRANCH_PREFIX = "fabrique/task-"
@@ -40,19 +41,40 @@ MAX_BRANCHES = 200
 KEEP_SNAPSHOTS = 3
 
 
-def _tip(root: Path, ref: str) -> str:
-    return run_git(["rev-parse", f"refs/heads/{ref}"], root).stdout.strip()
+def _resolve(root: Path, worktree: Path, ref: str):
+    """``(state, commit)``: the branch's tip read once, and whether HEAD holds it.
+
+    The same commit is checked, merged and recorded, so a delivery that moves
+    the task branch meanwhile is neither recorded unmerged nor merged unrecorded.
+    """
+    if not (valid_branch(ref) and ref.startswith(TASK_BRANCH_PREFIX)):
+        return "skip", None
+    tip = run_git(["rev-parse", "--verify", "--quiet", f"refs/heads/{ref}^{{commit}}"], root, check=False)
+    commit = tip.stdout.strip()
+    if tip.returncode != 0 or not commit:
+        return "missing", None
+    if run_git(["merge-base", "--is-ancestor", commit, "HEAD"], worktree, check=False).returncode == 0:
+        return "already", commit
+    return "todo", commit
 
 
 def snapshot_worktree(worktree: Path, root: Path, commit: str) -> Path:
     """A detached worktree at *commit* beside the branch's.
 
     The most recent ``KEEP_SNAPSHOTS`` of the branch are kept, so a suite
-    still running at an earlier commit is not pulled from under it.
+    still running at an earlier commit is not pulled from under it. One
+    already at *commit* is reset and cleaned first: a previous suite may have
+    changed or left files there, and the files tested must be the commit's.
+    The backend runs one integration of a sprint at a time, so no suite is
+    running in it.
     """
     path = worktree.parent / f"{worktree.name}@{commit[:12]}"
     run_git(["worktree", "prune"], root, check=False)
-    if not (path / ".git").exists():
+    if (path / ".git").exists():
+        run_git(["checkout", "--detach", "--force", commit], path)
+        run_git(["reset", "--hard", commit], path)
+        run_git(["clean", "-ffdx"], path)
+    else:
         run_git(["worktree", "add", "--detach", str(path), commit], root)
     path.touch()
     older = sorted(
@@ -106,18 +128,18 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
     conflict = None
     not_attempted: list = []
     for index, ref in enumerate(refs):
-        state = merge_state(root, worktree, ref) if ref.startswith(TASK_BRANCH_PREFIX) else "skip"
+        state, tip = _resolve(root, worktree, ref)
         if state == "skip":
             refused.append(ref)
             continue
         if state == "missing":
             missing.append(ref)
             continue
-        sources[ref] = _tip(root, ref)
+        sources[ref] = tip
         if state == "already":
             already.append(ref)
             continue
-        result = merge_one(worktree, ref, f"Merge {ref} into {branch}")
+        result = merge_one(worktree, tip, f"Merge {ref} into {branch}")
         if result.returncode != 0:
             conflict = _conflict(worktree, ref, result)
             run_git(["merge", "--abort"], worktree, check=False)

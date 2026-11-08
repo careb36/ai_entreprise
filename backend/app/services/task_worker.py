@@ -44,7 +44,7 @@ from services import (
     developer_tools,
     edit_blocks,
     git_workflow,
-    integration,
+    integration_jobs,
     mcp_tools,
     model_routing,
     procedures,
@@ -1141,7 +1141,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     )
     if not result.get("completed"):
         return
-    integration.schedule_after_close(nats_client, engine, sprint_id)  # issue #314
+    integration_jobs.schedule_after_close(nats_client, engine, sprint_id)  # issue #314
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await asyncio.to_thread(
             _post_message,

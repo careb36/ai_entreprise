@@ -21,11 +21,12 @@ published as one request for the sprint by ``services/integration_publish.py``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from config import settings
-from logging_config import logger
 from models import (
     AgentRun,
     BacklogItem,
@@ -36,10 +37,12 @@ from models import (
 )
 from models.agent_run import TASK_WORKER_PRODUCER
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from services import workspace_daemon
 from services.agent_service import AgentService
+from services.spec_planning import acceptance_summary
 
 BRANCH_PREFIX = "fabrique/task-"
 INTEGRATION_BRANCH_PREFIX = "fabrique/sprint-"
@@ -124,12 +127,11 @@ def plan(session: Session, sprint_id: int) -> dict[str, Any]:
 # A merge per task branch and, on a large repository, a worktree to create.
 INTEGRATE_TIMEOUT_SECONDS = 150.0
 TRIGGERS = ("sprint_closed", "manual")
-# How often an integration the daemon could not take at close is tried again.
-RETRY_SECONDS = float(os.getenv("INTEGRATION_RETRY_SECONDS", "60"))
-# The background integrations started when a sprint closed, kept until done.
-_RUNNING: set[asyncio.Task] = set()
 # One integration of a sprint at a time: merge, test and record together.
+# In this process an asyncio lock; across replicas a Postgres advisory lock.
 _LOCKS: dict[int, asyncio.Lock] = {}
+# The advisory-lock namespace for integrations ("intg" in ASCII).
+_LOCK_NAMESPACE = 0x696E7467
 
 
 class IntegrationRefused(Exception):
@@ -137,6 +139,45 @@ class IntegrationRefused(Exception):
         super().__init__(detail)
         self.status = status
         self.detail = detail
+
+
+@contextlib.contextmanager
+def _database_lock(engine: Any, sprint_id: int) -> Iterator[bool]:
+    """Whether this process owns the sprint's integration across replicas.
+
+    A session advisory lock on its own connection, held for the attempt and
+    released if the process dies; always owned on a database without them.
+    """
+    if engine.dialect.name != "postgresql":
+        yield True
+        return
+    key = {"namespace": _LOCK_NAMESPACE, "sprint_id": sprint_id}
+    with engine.connect() as conn:
+        owned = bool(
+            conn.execute(
+                text("SELECT pg_try_advisory_lock(:namespace, :sprint_id)"), key
+            ).scalar()
+        )
+        conn.commit()
+        try:
+            yield owned
+        finally:
+            if owned:
+                try:
+                    conn.execute(
+                        text("SELECT pg_advisory_unlock(:namespace, :sprint_id)"), key
+                    )
+                    conn.commit()
+                except Exception:  # noqa: BLE001 - Never return a locked connection to the pool.
+                    conn.invalidate()
+
+
+@contextlib.asynccontextmanager
+async def sprint_lock(engine: Any, sprint_id: int) -> AsyncIterator[bool]:
+    """Hold the sprint's integration; yields False when another replica holds it."""
+    async with _LOCKS.setdefault(sprint_id, asyncio.Lock()):
+        with _database_lock(engine, sprint_id) as owned:
+            yield owned
 
 
 def _project_path(session: Session, company_id: int) -> str | None:
@@ -216,6 +257,10 @@ def integration_spec(
                         _task_evidence(session, company.id, t["task_id"]),
                         strict=True,
                     )
+                ),
+                # As it stood at integration; a later run does not rewrite it.
+                "acceptance": acceptance_summary(
+                    session, session.get(BacklogItem, t["task_id"])
                 ),
             }
             for t in done
@@ -309,8 +354,13 @@ def record(
     *,
     trigger: str,
     requested_by: str,
+    job: SprintIntegration | None = None,
 ) -> SprintIntegration:
-    """Keep the daemon's answer, audited; an answer that is not about this branch is refused."""
+    """Keep the daemon's answer, audited; an answer that is not about this branch is refused.
+
+    *job*, the row a closed sprint's integration was kept as while it ran, is
+    filled in place, so the attempt it stood for ends there.
+    """
     if reply.get("branch") != spec["branch"] or not reply.get("commit"):
         raise IntegrationRefused(502, "The workspace daemon sent an unreadable answer")
     task_of = {t["branch"]: t["task_id"] for t in context["tasks"]}
@@ -338,25 +388,33 @@ def record(
     }
     # An older daemon does not say: whatever is missing or refused decides.
     complete = not details["missing"] and not details["refused"]
-    row = SprintIntegration(
-        company_id=context["company_id"],
-        sprint_id=context["sprint_id"],
-        trigger=trigger,
-        requested_by=requested_by,
-        status=status_of(conflict, test_run, complete),
-        branch=spec["branch"],
-        base=str(reply.get("base") or spec["base"] or ""),
-        repository=reply.get("repository"),
-        worktree=reply.get("worktree"),
-        start_commit=reply.get("start"),
-        commit=str(reply["commit"]),
-        merged=merged,
-        conflict=conflict,
-        test_run=test_run,
-        tested_commit=(test_run or {}).get("commit"),
-        tasks=_task_states(context, reply, conflict),
-        details=details | {"left_out": context["left_out"]},
-    )
+    if job is not None:
+        details["attempts"] = (job.details or {}).get("attempts")
+    fields = {
+        "company_id": context["company_id"],
+        "sprint_id": context["sprint_id"],
+        "trigger": trigger,
+        "requested_by": requested_by,
+        "status": status_of(conflict, test_run, complete),
+        "branch": spec["branch"],
+        "base": str(reply.get("base") or spec["base"] or ""),
+        "repository": reply.get("repository"),
+        "worktree": reply.get("worktree"),
+        "start_commit": reply.get("start"),
+        "commit": str(reply["commit"]),
+        "merged": merged,
+        "conflict": conflict,
+        "test_run": test_run,
+        "tested_commit": (test_run or {}).get("commit"),
+        "tasks": _task_states(context, reply, conflict),
+        "details": details | {"left_out": context["left_out"]},
+    }
+    row = session.get(SprintIntegration, job.id) if job is not None else None
+    if row is None:
+        row = SprintIntegration(**fields)
+    else:
+        for key, value in fields.items():
+            setattr(row, key, value)
     _audit(session, row, "sprint_integrated")
     return row
 
@@ -408,130 +466,51 @@ async def integrate(
 ) -> SprintIntegration:
     """Merge the sprint's done task branches, run the suite on the result, record both.
 
-    Raises ``IntegrationRefused`` when there is nothing to integrate, and
+    Raises ``IntegrationRefused`` when there is nothing to integrate or
+    another replica is integrating the sprint, and
     ``workspace_daemon.DaemonUnavailable`` / ``DaemonError`` when the daemon
     could not do it; nothing is recorded then. One integration of a sprint
     runs at a time, so what is recorded is what that attempt merged and tested.
     """
-    async with _LOCKS.setdefault(sprint_id, asyncio.Lock()):
-        with Session(engine) as session:
-            spec, context = integration_spec(session, sprint_id)
-        reply = await workspace_daemon.daemon_request(
-            nats_client, "workspace.git.integrate", spec, INTEGRATE_TIMEOUT_SECONDS
-        )
-        test_run = None
-        if reply.get("ok") and reply.get("commit"):
-            test_run = await _run_suite(nats_client, engine, context, reply)
-        with Session(engine) as session:
-            return record(
-                session,
-                spec,
-                context,
-                reply,
-                test_run,
-                trigger=trigger,
-                requested_by=requested_by,
+    async with sprint_lock(engine, sprint_id) as owned:
+        if not owned:
+            raise IntegrationRefused(
+                409, "An integration of this sprint is already running"
             )
+        return await attempt(
+            nats_client, engine, sprint_id, trigger=trigger, requested_by=requested_by
+        )
 
 
-def _hold(engine: Any, sprint_id: int, status: str, reason: str) -> None:
-    """Record that the sprint's integration could not start; a repeat counts an attempt."""
+async def attempt(
+    nats_client: Any,
+    engine: Any,
+    sprint_id: int,
+    *,
+    trigger: str,
+    requested_by: str,
+    job: SprintIntegration | None = None,
+) -> SprintIntegration:
+    """One integration, for a caller that holds ``sprint_lock``."""
     with Session(engine) as session:
-        row = latest(session, sprint_id)
-        if row is not None and row.status == status:
-            details = dict(row.details or {})
-            details.update(
-                reason=reason, attempts=int(details.get("attempts") or 1) + 1
-            )
-            row.details = details
-            session.add(row)
-            session.commit()
-            return
-        try:
-            spec, context = integration_spec(session, sprint_id)
-        except IntegrationRefused:
-            return
-        held = SprintIntegration(
-            company_id=context["company_id"],
-            sprint_id=sprint_id,
-            trigger="sprint_closed",
-            requested_by="task_worker",
-            status=status,
-            branch=spec["branch"],
-            base=spec["base"],
-            tasks=[{**t, "state": "not_attempted"} for t in context["tasks"]],
-            details={"reason": reason, "attempts": 1, "left_out": context["left_out"]},
-        )
-        _audit(session, held, f"sprint_integration_{status}")
-
-
-async def _after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
-    try:
-        await integrate(
-            nats_client,
-            engine,
-            sprint_id,
-            trigger="sprint_closed",
-            requested_by="task_worker",
-        )
-    except IntegrationRefused as refused:
-        logger.info("Sprint %s not integrated: %s", sprint_id, refused.detail)
-    except workspace_daemon.DaemonUnavailable as exc:
-        # Kept as pending and tried again (retry_pending) until a daemon answers.
-        logger.info("Sprint %s integration pending: %s", sprint_id, exc)
-        _hold(engine, sprint_id, "pending", "the workspace daemon did not answer")
-    except workspace_daemon.DaemonError as exc:
-        _hold(engine, sprint_id, "error", exc.message)
-    except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
-        logger.warning("Integration of sprint %s failed: %s", sprint_id, exc)
-        _hold(engine, sprint_id, "error", f"{type(exc).__name__}: {exc}"[:300])
-
-
-def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
-    """Integrate a sprint that just closed, in the background, when its company uses the Git workflow."""
-    try:
-        with Session(engine) as session:
-            sprint = session.get(Sprint, sprint_id)
-            company = session.get(Company, sprint.company_id) if sprint else None
-            if company is None or not company.git_workflow:
-                return
-        task = asyncio.get_running_loop().create_task(
-            _after_close(nats_client, engine, sprint_id)
-        )
-    except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
-        logger.warning("Integration of sprint %s not started: %s", sprint_id, exc)
-        return
-    _RUNNING.add(task)
-    task.add_done_callback(_RUNNING.discard)
-
-
-async def retry_pending(nats_client: Any, engine: Any) -> int:
-    """Try again each sprint whose latest integration is pending; how many were tried."""
+        spec, context = integration_spec(session, sprint_id)
+    reply = await workspace_daemon.daemon_request(
+        nats_client, "workspace.git.integrate", spec, INTEGRATE_TIMEOUT_SECONDS
+    )
+    test_run = None
+    if reply.get("ok") and reply.get("commit"):
+        test_run = await _run_suite(nats_client, engine, context, reply)
     with Session(engine) as session:
-        rows = session.exec(
-            select(SprintIntegration).order_by(
-                SprintIntegration.created_at.desc(), SprintIntegration.id.desc()
-            )
-        ).all()
-        latest_of: dict[int, str] = {}
-        for row in rows:
-            latest_of.setdefault(row.sprint_id, row.status)
-    pending = [
-        sprint_id for sprint_id, status in latest_of.items() if status == "pending"
-    ]
-    for sprint_id in pending:
-        await _after_close(nats_client, engine, sprint_id)
-    return len(pending)
-
-
-async def retry_loop(nats_client: Any, engine: Any) -> None:
-    """The background worker that retries pending integrations every ``RETRY_SECONDS``."""
-    while True:
-        await asyncio.sleep(RETRY_SECONDS)
-        try:
-            await retry_pending(nats_client, engine)
-        except Exception as exc:  # noqa: BLE001 - Keep retrying on the next round.
-            logger.warning("Pending integrations not retried: %s", exc)
+        return record(
+            session,
+            spec,
+            context,
+            reply,
+            test_run,
+            trigger=trigger,
+            requested_by=requested_by,
+            job=job,
+        )
 
 
 # --- what people read --------------------------------------------------------

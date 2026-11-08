@@ -10,6 +10,7 @@ repository standing in for the remote.
 """
 
 import asyncio
+import contextlib
 import shlex
 import sys
 from pathlib import Path
@@ -18,7 +19,7 @@ import pytest
 from config import settings
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import integration
+from services import integration, integration_jobs
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -480,9 +481,9 @@ def test_a_closed_sprint_is_integrated_on_its_own_when_the_workflow_is_on(
     nats = _Daemon()
 
     async def close_both():
-        integration.schedule_after_close(nats, engine, off.id)
-        integration.schedule_after_close(nats, engine, sprint.id)
-        await asyncio.gather(*list(integration._RUNNING))
+        integration_jobs.schedule_after_close(nats, engine, off.id)
+        integration_jobs.schedule_after_close(nats, engine, sprint.id)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
 
     asyncio.run(close_both())
 
@@ -730,9 +731,9 @@ def test_an_integration_the_daemon_missed_at_close_is_pending_and_retried(
     nats.offline = True
 
     async def close_then_retry():
-        integration.schedule_after_close(nats, engine, sprint.id)
-        await asyncio.gather(*list(integration._RUNNING))
-        return await integration.retry_pending(nats, engine)
+        integration_jobs.schedule_after_close(nats, engine, sprint.id)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
+        return await integration_jobs.retry_pending(nats, engine)
 
     assert asyncio.run(close_then_retry()) == 1  # still offline: tried again
     with Session(engine) as session:
@@ -747,11 +748,11 @@ def test_an_integration_the_daemon_missed_at_close_is_pending_and_retried(
     assert refused.status_code == 409
 
     nats.offline = False
-    assert asyncio.run(integration.retry_pending(nats, engine)) == 1
+    assert asyncio.run(integration_jobs.retry_pending(nats, engine)) == 1
     with Session(engine) as session:
         done = integration.latest(session, sprint.id)
     assert (done.status, done.trigger) == ("tests_passed", "sprint_closed")
-    assert asyncio.run(integration.retry_pending(nats, engine)) == 0
+    assert asyncio.run(integration_jobs.retry_pending(nats, engine)) == 0
     inbox = test_client.get("/v1/inbox", params={"company_id": company.id}).json()
     assert inbox["integrations"] == []
 
@@ -768,8 +769,8 @@ def test_a_daemon_that_refuses_at_close_leaves_an_error_for_a_person(
             return {"error": {"status": 409, "message": "fatal: bad base"}}
 
     async def close():
-        integration.schedule_after_close(_Refusing(), engine, sprint.id)
-        await asyncio.gather(*list(integration._RUNNING))
+        integration_jobs.schedule_after_close(_Refusing(), engine, sprint.id)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
 
     asyncio.run(close())
 
@@ -778,4 +779,216 @@ def test_a_daemon_that_refuses_at_close_leaves_an_error_for_a_person(
         ("error", "fatal: bad base")
     ]
     # An error is not retried on its own: a person integrates again.
-    assert asyncio.run(integration.retry_pending(_Refusing(), engine)) == 0
+    assert asyncio.run(integration_jobs.retry_pending(_Refusing(), engine)) == 0
+
+
+# --- review findings (PR #384) -----------------------------------------------
+
+
+def test_the_suite_never_runs_on_files_a_previous_suite_left(repo):
+    _deliver(repo, 1, {"a.py": "A = 1\n"})
+    spec = {"branch": "fabrique/sprint-9", "merge": ["fabrique/task-1"]}
+    first = sprint_integration.integrate(str(repo), spec)
+    snapshot = Path(first["test_worktree"])
+    (snapshot / "a.py").write_text("A = 'changed by a test'\n")
+    (snapshot / "generated_test.py").write_text("assert True\n")
+    (snapshot / "cache").mkdir()
+
+    again = sprint_integration.integrate(str(repo), spec)
+
+    assert again["commit"] == first["commit"]
+    assert Path(again["test_worktree"]) == snapshot
+    assert (snapshot / "a.py").read_text() == "A = 1\n"
+    assert not (snapshot / "generated_test.py").exists()
+    assert not (snapshot / "cache").exists()
+
+
+def test_a_task_branch_is_read_once_checked_merged_and_recorded_at_that_commit(
+    repo, monkeypatch
+):
+    _deliver(repo, 1, {"a.py": "A = 1\n"})
+    read = git(repo, "rev-parse", "fabrique/task-1")
+    real_merge = sprint_integration.merge_one
+
+    def merge_after_a_delivery(worktree, ref, message):
+        # A delivery moves the task branch between the read and the merge.
+        _deliver(repo, 1, {"late.py": "LATE = 1\n"})
+        return real_merge(worktree, ref, message)
+
+    monkeypatch.setattr(sprint_integration, "merge_one", merge_after_a_delivery)
+    reply = sprint_integration.integrate(
+        str(repo), {"branch": "fabrique/sprint-10", "merge": ["fabrique/task-1"]}
+    )
+
+    [merged] = reply["merged"]
+    assert reply["sources"]["fabrique/task-1"] == merged["source"] == read
+    assert git(repo, "rev-parse", f"{merged['commit']}^2") == read
+    assert git(repo, "rev-parse", "fabrique/task-1") != read
+    assert not (Path(reply["worktree"]) / "late.py").exists()
+
+
+def test_a_closed_sprints_integration_is_kept_before_the_daemon_is_asked(
+    sqlite_session, published_repo, suite
+):
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+    nats = _Daemon()
+
+    async def close_then_die():
+        integration_jobs.schedule_after_close(nats, engine, sprint.id)
+        # The backend stops before the background attempt runs.
+        for task in list(integration_jobs._RUNNING):
+            task.cancel()
+        await asyncio.gather(*list(integration_jobs._RUNNING), return_exceptions=True)
+
+    asyncio.run(close_then_die())
+    assert nats.requests == []
+    with Session(engine) as session:
+        job = integration.latest(session, sprint.id)
+        assert (job.status, job.trigger, job.details["attempts"]) == (
+            "running",
+            "sprint_closed",
+            0,
+        )
+        job_id = job.id
+
+    # After the restart, the retry loop takes the job nobody holds.
+    assert asyncio.run(integration_jobs.retry_pending(nats, engine)) == 1
+    with Session(engine) as session:
+        rows = session.exec(
+            select(SprintIntegration).where(SprintIntegration.sprint_id == sprint.id)
+        ).all()
+    [row] = rows
+    assert (row.id, row.status, row.details["attempts"]) == (job_id, "tests_passed", 1)
+    assert asyncio.run(integration_jobs.retry_pending(nats, engine)) == 0
+
+
+def test_two_attempts_at_one_job_integrate_once(sqlite_session, published_repo, suite):
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+    nats = _Daemon()
+
+    async def twice():
+        integration_jobs.schedule_after_close(nats, engine, sprint.id)
+        tried = await integration_jobs.retry_pending(nats, engine)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
+        tried += await integration_jobs.retry_pending(nats, engine)
+        return tried
+
+    assert asyncio.run(twice()) == 1
+    assert [s for s, _ in nats.requests].count("workspace.git.integrate") == 1
+
+
+def test_a_sprint_another_replica_integrates_is_left_to_it(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+    nats = _Daemon()
+    monkeypatch.setattr(test_client.app.state, "nats_client", nats)
+
+    @contextlib.contextmanager
+    def held_elsewhere(engine, sprint_id):
+        yield False
+
+    monkeypatch.setattr(integration, "_database_lock", held_elsewhere)
+    refused = test_client.post(f"/v1/sprints/{sprint.id}/integrate")
+    assert refused.status_code == 409 and "already running" in refused.json()["detail"]
+
+    async def close():
+        integration_jobs.schedule_after_close(nats, engine, sprint.id)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
+        return await integration_jobs.retry_pending(nats, engine)
+
+    assert asyncio.run(close()) == 0
+    assert nats.requests == []
+    with Session(engine) as session:
+        assert integration.latest(session, sprint.id).status == "running"
+
+
+class _Conn:
+    def __init__(self, owned):
+        self.owned, self.sql = owned, []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, statement, params):
+        self.sql.append((str(statement), params))
+        return type("R", (), {"scalar": lambda _self: self.owned})()
+
+    def commit(self):
+        return None
+
+    def invalidate(self):
+        raise AssertionError("not expected")
+
+
+@pytest.mark.parametrize("owned", [True, False])
+def test_on_postgres_the_sprint_is_held_with_an_advisory_lock(owned):
+    conn = _Conn(owned)
+    engine = type(
+        "E",
+        (),
+        {"dialect": type("D", (), {"name": "postgresql"})(), "connect": lambda _: conn},
+    )()
+
+    with integration._database_lock(engine, 42) as got:
+        assert got is owned
+
+    calls = [sql.split("(")[0] for sql, _ in conn.sql]
+    expected = ["SELECT pg_try_advisory_lock"] + (
+        ["SELECT pg_advisory_unlock"] if owned else []
+    )
+    assert calls == expected
+    assert all(p["sprint_id"] == 42 for _, p in conn.sql)
+
+
+def test_an_integration_recorded_without_its_tasks_evidence_is_not_published(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    row = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+    # As a row from before migration 0012 reads.
+    legacy = sqlite_session.get(SprintIntegration, row["id"])
+    sqlite_session.refresh(legacy)
+    legacy.tasks = None
+    sqlite_session.add(legacy)
+    sqlite_session.commit()
+
+    refused = test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+
+    assert refused.status_code == 409
+    assert "integrate again" in refused.json()["detail"]
+
+
+def test_the_acceptance_line_is_the_one_seen_at_integration(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    monkeypatch.setattr(
+        integration,
+        "acceptance_summary",
+        lambda s, item: "**Acceptance:** AT INTEGRATION",
+    )
+    assert test_client.post(f"/v1/sprints/{sprint.id}/integrate").status_code == 201
+    # A later run changes the specification's coverage; the integration does not.
+    monkeypatch.setattr(
+        integration, "acceptance_summary", lambda s, item: "**Acceptance:** LATER"
+    )
+
+    test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+    text = _published_body(test_client)
+
+    assert "**Acceptance:** AT INTEGRATION" in observed_part(text)
+    assert "LATER" not in text
