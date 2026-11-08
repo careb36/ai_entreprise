@@ -477,7 +477,9 @@ def test_a_manager_a_viewer_an_outsider_and_an_api_token_cannot_delete(
         assert test_client.post(f"{url}/unarchive", headers=headers).status_code == 403
     outsider = _member(sqlite_session, None, "Owner")
     assert test_client.delete(url, headers=outsider).status_code == 403
-    _token, raw = api_tokens.create_token(sqlite_session, sprint.company_id, "ci")
+    _token, raw = api_tokens.create_token(
+        sqlite_session, sprint.company_id, "ci", role="Manager"
+    )
     token = {"Authorization": f"Bearer {raw}"}
     assert test_client.delete(url, headers=token).status_code == 403
     # The token is still a Manager: it may edit.
