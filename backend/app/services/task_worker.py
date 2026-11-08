@@ -43,6 +43,7 @@ from services import (
     dependencies,
     developer_tools,
     edit_blocks,
+    edit_plan,
     git_workflow,
     integration_jobs,
     locks,
@@ -439,13 +440,7 @@ def _execute_task(
             f"{external_advice[:4000]}"
         )
 
-    if architect_advice:
-        user_prompt += (
-            "\n\n## Architect Guidance\n"
-            "The team Architect reviewed this task before implementation. "
-            "Follow this brief unless it conflicts with the task requirements.\n\n"
-            f"{architect_advice[:3000]}"
-        )
+    user_prompt += edit_plan.prompt_section(architect_advice)  # A plan, or guidance.
 
     rework_feedback = pending_rework_feedback(item.get("comments"))
     if rework_feedback:
@@ -457,7 +452,10 @@ def _execute_task(
         )
 
     model = model_routing.resolve_agent_model(
-        agent, item=item, rework=bool(rework_feedback)
+        agent,
+        item=item,
+        rework=bool(rework_feedback),
+        editor=bool(edit_plan.plan_in(architect_advice)),
     )
     role = agent.get("role", "Dev")
 
@@ -574,7 +572,7 @@ def _consult_architect(
     )
     prompt = build_architect_consult_prompt(
         item, developer, sprint.get("name", ""), prior_feedback or (), record
-    )
+    ) + edit_plan.request_section(item)
 
     client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
     client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
@@ -2200,7 +2198,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             architect_advice = ""
             if should_consult_architect(
                 item, agent, item.get("comments"), enabled=ARCHITECT_CONSULT_ENABLED
-            ):
+            ) or (ARCHITECT_CONSULT_ENABLED and edit_plan.wanted(item, agent)):
                 prior_feedback = [
                     str(c.get("text", ""))
                     for c in (item.get("comments") or [])
