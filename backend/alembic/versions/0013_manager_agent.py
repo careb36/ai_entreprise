@@ -1,7 +1,7 @@
 """Add manager_policies and manager_decisions: the Manager agent (issue #331).
 
-Revision ID: 0012
-Revises: 0011
+Revision ID: 0013
+Revises: 0012
 Create Date: 2026-11-08 20:00:00 UTC
 """
 
@@ -12,8 +12,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0012"
-down_revision = "0011"
+revision = "0013"
+down_revision = "0012"
 branch_labels = None
 depends_on = None
 

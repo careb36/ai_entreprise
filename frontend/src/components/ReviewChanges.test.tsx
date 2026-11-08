@@ -15,6 +15,7 @@ vi.mock('../services/runReviews', () => ({
   useResolveReviewComment: vi.fn(() => ({ mutate: resolveComment, isPending: false })),
   useRunPublications: vi.fn(() => ({ data: { publications: [] } })),
   usePublishRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  useMergeRun: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   useSyncComments: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false, isSuccess: false })),
 }))
 

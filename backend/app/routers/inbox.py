@@ -8,7 +8,8 @@ delivery waiting for a person to accept it), procedure proposals waiting for a M
 the agent runs of other producers nobody has approved or rejected (the
 company's own task worker and kickoff runs are decided by the review loop),
 and the sprints whose integration stopped at a merge conflict or a failing
-suite (``integrations``, ``services/integration.py``).
+suite, missed a task's branch or could not start (``integrations``, listed up
+to the limit and counted in full; ``services/integration.py``).
 
 With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
 ``suggestion`` (a claim, ``services/manager_agent.py``), and
@@ -140,7 +141,7 @@ async def inbox(
             .limit(20)
         ).all()
 
-    integrations = integration.waiting_for_a_person(session, company_id)[:limit]
+    integrations = integration.waiting_for_a_person(session, company_id)
     agent_decisions = []
     if settings.MANAGER_AGENT_ENABLED:
         agent_decisions = [
@@ -179,7 +180,8 @@ async def inbox(
             }
             for r in pending_run_rows
         ],
-        "integrations": integrations,
+        "integrations": integrations[:limit],
+        "integrations_total": len(integrations),
         "agent_decisions": agent_decisions,
         "blocked_total": blocked_total,
         "total": blocked_total

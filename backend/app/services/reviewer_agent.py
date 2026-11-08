@@ -26,7 +26,7 @@ import json
 import os
 import re
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from config import settings
 from llm_proxy_client import LLMProxyClient
@@ -37,10 +37,10 @@ from models.agent_run import (
     AgentRunApproval,
     Verification,
 )
-from sqlmodel import Session, select
+from sqlmodel import Session, or_, select
 
 from llm.model_factory import default_model_for_role
-from services import company_models
+from services import company_models, locks
 
 REVIEWER_AGENT_NAME = "Reviewer agent"
 REVIEWER_ROLE = "Reviewer"
@@ -262,15 +262,25 @@ def ask_llm(
     return content
 
 
-def pending_runs(session: Session, limit: int = RUNS_PER_CYCLE) -> list[AgentRun]:
-    """Outside producers' runs nobody decided that the agent has not looked at."""
+def pending_runs(
+    session: Session, limit: int = RUNS_PER_CYCLE, now: datetime | None = None
+) -> list[AgentRun]:
+    """Outside producers' runs nobody decided that the agent has not looked at.
+
+    A run not verified yet waits ``REVIEWER_VERIFY_GRACE_SECONDS`` after its
+    ingestion: a producer that ingests and then verifies would otherwise be
+    judged in between, with "none yet" where the verdict belongs."""
     decided = select(AgentRunApproval.agent_run_id)
+    verified = select(Verification.agent_run_id)
+    now = now or datetime.now(UTC).replace(tzinfo=None)
+    settled = now - timedelta(seconds=settings.REVIEWER_VERIFY_GRACE_SECONDS)
     return session.exec(
         select(AgentRun)
         .where(
             AgentRun.producer.not_in(IN_HOUSE_PRODUCERS),
             AgentRun.reviewed_at.is_(None),
             AgentRun.id.not_in(decided),
+            or_(AgentRun.id.in_(verified), AgentRun.ingested_at <= settled),
         )
         .order_by(AgentRun.id)
         .limit(limit)
@@ -336,7 +346,10 @@ async def run_reviewer_agent(engine) -> None:
     )
     while True:
         try:
-            count = await asyncio.to_thread(review_cycle, engine)
+            # One replica at a time (issue #328): the others skip the round.
+            count = await asyncio.to_thread(
+                locks.run_exclusive, engine, locks.REVIEWER_AGENT, review_cycle, engine
+            )
             if count:
                 logger.info("Reviewer agent suggested on %s run(s)", count)
         except Exception as exc:  # noqa: BLE001 - Keep the loop alive.

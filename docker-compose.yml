@@ -16,17 +16,28 @@ services:
       retries: 5
 
   nats:
-    image: nats:latest
+    # The alpine image has a shell for nats/start.sh.
+    image: nats:2.10-alpine
     container_name: factory-nats
     # JetStream keeps task assignments and queued deliveries on disk, so they
     # survive a backend or daemon that is down when they are published.
-    command: ["-js", "-sd", "/data"]
+    # nats/start.sh turns on one user per component when both passwords are
+    # set (nats/nats-server.conf, scripts/nats_config.py) and TLS when
+    # nats/certs holds a certificate; see SECURITY.md, "Securing the bus".
+    entrypoint: ["/bin/sh", "/etc/fabrique-nats/start.sh"]
+    environment:
+      NATS_BACKEND_PASSWORD: ${NATS_BACKEND_PASSWORD:-}
+      NATS_DAEMON_PASSWORD: ${NATS_DAEMON_PASSWORD:-}
+      # Explicit TLS: nats/start.sh refuses to start if a certificate is missing.
+      NATS_TLS: ${NATS_TLS:-false}
+      NATS_TLS_VERIFY: ${NATS_TLS_VERIFY:-false}
     ports:
       # The workspace daemon on this computer connects here. Only this machine
       # by default: anything that reaches NATS can ask the daemon to run commands.
       - "${NATS_BIND:-127.0.0.1}:4222:4222"
     volumes:
       - nats-data:/data
+      - ./nats:/etc/fabrique-nats:ro
     networks:
       - factory-network
     healthcheck:
@@ -140,6 +151,18 @@ services:
       MANAGER_AGENT_ENABLED: ${MANAGER_AGENT_ENABLED:-false}
       NATS_URL: nats://nats:4222
       NATS_NAMESPACE: ${NATS_NAMESPACE:-}
+      # The backend's own NATS user (empty: no authentication, as before).
+      NATS_USER: ${NATS_BACKEND_PASSWORD:+backend}
+      NATS_PASSWORD: ${NATS_BACKEND_PASSWORD:-}
+      NATS_BIND: ${NATS_BIND:-127.0.0.1}
+      NATS_TLS: ${NATS_TLS:-false}
+      # Inside the container nats/certs is /etc/fabrique-nats/certs: the CA
+      # there, and a client certificate when NATS_BACKEND_TLS_CERT and
+      # NATS_BACKEND_TLS_KEY name its files in nats/certs (for the broker's
+      # NATS_TLS_VERIFY=true).
+      NATS_TLS_CA: /etc/fabrique-nats/certs/ca.crt
+      NATS_TLS_CERT: ${NATS_BACKEND_TLS_CERT:+/etc/fabrique-nats/certs/${NATS_BACKEND_TLS_CERT}}
+      NATS_TLS_KEY: ${NATS_BACKEND_TLS_KEY:+/etc/fabrique-nats/certs/${NATS_BACKEND_TLS_KEY}}
       LLM_PROXY_URL: http://llm-proxy:5100
       LLM_PROXY_INTERNAL_TOKEN: ${LLM_PROXY_INTERNAL_TOKEN:-}
       AUDIT_LOG_PATH: /app/.factory/logs
@@ -185,6 +208,8 @@ services:
       - ./backend/memory:/app/memory
       - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
+      # The CA that signed the broker's certificate, read when NATS_TLS=true.
+      - ./nats/certs:/etc/fabrique-nats/certs:ro
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}:rw
     networks:
       - factory-network
@@ -214,6 +239,14 @@ services:
     environment:
       NATS_URL: nats://nats:4222
       NATS_NAMESPACE: ${NATS_NAMESPACE:-}
+      NATS_USER: ${NATS_DAEMON_PASSWORD:+daemon}
+      NATS_PASSWORD: ${NATS_DAEMON_PASSWORD:-}
+      NATS_TLS: ${NATS_TLS:-false}
+      # nats/certs is mounted at /etc/fabrique-nats/certs (see volumes); the
+      # client certificate's files are named by NATS_DAEMON_TLS_CERT / _KEY.
+      NATS_TLS_CA: /etc/fabrique-nats/certs/ca.crt
+      NATS_TLS_CERT: ${NATS_DAEMON_TLS_CERT:+/etc/fabrique-nats/certs/${NATS_DAEMON_TLS_CERT}}
+      NATS_TLS_KEY: ${NATS_DAEMON_TLS_KEY:+/etc/fabrique-nats/certs/${NATS_DAEMON_TLS_KEY}}
       WORKSPACE_ROOT: ${CONTAINER_WORKSPACE_ROOT:-/workspace}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     working_dir: /app
@@ -221,8 +254,9 @@ services:
     volumes:
       - ./:${CONTAINER_WORKSPACE_ROOT:-/workspace}
       - ${PROJECTS_ROOT:-${HOME:-/tmp}}:${PROJECTS_ROOT:-${HOME:-/tmp}}:rw
-      - ./vscode-daemon/daemon.py:/app/daemon.py:ro
-      - ./vscode-daemon/requirements.txt:/app/requirements.txt:ro
+      # The whole folder: daemon.py imports its sibling modules.
+      - ./vscode-daemon:/app:ro
+      - ./nats/certs:/etc/fabrique-nats/certs:ro
     networks:
       - factory-network
     depends_on:
@@ -240,6 +274,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-factory}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-factory}
+      # Retention in days, 0 keeps everything (backend/janitor/retention.py).
+      RETENTION_OUTBOX_DAYS: ${RETENTION_OUTBOX_DAYS:-7}
+      RETENTION_AGENT_RUNS_DAYS: ${RETENTION_AGENT_RUNS_DAYS:-0}
+      RETENTION_KPI_TURNS_DAYS: ${RETENTION_KPI_TURNS_DAYS:-0}
+      RETENTION_GLASSROOM_DAYS: ${RETENTION_GLASSROOM_DAYS:-0}
     networks:
       - factory-network
     depends_on:
