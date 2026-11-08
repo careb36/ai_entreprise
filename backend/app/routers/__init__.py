@@ -21,6 +21,7 @@ from routers.model_settings import router as model_settings_router
 from routers.procedures import router as procedures_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
+from routers.run_secrets import router as run_secrets_router
 from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
 from routers.sprint_control import router as sprint_control_router
@@ -43,6 +44,7 @@ __all__ = [
     "procedures_router",
     "providers_router",
     "reviews_router",
+    "run_secrets_router",
     "specifications_router",
     "sprint_control_router",
     "sprint_router",
