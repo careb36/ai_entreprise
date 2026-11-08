@@ -155,6 +155,14 @@ the OpenAPI tags do not follow the module boundaries.
 | `GET` | `/v1/models` | Models the proxy exposes, by tier |
 | `POST` | `/v1/company/invite` | |
 
+### Integration — `routers/integration.py`
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/sprints/{id}/integration` | The merge plan, the latest integration and the earlier ones (Viewer) |
+| `POST` | `/v1/sprints/{id}/integrate` | Merge the done tasks' branches into `fabrique/sprint-<id>` and run the suite on the result (Manager) |
+| `POST` | `/v1/sprints/{id}/integration/publish` | One pull or merge request for the sprint, with every task's evidence (Manager) |
+
 ### GitHub — `routers/github.py`
 
 | Method | Path | Notes |
