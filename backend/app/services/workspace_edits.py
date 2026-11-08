@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from services import developer_tool_replies
+from services import developer_tool_replies, edit_lint
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -87,7 +87,12 @@ def edit(box: Any, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
             )
         }
     )
-    return developer_tool_replies.edit_text(reply)
+    # The linter's errors in the same turn (``services/edit_lint.py``), ahead
+    # of the edited window so the result's cut never drops them.
+    lint = edit_lint.after_edit(box, str(reply.get("path") or path), reply, extra)
+    return (lint.strip() + "\n\n" if lint else "") + developer_tool_replies.edit_text(
+        reply
+    )
 
 
 def finish(box: Any) -> None:
