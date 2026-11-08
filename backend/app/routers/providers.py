@@ -22,7 +22,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import ProviderConnection, User
 from pydantic import BaseModel, Field
-from services import model_catalog
+from services import model_catalog, model_suggestions
 from services import provider_connections as connections
 from sqlmodel import Session, select
 
@@ -242,3 +242,28 @@ async def company_models(
         "origin": model_catalog.origin(),
         "connections": [model_catalog.connection_models(row) for row in rows],
     }
+
+
+@router.get("/companies/{company_id}/model_suggestions")
+async def company_model_suggestions(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Suggested model per role, based on the company's enabled connections."""
+    require_company_role(session, user, company_id, "Viewer")
+    rows = session.exec(
+        select(ProviderConnection)
+        .where(
+            ProviderConnection.company_id == company_id,
+            ProviderConnection.enabled.is_(True),
+        )
+        .order_by(ProviderConnection.name)
+    ).all()
+    models: list[dict[str, Any]] = []
+    for row in rows:
+        for m in model_catalog.connection_models(row).get("models", []):
+            entry = dict(m)
+            entry["id"] = connections.model_ref(row.id, str(m.get("id")))
+            models.append(entry)
+    return {"suggestions": model_suggestions.suggest(models)}
