@@ -58,6 +58,35 @@ def upstream_message(resp) -> str:
     return text_body[:300] or f"HTTP {resp.status_code}"
 
 
+# What a provider says when the account, not the request, is the problem.
+# Whole phrases: "insufficient permissions" or a "load balancer" error is not
+# a lack of credit, and neither is a plain 401 or 403 (a key or an access).
+CREDIT_PHRASES = (
+    "insufficient balance",
+    "insufficient credit",
+    "insufficient funds",
+    "insufficient_quota",
+    "insufficient quota",
+    "credit balance",
+    "out of credit",
+    "no credit",
+    "credits exhausted",
+    "account balance",
+    "balance is not enough",
+    "arrearage",
+    "payment required",
+    "billing",
+)
+
+
+def credit_refusal(status: int | None, message: str | None) -> bool:
+    """Whether the provider refused for lack of credit (402, or a message saying so)."""
+    if status == 402:
+        return True
+    low = (message or "").lower()
+    return any(phrase in low for phrase in CREDIT_PHRASES)
+
+
 def post_upstream(
     provider: str, model: str, url: str, headers: dict, payload: dict, timeout: float
 ) -> tuple[int, dict]:
@@ -71,7 +100,10 @@ def post_upstream(
     except requests.RequestException as exc:
         raise UpstreamError(provider, model, None, f"request failed: {exc}")
     if not 200 <= resp.status_code < 300:
-        raise UpstreamError(provider, model, resp.status_code, upstream_message(resp))
+        message = upstream_message(resp)
+        # A provider without credit may still be answered by another one.
+        retriable = True if credit_refusal(resp.status_code, message) else None
+        raise UpstreamError(provider, model, resp.status_code, message, retriable=retriable)
     try:
         body = resp.json()
     except ValueError:
@@ -87,8 +119,10 @@ def post_upstream(
             retriable=False,
         )
     if body.get("error"):
+        message = upstream_message(resp)
+        retriable = credit_refusal(resp.status_code, message)
         raise UpstreamError(
-            provider, model, resp.status_code, upstream_message(resp), retriable=False
+            provider, model, resp.status_code, message, retriable=retriable
         )
     return resp.status_code, body
 
