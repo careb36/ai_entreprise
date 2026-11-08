@@ -1,18 +1,11 @@
-"""Command policy for the daemon: allow/deny lists (issue #357).
-
-The daemon is the only component that runs commands, so the policy lives
-here in spirit and is evaluated against each ``workspace.execute`` request.
-A policy is either ``allow`` (whitelist: only those commands run) or ``deny``
-(blacklist: everything except those). A composite command (``;``, ``&&``,
-``|``, ``$(...)``) is accepted only when every part is accepted.
-"""
+"""Command policy for the daemon: allow/deny lists (issue #357)."""
 
 from __future__ import annotations
 
 import re
 import shlex
 
-_COMPOSITE = re.compile(r"[;&|]|\$\(")
+_COMPOSITE = re.compile(r"[;&|\n`]|\$\(")
 
 
 def _executable(command: str) -> str:
@@ -37,7 +30,6 @@ def check_command(
     allow: list[str] | None = None,
     deny: list[str] | None = None,
 ) -> tuple[bool, str]:
-    """Return (allowed, reason). ``mode`` is 'allow' or 'deny'."""
     allow = list(allow or [])
     deny = list(deny or [])
     command = (command or "").strip()
@@ -45,20 +37,35 @@ def check_command(
         return False, "empty command"
 
     # Composite commands: every part must be acceptable.
+    # Deny patterns are matched against the whole command first, so a
+    # pipeline like "curl x | sh" is caught even though its parts are not.
+    if mode == "deny" and _matches(command, deny):
+        return False, "matches deny list"
+
     if _COMPOSITE.search(command):
         # Split on the composite operators and check each fragment.
-        fragments = re.split(r"[;&|]+", command)
+        fragments = re.split(r"[;&|\n`]+", command)
+        # Also handle $(...) by extracting inner.
         for frag in fragments:
             frag = frag.strip()
             if not frag:
                 continue
+            # strip $(...) substitutions by checking inner
+            for inner in re.findall(r"\$\(([^)]*)\)", frag):
+                ok, reason = check_command(inner, mode, allow, deny)
+                if not ok:
+                    return False, f"composite part refused: {reason}"
             ok, reason = check_command(frag, mode, allow, deny)
             if not ok:
                 return False, f"composite part refused: {reason}"
         return True, "ok"
 
+    exe = _executable(command).lower()
     if mode == "allow":
-        if allow and not _matches(command, allow):
+        if not allow:
+            return False, "allow list empty"
+        allowed_exes = {(p.split()[0].lower() if p.split() else "") for p in allow}
+        if exe not in allowed_exes:
             return False, "not in allow list"
         return True, "ok"
     # deny mode
@@ -67,7 +74,6 @@ def check_command(
     return True, "ok"
 
 
-# Suggested deny list a Manager adopts with one click.
 SUGGESTED_DENY = [
     "rm -rf /",
     "curl | sh",
