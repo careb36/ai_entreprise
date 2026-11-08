@@ -10,6 +10,11 @@ company's own task worker and kickoff runs are decided by the review loop),
 and the sprints whose integration stopped at a merge conflict or a failing
 suite, missed a task's branch or could not start (``integrations``, listed up
 to the limit and counted in full; ``services/integration.py``).
+
+With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
+``suggestion`` (a claim, ``services/manager_agent.py``), and
+``agent_decisions`` lists what it decided alone under the company's policy,
+each with its rule, for the client to override in one click.
 The agents do the rest on their own, so this is the whole of a person's
 queue.
 """
@@ -20,20 +25,32 @@ from database import get_session
 from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
-from services import (
-    integration,
-    manager_agent,
-    scrum_master,
-    task_events,
-    task_projection,
-)
+from models.manager import ManagerDecision
+from services import integration, scrum_master, task_events, task_projection
 from services.carry_over import carried_over
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from routers.manager import serialize_decision
+
 router = APIRouter(prefix="/v1", tags=["Company"])
 
 REASON_LIMIT = 300
+AGENT_DECISIONS_LIMIT = 20
+
+
+def _suggestions(session: Session, company_id: int) -> dict[tuple[str, int], dict]:
+    """The Manager agent's latest row per inbox item, serialized."""
+    if not settings.MANAGER_AGENT_ENABLED:
+        return {}
+    latest: dict[tuple[str, int], dict] = {}
+    for row in session.exec(
+        select(ManagerDecision)
+        .where(ManagerDecision.company_id == company_id)
+        .order_by(ManagerDecision.id.desc())
+    ).all():
+        latest.setdefault((row.item_kind, row.item_id), serialize_decision(row))
+    return latest
 
 
 @router.get("/inbox")
@@ -56,6 +73,7 @@ async def inbox(
     blocked_total = 0
     # The ScrumMaster's answers to the escalations, one query for the page.
     triages = scrum_master.triages_for(session, [item for item, _ in rows])
+    suggestions = _suggestions(session, company_id)
     # Every candidate's events, one query, shared by the three projections.
     histories = task_events.for_tasks(session, [item.id for item, _ in rows])
     for item, sprint in rows:
@@ -89,11 +107,7 @@ async def inbox(
                 "risk_hold": task_projection.awaits_risk_acceptance(
                     session, item, histories
                 ),
-                "suggestion": (
-                    manager_agent.suggest_for_blocked(item, triages.get(item.id))
-                    if settings.MANAGER_AGENT_ENABLED
-                    else None
-                ),
+                "suggestion": suggestions.get(("task", item.id)),
                 "updated_at": item.updated_at.isoformat() if item.updated_at else None,
             }
         )
@@ -131,6 +145,20 @@ async def inbox(
         ).all()
 
     integrations = integration.waiting_for_a_person(session, company_id)
+    agent_decisions = []
+    if settings.MANAGER_AGENT_ENABLED:
+        agent_decisions = [
+            serialize_decision(row)
+            for row in session.exec(
+                select(ManagerDecision)
+                .where(
+                    ManagerDecision.company_id == company_id,
+                    ManagerDecision.decided_by.is_not(None),
+                )
+                .order_by(ManagerDecision.id.desc())
+                .limit(AGENT_DECISIONS_LIMIT)
+            ).all()
+        ]
 
     return {
         "blocked_tasks": blocked_tasks,
@@ -142,11 +170,7 @@ async def inbox(
                 "proposed_by": p.proposed_by,
                 "source_sprint_id": p.source_sprint_id,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
-                "suggestion": (
-                    manager_agent.suggest_for_proposal(p)
-                    if settings.MANAGER_AGENT_ENABLED
-                    else None
-                ),
+                "suggestion": suggestions.get(("procedure", p.id)),
             }
             for p in proposals
         ],
@@ -155,12 +179,13 @@ async def inbox(
             {
                 "id": r.id,
                 "producer": r.producer,
-                "suggestion": manager_agent.suggest_for_run(r),
+                "suggestion": suggestions.get(("run", r.id)),
             }
             for r in pending_run_rows
         ],
         "integrations": integrations[:limit],
         "integrations_total": len(integrations),
+        "agent_decisions": agent_decisions,
         "blocked_total": blocked_total,
         "total": blocked_total
         + len(proposals)

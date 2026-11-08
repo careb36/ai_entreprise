@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sprints from './Sprints'
 import { api, type SprintSummary } from '../services/api'
 import { specificationsApi } from '../services/specifications'
+import { managerApi, type ManagerRecord } from '../services/manager'
 import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 
@@ -13,6 +14,11 @@ const sprints: SprintSummary[] = [
   { id: 9, sprint_name: 'Hardening', status: 'active', goal: 'Close audit gaps', start_date: '2026-10-01', scope_size: 'M', total: 8, done: 3, blocked: 1, rework: 2, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } },
   { id: 4, sprint_name: 'Foundation', status: 'needs_split', goal: null, start_date: null, scope_size: 'L', total: 0, done: 0, blocked: 0, rework: 0, second_attempts: { total: 0, done: 0, briefed: 0, briefed_done: 0 }, console_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } }, architect_advice: { advised: { total: 0, done: 0, rework: 0 }, unadvised: { total: 0, done: 0, rework: 0 } } },
 ]
+
+const counts = (overrides: Partial<ManagerRecord['total']> = {}): ManagerRecord['total'] => ({
+  suggested: 0, decided: 0, agreed: 0, unusable: 0, taken_alone: 0, overridden: 0, override_rate: null, ...overrides,
+})
+const EMPTY_RECORD: ManagerRecord = { categories: {}, total: counts(), flagged_rules: [] }
 
 function renderPage() {
   return render(
@@ -28,6 +34,7 @@ describe('Sprints list', () => {
     useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: 9 })
     // The planner lists the company's approved specifications; none here.
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
+    vi.spyOn(managerApi, 'record').mockResolvedValue(EMPTY_RECORD)
   })
   afterEach(() => {
     queryClient.clear()
@@ -75,5 +82,29 @@ describe('Sprints list', () => {
     expect(screen.getByText('Select a company to see its sprints.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Select company' })).toHaveAttribute('href', '/companies/select')
     expect(list).not.toHaveBeenCalled()
+  })
+
+  it("shows the Manager agent's record beside the other numbers once it has decisions", async () => {
+    vi.spyOn(api, 'listSprints').mockResolvedValue(sprints)
+    const record = vi.spyOn(managerApi, 'record').mockResolvedValue({
+      categories: {
+        accept_delivery: counts({ suggested: 3, decided: 2, agreed: 1, taken_alone: 4, overridden: 1, override_rate: 0.25 }),
+      },
+      total: counts({ suggested: 3, decided: 2, agreed: 1, taken_alone: 4, overridden: 1, override_rate: 0.25 }),
+      flagged_rules: ['accept_delivery'],
+    })
+    renderPage()
+    const card = await screen.findByRole('region', { name: "The Manager agent's record" })
+    expect(record).toHaveBeenCalledWith(42)
+    expect(within(card).getByText('accept_delivery')).toBeInTheDocument()
+    expect(card).toHaveTextContent('matched your decision 1 of 2 · overridden 1 of 4 taken alone (25%)')
+    expect(card).toHaveTextContent('Flagged, not applied: accept_delivery')
+  })
+
+  it('shows no record while the Manager agent has decided nothing', async () => {
+    vi.spyOn(api, 'listSprints').mockResolvedValue(sprints)
+    renderPage()
+    await screen.findByRole('list', { name: 'Sprints' })
+    expect(screen.queryByRole('region', { name: "The Manager agent's record" })).not.toBeInTheDocument()
   })
 })

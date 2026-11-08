@@ -11,7 +11,8 @@ and reports histories the loop must never produce:
 - ``done_without_verified_delivery``: closed by an approval while the task
   worker's latest run of it was refuted, unverifiable or never recorded;
 - ``high_risk_done_without_person``: a high-risk hold closed with no note
-  from a person after it;
+  from a person after it (a hold only for autonomy level 1 may also close
+  with the Manager agent's acceptance under the company's policy);
 - ``carried_twice``: one task carried into another sprint more than once;
 - ``worked_before_dependency``: a task that delivered before every task it
   depends on was done: the dependency is not done, or it closed (its last
@@ -59,6 +60,9 @@ _RISK_HOLD = "High-risk delivery approved by QA, waiting for a person to accept 
 _ANSWERS = "Answers escalation #"
 _DECISION_FIRST_LINES = ("Triage decision:",)
 _TASK_WORKER = "le-fabrique-task-worker"
+_HUMAN_LED = "autonomy level 1: every approved task waits for a person"
+_MANAGER_AGENT = "manager agent"
+_AGENT_ACCEPTED = "Accepted by the Manager agent"
 
 
 def _author(comment: dict[str, Any]) -> str:
@@ -75,10 +79,17 @@ def _is_approval(comment: dict[str, Any]) -> bool:
     ).upper().startswith("APPROVED:")
 
 
+def _is_agent_acceptance(comment: dict[str, Any]) -> bool:
+    return _author(comment) == _MANAGER_AGENT and _text(comment).startswith(
+        _AGENT_ACCEPTED
+    )
+
+
 def _is_deliverable(comment: dict[str, Any]) -> bool:
     text = _text(comment)
     return (
         bool(text)
+        and not _is_agent_acceptance(comment)
         and _author(comment) not in _GATE_AUTHORS | {"system", _PERSON}
         and not text.upper().startswith(("APPROVED:", "NEEDS WORK:"))
         and not text.startswith("ARCHITECT_CONSULTED:")
@@ -112,8 +123,13 @@ def _started_at(comments: list[dict[str, Any]]) -> datetime | None:
 
 
 def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
-    """When the task was closed: its last approval or person's note."""
-    closing = [c for c in comments if _is_approval(c) or _author(c) == _PERSON]
+    """When the task was closed: its last approval, person's note or the
+    Manager agent's acceptance (which releases an autonomy-1 hold)."""
+    closing = [
+        c
+        for c in comments
+        if _is_approval(c) or _author(c) == _PERSON or _is_agent_acceptance(c)
+    ]
     return _when(closing[-1]) if closing else None
 
 
@@ -249,7 +265,13 @@ def check_task(
             for i, c in enumerate(comments)
             if _author(c) == "system" and _text(c).startswith(_RISK_HOLD)
         ]
-        if holds and not any(i > holds[-1] for i in person_notes):
+        agent_accepts = [i for i, c in enumerate(comments) if _is_agent_acceptance(c)]
+        human_led = bool(holds) and _HUMAN_LED in _text(comments[holds[-1]])
+        if (
+            holds
+            and not any(i > holds[-1] for i in person_notes)
+            and not (human_led and any(i > holds[-1] for i in agent_accepts))
+        ):
             violations.append("high_risk_done_without_person")
 
     started = _started_at(comments)

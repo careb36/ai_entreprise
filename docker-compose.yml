@@ -148,6 +148,7 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:-}
       SUPPORT_ADMIN_EMAILS: ${SUPPORT_ADMIN_EMAILS:-}
       SUPPORT_AGENT_ENABLED: ${SUPPORT_AGENT_ENABLED:-false}
+      MANAGER_AGENT_ENABLED: ${MANAGER_AGENT_ENABLED:-false}
       NATS_URL: nats://nats:4222
       NATS_NAMESPACE: ${NATS_NAMESPACE:-}
       # The backend's own NATS user (empty: no authentication, as before).

@@ -51,6 +51,7 @@ from models.company import (
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.integration import SprintIntegration
+from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
 from models.provider import ProviderConnection
@@ -165,6 +166,8 @@ SQLModel.metadata.create_all(
         RunSecret.__table__,
         CompanyWebhook.__table__,
         SprintIntegration.__table__,
+        ManagerPolicy.__table__,
+        ManagerDecision.__table__,
     ],
 )
 

@@ -12,6 +12,9 @@ prompt's section headers, so one run exercises the whole loop:
   proposes one procedure in the fixed format;
 - the Architect answers every consultation with the same short brief;
 - the Support agent triages every ticket as a high-severity bug;
+- the Manager agent suggests accepting every delivery waiting for a person
+  (low or high risk: the policy, not the model, keeps a high-risk one for
+  the client) and escalates everything else;
 - the PO drafts a specification (with a quality target without a number
   and one open question the first time, both fixed on the revision) and
   plans a sprint from it, one task per requirement with its criteria, the
@@ -97,6 +100,17 @@ def answer(prompt: str) -> str:
     with open(PROMPT_LOG, "a") as log:
         # Long enough for a task prompt with every section the checks read.
         log.write(prompt.replace("\n", " ")[:20000] + "\n")
+    if prompt.startswith("You are the Manager agent"):
+        item = re.search(r"--- ITEM \((\w+)\) ---", prompt)
+        category = item.group(1) if item else "unknown"
+        decision = "accept" if category in ("accept_delivery", "accept_high_risk") else "escalate"
+        return (
+            f"DECISION: {decision}\n"
+            f"CATEGORY: {category}\n"
+            "REASON:\n"
+            "QA approved it and the Verifier's verdict is in the item; the tier decides who accepts.\n"
+            "END"
+        )
     if ", the PO of an AI software factory. Write the specification" in prompt:
         revision = "## Answers to your questions" in prompt
         return json.dumps(

@@ -2026,5 +2026,31 @@
       },
       "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
     }
+  },
+  "manager": {
+    "suggestion": "El agente Manager sugiere: {{decision}}",
+    "suggestionUnusable": "El agente Manager no pudo sugerir; la decisión es tuya.",
+    "briefTitle": "Tu resumen",
+    "briefLine": "Último día: {{done}} tareas hechas, {{decided}} decididas por el agente Manager ({{overridden}} revertidas), {{waiting}} esperan por ti, {{tokens}} tokens.",
+    "overBudget": "Por encima del presupuesto de tokens: el agente no decide nada solo.",
+    "decided": "Decidido por el agente Manager: {{decision}} ({{kind}} #{{id}})",
+    "rule": "Permitido por la regla {{rule}}",
+    "overriddenBy": "Revertido por {{who}}",
+    "overrideError": "No se pudo revertir: {{message}}",
+    "override": "Revertir",
+    "decisionsTitle": "Decidido por el agente Manager",
+    "requestTitle": "¿Qué necesitás?",
+    "requestHint": "Contalo con tus palabras. El PO escribe un borrador de especificación a partir de eso, y aprobarlo sigue siendo decisión tuya.",
+    "requestPlaceholder": "Por ejemplo: que los clientes puedan exportar sus facturas como planilla.",
+    "requestSending": "El PO está escribiendo el borrador…",
+    "requestSend": "Pedirle un borrador al PO",
+    "requestError": "No se pudo hacer el borrador: {{message}}",
+    "requestDone": "Leé y aprobá el borrador: {{title}}",
+    "recordTitle": "El historial del agente Manager",
+    "recordHint": "Contado a partir de lo que decidiste y de lo que revertiste; una regla cuyas reversiones suben queda marcada y deja de aplicarse.",
+    "recordAgreed": "coincidió con tu decisión {{agreed}} de {{decided}}",
+    "recordOverridden": "revertidas {{overridden}} de {{taken}} tomadas solo ({{rate}})",
+    "recordFlagged": "Marcadas, no se aplican: {{rules}}",
+    "requestLabel": "Tu pedido, con tus palabras"
   }
 }

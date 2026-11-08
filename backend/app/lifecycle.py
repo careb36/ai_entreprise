@@ -180,6 +180,17 @@ async def startup(app):
         _background_tasks.add(reviewer_task)
         reviewer_task.add_done_callback(_on_task_done)
 
+    # And the Manager agent, which suggests on the inbox (issue #331).
+    if settings.MANAGER_AGENT_ENABLED:
+        from database import engine
+        from services.manager_agent import run_manager_agent
+
+        manager_task = asyncio.create_task(
+            run_manager_agent(engine), name="manager_agent"
+        )
+        _background_tasks.add(manager_task)
+        manager_task.add_done_callback(_on_task_done)
+
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
     if not settings.NEO4J_ENABLED:

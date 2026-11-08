@@ -11,6 +11,7 @@ import type { SprintSummary } from '../services/api'
 import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
 import { LearningTrend } from '../components/LearningTrend'
+import { ManagerRecordCard } from '../components/ManagerRecordCard'
 
 const STATUS_TONE: Record<string, string> = {
   active: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
@@ -111,6 +112,7 @@ export default function Sprints() {
       ) : (
         <>
           <LearningTrend sprints={sprints} />
+          <ManagerRecordCard companyId={companyId} />
           <ul className="space-y-2" aria-label={t('nav.sprints', { defaultValue: 'Sprints' })}>
             {sprints.map(sprint => <SprintRow key={sprint.id} sprint={sprint} current={sprint.id === activeSprintId} />)}
           </ul>
