@@ -246,7 +246,7 @@ There is no SDK and no dependency on the reference checkout.
 
 ```bash
 cd la-fabrique
-cp .env.example .env                     # set NEBIUS_API_KEY, POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
+cp .env.example .env                     # set NEBIUS_API_KEY, NEMOTRON_ROLES or AGENT_MODEL, POSTGRES_PASSWORD, NEO4J_PASSWORD, JWT_SECRET_KEY
 docker compose up -d                     # Postgres, Neo4j, NATS, backend, proxy, frontend
 ```
 
@@ -366,9 +366,10 @@ In local mode (`run_fusion.py` without `--completa`) the launcher:
 
 1. loads `la-fabrique/.env` (already exported values win);
 2. uses **SQLite** at `la-fabrique/.fusion/factory.db` when no Postgres is
-   configured;
-3. disables Neo4j and NATS (`NEO4J_DISABLED=true`, `NATS_DISABLED=true`) so
-   startup does not wait for servers that do not exist;
+   configured, and lets the backend bring the database (SQLite or Postgres)
+   to its schema's head at startup (`DB_AUTO_UPGRADE=true`);
+3. disables Neo4j and NATS (`NEO4J_DISABLED=true`, `NEO4J_ENABLED=false`,
+   `NATS_DISABLED=true`) so startup does not wait for servers that do not exist;
 4. generates a `VOICE_API_KEY` and shares it with the assistant, and forces
    `AUTH_REQUIRED=true` (an `AUTH_REQUIRED=false` in the shell or in `.env` is
    ignored);
@@ -787,7 +788,7 @@ resolve to the same actions; `crear_sprint` has no English alias.
 ```bash
 # The fusion layer: launcher, demo, codegen and panel guards.
 python3 -m pytest tests -q
-# 134 passed, 7 skipped when the reference profesor3/ checkout is absent
+# 135 passed, 7 skipped when the reference profesor3/ checkout is absent
 # (one launcher test imports the backend, so it needs FastAPI installed).
 
 # The assistant: no network, no microphone, no Qt.
