@@ -4,7 +4,7 @@
   "backend/app/services/console_assistants.py": 617,
   "backend/app/services/discovery_service.py": 767,
   "backend/app/services/sprint_planner.py": 860,
-  "backend/app/services/task_worker.py": 3434,
+  "backend/app/services/task_worker.py": 3432,
   "frontend/src/components/GlassRoom.tsx": 1494,
   "frontend/src/pages/AgentSettings.tsx": 1193,
   "frontend/src/pages/CompanyNew.tsx": 1242,

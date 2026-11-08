@@ -87,6 +87,7 @@ def ask(
     timeout: float = DRAFT_TIMEOUT_SECONDS,
     role: str = PO_ROLE,
     bu_id: int | None = None,
+    company_id: int | None = None,
 ) -> str:
     """One question to an agent (the PO by default) through the proxy; no database involved.
 
@@ -96,16 +97,19 @@ def ask(
     messages = [{"role": "user", "content": prompt}]
     if system_prompt:
         messages.insert(0, {"role": "system", "content": system_prompt})
-    client = _client(timeout, max_tokens)
+    client = _client(timeout, max_tokens, company_id)
     result = client.chat(messages=messages, model=model, role=role, bu_id=bu_id)
     return _content(result)
 
 
-def _client(timeout: float, max_tokens: int) -> LLMProxyClient:
+def _client(
+    timeout: float, max_tokens: int, company_id: int | None = None
+) -> LLMProxyClient:
     client = LLMProxyClient(
         base_url=os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100")
     )
     client.timeout, client.max_tokens, client.max_retries = timeout, max_tokens, 0
+    client.company_id = company_id
     return client
 
 
@@ -129,6 +133,7 @@ def ask_with_tools(
     role: str = PO_ROLE,
     bu_id: int | None = None,
     toolbox: Any = None,
+    company_id: int | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """``ask`` with a toolbox (``mcp_tools.chat_with_tools``): the answer and
     the observations of every tool call the agent made on the way. Without a
@@ -142,6 +147,7 @@ def ask_with_tools(
             timeout=timeout,
             role=role,
             bu_id=bu_id,
+            company_id=company_id,
         )
         return plain, []
     messages = [{"role": "user", "content": prompt}]
@@ -149,7 +155,12 @@ def ask_with_tools(
         messages.insert(0, {"role": "system", "content": system_prompt})
     try:
         result, calls = mcp_tools.chat_with_tools(
-            _client(timeout, max_tokens), messages, model, role, toolbox, bu_id=bu_id
+            _client(timeout, max_tokens, company_id),
+            messages,
+            model,
+            role,
+            toolbox,
+            bu_id=bu_id,
         )
     finally:
         toolbox.close()
@@ -317,6 +328,7 @@ def draft_from(request: dict[str, Any]) -> dict[str, Any]:
         request["prompt"],
         bu_id=request["bu_id"],
         toolbox=research_tools.toolbox_for_request(PO_ROLE, request),
+        company_id=request["company_id"],
     )
     spec = parse_draft(answer)
     if spec is None:

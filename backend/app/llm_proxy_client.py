@@ -65,6 +65,8 @@ class LLMProxyClient:
         # brief, a plan); ``None`` leaves the provider's own limit.
         self.max_tokens: int | None = None
         self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
+        # The company whose provider connections a ``conn:<id>:<model>`` may use.
+        self.company_id: int | None = None
         self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
 
     def _get_headers(
@@ -81,6 +83,20 @@ class LLMProxyClient:
         # Propagate OpenTelemetry context (TraceParent)
         propagate.inject(headers)
         return headers
+
+    def _route(
+        self, model: str, headers: dict[str, str]
+    ) -> tuple[str, dict[str, Any] | None]:
+        """The model to send and the headers updated for a company connection;
+        an error answer instead when the connection cannot be used."""
+        from services import provider_connections
+
+        try:
+            sent, extra = provider_connections.proxy_route(model, self.company_id)
+        except Exception as exc:  # noqa: BLE001 - The reason is the answer.
+            return model, {"error": f"provider connection: {exc}", "ok": False}
+        headers.update(extra)
+        return sent, None
 
     def chat(
         self,
@@ -102,6 +118,9 @@ class LLMProxyClient:
         sending it again would bill it again.
         """
         headers = self._get_headers(role, bu_id)
+        model, refused = self._route(model, headers)
+        if refused:
+            return refused
         payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
@@ -162,6 +181,9 @@ class LLMProxyClient:
         Async variant of ``chat()`` used by LangGraph async nodes.
         """
         headers = self._get_headers(role, bu_id)
+        model, refused = await asyncio.to_thread(self._route, model, headers)
+        if refused:
+            return refused
         payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):

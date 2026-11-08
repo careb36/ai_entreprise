@@ -319,7 +319,7 @@ def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
     monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
     asked = []
 
-    def _ask(model, system_prompt, prompt):
+    def _ask(model, system_prompt, prompt, company_id=None):
         # Asked before the task counts as blocked, so a sprint closing in the
         # meantime already sees the decision.
         statuses.append(
