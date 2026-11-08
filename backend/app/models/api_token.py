@@ -18,3 +18,8 @@ class ApiToken(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    # The company role the token acts with ("Viewer" or "Manager", never
+    # "Owner"); rows written before roles existed act as a Manager, as before.
+    role: str = Field(default="Manager")
+    # After this moment the token is refused; None (legacy rows) never expires.
+    expires_at: datetime | None = None

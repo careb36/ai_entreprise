@@ -481,8 +481,12 @@ Before the stack serves anyone but the person running it:
       `nats/certs`, `NATS_TLS=true` and `NATS_TLS_CA` on the backend and the
       daemon, `/health` reports `nats.tls: true`.
 - [ ] **API tokens.** External callers use per-company API tokens
-      (`/v1/auth/tokens`), stored hashed, named, scoped and
-      revoked when no longer used; `JWT_SECRET_KEY` set and `AUTH_REQUIRED` on.
+      (`/v1/auth/tokens`), stored hashed, named, with the narrowest role that
+      works (`Viewer` by default; a Manager at most, never above the creator's
+      own role), an expiry (90 days by default, at most 365) and revoked when
+      no longer used. A token cannot create tokens, and the audit rows its
+      requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set and
+      `AUTH_REQUIRED` on.
 - [ ] **Secrets at rest.** `FERNET_SECRET_KEY` set, so provider keys, MCP
       secrets, run secrets and project credentials are encrypted (the backend
       warns at startup without it); `AUDIT_SIGNING_KEY` keys the audit chain.
