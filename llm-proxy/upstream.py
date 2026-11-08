@@ -91,3 +91,29 @@ def post_upstream(
             provider, model, resp.status_code, upstream_message(resp), retriable=False
         )
     return resp.status_code, body
+
+
+def check_openai_answer(provider: str, model: str, status: int, result: dict) -> None:
+    """Refuse an OpenAI-shaped 2xx body that carries no usable answer.
+
+    No choices is an error no other provider would fix. An empty answer (no
+    text and no tool call) is one a provider sometimes returns (DeepSeek does)
+    and another may not, so it is retriable and the fallback runs. A tool call
+    with no text is a real answer, and so is an empty one cut at the length
+    limit (``finish_reason: length``): the caller reads that as truncated and
+    asks again with room, which another provider would not change.
+    """
+    choices = result.get("choices")
+    if not choices:
+        raise UpstreamError(
+            provider, model, status, "response contained no choices", retriable=False
+        )
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = choice.get("message")
+    message = message if isinstance(message, dict) else {}
+    text = message.get("content")
+    if (isinstance(text, str) and text.strip()) or message.get("tool_calls"):
+        return
+    if choice.get("finish_reason") == "length":
+        return
+    raise UpstreamError(provider, model, status, "empty response", retriable=True)

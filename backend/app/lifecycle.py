@@ -192,6 +192,16 @@ async def startup(app):
         _background_tasks.add(manager_task)
         manager_task.add_done_callback(_on_task_done)
 
+        # The client's brief by mail, only where SMTP is configured.
+        if settings.SMTP_HOST.strip():
+            from services.brief_mail import run_brief_mail
+
+            brief_task = asyncio.create_task(
+                run_brief_mail(engine), name="manager_brief_mail"
+            )
+            _background_tasks.add(brief_task)
+            brief_task.add_done_callback(_on_task_done)
+
     # Neo4j is used for memory search and lineage; degrade gracefully if absent.
     app.state.memory_client = None
     if not settings.NEO4J_ENABLED:
