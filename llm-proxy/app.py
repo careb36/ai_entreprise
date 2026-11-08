@@ -498,17 +498,11 @@ def _call_openai_compatible(provider: str, model: str, data: dict, timeout: floa
     )
     if not result.get("choices"):
         raise UpstreamError(provider, model, status, "response contained no choices", retriable=False)
-    # A 200 with no text and no tool call is an empty answer (DeepSeek
-    # occasionally returns one); treat it as retriable so the fallback runs.
-    # A tool call with no text is legitimate, so it is not an error.
-    message = (result.get("choices") or [{}])[0].get("message") or {}
-    if not openai_text(result).strip() and not message.get("tool_calls"):
+    if not openai_text(result).strip() and not ((result.get("choices") or [{}])[0].get("message") or {}).get("tool_calls"):
         raise UpstreamError(provider, model, status, "empty response", retriable=True)
     return with_usage(result, openai_reported_count(result), data.get("messages", []), openai_text(result))
 
-
 def _call_gemini(model: str, data: dict, timeout: float) -> tuple[dict, int]:
-    # The key and URL are read here, at call time, so a test can replace them.
     return call_gemini(model, data, timeout, post=_post_upstream, base_url=GEMINI_PROXY_URL, api_key=GEMINI_API_KEY)
 
 
