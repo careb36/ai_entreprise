@@ -1,0 +1,16 @@
+# Core: no dependencies (Python standard library only).
+# Voice and the window are optional; without them B1 runs in text mode.
+
+# --- window ------------------------------------------------------------------
+PyQt6>=6.6
+
+# --- voice -------------------------------------------------------------------
+sounddevice>=0.4
+numpy>=1.24
+faster-whisper>=1.0      # local speech to text (MIT); also ships Silero VAD
+kokoro-onnx>=0.4         # Kokoro-82M voice (MIT; model Apache-2.0); `b1 --voices` fetches it
+piper-tts>=1.2           # fallback local voice (MIT); needs a separate .onnx model
+
+# --- tests -------------------------------------------------------------------
+pytest>=8
+pytest-asyncio>=0.23
