@@ -47,7 +47,7 @@ from sqlalchemy import update
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
-from services import locks, scrum_master
+from services import locks, scrum_master, task_events
 from services.board import comment_list, has_manual_freeze_marker
 from services.glassroom import publish_glassroom
 
@@ -60,15 +60,24 @@ RECOVERY_NOTE = (
 
 
 def claim_todo(engine: Engine, item_id: int) -> bool:
-    """Move a ``todo`` task to ``in_progress``; ``True`` only for the caller whose update matched."""
+    """Move a ``todo`` task to ``in_progress``; ``True`` only for the caller whose update matched.
+
+    The claim is the task's ``claimed`` event (issue #324), written in the
+    same transaction as the update that won it.
+    """
     with Session(engine) as session:
         result = session.exec(  # type: ignore[call-overload]
             update(BacklogItem)
             .where(BacklogItem.id == item_id, BacklogItem.status == "todo")
             .values(status="in_progress", updated_at=datetime.now(UTC))
         )
+        if result.rowcount != 1:
+            session.commit()
+            return False
+        item = session.get(BacklogItem, item_id)
+        task_events.record(session, item, "claimed", "system", status="in_progress")
         session.commit()
-        return result.rowcount == 1
+        return True
 
 
 @contextmanager
@@ -84,7 +93,6 @@ def task_lock(engine: Engine, item_id: Any) -> Iterator[bool]:
 def recover_inflight(engine: Engine) -> list[dict[str, Any]]:
     """Return to ``todo`` the ``in_progress`` tasks no live replica is working on."""
     recovered: list[dict[str, Any]] = []
-    now = datetime.now(UTC)
     with Session(engine) as session:
         inflight = session.exec(
             select(BacklogItem).where(BacklogItem.status == "in_progress")
@@ -96,23 +104,21 @@ def recover_inflight(engine: Engine) -> list[dict[str, Any]]:
                 session.refresh(item)
                 if item.status != "in_progress":
                     continue
-                comments = comment_list(item.comments)
-                item.updated_at = now
-                if has_manual_freeze_marker(comments):
-                    item.status = "blocked"
-                    session.add(item)
+                # Every transition is an event first (issue #324).
+                if has_manual_freeze_marker(comment_list(item.comments)):
+                    task_events.record(
+                        session, item, "blocked", "system", status="blocked"
+                    )
                     session.commit()
                     continue
-                comments.append(
-                    {
-                        "author": "System",
-                        "text": RECOVERY_NOTE,
-                        "created_at": now.isoformat(),
-                    }
+                task_events.record(
+                    session,
+                    item,
+                    "recovered",
+                    "system",
+                    status="todo",
+                    text=RECOVERY_NOTE,
                 )
-                item.comments = comments
-                item.status = "todo"
-                session.add(item)
                 session.commit()
                 recovered.append(
                     {

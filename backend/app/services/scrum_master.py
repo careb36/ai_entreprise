@@ -27,7 +27,7 @@ from logging_config import setup_logger
 from models import Agent, AgentMessage, BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services import company_models, procedures
+from services import company_models, procedures, task_events
 from services.board import (
     BRIEF_PREFIX,
     SCRUM_MASTER_ROLE,
@@ -360,6 +360,22 @@ def record_decision(
         body=decision_body(decision, answers),
     )
     session.add(message)
+    session.flush()
+    item = session.get(BacklogItem, item_id)
+    if item is not None:
+        # The decision as an event on the task; the message is its text.
+        task_events.record(
+            session,
+            item,
+            "decided",
+            SCRUM_MASTER_ROLE,
+            payload={
+                "message_id": message.id,
+                "decision": decision["decision"],
+                "answers": answers,
+            },
+            company_id=company_id,
+        )
     return message
 
 

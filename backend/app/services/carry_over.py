@@ -21,7 +21,7 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
-from services import dependencies, scrum_master
+from services import dependencies, scrum_master, task_events
 from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
@@ -133,36 +133,38 @@ def carry_over(
             and new_sprint.specification_id == sprint.specification_id
             else None,
             kind=item.kind,
-            comments=[
-                {
-                    "author": "System",
-                    "text": (
-                        f'{CARRIED_FROM_PREFIX} task {item.id} ("{sprint.sprint_name}"), '
-                        f"which was blocked: {reason or 'no reason recorded'}"
-                        + (f"\n{scrum_master.BRIEF_PREFIX}{brief}" if brief else "")
-                    ),
-                    "created_at": now.isoformat(),
-                }
-            ],
         )
         session.add(clone)
         session.flush()
+        task_events.record(
+            session,
+            clone,
+            "carried_over",
+            task_events.SYSTEM,
+            text=(
+                f'{CARRIED_FROM_PREFIX} task {item.id} ("{sprint.sprint_name}"), '
+                f"which was blocked: {reason or 'no reason recorded'}"
+                + (f"\n{scrum_master.BRIEF_PREFIX}{brief}" if brief else "")
+            ),
+            payload={"direction": "from", "task": item.id, "by": by},
+            created_at=now.isoformat(),
+            company_id=new_sprint.company_id,
+        )
         clones_by_original[item.id] = clone
         held[clone.id] = [
             d for d in dependencies.depends_on_of(item) if d in carried_ids
         ]
         created.append(clone)
 
-        item.comments = [
-            *comment_list(item.comments),
-            {
-                "author": "System",
-                "text": f'{CARRIED_TO_PREFIX} {new_sprint.id} ("{new_sprint.sprint_name}") as task {clone.id} by {by}.',
-                "created_at": now.isoformat(),
-            },
-        ]
-        item.updated_at = now
-        session.add(item)
+        task_events.record(
+            session,
+            item,
+            "carried_over",
+            task_events.SYSTEM,
+            text=f'{CARRIED_TO_PREFIX} {new_sprint.id} ("{new_sprint.sprint_name}") as task {clone.id} by {by}.',
+            payload={"direction": "to", "task": clone.id, "sprint": new_sprint.id},
+            created_at=now.isoformat(),
+        )
 
         if not held[clone.id]:
             session.add(
@@ -202,6 +204,7 @@ def carry_over(
             # The worker queues it once its new dependencies are done.
             clone.depends_on = [clones_by_original[d].id for d in held[clone.id]]
             dependencies.note(
+                session,
                 clone,
                 dependencies.waiting_note(
                     [clones_by_original[d] for d in held[clone.id]]
