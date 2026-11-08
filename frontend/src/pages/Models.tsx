@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 export function Models() {
   const { t } = useTranslation()
   const companyId = useAppStore((s) => s.companyId)
-  const { data: modelsData } = useQuery({
+  const { data: modelsData, isError: modelsError, isLoading: modelsLoading } = useQuery({
     queryKey: ['company-models', companyId],
     queryFn: () => providersApi.models(companyId!),
     enabled: companyId !== null,
@@ -21,6 +21,10 @@ export function Models() {
     <div className="page-container">
       <h1 className="text-2xl font-semibold mb-4">{t('models.title')}</h1>
       <p className="text-sm text-gray-400 mb-6">{t('models.subtitle')}</p>
+      {modelsError && (
+        <div className="text-sm text-red-400 mb-4">{t('models.loadError', { defaultValue: 'Failed to load models.' })}</div>
+      )}
+      {modelsLoading && <div className="text-sm text-gray-400">{t('models.loading', { defaultValue: 'Loading...' })}</div>}
       {suggestions?.suggestions && (
         <div className="mb-6">
           <h2 className="text-lg font-medium mb-2">{t('models.suggestions')}</h2>

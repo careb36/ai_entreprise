@@ -331,6 +331,7 @@ function NavBar() {
                   <Link role="menuitem" to="/company/quotas" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.quotas', { defaultValue: 'Quotas' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}

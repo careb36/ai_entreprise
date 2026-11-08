@@ -24,5 +24,5 @@ export const providersApi = {
   models: (companyId: number) =>
     api.get<{ origin: string; connections: ConnectionModels[] }>(`/v1/companies/${companyId}/models`),
   suggestions: (companyId: number) =>
-    api.get<{ suggestions: Record<string, string | null> }>(`/v1/companies/${companyId}/model_suggestions`),
+    api.get<{ suggestions: Record<string, string | null> }>(`/v1/companies/${companyId}/model_suggestions`).catch(() => ({ suggestions: {} })),
 }
