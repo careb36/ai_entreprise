@@ -132,9 +132,11 @@ docker compose up -d          # backend :8000 · frontend :5173 · LLM proxy :51
 ```
 
 The default team runs on Qwen (PO, Architect, ScrumMaster, SecOps, TechWriter)
-and DeepSeek (Developer, QA), so it needs both keys. Each agent's model can be
-changed on the **Agents** page, and `NEMOTRON_ROLES` moves roles to NVIDIA
-Nemotron on Nebius (see [Model Providers](#model-providers-nebius--nvidia-nemotron)).
+and DeepSeek (Developer, QA), so it needs both keys. `AGENT_MODEL` puts the whole
+team on one model instead (`AGENT_MODEL=deepseek-v4-pro` needs only
+`DEEPSEEK_API_KEY`), and `AGENT_MODEL_<ROLE>` (`AGENT_MODEL_SCRUM_MASTER`, …)
+sets one role. Each agent's model can also be changed on the **Agents** page,
+and `NEMOTRON_ROLES` moves roles to NVIDIA Nemotron on Nebius (see [Model Providers](#model-providers-nebius--nvidia-nemotron)).
 
 Open `http://localhost:5173`, create a company, point it at a project folder and
 plan your first sprint. Try it without API keys: `scripts/seed_demo_evidence.py`

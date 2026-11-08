@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     # decide read official sources (documentation, registries, OSV) through
     # the backend's own egress, from the default hosts plus these; every
     # source is evidence. The registries' URLs can point at a mirror.
+    # The model catalogue (issue #356): models.dev, refreshed in the
+    # background at most every MODELS_CATALOG_REFRESH_HOURS (0 keeps the
+    # snapshot shipped in app/data/models_dev.json and never calls out).
+    MODELS_CATALOG_URL: str = "https://models.dev/api.json"
+    MODELS_CATALOG_REFRESH_HOURS: float = 24.0
     RESEARCH_TOOLS_ENABLED: bool = True
     RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter"
     RESEARCH_ALLOWED_HOSTS: str = ""
@@ -190,6 +195,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     SECURITY_HEADERS_ENABLED: bool = True
+    AGENT_MODEL_POLICY: str = ""
     MANAGER_AGENT_ENABLED: bool = False
 
     class Config:

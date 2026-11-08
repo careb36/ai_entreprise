@@ -79,6 +79,10 @@ Copy `.env.example` to `.env` and fill in:
 - `DEEPSEEK_API_KEY` — DeepSeek key (used by Developer/QA agents)
 - `POSTGRES_PASSWORD`, `NEO4J_PASSWORD` — database credentials
 - `NEO4J_AUTH=neo4j/<password>` must match `NEO4J_PASSWORD`
+- `MODELS_CATALOG_URL`, `MODELS_CATALOG_REFRESH_HOURS` — optional. The model
+  catalogue (models.dev, `services/model_catalog.py`) starts from the snapshot in
+  `backend/app/data/models_dev.json` (`scripts/update_models_snapshot.py`) and
+  refreshes in the background every 24 hours by default; `0` never calls out.
 - `FERNET_SECRET_KEY` — optional. Encrypts `ProjectCredential.encrypted_value`
   at rest. Without it those values are stored with a `plaintext:` prefix and the
   backend warns at startup. Generate one with:
@@ -193,7 +197,7 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 
 ### Key Components
 
-**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`).
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `agents`, `agent_runs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`, `providers`).
 
 **`backend/app/migrations.py`** / **`backend/alembic/`** — The schema's version. Alembic owns it: `alembic.ini` and `alembic/env.py` (the models are the target metadata; the URL is the backend's `POSTGRES_*`, or `ALEMBIC_DATABASE_URL`), `alembic/versions/0001_baseline.py` (the baseline: creates each table the models define and the database lacks, adds each column a table lacks, and repeats the old startup's `ALTER TABLE` fixes, indexes and backfills on Postgres, so an empty database, one from `db/init-db/init.sql` and one patched by an older backend all converge). `database.prepare_database` (startup) runs `require_schema_at_head`: a database behind head stops the start with both versions in the error; `DB_AUTO_UPGRADE=true` runs `upgrade_to_head` first. `schema_differences` is what `alembic check` reports (`include_object` leaves `vector_memory` and init.sql's other tables out). The container's `CMD` runs `alembic upgrade head` before uvicorn; the e2e runs `upgrade head` then `check` on Postgres; `backend-tests.yml` runs both on a SQLite file. How to write a migration: `CONTRIBUTING.md` §5.
 
@@ -482,6 +486,8 @@ Test files:
 | `test_work_control.py` | Sprint 0 starts only when asked and never at autonomy 1; a planned sprint starts once and dispatches its tasks; pause, resume and stop (Manager only; stop blocks unfinished tasks); the autonomy level read by a Viewer and changed by a Manager; a planned, paused or cancelled sprint's task is not loaded, dispatched or reviewed; a credit answer is told from a passing error; no credit pauses the sprint and the task waits as todo; the execute call names the provider without credit; at autonomy 1 every approved task waits for a person |
 | `test_tenant_scoping.py` | Every table carries a required `company_id` that references `companies`, or is listed with its reason (the tenant, users, help-desk tickets, the outbox, backlog items through their sprint); `audit_log` alone may hold rows without a company; the lists hold no stale names |
 | `test_edit_blocks.py` | SEARCH/REPLACE edits in a deliverable and the syntax check before writing (issue #359, from Aider and SWE-agent): a block marked `edit` is read as edits, with no expected hash; the daemon applies an edit only when its search text appears exactly once, refuses a missing or ambiguous one, and writes a `.py` or `.json` file only when it still parses (parsed, never run); the Verifier names the daemon's reason |
+| `test_provider_connections.py` | A company's model provider connections (issue #356): a Manager connects, changes and removes them, a Viewer reads them, nobody outside the company does; the key is encrypted at rest and never returned, an omitted key keeps the stored one and an empty one clears it; base URLs and headers are checked (local servers allowed on purpose); the validation lists the provider's models with the key and records the outcome, which a later change to the key or URL clears |
+| `test_model_catalog.py` | The model catalogue from models.dev (issue #356): the shipped snapshot describes the providers callable through an OpenAI-compatible client with each model's capabilities, limits and price; a refresh replaces it and a failed one keeps it; a connection's base URL comes from the catalogue; the catalogue routes are public; a company's models merge the catalogue with what each enabled connection listed at its validation |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -646,7 +652,11 @@ Every LLM call goes through the proxy client (`backend/app/llm_proxy_client.py`)
 `"gemini-pro"`), a `role`, and an optional `bu_id`. There is no
 `model_preference` parameter: the `fast` / `powerful` tiers are an internal
 fallback in the proxy (`_PREFERENCE_TIERS`). Role→model defaults live in
-`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`).
+`backend/llm/model_factory.py` (`ModelFactory.ROLE_MODEL_MAP`); every caller
+reads them through `default_model_for_role` → `ModelFactory.model_for_role`,
+which applies, most specific first, `AGENT_MODEL_<ROLE>`, `NEMOTRON_ROLES`,
+`AGENT_MODEL` (one model for the whole team, e.g. DeepSeek alone), then the
+map. An agent's own `model` (the Agents page) wins over all of them.
 
 Token budgets are enforced per company at the proxy layer — the backend never calls a model provider directly.
 

@@ -13,7 +13,7 @@ from langgraph.errors import GraphRecursionError
 
 from agents.tools.openproject_tools import create_work_package
 from llm_proxy_client import LLMProxyClient
-from llm.model_factory import AgentRole, ModelFactory
+from llm.model_factory import default_model_for_role
 from memory.engram_processor import get_engram_processor
 from telemetry import configure_telemetry, get_tracer
 from opentelemetry.trace import StatusCode
@@ -44,10 +44,10 @@ class AgentState(TypedDict):
 
 
 def _resolve_model_name(role: str) -> str:
-    try:
-        return ModelFactory.ROLE_MODEL_MAP[AgentRole(role)].model_name
-    except Exception:
-        return ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name
+    """The role's model, through the same selector every other caller uses
+    (``AGENT_MODEL_<ROLE>``, ``NEMOTRON_ROLES``, ``AGENT_MODEL``, then the
+    map); an unknown role is treated as the Developer."""
+    return default_model_for_role(role)
 
 
 def _message_text(message: AnyMessage) -> str:
