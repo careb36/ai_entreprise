@@ -1,0 +1,310 @@
+"""The bench (issue #316): reference specifications, the scorecard and its diff.
+
+No stack here: ``scripts/bench/run.sh`` drives the factory; these tests check
+the pieces it relies on. The reference specifications are data the
+specification API accepts and approves, numbered the way the backend
+numbers them; every criterion has a test a person wrote, kept apart from the
+fake producer's answers; the grade reads pytest's report per criterion; the
+scorecard keeps to its schema; and ``compare.py`` fails beyond a threshold.
+"""
+
+import copy
+import json
+import re
+import sys
+from pathlib import Path
+
+import pytest
+from services import spec_check
+
+REPO = Path(__file__).resolve().parents[2]
+BENCH = REPO / "bench"
+sys.path.insert(0, str(REPO / "scripts" / "bench"))
+
+import compare  # noqa: E402 - scripts/bench/compare.py, by path.
+import scorecard  # noqa: E402 - scripts/bench/scorecard.py, by path.
+
+SPEC_DIRS = sorted(p for p in (BENCH / "specs").iterdir() if (p / "spec.json").is_file())
+TEST_DEF = re.compile(r"^def (test_\w+)\(", re.MULTILINE)
+
+
+def _spec(spec_dir: Path) -> dict:
+    return json.loads((spec_dir / "spec.json").read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# The reference specifications
+# ---------------------------------------------------------------------------
+
+
+def test_there_are_at_least_two_reference_specifications():
+    assert len(SPEC_DIRS) >= 2
+
+
+@pytest.mark.parametrize("spec_dir", SPEC_DIRS, ids=lambda p: p.name)
+def test_a_reference_specification_is_approvable_data(spec_dir):
+    spec = _spec(spec_dir)
+    normalized = spec_check.normalize(spec)
+    result = spec_check.check(normalized)
+    assert result["ok"], result["findings"]
+    # The grade numbers the criteria the way the backend does.
+    backend_ids = [c["id"] for r in normalized["requirements"] for c in r["criteria"]]
+    assert scorecard.criteria_of(spec) == backend_ids
+
+
+@pytest.mark.parametrize("spec_dir", SPEC_DIRS, ids=lambda p: p.name)
+def test_every_criterion_has_a_person_written_test(spec_dir):
+    names = [
+        name
+        for path in (spec_dir / "acceptance").glob("test_*.py")
+        for name in TEST_DEF.findall(path.read_text(encoding="utf-8"))
+    ]
+    graded = {scorecard.criterion_of_test(n) for n in names}
+    assert set(scorecard.criteria_of(_spec(spec_dir))) <= graded
+    assert None not in graded, "every acceptance test is named after its criterion"
+
+
+@pytest.mark.parametrize("spec_dir", SPEC_DIRS, ids=lambda p: p.name)
+def test_the_fake_producer_covers_the_spec_and_never_the_grading_tests(spec_dir):
+    plan = json.loads((spec_dir / "fake" / "plan.json").read_text(encoding="utf-8"))
+    spec = _spec(spec_dir)
+    covered = {c for task in plan["tasks"] for c in task["covers"]}
+    assert covered == set(scorecard.criteria_of(spec))
+    assert sorted(plan["acceptance"]) == [f"REQ-{i}" for i in range(1, len(spec["requirements"]) + 1)]
+    written = [p for task in plan["tasks"] for p in task["files"]] + list(plan["acceptance"].values())
+    assert all((spec_dir / "fake" / "files" / p).is_file() for p in written)
+    graders = {p.read_text(encoding="utf-8") for p in (spec_dir / "acceptance").glob("*.py")}
+    assert not graders & {(spec_dir / "fake" / "files" / p).read_text(encoding="utf-8") for p in written}
+
+
+# ---------------------------------------------------------------------------
+# Grading
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "criterion"),
+    [
+        ("test_req_1_2_reads", "REQ-1.2"),
+        ("test_req_10_3", "REQ-10.3"),
+        ("test_req_2_1[1-I]", "REQ-2.1"),
+        ("test_req_1_23_x", "REQ-1.23"),
+        ("test_request_1_2", None),
+        ("test_req_1", None),
+        ("test_something", None),
+    ],
+)
+def test_a_test_name_names_its_criterion(name, criterion):
+    assert scorecard.criterion_of_test(name) == criterion
+
+
+JUNIT = """<testsuites><testsuite>
+<testcase classname="t" name="test_req_1_1_a"/>
+<testcase classname="t" name="test_req_1_1_b[x]"/>
+<testcase classname="t" name="test_req_1_2_a"><failure message="no"/></testcase>
+<testcase classname="t" name="test_req_2_1_a"><skipped/></testcase>
+<testcase classname="t" name="test_req_2_2_a"><error message="boom"/></testcase>
+<testcase classname="t" name="test_helper"/>
+</testsuite></testsuites>"""
+
+
+def test_the_junit_report_is_read_per_criterion():
+    criteria = ["REQ-1.1", "REQ-1.2", "REQ-2.1", "REQ-2.2", "REQ-3.1"]
+    assert scorecard.criteria_from_junit(JUNIT, criteria) == {
+        "REQ-1.1": "pass",
+        "REQ-1.2": "fail",
+        "REQ-2.1": "fail",  # a skipped test decides nothing in the criterion's favour
+        "REQ-2.2": "fail",
+        "REQ-3.1": "missing",
+    }
+
+
+@pytest.mark.parametrize("text", ["", "not xml <", "<testsuites/>"])
+def test_an_unreadable_or_empty_report_leaves_every_criterion_missing(text):
+    assert scorecard.criteria_from_junit(text, ["REQ-1.1"]) == {"REQ-1.1": "missing"}
+
+
+def test_grading_the_fake_producers_files_passes_every_criterion():
+    spec_dir = BENCH / "specs" / "02-lib-roman"
+    graded = scorecard.grade(spec_dir, spec_dir / "fake" / "files", sys.executable)
+    assert (graded["passed"], graded["total"]) == (5, 5), graded["output_tail"]
+
+
+def test_grading_an_empty_project_fails_every_criterion(tmp_path):
+    graded = scorecard.grade(BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable)
+    assert graded["passed"] == 0
+    assert set(graded["results"].values()) == {"fail"}
+
+
+def test_grading_a_wrong_answer_fails_only_its_criteria(tmp_path):
+    (tmp_path / "romannum").mkdir()
+    source = (BENCH / "specs" / "02-lib-roman" / "fake" / "files" / "romannum" / "__init__.py").read_text()
+    # A reader that accepts IIII: only the criterion that refuses it fails.
+    broken = source.replace("or to_roman(total) != s", "")
+    (tmp_path / "romannum" / "__init__.py").write_text(broken)
+    graded = scorecard.grade(BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable)
+    assert [c for c, r in graded["results"].items() if r != "pass"] == ["REQ-2.2"]
+
+
+# ---------------------------------------------------------------------------
+# The scorecard
+# ---------------------------------------------------------------------------
+
+
+def _entry(name="01-a", status="completed", results=None, runs=None, rework=0, tokens=100):
+    results = results or {"REQ-1.1": "pass", "REQ-1.2": "pass"}
+    items = [{"id": 1, "status": "done"}, {"id": 2, "status": "done"}]
+    return scorecard.summarize_spec(
+        name=name,
+        status=status,
+        items=items,
+        runs_per_task=runs or {1: 1, 2: 1},
+        rework_requests=rework,
+        graded={"passed": sum(r == "pass" for r in results.values()), "total": len(results), "results": results},
+        factory_verified=2,
+        wall_clock_seconds=12.34,
+        tokens={"reported": tokens, "turns_reported": 4, "turns_unreported": 1},
+        models={"Developer": ["fake-model", "fake-model"]},
+    )
+
+
+def _card(*entries, stamp="20260101T000000Z"):
+    return scorecard.build_scorecard(list(entries) or [_entry()], stamp=stamp, commit="abc123", llm="fake")
+
+
+def test_a_spec_entry_counts_first_attempts_by_deliveries():
+    entry = scorecard.summarize_spec(
+        name="x",
+        status="completed",
+        items=[{"id": 1, "status": "done"}, {"id": 2, "status": "done"}, {"id": 3, "status": "blocked"}, {"id": 4, "status": "done"}],
+        runs_per_task={1: 1, 2: 3, 3: 1, 4: 0},
+        rework_requests=3,
+        graded={"passed": 1, "total": 2, "results": {"REQ-1.1": "pass", "REQ-1.2": "fail"}},
+        factory_verified=None,
+        wall_clock_seconds=5,
+        tokens={},
+        models={},
+    )
+    assert entry["tasks"] == {"total": 4, "done": 3, "blocked": 1, "done_first_attempt": 1}
+    assert (entry["first_attempt_rate"], entry["rework_per_task"], entry["blocked_share"]) == (0.25, 0.75, 0.25)
+    assert entry["tokens"] == {"reported": 0, "turns_reported": 0, "turns_unreported": 0}
+
+
+def test_the_scorecard_totals_and_its_schema():
+    card = _card(_entry("01-a"), _entry("02-b", results={"REQ-1.1": "fail"}, tokens=50))
+    assert scorecard.validate(card) == []
+    totals = card["totals"]
+    assert (totals["criteria_passed"], totals["criteria_total"], totals["criteria_rate"]) == (2, 3, 0.6667)
+    assert (totals["tasks"], totals["done_first_attempt"], totals["tokens_reported"]) == (4, 4, 150)
+    assert card["specs"][0]["models"] == {"Developer": ["fake-model"]}
+    assert json.loads(json.dumps(card)) == card
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        (lambda c: c.update(schema_version=2), "schema_version"),
+        (lambda c: c.update(commit=""), "commit"),
+        (lambda c: c["specs"][0].update(status="done"), "status"),
+        (lambda c: c["specs"][0]["criteria"].update(passed=7), "criteria.passed"),
+        (lambda c: c["specs"][0]["criteria"]["results"].update({"REQ-9.9": "maybe"}), "pass, fail, missing"),
+        (lambda c: c["specs"][0]["tasks"].update(done_first_attempt=9), "done_first_attempt"),
+        (lambda c: c["specs"][0].pop("tokens"), "tokens"),
+        (lambda c: c["totals"].pop("criteria_rate"), "totals.criteria_rate"),
+        (lambda c: c.update(specs={}), "specs must be a list"),
+    ],
+)
+def test_the_schema_names_what_is_wrong(change, problem):
+    card = _card()
+    change(card)
+    assert any(problem in p for p in scorecard.validate(card))
+
+
+def test_the_markdown_summary():
+    text = scorecard.render_markdown(_card(_entry("01-a"), _entry("02-b", results={"REQ-1.1": "fail"})))
+    assert "| 01-a | completed | 2/2 | 2/2 | 0.00 | 0% | 12 s | 100 |" in text
+    assert "| **Total** | 2/2 completed | 2/3 |" in text
+    assert "- Criteria not passing: REQ-1.1" in text
+
+
+def test_the_committed_scorecards_keep_to_the_schema():
+    cards = sorted((BENCH / "scorecards").glob("*.json"))
+    assert cards, "a reference scorecard is committed for compare.py"
+    for path in cards:
+        card = json.loads(path.read_text(encoding="utf-8"))
+        assert scorecard.validate(card) == [], path.name
+        assert path.stem == card["stamp"]
+        assert (path.with_suffix(".md")).is_file()
+
+
+# ---------------------------------------------------------------------------
+# compare.py
+# ---------------------------------------------------------------------------
+
+
+def test_the_same_numbers_are_no_regression():
+    card = _card()
+    assert compare.compare(card, copy.deepcopy(card))["regressions"] == []
+
+
+@pytest.mark.parametrize(
+    ("after", "expected"),
+    [
+        (_entry(results={"REQ-1.1": "pass", "REQ-1.2": "fail"}), "criteria passed went from 1.00 to 0.50"),
+        (_entry(runs={1: 2, 2: 1}), "done at the first attempt went from 1.00 to 0.50"),
+        (_entry(rework=2), "rework per task went from 0.00 to 1.00"),
+        (_entry(tokens=200), "reported tokens grew from 100 to 200"),
+        (_entry(status="timeout"), "01-a: completed before, timeout now"),
+    ],
+)
+def test_a_drop_beyond_the_threshold_is_a_regression(after, expected):
+    result = compare.compare(_card(_entry()), _card(after))
+    assert any(expected in r for r in result["regressions"]), result["regressions"]
+
+
+def test_a_change_within_the_threshold_is_not():
+    result = compare.compare(_card(_entry(tokens=100)), _card(_entry(tokens=140)))
+    assert result["regressions"] == []
+    loose = compare.compare(_card(_entry()), _card(_entry(rework=2)), {"rework": 1.5})
+    assert loose["regressions"] == []
+
+
+def test_a_new_specification_is_listed_not_judged():
+    result = compare.compare(_card(_entry("01-a")), _card(_entry("01-a"), _entry("02-b", results={"REQ-1.1": "fail"})))
+    assert result["new_specs"] == ["02-b"]
+    assert all("02-b" not in r for r in result["regressions"])
+
+
+def _write(directory: Path, card: dict) -> Path:
+    path = directory / f"{card['stamp']}.json"
+    path.write_text(json.dumps(card))
+    return path
+
+
+def test_the_previous_scorecard_is_the_newest_earlier_one(tmp_path):
+    a = _write(tmp_path, _card(stamp="20260101T000000Z"))
+    b = _write(tmp_path, _card(stamp="20260102T000000Z"))
+    c = _write(tmp_path, _card(stamp="20260103T000000Z"))
+    assert compare.previous_of(c, tmp_path) == b
+    assert compare.previous_of(b, tmp_path) == a
+    assert compare.previous_of(a, tmp_path) is None
+
+
+def test_the_command_exits_by_what_it_found(tmp_path, capsys):
+    first = _write(tmp_path, _card(stamp="20260101T000000Z"))
+    assert compare.main([str(first), "--dir", str(tmp_path)]) == 0
+    assert "first reference" in capsys.readouterr().out
+    same = _write(tmp_path, _card(stamp="20260102T000000Z"))
+    assert compare.main([str(same), "--dir", str(tmp_path)]) == 0
+    assert "No regression beyond the thresholds." in capsys.readouterr().out
+    worse = _write(tmp_path, _card(_entry(results={"REQ-1.1": "fail", "REQ-1.2": "fail"}), stamp="20260103T000000Z"))
+    assert compare.main([str(worse), "--dir", str(tmp_path)]) == 1
+    assert "### Regressions" in capsys.readouterr().out
+    bad = tmp_path / "20260104T000000Z.json"
+    bad.write_text(json.dumps({"schema_version": 1}))
+    assert compare.main([str(bad), "--dir", str(tmp_path)]) == 2
+
+
+def test_the_committed_reference_compares_clean_with_itself():
+    latest = sorted((BENCH / "scorecards").glob("*.json"))[-1]
+    assert compare.main([str(latest), "--previous", str(latest)]) == 0
