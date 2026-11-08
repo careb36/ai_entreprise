@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import file_diff
+import file_edits
 import file_hash
 import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
@@ -108,17 +109,11 @@ def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     """
-    Write a list of files to the workspace directory, creating parent dirs as needed.
+    Write *files* (``path`` with ``content``, or ``edits``: ``file_edits.py``) under the workspace.
 
-    Args:
-        workspace_path: Absolute path to the workspace root.
-        files:          List of dicts with ``path`` (relative) and ``content`` keys.
-
-    Returns:
-        One dict per file: ``path`` (as requested), ``status`` (``written``,
-        ``skipped_protected`` or ``rejected``) and, for written files,
-        ``absolute_path``, ``bytes`` and ``sha256`` of the bytes read back from
-        disk after writing — an observation, not an echo of the request.
+    One report per file: ``status`` (``written``, ``skipped_protected``,
+    ``rejected``, ``rejected_edit`` or ``rejected_syntax`` with ``error``) and,
+    when written, ``bytes`` and the ``sha256`` read back from disk: an observation.
     """
     results = []
     workspace_root = Path(workspace_path).expanduser()
@@ -134,7 +129,6 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     for file_info in files:
         requested = file_info.get("path", "")
         target_path = _resolve_target_path(workspace_path, requested)
-        content = file_info.get("content", "")
         overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
 
         if not target_path or target_path == workspace_root:
@@ -147,6 +141,10 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             logger.warning("Skipped protected document overwrite: %s", target_path)
             continue
 
+        content, extra = file_edits.resolve_content(target_path, file_info)
+        if content is None:  # A refused edit or a file that does not parse.
+            results.append({"path": requested, "absolute_path": str(target_path), **extra})
+            continue
         os.makedirs(target_path.parent, exist_ok=True)
         before = file_diff.read_previous(target_path)
         with open(target_path, "w", encoding="utf-8", newline="") as f:
@@ -159,6 +157,7 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             "bytes": len(on_disk),
             "sha256": hashlib.sha256(on_disk).hexdigest(),
             **file_diff.describe_change(requested, before, on_disk),
+            **extra,
         })
         logger.info(f"File written: {target_path}")
     return file_diff.cap_reply(results)

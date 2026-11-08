@@ -260,7 +260,10 @@ the LangGraph graph is only an optional kickoff conversation.
    requests from the company's last two completed sprints, read from the board
    (`_load_recent_lessons`), and the **Company Procedures** in force for the
    agent's role (QA's go into its review prompt).
-3. `parse_file_manifest` turns the answer into files. The worker sends them to the
+3. `parse_file_manifest` turns the answer into files (a block marked `edit`
+   carries SEARCH/REPLACE edits instead, `services/edit_blocks.py`; the daemon
+   applies them exactly and writes a `.py` or `.json` file only if it still
+   parses, `vscode-daemon/file_edits.py`). The worker sends them to the
    VS Code daemon with a NATS **request** on `workspace.generate`, targeting the
    company's project (`ProjectDiscovery.project_path`, recorded at company creation;
    `AGENT_WORKSPACE_ROOT` is the fallback). The daemon replies per file with the
@@ -478,6 +481,7 @@ Test files:
 | `test_mcp_router.py` | `/v1/mcp/servers`: a Manager adds (by name, replacing), disables, restricts and removes servers, a Viewer reads, an outsider gets 403 and no token 401; no answer carries a secret; the tools endpoint reports what the server advertises or why it could not be reached |
 | `test_work_control.py` | Sprint 0 starts only when asked and never at autonomy 1; a planned sprint starts once and dispatches its tasks; pause, resume and stop (Manager only; stop blocks unfinished tasks); the autonomy level read by a Viewer and changed by a Manager; a planned, paused or cancelled sprint's task is not loaded, dispatched or reviewed; a credit answer is told from a passing error; no credit pauses the sprint and the task waits as todo; the execute call names the provider without credit; at autonomy 1 every approved task waits for a person |
 | `test_tenant_scoping.py` | Every table carries a required `company_id` that references `companies`, or is listed with its reason (the tenant, users, help-desk tickets, the outbox, backlog items through their sprint); `audit_log` alone may hold rows without a company; the lists hold no stale names |
+| `test_edit_blocks.py` | SEARCH/REPLACE edits in a deliverable and the syntax check before writing (issue #359, from Aider and SWE-agent): a block marked `edit` is read as edits, with no expected hash; the daemon applies an edit only when its search text appears exactly once, refuses a missing or ambiguous one, and writes a `.py` or `.json` file only when it still parses (parsed, never run); the Verifier names the daemon's reason |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,

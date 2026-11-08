@@ -224,7 +224,8 @@ def evaluate_workspace_writes(
         if write is None:
             problems.append(f"{path} not reported")
         elif write.get("status") != "written":
-            problems.append(f"{path} {write.get('status') or 'not written'}")
+            reason = f": {write['error']}" if write.get("error") else ""
+            problems.append(f"{path} {write.get('status') or 'not written'}{reason}")
         elif path in expected and write.get("sha256") != expected[path]:
             problems.append(f"{path} content on disk differs from what was sent")
     if problems:
