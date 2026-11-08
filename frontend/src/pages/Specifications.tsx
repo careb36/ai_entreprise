@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ClipboardList, Loader2, Pencil, WandSparkles } from 'lucide-react'
+import { ClipboardList, Loader2, Pencil, Sparkles } from 'lucide-react'
 import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail } from '../services/api'
 import { type Specification, useCreateSpecification, useDraftSpecification, useSpecifications } from '../services/specifications'
@@ -78,7 +78,7 @@ function AskThePO({ companyId }: { companyId: number }) {
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <button type="submit" disabled={draft.isPending || !brief.trim()} className="btn btn-primary">
-            {draft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <WandSparkles size={15} aria-hidden="true" />}
+            {draft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
             {draft.isPending ? t('specifications.drafting') : t('specifications.askPO')}
           </button>
           {draft.isError && (

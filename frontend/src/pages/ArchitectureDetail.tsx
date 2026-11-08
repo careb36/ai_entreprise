@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronDown, ChevronRight, CircleCheck, FileText, FolderOutput, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, CheckCircle, FileText, FolderOutput, Loader2, Pencil, Send, Sparkles } from 'lucide-react'
 import { ArchitectureEditor } from '../components/ArchitectureEditor'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
@@ -69,7 +69,7 @@ function CheckPanel({ architecture }: { architecture: Architecture }) {
       <h2 id="architecture-check" className="text-sm font-semibold text-white">{t('specifications.check.title')}</h2>
       {check.ok && (
         <p className="flex items-center gap-2 text-sm text-emerald-300">
-          <CircleCheck size={15} aria-hidden="true" /> {t('architectures.check.ok')}
+          <CheckCircle size={15} aria-hidden="true" /> {t('architectures.check.ok')}
         </p>
       )}
       <FindingList findings={check.findings} severity="blocking" />
@@ -288,7 +288,7 @@ function Actions({ architecture, onEdit }: { architecture: Architecture; onEdit:
         </div>
         {write.isSuccess && write.data.written_path && (
           <p role="status" className="flex items-center gap-2 text-sm text-emerald-300">
-            <CircleCheck size={15} aria-hidden="true" />
+            <CheckCircle size={15} aria-hidden="true" />
             {t('architectures.actions.written', { path: write.data.written_path, hash: (write.data.written_sha256 ?? '').slice(0, 12) })}
           </p>
         )}
@@ -306,7 +306,7 @@ function Actions({ architecture, onEdit }: { architecture: Architecture; onEdit:
         </button>
         <button type="button" disabled={redraft.isPending} className="btn btn-secondary"
           onClick={() => redraft.mutate({ specification_id: specId, architecture_id: architecture.id })}>
-          {redraft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <WandSparkles size={15} aria-hidden="true" />}
+          {redraft.isPending ? <Loader2 size={15} className="animate-spin" aria-hidden="true" /> : <Sparkles size={15} aria-hidden="true" />}
           {redraft.isPending ? t('architectures.drafting') : t('architectures.actions.reviseArchitect')}
         </button>
         <button type="button" onClick={() => approve.mutate(architecture.id)} disabled={!architecture.check.ok || approve.isPending}

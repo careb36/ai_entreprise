@@ -5,7 +5,7 @@
  * warnings.
  */
 import { useTranslation } from 'react-i18next'
-import { CircleAlert } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import type { Finding } from '../services/specifications'
 
 export function Where({ where }: { where: string }) {
@@ -24,7 +24,7 @@ export function FindingList({ findings, severity }: { findings: Finding[]; sever
       <ul aria-label={label} className="space-y-1">
         {own.map((finding, i) => (
           <li key={`${finding.where}-${finding.code}-${i}`} className="flex flex-wrap items-center gap-2 text-sm text-gray-200">
-            <CircleAlert size={14} className={blocking ? 'text-red-300' : 'text-amber-300'} aria-hidden="true" />
+            <AlertCircle size={14} className={blocking ? 'text-red-300' : 'text-amber-300'} aria-hidden="true" />
             <Where where={finding.where} />
             <span>{finding.message}</span>
           </li>

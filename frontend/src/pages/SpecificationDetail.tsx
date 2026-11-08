@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, CircleCheck, FlaskConical, Loader2, Pencil, Send, WandSparkles } from 'lucide-react'
+import { Check, CheckCircle, FlaskConical, Loader2, Pencil, Send, Sparkles } from 'lucide-react'
 import { ArchitectureSummary } from '../components/ArchitectureSummary'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { FindingList, Where } from '../components/Findings'
@@ -59,7 +59,7 @@ function CheckPanel({ specification }: { specification: Specification }) {
       <h2 id="specification-check" className="text-sm font-semibold text-white">{t('specifications.check.title')}</h2>
       {check.ok && (
         <p className="flex items-center gap-2 text-sm text-emerald-300">
-          <CircleCheck size={15} aria-hidden="true" /> {t('specifications.check.ok')}
+          <CheckCircle size={15} aria-hidden="true" /> {t('specifications.check.ok')}
         </p>
       )}
       <FindingList findings={check.findings} severity="blocking" />
@@ -239,7 +239,7 @@ function Actions({ specification, onEdit }: { specification: Specification; onEd
           <Pencil size={15} aria-hidden="true" /> {t('specifications.actions.edit')}
         </button>
         <button type="button" onClick={() => setAsking(open => !open)} className="btn btn-secondary" aria-expanded={asking}>
-          <WandSparkles size={15} aria-hidden="true" /> {t('specifications.actions.revisePO')}
+          <Sparkles size={15} aria-hidden="true" /> {t('specifications.actions.revisePO')}
         </button>
         <button type="button" onClick={() => approve.mutate(specification.id)} disabled={!specification.check.ok || approve.isPending}
           title={specification.check.ok ? undefined : t('specifications.actions.approveBlocked')} className="btn btn-primary">
