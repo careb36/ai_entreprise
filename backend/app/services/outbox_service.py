@@ -34,6 +34,8 @@ from database import engine
 from logging_config import logger
 from sqlmodel import Session, text
 
+from services import webhooks
+
 
 async def process_outbox(nats_client) -> None:
     """
@@ -61,6 +63,8 @@ async def process_outbox(nats_client) -> None:
                         SELECT id, event_type, payload, retry_count
                         FROM outbox_events
                         WHERE status = 'pending'
+                          AND (retry_count = 0 OR processed_at IS NULL
+                               OR processed_at < NOW() - retry_count * retry_count * INTERVAL '10 seconds')
                         ORDER BY created_at ASC
                         FOR UPDATE SKIP LOCKED
                         LIMIT 10
@@ -96,6 +100,8 @@ async def process_outbox(nats_client) -> None:
                             await nats_client.publish(
                                 subject, message, msg_id=f"outbox-{event_id}"
                             )
+                        elif event_type == webhooks.EVENT_TYPE:
+                            await webhooks.deliver(session, payload, event_id)
 
                         # Mark the event as successfully delivered.
                         session.exec(

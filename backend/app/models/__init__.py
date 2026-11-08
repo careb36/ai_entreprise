@@ -33,6 +33,7 @@ from .runtime import AssistantRuntimeState
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .support import BugReport
+from .webhook import CompanyWebhook
 
 __all__ = [
     "Agent",
@@ -48,6 +49,7 @@ __all__ = [
     "BusinessUnit",
     "Company",
     "CompanyMember",
+    "CompanyWebhook",
     "GitHubRepoBinding",
     "McpServer",
     "OutboxEvent",

@@ -82,28 +82,27 @@ def confirm_workspace_path() -> str:
     return WORKSPACE_ROOT_DEFAULT
 
 
+VCS_DIRS = frozenset({".git", ".svn", ".hg"})  # A hook there would run on the next commit.
+
+
 def _resolve_target_path(workspace_path: str, relative_path: str) -> Optional[Path]:
-    """Resolve a payload path safely under the workspace root."""
+    """Resolve a path under the workspace root, never into VCS metadata (asked or via a symlink)."""
     root = Path(workspace_path).resolve()
     candidate = (root / (relative_path or "")).resolve()
     try:
-        candidate.relative_to(root)
+        parts = candidate.relative_to(root).parts + Path(relative_path or "").parts
     except ValueError:
         return None
-    return candidate
+    return None if VCS_DIRS.intersection(parts) else candidate
 
 
 def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
     """Protect curated root docs from blind overwrite by agent output."""
-    if not target_path.exists() or target_path.is_dir():
-        return False
-
-    try:
-        relative = target_path.relative_to(workspace_root)
-    except ValueError:
-        return False
-
-    return len(relative.parts) == 1 and relative.name in PROTECTED_ROOT_DOCS
+    return (
+        target_path.is_file()
+        and target_path.parent == workspace_root
+        and target_path.name in PROTECTED_ROOT_DOCS
+    )
 
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:

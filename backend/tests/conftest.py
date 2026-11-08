@@ -58,6 +58,7 @@ from models.run_secret import RunSecret
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.support import BugReport
+from models.webhook import CompanyWebhook
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -157,6 +158,7 @@ SQLModel.metadata.create_all(
         ApiToken.__table__,
         TaskEvent.__table__,
         RunSecret.__table__,
+        CompanyWebhook.__table__,
     ],
 )
 

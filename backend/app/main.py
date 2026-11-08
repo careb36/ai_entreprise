@@ -39,12 +39,16 @@ from routers import (
     sprint_control_router,
     sprint_router,
     support_router,
+    webhooks_router,
     workspace_router,
 )
 from security import get_cors_origins, setup_security
+from services import webhooks
 from services.healthcheck import aggregate
 
 settings = Settings()
+# A delivery for the company's webhook joins every change it reports.
+webhooks.install()
 
 
 @asynccontextmanager
@@ -116,6 +120,7 @@ app.include_router(workspace_router)
 app.include_router(mcp_router)
 app.include_router(providers_router)
 app.include_router(model_settings_router)
+app.include_router(webhooks_router)
 
 # Register exception handlers
 register_exception_handlers(app)
