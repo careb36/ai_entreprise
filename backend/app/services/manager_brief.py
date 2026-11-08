@@ -29,8 +29,8 @@ from models.manager import ManagerDecision
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
-from services import integration, manager_agent, manager_record
-from services.board import awaits_risk_acceptance, comment_list
+from services import integration, manager_agent, manager_record, task_projection
+from services.board import comment_list
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 
 LIST_LIMIT = 20
@@ -147,7 +147,8 @@ def _decisions(session: Session, company_id: int, since: datetime) -> dict[str, 
 
 def _waiting(session: Session, company_id: int) -> dict[str, int]:
     tasks = manager_agent.waiting_tasks(session, company_id)
-    holds = sum(1 for t in tasks if awaits_risk_acceptance(t.comments))
+    records = task_projection.records_for(session, tasks)
+    holds = sum(1 for t in tasks if records[t.id].awaits_risk_acceptance())
     decided = select(AgentRunApproval.agent_run_id)
 
     def count(statement) -> int:

@@ -206,16 +206,30 @@ def _chain_scope(event: TaskEvent):
     return (TaskEvent.task_id.is_(None)) & (TaskEvent.sprint_id == event.sprint_id)  # type: ignore[union-attr]
 
 
+def lock_chain(session: Session, key: int) -> None:
+    """Take the chain lock of task *key* (``-sprint_id`` for a sprint's own
+    chain) until the transaction ends; a no-op off Postgres.
+
+    Every writer takes it before it touches the task's row, as ``record``
+    does, so a writer that also changes the row first (a conditional claim)
+    takes it beforehand and keeps one lock order. Reentrant: ``seal`` takes
+    it again. Run on the connection, so nothing pending is flushed (and no
+    row locked) before it.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    session.connection().execute(
+        sql_text("SELECT pg_advisory_xact_lock(:ns, :key)").bindparams(
+            ns=_LOCK_NAMESPACE, key=key
+        )
+    )
+
+
 def seal(session: Session, event: TaskEvent) -> TaskEvent:
     """Number *event* in its task's chain, link it and hash it; flushed, not committed."""
-    bind = session.get_bind()
-    if bind.dialect.name == "postgresql":
-        session.exec(
-            sql_text("SELECT pg_advisory_xact_lock(:ns, :key)").bindparams(
-                ns=_LOCK_NAMESPACE,
-                key=event.task_id if event.task_id is not None else -event.sprint_id,
-            )
-        )
+    lock_chain(
+        session, event.task_id if event.task_id is not None else -event.sprint_id
+    )
     last = session.exec(
         select(TaskEvent)
         .where(_chain_scope(event))

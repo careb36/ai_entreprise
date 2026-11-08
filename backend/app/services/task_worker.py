@@ -59,6 +59,7 @@ from services import (
     sprint_control,
     standards,
     task_events,
+    task_projection,
     workspace_daemon,
 )
 from services.answers import BRIEF_MAX_TOKENS, REVIEW_MAX_TOKENS
@@ -84,13 +85,7 @@ from services.board import (
     QUALITY_GATE_AUTHOR,
     RISK_HOLD_PREFIX,
     SCRUM_MASTER_ROLE,
-    blocked_item_next_step,
-    comment_list,
     completed_tasks_context,
-    extract_latest_reviewable_comment,
-    has_manual_freeze_marker,
-    pending_rework_feedback,
-    rework_requests_by,
 )
 from services.carry_over import carry_over_on_the_companys_own, previous_attempt_context
 from services.console_assistants import normalize_utc
@@ -447,7 +442,7 @@ def _execute_task(
 
     user_prompt += edit_plan.prompt_section(architect_advice)  # A plan, or guidance.
 
-    rework_feedback = pending_rework_feedback(item.get("comments"))
+    rework_feedback = task_projection.record_from_dict(item).pending_rework_feedback()
     if rework_feedback:
         user_prompt += (
             "\n\n## Review feedback to address\n"
@@ -801,18 +796,11 @@ def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
         item = session.get(BacklogItem, item_id)
         if not item:
             return None
-
-        comments = item.comments or []
-        if isinstance(comments, str):
-            try:
-                comments = json.loads(comments)
-            except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                comments = []
-
+        record = task_projection.record_of(session, item)
         return {
             "status": item.status,
-            "comments": comments,
-            "manually_frozen": has_manual_freeze_marker(comments),
+            "comments": record.comments,
+            "manually_frozen": record.frozen(),
         }
 
 
@@ -820,17 +808,7 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
     """Ensure manually frozen items stay blocked and out of automation."""
     with Session(engine) as session:
         item = session.get(BacklogItem, item_id)
-        if not item:
-            return False
-
-        comments = item.comments or []
-        if isinstance(comments, str):
-            try:
-                comments = json.loads(comments)
-            except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                comments = []
-
-        if not has_manual_freeze_marker(comments):
+        if not item or not task_projection.record_of(session, item).frozen():
             return False
 
         changed = item.status != "blocked"
@@ -1278,6 +1256,8 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
                 "assignee": item.assignee,
                 "status": item.status,
                 "comments": item.comments or [],
+                # The decisions on this task read its events (issue #324).
+                "events": task_projection.snapshot(session, item),
                 "covers": item.covers if isinstance(item.covers, list) else [],
             },
             "sprint": {
@@ -1963,7 +1943,9 @@ async def _send_back_from_quality_gate(
     sprint open forever. After ``AUTOPILOT_MAX_REWORK_CYCLES`` attempts the
     task is blocked for a person and escalated to the ScrumMaster.
     """
-    previous_reworks = rework_requests_by(item.get("comments"), QUALITY_GATE_AUTHOR)
+    previous_reworks = task_projection.record_from_dict(item).rework_requests_by(
+        QUALITY_GATE_AUTHOR
+    )
     rework = previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
     text = (
         f"NEEDS WORK: {reason}. Deliver the complete result again, with every "
@@ -2067,7 +2049,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             sprint = ctx["sprint"]
             _clear_queue_marker(item["id"])
 
-            if has_manual_freeze_marker(item.get("comments") or []):
+            if task_projection.record_from_dict(item).frozen():
                 await asyncio.to_thread(_sync_manual_freeze_state, item["id"])
                 logger.info(
                     "Skipping manually frozen assignment for item=%s", item["id"]
@@ -2555,6 +2537,8 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
         in_review = session.exec(
             select(BacklogItem).where(BacklogItem.status == "in_review")
         ).all()
+        # Every decision below reads the task's events (one query for all).
+        histories = task_projection.histories_for(session, list(in_review))
 
         for item in in_review:
             sprint = session.get(Sprint, item.sprint_id)
@@ -2581,31 +2565,16 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 "system_prompt": reviewer.system_prompt if reviewer else None,
             }
 
-            # Get the deliverable from comments
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
-
-            if has_manual_freeze_marker(comments):
+            record = task_projection.record_of(session, item, histories)
+            if record.frozen():
                 task_events.record(session, item, "blocked", "system", status="blocked")
                 session.commit()
                 logger.info("Skipping QA review for manually frozen item=%s", item.id)
                 continue
 
-            deliverable = extract_latest_reviewable_comment(
-                comments, assignee_role=item.assignee
-            )
-
+            deliverable = record.deliverable()
             # Prevent infinite review loops when QA repeatedly fails.
-            qa_review_failures = sum(
-                1
-                for c in comments
-                if c.get("author") == "System"
-                and "qa review failed" in c.get("text", "").lower()
-            )
+            qa_review_failures = record.review_failures()
             if qa_review_failures >= MAX_QA_REVIEW_FAILURES:
                 task_events.record(
                     session,
@@ -2677,9 +2646,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 continue
             if gate is not None:
                 problem, observation = gate
-                previous_gate_reworks = rework_requests_by(
-                    comments, DELIVERY_GATE_AUTHOR
-                )
+                previous_gate_reworks = record.rework_requests_by(DELIVERY_GATE_AUTHOR)
                 rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
                 instruction = (
                     "Fix the code so the project's checks pass and deliver every "
@@ -2687,7 +2654,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     if problem in delivery_gate.CODE_PROBLEMS
                     else "Re-run the task and give every file in full as a path= block."
                 )
-                task_events.record(
+                gate_event = task_events.record(
                     session,
                     item,
                     "reviewed" if rework else "blocked",
@@ -2701,7 +2668,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                         f"rework(s) — blocked for manual triage: {observation}"
                     ),
                 )
-                comments = comment_list(item.comments)
+                gate_text = gate_event.payload["text"]
                 gate_message = _message(
                     sprint.company_id,
                     sprint.id,
@@ -2710,7 +2677,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     DELIVERY_GATE_AUTHOR,
                     (item.assignee or "Developer") if rework else SCRUM_MASTER_ROLE,
                     "request" if rework else "escalation",
-                    comments[-1]["text"],
+                    gate_text,
                 )
                 session.add(gate_message)
                 session.commit()
@@ -2721,7 +2688,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                         sprint.company_id,
                         sprint.id,
                         item.id,
-                        comments[-1]["text"],
+                        gate_text,
                         gate_message.id,
                     )
                 await publish_glassroom(
@@ -2831,7 +2798,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     risk_hold = True
                     risk_check = {"reasons": [sprint_control.HUMAN_LED_REASON]}
 
-                previous_reworks = rework_requests_by(comments, reviewer_dict["name"])
+                previous_reworks = record.rework_requests_by(reviewer_dict["name"])
                 autopilot_rework_allowed = (
                     needs_work
                     and AUTOPILOT_QA_REWORK_ENABLED
@@ -2880,7 +2847,6 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     task_events.record(
                         session, item, "risk_hold", "system", text=risk_note
                     )
-                comments = comment_list(item.comments)
 
                 session.add(item)
                 session.add(
@@ -3086,6 +3052,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
         # Sprints holding an item that stays blocked until a person acts may
         # have nothing left to move; they are checked for closing below.
         settled_sprint_ids: set[int] = set()
+        histories = task_projection.histories_for(session, list(blocked))
 
         for item in blocked:
             item_sprint = session.get(Sprint, item.sprint_id)
@@ -3095,8 +3062,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 settled_sprint_ids.add(item.sprint_id)
                 continue
 
-            comments = comment_list(item.comments)
-            next_step = blocked_item_next_step(comments, item.assignee)
+            next_step = task_projection.record_of(session, item, histories).next_step()
             if next_step is None:
                 settled_sprint_ids.add(item.sprint_id)
                 continue
@@ -3250,6 +3216,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
         todo_items = session.exec(
             select(BacklogItem).where(BacklogItem.status == "todo")
         ).all()
+        histories = task_projection.histories_for(session, list(todo_items))
         for item in todo_items:
             item_sprint = session.get(Sprint, item.sprint_id)
             if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
@@ -3257,9 +3224,8 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
             if not dependencies.is_ready(session, item):
                 continue
             dispatch_time = datetime.now(UTC)
-            comments = comment_list(item.comments)
-
-            if has_manual_freeze_marker(comments):
+            record = task_projection.record_of(session, item, histories)
+            if record.frozen():
                 task_events.record(session, item, "blocked", "system", status="blocked")
                 logger.info(
                     "Keeping manually frozen todo item=%s blocked during dispatch",
@@ -3267,10 +3233,7 @@ async def _dispatch_todo_items(nats_client: NATSClient) -> None:
                 )
                 continue
 
-            existing_deliverable = extract_latest_reviewable_comment(
-                comments,
-                assignee_role=item.assignee,
-            )
+            existing_deliverable = record.deliverable()
             if existing_deliverable:
                 task_events.record(
                     session, item, "recovered", "system", status="in_review"

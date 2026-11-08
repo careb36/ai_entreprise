@@ -280,7 +280,7 @@ def triage(monkeypatch):
     monkeypatch.setattr(
         scrum_master,
         "triages_for",
-        lambda session, items: {
+        lambda session, items, records=None: {
             i.id: decisions[i.id] for i in items if i.id in decisions
         },
     )
