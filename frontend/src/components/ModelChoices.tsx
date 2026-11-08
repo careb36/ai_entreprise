@@ -13,15 +13,17 @@ import {
 
 interface Option { value: string; label: string }
 
-/** Every model of the company's enabled connections, as `conn:<id>:<model>`. */
+/**
+ * The models the company's enabled connections confirmed, as `conn:<id>:<model>`:
+ * only a connection validated with success, and only what its provider listed.
+ * The catalogue says what a model can do, never that the provider serves it.
+ */
 function modelOptions(connections: ConnectionModels[]): Option[] {
-  return connections.flatMap(conn => {
-    // A validated provider serves only what it listed; the catalogue alone is not enough.
-    const listedOnly = conn.validation_ok === true && conn.models.some(m => m.listed)
-    return conn.models
-      .filter(m => !listedOnly || m.listed)
-      .map(m => ({ value: connectionModelRef(conn.connection_id, m.id), label: `${conn.name} · ${m.name ?? m.id}` }))
-  })
+  return connections
+    .filter(conn => conn.validation_ok === true)
+    .flatMap(conn => conn.models
+      .filter(m => m.listed)
+      .map(m => ({ value: connectionModelRef(conn.connection_id, m.id), label: `${conn.name} · ${m.name ?? m.id}` })))
 }
 
 /**
@@ -67,6 +69,8 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
     )
   }
   const data = settings.data as ModelSettings
+  // Nothing changes while a save is on its way: its answer replaces the draft.
+  const locked = !canManage || save.isPending
   const advice = suggestions.data?.suggestions ?? {}
   const change = (role: string | null, value: string) => {
     setSaved(false)
@@ -91,7 +95,7 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
         <Cpu size={18} className="text-brand-400" />
         <h2 id="model-choices" className="text-lg font-semibold">{t('models.choices.title')}</h2>
         {canManage && Object.values(advice).some(Boolean) && (
-          <button type="button" className="btn-ghost btn-sm ml-auto" onClick={useSuggestions}>
+          <button type="button" className="btn-ghost btn-sm ml-auto" disabled={locked} onClick={useSuggestions}>
             <Sparkles size={14} /> {t('models.choices.useSuggestions')}
           </button>
         )}
@@ -100,7 +104,7 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
       {options.length === 0 && <p className="text-sm text-amber-300">{t('models.choices.noConnections')}</p>}
 
       <ModelSelect id="model-default" label={t('models.choices.default')} value={draft.default_model}
-        emptyLabel={t('models.choices.deploymentDefault')} options={options} disabled={!canManage}
+        emptyLabel={t('models.choices.deploymentDefault')} options={options} disabled={locked}
         onChange={value => change(null, value)} />
 
       <table className="w-full text-sm">
@@ -121,7 +125,7 @@ export default function ModelChoices({ companyId, canManage }: { companyId: numb
                 <td className="py-2 pr-2">
                   <ModelSelect id={`model-role-${role}`} label={role} hideLabel value={draft.role_models[role] ?? ''}
                     emptyLabel={t('models.choices.companyDefault')} options={options} suggestion={suggestion}
-                    disabled={!canManage} onChange={value => change(role, value)} />
+                    disabled={locked} onChange={value => change(role, value)} />
                   {suggestion && (
                     <div className="mt-1 text-xs text-gray-400" title={suggestion.reason}>
                       {t('models.choices.suggested', { model: `${suggestion.connection} · ${suggestion.name}` })}

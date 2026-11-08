@@ -2,8 +2,9 @@
 ``GET /v1/companies/{id}/model_suggestions``; issue #356, step 6): a
 deterministic rule over the catalogue's real fields; the roles that decide get
 a model that reasons, the coding roles the largest context with tools, the
-TechWriter the cheapest; a model without tools is never suggested, nor one a
-validated provider did not list; each suggestion is the connection's own
+TechWriter the cheapest; a model without tools is never suggested, nor one the
+provider did not list, nor any from a connection not validated, failed, or
+that listed nothing; each suggestion is the connection's own
 reference; a Viewer reads them, nobody outside the company does."""
 
 from __future__ import annotations
@@ -68,9 +69,12 @@ def _connection(session, company, name="acme", listed=None, ok=None):
     return row
 
 
+LISTED = ["big-thinker", "coder", "cheap", "no-tools"]
+
+
 def test_each_role_gets_the_rule_s_model(sqlite_session, catalog):
     company = _company(sqlite_session)
-    conn = _connection(sqlite_session, company)
+    conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
     models = model_suggestions.candidates([conn])
     assert {m["id"] for m in models} == {"big-thinker", "coder", "cheap"}
     suggestions = model_suggestions.suggest(models)
@@ -90,6 +94,19 @@ def test_a_validated_provider_only_suggests_what_it_listed(sqlite_session, catal
     assert suggestions["Developer"]["model"] == f"conn:{conn.id}:cheap"
     # Nothing listed reasons and calls tools: no suggestion for those roles.
     assert suggestions["PO"] is None
+
+
+@pytest.mark.parametrize(
+    ("listed", "ok"),
+    [(None, None), (LISTED, False), ([], True)],
+    ids=["not-validated", "failed", "listed-nothing"],
+)
+def test_an_unconfirmed_connection_suggests_nothing(
+    sqlite_session, catalog, listed, ok
+):
+    company = _company(sqlite_session)
+    conn = _connection(sqlite_session, company, listed=listed, ok=ok)
+    assert model_suggestions.candidates([conn]) == []
 
 
 def test_no_model_with_tools_means_no_suggestion():
@@ -113,8 +130,10 @@ def test_an_unpriced_model_is_not_taken_for_free():
 @pytest.mark.usefixtures("enforcement")
 def test_a_viewer_reads_the_suggestions(sqlite_session, test_client, catalog):
     company, other = _company(sqlite_session), _company(sqlite_session)
-    conn = _connection(sqlite_session, company)
-    _connection(sqlite_session, company, name="off").enabled = False
+    conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
+    _connection(
+        sqlite_session, company, name="off", listed=LISTED, ok=True
+    ).enabled = False
     sqlite_session.commit()
     viewer = _member(sqlite_session, company.id, "Viewer")
     outsider = _member(sqlite_session, other.id, "Manager")

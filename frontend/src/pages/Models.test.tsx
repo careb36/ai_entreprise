@@ -42,6 +42,10 @@ function stubApi(overrides: Record<string, (init: RequestInit) => Response> = {}
         { id: 'thinker', name: 'Thinker', in_catalog: true, listed: true },
         { id: 'unlisted', name: 'Not served', in_catalog: true, listed: false },
       ],
+    }, {
+      connection_id: 9, name: 'unchecked', provider: 'groq', validation_ok: null, models: [
+        { id: 'llama', name: 'Llama', in_catalog: true, listed: false },
+      ],
     }] })
     if (key === 'GET /v1/companies/4/model_settings') return response(200, SETTINGS)
     if (key === 'GET /v1/companies/4/model_suggestions') return response(200, {
@@ -101,6 +105,8 @@ describe('Models', () => {
     expect(groups.map(g => g.getAttribute('label'))).toEqual(['Suggested', 'Others'])
     expect(within(groups[0]).getByRole('option')).toHaveValue('conn:7:thinker')
     expect(within(architect).queryByRole('option', { name: 'acme-router · Not served' })).not.toBeInTheDocument()
+    // A connection nobody validated offers nothing: the catalogue alone is not the provider's word.
+    expect(within(architect).queryByRole('option', { name: 'unchecked · Llama' })).not.toBeInTheDocument()
     expect(screen.getByText('Suggested: acme-router · Thinker')).toBeInTheDocument()
   })
 

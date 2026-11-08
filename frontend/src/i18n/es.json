@@ -1966,7 +1966,7 @@
       "turnOff": "Apagar",
       "turnOn": "Encender",
       "removeNamed": "Quitar {{name}}",
-      "confirmRemove": "¿Quitar la conexión {{name}}? Los agentes que usan sus modelos pasan a la siguiente opción.",
+      "confirmRemove": "¿Quitar la conexión {{name}}? Los agentes y las elecciones de modelo que usan sus modelos van a fallar hasta que les elijas otro modelo.",
       "validated_one": "Validada: el proveedor listó {{count}} modelo",
       "validated_other": "Validada: el proveedor listó {{count}} modelos",
       "failed": "La validación falló: {{detail}}",

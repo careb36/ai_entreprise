@@ -11,11 +11,12 @@ makes.
   cheapest.
 - TechWriter: the cheapest model that calls tools.
 
-The candidates are the models of the company's enabled connections that the
-catalogue describes (models.dev: ``tool_call``, ``reasoning``, ``context``,
-``cost_input``). When a connection was validated, only the ids its provider
-listed count: the catalogue says what a model can do, the provider says
-whether it serves it. Each suggestion is the connection's model reference
+The candidates are the models of the company's enabled, validated connections
+that the provider listed and the catalogue describes (models.dev:
+``tool_call``, ``reasoning``, ``context``, ``cost_input``): the catalogue says
+what a model can do, the provider says whether it serves it. A connection not
+validated, or whose validation failed, suggests nothing, and one that listed
+no model suggests nothing either. Each suggestion is the connection's model reference
 (``conn:<id>:<model>``), so choosing it routes through the company's key.
 """
 
@@ -34,12 +35,12 @@ def candidates(rows: list[Any]) -> list[dict[str, Any]]:
     """The models the rule may suggest, each with its connection's reference."""
     out = []
     for row in rows:
-        entry = model_catalog.connection_models(row)
-        validated = bool(row.validation_ok) and bool(row.listed_models)
-        for model in entry["models"]:
-            if not model.get("in_catalog") or not model.get("tool_call"):
+        if row.validation_ok is not True:
+            continue
+        for model in model_catalog.connection_models(row)["models"]:
+            if not model.get("listed") or not model.get("in_catalog"):
                 continue
-            if validated and not model.get("listed"):
+            if not model.get("tool_call"):
                 continue
             out.append(
                 {

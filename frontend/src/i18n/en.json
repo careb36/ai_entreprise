@@ -1966,7 +1966,7 @@
       "turnOff": "Turn off",
       "turnOn": "Turn on",
       "removeNamed": "Remove {{name}}",
-      "confirmRemove": "Remove the connection {{name}}? Agents that use its models fall back to the next choice.",
+      "confirmRemove": "Remove the connection {{name}}? Agents and model choices that use its models will fail until you choose another model for them.",
       "validated_one": "Validated: the provider listed {{count}} model",
       "validated_other": "Validated: the provider listed {{count}} models",
       "failed": "Validation failed: {{detail}}",
