@@ -319,8 +319,15 @@ def detect_install_command(workspace_root: str) -> str | None:
         return "npm install"
     if os.path.isfile(os.path.join(root, "requirements.txt")):
         return "pip install -r requirements.txt"
-    if os.path.isfile(os.path.join(root, "pyproject.toml")):
-        return "pip install -e ."
+    pyproject = os.path.join(root, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            with open(pyproject, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError:
+            text = ""
+        if "[project]" in text or "[tool.poetry]" in text:
+            return "pip install -e ."
     if os.path.isfile(os.path.join(root, "Cargo.toml")):
         return "cargo build"
     if os.path.isfile(os.path.join(root, "go.mod")):
@@ -330,7 +337,7 @@ def detect_install_command(workspace_root: str) -> str | None:
     if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
         os.path.join(root, "build.gradle.kts")
     ):
-        return "gradle dependencies"
+        return "gradle --offline dependencies 2>/dev/null || gradle dependencies"
     if os.path.isfile(os.path.join(root, "Gemfile")):
         return "bundle install"
     return None
