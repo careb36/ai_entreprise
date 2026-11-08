@@ -8,11 +8,17 @@ to one replica. What remained were the places that assumed one process:
   that both read ``todo`` and both ran it. :func:`claim_todo` moves the task
   to ``in_progress`` with one conditional ``UPDATE … WHERE status = 'todo'``;
   only the replica whose update matched works on it.
-- **Recovering after a restart.** A replica that starts returned *every*
-  ``in_progress`` task to ``todo``, including the ones another live replica
-  was working on. A replica holds the task's lock while it works
-  (:func:`task_lock`), and :func:`recover_inflight` returns only the tasks
-  whose lock nobody holds.
+- **Recovering a dead replica's tasks.** A replica that starts returned
+  *every* ``in_progress`` task to ``todo``, including the ones another live
+  replica was working on, and a replica that died left its task
+  ``in_progress`` until some replica restarted (a survivor acknowledges the
+  redelivered assignment, since the task is no longer ``todo``). A replica
+  holds the task's lock while it works (:func:`task_lock`): the lock is the
+  lease, and it goes with the dead replica's connection.
+  :func:`recover_inflight` returns only the tasks whose lock nobody holds,
+  and :func:`recover_stale` runs it at the start of every review cycle,
+  under the cycle's lock, so a survivor dispatches the task again within a
+  cycle.
 - **Closing a sprint.** Two replicas could both read ``active``, both mark
   it completed and both post the retrospective, measure the procedures,
   ask for proposals and open a follow-up. :func:`close_once` runs the close
@@ -29,6 +35,7 @@ time, the others skip that round.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -42,12 +49,13 @@ from sqlmodel import Session, select
 
 from services import locks, scrum_master
 from services.board import comment_list, has_manual_freeze_marker
+from services.glassroom import publish_glassroom
 
 logger = setup_logger("fabrique-replicas")
 
 RECOVERY_NOTE = (
-    "Worker recovery after backend restart — unfinished in-progress task "
-    "returned to todo for redispatch."
+    "Worker recovery — unfinished in-progress task no live worker holds "
+    "(a backend restarted or stopped) returned to todo for redispatch."
 )
 
 
@@ -114,6 +122,34 @@ def recover_inflight(engine: Engine) -> list[dict[str, Any]]:
                         "assignee": item.assignee or "Dev",
                     }
                 )
+    return recovered
+
+
+async def recover_stale(engine: Engine, nats_client: Any) -> list[dict[str, Any]]:
+    """Return the tasks no live replica holds to ``todo`` and tell their Glassroom.
+
+    Called at the start of each review cycle (startup's first cycle
+    included), whose dispatch then queues them again.
+    """
+    recovered = await asyncio.to_thread(recover_inflight, engine)
+    for item in recovered:
+        logger.info("Recovered item=%s: no live worker held it", item["id"])
+        await publish_glassroom(
+            nats_client,
+            item["sprint_id"],
+            {
+                "type": "status",
+                "semantic_type": "task.recovered",
+                "source": "task_worker",
+                "agent": "System",
+                "role": "System",
+                "task_id": item["id"],
+                "task_status": "todo",
+                "phase": "restart_recovery",
+                "task": item["title"],
+                "message": f"♻️ Recovered: no live worker held {item['title']}; returned to todo for autonomous redispatch.",
+            },
+        )
     return recovered
 
 

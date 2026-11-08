@@ -149,8 +149,8 @@ jobs:
             bash scripts/e2e/run.sh
 
       # Issue #328: the backup script against the database the loop just
-      # filled, restored into a scratch database that must hold the same
-      # tables and the same audit chain length.
+      # filled, restored into a scratch database (the restore creates it)
+      # that must hold the same tables and the same audit chain length.
       - name: Back up and restore the e2e database
         if: matrix.sandbox == 'host'
         env:
@@ -161,7 +161,6 @@ jobs:
         run: |
           POSTGRES_DB=factory_e2e bash scripts/backup.sh
           dump="$(find "$BACKUP_DIR" -maxdepth 1 -name 'postgres-factory_e2e-*.dump' | sort | tail -1)"
-          docker exec "$PG_CONTAINER" psql -U factory -d factory -qc 'CREATE DATABASE factory_restore'
           POSTGRES_DB=factory_restore bash scripts/backup.sh restore "$dump" --yes
           count() {
             docker exec "$PG_CONTAINER" psql -U factory -d "$1" -tAc \

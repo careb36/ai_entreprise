@@ -25,7 +25,10 @@ company's whole chain with its rows (``docs/OPERATIONS.md``), never deleting
 from it.
 
 The statements are plain SQL over a DB-API connection: psycopg2 in the
-janitor's container, ``sqlite3`` in the tests.
+janitor's container, ``sqlite3`` in the tests. The connection is not in
+autocommit: each kind is one transaction, and each batch of run versions
+is one transaction that locks its runs, checks the guards again under the
+lock and deletes the verifications with their runs, or rolls back whole.
 """
 
 from __future__ import annotations
@@ -111,35 +114,93 @@ def prune_outbox(conn: Any, days: int, now: datetime) -> int:
     return cursor.rowcount
 
 
+def _eligible_runs(cutoff_clause: str) -> str:
+    """The superseded, undecided run versions; *cutoff_clause* narrows them."""
+    kept_for_people = " ".join(
+        f"AND NOT EXISTS (SELECT 1 FROM {table} d WHERE d.agent_run_id = r.id)"
+        for table in _DECISIONS_ON_A_RUN
+    )
+    return (
+        f"SELECT r.id FROM agent_runs r WHERE {cutoff_clause} "
+        "AND EXISTS (SELECT 1 FROM agent_runs n WHERE n.company_id = r.company_id "
+        "AND n.external_ref = r.external_ref AND n.version > r.version) "
+        f"{kept_for_people}"
+    )
+
+
+def _begin(conn: Any) -> None:
+    """Open the batch's transaction (psycopg2 opens one on its first statement)."""
+    if _is_sqlite(conn) and not conn.in_transaction:
+        # SQLite takes the write lock now, so nothing commits a decision mid-batch.
+        conn.execute("BEGIN IMMEDIATE")
+
+
+def _delete_run_batch(conn: Any, cutoff: Any) -> int:
+    """One batch in one transaction: select, lock, recheck, delete children then parents.
+
+    On Postgres the candidates are locked ``FOR UPDATE``: a person's review,
+    comment, approval or publication inserted meanwhile references the run
+    and waits for this transaction (its foreign key takes a share lock on
+    the run). The guards are then checked again in a new statement, which
+    sees whatever committed before the lock, and only the runs that still
+    qualify are deleted. Any failure rolls the whole batch back, so a run
+    never loses its verifications without being deleted itself.
+    """
+    _begin(conn)
+    try:
+        ids = [
+            row[0]
+            for row in _execute(
+                conn,
+                _eligible_runs("r.ingested_at < %s")
+                + f" ORDER BY r.id LIMIT {AGENT_RUN_BATCH}",
+                (cutoff,),
+            ).fetchall()
+        ]
+        if not ids:
+            conn.rollback()
+            return 0
+        marks = ", ".join(["%s"] * len(ids))
+        if not _is_sqlite(conn):
+            _execute(
+                conn,
+                f"SELECT id FROM agent_runs WHERE id IN ({marks}) ORDER BY id FOR UPDATE",
+                tuple(ids),
+            )
+        ids = [
+            row[0]
+            for row in _execute(
+                conn, _eligible_runs(f"r.id IN ({marks})"), tuple(ids)
+            ).fetchall()
+        ]
+        if ids:
+            marks = ", ".join(["%s"] * len(ids))
+            _execute(
+                conn,
+                f"DELETE FROM verifications WHERE agent_run_id IN ({marks})",
+                tuple(ids),
+            )
+            _execute(conn, f"DELETE FROM agent_runs WHERE id IN ({marks})", tuple(ids))
+        conn.commit()
+        return len(ids)
+    except BaseException:
+        conn.rollback()
+        raise
+
+
 def prune_agent_runs(conn: Any, days: int, now: datetime) -> int:
     """Delete superseded, undecided run versions older than the cutoff, in batches."""
     if days <= 0:
         return 0
     cutoff = _cutoff(conn, days, now)
-    kept_for_people = " ".join(
-        f"AND NOT EXISTS (SELECT 1 FROM {table} d WHERE d.agent_run_id = r.id)"
-        for table in _DECISIONS_ON_A_RUN
-    )
-    select_batch = (
-        "SELECT r.id FROM agent_runs r WHERE r.ingested_at < %s "
-        "AND EXISTS (SELECT 1 FROM agent_runs n WHERE n.company_id = r.company_id "
-        "AND n.external_ref = r.external_ref AND n.version > r.version) "
-        f"{kept_for_people} ORDER BY r.id LIMIT {AGENT_RUN_BATCH}"
-    )
     removed = 0
     while True:
-        ids = [row[0] for row in _execute(conn, select_batch, (cutoff,)).fetchall()]
-        if not ids:
+        deleted = _delete_run_batch(conn, cutoff)
+        if not deleted:
+            # A batch whose every candidate got a decision meanwhile deletes
+            # nothing; the next run of the janitor looks again.
             return removed
-        marks = ", ".join(["%s"] * len(ids))
-        _execute(
-            conn,
-            f"DELETE FROM verifications WHERE agent_run_id IN ({marks})",
-            tuple(ids),
-        )
-        _execute(conn, f"DELETE FROM agent_runs WHERE id IN ({marks})", tuple(ids))
-        conn.commit()
-        removed += len(ids)
+        removed += deleted
 
 
 def prune_kpi_turns(conn: Any, days: int, now: datetime) -> tuple[int, int]:
@@ -183,9 +244,23 @@ def prune_glassroom(conn: Any, days: int, now: datetime) -> int:
 def apply(
     conn: Any, days: dict[str, int] | None = None, now: datetime | None = None
 ) -> dict[str, int]:
-    """Apply every retention setting once; commit after each kind. Returns what was deleted."""
+    """Apply every retention setting once; commit after each kind. Returns what was deleted.
+
+    *conn* must not be in autocommit mode: each kind (and each batch of run
+    versions) is one transaction, rolled back when it fails.
+    """
     days = settings_from_env() if days is None else {**DEFAULTS, **days}
     now = now or datetime.now(UTC)
+    if getattr(conn, "autocommit", None) is True:
+        raise ValueError("retention needs transactions; turn autocommit off")
+    try:
+        return _apply(conn, days, now)
+    except BaseException:
+        conn.rollback()
+        raise
+
+
+def _apply(conn: Any, days: dict[str, int], now: datetime) -> dict[str, int]:
     report: dict[str, int] = {}
     report["outbox_events"] = prune_outbox(conn, days["RETENTION_OUTBOX_DAYS"], now)
     conn.commit()

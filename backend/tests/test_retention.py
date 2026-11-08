@@ -7,6 +7,9 @@ models created, the way the janitor runs them over psycopg2.
 - Delivered outbox events older than the setting go; pending and failed stay.
 - A superseded run version older than the setting goes with its
   verifications; the latest version and a version a person decided on stay.
+  A batch is one transaction: a decision recorded after the runs were picked
+  keeps its run (the guards are checked again), and a failure rolls the
+  batch back with the verifications in place.
 - KPI turn rows outside the audit chain go; a chained row is never deleted
   and is counted as kept.
 - Task events of closed sprints go; an open sprint's stay.
@@ -133,6 +136,72 @@ def test_superseded_run_versions_go_and_the_evidence_of_record_stays(db):
     assert {recent_v1.id, decided_v1.id} <= remaining and len(remaining) == 5
     assert _count(session, Verification, Verification.agent_run_id == old_v1) == 0
     assert _count(session, Verification) == 5
+
+
+def _superseded_pair(session, company_id, ref):
+    old = _run(session, company_id, ref, 1, OLD).id
+    _run(session, company_id, ref, 2, OLD)
+    return old
+
+
+def test_a_decision_recorded_after_the_runs_were_picked_keeps_its_run(db, monkeypatch):
+    session, company_id, path = db
+    commented = _superseded_pair(session, company_id, "task-1")
+    plain = _superseded_pair(session, company_id, "task-2")
+    original = retention._execute
+    picked = []
+
+    def comment_right_after_the_pick(conn, statement, params=()):
+        cursor = original(conn, statement, params)
+        if not picked and "ORDER BY r.id LIMIT" in statement:
+            picked.append(statement)
+            # A Manager's comment that committed before the batch locked the runs.
+            original(
+                conn,
+                "INSERT INTO review_comments (company_id, agent_run_id, side, body, "
+                "author_name, created_at) VALUES (%s, %s, 'new', 'keep', 'a manager', %s)",
+                (company_id, commented, OLD.isoformat(sep=" ")),
+            )
+        return cursor
+
+    monkeypatch.setattr(retention, "_execute", comment_right_after_the_pick)
+    report = _apply(path, RETENTION_AGENT_RUNS_DAYS=30)
+
+    assert picked and report["agent_runs"] == 1
+    remaining = {r.id for r in session.exec(select(AgentRun)).all()}
+    assert commented in remaining and plain not in remaining
+    assert _count(session, Verification, Verification.agent_run_id == commented) == 1
+
+
+def test_a_batch_that_fails_keeps_the_verifications_with_their_runs(db, monkeypatch):
+    session, company_id, path = db
+    old = _superseded_pair(session, company_id, "task-1")
+    original = retention._execute
+
+    def parent_delete_fails(conn, statement, params=()):
+        if statement.startswith("DELETE FROM agent_runs"):
+            raise sqlite3.IntegrityError("FOREIGN KEY constraint failed")
+        return original(conn, statement, params)
+
+    monkeypatch.setattr(retention, "_execute", parent_delete_fails)
+    with pytest.raises(sqlite3.IntegrityError):
+        _apply(path, RETENTION_AGENT_RUNS_DAYS=30)
+
+    session.expire_all()
+    assert old in {r.id for r in session.exec(select(AgentRun)).all()}
+    assert _count(session, Verification, Verification.agent_run_id == old) == 1
+    assert _count(session, Verification) == 2
+
+
+def test_retention_refuses_a_connection_in_autocommit():
+    class Autocommit:
+        autocommit = True
+
+        def rollback(self):
+            raise AssertionError("nothing to roll back")
+
+    with pytest.raises(ValueError, match="autocommit"):
+        retention.apply(Autocommit(), {"RETENTION_AGENT_RUNS_DAYS": 30}, now=NOW)
 
 
 def _turn(session, company_id, action, created_at, chain_seq=None):

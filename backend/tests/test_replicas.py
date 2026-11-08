@@ -7,7 +7,8 @@ way a second process would meet them.
 
 - A todo task is claimed by one worker only.
 - A restarting worker returns to todo only the in-progress tasks no live
-  worker holds.
+  worker holds, and a surviving worker's review cycle recovers and queues
+  again the task of a worker that died while working on it.
 - A sprint closes once: one close, one follow-up, one retrospective, one
   measurement of the procedures, one proposal round.
 - An escalation gets one ScrumMaster triage.
@@ -217,6 +218,63 @@ def test_a_restarting_worker_leaves_the_tasks_another_worker_holds(engine):
     statuses = {i.id: i.status for i in _items(engine, sprint_id)}
     assert statuses == {held_item.id: "in_progress", orphan.id: "todo"}
     assert "Worker recovery" in _items(engine, sprint_id)[1].comments[-1]["text"]
+
+
+def test_a_surviving_worker_recovers_the_task_of_one_that_died(engine, monkeypatch):
+    """A worker dies mid-task; the survivor acks the redelivery, then its cycle recovers it."""
+    sprint_id = _sprint(engine, _company(engine), items=("todo",))
+    item_id = _items(engine, sprint_id)[0].id
+    executed = []
+
+    def dies(*args, **kwargs):
+        executed.append("dead")
+        # Not an Exception: nothing marks the task blocked, as when the process is killed.
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(task_worker, "_execute_task", dies)
+    dead = _task_assign_handler(monkeypatch).handler
+    message = {"backlog_item_id": item_id, "sprint_id": sprint_id}
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(dead(None, dict(message)))
+    assert executed == ["dead"]
+    assert _items(engine, sprint_id)[0].status == "in_progress"
+
+    def runs(*args, **kwargs):
+        executed.append("survivor")
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(task_worker, "_execute_task", runs)
+    survivor = _task_assign_handler(monkeypatch).handler
+    # The redelivered assignment finds the task in progress and is skipped.
+    asyncio.run(survivor(None, dict(message)))
+    assert executed == ["dead"]
+
+    nats = _FakeNATS()
+    asyncio.run(task_worker._review_cycle(nats))
+
+    item = _items(engine, sprint_id)[0]
+    assert item.status == "todo"
+    assert "Worker recovery" in item.comments[-1]["text"]
+    assigned = [p for subject, p in nats.published if subject == "task.assign"]
+    assert [p["backlog_item_id"] for p in assigned] == [item_id]
+    assert any(
+        p.get("semantic_type") == "task.recovered"
+        for subject, p in nats.published
+        if subject == f"glassroom.{sprint_id}"
+    )
+
+    asyncio.run(survivor(None, dict(assigned[0])))
+    assert executed == ["dead", "survivor"]
+
+
+def test_a_review_cycle_leaves_the_task_a_live_worker_holds(engine):
+    sprint_id = _sprint(engine, _company(engine), items=("in_progress",))
+    item_id = _items(engine, sprint_id)[0].id
+    nats = _FakeNATS()
+    with replicas.task_lock(engine, item_id):
+        asyncio.run(task_worker._review_cycle(nats))
+    assert _items(engine, sprint_id)[0].status == "in_progress"
+    assert not [p for subject, p in nats.published if subject == "task.assign"]
 
 
 # --- closing a sprint -------------------------------------------------------

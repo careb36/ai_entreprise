@@ -2535,26 +2535,6 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             "workspace.delivered", DELIVERY_RESULTS_CONSUMER, _on_delivered
         )
 
-    # Only the tasks no live replica holds (issue #328).
-    recovered_items = await asyncio.to_thread(replicas.recover_inflight, engine)
-    for recovered in recovered_items:
-        await publish_glassroom(
-            nats_client,
-            recovered["sprint_id"],
-            {
-                "type": "status",
-                "semantic_type": "task.recovered",
-                "source": "task_worker",
-                "agent": "System",
-                "role": "System",
-                "task_id": recovered.get("id"),
-                "task_status": "todo",
-                "phase": "restart_recovery",
-                "task": recovered["title"],
-                "message": f"♻️ Recovered after backend restart: {recovered['title']} returned to todo for autonomous redispatch.",
-            },
-        )
-
     await _review_cycle(nats_client)
 
     # Periodic review loop — processes items stuck in in_review or blocked.
@@ -2570,7 +2550,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 async def _review_cycle(nats_client: NATSClient) -> None:
     """One replica at a time runs the review cycle; the others skip the round (issue #328)."""
     with locks.held(engine, locks.REVIEW_CYCLE) as mine:
-        if mine:
+        if mine:  # a dead replica's tasks first, so the dispatch below queues them
+            await replicas.recover_stale(engine, nats_client)
             await _review_cycle_body(nats_client)
 
 

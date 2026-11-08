@@ -38,7 +38,7 @@ a database behind head and names both versions.
 1. Back up with `scripts/backup.sh` (below). The baseline migration is
    irreversible on purpose, so rolling back means restoring that backup.
 2. Stop the backend replicas and the janitor (`docker compose stop backend
-   janitor`). Work in flight returns to `todo` on the next start;
+   janitor`). Work in flight returns to `todo` on the next review cycle;
    assignments wait in JetStream.
 3. `git pull`, then `docker compose build backend janitor llm-proxy frontend`.
 4. `docker compose up -d`. The backend's entrypoint migrates to head. With
@@ -46,8 +46,9 @@ a database behind head and names both versions.
    takes no lock of its own.
 5. Check `GET /health/deep` and the Glassroom of a running sprint.
 
-To roll back: stop everything, run `scripts/backup.sh restore <file> --yes`,
-check out the previous release, then build and start it.
+To roll back: stop everything, run `scripts/backup.sh restore <file> --yes`
+(it replaces the whole database, below), check out the previous release,
+then build and start it.
 
 ## Rotate keys
 
@@ -105,8 +106,9 @@ at delivery. There is nothing to replay by hand.
 3. Tasks in `todo` that never start: `POST /v1/sprints/{id}/dispatch`
    queues them again. Check that `/health` says `connected` and that the
    backend's log says `Task Worker consuming task.assign`.
-4. Tasks left in `in_progress` by a crash return to `todo` when a backend
-   replica starts and finds that no live replica holds them.
+4. Tasks left in `in_progress` by a crashed replica return to `todo` at
+   the next review cycle of any live replica (every 30 seconds), which
+   finds that no live replica holds them and queues them again.
 5. A delivery waiting for the daemon: see above.
 
 **A provider is out of credit.** The worker pauses the sprint, with
@@ -126,7 +128,17 @@ running. `PG_CONTAINER` names another container; set it empty to use the
 `pg_dump` on PATH with `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER` and
 `POSTGRES_PASSWORD`. Unset values are read from `.env`. With
 `NEO4J_ENABLED=true` and the `factory-neo4j` container running, it also
-exports the graph as Cypher through APOC (`neo4j-<time>.cypher`).
+exports the graph as Cypher through APOC (`neo4j-<time>.cypher`). The
+APOC export is streamed (APOC's file export is not enabled in
+`docker-compose.yml`), each batch base64-encoded by the query and decoded
+by the script, so the file holds plain Cypher statements and not
+`cypher-shell`'s quoted result table.
+
+Everything is written with `umask 077`, readable only by the account that
+runs the script: a backup holds every company's data and the stored
+credentials. `.gitignore` leaves out `/backups/`, `*.dump`,
+`*.dump.partial`, `*.dump.sha256` and `neo4j-*.cypher`, so a backup in the
+checkout is never committed; keep `BACKUP_DIR` outside it where you can.
 
 Run it daily from cron on the host, for example
 `17 3 * * * cd /srv/la-fabrique && scripts/backup.sh >>backups/backup.log 2>&1`,
@@ -135,17 +147,37 @@ restores it on every run (`.github/workflows/e2e.yml`).
 
 **Restore.** Stop the backend replicas and the janitor, then run
 `scripts/backup.sh restore backups/postgres-factory-<time>.dump --yes`. It
-checks the checksum and runs `pg_restore --clean --if-exists` into
-`POSTGRES_DB`. Then start the backend: it checks that the schema is at head
-and migrates a backup from an older release. Load a Neo4j export with
-`cypher-shell < neo4j-<time>.cypher` into an empty database. Always restore
-the whole Postgres database, never single tables: the audit chain would show
-the missing rows.
+checks the checksum, then replaces the whole database rather than editing
+it in place (`pg_restore --clean` drops only what the archive holds, and a
+table a later migration added would block it or be left behind):
+1. creates an empty database `<db>_restore_<time>` (from `template0`,
+   UTF8), connected to `PG_MAINTENANCE_DB` (default `postgres`);
+2. restores the dump into it with `pg_restore --single-transaction
+   --exit-on-error --no-owner`: a restore that fails leaves nothing, the
+   empty database is dropped and `POSTGRES_DB` is untouched;
+3. renames `POSTGRES_DB` to `<db>_pre_restore_<time>` and the restored
+   database to `POSTGRES_DB`. A rename needs no session on either database,
+   so it stops here while a backend is still connected.
+
+Drop `<db>_pre_restore_<time>` once you have checked the restore. By hand,
+the same is: `CREATE DATABASE <new> TEMPLATE template0`, `pg_restore
+--single-transaction -d <new> <file>`, then `DROP DATABASE <db>` (or rename
+it) and `ALTER DATABASE <new> RENAME TO <db>`. Then start the backend: it
+checks that the schema is at head and migrates a backup from an older
+release. Load a Neo4j export with `cypher-shell < neo4j-<time>.cypher` into
+an empty database. Always restore the whole Postgres database, never single
+tables: the audit chain would show the missing rows.
 
 ## Retention
 
 The janitor applies these settings once a day (`JANITOR_INTERVAL_SECONDS`).
 Each is a number of days; `0` keeps everything (`backend/janitor/retention.py`).
+Retention runs in transactions; only the vector index rebuild (`REINDEX
+CONCURRENTLY`) runs in autocommit. Superseded run versions go in batches,
+each one transaction: the runs are locked (`FOR UPDATE`), the guards
+checked again under the lock, so a review, comment, approval or
+publication recorded meanwhile keeps its run, and the verifications are
+deleted with their runs or not at all.
 
 | Setting | Default | Deletes | Never deletes |
 |---------|---------|---------|---------------|
@@ -193,10 +225,16 @@ What makes several replicas safe (`backend/app/services/replicas.py`,
   assignment for the same task (from another dispatch) does no harm: a
   replica claims a task with a conditional update from `todo`, and only the
   replica whose update matched runs it.
-- **Restarts.** The replica working on a task holds the task's Postgres
-  advisory lock. A replica that starts returns to `todo` only the
-  `in_progress` tasks that nobody holds. A crashed replica's locks go with
-  its connections.
+- **Restarts and crashes.** The replica working on a task holds the
+  task's Postgres advisory lock, which is its lease: a crashed replica's
+  locks go with its connections. Every review cycle (the startup one
+  included) first returns to `todo` the `in_progress` tasks nobody holds,
+  and its dispatch queues them again, so a surviving replica picks up a
+  dead one's task within a cycle (a survivor acknowledges the redelivered
+  assignment itself, since the task is no longer `todo`). Postgres notices
+  a killed process at once; a host that vanished is noticed when its TCP
+  connection times out, so set the server's `tcp_keepalives_idle` (for
+  example 60) to bound that.
 - **The review cycle** (QA reviews, the delivery gate, rework, dispatch,
   dependency holds) runs under one advisory lock: one replica at a time,
   and the others skip that round. The dispatch cooldown is kept per

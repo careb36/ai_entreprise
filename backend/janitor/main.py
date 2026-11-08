@@ -45,8 +45,8 @@ def get_db_connection():
     """
     Establish a direct psycopg2 connection for the Janitor process.
 
-    Uses psycopg2 directly (not SQLModel/SQLAlchemy) so we can set
-    ``autocommit = True``, which is required by ``REINDEX CONCURRENTLY``
+    Uses psycopg2 directly (not SQLModel/SQLAlchemy) so the reindex can
+    switch to ``autocommit = True``, which ``REINDEX CONCURRENTLY`` requires
     (that DDL command cannot run inside a transaction block).
     """
     return psycopg2.connect(
@@ -62,16 +62,15 @@ def run_janitor_tasks():
     """
     Execute all daily maintenance tasks in a single database session.
 
-    Connects with ``autocommit = True`` so each statement commits immediately
-    — a requirement for ``REINDEX CONCURRENTLY``.  All tasks are
-    idempotent and safe to run repeatedly.
+    Retention runs in transactions (each batch of deletions commits whole or
+    rolls back); only ``REINDEX CONCURRENTLY`` runs in autocommit, which it
+    requires. All tasks are idempotent and safe to run repeatedly.
     """
     conn = None
     cursor = None
     try:
         conn = get_db_connection()
-        # CONCURRENTLY requires auto-commit mode (cannot be run inside a transaction block)
-        conn.autocommit = True
+        conn.autocommit = False
         cursor = conn.cursor()
 
         # One-time migration for the retired approval queue (issue #42).
@@ -80,6 +79,7 @@ def run_janitor_tasks():
 
         # 1. Retention. Cutoffs are naive UTC, so the session must be in UTC.
         cursor.execute("SET TIME ZONE 'UTC'")
+        conn.commit()
         days = retention.settings_from_env()
         report = retention.apply(conn, days)
         logger.info("Janitor: retention %s deleted %s", days, report)
@@ -90,7 +90,9 @@ def run_janitor_tasks():
                 report["kpi_turns_kept_for_chain"],
             )
 
-        # 2. Vector Index Rebuild (NON-BLOCKING for RAG queries)
+        # 2. Vector Index Rebuild (NON-BLOCKING for RAG queries). CONCURRENTLY
+        # cannot run inside a transaction block: autocommit for this alone.
+        conn.autocommit = True
         logger.info(
             "Janitor: Rebuilding vector memory index concurrently to prevent read blocks..."
         )
