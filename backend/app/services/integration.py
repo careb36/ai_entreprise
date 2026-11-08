@@ -26,7 +26,15 @@ from typing import Any
 
 from config import settings
 from logging_config import logger
-from models import BacklogItem, Company, ProjectDiscovery, Sprint
+from models import (
+    AgentRun,
+    BacklogItem,
+    Company,
+    ProjectDiscovery,
+    Sprint,
+    Verification,
+)
+from models.agent_run import TASK_WORKER_PRODUCER
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, select
 
@@ -116,8 +124,12 @@ def plan(session: Session, sprint_id: int) -> dict[str, Any]:
 # A merge per task branch and, on a large repository, a worktree to create.
 INTEGRATE_TIMEOUT_SECONDS = 150.0
 TRIGGERS = ("sprint_closed", "manual")
+# How often an integration the daemon could not take at close is tried again.
+RETRY_SECONDS = float(os.getenv("INTEGRATION_RETRY_SECONDS", "60"))
 # The background integrations started when a sprint closed, kept until done.
 _RUNNING: set[asyncio.Task] = set()
+# One integration of a sprint at a time: merge, test and record together.
+_LOCKS: dict[int, asyncio.Lock] = {}
 
 
 class IntegrationRefused(Exception):
@@ -136,6 +148,32 @@ def _project_path(session: Session, company_id: int) -> str | None:
     if discovery is not None and discovery.project_path:
         return discovery.project_path
     return os.getenv("AGENT_WORKSPACE_ROOT") or None
+
+
+def _task_evidence(
+    session: Session, company_id: int, task_id: int
+) -> tuple[int | None, int | None]:
+    """The task worker's latest run of the task and its latest verification, now."""
+    run = session.exec(
+        select(AgentRun)
+        .where(
+            AgentRun.company_id == company_id,
+            AgentRun.external_ref == f"task-{task_id}",
+            AgentRun.producer == TASK_WORKER_PRODUCER,
+        )
+        .order_by(AgentRun.id.desc())
+    ).first()
+    if run is None:
+        return None, None
+    verification = session.exec(
+        select(Verification)
+        .where(
+            Verification.agent_run_id == run.id,
+            Verification.company_id == company_id,
+        )
+        .order_by(Verification.observed_at.desc(), Verification.id.desc())
+    ).first()
+    return run.id, verification.id if verification else None
 
 
 def integration_spec(
@@ -167,7 +205,21 @@ def integration_spec(
     context = {
         "company_id": company.id,
         "sprint_id": sprint.id,
-        "task_of": {t["branch"]: t["task_id"] for t in done},
+        "tasks": [
+            {
+                "task_id": t["task_id"],
+                "title": t["title"],
+                "branch": t["branch"],
+                **dict(
+                    zip(
+                        ("run_id", "verification_id"),
+                        _task_evidence(session, company.id, t["task_id"]),
+                        strict=True,
+                    )
+                ),
+            }
+            for t in done
+        ],
         "left_out": [
             {"task_id": t["task_id"], "title": t["title"], "status": t["status"]}
             for t in tasks
@@ -178,11 +230,15 @@ def integration_spec(
 
 
 async def _run_suite(
-    nats_client: Any, engine: Any, context: dict[str, Any], worktree: str
+    nats_client: Any, engine: Any, context: dict[str, Any], reply: dict[str, Any]
 ) -> dict[str, Any]:
-    """The project's test command on the integrated worktree, as a delivery's tests run."""
+    """The project's test command at the integrated commit, as a delivery's tests run."""
     if not settings.DELIVERY_TESTS_ENABLED:
         return {"command": None, "reason": "DELIVERY_TESTS_ENABLED is off"}
+    # The detached worktree at the commit: a later integration cannot move it.
+    worktree = reply.get("test_worktree")
+    if not worktree:
+        return {"command": None, "reason": "the daemon named no worktree at the commit"}
     # An empty acceptance asks for per-test lines, so the failing tests are named.
     evidence: dict[str, Any] = {"workspace_root": worktree, "acceptance": {"all": []}}
     await workspace_daemon.run_delivery_tests(
@@ -193,17 +249,55 @@ async def _run_suite(
     )
     test_run = dict(evidence.get("test_run") or {})
     test_run.pop("criteria", None)
+    if test_run.get("command") and test_run.get("exit_code") is not None:
+        test_run["commit"] = reply.get("commit")
+    test_run["workspace_root"] = worktree
     return test_run
 
 
-def status_of(conflict: Any, test_run: dict[str, Any] | None) -> str:
+def status_of(
+    conflict: Any, test_run: dict[str, Any] | None, complete: bool = True
+) -> str:
     if conflict:
         return "conflict"
+    if not complete:
+        return "incomplete"
     test_run = test_run or {}
     exit_code = test_run.get("exit_code")
     if test_run.get("timed_out") or (isinstance(exit_code, int) and exit_code != 0):
         return "tests_failed"
     return "tests_passed" if exit_code == 0 else "untested"
+
+
+def _task_states(
+    context: dict[str, Any], reply: dict[str, Any], conflict: dict | None
+) -> list[dict[str, Any]]:
+    merged = {
+        m.get("branch"): m.get("commit")
+        for m in reply.get("merged") or []
+        if isinstance(m, dict)
+    }
+    state_of = {b: "merged" for b in merged}
+    for key, state in (
+        ("already_merged", "already_merged"),
+        ("missing", "missing"),
+        ("refused", "refused"),
+        ("not_attempted", "not_attempted"),
+    ):
+        state_of.update({b: state for b in reply.get(key) or [] if isinstance(b, str)})
+    if conflict:
+        state_of[conflict.get("branch")] = "conflict"
+    sources = reply.get("sources") if isinstance(reply.get("sources"), dict) else {}
+    return [
+        {
+            **task,
+            # Not named by the daemon: the request ended before it.
+            "state": state_of.get(task["branch"], "not_attempted"),
+            "source_commit": sources.get(task["branch"]),
+            "merge_commit": merged.get(task["branch"]),
+        }
+        for task in context["tasks"]
+    ]
 
 
 def record(
@@ -219,7 +313,7 @@ def record(
     """Keep the daemon's answer, audited; an answer that is not about this branch is refused."""
     if reply.get("branch") != spec["branch"] or not reply.get("commit"):
         raise IntegrationRefused(502, "The workspace daemon sent an unreadable answer")
-    task_of = context["task_of"]
+    task_of = {t["branch"]: t["task_id"] for t in context["tasks"]}
     conflict = reply.get("conflict")
     if isinstance(conflict, dict):
         conflict = {**conflict, "task_id": task_of.get(conflict.get("branch"))}
@@ -234,12 +328,22 @@ def record(
         for m in reply.get("merged") or []
         if isinstance(m, dict)
     ]
+    details = {
+        key: [
+            {"task_id": task_of.get(b), "branch": b}
+            for b in reply.get(key) or []
+            if isinstance(b, str)
+        ]
+        for key in ("already_merged", "missing", "refused", "not_attempted")
+    }
+    # An older daemon does not say: whatever is missing or refused decides.
+    complete = not details["missing"] and not details["refused"]
     row = SprintIntegration(
         company_id=context["company_id"],
         sprint_id=context["sprint_id"],
         trigger=trigger,
         requested_by=requested_by,
-        status=status_of(conflict, test_run),
+        status=status_of(conflict, test_run, complete),
         branch=spec["branch"],
         base=str(reply.get("base") or spec["base"] or ""),
         repository=reply.get("repository"),
@@ -249,18 +353,18 @@ def record(
         merged=merged,
         conflict=conflict,
         test_run=test_run,
-        details={
-            key: [
-                {"task_id": task_of.get(b), "branch": b}
-                for b in reply.get(key) or []
-                if isinstance(b, str)
-            ]
-            for key in ("already_merged", "missing", "refused", "not_attempted")
-        }
-        | {"left_out": context["left_out"]},
+        tested_commit=(test_run or {}).get("commit"),
+        tasks=_task_states(context, reply, conflict),
+        details=details | {"left_out": context["left_out"]},
     )
+    _audit(session, row, "sprint_integrated")
+    return row
+
+
+def _audit(session: Session, row: SprintIntegration, action: str) -> None:
     session.add(row)
     session.flush()
+    requested_by = row.requested_by
     audit_log = AgentService().audit_interaction(
         session=session,
         company_id=row.company_id,
@@ -268,20 +372,22 @@ def record(
         agent_id=requested_by
         if requested_by.startswith("human:")
         else f"system:{requested_by}",
-        action="sprint_integrated",
+        action=action,
         details={
             "company_id": str(row.company_id),
             "sprint_id": row.sprint_id,
             "integration_id": row.id,
-            "trigger": trigger,
+            "trigger": row.trigger,
         },
         result={
             "status": row.status,
             "branch": row.branch,
             "commit": row.commit,
-            "merged": [m["branch"] for m in merged],
-            "conflict_files": (conflict or {}).get("files"),
-            "tests_exit_code": (test_run or {}).get("exit_code"),
+            "tested_commit": row.tested_commit,
+            "merged": [m["branch"] for m in row.merged or []],
+            "conflict_files": (row.conflict or {}).get("files"),
+            "tests_exit_code": (row.test_run or {}).get("exit_code"),
+            "reason": (row.details or {}).get("reason"),
         },
         decision_signature=None,
         cost_tokens=0,
@@ -290,7 +396,6 @@ def record(
     session.add(row)
     session.commit()
     session.refresh(row)
-    return row
 
 
 async def integrate(
@@ -305,26 +410,59 @@ async def integrate(
 
     Raises ``IntegrationRefused`` when there is nothing to integrate, and
     ``workspace_daemon.DaemonUnavailable`` / ``DaemonError`` when the daemon
-    could not do it; nothing is recorded then.
+    could not do it; nothing is recorded then. One integration of a sprint
+    runs at a time, so what is recorded is what that attempt merged and tested.
     """
-    with Session(engine) as session:
-        spec, context = integration_spec(session, sprint_id)
-    reply = await workspace_daemon.daemon_request(
-        nats_client, "workspace.git.integrate", spec, INTEGRATE_TIMEOUT_SECONDS
-    )
-    test_run = None
-    if reply.get("ok") and reply.get("worktree"):
-        test_run = await _run_suite(nats_client, engine, context, reply["worktree"])
-    with Session(engine) as session:
-        return record(
-            session,
-            spec,
-            context,
-            reply,
-            test_run,
-            trigger=trigger,
-            requested_by=requested_by,
+    async with _LOCKS.setdefault(sprint_id, asyncio.Lock()):
+        with Session(engine) as session:
+            spec, context = integration_spec(session, sprint_id)
+        reply = await workspace_daemon.daemon_request(
+            nats_client, "workspace.git.integrate", spec, INTEGRATE_TIMEOUT_SECONDS
         )
+        test_run = None
+        if reply.get("ok") and reply.get("commit"):
+            test_run = await _run_suite(nats_client, engine, context, reply)
+        with Session(engine) as session:
+            return record(
+                session,
+                spec,
+                context,
+                reply,
+                test_run,
+                trigger=trigger,
+                requested_by=requested_by,
+            )
+
+
+def _hold(engine: Any, sprint_id: int, status: str, reason: str) -> None:
+    """Record that the sprint's integration could not start; a repeat counts an attempt."""
+    with Session(engine) as session:
+        row = latest(session, sprint_id)
+        if row is not None and row.status == status:
+            details = dict(row.details or {})
+            details.update(
+                reason=reason, attempts=int(details.get("attempts") or 1) + 1
+            )
+            row.details = details
+            session.add(row)
+            session.commit()
+            return
+        try:
+            spec, context = integration_spec(session, sprint_id)
+        except IntegrationRefused:
+            return
+        held = SprintIntegration(
+            company_id=context["company_id"],
+            sprint_id=sprint_id,
+            trigger="sprint_closed",
+            requested_by="task_worker",
+            status=status,
+            branch=spec["branch"],
+            base=spec["base"],
+            tasks=[{**t, "state": "not_attempted"} for t in context["tasks"]],
+            details={"reason": reason, "attempts": 1, "left_out": context["left_out"]},
+        )
+        _audit(session, held, f"sprint_integration_{status}")
 
 
 async def _after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
@@ -338,8 +476,15 @@ async def _after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
         )
     except IntegrationRefused as refused:
         logger.info("Sprint %s not integrated: %s", sprint_id, refused.detail)
+    except workspace_daemon.DaemonUnavailable as exc:
+        # Kept as pending and tried again (retry_pending) until a daemon answers.
+        logger.info("Sprint %s integration pending: %s", sprint_id, exc)
+        _hold(engine, sprint_id, "pending", "the workspace daemon did not answer")
+    except workspace_daemon.DaemonError as exc:
+        _hold(engine, sprint_id, "error", exc.message)
     except Exception as exc:  # noqa: BLE001 - Integration never holds a closed sprint back.
         logger.warning("Integration of sprint %s failed: %s", sprint_id, exc)
+        _hold(engine, sprint_id, "error", f"{type(exc).__name__}: {exc}"[:300])
 
 
 def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
@@ -360,6 +505,35 @@ def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
     task.add_done_callback(_RUNNING.discard)
 
 
+async def retry_pending(nats_client: Any, engine: Any) -> int:
+    """Try again each sprint whose latest integration is pending; how many were tried."""
+    with Session(engine) as session:
+        rows = session.exec(
+            select(SprintIntegration).order_by(
+                SprintIntegration.created_at.desc(), SprintIntegration.id.desc()
+            )
+        ).all()
+        latest_of: dict[int, str] = {}
+        for row in rows:
+            latest_of.setdefault(row.sprint_id, row.status)
+    pending = [
+        sprint_id for sprint_id, status in latest_of.items() if status == "pending"
+    ]
+    for sprint_id in pending:
+        await _after_close(nats_client, engine, sprint_id)
+    return len(pending)
+
+
+async def retry_loop(nats_client: Any, engine: Any) -> None:
+    """The background worker that retries pending integrations every ``RETRY_SECONDS``."""
+    while True:
+        await asyncio.sleep(RETRY_SECONDS)
+        try:
+            await retry_pending(nats_client, engine)
+        except Exception as exc:  # noqa: BLE001 - Keep retrying on the next round.
+            logger.warning("Pending integrations not retried: %s", exc)
+
+
 # --- what people read --------------------------------------------------------
 
 
@@ -372,7 +546,7 @@ def latest(session: Session, sprint_id: int) -> SprintIntegration | None:
 
 
 def waiting_for_a_person(session: Session, company_id: int) -> list[dict[str, Any]]:
-    """Each sprint whose latest integration stopped at a conflict or a failing suite."""
+    """Each sprint whose latest integration stopped, was incomplete or could not start."""
     rows = session.exec(
         select(SprintIntegration, Sprint)
         .join(Sprint, Sprint.id == SprintIntegration.sprint_id)
@@ -387,6 +561,7 @@ def waiting_for_a_person(session: Session, company_id: int) -> list[dict[str, An
         seen.add(row.sprint_id)
         if row.status not in WAITS_FOR_A_PERSON:
             continue
+        details = row.details or {}
         waiting.append(
             {
                 "id": row.id,
@@ -394,9 +569,15 @@ def waiting_for_a_person(session: Session, company_id: int) -> list[dict[str, An
                 "sprint_name": sprint.sprint_name,
                 "status": row.status,
                 "branch": row.branch,
+                "reason": details.get("reason"),
                 "conflict_task_id": (row.conflict or {}).get("task_id"),
                 "conflict_files": (row.conflict or {}).get("files") or [],
                 "failing_tests": (row.test_run or {}).get("failing_tests") or [],
+                "missing_task_ids": [
+                    e.get("task_id")
+                    for e in (details.get("missing") or [])
+                    + (details.get("refused") or [])
+                ],
                 "created_at": row.created_at.isoformat() if row.created_at else None,
             }
         )

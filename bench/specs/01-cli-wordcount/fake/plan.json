@@ -1,0 +1,28 @@
+{
+  "sprint_name": "Word counter 1",
+  "goal": "Count a text, then a file from the command line",
+  "tasks": [
+    {
+      "title": "Count lines, words and characters",
+      "description": "wordcount.count(text) with its unit test.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-1.1", "REQ-1.2"],
+      "depends_on": [],
+      "files": ["wordcount/__init__.py", "tests/test_count.py"]
+    },
+    {
+      "title": "Word counter command line",
+      "description": "python -m wordcount <file> with its test.",
+      "priority": "medium",
+      "assignee": "Developer",
+      "covers": ["REQ-2.1", "REQ-2.2"],
+      "depends_on": ["Count lines, words and characters"],
+      "files": ["wordcount/__main__.py", "tests/test_cli.py"]
+    }
+  ],
+  "acceptance": {
+    "REQ-1": "tests/test_req_1.py",
+    "REQ-2": "tests/test_req_2.py"
+  }
+}

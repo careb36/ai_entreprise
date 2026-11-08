@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "stamp": "20261108T140751Z",
+  "commit": "192fcf5f5590e2e776defb2e1911542276eb7e29",
+  "llm": "fake",
+  "specs": [
+    {
+      "name": "01-cli-wordcount",
+      "status": "completed",
+      "error": null,
+      "criteria": {
+        "passed": 4,
+        "total": 4,
+        "results": {
+          "REQ-1.1": "pass",
+          "REQ-1.2": "pass",
+          "REQ-2.1": "pass",
+          "REQ-2.2": "pass"
+        }
+      },
+      "factory_criteria_verified": 4,
+      "tasks": {
+        "total": 4,
+        "done": 4,
+        "blocked": 0,
+        "done_first_attempt": 4
+      },
+      "rework_requests": 0,
+      "rework_per_task": 0.0,
+      "blocked_share": 0.0,
+      "first_attempt_rate": 1.0,
+      "wall_clock_seconds": 69.0,
+      "tokens": {
+        "reported": 13108,
+        "turns_reported": 8,
+        "turns_unreported": 0
+      },
+      "models": {
+        "Developer": [
+          "fake-model"
+        ],
+        "QA": [
+          "fake-model"
+        ]
+      }
+    },
+    {
+      "name": "02-lib-roman",
+      "status": "completed",
+      "error": null,
+      "criteria": {
+        "passed": 5,
+        "total": 5,
+        "results": {
+          "REQ-1.1": "pass",
+          "REQ-1.2": "pass",
+          "REQ-2.1": "pass",
+          "REQ-2.2": "pass",
+          "REQ-3.1": "pass"
+        }
+      },
+      "factory_criteria_verified": 5,
+      "tasks": {
+        "total": 4,
+        "done": 4,
+        "blocked": 0,
+        "done_first_attempt": 4
+      },
+      "rework_requests": 0,
+      "rework_per_task": 0.0,
+      "blocked_share": 0.0,
+      "first_attempt_rate": 1.0,
+      "wall_clock_seconds": 60.0,
+      "tokens": {
+        "reported": 12633,
+        "turns_reported": 8,
+        "turns_unreported": 0
+      },
+      "models": {
+        "Developer": [
+          "fake-model"
+        ],
+        "QA": [
+          "fake-model"
+        ]
+      }
+    }
+  ],
+  "totals": {
+    "specs": 2,
+    "specs_completed": 2,
+    "criteria_passed": 9,
+    "criteria_total": 9,
+    "criteria_rate": 1.0,
+    "tasks": 8,
+    "done_first_attempt": 8,
+    "first_attempt_rate": 1.0,
+    "rework_per_task": 0.0,
+    "blocked_share": 0.0,
+    "wall_clock_seconds": 129.0,
+    "tokens_reported": 25741
+  }
+}

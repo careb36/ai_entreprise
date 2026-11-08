@@ -1,0 +1,2 @@
+# Keys and certificates for TLS stay on the machine that runs the broker.
+certs/

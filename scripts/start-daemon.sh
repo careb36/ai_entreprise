@@ -6,7 +6,29 @@
 # writes the agents' files and runs commands there. It connects to the NATS
 # server of the Docker stack (nats://localhost:4222, override with NATS_URL)
 # and keeps retrying until it is up.
+#
+# When the broker has one user per component (SECURITY.md, "Securing the
+# bus"), give the daemon its credentials:
+#   NATS_DAEMON_PASSWORD=...  ./scripts/start-daemon.sh   (user "daemon")
+#   NATS_USER=... NATS_PASSWORD=...  ./scripts/start-daemon.sh
+#   ./scripts/start-daemon.sh --creds ~/.fabrique/daemon.creds   (or NATS_CREDS_FILE)
+#   NATS_NKEY_SEED=~/.fabrique/daemon.nk ./scripts/start-daemon.sh
+# and, for TLS, NATS_TLS=true with NATS_TLS_CA=<the CA that signed the broker>.
 set -eu
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --creds)
+      [ $# -ge 2 ] || { echo "--creds needs a file" >&2; exit 1; }
+      NATS_CREDS_FILE=$2; export NATS_CREDS_FILE; shift 2 ;;
+    --creds=*)
+      NATS_CREDS_FILE=${1#--creds=}; export NATS_CREDS_FILE; shift ;;
+    -h|--help)
+      sed -n '2,20p' "$0"; exit 0 ;;
+    *)
+      echo "unknown option: $1 (try --help)" >&2; exit 1 ;;
+  esac
+done
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DAEMON_DIR="$ROOT/vscode-daemon"
@@ -26,7 +48,17 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 
 "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check -r "$DAEMON_DIR/requirements.txt"
+# A .creds file or an nkey seed signs the connection with nkeys.
+if [ -n "${NATS_CREDS_FILE:-}${NATS_NKEY_SEED:-}" ]; then
+  "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check "nkeys==0.2.1"
+fi
 
+# The broker's "daemon" user, from the same variable docker compose reads.
+if [ -z "${NATS_USER:-}" ] && [ -n "${NATS_DAEMON_PASSWORD:-}" ]; then
+  NATS_USER=daemon
+  NATS_PASSWORD=$NATS_DAEMON_PASSWORD
+  export NATS_USER NATS_PASSWORD
+fi
 NATS_URL="${NATS_URL:-nats://localhost:4222}"
 export NATS_URL
 exec "$VENV/bin/python" "$DAEMON_DIR/daemon.py"

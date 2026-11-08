@@ -192,16 +192,26 @@ def _task(session, sprint, title, status="done", depends_on=None):
     return item
 
 
-def _run(session, company, item, summary):
+def _run(
+    session,
+    company,
+    item,
+    summary,
+    files=(),
+    verdict="verified",
+    artifact="x",
+    version=1,
+):
     run = AgentRun(
         company_id=company.id,
         external_ref=f"task-{item.id}",
+        version=version,
         producer="le-fabrique-task-worker",
         agent_role="Developer",
         claims={"summary": summary},
-        artifact_text="x",
+        artifact_text=artifact,
         artifact_digest="d",
-        artifact_size=1,
+        artifact_size=len(artifact),
     )
     session.add(run)
     session.commit()
@@ -209,12 +219,27 @@ def _run(session, company, item, summary):
         Verification(
             company_id=company.id,
             agent_run_id=run.id,
-            verdict="verified",
+            verdict=verdict,
             checks=[{"name": "files_written", "outcome": "pass", "observation": "ok"}],
-            evidence={},
+            # None: the daemon never reported (no files read back).
+            evidence={
+                "workspace_writes": None
+                if files is None
+                else [
+                    {
+                        "path": path,
+                        "status": "written",
+                        "change": "added",
+                        "additions": 1,
+                        "deletions": 0,
+                    }
+                    for path in files
+                ]
+            },
         )
     )
     session.commit()
+    return run
 
 
 def _two_done_tasks(session, root, *, conflict=False):
@@ -233,8 +258,8 @@ def _two_done_tasks(session, root, *, conflict=False):
             {"b.py": "from a import A\n"},
             [f"fabrique/task-{first.id}"],
         )
-    _run(session, company, first, "Adds A | the constant")
-    _run(session, company, second, "Uses A")
+    _run(session, company, first, "Adds A | the constant", ["a.py"])
+    _run(session, company, second, "Uses A", ["b.py"])
     return company, sprint, first, second, left
 
 
@@ -267,8 +292,19 @@ def test_a_manager_integrates_the_suite_runs_on_the_result_and_one_request_is_pu
         "workspace.git.integrate",
         "workspace.execute",
     ]
-    # The suite ran in the integrated worktree, not in the person's checkout.
-    assert nats.requests[1][1]["workspace_root"] == body["worktree"]
+    # The suite ran at the integrated commit, in a worktree detached there.
+    tested_in = nats.requests[1][1]["workspace_root"]
+    assert tested_in == body["test_run"]["workspace_root"]
+    assert tested_in.endswith("@" + body["commit"][:12])
+    assert git(Path(tested_in), "rev-parse", "HEAD") == body["commit"]
+    assert body["tested_commit"] == body["commit"]
+    assert [(t["task_id"], t["state"]) for t in body["tasks"]] == [
+        (first.id, "merged"),
+        (second.id, "merged"),
+    ]
+    assert body["tasks"][0]["source_commit"] == git(
+        root, "rev-parse", f"fabrique/task-{first.id}"
+    )
     assert git(root, "rev-parse", body["branch"]) == body["commit"]
     assert body["audit_log_id"] is not None
 
@@ -296,6 +332,7 @@ def test_a_manager_integrates_the_suite_runs_on_the_result_and_one_request_is_pu
     assert f"### Task {first.id}: Constants" in text
     assert f"### Task {second.id}: Use them" in text
     assert "**Verdict:** verified" in text
+    assert "- `a.py` added (+1 −0)" in observed_part(text)
     assert "exit code 0" in text
     assert f"Not done, left out: task {left.id}" in text
     observed, claimed = text.split("## Claimed by the producers (not observed)")
@@ -305,6 +342,10 @@ def test_a_manager_integrates_the_suite_runs_on_the_result_and_one_request_is_pu
     )
     # The per-task branch is still there to publish on its own.
     assert git(root, "rev-parse", f"fabrique/task-{first.id}")
+
+
+def observed_part(text):
+    return text.split("## Claimed by the producers (not observed)")[0]
 
 
 @pytest.mark.usefixtures("enforcement")
@@ -467,3 +508,274 @@ def test_the_status_reads_the_observations():
 def test_the_daemon_dockerfile_ships_the_module():
     dockerfile = Path(__file__).resolve().parents[2] / "vscode-daemon" / "Dockerfile"
     assert "sprint_integration.py" in dockerfile.read_text(encoding="utf-8")
+
+
+# --- review findings (PR #380) -----------------------------------------------
+
+
+def test_the_daemon_tests_a_worktree_a_later_integration_cannot_move(repo):
+    _deliver(repo, 1, {"a.py": "A = 1\n"})
+    first = sprint_integration.integrate(
+        str(repo), {"branch": "fabrique/sprint-8", "merge": ["fabrique/task-1"]}
+    )
+    _deliver(repo, 2, {"b.py": "B = 2\n"})
+    second = sprint_integration.integrate(
+        str(repo),
+        {
+            "branch": "fabrique/sprint-8",
+            "merge": ["fabrique/task-1", "fabrique/task-2"],
+        },
+    )
+
+    assert second["commit"] != first["commit"]
+    assert first["test_worktree"] != second["test_worktree"]
+    assert git(Path(second["test_worktree"]), "rev-parse", "HEAD") == second["commit"]
+    # The sprint branch's own worktree moved on; the snapshot is detached at its commit.
+    assert git(Path(second["worktree"]), "rev-parse", "HEAD") == second["commit"]
+    assert (
+        git(Path(second["test_worktree"]), "rev-parse", "--abbrev-ref", "HEAD")
+        == "HEAD"
+    )
+    assert second["sources"]["fabrique/task-2"] == git(
+        repo, "rev-parse", "fabrique/task-2"
+    )
+
+
+class _RacingDaemon(_Daemon):
+    """While the first suite runs, another integration moves the sprint branch."""
+
+    def __init__(self, root, task_id):
+        super().__init__()
+        self.root, self.task_id, self.heads = root, task_id, []
+
+    async def request(self, subject, payload, timeout=5.0):
+        if subject == "workspace.execute":
+            if not self.heads:
+                # Another integration moves the sprint branch and its worktree first.
+                _deliver(self.root, self.task_id, {"a2.py": "A2 = 2\n"})
+                branch = self.integrate_payload["branch"]
+                sprint_integration.integrate(str(self.root), self.integrate_payload)
+                self.moved_to = git(self.root, "rev-parse", branch)
+            self.heads.append(git(Path(payload["workspace_root"]), "rev-parse", "HEAD"))
+            await asyncio.sleep(0)
+        if subject == "workspace.git.integrate":
+            self.integrate_payload = payload
+        return await super().request(subject, payload, timeout)
+
+
+def test_concurrent_integrations_each_record_the_commit_they_tested(
+    sqlite_session, published_repo, suite
+):
+    root, _, _ = published_repo
+    _, sprint, first, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+    nats = _RacingDaemon(root, first.id)
+
+    async def twice():
+        return await asyncio.gather(
+            *(
+                integration.integrate(
+                    nats, engine, sprint.id, trigger="manual", requested_by="human:A"
+                )
+                for _ in range(2)
+            )
+        )
+
+    rows = asyncio.run(twice())
+
+    # The first attempt tested its own commit, not where the branch was moved to.
+    for row, head in zip(rows, nats.heads, strict=True):
+        assert row.tested_commit == row.commit == head
+    assert rows[0].commit != nats.moved_to == rows[1].commit
+
+
+def test_the_request_shows_the_runs_recorded_at_integration_not_later_ones(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    company, sprint, first, *_ = _two_done_tasks(sqlite_session, root)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    row = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+    recorded = row["tasks"][0]
+    assert recorded["run_id"] is not None and recorded["verification_id"] is not None
+    later = _run(
+        sqlite_session, company, first, "LATER CLAIM", ["z.py"], "refuted", version=2
+    )
+
+    text = test_client.post(
+        f"/v1/sprints/{sprint.id}/integration/publish"
+    ).json() and _published_body(test_client)
+
+    assert (
+        f"Run {recorded['run_id']}, verification {recorded['verification_id']}" in text
+    )
+    assert f"Run {later.id}" not in text
+    assert "LATER CLAIM" not in text and "z.py" not in text
+
+
+def _published_body(test_client):
+    nats = test_client.app.state.nats_client
+    [(_, spec)] = [r for r in nats.requests if r[0] == "workspace.git.publish"][-1:]
+    return spec["body"]
+
+
+DIFF = """diff --git a/c.py b/c.py
+new file mode 100644
+--- /dev/null
++++ b/c.py
+@@ -0,0 +1 @@
++c = 1
+"""
+
+
+def test_a_diff_the_producer_sent_is_a_claim_never_observed(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    company, sprint, _, second, _ = _two_done_tasks(sqlite_session, root)
+    # The second task's latest run: no files read back, only a diff it sent.
+    _run(sqlite_session, company, second, "Sent a diff", None, artifact=DIFF, version=2)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    assert test_client.post(f"/v1/sprints/{sprint.id}/integrate").status_code == 201
+
+    test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+    text = _published_body(test_client)
+
+    observed, claimed = text.split("## Claimed by the producers (not observed)")
+    assert "c.py" not in observed
+    assert f"Task {second.id}, files in the diff it sent: `c.py`" in claimed
+
+
+def test_an_unchanged_rerun_still_describes_every_task(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    _, sprint, first, second, _ = _two_done_tasks(sqlite_session, root)
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    test_client.post(f"/v1/sprints/{sprint.id}/integrate")
+
+    again = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+
+    assert again["merged"] == []
+    assert {t["state"] for t in again["tasks"]} == {"already_merged"}
+    test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+    text = _published_body(test_client)
+    assert f"### Task {first.id}: Constants" in text
+    assert f"### Task {second.id}: Use them" in text
+    assert "already in" in text
+
+
+def test_a_done_task_without_its_branch_makes_the_integration_incomplete(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    company, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    branchless = _task(sqlite_session, sprint, "Never on a branch")
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+
+    row = test_client.post(f"/v1/sprints/{sprint.id}/integrate").json()
+
+    assert row["status"] == "incomplete"
+    assert [t["state"] for t in row["tasks"] if t["task_id"] == branchless.id] == [
+        "missing"
+    ]
+    inbox = test_client.get("/v1/inbox", params={"company_id": company.id}).json()
+    [waiting] = inbox["integrations"]
+    assert (waiting["status"], waiting["missing_task_ids"]) == (
+        "incomplete",
+        [branchless.id],
+    )
+    refused = test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+    assert refused.status_code == 409 and "missing" in refused.json()["detail"]
+
+
+def test_the_inbox_counts_every_waiting_integration_beyond_the_limit(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    monkeypatch.setattr(
+        settings,
+        "DELIVERY_TEST_COMMAND",
+        f'{shlex.quote(sys.executable)} -c "import sys; sys.exit(1)"',
+    )
+    company, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    other = Sprint(company_id=company.id, sprint_name="Two", status="completed")
+    sqlite_session.add(other)
+    sqlite_session.commit()
+    task = _task(sqlite_session, other, "More")
+    _deliver(root, task.id, {"m.py": "m = 1\n"})
+    monkeypatch.setattr(test_client.app.state, "nats_client", _Daemon())
+    for sprint_id in (sprint.id, other.id):
+        assert (
+            test_client.post(f"/v1/sprints/{sprint_id}/integrate").json()["status"]
+            == "tests_failed"
+        )
+
+    inbox = test_client.get(
+        "/v1/inbox", params={"company_id": company.id, "limit": 1}
+    ).json()
+
+    assert len(inbox["integrations"]) == 1
+    assert inbox["integrations_total"] == 2
+    assert inbox["total"] == inbox["blocked_total"] + 2
+
+
+def test_an_integration_the_daemon_missed_at_close_is_pending_and_retried(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    company, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+    nats = _Daemon()
+    nats.offline = True
+
+    async def close_then_retry():
+        integration.schedule_after_close(nats, engine, sprint.id)
+        await asyncio.gather(*list(integration._RUNNING))
+        return await integration.retry_pending(nats, engine)
+
+    assert asyncio.run(close_then_retry()) == 1  # still offline: tried again
+    with Session(engine) as session:
+        pending = integration.latest(session, sprint.id)
+        assert (pending.status, pending.details["attempts"]) == ("pending", 2)
+        assert pending.commit is None
+    inbox = test_client.get("/v1/inbox", params={"company_id": company.id}).json()
+    assert [(i["status"], i["reason"]) for i in inbox["integrations"]] == [
+        ("pending", "the workspace daemon did not answer")
+    ]
+    refused = test_client.post(f"/v1/sprints/{sprint.id}/integration/publish")
+    assert refused.status_code == 409
+
+    nats.offline = False
+    assert asyncio.run(integration.retry_pending(nats, engine)) == 1
+    with Session(engine) as session:
+        done = integration.latest(session, sprint.id)
+    assert (done.status, done.trigger) == ("tests_passed", "sprint_closed")
+    assert asyncio.run(integration.retry_pending(nats, engine)) == 0
+    inbox = test_client.get("/v1/inbox", params={"company_id": company.id}).json()
+    assert inbox["integrations"] == []
+
+
+def test_a_daemon_that_refuses_at_close_leaves_an_error_for_a_person(
+    sqlite_session, test_client, published_repo, suite, monkeypatch
+):
+    root, _, _ = published_repo
+    company, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    engine = sqlite_session.get_bind()
+
+    class _Refusing(_Daemon):
+        async def request(self, subject, payload, timeout=5.0):
+            return {"error": {"status": 409, "message": "fatal: bad base"}}
+
+    async def close():
+        integration.schedule_after_close(_Refusing(), engine, sprint.id)
+        await asyncio.gather(*list(integration._RUNNING))
+
+    asyncio.run(close())
+
+    inbox = test_client.get("/v1/inbox", params={"company_id": company.id}).json()
+    assert [(i["status"], i["reason"]) for i in inbox["integrations"]] == [
+        ("error", "fatal: bad base")
+    ]
+    # An error is not retried on its own: a person integrates again.
+    assert asyncio.run(integration.retry_pending(_Refusing(), engine)) == 0

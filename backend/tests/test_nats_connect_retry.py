@@ -154,4 +154,11 @@ def test_health_reports_nats_state(test_client):
     body = test_client.get("/health").json()
     assert body["status"] == "healthy"
     assert "timestamp" in body
-    assert body["nats"] == "connected"
+    assert body["nats"]["state"] == "connected"
+    assert set(body["nats"]) == {
+        "state",
+        "connected",
+        "jetstream",
+        "authenticated",
+        "tls",
+    }
