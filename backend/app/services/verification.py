@@ -5,6 +5,7 @@ from models.agent_run import AgentRun, Verification
 from sqlmodel import Session
 
 from services import (
+    app_check,
     context_read,
     criteria_tests,
     mcp_tools,
@@ -413,6 +414,9 @@ def verify_agent_run(
         sandbox_check = sandbox.check_sandbox(evidence)
         if sandbox_check:
             checks.append(sandbox_check)
+    # The dependency install, the application started and probed, and its
+    # e2e run (``services/app_check.py``), as the daemon reported them.
+    checks.extend(app_check.checks(evidence))
     if evidence and evidence.get("acceptance"):
         # The acceptance tests per criterion (``services.acceptance``): what the
         # observed run said of this task's criteria, and that an implementation

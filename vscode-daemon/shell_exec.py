@@ -27,6 +27,19 @@ IS_WINDOWS = os.name == "nt"
 # DELIVERY_TEST_TIMEOUT_SECONDS (130s) so this side, not the NATS client,
 # reports the timeout and the caller learns the command hung.
 COMMAND_TIMEOUT_SECONDS = 120
+# The longest a request may ask for (``timeout_seconds``): a dependency
+# install takes longer than a test run, never without a bound.
+MAX_COMMAND_TIMEOUT_SECONDS = 900
+
+
+def bounded_timeout(requested: Any) -> int:
+    """The request's ``timeout_seconds`` within 1 and the maximum; the
+    default when it names none (or nothing readable)."""
+    try:
+        seconds = int(float(requested))
+    except (TypeError, ValueError):
+        return COMMAND_TIMEOUT_SECONDS
+    return min(max(seconds, 1), MAX_COMMAND_TIMEOUT_SECONDS)
 
 
 def build_command_env() -> dict[str, str]:
@@ -88,7 +101,7 @@ def summarize_command_result(command: str, result: dict[str, Any]) -> str:
 
 
 def execute_shell_command(
-    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None
+    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None, timeout: Any = None
 ) -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 
@@ -99,6 +112,7 @@ def execute_shell_command(
                  daemon's ``FABRIQUE_COMMAND_DENY``, a command the policy
                  refuses is not run (``command_policy.py``) and the result
                  says ``refused`` with the reason.
+        timeout: The request's ``timeout_seconds`` (``bounded_timeout``).
 
     Returns:
         Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
@@ -107,6 +121,7 @@ def execute_shell_command(
         captured before the kill, so the caller can tell "hung" from "ran and
         failed".
     """
+    seconds = bounded_timeout(timeout)
     refused = command_policy.refusal(command, policy)
     if refused:
         logger.warning(f"Not running {command!r}: {refused}")
@@ -120,12 +135,10 @@ def execute_shell_command(
         try:
             box = sandbox_runner.normalize(sandbox)
             if box["mode"] != "host":
-                return sandbox_runner.run_sandboxed(
-                    command, cwd, sandbox, COMMAND_TIMEOUT_SECONDS
-                )
+                return sandbox_runner.run_sandboxed(command, cwd, sandbox, seconds)
         except sandbox_runner.SandboxUnavailable as exc:
             return {"success": False, "error": f"sandbox unavailable: {exc}"}
-        result = execute_shell_command(command, cwd)
+        result = execute_shell_command(command, cwd, timeout=seconds)
         result["sandbox"] = sandbox_runner.report(box)
         return result
     logger.info(f"Executing: {command} in {cwd}")
@@ -137,7 +150,7 @@ def execute_shell_command(
             env=build_command_env(),
             capture_output=True,
             text=True,
-            timeout=COMMAND_TIMEOUT_SECONDS,
+            timeout=seconds,
         )
         return {
             "success": result.returncode == 0,
@@ -151,8 +164,8 @@ def execute_shell_command(
             "stdout": e.output or "",
             "stderr": e.stderr or "",
             "timed_out": True,
-            "timeout_seconds": COMMAND_TIMEOUT_SECONDS,
-            "error": f"command timed out after {COMMAND_TIMEOUT_SECONDS}s",
+            "timeout_seconds": seconds,
+            "error": f"command timed out after {seconds}s",
         }
     except Exception as e:  # noqa: BLE001 - a command that cannot start must not kill the daemon
         return {"success": False, "error": str(e)}

@@ -19,7 +19,7 @@ from typing import Any
 
 from config import settings
 
-from services import criteria_tests
+from services import criteria_tests, stack_profiles
 
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
@@ -220,7 +220,7 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
     }
 
 
-_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+_NPM_DEFAULT_TEST = stack_profiles.NPM_DEFAULT_TEST
 
 
 async def detect_project_test_command(
@@ -353,14 +353,39 @@ async def run_delivery_tests(
     sprint: dict[str, Any],
     evidence: dict[str, Any],
     engine: Any = None,
+    application: bool = True,
+) -> None:
+    """Install the dependencies when a manifest changed, run the project's
+    tests, then (opt-in) start the application and probe it, each through the
+    daemon (``services/app_check.py``); every result goes on *evidence*.
+    ``application=False`` runs the tests alone (a sprint's integration, whose
+    status reads only the test run)."""
+    from services import app_check
+
+    ctx = app_check.Context(nats_client, sprint, evidence, engine)
+    await app_check.install_if_needed(ctx)
+    await _run_tests(nats_client, sprint, evidence, engine, ctx)
+    if application:
+        await app_check.check_application(ctx)
+
+
+async def _run_tests(
+    nats_client: Any,
+    sprint: dict[str, Any],
+    evidence: dict[str, Any],
+    engine: Any,
+    ctx: Any,
 ) -> None:
     """Run the project's tests through the daemon and add the result to *evidence*:
     ``test_run`` (command, exit code, output tail) and ``ci``, the shape
-    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
+    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's.
+    The command is the resolved stack profile's (``app_check.Context.test_command``):
+    the company's, the deployment's, or the detected one; an empty one in the
+    company's profile turns the tests off."""
     workspace_root = evidence["workspace_root"]
-    command = await detect_project_test_command(nats_client, workspace_root)
+    command, reason = await ctx.test_command()
     if not command:
-        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        evidence["test_run"] = {"command": None, "reason": reason}
         return
     if evidence.get("acceptance"):
         # Per-test lines, so the criteria's tests can be told apart.
