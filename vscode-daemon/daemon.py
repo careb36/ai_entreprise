@@ -38,7 +38,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import delivery_journal
 import file_diff
+import file_edits
 import file_hash
 import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
@@ -48,9 +50,7 @@ import platform_reviews
 import shell_exec
 import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-
-# Old private names kept so the handlers read as before; the logic is in shell_exec.
-_build_command_env = shell_exec.build_command_env
+_build_command_env = shell_exec.build_command_env  # Old private names; the logic is in shell_exec.
 _build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
 
@@ -108,17 +108,11 @@ def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     """
-    Write a list of files to the workspace directory, creating parent dirs as needed.
+    Write *files* (``path`` with ``content``, or ``edits``: ``file_edits.py``) under the workspace.
 
-    Args:
-        workspace_path: Absolute path to the workspace root.
-        files:          List of dicts with ``path`` (relative) and ``content`` keys.
-
-    Returns:
-        One dict per file: ``path`` (as requested), ``status`` (``written``,
-        ``skipped_protected`` or ``rejected``) and, for written files,
-        ``absolute_path``, ``bytes`` and ``sha256`` of the bytes read back from
-        disk after writing — an observation, not an echo of the request.
+    One report per file: ``status`` (``written``, ``skipped_protected``,
+    ``rejected``, ``rejected_edit`` or ``rejected_syntax`` with ``error``) and,
+    when written, ``bytes`` and the ``sha256`` read back from disk: an observation.
     """
     results = []
     workspace_root = Path(workspace_path).expanduser()
@@ -134,7 +128,6 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
     for file_info in files:
         requested = file_info.get("path", "")
         target_path = _resolve_target_path(workspace_path, requested)
-        content = file_info.get("content", "")
         overwrite_existing = bool(file_info.get("overwrite_existing") or file_info.get("safe_replace"))
 
         if not target_path or target_path == workspace_root:
@@ -147,6 +140,10 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             logger.warning("Skipped protected document overwrite: %s", target_path)
             continue
 
+        content, extra = file_edits.resolve_content(target_path, file_info)
+        if content is None:  # A refused edit or a file that does not parse.
+            results.append({"path": requested, "absolute_path": str(target_path), **extra})
+            continue
         os.makedirs(target_path.parent, exist_ok=True)
         before = file_diff.read_previous(target_path)
         with open(target_path, "w", encoding="utf-8", newline="") as f:
@@ -159,6 +156,7 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
             "bytes": len(on_disk),
             "sha256": hashlib.sha256(on_disk).hexdigest(),
             **file_diff.describe_change(requested, before, on_disk),
+            **extra,
         })
         logger.info(f"File written: {target_path}")
     return file_diff.cap_reply(results)
@@ -570,7 +568,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
         await msg.term()
         return
     workspace_path = job.get("workspace_root") or ""
-    response = await asyncio.to_thread(deliver_files, workspace_path, job.get("files") or [], job.get("git"))
+    response = await asyncio.to_thread(delivery_journal.once, job.get("job_id"), lambda: deliver_files(workspace_path, job.get("files") or [], job.get("git")))
     result = {
         **response,
         "job_id": job.get("job_id"),
@@ -585,11 +583,12 @@ async def process_queued_delivery(nc, js, msg) -> None:
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
-    except Exception as e:  # noqa: BLE001 - Retry the job; writing again is idempotent.
+    except Exception as e:  # noqa: BLE001 - Retry; the journal replays the response, edits apply once.
         logger.warning("Could not report queued delivery %s (%s); will retry", job.get("job_id"), e)
         await msg.nak(delay=10)
         return
     await msg.ack()
+    delivery_journal.forget(job.get("job_id"))
     logger.info("Queued delivery %s: %s", job.get("job_id"), _delivery_summary(response))
     if job.get("sprint_id") is not None:
         await _publish_glassroom_status(nc, job["sprint_id"], f"{_delivery_summary(response)} (queued delivery)")

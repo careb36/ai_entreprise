@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services import edit_blocks
+
 ALL = "*"
 PO, ARCHITECT, DEVELOPER, QA, SCRUM_MASTER = (
     "PO",
@@ -423,13 +425,15 @@ def unpinned_in(path: str, content: str) -> list[str]:
 
         try:
             data = json.loads(content)
-        except ValueError:
-            return found
-        for section in ("dependencies", "devDependencies"):
-            for dep, version in (data.get(section) or {}).items():
-                v = str(version).strip()
-                if v in ("", "*", "latest") or v.startswith((">", "<")):
-                    found.append(f"{dep}@{v or '*'}")
+            pairs = {}
+            for section in ("dependencies", "devDependencies"):
+                pairs.update(data.get(section) or {})
+        except (ValueError, AttributeError):
+            pairs = edit_blocks.json_dependency_pairs(content)  # An edit's fragment.
+        for dep, version in pairs.items():
+            v = str(version).strip()
+            if v in ("", "*", "latest") or v.startswith((">", "<")):
+                found.append(f"{dep}@{v or '*'}")
     return found[:10]
 
 
@@ -446,9 +450,10 @@ def check_files(files: list[dict[str, str]]) -> dict[str, Any]:
     code = [f["path"] for f in files if _is_code(f["path"])]
     tests = [f["path"] for f in files if _is_test(f["path"])]
     for f in files:
-        secrets += secrets_in(f["path"], f["content"])
-        todos += todos_in(f["path"], f["content"])
-        unpinned += unpinned_in(f["path"], f["content"])
+        text = edit_blocks.scanned_text(f)
+        secrets += secrets_in(f["path"], text)
+        todos += todos_in(f["path"], text)
+        unpinned += unpinned_in(f["path"], text)
     findings: list[dict[str, str]] = []
     if secrets:
         findings += [

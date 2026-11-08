@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 
 from config import settings
 
-from services import mcp_tools
+from services import edit_blocks, mcp_tools
 from services.research_registries import (
     ECOSYSTEMS,
     OSV_ECOSYSTEMS,
@@ -528,7 +528,7 @@ def packages_in(files: list[dict[str, Any]]) -> dict[str, set[str]]:
     found: dict[str, set[str]] = {"pypi": set(), "npm": set()}
     for file in files:
         path = str(file.get("path") or "")
-        content = str(file.get("content") or "")
+        content = edit_blocks.scanned_text(file)
         base = path.rsplit("/", 1)[-1].lower()
         if base.startswith("requirements") and base.endswith(".txt"):
             for line in content.splitlines():
@@ -548,8 +548,8 @@ def packages_in(files: list[dict[str, Any]]) -> dict[str, set[str]]:
         elif base == "package.json":
             try:
                 doc = json.loads(content)
-            except ValueError:
-                continue
+            except ValueError:  # An edit's fragment: the pairs that look like versions.
+                doc = {"dependencies": edit_blocks.json_dependency_pairs(content)}
             for key in ("dependencies", "devDependencies"):
                 for dep in (doc.get(key) or {}) if isinstance(doc, dict) else {}:
                     found["npm"].add(str(dep).lower())

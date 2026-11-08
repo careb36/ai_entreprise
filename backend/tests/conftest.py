@@ -99,6 +99,14 @@ def no_nats_namespace(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def daemon_state_in_tmp(monkeypatch, tmp_path):
+    """The daemon's delivery journal (``vscode-daemon/delivery_journal.py``)
+    writes under ``FABRIQUE_DAEMON_STATE``; each test gets its own, never
+    the developer's home."""
+    monkeypatch.setenv("FABRIQUE_DAEMON_STATE", str(tmp_path / "daemon-state"))
+
+
+@pytest.fixture(autouse=True)
 def no_scrum_master_proxy(monkeypatch):
     """The ScrumMaster's triage of a blocked task never reaches a real proxy.
 
