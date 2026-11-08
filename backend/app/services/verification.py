@@ -435,13 +435,17 @@ def verify_agent_run(
         # The sources the run consulted (``services/research_tools.py``) and
         # the dependencies it named without a registry lookup; a record.
         sources = research_tools.check_sources(
-            evidence, _declared_files(run.artifact_text)
+            evidence,
+            _declared_files(run.artifact_text) + context_read.edited_texts(evidence),
         )
         if sources:
             checks.append(sources)
     # The factory's standards over the files the deliverable declares
     # (``services.standards``): a secret refutes, the rest is for the reviewer.
-    standards_check = standards.check_delivery(run.artifact_text)
+    # The edit tool's files too: what the delivery wrote for them (an observation).
+    standards_check = standards.check_delivery(
+        run.artifact_text, context_read.edited_texts(evidence)
+    )
     if standards_check:
         checks.append(standards_check)
     # SecOps scans (``services/secops_checks``): dependency audit, secret scan,

@@ -107,8 +107,28 @@ def finish(box: Any) -> None:
         box.finish_error = f"{type(exc).__name__}: {exc}"
         logger.warning("Could not finish the workspace edits: %s", exc)
         return
+    # The files to deliver, and the ones the daemon left alone (someone saved
+    # them meanwhile, or their path now leads elsewhere): kept to report.
     box.edited_files = [
-        f for f in reply.get("files") or [] if isinstance(f, dict) and f.get("changed")
+        f
+        for f in reply.get("files") or []
+        if isinstance(f, dict) and (f.get("changed") or f.get("error"))
+    ]
+    for f in box.edited_files:
+        if f.get("error"):
+            logger.warning("Edit of %s not delivered: %s", f.get("path"), f["error"])
+
+
+def delivered(edited: Any) -> list[dict[str, Any]]:
+    """The edited files a delivery writes: changed, with the daemon's text."""
+    return [
+        f
+        for f in edited or []
+        if isinstance(f, dict)
+        and f.get("changed")
+        and not f.get("error")
+        and isinstance(f.get("path"), str)
+        and isinstance(f.get("content"), str)
     ]
 
 
@@ -119,9 +139,41 @@ def with_tool_edits(targets: list[dict[str, Any]], edited: Any) -> list[dict[str
     have = {t["path"] for t in targets}
     extra = [
         {"path": f["path"], "content": f["content"], "source": "workspace_edit"}
-        for f in edited or []
-        if isinstance(f, dict)
-        and isinstance(f.get("content"), str)
-        and f.get("path") not in have
+        for f in delivered(edited)
+        if f["path"] not in have
     ]
     return list(targets) + extra
+
+
+def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
+    """The tool loop's observations onto the run's evidence, apart from the
+    claims: the calls (``tool_calls``), the edited files' texts as the daemon
+    read them back (``tool_edit_files``, scanned by the standards check and
+    read back by the acceptance guard) and the edits it left alone
+    (``tool_edit_conflicts``). Updates *evidence* in place, so a later
+    re-verification of the same delivery keeps them."""
+    calls, edits = agent.get("tool_calls"), agent.get("tool_edits") or []
+    files = [
+        {"path": f["path"], "content": f["content"], "sha256": f.get("sha256")}
+        for f in delivered(edits)
+    ]
+    conflicts = [
+        {
+            "path": f.get("path"),
+            "error": f["error"],
+            "conflict": bool(f.get("conflict")),
+        }
+        for f in edits
+        if isinstance(f, dict) and f.get("error")
+    ]
+    if not (calls or files or conflicts):
+        return evidence
+    evidence = evidence if isinstance(evidence, dict) else {}
+    for key, value in (
+        ("tool_calls", calls),
+        ("tool_edit_files", files),
+        ("tool_edit_conflicts", conflicts),
+    ):
+        if value:
+            evidence[key] = value
+    return evidence

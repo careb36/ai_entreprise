@@ -110,7 +110,7 @@ from services.sprint_planner import (
 )
 from services.verification import evaluate_workspace_writes, verify_agent_run
 from services.workspace_daemon import detect_test_command
-from services.workspace_edits import with_tool_edits
+from services.workspace_edits import delivered, observe_tools, with_tool_edits
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -613,10 +613,12 @@ def _consult_architect(
 
 
 def _validate_minimum_deliverable(
-    item: dict[str, Any], deliverable: str
+    item: dict[str, Any], deliverable: str, tool_edits: Any = None
 ) -> tuple[bool, str]:
-    """Apply lightweight quality checks before sending output to QA review."""
+    """Light checks before QA review; edit-tool files make the prose a summary."""
     text = (deliverable or "").strip()
+    if delivered(tool_edits) and text.count("```") % 2 == 0:
+        return True, "ok"
     if not text:
         return False, "Empty output from agent"
 
@@ -1683,10 +1685,8 @@ def _record_task_run(
         artifact=deliverable or "",
         finished_at=datetime.now(UTC),
     )
-    # The MCP tool calls the backend made for the producer are observations
-    # too; they go with the daemon's report, never with the claims.
-    if agent.get("tool_calls"):
-        evidence = {**(evidence or {}), "tool_calls": agent["tool_calls"]}
+    # Tool calls and edited files: observations beside the daemon's, not claims.
+    evidence = observe_tools(evidence, agent)
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)
@@ -2407,7 +2407,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 return
 
             is_valid, validation_reason = _validate_minimum_deliverable(
-                item, deliverable
+                item, deliverable, agent.get("tool_edits")
             )
             if not is_valid:
                 reason = _gate_reason(validation_reason, agent.get("finish_reason"))

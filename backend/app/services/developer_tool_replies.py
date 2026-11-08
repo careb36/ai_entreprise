@@ -32,8 +32,16 @@ def list_text(reply: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def read_text(path: str, reply: dict[str, Any]) -> str:
-    """The window of numbered lines, headed with where it sits in the file."""
+# Room kept for the header and the continuation lines around a window.
+WINDOW_FRAME_CHARS = 240
+
+
+def read_text(path: str, reply: dict[str, Any], max_chars: int | None = None) -> str:
+    """The window of numbered lines, headed with where it sits in the file.
+
+    With *max_chars* (the toolbox's result budget) the window is cut at whole
+    lines before the range is stated, so the header names the lines shown and
+    the continuation points at the first one left out."""
     if reply.get("binary"):
         return f"(binary file, {reply.get('bytes')} bytes: not shown)"
     total = int(reply.get("lines") or 0)
@@ -48,18 +56,30 @@ def read_text(path: str, reply: dict[str, Any]) -> str:
             f"[{path}: start_line {first} is past the {total} lines read of this "
             "large file; search it instead]"
         )
-    body = context_read.redact_secrets(path, str(reply.get("text") or ""))
+    span = last - first + 1
+    rows = context_read.redact_secrets(path, str(reply.get("text") or "")).split("\n")
+    if max_chars:
+        room, kept = max(max_chars - WINDOW_FRAME_CHARS, 80), []
+        for row in rows:
+            if sum(len(r) + 1 for r in kept) + len(row) + 1 > room:
+                break
+            kept.append(row)
+        if not kept:  # One line longer than the budget: its head, said so.
+            kept = [rows[0][: room - 12] + " [line cut]"]
+        rows = kept
+        last = first + len(rows) - 1
     out = [f"[{path}: lines {first}–{last} of {of}]"]
     if first > 1:
-        back = max(1, first - (last - first + 1))
-        out.append(f"[lines 1–{first - 1} above; start_line={back} goes back]")
-    out.append(body)
-    if last < total or reply.get("lines_indexed_to_byte"):
+        out.append(
+            f"[lines 1–{first - 1} above; start_line={max(1, first - span)} goes back]"
+        )
+    out += rows
+    if last < total:
         out.append(
             f"[{total - last} more lines below; read on with start_line={last + 1}]"
-            if last < total
-            else "[the rest of the file is beyond what is read; search it instead]"
         )
+    elif reply.get("lines_indexed_to_byte"):
+        out.append("[the rest of the file is beyond what is read; search it instead]")
     return "\n".join(out)
 
 

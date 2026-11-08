@@ -60,6 +60,22 @@ def files_edited(tool_calls: Any) -> set[str]:
     }
 
 
+def edited_texts(evidence: Any) -> list[dict[str, str]]:
+    """The files the edit tool changed, as the daemon read them back when the
+    tool loop finished (``tool_edit_files`` on the evidence): what the
+    delivery wrote for them, beside the answer's files."""
+    files = (
+        (evidence or {}).get("tool_edit_files") if isinstance(evidence, dict) else None
+    )
+    return [
+        {"path": f["path"], "content": f["content"]}
+        for f in files or []
+        if isinstance(f, dict)
+        and isinstance(f.get("path"), str)
+        and isinstance(f.get("content"), str)
+    ]
+
+
 def check_context_read(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     """The Verifier's ``context_read`` check: of the files the delivery
     modified (the daemon says which existed before), which the Developer had

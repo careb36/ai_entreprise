@@ -260,7 +260,10 @@ def test_an_edit_that_breaks_the_syntax_is_refused_and_the_file_is_untouched(
     )
     # Nothing was kept for a refused edit: only notes.txt has an original.
     assert [
-        f["path"] for f in workspace_edit.finish(str(project), SESSION)["files"]
+        f["path"]
+        for f in workspace_edit.finish(
+            str(project), SESSION, daemon._resolve_target_path
+        )["files"]
     ] == ["src/notes.txt"]
 
 
@@ -334,7 +337,7 @@ def test_finish_hands_back_the_final_texts_and_puts_the_originals_back(
     )
     _edit(daemon, project, path="src/notes.txt", search="one", replace="uno")
     _edit(daemon, project, path="src/notes.txt", search="uno", replace="one")
-    done = workspace_edit.finish(str(project), SESSION)
+    done = workspace_edit.finish(str(project), SESSION, daemon._resolve_target_path)
     by_path = {f["path"]: f for f in done["files"]}
     assert "VERSION = 4" in by_path["src/greet.py"]["content"]
     assert by_path["src/greet.py"]["changed"] is True
@@ -342,7 +345,12 @@ def test_finish_hands_back_the_final_texts_and_puts_the_originals_back(
     assert by_path["src/notes.txt"]["changed"] is False
     assert all(f["restored"] for f in done["files"])
     assert {p: p.read_bytes() for p in originals} == originals
-    assert workspace_edit.finish(str(project), SESSION)["files"] == []
+    assert (
+        workspace_edit.finish(str(project), SESSION, daemon._resolve_target_path)[
+            "files"
+        ]
+        == []
+    )
     # A session edits at most EDIT_MAX_FILES files.
     monkeypatch.setattr(workspace_edit, "EDIT_MAX_FILES", 1)
     _edit(daemon, project, path="src/notes.txt", search="one", replace="1")
@@ -351,7 +359,7 @@ def test_finish_hands_back_the_final_texts_and_puts_the_originals_back(
             daemon, project, path="src/greet.py", search="VERSION = 1", replace="V = 1"
         )
     assert limit.value.status == 409
-    workspace_edit.finish(str(project), SESSION)
+    workspace_edit.finish(str(project), SESSION, daemon._resolve_target_path)
 
 
 def test_the_daemon_answers_the_edit_subjects_over_nats(project, daemon):
@@ -443,7 +451,7 @@ class _Requester:
             if subject == "workspace.edit":
                 return workspace_edit.edit_file(root, payload, resolve)
             if subject == "workspace.edit.finish":
-                return workspace_edit.finish(root, payload.get("session"))
+                return workspace_edit.finish(root, payload.get("session"), resolve)
         except workspace_read.ReadError as exc:
             raise developer_tools.DaemonReplyError(exc.message) from exc
         raise AssertionError(subject)
@@ -667,3 +675,235 @@ def test_the_history_check_refuses_an_edit_recorded_without_its_hashes():
     assert facts(edit | {"sha256_before": "aa", "sha256_after": "bb"}) == []
     assert facts(edit | {"sha256_before": "aa"}) == ["src/a.py"]
     assert facts(edit | {"is_error": True}) == []
+
+
+# --- review findings on PR #381 ----------------------------------------------
+
+
+def test_finish_never_follows_a_folder_swapped_for_a_symlink(project, daemon, tmp_path):
+    """After an edit, ``src`` becomes a symlink to a folder outside the
+    project: finish reads nothing there, writes nothing there, and keeps the
+    original in the journal."""
+    _edit(daemon, project, path="src/notes.txt", search="two", replace="2")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "notes.txt").write_text("private\n")
+    (project / "src").rename(project / "src_moved")
+    (project / "src").symlink_to(outside, target_is_directory=True)
+    done = workspace_edit.finish(str(project), SESSION, daemon._resolve_target_path)
+    [report] = done["files"]
+    assert report["content"] is None and report["changed"] is False
+    assert "no longer leads" in report["error"] and report["restored"] is False
+    assert (outside / "notes.txt").read_text() == "private\n"
+    journal = workspace_edit.state_dir() / SESSION
+    assert (journal / "manifest.json").is_file() and (
+        journal / "0.orig"
+    ).read_text() == "one\ntwo\n"
+    assert workspace_edits.delivered([report]) == []
+
+
+def test_a_file_saved_by_someone_after_an_edit_is_kept_and_not_delivered(
+    project, daemon
+):
+    notes = project / "src" / "notes.txt"
+    _edit(daemon, project, path="src/notes.txt", search="two", replace="2")
+    notes.write_text("one\nthe person's own line\n")
+    with pytest.raises(workspace_read.ReadError) as later:
+        _edit(daemon, project, path="src/notes.txt", search="one", replace="1")
+    assert later.value.status == 409 and "outside the edit tool" in later.value.message
+    done = workspace_edit.finish(str(project), SESSION, daemon._resolve_target_path)
+    [report] = done["files"]
+    assert report["conflict"] is True and report["content"] is None
+    assert notes.read_text() == "one\nthe person's own line\n"
+    assert (workspace_edit.state_dir() / SESSION / "0.orig").read_text() == "one\ntwo\n"
+    # Not delivered, and recorded apart on the evidence.
+    agent = {"tool_calls": [], "tool_edits": [report]}
+    evidence = workspace_edits.observe_tools({"workspace_writes": []}, agent)
+    assert "tool_edit_files" not in evidence
+    assert evidence["tool_edit_conflicts"] == [
+        {"path": "src/notes.txt", "error": report["error"], "conflict": True}
+    ]
+    assert workspace_edits.with_tool_edits([], [report]) == []
+
+
+def test_a_window_cut_by_the_budget_names_the_lines_shown_and_where_to_go_on(
+    project, daemon
+):
+    (project / "src" / "wide.py").write_text(
+        "".join(f"x_{i} = '{'y' * 60}'\n" for i in range(150))
+    )
+    box = developer_tools.WorkspaceToolbox(
+        _Requester(daemon), str(project), result_max_chars=1200
+    )
+    observation, text = box.call(_call("workspace__read", path="src/wide.py"), 1)
+    lines = text.splitlines()
+    shown = [line for line in lines if not line.startswith("[")]
+    last = len(shown)
+    assert 0 < last < 100 and observation["truncated"] is False
+    assert len(text) <= 1200
+    assert lines[0] == f"[src/wide.py: lines 1–{last} of 150]"
+    assert shown[-1].startswith(f"{last:5d}| ")
+    assert lines[-1] == (
+        f"[{150 - last} more lines below; read on with start_line={last + 1}]"
+    )
+    (project / "src" / "one.py").write_text("z = '" + "w" * 3000 + "'\n")
+    _obs, text = box.call(_call("workspace__read", path="src/one.py"), 2)
+    assert "[line cut]" in text and len(text) <= 1200
+
+
+def test_the_minimum_deliverable_gate_counts_the_edited_files():
+    item = {"title": "Bump the version", "description": "x"}
+    edited = [{"path": "src/a.py", "content": "V = 2\n", "changed": True}]
+    assert task_worker._validate_minimum_deliverable(item, "Done.", edited) == (
+        True,
+        "ok",
+    )
+    assert task_worker._validate_minimum_deliverable(item, "", edited) == (True, "ok")
+    assert task_worker._validate_minimum_deliverable(item, "Done.")[0] is False
+    # An edit left alone (a conflict) is no delivery.
+    conflict = [{"path": "src/a.py", "error": "changed", "changed": False}]
+    assert (
+        task_worker._validate_minimum_deliverable(item, "Done.", conflict)[0] is False
+    )
+
+
+def test_a_secret_written_through_the_edit_tool_refutes_the_delivery(sqlite_session):
+    from services.verification import verify_agent_run
+
+    run = AgentRun(
+        company_id=1,
+        external_ref="task-secret",
+        producer="le-fabrique-task-worker",
+        claims={"files": ["src/keys.py"]},
+        artifact_text="Added the client.",
+        artifact_digest="d",
+        artifact_size=17,
+    )
+    sqlite_session.add(run)
+    sqlite_session.commit()
+    secret = 'API_KEY = "sk-abcdefghijklmnopqrstuvwxyz1234"\n'
+    evidence = workspace_edits.observe_tools(
+        {
+            "workspace_root": "/p",
+            "expected": {},
+            "workspace_writes": [
+                {
+                    "path": "src/keys.py",
+                    "status": "written",
+                    "sha256": "aa",
+                    "change": "modified",
+                }
+            ],
+        },
+        {
+            "tool_calls": [
+                {
+                    "server": "workspace",
+                    "tool": "edit",
+                    "path": "src/keys.py",
+                    "sha256_before": "00",
+                    "sha256_after": "aa",
+                    "read_only": False,
+                }
+            ],
+            "tool_edits": [
+                {
+                    "path": "src/keys.py",
+                    "content": secret,
+                    "sha256": "aa",
+                    "changed": True,
+                }
+            ],
+        },
+    )
+    verification = verify_agent_run(sqlite_session, run, evidence)
+    checks = {c["name"]: c for c in verification.checks}
+    assert checks["standards"]["outcome"] == "refuted"
+    assert verification.verdict == "refuted"
+    # Re-verifying the same delivery keeps the edited files: they live on the evidence.
+    again = verify_agent_run(sqlite_session, run, dict(verification.evidence))
+    assert {c["name"]: c for c in again.checks}["standards"]["outcome"] == "refuted"
+
+
+def test_qa_tests_written_with_the_edit_tool_can_be_restored(
+    sqlite_session, monkeypatch
+):
+    from services import acceptance
+
+    company = Company(company_name="Restore Co")
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    sprint = Sprint(company_id=company.id, sprint_name="S", scope_size="S")
+    sqlite_session.add(sprint)
+    sqlite_session.commit()
+    task = BacklogItem(
+        sprint_id=sprint.id, title="Tests", kind="acceptance_tests", status="done"
+    )
+    sqlite_session.add(task)
+    sqlite_session.commit()
+    run = AgentRun(
+        company_id=company.id,
+        external_ref=f"task-{task.id}",
+        producer="le-fabrique-task-worker",
+        claims={"files": ["tests/test_req_1.py"]},
+        artifact_text="Wrote the test with the edit tool.",
+        artifact_digest="d",
+        artifact_size=34,
+    )
+    sqlite_session.add(run)
+    sqlite_session.commit()
+    body = "def test_req_1_1():\n    assert False\n"
+    sqlite_session.add(
+        Verification(
+            company_id=company.id,
+            agent_run_id=run.id,
+            verdict="verified",
+            checks=[],
+            evidence={
+                "tool_edit_files": [
+                    {"path": "tests/test_req_1.py", "content": body, "sha256": "x"}
+                ]
+            },
+        )
+    )
+    sqlite_session.commit()
+    sources = acceptance.test_sources_of(
+        sqlite_session.get_bind(), sprint.id, ["tests/test_req_1.py", "tests/other.py"]
+    )
+    assert sources == {"tests/test_req_1.py": body}
+
+
+def test_a_javascript_check_that_cannot_complete_refuses_the_edit(
+    project, daemon, monkeypatch
+):
+    import subprocess
+
+    script = project / "src" / "app.js"
+    script.write_text("const a = 1;\n")
+    monkeypatch.setattr(workspace_edit.shutil, "which", lambda name: "/usr/bin/node")
+
+    def hang(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], 15)
+
+    monkeypatch.setattr(workspace_edit.subprocess, "run", hang)
+    with pytest.raises(workspace_read.ReadError) as refused:
+        _edit(daemon, project, path="src/app.js", start_line=1, new_text="const a = 2;")
+    assert refused.value.status == 422 and "could not complete" in refused.value.message
+    assert script.read_text() == "const a = 1;\n"
+    # Without node at all the edit goes unchecked, and says so.
+    monkeypatch.setattr(workspace_edit.shutil, "which", lambda name: None)
+    assert (
+        _edit(
+            daemon, project, path="src/app.js", start_line=1, new_text="const a = 2;"
+        )["checked"]
+        is None
+    )
+
+
+def test_appending_after_a_last_line_without_a_newline_keeps_the_lines_apart(
+    project, daemon
+):
+    tail = project / "src" / "tail.txt"
+    tail.write_text("a\nb")
+    _edit(daemon, project, path="src/tail.txt", start_line=3, end_line=2, new_text="c")
+    assert tail.read_text() == "a\nb\nc\n"

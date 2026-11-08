@@ -238,7 +238,7 @@ class WorkspaceToolbox:
                 }
             )
             return developer_tool_replies.read_text(
-                str(arguments.get("path") or ""), reply
+                str(arguments.get("path") or ""), reply, self.result_max_chars
             )
         if tool in ("search", developer_tool_schemas.FIND):
             subject = "workspace.search" if tool == "search" else "workspace.find"
