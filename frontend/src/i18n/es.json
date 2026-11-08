@@ -25,7 +25,8 @@
     "github": "GitHub",
     "helpDesk": "Mesa de ayuda",
     "procedures": "Procedimientos",
-    "specifications": "Especificaciones"
+    "specifications": "Especificaciones",
+    "models": "Modelos"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1954,9 +1955,55 @@
   },
   "models": {
     "title": "Modelos",
-    "subtitle": "Modelos con los que corren los agentes de la empresa.",
-    "suggestions": "Sugerencias",
-    "none": "ninguno",
-    "modelsCount": "modelos"
+    "subtitle": "Los proveedores a los que llegan los agentes de tu empresa y los modelos con los que corren. El modelo propio de un agente, en la página Agentes, sigue teniendo prioridad.",
+    "noCompany": "Elegí una empresa primero.",
+    "connections": {
+      "title": "Conexiones con proveedores",
+      "subtitle": "Conectá los proveedores que usan tus agentes, con la clave de tu empresa. Validar lista los modelos del proveedor con la clave y no gasta tokens.",
+      "none": "Todavía no hay proveedores conectados.",
+      "off": "apagada",
+      "validate": "Validar",
+      "turnOff": "Apagar",
+      "turnOn": "Encender",
+      "removeNamed": "Quitar {{name}}",
+      "confirmRemove": "¿Quitar la conexión {{name}}? Los agentes que usan sus modelos pasan a la siguiente opción.",
+      "validated_one": "Validada: el proveedor listó {{count}} modelo",
+      "validated_other": "Validada: el proveedor listó {{count}} modelos",
+      "failed": "La validación falló: {{detail}}",
+      "notValidated": "Todavía sin validar",
+      "add": "Conectar un proveedor",
+      "provider": "Proveedor",
+      "providerPlaceholder": "deepseek, openrouter, ollama…",
+      "openaiCompatible": "Cualquier endpoint compatible con OpenAI",
+      "name": "Nombre",
+      "namePlaceholder": "por defecto, el del proveedor",
+      "baseUrl": "URL base",
+      "baseUrlPlaceholder": "obligatoria para un endpoint compatible con OpenAI",
+      "apiKey": "Clave de API",
+      "keyNote": "La clave se guarda cifrada y no se vuelve a mostrar. Los servidores locales (Ollama, LM Studio, vLLM) no necesitan clave.",
+      "connect": "Conectar"
+    },
+    "choices": {
+      "title": "Modelos por rol",
+      "subtitle": "El modelo con el que corre cada rol cuando su agente no tiene uno propio. Si acá no se elige nada, se usa la configuración de la instalación.",
+      "useSuggestions": "Usar las sugerencias",
+      "noConnections": "Conectá y validá un proveedor para elegir entre sus modelos.",
+      "default": "Modelo por defecto de la empresa",
+      "deploymentDefault": "El de la instalación",
+      "companyDefault": "El de la empresa",
+      "role": "Rol",
+      "model": "Modelo",
+      "runs": "Corre ahora con",
+      "suggested": "Sugerido: {{model}}",
+      "suggestedGroup": "Sugeridos",
+      "others": "Otros",
+      "current": "Actual",
+      "saved": "Guardado.",
+      "source": {
+        "role": "elegido para este rol",
+        "company": "el de la empresa",
+        "deployment": "el de la instalación"
+      }
+    }
   }
 }
