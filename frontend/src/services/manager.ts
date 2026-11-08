@@ -8,7 +8,8 @@ import { api, type Inbox, type InboxBlockedTask } from './api'
 /** One inbox item the Manager agent looked at. A suggestion is a claim. */
 export interface ManagerDecision {
   id: number
-  item_kind: 'task' | 'procedure' | 'run'
+  /** task, procedure, run, task_branch, integration, publication, delivery, specification, architecture, …_questions or sprint. */
+  item_kind: string
   item_id: number
   category: string
   /** Empty: its answer was unusable and the item is left to the client. */
@@ -25,9 +26,15 @@ export interface ManagerDecision {
   overridden_at: string | null
 }
 
+/** A blocked task with the Manager agent's suggestion, and its carry-over mark (the policy's carry_over rule). */
+export type InboxTaskWithManager = InboxBlockedTask & {
+  suggestion?: ManagerDecision | null
+  marked_for_carry_over?: boolean
+}
+
 /** The inbox with the Manager agent's suggestions and decisions, when it is on. */
 export type InboxWithManager = Omit<Inbox, 'blocked_tasks'> & {
-  blocked_tasks: (InboxBlockedTask & { suggestion?: ManagerDecision | null })[]
+  blocked_tasks: InboxTaskWithManager[]
   agent_decisions?: ManagerDecision[]
 }
 
@@ -58,7 +65,48 @@ export interface ManagerRecord {
   flagged_rules: string[]
 }
 
+/** The rule names a policy may carry; each is off until a Manager names it. */
+export const MANAGER_RULES = [
+  'accept_delivery',
+  'adopt_procedure',
+  'approve_run',
+  'merge_local',
+  'undo_delivery',
+  'send_back_blocked',
+  'carry_over',
+  'answer_question',
+  'publish',
+  'resume_after_credit',
+  'approve_specification',
+  'approve_architecture',
+  'accept_high_risk',
+] as const
+
+/** `GET /v1/companies/{id}/manager_policy`: what the agent may decide alone. */
+export interface ManagerPolicy {
+  company_id: number
+  rules: string[]
+  max_files: number
+  max_criteria: number
+  max_files_high_risk: number
+  publish_enabled: boolean
+  updated_by: string | null
+  updated_at: string | null
+  /** Every rule the backend knows, with what it needs to hold. */
+  catalogue: Record<string, string>
+  /** Decisions no policy can hand to the agent. */
+  always_escalate: string[]
+}
+
+export type ManagerPolicyUpdate = Pick<
+  ManagerPolicy,
+  'rules' | 'max_files' | 'max_criteria' | 'max_files_high_risk' | 'publish_enabled'
+>
+
 export const managerApi = {
+  policy: (companyId: number) => api.get<ManagerPolicy>(`/v1/companies/${companyId}/manager_policy`),
+  savePolicy: (companyId: number, data: ManagerPolicyUpdate) =>
+    api.put<ManagerPolicy>(`/v1/companies/${companyId}/manager_policy`, data),
   record: (companyId: number) => api.get<ManagerRecord>(`/v1/manager_record?company_id=${companyId}`),
   override: (decisionId: number) =>
     api.post<{ id: number; outcome: string }>(`/v1/manager_decisions/${decisionId}/override`, {}),
@@ -70,6 +118,25 @@ export function useManagerRecord(companyId: number | null) {
     queryKey: ['manager-record', companyId ?? 0] as const,
     queryFn: () => managerApi.record(companyId!),
     enabled: companyId !== null,
+  })
+}
+
+export function useManagerPolicy(companyId: number | null) {
+  return useQuery({
+    queryKey: ['company', companyId ?? 0, 'manager-policy'] as const,
+    queryFn: () => managerApi.policy(companyId!),
+    enabled: companyId !== null,
+  })
+}
+
+export function useSaveManagerPolicy(companyId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ManagerPolicyUpdate) => managerApi.savePolicy(companyId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['company', companyId, 'manager-policy'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-record'] })
+    },
   })
 }
 

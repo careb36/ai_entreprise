@@ -2051,6 +2051,36 @@
     "recordAgreed": "coincidió con tu decisión {{agreed}} de {{decided}}",
     "recordOverridden": "revertidas {{overridden}} de {{taken}} tomadas solo ({{rate}})",
     "recordFlagged": "Marcadas, no se aplican: {{rules}}",
-    "requestLabel": "Tu pedido, con tus palabras"
+    "requestLabel": "Tu pedido, con tus palabras",
+    "policy": {
+      "title": "Lo que el agente Manager puede decidir solo",
+      "hint": "Cada regla está apagada hasta que la marques. Cada una decide con lo que la plataforma observó, nunca con el modelo; podés revertir cualquier decisión que tome.",
+      "strictTitle": "Reglas estrictas",
+      "strictHint": "Aprobaciones y aceptaciones de alto riesgo: leen más hechos y quedan apagadas salvo que las enciendas.",
+      "publishEnabled": "La publicación está encendida: la regla de publicar puede subir ramas al remoto",
+      "alwaysYours": "Siempre tuyas, diga lo que diga la política: {{decisions}}",
+      "saveError": "No se pudo guardar la política: {{message}}",
+      "save": "Guardar la política",
+      "limits": {
+        "max_files": "Archivos como máximo",
+        "max_criteria": "Criterios como máximo",
+        "max_files_high_risk": "Archivos como máximo en una entrega de alto riesgo"
+      },
+      "rules": {
+        "accept_delivery": "Aceptar una entrega retenida solo por el nivel de autonomía 1",
+        "adopt_procedure": "Adoptar un procedimiento propuesto (nivel de autonomía 3)",
+        "approve_run": "Aprobar la ejecución verificada de un productor externo",
+        "merge_local": "Fusionar localmente la rama de una tarea hecha, o una integración que pasa",
+        "undo_delivery": "Deshacer una entrega refutada desde su instantánea",
+        "send_back_blocked": "Devolver una tarea bloqueada que el ScrumMaster reintenta",
+        "carry_over": "Marcar una tarea bloqueada para el próximo sprint",
+        "answer_question": "Responder una pregunta de un borrador que un documento aprobado ya responde",
+        "publish": "Publicar la rama de una tarea hecha",
+        "resume_after_credit": "Reanudar un sprint pausado por falta de crédito",
+        "approve_specification": "Aprobar una especificación que el control no bloquea",
+        "approve_architecture": "Aprobar una arquitectura que cubre todos los requisitos",
+        "accept_high_risk": "Aceptar una entrega de alto riesgo con todas las pruebas de criterio en verde"
+      }
+    }
   }
 }

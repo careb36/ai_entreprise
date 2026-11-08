@@ -2051,6 +2051,36 @@
     "recordAgreed": "matched your decision {{agreed}} of {{decided}}",
     "recordOverridden": "overridden {{overridden}} of {{taken}} taken alone ({{rate}})",
     "recordFlagged": "Flagged, not applied: {{rules}}",
-    "requestLabel": "Your request, in plain words"
+    "requestLabel": "Your request, in plain words",
+    "policy": {
+      "title": "What the Manager agent may decide alone",
+      "hint": "Every rule is off until you tick it. Each one decides from what the platform observed, never from the model; you can override any decision it takes.",
+      "strictTitle": "Strict rules",
+      "strictHint": "Approvals and high-risk acceptances: they read more facts and stay off unless you turn them on.",
+      "publishEnabled": "Publishing is on: the publish rule may push branches to the remote",
+      "alwaysYours": "Always yours, whatever the policy says: {{decisions}}",
+      "saveError": "Could not save the policy: {{message}}",
+      "save": "Save the policy",
+      "limits": {
+        "max_files": "Files at most",
+        "max_criteria": "Criteria at most",
+        "max_files_high_risk": "Files at most for a high-risk delivery"
+      },
+      "rules": {
+        "accept_delivery": "Accept a delivery held only by autonomy level 1",
+        "adopt_procedure": "Adopt a proposed procedure (autonomy level 3)",
+        "approve_run": "Approve an outside producer's verified run",
+        "merge_local": "Merge a done task's branch, or a passing integration, locally",
+        "undo_delivery": "Undo a refuted delivery from its snapshot",
+        "send_back_blocked": "Send back a blocked task the ScrumMaster retries",
+        "carry_over": "Mark a blocked task for the next sprint",
+        "answer_question": "Answer a draft's question an approved document already answers",
+        "publish": "Publish a done task's branch",
+        "resume_after_credit": "Resume a sprint paused for lack of credit",
+        "approve_specification": "Approve a specification the check does not block",
+        "approve_architecture": "Approve an architecture that covers every requirement",
+        "accept_high_risk": "Accept a high-risk delivery with every criterion test passing"
+      }
+    }
   }
 }
