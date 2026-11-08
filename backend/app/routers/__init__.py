@@ -17,6 +17,7 @@ from routers.github import router as github_router
 from routers.inbox import router as inbox_router
 from routers.mcp import router as mcp_router
 from routers.messages import router as messages_router
+from routers.model_settings import router as model_settings_router
 from routers.procedures import router as procedures_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
@@ -38,6 +39,7 @@ __all__ = [
     "inbox_router",
     "mcp_router",
     "messages_router",
+    "model_settings_router",
     "procedures_router",
     "providers_router",
     "reviews_router",
