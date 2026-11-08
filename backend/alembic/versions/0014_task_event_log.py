@@ -1,7 +1,7 @@
 """The task event log: actor, cause, status, chain; events backfilled from threads (issue #324).
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-11-08 22:00:00 UTC
 
 Adds to ``task_events`` what an event of a task's life carries (``actor``,
@@ -31,8 +31,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0013"
-down_revision = "0012"
+revision = "0014"
+down_revision = "0013"
 branch_labels = None
 depends_on = None
 

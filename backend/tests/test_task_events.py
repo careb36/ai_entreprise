@@ -745,7 +745,7 @@ def test_the_migration_backfills_events_and_marks_what_it_cannot_read(
     config = migrations.alembic_config()
     with engine.begin() as connection:
         config.attributes["connection"] = connection
-        command.upgrade(config, "0012")
+        command.upgrade(config, "0013")
     with engine.begin() as connection:
         connection.execute(
             text(
