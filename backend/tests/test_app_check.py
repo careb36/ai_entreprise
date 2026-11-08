@@ -1134,7 +1134,7 @@ def test_the_integration_runs_the_tests_alone(sqlite_session, tmp_path, monkeypa
             daemon,
             sqlite_session.get_bind(),
             {"sprint_id": None, "company_id": company.id},
-            str(tmp_path),
+            {"test_worktree": str(tmp_path), "commit": "abc"},
         )
     )
     assert test_run["exit_code"] == 0

@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     # default: each run costs an LLM call.
     REVIEWER_AGENT_ENABLED: bool = False
     REVIEWER_AGENT_INTERVAL_SECONDS: float = 60.0
+    # A run with no verification yet waits this long, so a producer that
+    # verifies right after ingesting is judged with the Verifier's verdict.
+    REVIEWER_VERIFY_GRACE_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
     # MCP tools (``services/mcp_tools.py``): how many rounds of tool calls a

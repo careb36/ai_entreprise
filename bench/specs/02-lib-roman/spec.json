@@ -1,0 +1,60 @@
+{
+  "title": "Roman numerals",
+  "summary": "A small library that converts integers to Roman numerals and back, in the standard subtractive notation, from 1 to 3999.",
+  "requirements": [
+    {
+      "title": "Write a Roman numeral",
+      "description": "romannum.to_roman(n: int) -> str returns the numeral in upper case, subtractive notation (IV, IX, XL, XC, CD, CM).",
+      "criteria": [
+        {
+          "given": "the integers 1, 4, 42, 1994 and 3999",
+          "when": "to_roman is called with each",
+          "then": "it returns I, IV, XLII, MCMXCIV and MMMCMXCIX"
+        },
+        {
+          "given": "an integer outside 1 to 3999, such as 0, -1 or 4000",
+          "when": "to_roman is called with it",
+          "then": "it raises ValueError"
+        }
+      ]
+    },
+    {
+      "title": "Read a Roman numeral",
+      "description": "romannum.from_roman(s: str) -> int reads a numeral written in upper case, standard notation.",
+      "criteria": [
+        {
+          "given": "the numerals I, IV, XLII, MCMXCIV and MMMCMXCIX",
+          "when": "from_roman is called with each",
+          "then": "it returns 1, 4, 42, 1994 and 3999"
+        },
+        {
+          "given": "a text that is not a numeral in standard notation, such as IIII, IC, ABC or an empty text",
+          "when": "from_roman is called with it",
+          "then": "it raises ValueError"
+        }
+      ]
+    },
+    {
+      "title": "Convert both ways without loss",
+      "description": "Writing a number and reading it back gives the number again.",
+      "criteria": [
+        {
+          "given": "every integer from 1 to 3999",
+          "when": "it is written with to_roman and read back with from_roman",
+          "then": "the result is the integer itself"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "converting all 3999 numbers both ways takes under 1 second"
+    }
+  ],
+  "constraints": [
+    "Python 3.11 or later, standard library only.",
+    "The package is romannum/ at the project root: romannum/__init__.py defines to_roman and from_roman.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}
