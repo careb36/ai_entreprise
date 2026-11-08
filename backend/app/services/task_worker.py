@@ -45,9 +45,11 @@ from services import (
     edit_blocks,
     git_workflow,
     integration,
+    locks,
     mcp_tools,
     model_routing,
     procedures,
+    replicas,
     retrospective,
     review_digest,
     risk,
@@ -835,49 +837,6 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
         return changed
 
 
-def _recover_inflight_items_for_restart() -> list[dict[str, Any]]:
-    """Return unfinished in-progress work to todo so the worker can resume after restart."""
-    recovered: list[dict[str, Any]] = []
-
-    with Session(engine) as session:
-        inflight_items = session.exec(
-            select(BacklogItem).where(BacklogItem.status == "in_progress")
-        ).all()
-
-        for item in inflight_items:
-            comments = item.comments or []
-            if isinstance(comments, str):
-                try:
-                    comments = json.loads(comments)
-                except Exception:  # noqa: BLE001 - Malformed legacy comments fall back to an empty list.
-                    comments = []
-
-            if has_manual_freeze_marker(comments):
-                task_events.record(session, item, "blocked", "system", status="blocked")
-                continue
-
-            task_events.record(
-                session,
-                item,
-                "recovered",
-                "system",
-                status="todo",
-                text="Worker recovery after backend restart — unfinished in-progress task returned to todo for redispatch.",
-            )
-            recovered.append(
-                {
-                    "id": item.id,
-                    "sprint_id": item.sprint_id,
-                    "title": item.title,
-                    "assignee": item.assignee or "Dev",
-                }
-            )
-
-        session.commit()
-
-    return recovered
-
-
 def _coerce_json_dict(value: Any) -> dict[str, Any]:
     """Decode a JSON object stored either as dict or JSON string."""
     if isinstance(value, dict):
@@ -932,8 +891,8 @@ def _complete_sprint_and_plan_follow_up(
             session.commit()
             return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
 
-        sprint.status = "completed"
-        session.add(sprint)
+        if not replicas.mark_completed(session, sprint):
+            return {"completed": False, "auto_opened": False, "reason": "not_active"}
 
         result = {
             "completed": True,
@@ -1130,8 +1089,12 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     # Build retrospective metrics before closing so the planner can use them.
     retro_metrics = await asyncio.to_thread(_build_sprint_retrospective, sprint_id)
 
-    result = await asyncio.to_thread(
-        _complete_sprint_and_plan_follow_up, sprint_id, retro_metrics
+    result = await asyncio.to_thread(  # once across replicas (issue #328)
+        replicas.close_once,
+        engine,
+        sprint_id,
+        _complete_sprint_and_plan_follow_up,
+        retro_metrics,
     )
     if not result.get("completed"):
         return
@@ -1420,35 +1383,41 @@ def _triage_blocked_task(
     The prompt is read and the decision written in two short sessions, so no
     database connection waits while the model answers. The decision names the
     escalation it answers (*escalation_id*), so a late answer is never read
-    against a newer escalation.
+    against a newer escalation. On Postgres the escalation's advisory lock
+    keeps one idle connection while the model answers.
     """
     try:
-        with Session(engine) as session:
-            item = session.get(BacklogItem, item_id)
-            if item is None:
+        # Once per escalation, even with several replicas (issue #328).
+        with replicas.triage_slot(engine, item_id, escalation_id) as mine:
+            if not mine:
                 return
-            task_events.escalated(session, item, escalation_id, reason)
-            session.commit()
-            assignee = item.assignee
-            prompt, model, system_prompt = scrum_master.prepare_triage(
-                session, company_id, item, reason
-            )
-        decision = scrum_master.decide(
-            scrum_master.ask_triage(model, system_prompt, prompt, company_id), item_id
-        )
-        if decision is None:
-            return
-        with Session(engine) as session:
-            scrum_master.record_decision(
-                session,
-                company_id,
-                sprint_id,
+            with Session(engine) as session:
+                item = session.get(BacklogItem, item_id)
+                if item is None:
+                    return
+                task_events.escalated(session, item, escalation_id, reason)
+                session.commit()
+                assignee = item.assignee
+                prompt, model, system_prompt = scrum_master.prepare_triage(
+                    session, company_id, item, reason
+                )
+            decision = scrum_master.decide(
+                scrum_master.ask_triage(model, system_prompt, prompt, company_id),
                 item_id,
-                assignee,
-                decision,
-                answers=escalation_id,
             )
-            session.commit()
+            if decision is None:
+                return
+            with Session(engine) as session:
+                scrum_master.record_decision(
+                    session,
+                    company_id,
+                    sprint_id,
+                    item_id,
+                    assignee,
+                    decision,
+                    answers=escalation_id,
+                )
+                session.commit()
     except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
         logger.warning("ScrumMaster triage not recorded for item=%s: %s", item_id, exc)
 
@@ -2117,19 +2086,18 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             # A task that waits for others is queued once they are done.
             if not await asyncio.to_thread(dependencies.ready, engine, item["id"]):
                 return
-            # Guard against duplicate task.assign events for the same item.
-            if item.get("status") != "todo":
+            # Guard against duplicate task.assign events for the same item: one
+            # replica claims it, with a conditional update from todo (issue #328),
+            # recorded as its ``claimed`` event (issue #324).
+            if item.get("status") != "todo" or not await asyncio.to_thread(
+                replicas.claim_todo, engine, item["id"]
+            ):
                 logger.info(
                     "Skipping duplicate assignment for item=%s with status=%s",
                     item["id"],
                     item.get("status"),
                 )
                 return
-
-            # 2. Mark as in_progress and notify glassroom.
-            await asyncio.to_thread(
-                _update_item_status, item["id"], "in_progress", kind="claimed"
-            )
 
             await publish_glassroom(
                 nats_client,
@@ -2538,10 +2506,17 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     developer_tools.bind(
         nats_client, asyncio.get_running_loop(), _resolve_workspace_root
     )
+
+    async def _on_task_assign_held(msg, data=None):
+        # Held while this replica works on the task: a restarting one leaves it alone.
+        with replicas.task_lock(engine, (data or {}).get("backlog_item_id")) as mine:
+            if mine:
+                await _on_task_assign(msg, data)
+
     await nats_client.consume(
         "task.assign",
         TASK_ASSIGN_CONSUMER,
-        _on_task_assign,
+        _on_task_assign_held,
         ack_wait_seconds=TASK_ASSIGN_ACK_WAIT_SECONDS,
     )
     logger.info("Task Worker consuming task.assign")
@@ -2553,25 +2528,6 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     if nats_client.jetstream_enabled:
         await nats_client.consume(
             "workspace.delivered", DELIVERY_RESULTS_CONSUMER, _on_delivered
-        )
-
-    recovered_items = await asyncio.to_thread(_recover_inflight_items_for_restart)
-    for recovered in recovered_items:
-        await publish_glassroom(
-            nats_client,
-            recovered["sprint_id"],
-            {
-                "type": "status",
-                "semantic_type": "task.recovered",
-                "source": "task_worker",
-                "agent": "System",
-                "role": "System",
-                "task_id": recovered.get("id"),
-                "task_status": "todo",
-                "phase": "restart_recovery",
-                "task": recovered["title"],
-                "message": f"♻️ Recovered after backend restart: {recovered['title']} returned to todo for autonomous redispatch.",
-            },
         )
 
     await _review_cycle(nats_client)
@@ -2587,6 +2543,14 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
 
 async def _review_cycle(nats_client: NATSClient) -> None:
+    """One replica at a time runs the review cycle; the others skip the round (issue #328)."""
+    with locks.held(engine, locks.REVIEW_CYCLE) as mine:
+        if mine:  # a dead replica's tasks first, so the dispatch below queues them
+            await replicas.recover_stale(engine, nats_client)
+            await _review_cycle_body(nats_client)
+
+
+async def _review_cycle_body(nats_client: NATSClient) -> None:
     """
     Periodic cycle that advances the sprint board:
     - ``in_review`` items get reviewed by QA and moved to ``done``.

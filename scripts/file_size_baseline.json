@@ -4,12 +4,12 @@
   "backend/app/services/console_assistants.py": 617,
   "backend/app/services/discovery_service.py": 767,
   "backend/app/services/sprint_planner.py": 859,
-  "backend/app/services/task_worker.py": 3383,
+  "backend/app/services/task_worker.py": 3347,
   "frontend/src/components/GlassRoom.tsx": 1494,
   "frontend/src/pages/AgentSettings.tsx": 1188,
   "frontend/src/pages/CompanyNew.tsx": 1242,
   "frontend/src/services/api.ts": 1093,
   "llm-proxy/app.py": 661,
   "scripts/verify_infra.py": 722,
-  "vscode-daemon/daemon.py": 664
+  "vscode-daemon/daemon.py": 663
 }

@@ -3,9 +3,10 @@ import i18n from 'i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PublishBranch } from './PublishBranch'
 import { ApiError } from '../services/api'
-import { type ReviewComment, type RunPublication, usePublishRun, useReviewComments, useRunPublications, useSyncComments } from '../services/runReviews'
+import { type ReviewComment, type RunPublication, useMergeRun, usePublishRun, useReviewComments, useRunPublications, useSyncComments } from '../services/runReviews'
 
 vi.mock('../services/runReviews', () => ({
+  useMergeRun: vi.fn(),
   usePublishRun: vi.fn(),
   useRunPublications: vi.fn(),
   useReviewComments: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock('../services/runReviews', () => ({
 }))
 
 const publish = vi.fn()
+const merge = vi.fn()
 const sync = vi.fn()
 
 const FROM_GITHUB: ReviewComment = {
@@ -31,9 +33,11 @@ const PULL_REQUEST: RunPublication = {
 function setup({
   publications = [] as RunPublication[], mutation = {} as Record<string, unknown>, canPublish = true,
   comments = [] as ReviewComment[], syncState = {} as Record<string, unknown>, shownPaths = [] as string[],
+  mergeState = {} as Record<string, unknown>,
 } = {}) {
   vi.mocked(useRunPublications).mockReturnValue({ data: { publications } } as never)
   vi.mocked(usePublishRun).mockReturnValue({ mutate: publish, isPending: false, isError: false, ...mutation } as never)
+  vi.mocked(useMergeRun).mockReturnValue({ mutate: merge, isPending: false, isError: false, ...mergeState } as never)
   vi.mocked(useReviewComments).mockReturnValue({ data: { comments } } as never)
   vi.mocked(useSyncComments).mockReturnValue({ mutate: sync, isPending: false, isError: false, isSuccess: false, ...syncState } as never)
   return render(<PublishBranch companyId={42} runId={7} branch="fabrique/task-7" canPublish={canPublish} shownPaths={shownPaths} />)
@@ -42,11 +46,33 @@ function setup({
 describe('publishing a run branch', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('lets a Manager publish the branch', () => {
+  it('lets a Manager publish the branch, as an option', () => {
     setup()
-    expect(screen.getByText(i18n.t('review.publish.hint', { branch: 'fabrique/task-7' }))).toBeInTheDocument()
+    const hint = `${i18n.t('review.publish.mergeHint', { branch: 'fabrique/task-7' })} ${i18n.t('review.publish.hint', { branch: 'fabrique/task-7' })}`
+    expect(screen.getByText(hint)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: i18n.t('review.publish.button') }))
     expect(publish).toHaveBeenCalled()
+    expect(merge).not.toHaveBeenCalled()
+  })
+
+  it('lets a Manager merge the branch locally, with no remote', () => {
+    setup()
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('review.publish.merge') }))
+    expect(merge).toHaveBeenCalled()
+    expect(publish).not.toHaveBeenCalled()
+  })
+
+  it('shows a local merge without a link or comments to bring', () => {
+    setup({ publications: [{ ...PULL_REQUEST, provider: null, url: null, how: 'local' }] })
+    expect(screen.getByText(i18n.t('review.publish.merged', { name: 'Ana', commit: 'abcdef0', branch: 'fabrique/task-7', base: 'main' }))).toBeInTheDocument()
+    expect(screen.getByText(i18n.t('review.publish.how.local'))).toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: i18n.t('review.publish.sync') })).not.toBeInTheDocument()
+  })
+
+  it('shows why the local merge was refused', () => {
+    setup({ mergeState: { isError: true, error: new ApiError(409, 'the merge conflicts in a.py; nothing was changed', 'the merge conflicts in a.py; nothing was changed') } })
+    expect(screen.getByRole('alert')).toHaveTextContent('conflicts in a.py')
   })
 
   it('links the request it opened, for everyone', () => {

@@ -15,7 +15,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
 - workspace.hash:         sha256 of named files as they are on disk (file_hash.py)
 - workspace.list / read / search / find, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, workspace_edit.py)
-- workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
+- workspace.git.publish / merge: push a branch and open its request (gh, glab), or merge it locally (local_merge.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
                           the result goes to workspace.delivered
@@ -46,8 +46,7 @@ import git_workspace
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats_connect
 import nats_scope
-import platform_reviews
-import sprint_integration
+import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
 import workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
@@ -642,7 +641,7 @@ async def main():
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS)),
-        ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
+        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
     ):
