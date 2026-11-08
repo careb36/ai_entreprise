@@ -12,9 +12,10 @@ observation of the provider, with when it ran and what it answered.
 """
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlalchemy import JSON, UniqueConstraint
+from sqlmodel import Column, Field, SQLModel
 
 
 class ProviderConnection(SQLModel, table=True):
@@ -35,6 +36,8 @@ class ProviderConnection(SQLModel, table=True):
     validated_at: datetime | None = None
     validation_ok: bool | None = None
     validation_detail: str | None = None
+    # The model ids the provider listed at its last successful validation.
+    listed_models: list[Any] | None = Field(default=None, sa_column=Column(JSON))
     created_by: str | None = None
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)
