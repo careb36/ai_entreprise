@@ -723,8 +723,11 @@ Test files:
 | `test_retention.py` | The janitor's retention over `sqlite3`: delivered outbox events go and pending or failed stay, a superseded run version goes with its verifications while the latest and one a person decided on stay, a decision recorded after the batch was picked keeps its run, a failing batch rolls back with the verifications in place, an autocommit connection refused, KPI turns outside the audit chain go and a chained one is never deleted (counted as kept), nor one a run points at, task events of closed sprints only, `0` keeps everything, settings from the environment with safe defaults |
 | `test_memory_graph.py` | The knowledge graph optional (issue #328): on by default; lineage answers `recorded: false` with the reason without asking Neo4j, and an enabled graph that fails is still a 500; the engram history and a client's graph reads raise `GraphNotRecorded` instead of answering empty; memory store and search on pgvector alone (the store reports `vector` and `graph`, an engram kept in pgvector with `graph: not_recorded`, the RAG context from pgvector alone), the memory routes through the API, a 503 naming `vector_memory` without pgvector; the company seed skips the graph; startup never asks Neo4j when it is off, keeps memory search when it is unreachable and connects it once Neo4j answers, giving up after the retry bound; `/health/deep` shows `neo4j` as `disabled` and stays healthy, and degrades only for an enabled graph that is down |
 | `test_capabilities.py` | `GET /v1/capabilities` is public and reports the optional features: `memory` (pgvector) and `memory_graph` (the knowledge graph, only while `NEO4J_ENABLED` and connected) apart |
+| `test_model_routing.py` | Difficulty routing: the estimate grows with criteria and rework, a band names its model, a proxy tier name never leaks as a model id, no policy falls back |
+| `test_routing_record.py` | Done, rework and cost by difficulty and model (issue #319): a task's facts read from the board (rework, a person's send-back, a second delivery not a first attempt), estimated and unavailable token counts never added, rows per difficulty and model with the policy's band, the record over completed sprints only with the model of the last delivery and the task's reported turns, another company's runs and turns left out, a Viewer reads it and an outsider does not |
+| `test_edit_plan.py` | Architect and editor mode (issue #319, A.10): the plan read only from its fixed format (prose, no `END`, a stray line, an absolute or `..` path are no plan); off, nothing changes; on, only for Developer tasks at or above the band, once per attempt; the plan goes into the Developer's prompt and the task runs on the policy's cheapest band model, a model a person chose kept, a policy of tier names naming none; through the worker the Architect is asked for a plan and the Developer applies it on the cheap model, or keeps the guidance on the routed model when the answer has no plan |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
-| `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema |
+| `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema; each entry splits its tasks by difficulty and model (`routing`, from `services/routing_record.py`), the card names its routing policy (`--policy`), schema v2 checks the split and still reads a v1 card, and two runs under different policies compare band by band |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
 the workspace daemon and a fake LLM proxy (`scripts/e2e/fake_llm.py`,
@@ -834,6 +837,13 @@ kept live in `bench/scorecards/`. `scripts/bench/compare.py` diffs a
 scorecard with the newest earlier one and exits 1 beyond a threshold
 (criteria, first attempts or blocked share by `--rate`, rework per task by
 `--rework`, reported tokens by `--tokens`, a spec that stopped completing).
+Each entry also splits its tasks by difficulty and the model of their last
+delivery (`routing`, the backend's `services/routing_record.py`), the card
+carries the routing policy's label (`write --policy`; `run.sh` passes
+`BENCH_POLICY`, else `AGENT_MODEL_POLICY`, which reaches the backend), schema
+v2 checks both and still reads a v1 card, and `compare.py` adds a table by
+difficulty (shown, not judged), so two runs under different policies compare
+band by band.
 By default the models are `scripts/bench/fake_llm.py`, which answers each
 spec from its `fake/` folder (the PO's plan, QA's tests, the Developer's
 files, every review approved), and the run fails unless every spec completes
@@ -924,6 +934,7 @@ The frontend test suite uses Vitest with Testing Library and jsdom. Run it from
 | `src/components/ReviewPanel.test.tsx` | Submitting a review (the decision picked, the text trimmed, how many line comments go with it), the backend's refusal shown, what a review did, the history, a Viewer reads only |
 | `src/lib/patch.test.ts` | A file's hunks as review rows with their old and new line numbers |
 | `src/pages/HelpDesk.test.tsx` | Help desk for support admins: filters, resolution required to close, logs download, the agent's suggestions beside the reporter's choice, an admin's decision on impact and category (only a decision changed in the form is sent, one put back as the ticket stores it is not, an empty one clears it, one another admin made meanwhile is kept, a ticket another admin resolved meanwhile is not reopened, and after a save the form follows what is stored), the list showing the decided impact or the reporter's marked as theirs, the Support agent's record with its unusable answers and the reporters who chose |
+| `src/components/RoutingRecord.test.tsx` | The Sprints page's difficulty and model table (issue #319): each difficulty with its policy band and model, first attempts, rework per task, blocked share and reported tokens, a task without a delivery, the turns without a reported count said apart; nothing before a sprint closed; the difficulty alone without a policy |
 | `src/pages/Models.test.tsx` | The Models page: a Viewer reads the connections and the models per role with nothing to change; only what a validated provider listed is offered, the suggestion in its own group; a Manager chooses models, takes the suggestions and saves them; a suggestion the company's record decided says so with its numbers; a Manager connects (a refusal shown, the catalogue's base URL as placeholder, the key sent and cleared), validates and removes a provider |
 | `src/viteConfig.test.ts` | Absolute asset base for the web build (deep links), relative only for Electron |
 | `src/store/agentStore.test.ts` | The Glassroom connection asks for a stream ticket on every connection, opens without one when none is needed or none could be had, and opens nothing once disconnected; an event the backend replays on a reconnection is shown once |
@@ -971,6 +982,33 @@ Developer, Architect consultation and QA review, and the Reviewer agent (its
 own entry, else QA's) all read it; difficulty routing (`AGENT_MODEL_POLICY`)
 refines only the deployment's default, never a model a person chose. A model
 may be one of the company's provider connections (`conn:<id>:<model>`).
+Difficulty routing (`services/model_routing.py`): `estimate_difficulty` is a
+1..5 function of the plan (criteria covered, the modules they map to, a
+rework), and `AGENT_MODEL_POLICY` maps bands (`{"bands": {"1-2": …, "3-5":
+…}}`) to models, a proxy tier name falling back to the role default.
+Whether it pays is counted, never claimed: `services/routing_record.py`
+splits the company's completed sprints by the difficulty each task was routed
+by (recomputed from its stored `covers` with no rework, the first attempt's
+input, so nothing new is stored and no migration was needed) and the model the
+proxy reported for its last delivery, with tasks, done, done at the first
+attempt (done, no `NEEDS WORK:`, no person's send-back, at most one
+delivery), rework per task, blocked share and the audit log's tokens of the
+turns whose usage the provider reported (estimated or unavailable turns are
+counted apart, never added); `GET /v1/companies/{id}/routing_record` (Viewer,
+`routers/model_settings.py`) serves it with the policy's band beside each
+row, and the Sprints page shows it beside the learning tiles
+(`components/RoutingRecord.tsx`, `services/routing.ts`). The bench records the
+same split per specification (below). **Architect and editor mode**
+(`services/edit_plan.py`, taken from Aider's architect/editor split), off
+unless `ARCHITECT_EDITOR_MODE=true`: a Developer task whose difficulty is at
+least `ARCHITECT_EDITOR_MIN_DIFFICULTY` (4) consults the Architect once per
+attempt, asking for an edit plan in a fixed format (`EDIT PLAN`, numbered
+`<relative path> — <what changes>` steps, `END`; `parse` reads nothing else
+and refuses an absolute or `..` path), and the Developer gets a readable plan
+as `## Edit plan to apply` and runs on the policy's cheapest band model
+(`model_routing.cheapest_model`, unless a person chose its model); an answer
+without a plan stays the Architect's guidance on the routed model. The plan is
+a claim, prompt context, never evidence.
 `GET /v1/companies/{id}/model_suggestions` (Viewer, `services/model_suggestions.py`)
 suggests one per role by a fixed rule over the catalogue (the deciding roles: a
 model that reasons and calls tools, largest context, then cheapest; Developer, QA

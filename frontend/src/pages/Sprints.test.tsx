@@ -6,6 +6,7 @@ import Sprints from './Sprints'
 import { api, type SprintSummary } from '../services/api'
 import { specificationsApi } from '../services/specifications'
 import { managerApi, type ManagerRecord } from '../services/manager'
+import { routingApi } from '../services/routing'
 import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 
@@ -35,6 +36,7 @@ describe('Sprints list', () => {
     // The planner lists the company's approved specifications; none here.
     vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
     vi.spyOn(managerApi, 'record').mockResolvedValue(EMPTY_RECORD)
+    vi.spyOn(routingApi, 'record').mockResolvedValue({ rows: [], tasks: 0, policy: null })
   })
   afterEach(() => {
     queryClient.clear()
