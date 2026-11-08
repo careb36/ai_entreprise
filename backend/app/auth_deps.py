@@ -44,7 +44,7 @@ def get_current_user(
             password_hash="",
         )
         synthetic._api_token_company_id = token.company_id  # type: ignore[attr-defined]
-        synthetic._api_token_role = "Manager"  # type: ignore[attr-defined]
+        synthetic._api_token_role = token.role or "Manager"  # type: ignore[attr-defined]
         return synthetic
 
     raise HTTPException(

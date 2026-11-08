@@ -95,6 +95,15 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- API tokens (`/v1/auth/tokens`, `services/api_tokens.py`, issue #327): a
+  Manager creates one per company, accepted beside the JWT, with a `role`
+  (`Viewer` by default, `Manager` at most, never above the creator's own) and
+  an expiry (`expires_in_days`, 90 by default, 1 to 365, or `null` for none);
+  only its sha256 is stored and the raw token is shown once. A revoked or
+  expired token is a 401, a token cannot create tokens (403), and a request
+  made with one acts as `api-token:<id>`, the name its audit rows carry.
+  Tokens from before roles (migration `0016`) act as a Manager and never
+  expire.
 - `SUPPORT_ADMIN_EMAILS` — optional, comma-separated account emails. Those users
   see and triage every support ticket and download the support logs (`/support`
   in the frontend, flagged by `support_admin` in `/v1/auth/me`); everyone else
@@ -626,7 +635,8 @@ Test files:
 | `test_inbox.py` | `GET /v1/inbox`: tasks blocked for a person (frozen included, retries excluded), proposals waiting, undecided runs, company scoping |
 | `test_carry_over.py` | A blocked task carried into the next sprint: `carry_over_ids` on `start_sprint`, the reason in the new task and its prompt, refusals (404/409, scope), the original leaves the inbox, the autonomy-3 follow-up carries once |
 | `test_scrum_master.py` | The ScrumMaster's triage of an escalation: the prompt, the fixed answer format, the decision recorded and read back, nothing recorded without a usable answer, the brief in the next attempt, a task left for a person not carried on the company's own, the second-attempt track record in the prompt, a send-back during the triage window makes the answer stale, a decision names the escalation it answers and is judged by it, `END` with a period or Windows line endings |
-| `test_migrations.py` | The schema's version (head `0015`): the migrations build the models' schema from nothing and `alembic check` finds no difference; a database from the old startup (tables present, columns and tables missing) is converged, not rebuilt, and a second run changes nothing; the backend refuses a database that is not at head naming both versions; `DB_AUTO_UPGRADE` runs the migrations at startup; one head |
+| `test_api_tokens.py` / `test_api_token_auth.py` | API tokens (issue #327): created, verified and revoked; a token acts with its role only (a Viewer token reads and cannot act as a Manager), never mints a token, no one mints one above their own role or an Owner token, the expiry bounded (1 to 365 days, or none), an expired token refused with a 401, a legacy token kept as a Manager without expiry; the listing never carries the token or its hash |
+| `test_migrations.py` | The schema's version (head `0016`): the migrations build the models' schema from nothing and `alembic check` finds no difference; a database from the old startup (tables present, columns and tables missing) is converged, not rebuilt, and a second run changes nothing; the backend refuses a database that is not at head naming both versions; `DB_AUTO_UPGRADE` runs the migrations at startup; one head |
 | `test_database_timezone.py` | The Postgres session is pinned to UTC, so aware datetimes in `timestamp` columns and the naive UTC text in board comments stay comparable |
 | `test_backlog_comments.py` | In-place appends to `BacklogItem.comments` are persisted |
 | `test_kickoff_failure.py` | A failed graph kickoff leaves the sprint active and its tasks running |
