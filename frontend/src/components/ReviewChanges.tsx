@@ -233,7 +233,7 @@ export function ReviewChanges({ companyId, runId, canComment = false }: { compan
             shownPaths={changes.files.filter(file => patchRows(file.patch).length > 0).map(file => file.path)} />
         )}
         {!changes.git && changes.snapshot && canComment && (
-          <UndoDelivery companyId={companyId} runId={runId} snapshot={changes.snapshot} />
+          <UndoDelivery key={`${companyId}-${runId}-${changes.snapshot.id}`} companyId={companyId} runId={runId} snapshot={changes.snapshot} />
         )}
         {changes.files.map(file => <FileCard key={`${file.old_path ?? ''}${file.path}`} file={file} />)}
       </LineReviewProvider>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import i18n from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -103,5 +104,29 @@ describe('undoing a delivery', () => {
     } as never)
     render(<ReviewChanges companyId={42} runId={7} canComment />)
     expect(screen.queryByRole('button', { name: i18n.t('review.undo.button') })).not.toBeInTheDocument()
+  })
+
+  it('starts afresh on another run, whatever the previous undo did', () => {
+    // A stateful stand-in for the mutation: its state lives as long as the component.
+    vi.mocked(useUndoDelivery).mockImplementation((() => {
+      const [isSuccess, setSuccess] = useState(false)
+      return {
+        mutate: () => setSuccess(true), isPending: false, isError: false, isSuccess,
+        data: { run_id: 7, snapshot: SNAPSHOT.id, restored: [{ path: 'app.py', sha256: 'b' }], removed: [], undone_by: 'Ana', audit_log_id: 1 },
+      }
+    }) as never)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(useRunChanges).mockReturnValue({ isLoading: false, isError: false, data: CHANGES } as never)
+    const { rerender } = render(<ReviewChanges companyId={42} runId={7} canComment />)
+    fireEvent.click(screen.getByRole('button', { name: i18n.t('review.undo.button') }))
+    expect(screen.getByRole('status')).toHaveTextContent(i18n.t('review.undo.done', { restored: 1, removed: 0 }))
+
+    vi.mocked(useRunChanges).mockReturnValue({
+      isLoading: false, isError: false,
+      data: { ...CHANGES, run_id: 8, snapshot: { ...SNAPSHOT, id: 'b'.repeat(32) } },
+    } as never)
+    rerender(<ReviewChanges companyId={42} runId={8} canComment />)
+    expect(screen.getByRole('button', { name: i18n.t('review.undo.button') })).toBeInTheDocument()
+    expect(screen.queryByText(i18n.t('review.undo.done', { restored: 1, removed: 0 }))).not.toBeInTheDocument()
   })
 })

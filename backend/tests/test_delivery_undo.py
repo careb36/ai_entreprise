@@ -11,8 +11,10 @@ in ``tmp_path``, in a folder that is not a repository and in one that is.
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,8 @@ from sqlmodel import select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 import delivery_snapshot
+import project_lock
+import workspace_edit
 from test_git_workflow import SPEC, _company, _member, daemon, enforcement, git  # noqa: F401
 from workspace_read import ReadError
 
@@ -193,6 +197,146 @@ def test_the_daemon_answers_workspace_undo_in_the_reply_shape(project):
     assert sent[0]["ok"] is True
     assert sent[1]["error"]["status"] == 409
     assert sent[2]["error"]["status"] == 400
+
+
+def test_a_file_written_with_the_same_bytes_is_not_in_the_snapshot(project):
+    reply = daemon.deliver_files(
+        str(project),
+        [{"path": "app.py", "content": "print('old')\n"}, *FILES[1:]],
+    )
+    assert [f["path"] for f in reply["snapshot"]["files"]] == ["pkg/sub/new.py"]
+    # A person's later edit of the file it did not change blocks nothing.
+    (project / "app.py").write_text("print('Ana')\n", encoding="utf-8")
+
+    undone = _undo(project, reply["snapshot"]["id"])
+
+    assert undone["removed"] == [{"path": "pkg/sub/new.py"}]
+    assert (project / "app.py").read_text() == "print('Ana')\n"
+
+
+def test_aliases_of_one_file_are_kept_once_with_the_last_write(project):
+    reply = daemon.deliver_files(
+        str(project),
+        [
+            {"path": "app.py", "content": "print('first')\n"},
+            {"path": "./app.py", "content": "print('last')\n"},
+        ],
+    )
+    [entry] = reply["snapshot"]["files"]
+    assert entry["path"] == "app.py"
+    assert entry["after_sha256"] == reply["files"][-1]["sha256"]
+
+    _undo(project, reply["snapshot"]["id"])
+
+    assert (project / "app.py").read_text() == "print('old')\n"
+
+
+def _held(project):
+    """The project's lock, held by another thread until the returned event is set."""
+    taken, release = threading.Event(), threading.Event()
+
+    def hold():
+        with project_lock.lock_for(str(project)):
+            taken.set()
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    taken.wait(5)
+    return release, holder
+
+
+@pytest.mark.parametrize("step", ["undo", "deliver", "edit"])
+def test_delivery_edit_and_undo_wait_for_the_projects_lock(project, step):
+    reply = daemon.deliver_files(str(project), FILES)
+    alias = str(project / "pkg" / "..")  # another spelling of the same project
+    calls = {
+        "undo": lambda: _undo(alias, reply["snapshot"]["id"]),
+        "deliver": lambda: daemon.deliver_files(
+            alias, [{"path": "app.py", "content": "b\n"}]
+        ),
+        "edit": lambda: workspace_edit.edit_file(
+            alias,
+            {
+                "session": "ab" * 8,
+                "path": "keep.txt",
+                "search": "untouched",
+                "replace": "edited",
+            },
+            daemon._resolve_target_path,
+        ),
+    }
+    release, holder = _held(project)
+    worker = threading.Thread(target=calls[step])
+    worker.start()
+    worker.join(0.3)
+    try:
+        assert worker.is_alive()  # waiting: nothing read or written yet
+        assert (project / "app.py").read_text() == "print('new')\n"
+        assert (project / "keep.txt").read_text() == "untouched\n"
+    finally:
+        release.set()
+        holder.join(5)
+        worker.join(10)
+    assert not worker.is_alive()
+
+
+def test_a_write_that_fails_midway_puts_the_delivery_back_and_the_snapshot_stays(
+    project, monkeypatch
+):
+    reply = daemon.deliver_files(
+        str(project),
+        [*FILES, {"path": "keep.txt", "content": "changed\n"}],
+    )
+    real_write = workspace_edit._write_atomically
+    calls = []
+
+    def flaky(target, data):
+        calls.append(target.name)
+        if len(calls) == 2:
+            raise OSError("disk full")
+        real_write(target, data)
+
+    monkeypatch.setattr(workspace_edit, "_write_atomically", flaky)
+
+    with pytest.raises(ReadError) as failed:
+        _undo(project, reply["snapshot"]["id"])
+
+    assert failed.value.status == 500 and "can still undo it" in failed.value.message
+    assert calls == ["app.py", "keep.txt", "app.py"]  # restored, failed, rolled back
+    assert (project / "app.py").read_text() == "print('new')\n"
+    assert (project / "keep.txt").read_text() == "changed\n"
+    assert (project / "pkg" / "sub" / "new.py").exists()
+    monkeypatch.setattr(workspace_edit, "_write_atomically", real_write)
+    undone = _undo(project, reply["snapshot"]["id"])
+    assert (project / "app.py").read_text() == "print('old')\n"
+    assert (project / "keep.txt").read_text() == "untouched\n"
+    assert undone["removed"] == [{"path": "pkg/sub/new.py"}]
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a read-only folder",
+)
+def test_a_folder_that_cannot_be_written_is_found_before_anything_changes(project):
+    (project / "lib").mkdir()
+    (project / "lib" / "util.py").write_text("u = 0\n", encoding="utf-8")
+    reply = daemon.deliver_files(
+        str(project),
+        [FILES[0], {"path": "lib/util.py", "content": "u = 1\n"}],
+    )
+    (project / "lib").chmod(0o555)
+    try:
+        with pytest.raises(ReadError) as refused:
+            _undo(project, reply["snapshot"]["id"])
+        assert refused.value.status == 409
+        assert "lib/util.py (its folder cannot be written)" in refused.value.message
+        assert (project / "app.py").read_text() == "print('new')\n"
+    finally:
+        (project / "lib").chmod(0o755)
+    _undo(project, reply["snapshot"]["id"])
+    assert (project / "app.py").read_text() == "print('old')\n"
+    assert (project / "lib" / "util.py").read_text() == "u = 0\n"
 
 
 # --- the backend -------------------------------------------------------------

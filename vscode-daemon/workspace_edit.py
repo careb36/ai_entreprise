@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import file_edits
+import project_lock
 import workspace_read
 from workspace_read import ReadError
 
@@ -181,7 +182,14 @@ def _window(text: str, first: int, last: int) -> Tuple[str, int, int]:
 
 
 def edit_file(workspace_path: str, data: Dict[str, Any], resolve) -> Dict[str, Any]:
-    """Apply one edit to an existing file of the project, when it still parses."""
+    """Apply one edit to an existing file of the project, when it still parses.
+
+    Under the project's lock (``project_lock``), like a delivery and an undo."""
+    with project_lock.lock_for(workspace_path):
+        return _edit_file(workspace_path, data, resolve)
+
+
+def _edit_file(workspace_path: str, data: Dict[str, Any], resolve) -> Dict[str, Any]:
     root = workspace_read._root(workspace_path)
     folder = _session_folder(data.get("session"))
     path = data.get("path")
@@ -250,6 +258,12 @@ def edit_file(workspace_path: str, data: Dict[str, Any], resolve) -> Dict[str, A
 
 
 def finish(workspace_path: str, session: Any, resolve) -> Dict[str, Any]:
+    """``_finish`` under the project's lock (``project_lock``)."""
+    with project_lock.lock_for(workspace_path):
+        return _finish(workspace_path, session, resolve)
+
+
+def _finish(workspace_path: str, session: Any, resolve) -> Dict[str, Any]:
     """Each file the session edited, with its final text, and the original
     bytes put back. ``changed`` is false for a file edited back to what it was.
 

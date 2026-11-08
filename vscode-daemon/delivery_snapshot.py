@@ -22,6 +22,16 @@ nothing is touched. Otherwise each file gets its bytes back, or is removed
 when the delivery created it (with the folders it created, once empty), and
 the ref is deleted, so a second undo finds no snapshot.
 
+Only the files the delivery changed are in the snapshot: created, or with
+other bytes than before (a file written with the same bytes is left out), once
+per file however its path was spelled (``app.py`` and ``./app.py``), with the
+hash of the last write that succeeded on it. Everything is staged before an
+undo changes a file (the bytes to put back, the delivery's bytes now on disk,
+whether each folder can be written); a write that fails midway puts the files
+already undone back as the delivery left them, so the snapshot can still undo
+it. A delivery, an edit of the Developer's tool and an undo of the same project
+hold its lock (``project_lock``) from their first read to their last write.
+
 The bytes of a file that may hold secrets (``workspace_read.is_sensitive``)
 are never copied into the store: a delivery that overwrites one is made
 without a snapshot, and the reply says why (``snapshot_error``). A failure to
@@ -37,10 +47,12 @@ import os
 import re
 import secrets
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import project_lock
 import workspace_edit
 import workspace_read
 from workspace_read import ReadError
@@ -121,19 +133,25 @@ def _created_dirs(root: Path, target: Path) -> List[str]:
     return missing
 
 
-def _before(root: Path, store: Path, files: list, resolve) -> Dict[str, Dict[str, Any]]:
-    """What each target holds before the delivery, by requested path; raises when one cannot be kept."""
+def _before(root: Path, store: Path, files: list, resolve) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, str]]:
+    """What each target holds before the delivery, once per file however its path is spelled
+    (``app.py`` and ``./app.py``): the entries by the target's path relative to the root,
+    and the key of each requested path. Raises when one cannot be kept."""
     entries: Dict[str, Dict[str, Any]] = {}
+    keys: Dict[str, str] = {}
     for file_info in files:
         requested = file_info.get("path") if isinstance(file_info, dict) else None
-        if not isinstance(requested, str) or requested in entries:
+        if not isinstance(requested, str) or requested in keys:
             continue
         if resolve(str(root), requested) in (None, root):
             continue  # write_files refuses it: nothing changes there.
         target = _safe_target(root, requested, resolve)
         if target is None:
             raise SnapshotError(f"{requested} is reached through a symlink or an unusual path")
-        entry: Dict[str, Any] = {"path": requested, "existed": target.exists()}
+        key = keys[requested] = target.relative_to(root).as_posix()
+        if key in entries:
+            continue  # An alias of a file already kept: its original bytes once.
+        entry: Dict[str, Any] = {"path": key, "existed": target.exists()}
         if entry["existed"]:
             if not target.is_file():
                 raise SnapshotError(f"{requested} is not a regular file")
@@ -143,8 +161,23 @@ def _before(root: Path, store: Path, files: list, resolve) -> Dict[str, Dict[str
             entry.update({"before_blob": _blob(store, data), "before_sha256": _sha256(data)})
         else:
             entry.update({"before_blob": None, "before_sha256": None, "created_dirs": _created_dirs(root, target)})
-        entries[requested] = entry
-    return entries
+        entries[key] = entry
+    return entries, keys
+
+
+def _changed(entries: Dict[str, Dict[str, Any]], keys: Dict[str, str], results: list) -> List[Dict[str, Any]]:
+    """The files the delivery changed: created, or with other bytes than before; each with
+    the hash of the last write that succeeded on it, whichever alias it came through."""
+    after: Dict[str, Any] = {}
+    for result in results:
+        key = keys.get(result.get("path"))
+        if result.get("status") == "written" and key is not None:
+            after[key] = result.get("sha256")
+    return [
+        {**entries[key], "after_sha256": sha}
+        for key, sha in after.items()
+        if not entries[key]["existed"] or entries[key]["before_sha256"] != sha
+    ]
 
 
 def _save(root: Path, store: Path, entries: List[Dict[str, Any]]) -> str:
@@ -163,15 +196,22 @@ def _save(root: Path, store: Path, entries: List[Dict[str, Any]]) -> str:
 
 
 def deliver(workspace_path: str, files: list, write_files: Callable[[str, list], list], resolve) -> Dict[str, Any]:
-    """``write_files`` in the reply shape the backend reads, with the snapshot that undoes it."""
+    """``write_files`` in the reply shape the backend reads, with the snapshot that undoes it.
+
+    Under the project's lock from the snapshot to the manifest (``project_lock``)."""
+    with project_lock.lock_for(workspace_path):
+        return _deliver(workspace_path, files, write_files, resolve)
+
+
+def _deliver(workspace_path: str, files: list, write_files: Callable[[str, list], list], resolve) -> Dict[str, Any]:
     root_path = Path(workspace_path).expanduser()
-    store = entries = None
+    store = entries = keys = None
     snapshot_error = None
     if root_path.is_absolute() and root_path.is_dir():
         root = root_path.resolve()
         try:
             store = _open_store(root)
-            entries = _before(root, store, files, resolve)
+            entries, keys = _before(root, store, files, resolve)
         except (OSError, SnapshotError) as exc:
             snapshot_error = f"no snapshot was taken, this delivery cannot be undone: {exc}"
     results = write_files(workspace_path, files)
@@ -181,11 +221,7 @@ def deliver(workspace_path: str, files: list, write_files: Callable[[str, list],
         "files": results,
     }
     if entries is not None:
-        after: Dict[str, Any] = {}  # A path delivered twice: the last bytes written.
-        for result in results:
-            if result.get("status") == "written" and result.get("path") in entries:
-                after[result["path"]] = result.get("sha256")
-        written = [{**entries[path], "after_sha256": sha} for path, sha in after.items()]
+        written = _changed(entries, keys, results)
         try:
             if written:
                 snapshot_id = _save(root, store, written)
@@ -210,41 +246,92 @@ def _manifest(store: Path, snapshot_id: Any) -> Dict[str, Any]:
 
 
 def undo(workspace_path: str, snapshot_id: Any, resolve) -> Dict[str, Any]:
-    """Put back what the snapshot kept, only when every file still holds what the delivery wrote."""
+    """Put back what the snapshot kept, only when every file still holds what the delivery wrote.
+
+    Under the project's lock from the first check to the ref's deletion (``project_lock``)."""
     root = workspace_read._root(workspace_path)
+    with project_lock.lock_for(str(root)):
+        return _undo_locked(root, snapshot_id, resolve)
+
+
+def _writable(folder: Path) -> bool:
+    """Whether a file can be created, replaced or removed in *folder*: tried, not guessed."""
+    try:
+        handle, probe = tempfile.mkstemp(prefix=".fabrique-undo-", dir=str(folder))
+    except OSError:
+        return False
+    os.close(handle)
+    os.unlink(probe)
+    return True
+
+
+def _put_back(target: Path, data: bytes) -> None:
+    """*data* in *target*, whether the file is there or was removed."""
+    if target.exists():
+        workspace_edit._write_atomically(target, data)
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+
+def _undo_locked(root: Path, snapshot_id: Any, resolve) -> Dict[str, Any]:
     store = store_for(root)
     try:
         manifest = _manifest(store, snapshot_id)
     except SnapshotError as exc:
         raise ReadError(500, f"The snapshot store could not be read: {exc}") from exc
     entries = manifest.get("files") or []
-    targets, conflicts = [], []
-    for entry in entries:
+    ref = REF_PREFIX + manifest["id"]
+    # Staged before anything changes: each target, the delivery's bytes now on
+    # disk (to roll back to) and the bytes to put back.
+    staged, conflicts = [], []
+    for n, entry in enumerate(entries):
         target = _safe_target(root, entry.get("path"), resolve)
+        current = target.read_bytes() if target is not None and target.is_file() else None
         if target is None:
             conflicts.append(f"{entry.get('path')} (no longer leads to the file written)")
-        elif not target.is_file():
+        elif current is None:
             conflicts.append(f"{entry['path']} (deleted since the delivery)")
-        elif _sha256(target.read_bytes()) != entry.get("after_sha256"):
+        elif _sha256(current) != entry.get("after_sha256"):
             conflicts.append(f"{entry['path']} (changed since the delivery)")
-        targets.append(target)
+        elif not _writable(target.parent):
+            conflicts.append(f"{entry['path']} (its folder cannot be written)")
+        staged.append((entry, target, current, n))
     if conflicts:
         raise ReadError(409, "Nothing was undone; these files are not as the delivery left them: " + ", ".join(conflicts))
-    ref = REF_PREFIX + manifest["id"]
+    originals = {
+        n: _git(store, ["cat-file", "blob", f"{ref}:{n}"]).stdout
+        for entry, _, _, n in staged if entry.get("existed")
+    }
+    done: List[Tuple[Path, bytes]] = []
     restored, removed = [], []
-    for n, (entry, target) in enumerate(zip(entries, targets)):
-        if entry.get("existed"):
-            data = _git(store, ["cat-file", "blob", f"{ref}:{n}"]).stdout
-            workspace_edit._write_atomically(target, data)
-            restored.append({"path": entry["path"], "sha256": _sha256(target.read_bytes())})
-        else:
-            target.unlink()
-            for folder in entry.get("created_dirs") or []:
-                try:
-                    (root / folder).rmdir()  # Only once empty.
-                except OSError:
-                    break
-            removed.append({"path": entry["path"]})
+    try:
+        for entry, target, current, n in staged:
+            if entry.get("existed"):
+                workspace_edit._write_atomically(target, originals[n])
+                done.append((target, current))
+                restored.append({"path": entry["path"], "sha256": _sha256(target.read_bytes())})
+            else:
+                target.unlink()
+                done.append((target, current))
+                removed.append({"path": entry["path"]})
+    except OSError as exc:
+        # Back to the delivery's bytes, so the snapshot can still undo it.
+        unrecovered = []
+        for target, data in reversed(done):
+            try:
+                _put_back(target, data)
+            except OSError:
+                unrecovered.append(target.relative_to(root).as_posix())
+        if unrecovered:
+            raise ReadError(500, f"Undoing failed ({exc}) and these files could not be put back as the delivery left them: {', '.join(unrecovered)}") from exc
+        raise ReadError(500, f"Nothing was undone: {exc}. The files are as the delivery left them; the snapshot can still undo it.") from exc
+    for entry, _, _, _ in staged:
+        for folder in entry.get("created_dirs") or []:
+            try:
+                (root / folder).rmdir()  # Only once empty.
+            except OSError:
+                break
     _git(store, ["update-ref", "-d", ref])
     return {"ok": True, "snapshot": manifest["id"], "restored": restored, "removed": removed}
 
