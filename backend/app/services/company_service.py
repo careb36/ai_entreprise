@@ -281,18 +281,31 @@ class CompanyService:
         ).all()
         status_counts = {status: count for status, count in status_counts_rows}
 
-        ai_summary = (
-            f"The sprint is healthy. {status_counts.get('done', 0)} tasks completed. "
-            f"Total investment: {total_tokens} tokens. "
-            "Velocity is stable, no major blockers detected."
-        )
+        done = status_counts.get("done", 0)
+        blocked = status_counts.get("blocked", 0)
+        total = sum(status_counts.values()) or 1
+        # Health: base 100, penalised by blocked share and lack of progress.
+        score = 100 - int(40 * blocked / total) - (10 if done == 0 else 0)
+        score = max(0, min(100, score))
+
+        if blocked:
+            summary = (
+                f"{blocked} task(s) blocked. {done} of {total} completed. "
+                f"Total investment: {total_tokens} tokens."
+            )
+        else:
+            summary = (
+                f"The sprint is healthy. {done} tasks completed. "
+                f"Total investment: {total_tokens} tokens. "
+                "Velocity is stable, no major blockers detected."
+            )
 
         return {
             "sprint_id": sprint_id,
-            "health_score": 92,
+            "health_score": score,
             "tokens_consumed": total_tokens,
             "tasks_status": status_counts,
-            "ai_executive_summary": ai_summary,
+            "ai_executive_summary": summary,
         }
 
     def list_agents(self, company_id: int) -> list[dict[str, Any]]:
