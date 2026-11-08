@@ -313,8 +313,8 @@ echo "7b. the company's own provider connection"
 CONN_BODY="{\"provider\": \"deepseek\", \"name\": \"E2E DeepSeek\", \"base_url\": \"http://127.0.0.1:$LLM_PORT/provider/v1\", \"api_key\": \"e2e-provider-key\"}"
 CONN_JSON=$(api -X POST "$API/v1/companies/$CID/providers" -H 'Content-Type: application/json' -d "$CONN_BODY")
 CONN=$(echo "$CONN_JSON" | json "d['id']")
-check "a Manager connects the company's provider, and the key is never returned" test "$(echo "$CONN_JSON" | json "d['api_key_set'], 'e2e-provider-key' in json.dumps(d)")" = "(True, False)"
-check "the validation lists the provider's models with the key" test "$(api -X POST "$API/v1/companies/$CID/providers/$CONN/validate" | json "d['provider']['validation_ok'], sorted(d['provider']['listed_models'])")" = "(True, ['deepseek-v4-flash', 'e2e-unlisted-elsewhere'])"
+check "a Manager connects the company's provider, and the key is never returned" test "$(echo "$CONN_JSON" | json "d['api_key_set'], 'e2e-provider-key' in json.dumps(d)")" = "True False"
+check "the validation lists the provider's models with the key" test "$(api -X POST "$API/v1/companies/$CID/providers/$CONN/validate" | json "d['provider']['validation_ok'], sorted(d['provider']['listed_models'])")" = "True ['deepseek-v4-flash', 'e2e-unlisted-elsewhere']"
 CONN_MODEL="conn:$CONN:deepseek-v4-flash"
 check "the Reviewer's suggestion is the listed model the catalogue describes" test "$(api "$API/v1/companies/$CID/model_suggestions" | json "d['suggestions']['Reviewer']['model']")" = "$CONN_MODEL"
 check "a Manager chooses it for the Reviewer" test "$(api -X PUT "$API/v1/companies/$CID/model_settings" -H 'Content-Type: application/json' -d "{\"role_models\": {\"Reviewer\": \"$CONN_MODEL\"}}" | json "d['effective']['Reviewer']")" = "{'model': '$CONN_MODEL', 'source': 'role'}"
