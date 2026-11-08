@@ -17,6 +17,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.list / read / search: the Developer's read-only tools on the project (workspace_read.py)
 - workspace.git.publish:  push a task's branch and open its pull/merge request (gh, glab)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
+- workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
 - workspace.deliver:      (JetStream) files queued while this daemon was offline;
                           the result goes to workspace.delivered
 
@@ -38,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import app_run
 import delivery_journal
 import file_diff
 import file_edits
@@ -50,8 +52,7 @@ import platform_reviews
 import shell_exec
 import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-_build_command_env = shell_exec.build_command_env  # Old private names; the logic is in shell_exec.
-_build_shell_command = shell_exec.build_shell_command
+_build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -98,11 +99,7 @@ def _resolve_target_path(workspace_path: str, relative_path: str) -> Optional[Pa
 
 def _is_protected_existing_doc(workspace_root: Path, target_path: Path) -> bool:
     """Protect curated root docs from blind overwrite by agent output."""
-    return (
-        target_path.is_file()
-        and target_path.parent == workspace_root
-        and target_path.name in PROTECTED_ROOT_DOCS
-    )
+    return target_path.is_file() and target_path.parent == workspace_root and target_path.name in PROTECTED_ROOT_DOCS
 
 
 def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
@@ -119,10 +116,7 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
         # The project is not on this machine (wrong host, or the folder was
         # moved): never create it, and say so for every file.
         logger.warning("Workspace %s is not a folder on this machine", workspace_path)
-        return [
-            {"path": file_info.get("path", ""), "status": "workspace_missing"}
-            for file_info in files
-        ]
+        return [{"path": file_info.get("path", ""), "status": "workspace_missing"} for file_info in files]
     workspace_root = workspace_root.resolve()
     for file_info in files:
         requested = file_info.get("path", "")
@@ -236,7 +230,7 @@ async def handle_msg(nc, msg):
 
     elif subject == "workspace.execute":
         cmd = data.get("command")
-        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"))
+        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"))
 
         sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
         if sprint_id is not None and not shell_exec.is_assistant_command(cmd):
@@ -267,7 +261,7 @@ def _has_fallback_binary(name: str) -> bool:
 
 def detect_assistants(commands: list[str]) -> list[str]:
     """Return the assistant commands found on the PATH used for command execution."""
-    search_path = _build_command_env().get("PATH")
+    search_path = shell_exec.build_command_env().get("PATH")
     return [
         name
         for name in commands
@@ -674,6 +668,7 @@ async def main():
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in workspace_read.HANDLERS),
         ("workspace.git.publish", bound(git_workspace.handle_publish, _reply, _request_body)),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
+        ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
     ):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
 

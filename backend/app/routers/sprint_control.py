@@ -9,9 +9,13 @@ Endpoints (Manager):
   paused for lack of credit) and dispatch its waiting tasks.
 - ``POST /v1/sprints/{id}/stop``     — stop for good; no follow-up sprint opens.
 - ``GET/PUT /v1/companies/{id}/autonomy`` — read (Viewer) or change the autonomy level.
+- ``GET/PUT /v1/companies/{id}/stack_profile`` — read (Viewer) or replace the
+  company's overrides of the detected stack profile (``services/stack_profiles.py``).
 
 The states and what they allow are in ``services/sprint_control.py``.
 """
+
+from typing import Any
 
 from auth_policy import current_user_if_required, require_company_role
 from config import settings
@@ -20,7 +24,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import git_workflow, research_tools, sandbox, sprint_control
+from services import (
+    git_workflow,
+    research_tools,
+    sandbox,
+    sprint_control,
+    stack_profiles,
+)
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -309,6 +319,64 @@ async def set_sandbox(
     session.add(company)
     session.commit()
     return _sandbox_payload(company)
+
+
+class StackProfileRequest(BaseModel):
+    # install, test, lint, start, e2e (an empty string turns the step off),
+    # port, probe_path and stack; a field left out keeps the detected value.
+    profile: dict[str, Any] = Field(default_factory=dict)
+
+
+def _stack_profile_payload(company: Company) -> dict:
+    return {
+        "company_id": company.id,
+        "overrides": dict(company.stack_profile or {}),
+        "effective_without_detection": stack_profiles.resolve(
+            None, company.stack_profile
+        ),
+        "stacks": [
+            {k: v for k, v in p.items() if k != "markers"}
+            for p in stack_profiles.PROFILES
+        ],
+        "installed_manifests": dict(company.dependency_installs or {}),
+    }
+
+
+@router.get("/companies/{company_id}/stack_profile")
+async def get_stack_profile(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The company's overrides of the detected stack profile, the stacks the
+    detection knows, and the manifests its last installs saw (Viewer)."""
+    require_company_role(session, user, company_id, "Viewer")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return _stack_profile_payload(company)
+
+
+@router.put("/companies/{company_id}/stack_profile")
+async def set_stack_profile(
+    company_id: int,
+    req: StackProfileRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Replace the company's overrides of the detected stack profile (Manager)."""
+    require_company_role(session, user, company_id, "Manager")
+    company = session.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    try:
+        overrides = stack_profiles.validate_overrides(req.profile)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    company.stack_profile = overrides or None
+    session.add(company)
+    session.commit()
+    return _stack_profile_payload(company)
 
 
 @router.get("/companies/{company_id}/git")

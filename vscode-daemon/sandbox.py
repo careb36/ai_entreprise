@@ -221,11 +221,13 @@ class _Tail:
         return bytes(self.data).decode("utf-8", errors="replace")
 
 
-def run_bounded(argv: list[str], timeout: int) -> dict[str, Any]:
+def run_bounded(
+    argv: list[str], timeout: float, cwd: str | None = None, env: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Run *argv*, keeping at most ``MAX_OUTPUT_BYTES`` of each stream's tail.
     Returns ``exit_code`` (``None`` when killed at *timeout*), the decoded
     ``stdout`` / ``stderr``, ``timed_out`` and ``output_truncated``."""
-    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env)
     out = _Tail(process.stdout, MAX_OUTPUT_BYTES)
     err = _Tail(process.stderr, MAX_OUTPUT_BYTES)
     timed_out = False
