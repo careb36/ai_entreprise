@@ -187,6 +187,16 @@ Copy `.env.example` to `.env` and fill in:
   container's entrypoint and the e2e run `alembic upgrade head` themselves,
   and the backend refuses to start on a database behind head
   (`app/migrations.py`, `CONTRIBUTING.md` §5).
+- `RETENTION_OUTBOX_DAYS` (7), `RETENTION_AGENT_RUNS_DAYS`,
+  `RETENTION_KPI_TURNS_DAYS`, `RETENTION_GLASSROOM_DAYS` (0, keep all) — what
+  the janitor deletes (`backend/janitor/retention.py`): delivered outbox
+  events; superseded run versions with their verifications (never the latest
+  version, nor one a person reviewed, approved, commented on or published);
+  KPI turn rows of `audit_log` outside a company's hash chain (a chained row
+  is never deleted, and counted as kept); task events of closed sprints.
+  There is no audit retention: `docs/OPERATIONS.md` says how to archive a
+  chain with its rows. `BACKUP_DIR`, `BACKUP_KEEP_DAYS` (14) and
+  `PG_CONTAINER` steer `scripts/backup.sh`.
 - `DEVELOPER_TOOLS_ENABLED` (true), `DEVELOPER_TOOL_ROUNDS` (8) — the
   Developer's workspace tools (`services/developer_tools.py`): the roles that
   deliver files may list, read and search the project through the daemon, and
@@ -272,7 +282,9 @@ FastAPI Backend  ←→  LangGraph Agent Orchestration
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
 
-**`backend/janitor/main.py`** — Background maintenance container (runs daily). Cleans outbox events and rebuilds pgvector indices with `REINDEX CONCURRENTLY`.
+**`backend/janitor/main.py`** — Background maintenance container (runs daily, `JANITOR_INTERVAL_SECONDS`). Applies the retention settings (`janitor/retention.py`, plain SQL over psycopg2, tested on `sqlite3`) and rebuilds pgvector indices with `REINDEX CONCURRENTLY`. `scripts/backup.sh` backs Postgres up (`pg_dump -Fc`, checked, with a checksum; Neo4j through APOC only when enabled) and restores it (`restore FILE --yes`); CI backs up and restores the e2e database.
+
+**`backend/app/services/locks.py`** / **`replicas.py`** — Several backend replicas may run the workers against one database (issue #328, `docs/OPERATIONS.md`). `locks.held(engine, name, ident)` is a Postgres session-level advisory lock taken with `pg_try_advisory_lock` on a connection held for the work (never waits; a replica that does not get it skips; a dead replica's lock goes with its connection), a process-local table on SQLite. `replicas.claim_todo` claims a task with a conditional `UPDATE … WHERE status = 'todo'` (only the replica whose update matched runs it), the worker holds `task_lock` while it works on a task and `recover_inflight` returns to `todo` only the `in_progress` tasks nobody holds, `close_once` closes a sprint under its company's lock and `mark_completed` with a conditional update from `active` (one close, retrospective, procedure measurement, proposal round and follow-up), and `triage_slot` triages an escalation once. The review cycle (`task_worker._review_cycle`) and the Support and Reviewer agents' cycles run under their own locks.
 
 ### Data Flow for a Sprint
 
@@ -524,6 +536,8 @@ Test files:
 | `test_proxy_connections.py` | A company's provider connection reaches the LLM proxy (issue #356): `conn:<id>:<model>` resolves into the model the proxy calls and the headers carrying the connection with the shared internal token; only the company's own enabled connection is used, never another company's; without the token or the company the call fails with the reason; plain model ids are untouched |
 | `test_company_models.py` | A company's models (issue #356, step 4): the agent's model, then the company's for the role, then its default, then the deployment's; the Reviewer follows QA unless it has its own; a Manager sets them and a Viewer reads them with what each role runs, an empty value clears one, an unknown role, a malformed id or another company's connection refused; the ScrumMaster, PO, Architect, the worker's task, Architect consultation and the Reviewer agent run the company's choice, and the agent's own model still wins; an agent's model may be a connection of its own company only |
 | `test_model_suggestions.py` | The model suggested per role (issue #356, step 6): the catalogue's real fields decide, the deciding roles get a model that reasons, the coding roles the largest context with tools, the TechWriter the cheapest; no tools, no suggestion; a validated provider only suggests what it listed; an unpriced model is not taken for free; each suggestion is the connection's own reference; once the company ran a model on three of its tasks in a role, more done than not, its record decides (least rework per task), counted for the model of each task's last delivery in completed sprints, a record of mostly blocked tasks never outranks the rule; a Viewer reads them, an outsider does not |
+| `test_replicas.py` | Two workers against one database (threads on a file-backed SQLite): a todo task claimed once and a task given to both run once, a restarting worker leaves the tasks another holds, a sprint closed once with one follow-up, one retrospective, one procedure measurement and one proposal round, one triage per escalation (a new escalation gets its own), one review cycle and one Support/Reviewer cycle at a time; with `REPLICAS_POSTGRES_URL` the advisory lock and the conditional updates on Postgres (the e2e workflow runs these) |
+| `test_retention.py` | The janitor's retention over `sqlite3`: delivered outbox events go and pending or failed stay, a superseded run version goes with its verifications while the latest and one a person decided on stay, KPI turns outside the audit chain go and a chained one is never deleted (counted as kept), nor one a run points at, task events of closed sprints only, `0` keeps everything, settings from the environment with safe defaults |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -587,7 +601,12 @@ too (`.github/workflows/e2e.yml`) on every pull request that touches
 `backend/`, `vscode-daemon/`, `scripts/e2e/` or the workflow itself, and on
 pushes to `main`, against a `pgvector/pgvector:pg15` service and
 a NATS container started with JetStream; the logs are kept as the `e2e-logs`
-artifact.
+artifact. After the loop (host matrix entry), the same job backs up the e2e
+database with `scripts/backup.sh`, restores it into a scratch database and
+compares its tables and audit rows, then runs `test_replicas.py`'s Postgres
+races against it (`REPLICAS_POSTGRES_URL`); a change to `scripts/backup.sh`
+triggers the workflow too. Two backend processes driving the whole loop
+together is not run yet (issue #328, next).
 
 `scripts/check_file_sizes.py` is a ratchet on file size: a source file
 (backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
@@ -733,3 +752,4 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
 - [`docs/STANDARDS.md`](docs/STANDARDS.md) — The quality standards every project is held to, and which the loop checks without a model
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — The operations runbook: deploy, upgrade, key rotation, `/health` and `/metrics`, the daemon absent, a sprint stuck, a provider out of credit, backups and restore, retention, and how many workers may run

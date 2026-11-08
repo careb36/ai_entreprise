@@ -15,6 +15,7 @@ on:
       - 'backend/**'
       - 'vscode-daemon/**'
       - 'scripts/e2e/**'
+      - 'scripts/backup.sh'
       - '.github/workflows/e2e.yml'
 
 
