@@ -228,7 +228,7 @@ async def handle_msg(nc, msg):
 
     elif subject == "workspace.execute":
         cmd = data.get("command")
-        result = await asyncio.to_thread(execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"))
+        result = await asyncio.to_thread(sprint_integration.while_active, workspace_path, execute_shell_command, cmd, workspace_path, data.get("sandbox"), data.get("command_policy"), data.get("timeout_seconds"))
 
         sprint_id = data.get("sprint_id")  # none: the Developer's test tool, reported to nobody
         if sprint_id is not None and not shell_exec.is_assistant_command(cmd):

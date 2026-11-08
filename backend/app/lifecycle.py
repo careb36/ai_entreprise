@@ -15,7 +15,7 @@ from logging_config import logger
 from memory_client import MemoryClient
 from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
-from services import console_capabilities, integration
+from services import console_capabilities, integration_jobs
 from services.agent_worker import process_agent_tasks
 from services.outbox_service import process_outbox
 from services.task_worker import process_backlog_tasks
@@ -103,7 +103,7 @@ async def _start_workers(app, client: NATSClient) -> None:
         "agent_worker": process_agent_tasks(client),
         "task_worker": process_backlog_tasks(client),
         # Sprint integrations the daemon could not take at close (issue #314).
-        "integration_retry": integration.retry_loop(client, _engine()),
+        "integration_retry": integration_jobs.retry_loop(client, _engine()),
     }
     for name, coro in worker_coros.items():
         task = asyncio.create_task(coro, name=name)

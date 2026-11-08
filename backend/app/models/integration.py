@@ -15,14 +15,17 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 # untested says nothing about the tests; incomplete: a done task's branch was
-# missing or refused; pending: the daemon could not be reached when the sprint
-# closed (retried); error: the daemon refused the integration.
+# missing or refused; running: a closed sprint's integration kept before the
+# daemon is asked (a restart leaves it to be retried); pending: the daemon
+# could not be reached when the sprint closed (retried); error: the daemon
+# refused the integration.
 INTEGRATION_STATUSES = (
     "tests_passed",
     "tests_failed",
     "untested",
     "conflict",
     "incomplete",
+    "running",
     "pending",
     "error",
 )
