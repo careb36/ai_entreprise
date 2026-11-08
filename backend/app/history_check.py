@@ -315,9 +315,15 @@ def _run_facts(verification: Any) -> dict[str, Any]:
         for call in (verification.evidence or {}).get("tool_calls") or []
         if isinstance(call, dict)
         and call.get("server") == "workspace"
-        and call.get("tool") == "read"
         and not call.get("is_error")
-        and not call.get("sha256")
+        and (
+            (call.get("tool") == "read" and not call.get("sha256"))
+            # An applied edit carries the file's hash before and after.
+            or (
+                call.get("tool") == "edit"
+                and not (call.get("sha256_before") and call.get("sha256_after"))
+            )
+        )
     ]
     return {
         "verified_criteria": passed,

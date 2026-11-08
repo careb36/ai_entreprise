@@ -1,5 +1,5 @@
-"""The Developer's eyes on the project: ``workspace.list``, ``workspace.read``
-and ``workspace.search``.
+"""The Developer's eyes on the project: ``workspace.list``, ``workspace.read``,
+``workspace.search`` and ``workspace.find``.
 
 Read-only requests the backend relays as tools the model may call before it
 delivers (``backend/app/services/developer_tools.py``). Each reply is an
@@ -14,6 +14,12 @@ inside the project (a symlink that leads out is skipped), never a file that
 may hold secrets (``SENSITIVE_NAMES``), and runs in a child process it kills
 at ``SEARCH_TIMEOUT_SECONDS``, so a pattern that backtracks forever costs
 that much and no more.
+
+From SWE-agent's agent-computer interface (MIT): a read is a window of
+``READ_MAX_LINES`` numbered lines the model pages through with ``start_line``;
+a search over the bound answers how many matches there are and in which files
+instead of cutting the list silently, and ``workspace.find`` finds files by
+name or glob with the same rule.
 """
 
 from __future__ import annotations
@@ -46,7 +52,8 @@ SENSITIVE_DIRS = {".ssh", ".aws", ".gnupg", ".git", ".docker", ".kube"}
 LIST_MAX_ENTRIES = 400
 LIST_MAX_DEPTH = 6
 READ_MAX_BYTES = 64 * 1024
-READ_MAX_LINES = 400
+# The window a read shows; the model pages with ``start_line``.
+READ_MAX_LINES = 100
 # How much of a file is read into memory to index its lines; the rest is only hashed.
 READ_SCAN_BYTES = 1024 * 1024
 SEARCH_MAX_MATCHES = 60
@@ -54,6 +61,11 @@ SEARCH_MAX_FILE_BYTES = 512 * 1024
 SEARCH_MAX_FILES = 5000
 SEARCH_LINE_CHARS = 240
 SEARCH_TIMEOUT_SECONDS = 20.0
+# Past SEARCH_MAX_MATCHES the search goes on counting, up to this many.
+SEARCH_COUNT_LIMIT = 10000
+SEARCH_SUMMARY_FILES = 20
+FIND_MAX_RESULTS = 50
+FIND_MAX_FILES = 20000
 
 
 class ReadError(Exception):
@@ -170,6 +182,8 @@ def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[
         first = max(1, int(start_line or 1))
     except (TypeError, ValueError):
         first = 1
+    if first > max(len(lines), 1) and not beyond_scan:
+        raise ReadError(400, f"start_line {first} is past the end of {path}, which has {len(lines)} lines.")
     chosen = lines[first - 1 : first - 1 + READ_MAX_LINES]
     numbered: List[str] = []
     out = 0
@@ -190,6 +204,7 @@ def read_file(workspace_path: str, path: Any, start_line: Any, resolve) -> Dict[
         "lines": len(lines),
         "lines_indexed_to_byte": len(head) if beyond_scan else None,
         "first_line": first,
+        "last_line": first + len(numbered) - 1,
         "truncated": truncated,
     }
 
@@ -221,7 +236,11 @@ def search(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, A
             if len(files) > SEARCH_MAX_FILES:
                 files_truncated = True
                 break
+    count = 0
+    per_file: Dict[str, int] = {}
     for file in files[:SEARCH_MAX_FILES]:
+        if count >= SEARCH_COUNT_LIMIT:
+            break
         contained = _inside(root, file)
         if contained is None or is_sensitive(root, contained):
             continue
@@ -237,17 +256,68 @@ def search(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, A
         relative = file.relative_to(root).as_posix()
         for number, line in enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1):
             if regex.search(line):
+                count += 1
+                per_file[relative] = per_file.get(relative, 0) + 1
                 if len(matches) >= SEARCH_MAX_MATCHES:
                     matches_truncated = True
+                else:
+                    matches.append(f"{relative}:{number}: {line.strip()[:SEARCH_LINE_CHARS]}")
+                if count >= SEARCH_COUNT_LIMIT:
                     break
-                matches.append(f"{relative}:{number}: {line.strip()[:SEARCH_LINE_CHARS]}")
-        if matches_truncated:
-            break
+    busiest = sorted(per_file.items(), key=lambda kv: (-kv[1], kv[0]))[:SEARCH_SUMMARY_FILES]
     return {
         "pattern": pattern,
         "matches": matches,
         "files_scanned": scanned,
         "truncated": files_truncated or matches_truncated,
+        # How many there are, when more than the matches shown: the model is
+        # told to refine, never handed a silent cut.
+        "match_count": count,
+        "match_count_capped": count >= SEARCH_COUNT_LIMIT,
+        "files_matched": len(per_file),
+        "files_truncated": files_truncated,
+        "per_file": [[name, n] for name, n in busiest] if matches_truncated else [],
+    }
+
+
+def find_files(workspace_path: str, pattern: Any, path: Any, resolve) -> Dict[str, Any]:
+    """The files under *path* whose name matches *pattern*: a name
+    (case-insensitive, exact) or a glob (``*.py``, ``test_*``; one with a
+    ``/`` matches the path relative to the root). At most
+    ``FIND_MAX_RESULTS`` listed; past that only the count. The folders a
+    listing skips, hidden files and files that may hold secrets are left out."""
+    root = _root(workspace_path)
+    if not isinstance(pattern, str) or not pattern.strip():
+        raise ReadError(400, "A file name or glob is required.")
+    wanted = pattern.strip().lower()
+    start = _target(root, path or ".", resolve)
+    if not start.is_dir():
+        raise ReadError(404, f"Not a folder: {path}")
+    found: List[str] = []
+    count = visited = 0
+    walk_truncated = False
+    for dirpath, dirnames, filenames in os.walk(start):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
+        for name in sorted(filenames):
+            visited += 1
+            if name.startswith(".") or any(fnmatch.fnmatch(name, p) for p in SENSITIVE_NAMES):
+                continue
+            relative = (Path(dirpath) / name).relative_to(root).as_posix()
+            subject = relative.lower() if "/" in wanted else name.lower()
+            if fnmatch.fnmatchcase(subject, wanted):
+                count += 1
+                if len(found) < FIND_MAX_RESULTS:
+                    found.append(relative)
+        if visited >= FIND_MAX_FILES:
+            walk_truncated = True
+            break
+    return {
+        "pattern": pattern,
+        "path": start.relative_to(root).as_posix() if start != root else ".",
+        "files": found,
+        "match_count": count,
+        "truncated": count > len(found),
+        "walk_truncated": walk_truncated,
     }
 
 
@@ -336,9 +406,15 @@ async def handle_search(nc, msg, reply, request_body, resolve) -> None:
     await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: search_bounded(r, d.get("pattern"), d.get("path"), s))
 
 
+async def handle_find(nc, msg, reply, request_body, resolve) -> None:
+    """``workspace.find`` → the files whose name matches, or how many there are."""
+    await _serve(nc, msg, reply, request_body, resolve, lambda r, d, s: find_files(r, d.get("pattern"), d.get("path"), s))
+
+
 # (subject, handler) for the daemon's subscription loop.
 HANDLERS = (
     ("workspace.list", handle_list),
     ("workspace.read", handle_read),
     ("workspace.search", handle_search),
+    ("workspace.find", handle_find),
 )

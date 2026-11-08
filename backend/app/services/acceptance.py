@@ -247,18 +247,37 @@ def test_hashes_of(session: Session, sprint_id: int) -> dict[str, str]:
 
 
 def test_sources_of(engine: Engine, sprint_id: int, paths: list[str]) -> dict[str, str]:
-    """The content of the acceptance test files *paths*, from QA's deliverables.
+    """The content of the acceptance test files *paths*, from QA's deliverables:
+    a whole file in its answer, else the text the daemon read back of a file
+    QA changed with the edit tool (``tool_edit_files`` on its run's evidence,
+    an observation; ``services/workspace_edits.py``).
 
     A file QA delivered as SEARCH/REPLACE edits has no source here: it is
     reported tampered and not restored, so ``check_untouched`` refutes."""
+    from services import context_read
     from services.task_worker import parse_file_manifest
 
     sources: dict[str, str] = {}
     with Session(engine) as session:
         for _task, run in _test_tasks(session, sprint_id):
-            for target in parse_file_manifest(run.artifact_text or "") if run else []:
+            if run is None:
+                continue
+            verification = session.exec(
+                select(Verification)
+                .where(Verification.agent_run_id == run.id)
+                .order_by(Verification.id.desc())
+            ).first()
+            edited = context_read.edited_texts(
+                verification.evidence if verification else None
+            )
+            whole = [
+                t
+                for t in parse_file_manifest(run.artifact_text or "")
                 # Only a whole file can be restored: an edit is not the file.
-                if target["path"] in paths and "edits" not in target:
+                if "edits" not in t
+            ]
+            for target in edited + whole:  # The answer's own file wins.
+                if target["path"] in paths:
                     sources[target["path"]] = target["content"]
     return sources
 
