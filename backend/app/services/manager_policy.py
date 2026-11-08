@@ -109,7 +109,9 @@ RULE_DECISIONS = {
     "accept_high_risk": ("accept_high_risk", "accept"),
 }
 # Decisions that always go to the client, whatever a policy says.
-ALWAYS_ESCALATE = frozenset({"cancel_sprint", "change_autonomy", "spend_above_budget"})
+ALWAYS_ESCALATE = frozenset(
+    {"cancel_sprint", "delete_sprint", "change_autonomy", "spend_above_budget"}
+)
 LOW_TIERS = ("low", "medium")
 MAX_LIMIT = 1000
 

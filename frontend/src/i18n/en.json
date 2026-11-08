@@ -2026,7 +2026,8 @@
         "company": "the company's default",
         "deployment": "the deployment's setting"
       },
-      "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task"
+      "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task",
+      "search": "Filter models…"
     }
   },
   "manager": {
@@ -2084,5 +2085,24 @@
         "accept_high_risk": "Accept a high-risk delivery with every criterion test passing"
       }
     }
+  },
+  "sprintAdmin": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "unarchive": "Unarchive",
+    "editTitle": "Edit sprint",
+    "name": "Name",
+    "goal": "Goal",
+    "duration": "Days",
+    "nameRequired": "The sprint needs a name.",
+    "durationRange": "Duration is a whole number of days from 1 to {{max}}.",
+    "saved": "Sprint updated",
+    "deleteConfirm": "Delete \"{{name}}\"? A sprint with recorded work is archived, not deleted: its evidence stays and an Owner can unarchive it. A sprint nothing was recorded on is deleted with its tasks.",
+    "deleted": "Sprint deleted",
+    "archived": "Sprint archived: it had recorded work, which stays",
+    "unarchived": "Sprint unarchived",
+    "stopFirst": "Stop the sprint first",
+    "archivedBy": "Archived by {{who}}",
+    "showArchived": "Show archived sprints"
   }
 }

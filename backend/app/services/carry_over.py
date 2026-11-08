@@ -118,6 +118,10 @@ def carry_over(
         if row is None:
             raise CarryOverError(404, f"Task {item_id} not found in this company")
         item, sprint = row
+        if sprint.archived_at is not None:
+            raise CarryOverError(
+                409, f"Task {item_id} belongs to an archived sprint; unarchive it first"
+            )
         if not waits_for_a_person(item):
             raise CarryOverError(
                 409, f"Task {item_id} is not blocked waiting for a person"

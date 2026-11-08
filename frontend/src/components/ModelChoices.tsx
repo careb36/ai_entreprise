@@ -163,12 +163,17 @@ function ModelSelect({ id, label, hideLabel, value, emptyLabel, options, suggest
   onChange: (value: string) => void
 }) {
   const { t } = useTranslation()
+  const [query, setQuery] = useState('')
   const known = new Set(options.map(o => o.value))
-  const others = options.filter(o => o.value !== suggestion?.model)
+  const filtered = query.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()) || o.value.toLowerCase().includes(query.toLowerCase()))
+    : options
+  const others = filtered.filter(o => o.value !== suggestion?.model)
   return (
-    <label htmlFor={id} className="block">
-      <span className={hideLabel ? 'sr-only' : 'input-label'}>{label}</span>
-      <select id={id} className="input w-full" value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>
+    <div className="block">
+      <label htmlFor={id} className="block">
+        <span className={hideLabel ? 'sr-only' : 'input-label'}>{label}</span>
+        <select id={id} className="input w-full" value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>
         <option value="">{emptyLabel}</option>
         {value && !known.has(value) && (
           <optgroup label={t('models.choices.current')}><option value={value}>{value}</option></optgroup>
@@ -184,6 +189,9 @@ function ModelSelect({ id, label, hideLabel, value, emptyLabel, options, suggest
           </optgroup>
         )}
       </select>
-    </label>
+      </label>
+      <input type="search" className="input w-full mt-1 text-xs" placeholder={t('models.choices.search', { defaultValue: 'Filter models…' })}
+        value={query} onChange={e => setQuery(e.target.value)} disabled={disabled} />
+    </div>
   )
 }

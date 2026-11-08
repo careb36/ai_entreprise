@@ -39,7 +39,11 @@ def waiting_tasks(session: Session, company_id: int) -> list[BacklogItem]:
     rows = session.exec(
         select(BacklogItem)
         .join(Sprint, Sprint.id == BacklogItem.sprint_id)
-        .where(Sprint.company_id == company_id, BacklogItem.status == "blocked")
+        .where(
+            Sprint.company_id == company_id,
+            BacklogItem.status == "blocked",
+            Sprint.archived_at.is_(None),  # an archived sprint asks nobody
+        )
         .order_by(BacklogItem.id)
     ).all()
     return [

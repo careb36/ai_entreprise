@@ -2026,7 +2026,8 @@
         "company": "el de la empresa",
         "deployment": "el de la instalación"
       },
-      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea"
+      "measured": "Medido en {{tasks}} tareas de la empresa: {{done}} terminadas, {{rework}} retrabajos por tarea",
+      "search": "Filtrar modelos…"
     }
   },
   "manager": {
@@ -2084,5 +2085,24 @@
         "accept_high_risk": "Aceptar una entrega de alto riesgo con todas las pruebas de criterio en verde"
       }
     }
+  },
+  "sprintAdmin": {
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "unarchive": "Desarchivar",
+    "editTitle": "Editar sprint",
+    "name": "Nombre",
+    "goal": "Objetivo",
+    "duration": "Días",
+    "nameRequired": "El sprint necesita un nombre.",
+    "durationRange": "La duración es un número entero de días entre 1 y {{max}}.",
+    "saved": "Sprint actualizado",
+    "deleteConfirm": "¿Eliminar «{{name}}»? Un sprint con trabajo registrado se archiva, no se elimina: su evidencia se conserva y un Owner puede desarchivarlo. Un sprint sin nada registrado se elimina con sus tareas.",
+    "deleted": "Sprint eliminado",
+    "archived": "Sprint archivado: tenía trabajo registrado, que se conserva",
+    "unarchived": "Sprint desarchivado",
+    "stopFirst": "Detené el sprint primero",
+    "archivedBy": "Archivado por {{who}}",
+    "showArchived": "Mostrar sprints archivados"
   }
 }

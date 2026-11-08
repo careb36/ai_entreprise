@@ -3,8 +3,8 @@ the tighter file limit ``accept_high_risk`` reads (3 by default), and
 ``publish_enabled``, the client's switch for publishing branches (off). An
 existing policy keeps every rule it named and gains neither.
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-11-09 10:00:00 UTC
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0017"
-down_revision = "0016"
+revision = "0018"
+down_revision = "0017"
 branch_labels = None
 depends_on = None
 
