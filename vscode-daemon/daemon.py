@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import delivery_journal
 import file_diff
 import file_edits
 import file_hash
@@ -49,9 +50,7 @@ import platform_reviews
 import shell_exec
 import workspace_read
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
-
-# Old private names kept so the handlers read as before; the logic is in shell_exec.
-_build_command_env = shell_exec.build_command_env
+_build_command_env = shell_exec.build_command_env  # Old private names; the logic is in shell_exec.
 _build_shell_command = shell_exec.build_shell_command
 from nats.errors import TimeoutError as NATSTimeoutError
 
@@ -569,7 +568,7 @@ async def process_queued_delivery(nc, js, msg) -> None:
         await msg.term()
         return
     workspace_path = job.get("workspace_root") or ""
-    response = await asyncio.to_thread(deliver_files, workspace_path, job.get("files") or [], job.get("git"))
+    response = await asyncio.to_thread(delivery_journal.once, job.get("job_id"), lambda: deliver_files(workspace_path, job.get("files") or [], job.get("git")))
     result = {
         **response,
         "job_id": job.get("job_id"),
@@ -584,11 +583,12 @@ async def process_queued_delivery(nc, js, msg) -> None:
             json.dumps(result).encode(),
             headers={"Nats-Msg-Id": f"delivered-{job.get('job_id')}"},
         )
-    except Exception as e:  # noqa: BLE001 - Retry the job; writing again is idempotent.
+    except Exception as e:  # noqa: BLE001 - Retry; the journal replays the response, edits apply once.
         logger.warning("Could not report queued delivery %s (%s); will retry", job.get("job_id"), e)
         await msg.nak(delay=10)
         return
     await msg.ack()
+    delivery_journal.forget(job.get("job_id"))
     logger.info("Queued delivery %s: %s", job.get("job_id"), _delivery_summary(response))
     if job.get("sprint_id") is not None:
         await _publish_glassroom_status(nc, job["sprint_id"], f"{_delivery_summary(response)} (queued delivery)")
