@@ -1,4 +1,4 @@
-import { API_BASE } from './apiBase'
+import { API_BASE } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 
 /**

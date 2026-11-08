@@ -1,0 +1,90 @@
+"""A person's review of a run, the way a pull request is reviewed.
+
+``ReviewComment`` is a note on one line of a changed file (``path`` and
+``line``, on the ``new`` or ``old`` side), or on the run as a whole (no
+``path``), written here or brought from the pull or merge request the run
+was published as (``source``). ``RunReview`` is a submitted review, ``comment``, ``approve`` or
+``request_changes``, with what it did (``outcome``). Both are a person's
+words: they decide what happens next and are never evidence.
+"""
+
+from datetime import UTC, datetime
+
+from sqlmodel import Field, SQLModel
+
+REVIEW_EVENTS = ("comment", "approve", "request_changes")
+COMMENT_SIDES = ("new", "old")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+class RunReview(SQLModel, table=True):
+    __tablename__ = "run_reviews"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    agent_run_id: int = Field(foreign_key="agent_runs.id", index=True)
+    event: str
+    body: str | None = None
+    # recorded | sent_back | accepted | approval_recorded
+    outcome: str
+    author_name: str
+    author_user_id: int | None = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")
+
+
+class ReviewComment(SQLModel, table=True):
+    __tablename__ = "review_comments"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    agent_run_id: int = Field(foreign_key="agent_runs.id", index=True)
+    path: str | None = None
+    line: int | None = None
+    side: str = "new"
+    body: str
+    author_name: str
+    author_user_id: int | None = Field(default=None, foreign_key="users.id")
+    # The review that carried it; empty while it waits for one.
+    review_id: int | None = Field(default=None, foreign_key="run_reviews.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    resolved_at: datetime | None = None
+    # Written on the platform the run was published to (``github`` or
+    # ``gitlab``) and brought here by ``services/review_sync.py``: its id
+    # there, its page, and, for a submitted review, its state there.
+    source: str | None = None
+    external_id: str | None = Field(default=None, index=True)
+    external_url: str | None = None
+    external_state: str | None = None
+
+
+class RunPublication(SQLModel, table=True):
+    """A run's branch pushed to its platform, and the request opened for it.
+
+    What the workspace daemon answered: the branch, the base and the commit
+    git pushed, and the pull request (GitHub) or merge request (GitLab) the
+    platform's CLI opened, or the page where a person opens one (``how`` is
+    ``gh``, ``glab`` or ``compare``).
+    A request already open for the branch has its description updated.
+    """
+
+    __tablename__ = "run_publications"
+
+    id: int | None = Field(default=None, primary_key=True)
+    company_id: int = Field(foreign_key="companies.id", index=True)
+    agent_run_id: int = Field(foreign_key="agent_runs.id", index=True)
+    provider: str | None = None
+    branch: str
+    base: str
+    commit: str
+    url: str | None = None
+    how: str
+    # The request already existed: its description was brought up to date.
+    updated: bool = False
+    published_by: str
+    published_by_user_id: int | None = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=_utcnow)
+    audit_log_id: int | None = Field(default=None, foreign_key="audit_log.id")

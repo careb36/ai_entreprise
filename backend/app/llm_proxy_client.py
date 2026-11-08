@@ -38,10 +38,14 @@ def _json_body(response: Any) -> dict[str, Any] | None:
 DEFAULT_TIMEOUT_SECONDS = float(os.getenv("LLM_UPSTREAM_TIMEOUT_SECONDS", "110")) + 10
 
 
-def _payload(messages: list, model: str, max_tokens: int | None) -> dict[str, Any]:
+def _payload(
+    messages: list, model: str, max_tokens: int | None, tools: list | None = None
+) -> dict[str, Any]:
     payload: dict[str, Any] = {"messages": messages, "model": model}
     if max_tokens:
         payload["max_tokens"] = int(max_tokens)
+    if tools:
+        payload["tools"] = tools
     return payload
 
 
@@ -56,15 +60,13 @@ class LLMProxyClient:
 
     def __init__(self, base_url: str | None = None):
         self.base_url = base_url or os.getenv("LLM_PROXY_URL", "http://localhost:5100")
-        # Has to outlast the proxy's own upstream budget: timing out first
-        # discards an answer the provider is still writing (and billing).
-        self.timeout = float(
-            os.getenv("LLM_PROXY_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
-        )
+        self.timeout = DEFAULT_TIMEOUT_SECONDS
         # A cap on the answer for the calls whose form is fixed (a review, a
         # brief, a plan); ``None`` leaves the provider's own limit.
         self.max_tokens: int | None = None
         self.max_retries = int(os.getenv("LLM_PROXY_MAX_RETRIES", "2"))
+        # The company whose provider connections a ``conn:<id>:<model>`` may use.
+        self.company_id: int | None = None
         self.retry_backoff_sec = float(os.getenv("LLM_PROXY_RETRY_BACKOFF_SEC", "1.0"))
 
     def _get_headers(
@@ -82,6 +84,20 @@ class LLMProxyClient:
         propagate.inject(headers)
         return headers
 
+    def _route(
+        self, model: str, headers: dict[str, str]
+    ) -> tuple[str, dict[str, Any] | None]:
+        """The model to send and the headers updated for a company connection;
+        an error answer instead when the connection cannot be used."""
+        from services import provider_connections
+
+        try:
+            sent, extra = provider_connections.proxy_route(model, self.company_id)
+        except Exception as exc:  # noqa: BLE001 - The reason is the answer.
+            return model, {"error": f"provider connection: {exc}", "ok": False}
+        headers.update(extra)
+        return sent, None
+
     def chat(
         self,
         messages: list,
@@ -89,20 +105,26 @@ class LLMProxyClient:
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Send a multi-turn chat request to the LLM proxy (OpenAI-compatible).
 
         ``max_tokens`` caps the answer; without it the provider's own limit
-        applies. ``extra`` carries provider-specific switches
-        (``chat_template_kwargs``) that the proxy forwards untouched. Only a
-        request that never reached the proxy is retried: an error the proxy
-        answered has already cost its upstream call (and the proxy's own
-        fallbacks), so sending it again would bill it again.
+        applies. ``tools`` is the OpenAI ``tools`` list; the answer may then
+        carry ``tool_calls`` in its message instead of content. ``extra``
+        carries provider-specific switches (``chat_template_kwargs``, used by
+        the voice build) that the proxy forwards untouched. Only a request
+        that never reached the proxy is retried: an error the proxy answered
+        has already cost its upstream call (and the proxy's own fallbacks), so
+        sending it again would bill it again.
         """
         headers = self._get_headers(role, bu_id)
-        payload = _payload(messages, model, max_tokens or self.max_tokens)
+        model, refused = self._route(model, headers)
+        if refused:
+            return refused
+        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
         if extra:
             payload.update(extra)
 
@@ -133,12 +155,6 @@ class LLMProxyClient:
                     "detail": _json_body(response),
                 }
 
-            except requests.Timeout as e:
-                # Retrying a read timeout only triples the wait: the provider
-                # was already given the whole budget for this answer.
-                logger.error(f"LLM proxy timed out after {self.timeout:.0f}s: {e}")
-                return {"error": str(e), "ok": False, "timed_out": True}
-
             except requests.RequestException as e:
                 if attempt < self.max_retries:
                     delay = self.retry_backoff_sec * (attempt + 1)
@@ -164,12 +180,16 @@ class LLMProxyClient:
         role: str = "Developer",
         bu_id: int | None = None,
         max_tokens: int | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Async variant of ``chat()`` used by LangGraph async nodes.
         """
         headers = self._get_headers(role, bu_id)
-        payload = _payload(messages, model, max_tokens or self.max_tokens)
+        model, refused = await asyncio.to_thread(self._route, model, headers)
+        if refused:
+            return refused
+        payload = _payload(messages, model, max_tokens or self.max_tokens, tools)
 
         for attempt in range(self.max_retries + 1):
             try:

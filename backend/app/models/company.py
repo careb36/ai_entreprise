@@ -13,7 +13,9 @@ Tables defined here represent the multi-tenancy core of Fabrique:
 """
 
 from datetime import datetime
+from typing import Any
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -27,6 +29,25 @@ class Company(SQLModel, table=True):
     default_scope_size: str = "M"  # "S" | "M" | "L" — default scope for new sprints
     default_sprint_length_days: int | None = None  # deprecated
     autonomy_level: int = 2  # 1 = human-led  2 = assisted  3 = autonomous
+    # Each task's deliveries as commits on its own branch, in a worktree, never
+    # in the person's checkout (services/git_workflow.py); the branch starts
+    # from git_base_branch, or from what the repository has checked out.
+    git_workflow: bool = False
+    git_base_branch: str | None = None
+    # Hosts the research tools may read beside the defaults
+    # (services/research_tools.py); a Manager writes it.
+    research_hosts: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # Where agent-written code runs for this company (services/sandbox.py):
+    # ``host``, ``container`` or ``bwrap``; empty: the deployment's
+    # DELIVERY_SANDBOX. The environment variables a sandboxed run may see, by
+    # name (the values stay on the daemon's machine); none by default.
+    delivery_sandbox: str | None = None
+    sandbox_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The models the company's agents run when their own is empty
+    # (services/company_models.py): one per role ({"QA": "..."}), then one
+    # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.
+    default_model: str | None = None
+    role_models: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

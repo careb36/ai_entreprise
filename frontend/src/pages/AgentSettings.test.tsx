@@ -9,6 +9,12 @@ const catalogue = vi.hoisted(() => ({
   models: [] as CatalogEntry[],
   agents: [] as Record<string, unknown>[],
   role: null as string | null,
+  connectionModels: [] as { value: string; label: string; connection: string }[],
+}))
+
+vi.mock('../components/ConnectionModelOptions', async importActual => ({
+  ...(await importActual<typeof import('../components/ConnectionModelOptions')>()),
+  useConnectionModelOptions: () => catalogue.connectionModels,
 }))
 
 vi.mock('../hooks/useQueries', () => {
@@ -42,6 +48,7 @@ describe('AgentSettings model selector', () => {
       { id: 'qwen3.7-plus', provider: 'qwen', tier: 'balanced', description: 'Qwen qwen3.7-plus' },
     ]
     catalogue.agents = []
+    catalogue.connectionModels = []
     useAppStore.setState({ companyId: 1, companyName: 'Routing Corp' })
   })
 
@@ -62,6 +69,22 @@ describe('AgentSettings model selector', () => {
     ])
     expect(select.value).toBe('')
     expect(screen.queryByText(/kimi-k2\.6/)).not.toBeInTheDocument()
+  })
+
+  it("offers the models the company's validated connections listed, and says which connection runs one", () => {
+    catalogue.connectionModels = [
+      { value: 'conn:7:deepseek-chat', label: 'Our DeepSeek · DeepSeek Chat', connection: 'Our DeepSeek' },
+    ]
+    render(<AgentSettings />)
+    fireEvent.click(screen.getByRole('button', { name: 'New agent' }))
+
+    const select = modelSelect()
+    expect(optionLabels(select)).toContain('Our DeepSeek · DeepSeek Chat')
+    expect(within(select).getByRole('group', { name: 'Company connection: Our DeepSeek' })).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: 'conn:7:deepseek-chat' } })
+    expect(select.value).toBe('conn:7:deepseek-chat')
+    expect(screen.queryByText(/not in catalog/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Runs through the company's connection Our DeepSeek/)).toBeInTheDocument()
   })
 
   it('lets a chosen model go back to "Default for role"', () => {

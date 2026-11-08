@@ -24,7 +24,9 @@
     "members": "Members",
     "github": "GitHub",
     "helpDesk": "Help desk",
-    "procedures": "Procedures"
+    "procedures": "Procedures",
+    "specifications": "Specifications",
+    "models": "Models"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -493,6 +495,9 @@
     "carriedFrom": "Another attempt at a task blocked in {{sprint}}:",
     "carriedTo": "Given another attempt in {{sprint}}:",
     "taskNumber": "task #{{id}}",
+    "taskWithTitle": "task #{{id}}: {{title}}",
+    "waitsFor": "Waits for",
+    "dependedOn": "Depended on",
     "invalidId": "Invalid task ID: {{taskId}}.",
     "noSprint": "Select a sprint to look up task #{{taskId}}.",
     "notFound": "Task #{{taskId}} was not found in sprint #{{sprintId}}.",
@@ -575,7 +580,10 @@
     "qaReworksTitle": "QA reworks: {{count}}/{{limit}}",
     "qaReworks": "QA rework {{count}}/{{limit}}",
     "qaFailuresTitle": "QA failures: {{count}}/{{limit}}",
-    "qaFailures": "QA fail {{count}}/{{limit}}"
+    "qaFailures": "QA fail {{count}}/{{limit}}",
+    "waitsFor_one": "Waits for {{count}} task",
+    "waitsFor_other": "Waits for {{count}} tasks",
+    "acceptanceTests": "Acceptance tests"
   },
   "glassroom": {
     "title": "Glassroom",
@@ -1149,7 +1157,9 @@
       "support": "Favors fast, balanced models for clear responses and lightweight triage.",
       "generalist": "Uses a balanced general-purpose model when the role does not clearly call for a specialist."
     },
-    "readOnly": "You can read the agents. Only a Manager or the Owner changes them."
+    "readOnly": "You can read the agents. Only a Manager or the Owner changes them.",
+    "connectionGroup": "Company connection: {{connection}}",
+    "connectionModelHint": "Runs through the company's connection {{connection}}; the key stays with the company."
   },
   "common": {
     "loading": "Loading...",
@@ -1461,6 +1471,264 @@
       "proposal": "Procedure"
     }
   },
+  "specifications": {
+    "title": "Specifications",
+    "subtitle": "What the agents build from. Each acceptance criterion becomes a test, and a sprint planned from an approved specification says which task covers each one.",
+    "selectCompany": "Select a company to see its specifications.",
+    "loading": "Loading specifications…",
+    "loadError": "Could not load the specifications: {{message}}",
+    "loadingOne": "Loading the specification…",
+    "loadOneError": "Could not load the specification: {{message}}",
+    "invalidId": "Invalid specification ID: {{id}}",
+    "back": "All specifications",
+    "empty": "No specifications yet",
+    "emptyHint": "Ask the PO for a draft from a short brief, or write one yourself.",
+    "emptyViewer": "A Manager asks the PO for a draft, or writes one.",
+    "version": "v{{version}}",
+    "status": {
+      "draft": "Draft",
+      "approved": "Approved",
+      "superseded": "Superseded"
+    },
+    "draftedBy": "Drafted by {{who}}",
+    "approvedBy": "Approved by {{who}} on {{date}}",
+    "supersedes": "Revision of #{{id}}",
+    "checkSummary": "{{blocking}} blocking · {{warnings}} warnings",
+    "ready": "Ready to approve",
+    "summary": "Summary",
+    "askPO": "Ask the PO for a draft",
+    "briefLabel": "Brief",
+    "briefPlaceholder": "What should be built, for whom, and why…",
+    "briefHint": "The PO writes the requirements, their acceptance criteria and the questions it could not answer. It takes a minute.",
+    "drafting": "The PO is drafting…",
+    "draftError": "The PO could not draft it: {{message}}",
+    "writeYourself": "Write one yourself",
+    "taskCovers": "Covers",
+    "check": {
+      "title": "Check",
+      "ok": "Nothing blocks this specification: it is ready to approve.",
+      "blocking": "Blocking",
+      "warnings": "Warnings"
+    },
+    "questions": {
+      "title": "Open questions",
+      "none": "The PO left no questions.",
+      "unanswered": "Unanswered",
+      "answered": "Answer: {{answer}}",
+      "answer": "Answer",
+      "edit": "Edit answer",
+      "answerLabel": "Answer to question {{n}}",
+      "save": "Save answer",
+      "error": "Could not save the answer: {{message}}"
+    },
+    "requirements": {
+      "title": "Requirements",
+      "none": "No requirements.",
+      "criteria": "Acceptance criteria",
+      "criteriaOf": "Acceptance criteria of {{id}}",
+      "given": "Given",
+      "when": "When",
+      "then": "Then"
+    },
+    "coverage": {
+      "uncovered": "Uncovered",
+      "planned": "Planned",
+      "blocked": "Blocked",
+      "done": "Done",
+      "summary": "{{covered}} of {{total}} criteria covered, {{done}} done",
+      "task": "task #{{id}}",
+      "verified": "Verified",
+      "verifiedSummary": "{{verified}} of {{total}} verified by a passing test",
+      "testPlanned": "Test planned",
+      "testTask": "tests #{{id}}",
+      "testResult": {
+        "pass": "Test passed",
+        "fail": "Test failing",
+        "missing": "Test not run"
+      }
+    },
+    "quality": {
+      "title": "Quality attributes",
+      "none": "No quality attributes.",
+      "attribute": "Attribute",
+      "target": "Target",
+      "targetIs": "Target: {{target}}"
+    },
+    "constraints": {
+      "title": "Constraints",
+      "none": "No constraints."
+    },
+    "actions": {
+      "title": "Actions",
+      "edit": "Edit",
+      "revise": "Revise",
+      "reviseHint": "A new draft version; this one stays approved until the new one is.",
+      "reviseError": "Could not start the revision: {{message}}",
+      "revisePO": "Ask the PO to revise",
+      "reviseBrief": "What should change",
+      "sendToPO": "Send to the PO",
+      "answerFirst_one": "{{count}} question is still unanswered: answering it first gives a better revision.",
+      "answerFirst_other": "{{count}} questions are still unanswered: answering them first gives a better revision.",
+      "approve": "Approve",
+      "approveBlocked": "Fix the blocking findings first.",
+      "approveError": "Could not approve it: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Specification editor",
+      "newTitle": "New specification",
+      "idsNote": "Ids (REQ-1, REQ-1.1, NFR-1) are assigned when you save.",
+      "title": "Title",
+      "summary": "Summary",
+      "requirements": "Requirements",
+      "requirement": "Requirement {{n}}",
+      "requirementTitle": "Title",
+      "requirementTitleOf": "Title of requirement {{n}}",
+      "description": "Description",
+      "descriptionOf": "Description of requirement {{n}}",
+      "criterionField": "{{field}} of criterion {{r}}.{{n}}",
+      "addRequirement": "Add a requirement",
+      "removeRequirement": "Remove requirement {{n}}",
+      "addCriterion": "Add a criterion",
+      "removeCriterion": "Remove criterion {{r}}.{{n}}",
+      "quality": "Quality attributes",
+      "qualityHint": "Each target carries a number, so it can be measured.",
+      "attributeOf": "Attribute {{n}}",
+      "targetOf": "Target of attribute {{n}}",
+      "addQuality": "Add a quality attribute",
+      "removeQuality": "Remove attribute {{n}}",
+      "constraints": "Constraints",
+      "constraintOf": "Constraint {{n}}",
+      "addConstraint": "Add a constraint",
+      "removeConstraint": "Remove constraint {{n}}",
+      "incomplete": "Every requirement needs a title and complete criteria.",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "plan": {
+      "label": "Plan from a specification",
+      "none": "None: plan from the goal",
+      "option": "{{title}} (v{{version}})",
+      "goalPlaceholder": "The specification is the goal; add a note for the PO if you want.",
+      "covers": "Covers",
+      "after": "After: {{titles}}",
+      "uncovered_one": "{{count}} criterion stays uncovered: {{ids}}. The sprint can still start.",
+      "uncovered_other": "{{count}} criteria stay uncovered: {{ids}}. The sprint can still start."
+    }
+  },
+  "architectures": {
+    "title": "Architecture",
+    "loading": "Loading the architecture…",
+    "loadError": "Could not load the architecture: {{message}}",
+    "loadingOne": "Loading the architecture…",
+    "loadOneError": "Could not load the architecture: {{message}}",
+    "invalidId": "Invalid architecture ID: {{id}}",
+    "back": "Back to the specification",
+    "managerOnly": "Only a Manager writes an architecture.",
+    "noneHint": "No architecture yet. Ask the Architect for a design from this specification, or write one yourself.",
+    "noneViewer": "No architecture yet. A Manager asks the Architect for a design, or writes one.",
+    "askArchitect": "Ask the Architect for a design",
+    "writeYourself": "Write it yourself",
+    "drafting": "The Architect is designing…",
+    "draftError": "The Architect could not design it: {{message}}",
+    "overview": "Overview",
+    "writtenTo": "Written to {{path}} on {{date}}, sha256 {{hash}}",
+    "check": {
+      "ok": "Nothing blocks this architecture: it is ready to approve."
+    },
+    "questions": {
+      "none": "The Architect left no questions."
+    },
+    "kinds": {
+      "http": "HTTP",
+      "function": "Function",
+      "event": "Event",
+      "cli": "CLI",
+      "schema": "Schema",
+      "other": "Other"
+    },
+    "modules": {
+      "title": "Modules",
+      "none": "No modules.",
+      "dependsOn": "Depends on",
+      "covers": "Covers"
+    },
+    "interfaces": {
+      "title": "Interfaces",
+      "none": "No interfaces.",
+      "providedBy": "Provided by",
+      "consumers": "Consumed by"
+    },
+    "decisions": {
+      "title": "Decisions",
+      "none": "No decisions.",
+      "context": "Context",
+      "decision": "Decision",
+      "consequences": "Consequences"
+    },
+    "conventions": {
+      "title": "Conventions",
+      "none": "No conventions."
+    },
+    "markdown": {
+      "title": "Document",
+      "view": "View as Markdown",
+      "loading": "Loading the document…",
+      "error": "Could not load the document: {{message}}"
+    },
+    "actions": {
+      "reviseArchitect": "Ask the Architect to revise",
+      "reviseHint": "A new draft version; this one stays approved until the new one is.",
+      "write": "Write to the repository",
+      "writing": "Writing…",
+      "written": "Written to {{path}}, sha256 {{hash}}",
+      "writeError": "Could not write it: {{message}}"
+    },
+    "editor": {
+      "formLabel": "Architecture editor",
+      "newTitle": "New architecture",
+      "idsNote": "Ids (MOD-1, IF-1, ADR-1) are assigned when you save; modules are named here and the names map to ids.",
+      "title": "Title",
+      "overview": "Overview",
+      "module": "Module {{n}}",
+      "moduleName": "Name",
+      "moduleNameOf": "Name of module {{n}}",
+      "modulePath": "Path",
+      "modulePathOf": "Path of module {{n}}",
+      "responsibility": "Responsibility",
+      "responsibilityOf": "Responsibility of module {{n}}",
+      "dependsOn": "Depends on",
+      "dependsOnItem": "Module {{n}} depends on {{name}}",
+      "covers": "Covers",
+      "coversItem": "Module {{n}} covers {{id}}",
+      "addModule": "Add a module",
+      "removeModule": "Remove module {{n}}",
+      "nothingToPick": "Nothing to pick from yet.",
+      "interface": "Interface {{n}}",
+      "interfaceName": "Name",
+      "interfaceNameOf": "Name of interface {{n}}",
+      "kind": "Kind",
+      "kindOf": "Kind of interface {{n}}",
+      "providedBy": "Provided by",
+      "providedByOf": "Module providing interface {{n}}",
+      "pickModule": "Pick a module…",
+      "contract": "Contract",
+      "contractOf": "Contract of interface {{n}}",
+      "consumers": "Consumed by",
+      "consumersItem": "Interface {{n}} consumed by {{name}}",
+      "addInterface": "Add an interface",
+      "removeInterface": "Remove interface {{n}}",
+      "decision": "Decision {{n}}",
+      "decisionTitle": "Title",
+      "decisionTitleOf": "Title of decision {{n}}",
+      "decisionField": "{{field}} of decision {{n}}",
+      "addDecision": "Add a decision",
+      "removeDecision": "Remove decision {{n}}",
+      "conventionOf": "Convention {{n}}",
+      "addConvention": "Add a convention",
+      "removeConvention": "Remove convention {{n}}",
+      "incomplete": "Every module needs a name and a path, every interface a name and its module, every decision a title."
+    }
+  },
   "procedures": {
     "title": "Procedures",
     "subtitle": "The rules each role follows. The ScrumMaster proposes them after a sprint with rework; the board's numbers keep or revert them.",
@@ -1549,6 +1817,196 @@
     },
     "startNow": "Start Sprint 0 as soon as the company is created",
     "startNowHint": "Leave it unchecked to review the plan first and start it from the sprint page.",
-    "startNowHumanLed": "At level 1 you always start it yourself."
+    "startNowHumanLed": "At level 1 you always start it yourself.",
+    "git": "Git branch per task",
+    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched."
+  },
+  "review": {
+    "tabs": {
+      "overview": "Overview",
+      "files": "Files changed",
+      "label": "Run sections"
+    },
+    "loading": "Loading the files changed",
+    "loadError": "Could not load the files this run changed.",
+    "summary_one": "{{count}} file changed",
+    "summary_other": "{{count}} files changed",
+    "sourceWorkspace": "Observed by the workspace daemon when it wrote the files (verification #{{id}}): the bytes before and after, never the agent's account.",
+    "sourcePullRequest": "The pull request's diff, as GitHub returned it.",
+    "sourceArtifact": "The diff the producer sent as its artifact: what it proposes, not a change observed on a disk.",
+    "nothingObserved": "No change was observed for this run.",
+    "declaredNotObserved": "Declared by the producer, but no observation covers it: {{files}}",
+    "fileList": "Files in this review",
+    "filesNotShown_one": "{{count}} more file is not shown.",
+    "filesNotShown_other": "{{count}} more files are not shown.",
+    "viewed": "Viewed",
+    "expand": "Show the file's changes",
+    "collapse": "Hide the file's changes",
+    "showAllLines_one": "Show all {{count}} line",
+    "showAllLines_other": "Show all {{count}} lines",
+    "unchanged": "No change: the file already had these exact bytes.",
+    "notWritten": "Not written ({{status}}).",
+    "noHunks": "No line changed.",
+    "omitted": {
+      "binary": "Binary file: no diff shown.",
+      "too_large": "The file is too large to show its diff.",
+      "reply_size": "The diff was left out to keep the daemon's reply within its size limit; the counts are still the daemon's.",
+      "not_recorded": "Delivered before the daemon reported diffs: the file was written, but what changed was not recorded."
+    },
+    "change": {
+      "added": "Added",
+      "modified": "Modified",
+      "deleted": "Deleted",
+      "renamed": "Renamed",
+      "unchanged": "Unchanged",
+      "not_written": "Not written",
+      "unknown": "Written"
+    },
+    "comment": {
+      "add": "Comment on line {{line}}",
+      "label": "Your comment on line {{line}}",
+      "submit": "Comment",
+      "pending": "Waits for the review",
+      "resolved": "Resolved",
+      "resolve": "Resolve",
+      "inReview": "In review #{{id}}",
+      "elsewhere": "Comments on lines this diff does not show",
+      "on": {
+        "github": "on GitHub",
+        "gitlab": "on GitLab"
+      },
+      "state": {
+        "CHANGES_REQUESTED": "Changes requested",
+        "APPROVED": "Approved",
+        "COMMENTED": "Commented",
+        "DISMISSED": "Dismissed"
+      }
+    },
+    "panel": {
+      "title": "Review",
+      "history": "Reviews submitted",
+      "bodyLabel": "Leave a comment for the whole review",
+      "decision": "Decision",
+      "submit": "Submit review",
+      "pendingComments_one": "{{count}} line comment goes with this review",
+      "pendingComments_other": "{{count}} line comments go with this review",
+      "none": "No review yet.",
+      "hint": {
+        "comment": "Records the review and its comments; nothing else changes.",
+        "approve": "For a task the agents delivered: accepts a delivery QA approved that waits for a person. For another producer's run: records the approval.",
+        "request_changes": "For a task the agents delivered: sends it back to work, with this text and the line comments as what to change. For another producer's run: records the rejection."
+      }
+    },
+    "event": {
+      "comment": "Comment",
+      "approve": "Approve",
+      "request_changes": "Request changes"
+    },
+    "outcome": {
+      "recorded": "Recorded.",
+      "sent_back": "The task went back to work with the comments.",
+      "accepted": "The delivery was accepted and the task is done.",
+      "approval_recorded": "The decision was recorded on the run."
+    },
+    "gitCommit": "On branch {{branch}}, commit {{commit}} (on top of {{parent}})",
+    "gitNoCommit": "On branch {{branch}}: no new commit, nothing changed",
+    "publish": {
+      "title": "Publish the branch",
+      "button": "Publish as pull request",
+      "again": "Publish again",
+      "hint": "Pushes {{branch}} to origin with this computer's Git credentials and opens a draft pull request (gh) or merge request (glab); without them, gives the page to open it. The description carries this run's evidence.",
+      "pushed": "{{name}} pushed {{commit}} on {{branch}} → {{base}}",
+      "how": {
+        "gh": "Draft pull request",
+        "glab": "Draft merge request",
+        "compare": "Open the request"
+      },
+      "noUrl": "Pushed; this remote has no web page to open a request",
+      "updated": "description updated with this run",
+      "sync": "Bring comments",
+      "synced": "{{added}} new, {{updated}} updated",
+      "truncated": "Only part of the comments came: open the request on the platform for the rest",
+      "fromPlatform": "Comments from the request that are not on a line shown here"
+    }
+  },
+  "standards": {
+    "title": "Quality standards",
+    "subtitle": "What the factory holds every project to, by discipline. They bind every role before any task; a procedure adds to them, never relaxes them. The ones marked as checked are verified without a model.",
+    "loading": "Loading the standards…",
+    "loadError": "Could not load the standards: {{message}}",
+    "checked": "Checked",
+    "checkedBy": "Checked: {{how}}.",
+    "areas": {
+      "architecture": "Architecture",
+      "development": "Development",
+      "qa": "QA",
+      "security": "Security",
+      "audit": "Evidence and audit",
+      "documentation": "Documentation",
+      "operations": "Operations",
+      "product": "Product"
+    }
+  },
+  "sources": {
+    "title_one": "{{count}} source consulted",
+    "title_other": "{{count}} sources consulted",
+    "hint": "What the agent read while drafting, recorded by the backend: the page, when, the status and the hash of what came back. What it concluded is its claim.",
+    "fetched": "{{status}} · {{hash}} · {{date}}",
+    "failed": "failed ({{status}})",
+    "refused": "refused: {{host}} is not on the company's list of sources"
+  },
+  "models": {
+    "title": "Models",
+    "subtitle": "The providers your company's agents reach and the models they run. An agent's own model, set on the Agents page, still wins.",
+    "noCompany": "Choose a company first.",
+    "connections": {
+      "title": "Provider connections",
+      "subtitle": "Connect the providers your agents use, with your company's own key. Validating lists the provider's models with the key and spends no tokens.",
+      "none": "No provider connected yet.",
+      "off": "off",
+      "validate": "Validate",
+      "turnOff": "Turn off",
+      "turnOn": "Turn on",
+      "removeNamed": "Remove {{name}}",
+      "confirmRemove": "Remove the connection {{name}}? Agents and model choices that use its models will fail until you choose another model for them.",
+      "validated_one": "Validated: the provider listed {{count}} model",
+      "validated_other": "Validated: the provider listed {{count}} models",
+      "failed": "Validation failed: {{detail}}",
+      "notValidated": "Not validated yet",
+      "add": "Connect a provider",
+      "provider": "Provider",
+      "providerPlaceholder": "deepseek, openrouter, ollama…",
+      "openaiCompatible": "Any OpenAI-compatible endpoint",
+      "name": "Name",
+      "namePlaceholder": "defaults to the provider",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "required for an OpenAI-compatible endpoint",
+      "apiKey": "API key",
+      "keyNote": "The key is encrypted at rest and never shown again. Local servers (Ollama, LM Studio, vLLM) need no key.",
+      "connect": "Connect"
+    },
+    "choices": {
+      "title": "Models per role",
+      "subtitle": "The model each role runs when its agent has none of its own. Without a choice here, the deployment's settings apply.",
+      "useSuggestions": "Use the suggestions",
+      "noConnections": "Connect and validate a provider to choose among its models.",
+      "default": "Company default",
+      "deploymentDefault": "The deployment's default",
+      "companyDefault": "Company default",
+      "role": "Role",
+      "model": "Model",
+      "runs": "Runs now",
+      "suggested": "Suggested: {{model}}",
+      "suggestedGroup": "Suggested",
+      "others": "Others",
+      "current": "Current",
+      "saved": "Saved.",
+      "source": {
+        "role": "chosen for this role",
+        "company": "the company's default",
+        "deployment": "the deployment's setting"
+      },
+      "measured": "Measured on {{tasks}} of the company's tasks: {{done}} done, {{rework}} rework per task"
+    }
   }
 }

@@ -5,15 +5,10 @@ WORKDIR /app
 # Disable Electron download during build
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 
-# The unprivileged `node` user (uid 1000) owns the app: npm and Vite write
-# their caches under node_modules at run time.
-RUN chown node:node /app
-USER node
+COPY package*.json ./
+RUN npm install
 
-COPY --chown=node:node package*.json ./
-RUN npm ci
-
-COPY --chown=node:node . .
+COPY . .
 
 EXPOSE 5173
 

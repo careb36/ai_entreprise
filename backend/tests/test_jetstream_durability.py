@@ -515,6 +515,43 @@ def test_daemon_retries_a_queued_delivery_it_could_not_report(tmp_path):
     assert msg.calls == ["nak"]
 
 
+def test_a_redelivered_edit_job_replays_its_result_instead_of_applying_twice(tmp_path):
+    """The result of a job that wrote but could not report is replayed by
+    ``job_id``: applying the same SEARCH/REPLACE again would be refused (the
+    search text is gone) or, when the replacement keeps it, land twice."""
+    daemon = _load_daemon()
+    project = tmp_path / "p"
+    project.mkdir()
+    (project / "a.py").write_text("x = 1\n")
+    job = {
+        "job_id": "edit-1",
+        "workspace_root": str(project),
+        "files": [
+            {
+                "path": "a.py",
+                "edits": [{"search": "x = 1\n", "replace": "x = 1\ny = 2\n"}],
+            }
+        ],
+    }
+
+    class _DownJS:
+        async def publish(self, subject, data, headers=None):
+            raise ConnectionError("nats down")
+
+    first = _FakeMsg(json.dumps(job).encode())
+    asyncio.run(daemon.process_queued_delivery(_FakeDaemonNC(), _DownJS(), first))
+    assert first.calls == ["nak"]
+    assert (project / "a.py").read_text() == "x = 1\ny = 2\n"
+
+    result, calls = _daemon_writes(daemon, job)
+    assert calls == ["ack"]
+    assert (project / "a.py").read_text() == "x = 1\ny = 2\n"  # Not applied twice.
+    [written] = result["files"]
+    assert written["status"] == "written" and written["edits_applied"] == 1
+    # Acknowledged: the journal entry is gone, a new job with that id runs afresh.
+    assert not list((tmp_path / "daemon-state" / "deliveries").glob("*.json"))
+
+
 def test_repeated_dispatch_of_the_same_todo_item_has_one_id(db, tmp_path):
     project = tmp_path / "project"
     project.mkdir()

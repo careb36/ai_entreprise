@@ -13,8 +13,14 @@ and reports histories the loop must never produce:
 - ``high_risk_done_without_person``: a high-risk hold closed with no note
   from a person after it;
 - ``carried_twice``: one task carried into another sprint more than once;
+- ``worked_before_dependency``: a task that delivered before every task it
+  depends on was done: the dependency is not done, or it closed (its last
+  approval or person's note) after this task's first deliverable;
 - ``decision_without_escalation``: a ScrumMaster decision that names an
-  escalation the task never had.
+  escalation the task never had;
+- ``criteria_verified_without_run``: a run whose Verifier marked a criterion's
+  acceptance test as passed with no observed test run (no exit status from the
+  daemon) in its evidence.
 
 It deliberately imports none of the production readers (``services/board.py``,
 ``services/carry_over.py``, ``services/scrum_master.py``) and restates the
@@ -30,6 +36,7 @@ which prints every violation and exits 1 when there is one.
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from typing import Any
 
 # Restated on purpose; see the module docstring.
@@ -74,16 +81,47 @@ def _answered(body: str) -> int | None:
     return None
 
 
+def _when(comment: dict[str, Any]) -> datetime | None:
+    raw = str(comment.get("created_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return (
+        parsed if parsed.tzinfo is None else parsed.astimezone(UTC).replace(tzinfo=None)
+    )
+
+
+def _started_at(comments: list[dict[str, Any]]) -> datetime | None:
+    """When the task's first deliverable was posted."""
+    return next((_when(c) for c in comments if _is_deliverable(c)), None)
+
+
+def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
+    """When the task was closed: its last approval or person's note."""
+    closing = [c for c in comments if _is_approval(c) or _author(c) == _PERSON]
+    return _when(closing[-1]) if closing else None
+
+
 def check_task(
     task: dict[str, Any],
     runs: list[dict[str, Any]],
     messages: list[dict[str, Any]],
+    others: dict[int, Any] | None = None,
 ) -> list[str]:
     """The violations in one task's history, as ``"<rule>: <detail>"`` lines.
 
-    *task* has ``id``, ``status`` and ``comments``; *runs* are the task
-    worker's runs of it with ``version`` and ``status``; *messages* are the
-    company's messages about it with ``id``, ``kind`` and ``body``.
+    *task* has ``id``, ``status``, ``comments`` and ``depends_on``; *runs*
+    are the task worker's runs of it with ``version``, ``status``,
+    ``verified_criteria`` (the criteria its latest verification marked as
+    passed) and ``observed_test_run`` (whether that verification's evidence
+    holds an exit status from the daemon);
+    ``reads_without_hash`` (the files a workspace read recorded with no
+    sha256); *messages* are the company's messages about it with ``id``, ``kind``
+    and ``body``; *others* maps the ids of the tasks it depends on to their
+    ``status`` and ``comments`` (a bare status string is accepted).
     """
     comments = [c for c in task.get("comments") or [] if isinstance(c, dict)]
     status = task.get("status")
@@ -119,6 +157,41 @@ def check_task(
         if holds and not any(i > holds[-1] for i in person_notes):
             violations.append("high_risk_done_without_person")
 
+    started = _started_at(comments)
+    worked = started is not None or status in ("done", "in_progress", "in_review")
+    for dep in task.get("depends_on") or [] if worked else []:
+        other = (others or {}).get(dep)
+        if isinstance(other, str):
+            other = {"status": other, "comments": []}
+        dep_status = (other or {}).get("status", "missing")
+        if dep_status != "done":
+            violations.append(
+                f"worked_before_dependency: task {dep} is {dep_status}, not done"
+            )
+            continue
+        closed = _closed_at(
+            [c for c in (other or {}).get("comments") or [] if isinstance(c, dict)]
+        )
+        if started is not None and closed is not None and started < closed:
+            violations.append(
+                f"worked_before_dependency: task {dep} got done at "
+                f"{closed.isoformat()}, after this task delivered at {started.isoformat()}"
+            )
+
+    for run in runs:
+        if run.get("verified_criteria") and not run.get("observed_test_run"):
+            violations.append(
+                f"criteria_verified_without_run: run v{run.get('version')} marks "
+                f"{', '.join(str(c) for c in run['verified_criteria'])} as passed with no test run observed"
+            )
+        # A file the Developer read is evidence only with the hash the daemon
+        # reported; a read without one is a claim dressed as an observation.
+        if run.get("reads_without_hash"):
+            violations.append(
+                f"read_without_hash: run v{run.get('version')} records a read of "
+                f"{', '.join(str(p) for p in run['reads_without_hash'])} with no sha256"
+            )
+
     carried = sum(1 for c in comments if _text(c).startswith(_CARRIED_TO))
     if carried > 1:
         violations.append(f"carried_twice: carried {carried} times")
@@ -144,10 +217,47 @@ def check_task(
     return violations
 
 
+def _run_facts(verification: Any) -> dict[str, Any]:
+    """What a verification row says: the criteria its ``criteria_tests`` check
+    marked as passed, and whether its evidence holds an observed test run."""
+    if verification is None:
+        return {
+            "verified_criteria": [],
+            "observed_test_run": False,
+            "reads_without_hash": [],
+        }
+    passed = [
+        str(cid)
+        for check in verification.checks or []
+        if isinstance(check, dict) and check.get("name") == "criteria_tests"
+        for cid, result in (check.get("results") or {}).items()
+        if result == "pass"
+    ]
+    exit_code = ((verification.evidence or {}).get("test_run") or {}).get("exit_code")
+    # The daemon reports an integer; one that travelled as text still counts.
+    observed = (isinstance(exit_code, int) and not isinstance(exit_code, bool)) or (
+        isinstance(exit_code, str) and exit_code.strip().lstrip("-").isdigit()
+    )
+    reads_without_hash = [
+        str(call.get("path") or "?")
+        for call in (verification.evidence or {}).get("tool_calls") or []
+        if isinstance(call, dict)
+        and call.get("server") == "workspace"
+        and call.get("tool") == "read"
+        and not call.get("is_error")
+        and not call.get("sha256")
+    ]
+    return {
+        "verified_criteria": passed,
+        "observed_test_run": observed,
+        "reads_without_hash": reads_without_hash,
+    }
+
+
 def check_database() -> list[str]:
     """Every task in the database, checked; violations prefixed with the task id."""
     from database import engine
-    from models import AgentMessage, AgentRun, BacklogItem
+    from models import AgentMessage, AgentRun, BacklogItem, Verification
     from sqlmodel import Session, select
 
     found: list[str] = []
@@ -156,8 +266,17 @@ def check_database() -> list[str]:
         for run in session.exec(
             select(AgentRun).where(AgentRun.producer == _TASK_WORKER)
         ).all():
+            verification = session.exec(
+                select(Verification)
+                .where(Verification.agent_run_id == run.id)
+                .order_by(Verification.id.desc())
+            ).first()
             runs_by_ref.setdefault(run.external_ref, []).append(
-                {"version": run.version, "status": run.status}
+                {
+                    "version": run.version,
+                    "status": run.status,
+                    **_run_facts(verification),
+                }
             )
         messages_by_task: dict[int, list[dict[str, Any]]] = {}
         for message in session.exec(select(AgentMessage)).all():
@@ -165,12 +284,25 @@ def check_database() -> list[str]:
                 messages_by_task.setdefault(message.backlog_item_id, []).append(
                     {"id": message.id, "kind": message.kind, "body": message.body}
                 )
-        for item in session.exec(select(BacklogItem)).all():
-            task = {"id": item.id, "status": item.status, "comments": item.comments}
+        items = session.exec(select(BacklogItem)).all()
+        others = {
+            item.id: {"status": item.status, "comments": item.comments or []}
+            for item in items
+        }
+        for item in items:
+            task = {
+                "id": item.id,
+                "status": item.status,
+                "comments": item.comments,
+                "depends_on": item.depends_on
+                if isinstance(item.depends_on, list)
+                else [],
+            }
             for violation in check_task(
                 task,
                 runs_by_ref.get(f"task-{item.id}", []),
                 messages_by_task.get(item.id, []),
+                others,
             ):
                 found.append(f"task {item.id} ({item.title}): {violation}")
     return found

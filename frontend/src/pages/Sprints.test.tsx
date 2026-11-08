@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sprints from './Sprints'
 import { api, type SprintSummary } from '../services/api'
+import { specificationsApi } from '../services/specifications'
 import { queryClient } from '../lib/queryClient'
 import { useAppStore } from '../store/useAppStore'
 
@@ -25,6 +26,8 @@ describe('Sprints list', () => {
   beforeEach(() => {
     queryClient.clear()
     useAppStore.setState({ companyId: 42, companyName: 'Example', activeSprintId: 9 })
+    // The planner lists the company's approved specifications; none here.
+    vi.spyOn(specificationsApi, 'list').mockResolvedValue({ specifications: [] })
   })
   afterEach(() => {
     queryClient.clear()

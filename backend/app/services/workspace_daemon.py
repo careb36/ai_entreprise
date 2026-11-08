@@ -8,12 +8,18 @@ request to the daemon.  Paths are the host's own absolute paths and are passed
 through as opaque strings: the backend never resolves them locally.
 """
 
+import asyncio
 import contextlib
+import json
 import os
 import tempfile
 from collections.abc import Iterator
 from pathlib import PurePosixPath
 from typing import Any
+
+from config import settings
+
+from services import criteria_tests
 
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
@@ -195,6 +201,9 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
         "timed_out": timed_out,
         "reason": reply.get("error"),
     }
+    if isinstance(reply.get("sandbox"), dict):
+        # Where the daemon ran it (services/sandbox.py): its own report.
+        test_run["sandbox"] = reply["sandbox"]
     if timed_out:
         test_run["timeout_seconds"] = reply.get("timeout_seconds")
         conclusion = "timed_out"
@@ -209,3 +218,181 @@ def record_test_run(evidence: dict[str, Any], command: str, result: Any) -> None
         "ref": command,
         "conclusion": conclusion,
     }
+
+
+_NPM_DEFAULT_TEST = 'echo "Error: no test specified" && exit 1'
+
+
+async def detect_project_test_command(
+    nats_client: Any, workspace_root: str
+) -> str | None:
+    """``detect_test_command`` on the project's machine.
+
+    The project lives where the daemon runs, so detection reads the daemon's
+    snapshot of it; a folder this server can see itself is the fallback.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    try:
+        project = await inspect_project(nats_client, workspace_root, snapshot=True)
+    except (DaemonUnavailable, DaemonError):
+        project = None
+    if project and project.get("is_dir"):
+
+        def _detect_in_snapshot() -> str | None:
+            with materialized_snapshot(project.get("snapshot") or {}) as mirror:
+                return detect_test_command(mirror)
+
+        return await asyncio.to_thread(_detect_in_snapshot)
+    return await asyncio.to_thread(detect_test_command, workspace_root)
+
+
+def detect_test_command(workspace_root: str) -> str | None:
+    """
+    The command that runs this project's tests, or ``None``.
+
+    ``DELIVERY_TEST_COMMAND`` wins; otherwise an npm ``test`` script (not npm's
+    placeholder) means ``npm test``, and pytest configuration or a ``tests/``
+    folder with ``test_*.py`` files means ``python -m pytest``.
+    """
+    if settings.DELIVERY_TEST_COMMAND.strip():
+        return settings.DELIVERY_TEST_COMMAND.strip()
+    root = os.path.abspath(workspace_root)
+    package_json = os.path.join(root, "package.json")
+    if os.path.isfile(package_json):
+        try:
+            with open(package_json, encoding="utf-8") as fh:
+                script = (json.load(fh).get("scripts") or {}).get("test")
+        except (OSError, ValueError, AttributeError):
+            script = None
+        if isinstance(script, str) and script.strip() and script != _NPM_DEFAULT_TEST:
+            return "npm test --silent"
+    for name, marker in (
+        ("pytest.ini", None),
+        ("pyproject.toml", "[tool.pytest"),
+        ("setup.cfg", "[tool:pytest"),
+    ):
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
+            continue
+        if marker is None:
+            return "python -m pytest -q"
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if marker in fh.read():
+                    return "python -m pytest -q"
+        except OSError:
+            continue
+    tests_dir = os.path.join(root, "tests")
+    if os.path.isdir(tests_dir) and any(
+        name.startswith("test_") and name.endswith(".py")
+        for _dir, _subdirs, names in os.walk(tests_dir)
+        for name in names
+    ):
+        return "python -m pytest -q"
+
+    # Go.
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go test ./..."
+    # Rust.
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo test"
+    # Java (Maven / Gradle).
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q test"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle test"
+    # Ruby.
+    if os.path.isfile(os.path.join(root, "Gemfile")) and os.path.isdir(
+        os.path.join(root, "spec")
+    ):
+        return "bundle exec rspec"
+    return None
+
+
+def detect_install_command(workspace_root: str) -> str | None:
+    """The command that installs this project's dependencies, or None."""
+    root = os.path.abspath(workspace_root)
+    if os.path.isfile(os.path.join(root, "package.json")):
+        return "npm install"
+    if os.path.isfile(os.path.join(root, "requirements.txt")):
+        return "pip install -r requirements.txt"
+    pyproject = os.path.join(root, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            with open(pyproject, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            text = ""
+        # A Poetry project installs its dependencies with Poetry, whether it
+        # is a package or not (``package-mode = false`` cannot be built by
+        # pip); an editable pip install is for a PEP 621 package.
+        if "[tool.poetry]" in text:
+            return "poetry install"
+        if "[project]" in text:
+            return "pip install -e ."
+    if os.path.isfile(os.path.join(root, "Cargo.toml")):
+        return "cargo build"
+    if os.path.isfile(os.path.join(root, "go.mod")):
+        return "go mod download"
+    if os.path.isfile(os.path.join(root, "pom.xml")):
+        return "mvn -q dependency:resolve"
+    if os.path.isfile(os.path.join(root, "build.gradle")) or os.path.isfile(
+        os.path.join(root, "build.gradle.kts")
+    ):
+        return "gradle testClasses"
+    if os.path.isfile(os.path.join(root, "Gemfile")):
+        return "bundle install"
+    return None
+
+
+async def run_delivery_tests(
+    nats_client: Any,
+    sprint: dict[str, Any],
+    evidence: dict[str, Any],
+    engine: Any = None,
+) -> None:
+    """Run the project's tests through the daemon and add the result to *evidence*:
+    ``test_run`` (command, exit code, output tail) and ``ci``, the shape
+    ``check_claimed_tests_evidenced`` reads. The exit status is the daemon's."""
+    workspace_root = evidence["workspace_root"]
+    command = await detect_project_test_command(nats_client, workspace_root)
+    if not command:
+        evidence["test_run"] = {"command": None, "reason": "no test command found"}
+        return
+    if evidence.get("acceptance"):
+        # Per-test lines, so the criteria's tests can be told apart.
+        command = criteria_tests.verbose_command(command)
+    from services import sandbox
+
+    try:
+        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, engine)
+    except sandbox.PolicyUnavailable as e:
+        # Never run agent code under a guessed sandbox: the tests stay unverified.
+        evidence["test_run"] = {"command": command, "reason": str(e)}
+        return
+    try:
+        result = await nats_client.request(
+            "workspace.execute",
+            {
+                "command": command,
+                "workspace_root": workspace_root,
+                "sprint_id": sprint["id"],
+                # Agent-written code: run as the company's sandbox says.
+                "sandbox": box,
+            },
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+        )
+    except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
+        evidence["test_run"] = {
+            "command": command,
+            "reason": f"the workspace daemon did not reply ({type(e).__name__})",
+        }
+        return
+    record_test_run(evidence, command, result)
+    reply = result if isinstance(result, dict) else {}
+    criteria_tests.record_results(
+        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    )
