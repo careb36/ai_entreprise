@@ -229,6 +229,18 @@ class Settings(BaseSettings):
     # decision and takes alone only what the company's policy allows.
     MANAGER_AGENT_ENABLED: bool = False
     MANAGER_AGENT_INTERVAL_SECONDS: float = 60.0
+    # The client's brief by mail (services/brief_mail.py): nothing is sent
+    # unless SMTP_HOST is set.
+    MANAGER_BRIEF_INTERVAL_HOURS: float = 24.0
+    MANAGER_BRIEF_CHECK_SECONDS: float = 300.0
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    SMTP_SSL: bool = False
+    SMTP_TIMEOUT_SECONDS: float = 20.0
 
     class Config:
         env_file = ".env"
