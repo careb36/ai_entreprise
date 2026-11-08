@@ -312,30 +312,23 @@ class CompanyService:
 
     def _load_agent_activity(self, company_id: int) -> dict[str, dict[str, Any]]:
         """Aggregate audit_log into per-agent activity stats for the company."""
-        sprint_ids = [
-            sid
-            for (sid,) in self.session.exec(
-                select(Sprint.id).where(Sprint.company_id == company_id)
-            ).all()
-        ]
-        if not sprint_ids:
-            return {}
+        # Activity is aggregated per company from the audit log; sprints are
+        # not required for it (a company with no sprints has no activity).
 
         rows = self.session.exec(
             select(
                 AuditLog.agent_id,
                 func.count(AuditLog.id),
                 func.max(AuditLog.created_at),
-                func.coalesce(func.sum(AuditLog.cost_usd), 0.0),
                 func.coalesce(func.sum(AuditLog.cost_tokens), 0),
             )
-            .where(AuditLog.sprint_id.in_(sprint_ids))
+            .where(AuditLog.company_id == company_id)
             .where(AuditLog.action == "task.execute")
             .group_by(AuditLog.agent_id)
         ).all()
 
         activity: dict[str, dict[str, Any]] = {}
-        for agent_id, total, last_at, cost_usd, total_tokens in rows:
+        for agent_id, total, last_at, total_tokens in rows:
             if agent_id is None:
                 continue
             total_int = int(total or 0)
@@ -344,29 +337,27 @@ class CompanyService:
             activity[str(agent_id)] = {
                 "total_tasks": total_int,
                 "last_run_at": last_at.isoformat() if last_at else None,
-                "total_cost_usd": float(cost_usd) if cost_usd is not None else 0.0,
+                "total_cost_usd": 0.0,
                 "total_tokens": tokens_int,
                 "avg_tokens": avg,
                 "last_model": None,
             }
 
         recent_rows = self.session.exec(
-            select(AuditLog.agent_id, AuditLog.model)
-            .where(AuditLog.sprint_id.in_(sprint_ids))
+            select(AuditLog.agent_id)
+            .where(AuditLog.company_id == company_id)
             .where(AuditLog.action == "task.execute")
             .order_by(AuditLog.created_at.desc())
             .limit(500)
         ).all()
         seen: set[str] = set()
-        for agent_id, model in recent_rows:
+        for (agent_id,) in recent_rows:
             if agent_id is None:
                 continue
             key = str(agent_id)
             if key in seen:
                 continue
             seen.add(key)
-            if key in activity:
-                activity[key]["last_model"] = model
 
         return activity
 
