@@ -107,7 +107,7 @@ def grade(spec_dir: Path, project: Path, python: str, timeout: int = 300) -> dic
             run = subprocess.run(
                 [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-c", os.devnull,
                  "--rootdir", tmp, f"--junitxml={report}", str(tests)],
-                cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout,
+                cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout, check=False,
             )
             output, exit_code = run.stdout[-4000:], run.returncode
         except subprocess.TimeoutExpired:
@@ -332,7 +332,7 @@ def render_markdown(card: dict[str, Any]) -> str:
 
 
 def _get(api: str, path: str) -> Any:
-    with urllib.request.urlopen(f"{api}{path}", timeout=30) as response:  # noqa: S310 - the bench's own backend.
+    with urllib.request.urlopen(f"{api}{path}", timeout=30) as response:
         return json.loads(response.read())
 
 

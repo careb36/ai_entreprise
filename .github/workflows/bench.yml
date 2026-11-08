@@ -1,14 +1,125 @@
-name: bench
+name: Bench
+
+# The bench (issue #316): scripts/bench/run.sh drives every reference
+# specification in bench/specs/ through the factory against a real Postgres,
+# NATS, backend and workspace daemon, grades the produced project with the
+# acceptance tests a person wrote, and writes a scorecard that
+# scripts/bench/compare.py diffs with the newest one committed in
+# bench/scorecards/. A drop beyond the thresholds fails the job (and, on the
+# nightly run, opens an issue with the diff).
+#
+# This job runs the fake LLM (scripts/bench/fake_llm.py): it checks the
+# circuit, not the models, and spends no tokens. Real models are off: the
+# runner takes a real proxy through BENCH_LLM_URL, and the nightly
+# real-model run, with a token budget and a kill switch, comes with the next
+# part of #316. Until then nothing here sets BENCH_LLM_URL.
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "17 2 * * *"
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   bench:
+    permissions:
+      contents: read
+      actions: write   # upload-artifact
+      issues: write    # the nightly regression issue
     runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 30
+    env:
+      # Same reasons as the e2e: the venv is shared between steps, and Poetry
+      # must not reach for a desktop keyring on the runner.
+      POETRY_VIRTUALENVS_PATH: ${{ github.workspace }}/.poetry-backend
+      POETRY_NO_INTERACTION: "1"
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
     steps:
-      - uses: actions/checkout@v4
-      - name: Run bench on one reference spec
-        run: scripts/bench/run.sh bench/specs/01-cli-todo
+      - uses: actions/checkout@v7
+
+      - name: Start Postgres, NATS and pick free ports
+        run: |
+          # Docker picks the host ports (see e2e.yml for why), read back here.
+          docker run -d --name "pg-bench-$GITHUB_RUN_ID" \
+            -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
+            -p "127.0.0.1::5432" pgvector/pgvector:pg15
+          docker run -d --name "nats-bench-$GITHUB_RUN_ID" -p "127.0.0.1::4222" nats:2.10 -js
+          pg_port="$(docker port "pg-bench-$GITHUB_RUN_ID" 5432/tcp | head -1 | sed 's/.*://')"
+          nats_port="$(docker port "nats-bench-$GITHUB_RUN_ID" 4222/tcp | head -1 | sed 's/.*://')"
+          for _ in $(seq 1 60); do
+            docker exec "pg-bench-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1 >/dev/null 2>&1 && break
+            sleep 1
+          done
+          for _ in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/"$nats_port") 2>/dev/null && break
+            sleep 1
+          done
+          docker exec "pg-bench-$GITHUB_RUN_ID" pg_isready -U factory -h 127.0.0.1
+          {
+            echo "BENCH_POSTGRES_HOST=127.0.0.1"
+            echo "BENCH_POSTGRES_PORT=$pg_port"
+            echo "BENCH_POSTGRES_USER=factory"
+            echo "BENCH_POSTGRES_PASSWORD=factorypw"
+            echo "BENCH_NATS_URL=nats://127.0.0.1:$nats_port"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Python 3.12 (uv)
+        run: |
+          python3 -m pip install --user --break-system-packages uv >/dev/null
+          ~/.local/bin/uv python install 3.12
+          ~/.local/bin/uv venv --python 3.12 --seed "$RUNNER_TEMP/venv-3.12"
+          echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
+
+      - name: Install the backend
+        working-directory: ./backend
+        run: |
+          ~/.local/bin/uv pip install --python "$RUNNER_TEMP/venv-3.12/bin/python" poetry >/dev/null
+          poetry env use python
+          poetry install --no-interaction
+
+      - name: Run the bench (fake LLM)
+        env:
+          BENCH_WORKDIR: ${{ runner.temp }}/bench
+        run: |
+          pick_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
+          BENCH_BACKEND_PORT="$(pick_port)" BENCH_LLM_PORT="$(pick_port)" \
+          BENCH_PYTHON="$(cd backend && poetry run python -c 'import sys; print(sys.executable)')" \
+            bash scripts/bench/run.sh --out "$RUNNER_TEMP/bench-out"
+
+      - name: Compare with the previous scorecard
+        id: compare
+        run: |
+          card="$(ls "$RUNNER_TEMP"/bench-out/*.json | tail -1)"
+          set +e
+          python3 scripts/bench/compare.py "$card" --dir bench/scorecards > "$RUNNER_TEMP/bench-out/compare.md"
+          status=$?
+          set -e
+          { cat "${card%.json}.md"; echo; cat "$RUNNER_TEMP/bench-out/compare.md"; } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/bench-out/compare.md"
+          exit $status
+
+      - name: Open an issue on a nightly regression
+        if: failure() && steps.compare.outcome == 'failure' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "Bench regression $(date -u +%F)" \
+            --body-file "$RUNNER_TEMP/bench-out/compare.md"
+
+      - name: Stop the containers
+        if: always()
+        run: docker rm -f "pg-bench-$GITHUB_RUN_ID" "nats-bench-$GITHUB_RUN_ID" || true
+
+      - name: Keep the scorecard and the logs
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench
+          path: |
+            ${{ runner.temp }}/bench-out/
+            ${{ runner.temp }}/bench/*.log
+            ${{ runner.temp }}/bench/*.grade.json
+          if-no-files-found: ignore

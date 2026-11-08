@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from scorecard import validate  # noqa: E402 - the sibling module, by path.
+from scorecard import validate  # the sibling module, by path
 
 DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5}
 # (field, label, direction): +1 when higher is better, -1 when lower is.
@@ -92,8 +92,8 @@ def compare(previous: dict[str, Any], current: dict[str, Any], limits: dict[str,
         if old["status"] == "completed" and spec["status"] != "completed":
             regressions.append(f"{spec['name']}: completed before, {spec['status']} now")
     return {"regressions": regressions, "rows": rows,
-            "new_specs": sorted(set(s["name"] for s in current["specs"]) - set(before_specs)),
-            "dropped_specs": sorted(set(before_specs) - set(s["name"] for s in current["specs"]))}
+            "new_specs": sorted({s["name"] for s in current["specs"]} - set(before_specs)),
+            "dropped_specs": sorted(set(before_specs) - {s["name"] for s in current["specs"]})}
 
 
 def previous_of(current: Path, directory: Path) -> Path | None:
