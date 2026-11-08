@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from scorecard import validate  # the sibling module, by path
+from schema import validate  # the sibling module, by path
 
 DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5}
 # (field, label, direction): +1 when higher is better, -1 when lower is.
@@ -59,28 +59,58 @@ def _numbers(row: dict[str, Any], *, is_spec: bool) -> dict[str, float]:
             "tokens_reported": row["tokens"]["reported"],
             "wall_clock_seconds": row["wall_clock_seconds"],
         }
-    return {k: row[k] for k in (*(j[0] for j in _JUDGED), "tokens_reported", "wall_clock_seconds")}
+    return {
+        k: row[k]
+        for k in (*(j[0] for j in _JUDGED), "tokens_reported", "wall_clock_seconds")
+    }
 
 
-def _judge(where: str, before: dict[str, float], after: dict[str, float], limits: dict[str, float]) -> list[str]:
+def _judge(
+    where: str,
+    before: dict[str, float],
+    after: dict[str, float],
+    limits: dict[str, float],
+) -> list[str]:
     found = []
     for field, label, direction, limit in _JUDGED:
         worse = (before[field] - after[field]) * direction
         if worse > limits[limit] + 1e-9:
-            found.append(f"{where}: {label} went from {before[field]:.2f} to {after[field]:.2f}")
+            found.append(
+                f"{where}: {label} went from {before[field]:.2f} to {after[field]:.2f}"
+            )
     return found
 
 
-def compare(previous: dict[str, Any], current: dict[str, Any], limits: dict[str, float] | None = None) -> dict[str, Any]:
+def compare(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    limits: dict[str, float] | None = None,
+) -> dict[str, Any]:
     """The regressions of *current* against *previous* and the rows of the diff."""
     limits = {**DEFAULTS, **(limits or {})}
-    regressions = _judge("total", _numbers(previous["totals"], is_spec=False),
-                         _numbers(current["totals"], is_spec=False), limits)
+    regressions = _judge(
+        "total",
+        _numbers(previous["totals"], is_spec=False),
+        _numbers(current["totals"], is_spec=False),
+        limits,
+    )
     before_tokens = previous["totals"]["tokens_reported"]
     after_tokens = current["totals"]["tokens_reported"]
-    if before_tokens and after_tokens and (after_tokens - before_tokens) / before_tokens > limits["tokens"] + 1e-9:
-        regressions.append(f"total: reported tokens grew from {before_tokens} to {after_tokens}")
-    rows = [("total", _numbers(previous["totals"], is_spec=False), _numbers(current["totals"], is_spec=False))]
+    if (
+        before_tokens
+        and after_tokens
+        and (after_tokens - before_tokens) / before_tokens > limits["tokens"] + 1e-9
+    ):
+        regressions.append(
+            f"total: reported tokens grew from {before_tokens} to {after_tokens}"
+        )
+    rows = [
+        (
+            "total",
+            _numbers(previous["totals"], is_spec=False),
+            _numbers(current["totals"], is_spec=False),
+        )
+    ]
     before_specs = {s["name"]: s for s in previous["specs"]}
     for spec in current["specs"]:
         old = before_specs.get(spec["name"])
@@ -90,19 +120,32 @@ def compare(previous: dict[str, Any], current: dict[str, Any], limits: dict[str,
         rows.append((spec["name"], b, a))
         regressions += _judge(spec["name"], b, a, limits)
         if old["status"] == "completed" and spec["status"] != "completed":
-            regressions.append(f"{spec['name']}: completed before, {spec['status']} now")
-    return {"regressions": regressions, "rows": rows,
-            "new_specs": sorted({s["name"] for s in current["specs"]} - set(before_specs)),
-            "dropped_specs": sorted(set(before_specs) - {s["name"] for s in current["specs"]})}
+            regressions.append(
+                f"{spec['name']}: completed before, {spec['status']} now"
+            )
+    return {
+        "regressions": regressions,
+        "rows": rows,
+        "new_specs": sorted({s["name"] for s in current["specs"]} - set(before_specs)),
+        "dropped_specs": sorted(
+            set(before_specs) - {s["name"] for s in current["specs"]}
+        ),
+    }
 
 
 def previous_of(current: Path, directory: Path) -> Path | None:
     """The newest scorecard in *directory* whose name sorts before *current*'s."""
-    earlier = sorted(p for p in directory.glob("*.json") if p.name < current.name and p.resolve() != current.resolve())
+    earlier = sorted(
+        p
+        for p in directory.glob("*.json")
+        if p.name < current.name and p.resolve() != current.resolve()
+    )
     return earlier[-1] if earlier else None
 
 
-def render(previous: dict[str, Any], current: dict[str, Any], result: dict[str, Any]) -> str:
+def render(
+    previous: dict[str, Any], current: dict[str, Any], result: dict[str, Any]
+) -> str:
     lines = [
         f"## Bench: {current['stamp']} against {previous['stamp']}",
         "",
@@ -121,10 +164,21 @@ def render(previous: dict[str, Any], current: dict[str, Any], result: dict[str, 
             f"| {b['wall_clock_seconds']:.0f} s → {a['wall_clock_seconds']:.0f} s |"
         )
     if result["new_specs"]:
-        lines += ["", f"New specifications (no reference yet): {', '.join(result['new_specs'])}"]
+        lines += [
+            "",
+            f"New specifications (no reference yet): {', '.join(result['new_specs'])}",
+        ]
     if result["dropped_specs"]:
-        lines += ["", f"Specifications no longer run: {', '.join(result['dropped_specs'])}"]
-    lines += ["", "### Regressions" if result["regressions"] else "No regression beyond the thresholds."]
+        lines += [
+            "",
+            f"Specifications no longer run: {', '.join(result['dropped_specs'])}",
+        ]
+    lines += [
+        "",
+        "### Regressions"
+        if result["regressions"]
+        else "No regression beyond the thresholds.",
+    ]
     lines += [f"- {r}" for r in result["regressions"]]
     return "\n".join(lines) + "\n"
 
@@ -137,13 +191,18 @@ def _load(path: Path) -> dict[str, Any] | None:
         return None
     problems = validate(card)
     if problems:
-        print(f"{path} does not match the scorecard schema:\n  " + "\n  ".join(problems), file=sys.stderr)
+        print(
+            f"{path} does not match the scorecard schema:\n  " + "\n  ".join(problems),
+            file=sys.stderr,
+        )
         return None
     return card
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Compare a bench scorecard with the previous one.")
+    parser = argparse.ArgumentParser(
+        description="Compare a bench scorecard with the previous one."
+    )
     parser.add_argument("current", type=Path)
     parser.add_argument("--previous", type=Path)
     parser.add_argument("--dir", type=Path, default=Path("bench/scorecards"))
@@ -156,12 +215,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     previous_path = args.previous or previous_of(args.current, args.dir)
     if previous_path is None:
-        print(f"No previous scorecard in {args.dir}: {args.current.name} is the first reference.")
+        print(
+            f"No previous scorecard in {args.dir}: {args.current.name} is the first reference."
+        )
         return 0
     previous = _load(previous_path)
     if previous is None:
         return 2
-    result = compare(previous, current, {"rate": args.rate, "rework": args.rework, "tokens": args.tokens})
+    result = compare(
+        previous,
+        current,
+        {"rate": args.rate, "rework": args.rework, "tokens": args.tokens},
+    )
     print(render(previous, current, result), end="")
     return 1 if result["regressions"] else 0
 

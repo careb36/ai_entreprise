@@ -10,8 +10,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
   pytest's JUnit report. A test named ``test_req_1_2_...`` decides REQ-1.2; a
   criterion passes when it has tests and every one of them passes. This is an
   observation the bench makes, never a claim of the factory's agents.
-- ``collect`` reads the sprint's numbers through the API (board, runs, sprint
-  list, the specification's own coverage) and the reported tokens from the
+- ``collect`` reads the sprint's numbers through the API (the board and its
+  comments, the runs, the specification's own coverage; a failed reading
+  marks the entry ``error``, never a green zero) and the reported tokens from the
   audit log (only rows whose usage the provider reported, ``tokens:
   reported``), and writes one spec entry.
 - ``write --out-dir DIR ENTRY...`` joins the entries into one scorecard,
@@ -42,9 +43,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
-PASS, FAIL, MISSING = "pass", "fail", "missing"
-SPEC_STATUSES = ("completed", "timeout", "error")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
+
+__all__ = ["FAIL", "MISSING", "PASS", "SCHEMA_VERSION", "SPEC_STATUSES", "validate"]
 _TEST_NAME = re.compile(r"^test_req_(\d+)_(\d+)(?:_|\[|$)")
 
 
@@ -82,7 +84,9 @@ def criteria_from_junit(xml_text: str, criteria: list[str]) -> dict[str, str]:
         criterion = criterion_of_test(case.get("name", ""))
         if criterion is None:
             continue
-        failed = any(case.find(tag) is not None for tag in ("failure", "error", "skipped"))
+        failed = any(
+            case.find(tag) is not None for tag in ("failure", "error", "skipped")
+        )
         seen.setdefault(criterion, []).append(not failed)
     return {
         c: (MISSING if c not in seen else PASS if all(seen[c]) else FAIL)
@@ -90,29 +94,79 @@ def criteria_from_junit(xml_text: str, criteria: list[str]) -> dict[str, str]:
     }
 
 
-def grade(spec_dir: Path, project: Path, python: str, timeout: int = 300) -> dict[str, Any]:
+# Written next to the copied tests by the grader. The project goes at the END
+# of sys.path, after the standard library and pytest, so nothing in it (a
+# pytest.py, a conftest.py, a json.py) can stand in for either; the grader
+# itself starts isolated (python -I), so PYTHONPATH and the working directory
+# put nothing first, and no sitecustomize of the project's runs in it.
+GRADER_CONFTEST = """import sys
+
+sys.path.append({project!r})
+"""
+
+
+def grade(
+    spec_dir: Path, project: Path, python: str, timeout: int = 300
+) -> dict[str, Any]:
     """Run ``<spec_dir>/acceptance`` against *project* and read the criteria back.
 
     The tests are copied out of the repository so no configuration found
-    above them applies, and the project goes on ``PYTHONPATH``; the project
-    never sees the tests, and the tests never import the factory."""
+    above them applies. pytest starts isolated (``-I``) from a folder the
+    grader made, and reaches the project only through ``GRADER_CONFTEST``,
+    after everything else on ``sys.path``. ``PYTHONPATH`` still names the
+    project, for the commands a test runs (``python -m <package>``); the
+    isolated grader ignores it. The JUnit report goes to another folder the
+    grader made with a random name, read once pytest has exited; a report
+    pytest did not finish (exit status other than 0 or 1) is not read.
+
+    What this does not stop: the tests import the project, so its code runs
+    inside the grader. Until the sandbox runs the grade (#323), the bench
+    trusts the producer not to tamper with pytest from within."""
     spec = json.loads((spec_dir / "spec.json").read_text(encoding="utf-8"))
     criteria = criteria_of(spec)
-    with tempfile.TemporaryDirectory(prefix="bench-grade-") as tmp:
+    project_path = str(project.resolve())
+    with (
+        tempfile.TemporaryDirectory(prefix="bench-grade-") as tmp,
+        tempfile.TemporaryDirectory(prefix="bench-report-") as report_dir,
+    ):
         tests = Path(tmp) / "acceptance"
         shutil.copytree(spec_dir / "acceptance", tests)
-        report = Path(tmp) / "junit.xml"
-        env = {**os.environ, "PYTHONPATH": str(project.resolve()), "PYTHONDONTWRITEBYTECODE": "1"}
+        (Path(tmp) / "conftest.py").write_text(
+            GRADER_CONFTEST.format(project=project_path), encoding="utf-8"
+        )
+        report = Path(report_dir) / f"{os.urandom(8).hex()}.xml"
+        env = {**os.environ, "PYTHONPATH": project_path, "PYTHONDONTWRITEBYTECODE": "1"}
+        command = [
+            python,
+            "-I",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-c",
+            os.devnull,
+            "--rootdir",
+            tmp,
+            "--import-mode=importlib",
+            f"--junitxml={report}",
+            str(tests),
+        ]
         try:
             run = subprocess.run(
-                [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-c", os.devnull,
-                 "--rootdir", tmp, f"--junitxml={report}", str(tests)],
-                cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout, check=False,
+                command,
+                cwd=tmp,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
             )
             output, exit_code = run.stdout[-4000:], run.returncode
         except subprocess.TimeoutExpired:
             output, exit_code = "acceptance tests timed out", None
-        xml_text = report.read_text(encoding="utf-8") if report.exists() else ""
+        finished = exit_code in (0, 1) and report.exists()
+        xml_text = report.read_text(encoding="utf-8") if finished else ""
     results = criteria_from_junit(xml_text, criteria)
     return {
         "passed": sum(1 for r in results.values() if r == PASS),
@@ -132,13 +186,34 @@ def _ratio(numerator: float, denominator: float) -> float:
     return round(numerator / denominator, 4) if denominator else 0.0
 
 
+def _board():
+    """The backend's reader of a task's comment thread (``services/board.py``),
+    the one the sprint list and the procedures count rework with."""
+    app = str(Path(__file__).resolve().parents[2] / "backend" / "app")
+    if app not in sys.path:
+        sys.path.append(app)
+    from services import board
+
+    return board
+
+
+def task_history(comments: Any) -> dict[str, Any]:
+    """What the board says about a task's attempts: its rework requests
+    (every ``NEEDS WORK:``, a gate's, QA's or the Verifier's) and whether a
+    person sent it back to work."""
+    board = _board()
+    return {
+        "rework_requests": board.rework_request_count(comments),
+        "sent_back": any(board.is_send_back(c) for c in board.comment_list(comments)),
+    }
+
+
 def summarize_spec(
     *,
     name: str,
     status: str,
     items: list[dict[str, Any]],
     runs_per_task: dict[int, int],
-    rework_requests: int,
     graded: dict[str, Any],
     factory_verified: int | None,
     wall_clock_seconds: float,
@@ -148,14 +223,24 @@ def summarize_spec(
 ) -> dict[str, Any]:
     """One spec's entry from what was observed.
 
-    A task is done at the first attempt when it is done and the factory
-    recorded exactly one delivery (one AgentRun) for it: a rework request, a
-    quality-gate send-back or a refuted delivery each mean another one."""
+    A task is done at the first attempt when it is done, its board holds no
+    rework request (a quality gate's, the Verifier's or QA's ``NEEDS WORK:``)
+    and no person's send-back, and the factory recorded at most one delivery
+    (AgentRun) for it. The comments decide: a delivery the gate sent back
+    before it was ingested, or one the factory recognised as a repeat, adds no
+    run, but it does leave its request on the board."""
+    histories = {i.get("id"): task_history(i.get("comments")) for i in items}
+    rework_requests = sum(h["rework_requests"] for h in histories.values())
     total = len(items)
     done = sum(1 for i in items if i.get("status") == "done")
     blocked = sum(1 for i in items if i.get("status") == "blocked")
     first = sum(
-        1 for i in items if i.get("status") == "done" and runs_per_task.get(i.get("id"), 0) == 1
+        1
+        for i in items
+        if i.get("status") == "done"
+        and histories[i.get("id")]["rework_requests"] == 0
+        and not histories[i.get("id")]["sent_back"]
+        and runs_per_task.get(i.get("id"), 0) <= 1
     )
     return {
         "name": name,
@@ -167,7 +252,12 @@ def summarize_spec(
             "results": dict(graded.get("results") or {}),
         },
         "factory_criteria_verified": factory_verified,
-        "tasks": {"total": total, "done": done, "blocked": blocked, "done_first_attempt": first},
+        "tasks": {
+            "total": total,
+            "done": done,
+            "blocked": blocked,
+            "done_first_attempt": first,
+        },
         "rework_requests": int(rework_requests),
         "rework_per_task": _ratio(rework_requests, total),
         "blocked_share": _ratio(blocked, total),
@@ -216,70 +306,6 @@ def build_scorecard(
 
 
 # ---------------------------------------------------------------------------
-# Schema
-# ---------------------------------------------------------------------------
-
-_SPEC_FIELDS = {
-    "name": str, "status": str, "criteria": dict, "tasks": dict,
-    "rework_requests": int, "rework_per_task": (int, float), "blocked_share": (int, float),
-    "first_attempt_rate": (int, float), "wall_clock_seconds": (int, float),
-    "tokens": dict, "models": dict,
-}
-_TOTAL_FIELDS = (
-    "specs", "specs_completed", "criteria_passed", "criteria_total", "criteria_rate", "tasks",
-    "done_first_attempt", "first_attempt_rate", "rework_per_task", "blocked_share",
-    "wall_clock_seconds", "tokens_reported",
-)
-
-
-def validate(card: Any) -> list[str]:
-    """What is wrong with *card* against the schema; empty when it is sound."""
-    if not isinstance(card, dict):
-        return ["the scorecard is not an object"]
-    problems = []
-    if card.get("schema_version") != SCHEMA_VERSION:
-        problems.append(f"schema_version is {card.get('schema_version')!r}, expected {SCHEMA_VERSION}")
-    for key in ("stamp", "commit", "llm"):
-        if not isinstance(card.get(key), str) or not card.get(key):
-            problems.append(f"{key} must be a non-empty string")
-    specs = card.get("specs")
-    if not isinstance(specs, list):
-        return [*problems, "specs must be a list"]
-    for index, spec in enumerate(specs):
-        where = f"specs[{index}]"
-        if not isinstance(spec, dict):
-            problems.append(f"{where} is not an object")
-            continue
-        for key, kind in _SPEC_FIELDS.items():
-            if not isinstance(spec.get(key), kind) or isinstance(spec.get(key), bool):
-                problems.append(f"{where}.{key} is missing or of the wrong type")
-        if spec.get("status") not in SPEC_STATUSES:
-            problems.append(f"{where}.status must be one of {', '.join(SPEC_STATUSES)}")
-        criteria = spec.get("criteria") if isinstance(spec.get("criteria"), dict) else {}
-        results = criteria.get("results") if isinstance(criteria.get("results"), dict) else None
-        if results is None:
-            problems.append(f"{where}.criteria.results must be an object")
-        else:
-            if any(r not in (PASS, FAIL, MISSING) for r in results.values()):
-                problems.append(f"{where}.criteria.results holds a value other than pass, fail, missing")
-            if criteria.get("total") != len(results):
-                problems.append(f"{where}.criteria.total does not match its results")
-            if criteria.get("passed") != sum(1 for r in results.values() if r == PASS):
-                problems.append(f"{where}.criteria.passed does not match its results")
-        tasks = spec.get("tasks") if isinstance(spec.get("tasks"), dict) else {}
-        if not all(isinstance(tasks.get(k), int) for k in ("total", "done", "blocked", "done_first_attempt")):
-            problems.append(f"{where}.tasks needs integer total, done, blocked, done_first_attempt")
-        elif not tasks["done_first_attempt"] <= tasks["done"] <= tasks["total"]:
-            problems.append(f"{where}.tasks: done_first_attempt <= done <= total does not hold")
-    totals = card.get("totals")
-    if not isinstance(totals, dict):
-        problems.append("totals must be an object")
-    else:
-        problems.extend(f"totals.{k} is missing" for k in _TOTAL_FIELDS if k not in totals)
-    return problems
-
-
-# ---------------------------------------------------------------------------
 # Markdown
 # ---------------------------------------------------------------------------
 
@@ -313,14 +339,19 @@ def render_markdown(card: dict[str, Any]) -> str:
     )
     for s in card["specs"]:
         failing = [c for c, r in s["criteria"]["results"].items() if r != PASS]
-        models = "; ".join(f"{role}: {', '.join(m)}" for role, m in s["models"].items()) or "none recorded"
+        models = (
+            "; ".join(f"{role}: {', '.join(m)}" for role, m in s["models"].items())
+            or "none recorded"
+        )
         lines += ["", f"## {s['name']}", "", f"- Models served: {models}"]
         if s.get("factory_criteria_verified") is not None:
             lines.append(
                 f"- The factory's own verified criteria: {s['factory_criteria_verified']} "
                 "(its Verifier, beside the person-written grade)"
             )
-        lines.append(f"- Criteria not passing: {', '.join(failing) if failing else 'none'}")
+        lines.append(
+            f"- Criteria not passing: {', '.join(failing) if failing else 'none'}"
+        )
         if s.get("error"):
             lines.append(f"- Error: {s['error']}")
     return "\n".join(lines) + "\n"
@@ -336,7 +367,9 @@ def _get(api: str, path: str) -> Any:
         return json.loads(response.read())
 
 
-def reported_tokens(dsn: dict[str, str], company_id: int) -> tuple[dict[str, int], dict[str, list[str]]]:
+def reported_tokens(
+    dsn: dict[str, str], company_id: int
+) -> tuple[dict[str, int], dict[str, list[str]]]:
     """The company's KPI turns in the audit log: tokens of the reported ones,
     how many were and were not reported, and the model served per role."""
     import psycopg2  # the backend's environment has it
@@ -364,7 +397,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     graded = json.loads(Path(args.grade).read_text(encoding="utf-8"))
     items: list[dict[str, Any]] = []
     runs: dict[int, int] = {}
-    rework, verified, error = 0, None, args.error or None
+    status, verified, error = args.status, None, args.error or None
     tokens: dict[str, int] = {}
     models: dict[str, list[str]] = {}
     try:
@@ -372,28 +405,44 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
             board = _get(args.api, f"/v1/sprints/{args.sprint}/board")
             items = [i for column in board["columns"].values() for i in column]
             for item in items:
-                found = _get(args.api, f"/v1/agent_runs?company_id={args.company}&external_ref=task-{item['id']}")
+                found = _get(
+                    args.api,
+                    f"/v1/agent_runs?company_id={args.company}&external_ref=task-{item['id']}",
+                )
                 runs[item["id"]] = len(found.get("agent_runs") or [])
-            sprints = _get(args.api, f"/v1/sprints?company_id={args.company}")
-            rework = next((s["rework"] for s in sprints if s["id"] == args.sprint), 0)
         if args.spec_id:
             spec = _get(args.api, f"/v1/specifications/{args.spec_id}")
             verified = (spec.get("coverage") or {}).get("verified")
         if args.company:
-            dsn = dict(zip(("host", "port", "user", "password", "dbname"), args.pg, strict=True))
+            dsn = dict(
+                zip(
+                    ("host", "port", "user", "password", "dbname"), args.pg, strict=True
+                )
+            )
             tokens, models = reported_tokens(dsn, args.company)
     except Exception as exc:  # noqa: BLE001 - a failed collection is recorded, not hidden.
+        # An observation that could not be made is never a green zero.
+        status = "error"
         error = f"{error + '; ' if error else ''}collection failed: {exc}"
     return summarize_spec(
-        name=args.name, status=args.status, items=items, runs_per_task=runs,
-        rework_requests=rework, graded=graded, factory_verified=verified,
-        wall_clock_seconds=args.wall, tokens=tokens, models=models, error=error,
+        name=args.name,
+        status=status,
+        items=items,
+        runs_per_task=runs,
+        graded=graded,
+        factory_verified=verified,
+        wall_clock_seconds=args.wall,
+        tokens=tokens,
+        models=models,
+        error=error,
     )
 
 
 def _commit() -> str:
     try:
-        out = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True)
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+        )
         return out.stdout.strip() or "unknown"
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
@@ -427,7 +476,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "grade":
-        args.out.write_text(json.dumps(grade(args.spec, args.project, args.python), indent=2))
+        args.out.write_text(
+            json.dumps(grade(args.spec, args.project, args.python), indent=2)
+        )
         return 0
     if args.command == "collect":
         args.out.write_text(json.dumps(collect(args), indent=2))
@@ -436,8 +487,11 @@ def main(argv: list[str] | None = None) -> int:
     card = build_scorecard(entries, stamp=args.stamp, commit=_commit(), llm=args.llm)
     problems = validate(card)
     if problems:
-        print("the scorecard does not match its schema:\n  " + "\n  ".join(problems), file=sys.stderr)
-        return 1
+        print(
+            "the scorecard does not match its schema:\n  " + "\n  ".join(problems),
+            file=sys.stderr,
+        )
+        return 2
     args.out_dir.mkdir(parents=True, exist_ok=True)
     (args.out_dir / f"{args.stamp}.json").write_text(json.dumps(card, indent=2) + "\n")
     (args.out_dir / f"{args.stamp}.md").write_text(render_markdown(card))

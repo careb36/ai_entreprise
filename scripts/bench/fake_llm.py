@@ -37,7 +37,11 @@ PADDING = (
     "Inputs are validated at the boundary and each function has a single "
     "responsibility, so a reviewer can check it quickly against the criteria."
 )
-SPECS_DIR = Path(os.environ.get("BENCH_SPECS", Path(__file__).resolve().parents[2] / "bench" / "specs"))
+SPECS_DIR = Path(
+    os.environ.get(
+        "BENCH_SPECS", Path(__file__).resolve().parents[2] / "bench" / "specs"
+    )
+)
 PROMPT_LOG = os.environ.get("FAKE_LLM_PROMPTS", "")
 TITLE_LIMIT = 80  # services/acceptance.test_task cuts the test task's title here
 
@@ -47,7 +51,9 @@ def load(specs_dir: Path) -> tuple[dict, dict]:
     delivery is the list of (path, content) its answer writes."""
     plans: dict[str, dict] = {}
     deliveries: dict[str, list[tuple[str, str]]] = {}
-    for spec_dir in sorted(p for p in specs_dir.iterdir() if (p / "fake" / "plan.json").is_file()):
+    for spec_dir in sorted(
+        p for p in specs_dir.iterdir() if (p / "fake" / "plan.json").is_file()
+    ):
         spec = json.loads((spec_dir / "spec.json").read_text(encoding="utf-8"))
         plan = json.loads((spec_dir / "fake" / "plan.json").read_text(encoding="utf-8"))
         files = spec_dir / "fake" / "files"
@@ -58,7 +64,9 @@ def load(specs_dir: Path) -> tuple[dict, dict]:
         plans[spec["title"]] = {
             "sprint_name": plan["sprint_name"],
             "goal": plan["goal"],
-            "tasks": [{k: v for k, v in t.items() if k != "files"} for t in plan["tasks"]],
+            "tasks": [
+                {k: v for k, v in t.items() if k != "files"} for t in plan["tasks"]
+            ],
         }
         for task in plan["tasks"]:
             deliveries[task["title"]] = [read(p) for p in task["files"]]
@@ -109,7 +117,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/v1/models"):
-            return self._send(200, {"models": [{"id": "fake-model", "provider": "fake", "tier": "fast"}]})
+            return self._send(
+                200,
+                {"models": [{"id": "fake-model", "provider": "fake", "tier": "fast"}]},
+            )
         return self._send(200, {"status": "ok"})
 
     def do_POST(self):
@@ -118,7 +129,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.startswith("/v1/chat/completions"):
             return self._send(503, {"error": "not supported by the fake proxy"})
         messages = body.get("messages") or [{}]
-        prompt = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+        prompt = next(
+            (
+                m.get("content", "")
+                for m in reversed(messages)
+                if m.get("role") == "user"
+            ),
+            "",
+        )
         text = answer(prompt or "")
         return self._send(
             200,

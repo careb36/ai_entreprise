@@ -9,7 +9,9 @@ name: Bench
 # nightly run, opens an issue with the diff).
 #
 # This job runs the fake LLM (scripts/bench/fake_llm.py): it checks the
-# circuit, not the models, and spends no tokens. Real models are off: the
+# circuit, not the models, and spends no tokens. Its NATS container is the
+# bench's alone: the daemon's request subjects are not namespaced, so the
+# bench never shares a broker (scripts/bench/broker.py refuses one). Real models are off: the
 # runner takes a real proxy through BENCH_LLM_URL, and the nightly
 # real-model run, with a token budget and a kill switch, comes with the next
 # part of #316. Until then nothing here sets BENCH_LLM_URL.
@@ -91,8 +93,15 @@ jobs:
 
       - name: Compare with the previous scorecard
         id: compare
+        # Also when the run failed (a broken circuit still writes its
+        # scorecard): a nightly regression must get its diff and its issue.
+        if: always()
         run: |
-          card="$(find "$RUNNER_TEMP/bench-out" -maxdepth 1 -name '*.json' | sort | tail -1)"
+          card="$(find "$RUNNER_TEMP/bench-out" -maxdepth 1 -name '*.json' 2>/dev/null | sort | tail -1)"
+          if [ -z "$card" ]; then
+            echo "No scorecard was written: nothing to compare." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           set +e
           python3 scripts/bench/compare.py "$card" --dir bench/scorecards > "$RUNNER_TEMP/bench-out/compare.md"
           status=$?

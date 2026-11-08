@@ -21,6 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 BENCH = REPO / "bench"
 sys.path.insert(0, str(REPO / "scripts" / "bench"))
 
+import broker  # scripts/bench/broker.py, by path
 import compare  # scripts/bench/compare.py, by path
 import scorecard  # scripts/bench/scorecard.py, by path
 
@@ -165,17 +166,24 @@ def test_grading_a_wrong_answer_fails_only_its_criteria(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _comment(author, text):
+    return {"author": author, "text": text, "created_at": "2026-11-08T10:00:00"}
+
+
 def _entry(
     name="01-a", status="completed", results=None, runs=None, rework=0, tokens=100
 ):
     results = results or {"REQ-1.1": "pass", "REQ-1.2": "pass"}
-    items = [{"id": 1, "status": "done"}, {"id": 2, "status": "done"}]
+    asked = [_comment("QA", "NEEDS WORK: add a test.")] * rework
+    items = [
+        {"id": 1, "status": "done", "comments": asked},
+        {"id": 2, "status": "done", "comments": []},
+    ]
     return scorecard.summarize_spec(
         name=name,
         status=status,
         items=items,
         runs_per_task=runs or {1: 1, 2: 1},
-        rework_requests=rework,
         graded={
             "passed": sum(r == "pass" for r in results.values()),
             "total": len(results),
@@ -194,18 +202,54 @@ def _card(*entries, stamp="20260101T000000Z"):
     )
 
 
-def test_a_spec_entry_counts_first_attempts_by_deliveries():
+def test_a_spec_entry_counts_first_attempts_from_the_board():
+    deliverable = _comment("Dev", "Delivered.")
+    items = [
+        # One delivery, approved: the first attempt.
+        {
+            "id": 1,
+            "status": "done",
+            "comments": [deliverable, _comment("QA", "APPROVED: fine.")],
+        },
+        # A quality gate sent it back before any run was ingested: one run, not first.
+        {
+            "id": 2,
+            "status": "done",
+            "comments": [
+                _comment("Quality gate", "NEEDS WORK: too short."),
+                deliverable,
+            ],
+        },
+        # QA asked twice, and the factory deduplicated a repeat: still one run.
+        {
+            "id": 3,
+            "status": "done",
+            "comments": [
+                _comment("QA", "NEEDS WORK: a."),
+                _comment("Verifier", "NEEDS WORK: b."),
+            ],
+        },
+        # A person sent it back to work.
+        {
+            "id": 4,
+            "status": "done",
+            "comments": [_comment("user", "Sent back to work: again.")],
+        },
+        {"id": 5, "status": "blocked", "comments": []},
+        # Two deliveries with no request on the board are not a first attempt either.
+        {"id": 6, "status": "done", "comments": []},
+        # A carry-over note quotes another task's verdict, not this one's.
+        {
+            "id": 7,
+            "status": "done",
+            "comments": [_comment("system", "Carried over from task 3: NEEDS WORK: x")],
+        },
+    ]
     entry = scorecard.summarize_spec(
         name="x",
         status="completed",
-        items=[
-            {"id": 1, "status": "done"},
-            {"id": 2, "status": "done"},
-            {"id": 3, "status": "blocked"},
-            {"id": 4, "status": "done"},
-        ],
-        runs_per_task={1: 1, 2: 3, 3: 1, 4: 0},
-        rework_requests=3,
+        items=items,
+        runs_per_task={1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 2, 7: 1},
         graded={
             "passed": 1,
             "total": 2,
@@ -217,16 +261,13 @@ def test_a_spec_entry_counts_first_attempts_by_deliveries():
         models={},
     )
     assert entry["tasks"] == {
-        "total": 4,
-        "done": 3,
+        "total": 7,
+        "done": 6,
         "blocked": 1,
-        "done_first_attempt": 1,
+        "done_first_attempt": 2,
     }
-    assert (
-        entry["first_attempt_rate"],
-        entry["rework_per_task"],
-        entry["blocked_share"],
-    ) == (0.25, 0.75, 0.25)
+    assert entry["rework_requests"] == 3
+    assert (entry["first_attempt_rate"], entry["blocked_share"]) == (0.2857, 0.1429)
     assert entry["tokens"] == {
         "reported": 0,
         "turns_reported": 0,
@@ -328,7 +369,9 @@ def test_a_drop_beyond_the_threshold_is_a_regression(after, expected):
 def test_a_change_within_the_threshold_is_not():
     result = compare.compare(_card(_entry(tokens=100)), _card(_entry(tokens=140)))
     assert result["regressions"] == []
-    loose = compare.compare(_card(_entry()), _card(_entry(rework=2)), {"rework": 1.5})
+    loose = compare.compare(
+        _card(_entry()), _card(_entry(rework=2)), {"rework": 1.5, "rate": 0.5}
+    )
     assert loose["regressions"] == []
 
 
@@ -380,3 +423,207 @@ def test_the_command_exits_by_what_it_found(tmp_path, capsys):
 def test_the_committed_reference_compares_clean_with_itself():
     latest = max((BENCH / "scorecards").glob("*.json"))
     assert compare.main([str(latest), "--previous", str(latest)]) == 0
+
+
+# ---------------------------------------------------------------------------
+# What the produced project cannot do to its grade
+# ---------------------------------------------------------------------------
+
+FORGED_REPORT = """import sys
+
+# A grader impostor: writes a JUnit report where every criterion passes.
+for arg in sys.argv:
+    if arg.startswith("--junitxml="):
+        cases = "".join(
+            f'<testcase classname="x" name="test_req_{r}_{c}_forged"/>' for r in (1, 2) for c in (1, 2)
+        )
+        open(arg.split("=", 1)[1], "w").write(f"<testsuites><testsuite>{cases}</testsuite></testsuites>")
+sys.exit(0)
+"""
+
+
+def test_a_project_cannot_stand_in_for_the_grader(tmp_path):
+    # The old grader (project on PYTHONPATH, then `-m pytest`) ran this
+    # pytest.py instead of pytest and took its report: 4 of 4.
+    (tmp_path / "pytest.py").write_text(FORGED_REPORT)
+    (tmp_path / "sitecustomize.py").write_text(FORGED_REPORT)
+    (tmp_path / "usercustomize.py").write_text("raise SystemExit(0)\n")
+    (tmp_path / "conftest.py").write_text("raise SystemExit(0)\n")
+    graded = scorecard.grade(
+        BENCH / "specs" / "01-cli-wordcount", tmp_path, sys.executable
+    )
+    assert graded["exit_code"] == 1, graded["output_tail"]
+    assert set(graded["results"].values()) == {"fail"}
+
+
+def test_the_project_comes_after_the_standard_library(tmp_path):
+    # A json.py in the project does not replace the one pytest's report needs.
+    (tmp_path / "json.py").write_text("raise SystemExit(0)\n")
+    (tmp_path / "romannum").mkdir()
+    source = (
+        BENCH / "specs" / "02-lib-roman" / "fake" / "files" / "romannum" / "__init__.py"
+    )
+    (tmp_path / "romannum" / "__init__.py").write_text(source.read_text())
+    graded = scorecard.grade(BENCH / "specs" / "02-lib-roman", tmp_path, sys.executable)
+    assert (graded["passed"], graded["total"]) == (5, 5), graded["output_tail"]
+
+
+def test_a_report_pytest_did_not_finish_is_not_read(tmp_path):
+    # A python that writes a passing report and exits 2 (interrupted).
+    fake = tmp_path / "python"
+    fake.write_text(
+        f"#!{sys.executable}\n" + FORGED_REPORT.replace("sys.exit(0)", "sys.exit(2)")
+    )
+    fake.chmod(0o755)
+    graded = scorecard.grade(BENCH / "specs" / "01-cli-wordcount", tmp_path, str(fake))
+    assert graded["exit_code"] == 2
+    assert set(graded["results"].values()) == {"missing"}
+
+
+# ---------------------------------------------------------------------------
+# Missing observations are never green
+# ---------------------------------------------------------------------------
+
+
+def test_a_failed_collection_marks_the_entry_error(tmp_path):
+    grade_file = tmp_path / "grade.json"
+    grade_file.write_text(json.dumps({"passed": 0, "total": 0, "results": {}}))
+    out = tmp_path / "entry.json"
+    status = scorecard.main(
+        [
+            "collect",
+            "--api",
+            "http://127.0.0.1:9",
+            "--name",
+            "01-a",
+            "--status",
+            "completed",
+            "--company",
+            "1",
+            "--sprint",
+            "2",
+            "--grade",
+            str(grade_file),
+            "--out",
+            str(out),
+        ]
+    )
+    entry = json.loads(out.read_text())
+    assert status == 0
+    assert entry["status"] == "error"
+    assert "collection failed" in entry["error"]
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        (
+            lambda c: c["totals"].update(criteria_rate=float("nan")),
+            "totals.criteria_rate must be a finite number",
+        ),
+        (
+            lambda c: c["totals"].update(tokens_reported="many"),
+            "totals.tokens_reported must be a finite number",
+        ),
+        (
+            lambda c: c["totals"].update(blocked_share=float("inf")),
+            "totals.blocked_share",
+        ),
+        (lambda c: c["totals"].update(tasks=True), "totals.tasks"),
+        (
+            lambda c: c["specs"][0]["tokens"].pop("turns_unreported"),
+            "tokens.turns_unreported must be a count",
+        ),
+        (
+            lambda c: c["specs"][0]["tokens"].update(reported=-1),
+            "tokens.reported must be a count",
+        ),
+        (
+            lambda c: c["specs"][0].update(rework_per_task=float("nan")),
+            "rework_per_task must be a finite number",
+        ),
+        (
+            lambda c: c["specs"][0]["criteria"].update(total="2"),
+            "criteria needs counts",
+        ),
+    ],
+)
+def test_the_schema_wants_finite_numbers_and_every_counter(change, problem):
+    card = _card()
+    change(card)
+    assert any(problem in p for p in scorecard.validate(card)), scorecard.validate(card)
+
+
+def test_writing_a_card_off_the_schema_exits_2(tmp_path):
+    entry = _entry()
+    entry["tokens"] = {"reported": 1}
+    path = tmp_path / "entry.json"
+    path.write_text(json.dumps(entry))
+    assert scorecard.main(["write", "--out-dir", str(tmp_path / "out"), str(path)]) == 2
+    assert not (tmp_path / "out").exists()
+
+
+def test_compare_refuses_a_card_with_nan(tmp_path):
+    card = _card(stamp="20260105T000000Z")
+    card["totals"]["criteria_rate"] = float("nan")
+    path = tmp_path / "20260105T000000Z.json"
+    path.write_text(json.dumps(card))  # json writes NaN, and reads it back
+    assert compare.main([str(path), "--dir", str(tmp_path)]) == 2
+
+
+# ---------------------------------------------------------------------------
+# The bench's broker is its own
+# ---------------------------------------------------------------------------
+
+
+class _FakeNats:
+    def __init__(self, answers):
+        self.answers = answers
+        self.closed = False
+
+    async def request(self, subject, payload, timeout):
+        assert subject == "workspace.status"
+        if not self.answers:
+            raise TimeoutError("no responders")
+        return object()
+
+    async def close(self):
+        self.closed = True
+
+
+def _connect(answers=False, reachable=True):
+    async def connect(url, **kwargs):
+        if not reachable:
+            raise ConnectionRefusedError("refused")
+        return _FakeNats(answers)
+
+    return connect
+
+
+@pytest.mark.parametrize(
+    "url", ["nats://127.0.0.1:4222", "nats://localhost", "127.0.0.1:4222"]
+)
+def test_the_default_port_is_refused(url):
+    status, message = broker.check(url, connect=_connect())
+    assert status == 1
+    assert "default NATS port" in message
+
+
+def test_a_broker_where_a_daemon_answers_is_refused():
+    status, message = broker.check(
+        "nats://127.0.0.1:54222", connect=_connect(answers=True)
+    )
+    assert status == 1
+    assert "already answers" in message
+
+
+def test_a_quiet_broker_of_its_own_is_accepted():
+    assert broker.check("nats://127.0.0.1:54222", connect=_connect())[0] == 0
+
+
+def test_an_unreachable_broker_is_said_so():
+    status, message = broker.check(
+        "nats://127.0.0.1:54222", connect=_connect(reachable=False)
+    )
+    assert status == 2
+    assert "cannot reach" in message

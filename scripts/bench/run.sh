@@ -5,8 +5,8 @@
 #   scripts/bench/run.sh [--out DIR] [SPEC_DIR...]
 #
 # Without SPEC_DIR, every bench/specs/*/ holding a spec.json. The stack is the
-# e2e's (scripts/e2e/run.sh): a Postgres and a NATS you provide, the backend,
-# the workspace daemon and, by default, a fake LLM proxy
+# e2e's (scripts/e2e/run.sh): a Postgres you provide, a NATS broker of the
+# bench's own, the backend, the workspace daemon and, by default, a fake LLM proxy
 # (scripts/bench/fake_llm.py) that answers each spec from its fake/ folder.
 # Per specification:
 #
@@ -15,24 +15,35 @@
 #   2. the specification posted as data (POST /v1/specifications, the
 #      spec.json) and approved, which the check must allow;
 #   3. the PO plans the sprint from it (QA's acceptance-test tasks first),
-#      the sprint starts and runs until it closes or BENCH_TIMEOUT passes;
+#      the sprint starts and runs until it closes or BENCH_TIMEOUT passes,
+#      when it is stopped (POST /v1/sprints/{id}/stop) before the grade;
 #   4. the acceptance tests in <spec>/acceptance/, written by a person and
 #      never shown to the agents, run on the produced folder; each criterion
 #      passes or fails from their result (scripts/bench/scorecard.py grade);
 #   5. the numbers: criteria passed / total, tasks done at the first attempt
-#      (done with one delivery), rework requests per task, blocked share,
+#      (done with no rework request, no send-back on the board and at most one
+#      delivery), rework requests per task, blocked share,
 #      wall-clock from the sprint's start to its close, and tokens from the
 #      audit log's turns whose usage the provider reported.
 #
 # The scorecard lands in DIR (default bench/scorecards) as <stamp>.json and
 # <stamp>.md; scripts/bench/compare.py diffs it with the previous one.
 #
-# Environment (defaults in brackets; the BENCH_ variables fall back to the
-# e2e's E2E_ ones, so one Postgres and NATS serve both):
+# Environment (defaults in brackets; the Postgres variables fall back to the
+# e2e's E2E_ ones: the bench uses a database of its own on the same server):
 #   BENCH_POSTGRES_HOST [127.0.0.1]  BENCH_POSTGRES_PORT [5432]
 #   BENCH_POSTGRES_USER [factory]    BENCH_POSTGRES_PASSWORD [$POSTGRES_PASSWORD]
 #   BENCH_POSTGRES_DB [factory_bench]  (dropped and recreated on every run)
-#   BENCH_NATS_URL [nats://127.0.0.1:4222]
+#   BENCH_NATS_URL [empty]           a NATS broker of the bench's own, with
+#                                    JetStream. Never a shared one: the daemon's
+#                                    request subjects are not namespaced and all
+#                                    daemons share one queue group, so another
+#                                    stack's daemon could take the bench's work.
+#                                    The default port (4222) and a broker where a
+#                                    daemon already answers are refused
+#                                    (scripts/bench/broker.py). Empty: the bench
+#                                    starts its own nats-server
+#                                    (BENCH_NATS_SERVER, or nats-server on PATH).
 #   BENCH_BACKEND_PORT [18100]       BENCH_LLM_PORT [15200]
 #   BENCH_PYTHON [python]            the backend's interpreter (poetry env)
 #   BENCH_WORKDIR [mktemp]           logs and the produced projects
@@ -41,6 +52,10 @@
 #                                    the fake; it spends tokens, so CI sets it
 #                                    only behind a flag. Empty: the fake.
 #   BENCH_RESEARCH_TOOLS [false with the fake, true otherwise]
+#
+# A grade or a collection that fails stops the run (BENCH FAILED): a spec is
+# never left out of the scorecard, and nothing of an earlier run in the same
+# BENCH_WORKDIR stands in for it.
 #
 # With the fake, every criterion must pass (the circuit check) and the exit
 # status says so. With a real proxy the run exits 0 once the scorecard is
@@ -53,7 +68,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --out=*) OUT_DIR="${1#--out=}"; shift ;;
     --out) [ $# -ge 2 ] || { echo "--out requires a value" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
-    -h|--help) sed -n '2,47p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -u/p' "$0" | sed '$d'; exit 0 ;;
     *) SPECS+=("$(cd "$1" 2>/dev/null && pwd || echo "$1")"); shift ;;
   esac
 done
@@ -71,8 +86,9 @@ PG_PORT=${BENCH_POSTGRES_PORT:-${E2E_POSTGRES_PORT:-5432}}
 PG_USER=${BENCH_POSTGRES_USER:-${E2E_POSTGRES_USER:-factory}}
 PG_PASSWORD=${BENCH_POSTGRES_PASSWORD:-${E2E_POSTGRES_PASSWORD:-${POSTGRES_PASSWORD:-}}}
 PG_DB=${BENCH_POSTGRES_DB:-factory_bench}
-NATS_URL=${BENCH_NATS_URL:-${E2E_NATS_URL:-nats://127.0.0.1:4222}}
-# Its own JetStream namespace, apart from an e2e or a stack on the same broker.
+NATS_URL=${BENCH_NATS_URL:-}
+NATS_SERVER=${BENCH_NATS_SERVER:-$(command -v nats-server || true)}
+# Names its JetStream streams apart, on top of the broker of its own.
 NATS_NAMESPACE=${BENCH_NATS_NAMESPACE:-bench}
 BACKEND_PORT=${BENCH_BACKEND_PORT:-18100}
 LLM_PORT=${BENCH_LLM_PORT:-15200}
@@ -84,6 +100,10 @@ mkdir -p "$WORK/projects" "$WORK/audit" "$WORK/entries"
 rm -f "$WORK"/entries/*.json
 API=http://127.0.0.1:$BACKEND_PORT
 TEST_COMMAND="$PY -m pytest -q -p no:cacheprovider"
+cleanup() { kill ${BPID:-} ${DPID:-} ${LPID:-} ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
+trap cleanup EXIT
+fail() { echo "BENCH FAILED: $*"; exit 1; }
+free_port() { "$PY" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
 
 port_busy() { (echo > "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 healthy() { curl -sf -m 2 "$API/health" | "$PY" -c 'import sys, json; sys.exit(json.load(sys.stdin).get("status") != "healthy")' 2>/dev/null; }
@@ -115,10 +135,18 @@ else
   LLM_LABEL=$LLM_URL
   RESEARCH=${BENCH_RESEARCH_TOOLS:-true}
 fi
+if [ -z "$NATS_URL" ]; then
+  [ -n "$NATS_SERVER" ] || { echo "no broker for the bench: set BENCH_NATS_URL to a NATS of its own (JetStream on, not port 4222), or install nats-server"; exit 2; }
+  NATS_PORT=$(free_port)
+  "$NATS_SERVER" -js -a 127.0.0.1 -p "$NATS_PORT" -sd "$WORK/nats" > "$WORK/nats.log" 2>&1 & NPID=$!
+  NATS_URL=nats://127.0.0.1:$NATS_PORT
+  for _ in $(seq 1 30); do port_busy "$NATS_PORT" && break; sleep 1; done
+  port_busy "$NATS_PORT" || { echo "nats-server did not come up; see $WORK/nats.log"; exit 2; }
+fi
+# Before the bench's own daemon joins: nobody else may answer on this broker.
+"$PY" "$REPO/scripts/bench/broker.py" check "$NATS_URL" || exit 2
 NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/projects" \
   "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
-cleanup() { kill ${BPID:-} $DPID ${LPID:-} 2>/dev/null; wait 2>/dev/null; }
-trap cleanup EXIT
 for _ in $(seq 1 30); do grep -q "Daemon ready" "$WORK/daemon.log" 2>/dev/null && break; sleep 1; done
 grep -q "Daemon ready" "$WORK/daemon.log" || { echo "daemon did not come up; see $WORK/daemon.log"; exit 2; }
 PGENV=(POSTGRES_HOST="$PG_HOST" POSTGRES_PORT="$PG_PORT" POSTGRES_USER="$PG_USER" POSTGRES_PASSWORD="$PG_PASSWORD" POSTGRES_DB="$PG_DB")
@@ -152,6 +180,8 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   name=$(basename "$dir")
   local project="$WORK/projects/$name" company body spec approved plan="" new
   rm -rf "$project"; mkdir -p "$project"; echo "# $name" > "$project/README.md"
+  # Nothing of an earlier run in the same BENCH_WORKDIR can stand in for this one.
+  rm -f "$WORK/$name.grade.json" "$WORK/entries/$name.json"
   echo "== $name"
   company=$(post /v1/init_company "{\"company_name\": \"Bench $name\", \"project_path\": \"$project\",
     \"autonomy_level\": 2, \"start_now\": false, \"default_scope_size\": \"M\",
@@ -187,21 +217,29 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
       if [ "$(sprint_status "$cid" "$sid")" = completed ]; then status=completed; break; fi
       sleep 3
     done
-    [ "$status" = completed ] || error="the sprint did not close within ${TIMEOUT}s"
+    if [ "$status" != completed ]; then
+      # Stop it, so nothing the agents still do lands between the grade and the numbers.
+      error="the sprint did not close within ${TIMEOUT}s; stopped: $(api -X POST "$API/v1/sprints/$sid/stop" | json "d.get('status') or d.get('detail', '')")"
+    fi
   fi
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
-  "$PY" "$REPO/scripts/bench/scorecard.py" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json"
+  "$PY" "$REPO/scripts/bench/scorecard.py" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
+    || fail "the grade of $name did not run"
   echo "   criteria passed: $(json "d.get('passed'), 'of', d.get('total')" < "$WORK/$name.grade.json")"
   "$PY" "$REPO/scripts/bench/scorecard.py" collect --api "$API" --name "$name" --status "$status" \
     --company "$cid" --sprint "$sid" --spec-id "$spec_id" --grade "$WORK/$name.grade.json" --wall "$wall" \
-    --pg "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" --error "$error" --out "$WORK/entries/$name.json"
+    --pg "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" --error "$error" --out "$WORK/entries/$name.json" \
+    || fail "the numbers of $name could not be collected"
 }
 
 for dir in "${SPECS[@]}"; do run_spec "$dir"; done
+ENTRIES=("$WORK"/entries/*.json)
+[ -f "${ENTRIES[0]}" ] && [ ${#ENTRIES[@]} -eq ${#SPECS[@]} ] \
+  || fail "${#SPECS[@]} specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
-CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" "$WORK"/entries/*.json) \
-  || { echo "BENCH FAILED: the scorecard could not be written"; exit 1; }
+CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" "${ENTRIES[@]}") \
+  || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
