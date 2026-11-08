@@ -2091,7 +2091,8 @@
       "unsaved": "Unsaved changes",
       "saved": "Saved. The Manager agent applies it from its next cycle.",
       "noChanges": "No changes to save",
-      "lastSaved": "Last saved {{when}} by {{who}}"
+      "lastSaved": "Last saved {{when}} by {{who}}",
+      "reconfirm": "Suspended after overrides: {{rules}}. Saving the policy puts them back in force."
     }
   },
   "sprintAdmin": {

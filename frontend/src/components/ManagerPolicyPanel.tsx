@@ -5,6 +5,7 @@ import { errorDetail } from '../services/api'
 import {
   MANAGER_RULES,
   useManagerPolicy,
+  useManagerRecord,
   useSaveManagerPolicy,
   type ManagerPolicy,
   type ManagerPolicyUpdate,
@@ -33,6 +34,7 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
   const { t } = useTranslation()
   const policy = useManagerPolicy(companyId)
   const save = useSaveManagerPolicy(companyId)
+  const record = useManagerRecord(companyId)
   const [form, setForm] = useState<ManagerPolicyUpdate | null>(null)
 
   useEffect(() => {
@@ -41,7 +43,11 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
 
   if (!policy.data || !form) return null
   const stored = policy.data
-  const dirty = JSON.stringify(form) !== JSON.stringify(formOf(stored))
+  // Rules compared as a set: unticking and ticking a rule again is no change.
+  const canonical = (f: ManagerPolicyUpdate) => JSON.stringify({ ...f, rules: [...f.rules].sort() })
+  const dirty = canonical(form) !== canonical(formOf(stored))
+  // Saving the policy again is how a Manager puts rules suspended after overrides back in force.
+  const flagged = record.data?.flagged_rules ?? []
   const catalogue = policy.data.catalogue
   const rules = MANAGER_RULES.filter(name => name in catalogue)
   const toggle = (name: string) =>
@@ -126,7 +132,7 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={save.isPending || !dirty}
+            disabled={save.isPending || (!dirty && flagged.length === 0)}
             onClick={() => save.mutate(form)}
           >
             {save.isPending
@@ -136,6 +142,11 @@ export function ManagerPolicyPanel({ companyId, canManage }: { companyId: number
           <p role="status" className="text-xs text-gray-400">
             {dirty
               ? t('manager.policy.unsaved', { defaultValue: 'Unsaved changes' })
+              : flagged.length > 0 && !save.isSuccess
+                ? t('manager.policy.reconfirm', {
+                    rules: flagged.join(', '),
+                    defaultValue: 'Suspended after overrides: {{rules}}. Saving the policy puts them back in force.',
+                  })
               : save.isSuccess
                 ? t('manager.policy.saved', { defaultValue: 'Saved. The Manager agent applies it from its next cycle.' })
                 : !stored.updated_at

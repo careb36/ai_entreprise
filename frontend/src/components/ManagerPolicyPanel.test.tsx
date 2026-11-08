@@ -1,11 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ManagerPolicyPanel } from './ManagerPolicyPanel'
-import { MANAGER_RULES, useManagerPolicy, useSaveManagerPolicy, type ManagerPolicy } from '../services/manager'
+import { MANAGER_RULES, useManagerPolicy, useManagerRecord, useSaveManagerPolicy, type ManagerPolicy } from '../services/manager'
 
 vi.mock('../services/manager', async () => {
   const actual = await vi.importActual<typeof import('../services/manager')>('../services/manager')
-  return { ...actual, useManagerPolicy: vi.fn(), useSaveManagerPolicy: vi.fn() }
+  return { ...actual, useManagerPolicy: vi.fn(), useManagerRecord: vi.fn(), useSaveManagerPolicy: vi.fn() }
 })
 
 const mutate = vi.fn()
@@ -27,6 +27,7 @@ describe('ManagerPolicyPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(useManagerPolicy).mockReturnValue({ data: POLICY } as never)
+    vi.mocked(useManagerRecord).mockReturnValue({ data: undefined } as never)
     vi.mocked(useSaveManagerPolicy).mockReturnValue({ mutate, isPending: false, isError: false, error: null } as never)
   })
 
@@ -109,5 +110,24 @@ describe('ManagerPolicyPanel', () => {
     } as never)
     render(<ManagerPolicyPanel companyId={3} canManage />)
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+  })
+
+  it('unticking and ticking a rule again is no change, whatever the order', () => {
+    vi.mocked(useManagerPolicy).mockReturnValue({
+      data: { ...POLICY, rules: ['accept_delivery', 'merge_local'] },
+    } as never)
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    const box = screen.getByRole('checkbox', { name: /Accept a delivery held only/ })
+    fireEvent.click(box)
+    fireEvent.click(box)
+    expect(screen.getByRole('button', { name: 'Save the policy' })).toBeDisabled()
+  })
+
+  it('lets a Manager save an unchanged policy to put suspended rules back in force', () => {
+    vi.mocked(useManagerRecord).mockReturnValue({ data: { flagged_rules: ['accept_delivery'] } } as never)
+    render(<ManagerPolicyPanel companyId={3} canManage />)
+    expect(screen.getByRole('status')).toHaveTextContent(/Suspended after overrides: accept_delivery/)
+    fireEvent.click(screen.getByRole('button', { name: 'Save the policy' }))
+    expect(mutate).toHaveBeenCalled()
   })
 })
