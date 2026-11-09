@@ -42,10 +42,10 @@ const COMMON_ROLES = [
   // Product & Design
   'PO', 'Designer', 'UXResearcher',
   // Engineering
-  'Architect', 'BackendDev', 'FrontendDev', 'FullstackDev', 'MobileDev',
+  'Architect', 'Developer', 'BackendDeveloper', 'FrontendDeveloper', 'FullstackDev', 'MobileDev',
   'DataEngineer', 'MLEngineer',
   // Quality & Delivery
-  'QA', 'ScrumMaster', 'DevOps', 'Security',
+  'QA', 'ScrumMaster', 'DevOps', 'SecOps',
   // Support
   'TechWriter', 'Support',
 ]
@@ -74,18 +74,18 @@ const ROLE_DISPLAY_ORDER = [
   'PO',
   'Architect',
   'ScrumMaster',
-  'BackendDev', 'FrontendDev', 'FullstackDev', 'MobileDev',
+  'Developer', 'BackendDeveloper', 'FrontendDeveloper', 'BackendDev', 'FrontendDev', 'FullstackDev', 'MobileDev',
   'DataEngineer', 'MLEngineer',
   'Designer', 'UXResearcher',
   'QA',
-  'DevOps', 'Security',
+  'DevOps', 'SecOps', 'Security',
   'TechWriter', 'Support',
 ]
 
 function defaultDraft(): AgentDraft {
   return {
     name: '',
-    role: 'BackendDev',
+    role: 'BackendDeveloper',
     persona: '',
     seniority: 'Senior',
     specialty: '',
@@ -99,7 +99,7 @@ function defaultDraft(): AgentDraft {
 function draftFromAgent(agent: ManagedAgent): AgentDraft {
   return {
     name: agent.name || '',
-    role: agent.role || 'BackendDev',
+    role: agent.role || 'BackendDeveloper',
     persona: agent.persona || '',
     seniority: agent.seniority || 'Senior',
     specialty: agent.specialty || '',
@@ -168,7 +168,7 @@ function recommendModelForRole(
   }
 
   const plan = (() => {
-    if (['backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'].includes(normalizedRole)) {
+    if (['backenddeveloper', 'backenddev', 'backend dev', 'backend', 'fullstackdev', 'fullstack dev', 'fullstack', 'dev', 'developer', 'mobiledev', 'mobile dev', 'mobile'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
           ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
@@ -176,7 +176,7 @@ function recommendModelForRole(
         reasonKey: 'dev',
       }
     }
-    if (['frontenddev', 'frontend dev', 'frontend'].includes(normalizedRole)) {
+    if (['frontenddeveloper', 'frontenddev', 'frontend dev', 'frontend'].includes(normalizedRole)) {
       return {
         ids: isJuniorMid
           ? ['deepseek-coder', 'gemini-3.8-flash', 'deepseek-chat']
@@ -240,7 +240,7 @@ function recommendModelForRole(
         reasonKey: 'devops',
       }
     }
-    if (normalizedRole === 'security') {
+    if (normalizedRole === 'security' || normalizedRole === 'secops') {
       return {
         ids: isJuniorMid
           ? ['gemini-3.8-flash', 'deepseek-reasoner', 'gemini-3.1-pro-preview']
@@ -539,7 +539,7 @@ function DraftFields({
             value={draft.role}
             onChange={e => handleRoleChange(e.target.value)}
           >
-            {roleOptions.map(role => <option key={role} value={role}>{role}</option>)}
+            {roleOptions.map(role => <option key={role} value={role}>{t(`teamRoles.${role}`, { defaultValue: role })}</option>)}
           </select>
         </div>
         <div>

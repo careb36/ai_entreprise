@@ -99,6 +99,10 @@ const ROLES = [
   { value: 'SM',       label: 'Scrum Master',          icon: '🔄', desc: 'Facilitates agile delivery' },
   { value: 'Architect',label: 'Solution Architect',    icon: '🏗️', desc: 'Designs system structure' },
   { value: 'Dev',      label: 'Developer',             icon: '💻', desc: 'Writes and reviews code' },
+  { value: 'BackendDeveloper',  label: 'Backend Developer',  icon: '🧩', desc: 'Server-side logic, APIs and services' },
+  { value: 'FrontendDeveloper', label: 'Frontend Developer', icon: '🖥️', desc: 'User interfaces in the browser' },
+  { value: 'Designer', label: 'UX/UI Designer',        icon: '🎨', desc: 'UX flows, UI specs and accessibility' },
+  { value: 'TechWriter', label: 'Technical Writer',    icon: '📝', desc: 'Project and API documentation' },
   { value: 'QA',       label: 'QA Engineer',           icon: '🧪', desc: 'Tests and validates quality' },
   { value: 'DevOps',   label: 'DevOps Engineer',       icon: '🚀', desc: 'CI/CD and infrastructure' },
   { value: 'Security', label: 'Security Engineer',     icon: '🔐', desc: 'Vulnerability and compliance' },
@@ -150,13 +154,8 @@ const PERM_LEVELS = {
 }
 
 const DEFAULT_PERMISSIONS: Permissions = {
-  git_access: 'read_only',
-  cloud_access: 'none',
-  db_access: 'read_only',
-  ci_access: 'none',
-  secrets_access: 'none',
-  require_approval_deploy: true,
-  require_approval_db_write: true,
+  git_access: 'read_only', cloud_access: 'none', db_access: 'read_only', ci_access: 'none', secrets_access: 'none',
+  require_approval_deploy: true, require_approval_db_write: true,
 }
 
 const STEPS = ['Project', 'Company', 'Autonomy', 'Permissions', 'Team', 'Review']
