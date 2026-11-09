@@ -444,6 +444,13 @@ def verify_agent_run(
         )
         if sources:
             checks.append(sources)
+    # A console producer's run (``services/console_producer.py``): who ran,
+    # how it ended and what the daemon saw it change.
+    from services.console_clis import check_console_run
+
+    console_check = check_console_run(evidence)
+    if console_check:
+        checks.append(console_check)
     # The factory's standards over the files the deliverable declares
     # (``services.standards``): a secret refutes, the rest is for the reviewer.
     # The edit tool's files too: what the delivery wrote for them (an observation).

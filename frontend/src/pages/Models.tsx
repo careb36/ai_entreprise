@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Boxes, Cpu, Plug } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import ConsoleProducers from '../components/ConsoleProducers'
 import ModelChoices from '../components/ModelChoices'
 import ModelConnections from '../components/ModelConnections'
 import { useCurrentRole } from '../hooks/useQueries'
@@ -60,6 +61,7 @@ export default function Models() {
           </div>
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
+          <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>
       )}
     </div>

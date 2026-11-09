@@ -143,7 +143,11 @@ def with_tool_edits(targets: list[dict[str, Any]], edited: Any) -> list[dict[str
     model's claim. A file the answer delivers itself keeps its own block."""
     have = {t["path"] for t in targets}
     extra = [
-        {"path": f["path"], "content": f["content"], "source": "workspace_edit"}
+        {
+            "path": f["path"],
+            "content": f["content"],
+            "source": f.get("source") or "workspace_edit",
+        }
         for f in delivered(edited)
         if f["path"] not in have
     ]
@@ -171,9 +175,12 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         for f in edits
         if isinstance(f, dict) and f.get("error")
     ]
-    if not (calls or files or conflicts):
+    console = agent.get("console_run")  # A console producer's run (console_producer).
+    if not (calls or files or conflicts or console):
         return evidence
     evidence = evidence if isinstance(evidence, dict) else {}
+    if console:
+        evidence["console_run"] = console
     for key, value in (
         ("tool_calls", calls),
         ("tool_edit_files", files),

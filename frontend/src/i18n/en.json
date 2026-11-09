@@ -2157,5 +2157,16 @@
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
     "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
     "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
+  },
+  "consoleProducers": {
+    "title": "Console producers",
+    "subtitle": "A terminal coding agent can produce a role's tasks instead of the model. The workspace daemon runs it headless in the task's worktree, with the company's sandbox; the delivery is what the daemon saw it change, never what it says.",
+    "needsGit": "A console producer works in the task's own worktree: turn the Git workflow on first.",
+    "cooldown": "{{cli}} is cooling down until {{until}} (quota or missing on the daemon's machine); the model produces its tasks meanwhile.",
+    "role": "Role",
+    "producer": "Produced by",
+    "model": "The model (no console producer)",
+    "evidence": "The CLI's own report is kept as a claim; the files, command, exit status and duration are observations, verified like any delivery.",
+    "saved": "Console producers saved."
   }
 }

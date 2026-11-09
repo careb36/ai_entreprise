@@ -39,6 +39,7 @@ from services import (
     acceptance,
     agent_run_service,
     console_assistants,
+    console_producer,
     delivery_gate,
     dependencies,
     developer_tools,
@@ -2276,8 +2277,10 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 },
             )
 
-            # 3. Call the LLM (in a thread).
-            deliverable = await asyncio.to_thread(
+            # 3. The company's console producer for the role, else the LLM (in a thread).
+            deliverable = await console_producer.produce(
+                nats_client, item, agent, sprint, requirements_ctx, architect_advice
+            ) or await asyncio.to_thread(
                 _execute_task,
                 item,
                 agent,
@@ -2292,9 +2295,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 procedures_ctx or None,
                 requirements_ctx or None,
             )
-            deliverable = await asyncio.to_thread(
-                _sanitize_deliverable_text, deliverable
-            )
+            deliverable = _sanitize_deliverable_text(deliverable)
 
             await publish_glassroom(
                 nats_client,
@@ -2347,9 +2348,8 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 nats_client, item, agent, sprint, deliverable
             )
 
-            # 4. Save result and mark as in_review.
-            # Ensure the deliverable is persisted as a reviewable comment even if
-            # artifact normalization produced an empty payload.
+            # 4. Save result and mark as in_review (a reviewable comment even if
+            # artifact normalization produced an empty payload).
             review_text = (review_payload or deliverable or "").strip()
             if not review_text:
                 review_text = "(no deliverable text produced)"

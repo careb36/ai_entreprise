@@ -26,6 +26,7 @@ from routers import (
     architectures_router,
     auth_router,
     board_moves_router,
+    console_producers_router,
     enterprise_router,
     events_router,
     github_router,
@@ -105,6 +106,7 @@ setup_security(app)
 setup_metrics(app)
 
 app.include_router(auth_router)
+app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(events_router)
 app.include_router(sprint_router)
