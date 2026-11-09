@@ -134,6 +134,11 @@ def _name(key: str) -> str:
     return key.rsplit(".", 1)[-1]
 
 
+def _is_shim(path: Path) -> bool:
+    """A flat module that replaces itself with its owner in ``sys.modules``."""
+    return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
+
+
 def find_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     state: dict[str, int] = {}
     stack: list[str] = []
@@ -190,10 +195,29 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             owner[key] = key
         elif key not in owner:
             problems.append(f"{key}: in no context; add it to {DATA.name}")
+    # Edges are named by stem, so a stem must name one module: a migrated
+    # module and the shim at its flat path, never two modules of their own,
+    # or one would inherit the other's allowlisted edges.
+    stems: dict[str, list[str]] = {}
+    for key in modules:
+        if "." in key:
+            stems.setdefault(_name(key), []).append(key)
+    for stem, keys in sorted(stems.items()):
+        if len(keys) > 1:
+            problems.append(
+                f"{stem}: names {' and '.join(sorted(keys))}; edges are named "
+                "by the module's stem, so give one of them another name"
+            )
     for key in modules:
         if "." in key or key in contexts:
             continue
         homes = [c for c in contexts if f"{c}.{key}" in modules]
+        if homes and not _is_shim(modules[key]):
+            problems.append(
+                f"{key}: a module of its own beside {homes[0]}.{key}; edges are "
+                "named by the module's stem, so leave a shim there "
+                "(sys.modules[__name__] = the owner) or rename one of them"
+            )
         if homes:
             shims[key] = homes[0]
             if owner.get(key) not in (None, homes[0]):
