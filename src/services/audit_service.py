@@ -1,41 +1,35 @@
 from sqlalchemy.orm import Session
-from src.models.audit import AgentExecutionAudit
+from src.models.audit import AIAuditLog
+from typing import Dict, Any, Optional
 
 class AuditService:
-    def __init__(self, db_session: Session):
-        self.db = db_session
+    def __init__(self, session: Session):
+        self.session = session
 
-    def log_execution(
-        self, 
-        agent_id: str, 
-        task_id: str, 
-        claimed_files: list,
-        claimed_tests: list,
-        observed_timeout_ms: float, 
-        observed_retries: int, 
-        observed_iterations: int,
-        observed_files: list,
-        observed_tests: list,
-        status: str,
-        error_message: str = None
-    ) -> AgentExecutionAudit:
+    def log_agent_execution(
+        self,
+        event_type: str,
+        agent_id: str,
+        claims: Dict[str, Any],
+        observations: Dict[str, Any],
+        llm_timeout_duration_ms: Optional[int] = None,
+        retry_count: int = 0,
+        self_correction_iterations: int = 0
+    ) -> AIAuditLog:
         """
-        Persists an execution audit record separating claims from observations.
+        Log an AI agent execution event with resilience metrics.
+        Claims and observations are separated per STD-AUD-1.
         """
-        audit_record = AgentExecutionAudit(
+        log_entry = AIAuditLog(
+            event_type=event_type,
             agent_id=agent_id,
-            task_id=task_id,
-            claimed_files_written=claimed_files,
-            claimed_tests_run=claimed_tests,
-            observed_llm_timeout_duration_ms=observed_timeout_ms,
-            observed_retry_count=observed_retries,
-            observed_self_correction_iterations=observed_iterations,
-            observed_files_written=observed_files,
-            observed_tests_run=observed_tests,
-            status=status,
-            error_message=error_message
+            claims=claims,
+            observations=observations,
+            llm_timeout_duration_ms=llm_timeout_duration_ms,
+            retry_count=retry_count,
+            self_correction_iterations=self_correction_iterations
         )
-        self.db.add(audit_record)
-        self.db.commit()
-        self.db.refresh(audit_record)
-        return audit_record
+        self.session.add(log_entry)
+        self.session.commit()
+        self.session.refresh(log_entry)
+        return log_entry
