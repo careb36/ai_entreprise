@@ -43,6 +43,13 @@ def published_repo(tmp_path, monkeypatch):
     git(root, "commit", "-q", "-m", "first")
     git(root, "remote", "add", "origin", "https://token@github.com/ana/app.git")
     git(root, "config", "remote.origin.pushurl", str(remote))
+    # Fetches (the base's check against its remote) read the bare one too.
+    git(
+        root,
+        "config",
+        f"url.{remote}.insteadOf",
+        "https://token@github.com/ana/app.git",
+    )
     git(root, "push", "-q", "origin", "main")
     # No gh or glab unless a test puts one there.
     bin_dir = tmp_path / "bin"

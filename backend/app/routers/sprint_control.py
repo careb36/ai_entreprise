@@ -20,12 +20,12 @@ from typing import Any
 from auth_policy import current_user_if_required, require_company_role
 from config import settings
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
 from services import (
-    git_workflow,
+    git_setup,
     research_tools,
     sandbox,
     sprint_control,
@@ -382,15 +382,25 @@ async def set_stack_profile(
 @router.get("/companies/{company_id}/git")
 async def get_git_workflow(
     company_id: int,
+    request: Request,
+    check: bool = False,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Whether the company's deliveries are commits on a branch per task (Viewer)."""
+    """Whether the company's deliveries are commits on a branch per task (Viewer).
+
+    With ``check``, also ``base_status``: whether the folder is a repository
+    and how its base branch stands against its remote, as the daemon observed
+    it now (``services/git_setup.py``), or ``state: unknown`` with the reason.
+    """
     require_company_role(session, user, company_id, "Viewer")
     company = session.get(Company, company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
-    return _git_payload(company)
+    if not check:
+        return _git_payload(company)
+    status = await git_setup.base_status(request, session, company)
+    return _git_payload(company) | {"base_status": status}
 
 
 @router.put("/companies/{company_id}/git")
@@ -409,9 +419,7 @@ async def set_git_workflow(
     company = session.get(Company, company_id)
     if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
-    base = (req.git_base_branch or "").strip() or None
-    if not git_workflow.valid_base(base):
-        raise HTTPException(status_code=422, detail=f"not a branch name: {base}")
+    base = git_setup.clean_base(req.git_base_branch)
     company.git_workflow = req.git_workflow
     company.git_base_branch = base
     session.add(company)

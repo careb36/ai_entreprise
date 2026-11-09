@@ -9,6 +9,12 @@ its parent) is an observation kept on the run's evidence as ``git``, the
 tests the daemon runs after a delivery run in that worktree, and the run's
 Files changed show the commit. Merging the branch is a person's call, or the
 platform's it is published to.
+
+A new branch starts from the base as its remote has it when the local copy
+is behind (``vscode-daemon/git_base.py``: ``base_commit``,
+``base_behind_remote``, ``remote_unreachable`` on the ``git`` evidence). A
+folder that is not a repository is delivered without a branch, with a
+snapshot, and the evidence says why (``git_workflow_skipped``).
 """
 
 from __future__ import annotations
@@ -73,11 +79,13 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
 
     With a branch, the tests run where the files are: the task's worktree.
     Without one, the daemon's snapshot that undoes the delivery
-    (``services/delivery_undo.py``), or why it kept none, is kept too.
+    (``services/delivery_undo.py``), or why it kept none, is kept too, and
+    ``git_workflow_skipped`` when the workflow was on but the daemon found
+    the folder is not a repository and delivered without a branch.
     """
     if not isinstance(reply, dict):
         return
-    for key in ("snapshot", "snapshot_error"):
+    for key in ("snapshot", "snapshot_error", "git_workflow_skipped"):
         if reply.get(key):
             evidence[key] = reply[key]
     git = reply.get("git")
@@ -92,3 +100,14 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
         evidence["reason"] = (
             f"the workspace daemon could not write the files: {reply['error']}"
         )
+
+
+def skipped_note(evidence: dict[str, Any] | None) -> str:
+    """The board's words when the daemon delivered without the Git workflow it was asked for."""
+    reason = (evidence or {}).get("git_workflow_skipped")
+    if not reason:
+        return ""
+    return (
+        f" — delivered without the Git workflow ({reason}): no task branch,"
+        " the files are in the folder with a snapshot to undo them"
+    )

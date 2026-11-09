@@ -6,7 +6,8 @@ its git files, for the folder picker and stack detection.
 Writing: with the company's Git workflow on, a delivery never lands in the
 person's checkout. Each task has a branch, ``fabrique/task-<id>``, started
 from the base the company named (or the commit the repository has checked
-out) at its first delivery; each delivery is one commit on it, written in a
+out) at its first delivery, from the remote's tip when the local base is
+behind it (``git_base``); each delivery is one commit on it, written in a
 worktree under the repository's git directory
 (``<git dir>/fabrique-worktrees/``), so the person's working tree, index and
 checked-out branch are never touched. The answer is what git itself says:
@@ -38,7 +39,7 @@ class GitError(Exception):
 
 
 def run_git(
-    args: list[str], cwd: Path, check: bool = True
+    args: list[str], cwd: Path, check: bool = True, timeout: float = GIT_TIMEOUT_SECONDS
 ) -> subprocess.CompletedProcess:
     """``git <args>`` in *cwd*: no shell, no prompt, C locale, bounded in time."""
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
@@ -49,13 +50,13 @@ def run_git(
             env=env,
             capture_output=True,
             text=True,
-            timeout=GIT_TIMEOUT_SECONDS,
+            timeout=timeout,
             check=False,
         )
     except FileNotFoundError as e:
         raise GitError("git is not installed on this machine") from e
     except subprocess.TimeoutExpired as e:
-        raise GitError(f"git {args[0]} took more than {GIT_TIMEOUT_SECONDS} s") from e
+        raise GitError(f"git {args[0]} took more than {timeout:g} s") from e
     if check and result.returncode != 0:
         raise GitError(
             (result.stderr or result.stdout).strip() or f"git {args[0]} failed"
@@ -79,6 +80,19 @@ def valid_branch(name: str) -> bool:
     )
 
 
+def has_branch(root: Path, branch: str) -> bool:
+    return run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], root, check=False).returncode == 0
+
+
+def fresh_start(root: Path, branch: str, base: str) -> tuple:
+    """``(start point, observation)``: the base checked against its remote when *branch* is new (``git_base``)."""
+    if has_branch(root, branch):
+        return base, {}  # started at an earlier delivery, whose evidence says from where
+    import git_base  # git_base reads git through this module
+
+    return git_base.start_point(root, base)
+
+
 def worktree_for(root: Path, branch: str, start_point: str) -> Path:
     """The worktree where *branch* is checked out, made (and the branch with it) when missing."""
     common = Path(_out(["rev-parse", "--git-common-dir"], root))
@@ -87,16 +101,8 @@ def worktree_for(root: Path, branch: str, start_point: str) -> Path:
     run_git(["worktree", "prune"], root, check=False)
     if (path / ".git").exists():
         return path
-    exists = (
-        run_git(
-            ["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
-            root,
-            check=False,
-        ).returncode
-        == 0
-    )
     path.parent.mkdir(parents=True, exist_ok=True)
-    if exists:
+    if has_branch(root, branch):
         run_git(["worktree", "add", str(path), branch], root)
     else:
         start = _out(["rev-parse", "--verify", f"{start_point}^{{commit}}"], root)
@@ -133,7 +139,8 @@ def deliver(
         }
     root = Path(_out(["rev-parse", "--show-toplevel"], folder))
     base = str(spec.get("base") or "HEAD")
-    worktree = worktree_for(root, branch, base)
+    start, started = fresh_start(root, branch, base)
+    worktree = worktree_for(root, branch, start)
     merged = merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
     parent = _out(["rev-parse", "HEAD"], worktree)
     results = write_files(str(worktree), files)
@@ -177,6 +184,9 @@ def deliver(
             "commit": commit,
             # The prerequisites' branches merged into the worktree this time.
             "merged": merged,
+            # Where a new branch started, checked against the base's remote
+            # (``base_commit``, ``base_behind_remote``, ``remote_unreachable``).
+            **started,
         },
     }
 
@@ -311,6 +321,14 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         raise GitError(f"not a commit: {pinned!r}")
     if pinned and pinned != tip:
         raise GitError(f"{branch} has moved on to {tip[:7]} since this run's commit {pinned[:7]}: publish the task's latest run")
+    behind = None
+    if spec.get("require_current_base"):
+        import git_base
+
+        behind = git_base.behind_remote_at_publish(root, base, tip)
+        if behind:
+            raise GitError(f"{branch} is {behind} commit(s) behind origin/{base}: integrate the sprint again, "
+                           f"which merges origin/{base} into it first")
     run_git(["push", "--set-upstream", "origin", f"{tip}:refs/heads/{branch}"], root)
     provider, web_url = remote_web_url(_strip_credentials(remote_url))
     title = str(spec.get("title") or branch)[:250]
@@ -327,6 +345,8 @@ def publish(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         "url": url or compare_url(provider, web_url, base, branch),
         "how": ("gh" if provider == "github" else "glab") if url else "compare",
         "updated": updated,
+        # Checked against origin/<base> just before the push, when asked.
+        **({"base_behind_remote": behind} if behind is not None else {}),
     }
 
 

@@ -38,8 +38,10 @@ next ``prepare`` puts the worktree back). And every git command here names
 ``--git-dir`` and ``--work-tree`` from those known paths (``.git`` is never
 read), without the inherited ``GIT_*`` environment, with ``core.fsmonitor``
 off, no hooks, no submodule recursion, and ``--no-ext-diff --no-textconv`` on
-diff (``core.sshCommand`` is moot: nothing here talks to a remote). The
-person's checkout is not guarded: no sandbox mounts it.
+diff. The one remote call, the fetch of the base before a new task branch
+starts (``git_base``), runs in the person's checkout before the CLI runs,
+never in a worktree a CLI had. The person's checkout is not guarded: no
+sandbox mounts it.
 """
 
 from __future__ import annotations
@@ -192,15 +194,16 @@ def _task_worktree(workspace_root: str, spec: Dict[str, Any]) -> tuple:
     if not folder.is_dir():
         raise git_workspace.GitError(f"the project is not a folder on this machine: {workspace_root}")
     root = Path(git_workspace._out(["rev-parse", "--show-toplevel"], folder))
-    worktree = git_workspace.worktree_for(root, branch, str(spec.get("base") or "HEAD"))
-    return root, worktree, branch
+    # A new branch starts from the base as its remote has it (git_base).
+    start, started = git_workspace.fresh_start(root, branch, str(spec.get("base") or "HEAD"))
+    return root, git_workspace.worktree_for(root, branch, start), branch, started
 
 
 def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str, Any]:
     """The task's worktree, clean at its ``HEAD``, and the guard taken before the run."""
     spec = data.get("git") if isinstance(data.get("git"), dict) else {}
     try:
-        root, worktree, branch = _task_worktree(workspace_root, spec)
+        root, worktree, branch, started = _task_worktree(workspace_root, spec)
         with project_lock.lock_for(str(worktree)):
             admin = admin_dir(worktree)
             # A pointer a run left behind (one never collected) is put back first.
@@ -214,7 +217,7 @@ def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str
             return {
                 "ok": True, "repository": str(root), "worktree": str(worktree), "branch": branch,
                 "head": head, "merged": merged, "guard": guard(worktree, admin),
-                "pointer_restored": restored,
+                "pointer_restored": restored, **started,
             }
     except (OSError, git_workspace.GitError) as exc:
         return {"ok": False, "error": str(exc)}

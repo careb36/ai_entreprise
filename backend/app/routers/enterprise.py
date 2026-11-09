@@ -37,7 +37,7 @@ from schemas import (
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
-from services import memory_graph
+from services import git_setup, memory_graph
 from services.company_service import CompanyService
 from services.discovery_service import DiscoveryService
 from services.workspace_daemon import (
@@ -60,14 +60,14 @@ _ANCHOR_DATE = date(2026, 5, 2)
 @router.post("/init_company", tags=["Core"])
 async def init_company(
     req: CompanyInitRequest,
+    request: Request,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """
-    Bootstrap a new company tenant with its AI agents and project credentials.
-    Delegates to CompanyService for transactional logic and team planning.
-    """
+    """Bootstrap a new company (CompanyService); its Git workflow follows the folder (``services/git_setup.py``)."""
     require_authenticated(user)
+    base = git_setup.clean_base(req.git_base_branch)
+    observed = await git_setup.observe(request, req.project_path)
     service = CompanyService(session)
     try:
         result = service.init_company(
@@ -80,6 +80,8 @@ async def init_company(
             detected_stack=req.detected_stack,
             owner_user_id=user.id if user is not None else None,
             start_now=req.start_now,
+            git_workflow=git_setup.workflow_for(observed, req.git_workflow),
+            git_base_branch=base,
         )
         return result
     except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.
@@ -103,9 +105,7 @@ async def get_quotas(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """
-    Return token usage and limits for all business units of a company.
-    """
+    """Return token usage and limits for all business units of a company."""
     require_company_role(session, user, company_id, "Viewer")
     service = CompanyService(session)
     return service.get_quotas(company_id)
@@ -117,10 +117,7 @@ async def reset_quota(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """
-    Reset the token usage counter for a business unit to zero.
-    Intended for use at the start of a new billing cycle.
-    """
+    """Reset a business unit's token usage to zero, at the start of a billing cycle."""
     if user is not None:
         unit = session.get(BusinessUnit, bu_id)
         if not unit:
@@ -517,6 +514,8 @@ async def discover_team(
         if daemon_missing:
             raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL)
         raise HTTPException(status_code=422, detail=str(exc))
+    if req.company_id is not None:  # the folder it writes to: its workflow follows it
+        git_setup.record(session, req.company_id, project, project_path)
     return {
         "discovery_id": discovery.id if discovery else None,
         "detected_stack": detected_stack,

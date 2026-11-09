@@ -13,6 +13,10 @@ the suite's result on the integrated branch, and each task's verdict,
 checks, criteria verified and files written, as the Verifier observed
 them, with the acceptance line as it stood at integration), then each producer's own account, labelled as a claim. The per-task
 publication stays available beside it.
+
+A branch whose base is behind ``origin``'s is never published: the daemon
+fetches the base just before the push and refuses, naming how many commits
+the branch lacks (``require_current_base``); integrating again merges them in.
 """
 
 from __future__ import annotations
@@ -51,6 +55,33 @@ STATE_LABELS = {
 }
 
 
+def _base_lines(details: dict[str, Any]) -> list[str]:
+    """Where the base stood against its remote when the branch was integrated (git_base)."""
+    base = details.get("base_status") or {}
+    lines = []
+    if base.get("base_commit"):
+        lines.append(
+            f"Base `{_cell(base.get('started_from') or base.get('base_ref'))}`"
+            f" at `{_cell(base['base_commit'])[:12]}`"
+            + (
+                f" (the local copy was {_cell(base['base_behind_remote'])} commit(s) behind)"
+                if base.get("base_behind_remote")
+                else ""
+            )
+            + (
+                " (remote unreachable: local base)"
+                if base.get("remote_unreachable")
+                else ""
+            )
+        )
+    merge = details.get("base_merge") or {}
+    if merge.get("commit"):
+        lines.append(
+            f"`{_cell(merge.get('branch'))}` merged in first as `{_cell(merge['commit'])[:12]}`"
+        )
+    return [*lines, ""] if lines else []
+
+
 def _integration_lines(row: SprintIntegration) -> list[str]:
     tasks = row.tasks or []
     lines = [
@@ -58,6 +89,7 @@ def _integration_lines(row: SprintIntegration) -> list[str]:
         "",
         f"Integrated into `{_cell(row.branch)}` from `{_cell(row.base)}`, in dependency order:",
     ]
+    lines[2:2] = _base_lines(row.details or {})
     for t in tasks:
         if t.get("state") not in INTEGRATED:
             continue
@@ -230,6 +262,8 @@ def publish_spec(session: Session, row: SprintIntegration) -> dict[str, Any]:
         # The commit this integration's evidence covers; a branch moved past it is refused.
         "commit": row.commit,
         "base": "" if row.base == "HEAD" else row.base,
+        # Refused by the daemon when origin's base has commits the branch lacks.
+        "require_current_base": True,
         "title": " ".join(title.split())[:MAX_TITLE_CHARS],
         "body": request_body(session, row),
     }

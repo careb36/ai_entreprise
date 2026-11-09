@@ -60,6 +60,11 @@ class CompanyInitRequest(BaseModel):
     detected_stack: dict[str, Any] | None = None  # Stack analysis from discovery phase
     # Start Sprint 0 at once; ``False`` leaves it planned until someone starts it.
     start_now: bool = True
+    # The Git workflow: on only when the daemon observes a repository at
+    # project_path (services/git_setup.py); ``False`` turns it off anyway.
+    git_workflow: bool | None = None
+    # Where task branches start; empty: what the repository has checked out.
+    git_base_branch: str | None = Field(default=None, max_length=200)
 
 
 # How many tasks a sprint of each scope may hold, and the ceiling for any.

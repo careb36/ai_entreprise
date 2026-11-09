@@ -6,7 +6,7 @@ where the project was cloned — and is the only Fabrique component that touches
 that machine's files.  The backend reaches it over NATS:
 
 - workspace.generate:     write files (per-file sha256 read back and the diff, file_diff.py; a snapshot to undo it);
-                          with a `git` spec, a commit on the task's branch (git_workspace.py)
+                          with a `git` spec, a commit on the task's branch from the base as its remote has it (git_workspace.py, git_base.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
 - workspace.status:       which machine this is (hostname, platform, home)
@@ -14,7 +14,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
 - workspace.hash:         sha256 of named files as they are on disk (file_hash.py); workspace.undo: undo a delivery (delivery_snapshot.py)
 - workspace.list / read / search / find / map, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, repo_map.py, workspace_edit.py); workspace.console.prepare / collect: a console producer's worktree, then what it changed (console_run.py)
-- workspace.git.publish / merge: push a branch and open its request (gh, glab), or merge it locally (local_merge.py)
+- workspace.git.publish / merge / base_status: push a branch and open its request (gh, glab), merge it locally (local_merge.py), or the base against its remote (git_base.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
 - workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
 - workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
@@ -43,7 +43,7 @@ import delivery_journal
 import file_diff
 import file_edits
 import file_hash
-import git_workspace
+import git_base, git_workspace  # noqa: E401 - one line: this file may only shrink.
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
 import nats_connect
 import nats_scope
@@ -62,8 +62,7 @@ NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
 IS_WINDOWS = os.name == "nt"
 PROTECTED_ROOT_DOCS = set()
-# Console assistant commands reported by workspace.capabilities when the
-# request does not name its own list.
+# Console assistant commands workspace.capabilities reports when the request names none.
 ASSISTANT_COMMANDS_DEFAULT = os.getenv("CONSOLE_ASSISTANT_COMMANDS", "copilot,claude")
 # Off-PATH install locations the backend's command wrapper falls back to.
 ASSISTANT_FALLBACK_PATHS = {
@@ -154,11 +153,11 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
 
 
 def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else with a snapshot to undo it."""
+    """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else (also for a folder that is not a repository, ``git_workflow_skipped``) with a snapshot to undo it."""
     try:
-        if git:
+        if git and not git_base.not_a_repository(workspace_path):
             return git_workspace.deliver(workspace_path, git, files, write_files)
-        return delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path)
+        return {**delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path), **({"git_workflow_skipped": "not a repository"} if git else {})}
     except (OSError, git_workspace.GitError) as e:
         logger.error("Writing files under %s failed: %s", workspace_path, e)
         return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
@@ -631,7 +630,7 @@ async def main():
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
         *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *console_run.HANDLERS)),
-        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local))),
+        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.base_status", git_base.handle_status))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
         ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),

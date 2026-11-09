@@ -438,7 +438,10 @@ def record(
         "test_run": test_run,
         "tested_commit": (test_run or {}).get("commit"),
         "tasks": _task_states(context, reply, conflict),
-        "details": details | {"left_out": context["left_out"]},
+        # Where the base stood against its remote (git_base): an observation.
+        "details": details
+        | {"left_out": context["left_out"]}
+        | {k: reply[k] for k in ("base_status", "base_merge") if reply.get(k)},
     }
     row = session.get(SprintIntegration, job.id) if job is not None else None
     if row is None:
