@@ -414,3 +414,94 @@ def test_a_lint_command_that_rewrites_files_is_not_run(project, daemon):
     assert w("dotnet format") and not w("dotnet format --verify-no-changes")
     assert w("ruff format src") and not w("ruff format --check src")
     assert not w("ruff check --fix-dry-run .") and not w("python -m ruff check .")
+
+
+# --- second review ------------------------------------------------------------
+
+
+def test_a_typed_secret_the_linter_prints_is_redacted(project, daemon):
+    fake_value = (
+        "production-" + "value-123"
+    )  # built at runtime: no literal for scanners
+    secret = f'password: str = "{fake_value}"'
+    (project / "leak.py").write_text(
+        "import sys\n"
+        f"print('src/greet.py:1:1: S105 hardcoded: ' + {secret!r})\n"
+        "sys.exit(1)\n"
+    )
+    box = _box(daemon, project, f"{PY} leak.py .")
+    _observation, text = box.call(
+        _call(
+            "workspace__edit",
+            path="src/greet.py",
+            search="return name",
+            replace="return name.upper()",
+        ),
+        1,
+    )
+    assert fake_value not in text
+    assert "[line redacted: it looks like a secret]" in text
+    box.close()
+
+
+def test_the_write_guard_reads_quotes_and_each_simple_command():
+    w = edit_lint.writes_files
+    # Quotes are the shell's, not part of the flag.
+    assert "--fix" in w("ruff check '--fix' .")
+    assert "--fix" in w('ruff check "--fix=true" .')
+    # Black's --check does not exempt the isort after it, nor the other way.
+    assert "isort" in w("black --check . && isort .")
+    assert "black" in w("isort --check . ; black .")
+    assert "black" in w("ruff check . || black .")
+    assert "prettier" in w("eslint . | prettier .")
+    assert "isort" in w("black --check .\nisort .")
+    assert not w("black --check . && isort --check .")
+    assert not w("ruff check . && python -m mypy src")
+    # What runs is decided at run time: refused.
+    for opaque in (
+        "eslint $(cat files)",
+        "eslint `cat files`",
+        "ruff check . <<EOF\nx\nEOF",
+        "eval ruff check .",
+        "sh -c 'ruff check .'",
+        "bash -c 'ruff check .'",
+        "/bin/bash -lc 'ruff check .'",
+        "ruff check 'unbalanced .",
+    ):
+        assert w(opaque), opaque
+    # The package's lint script is split and read the same way.
+    assert w("npm run lint", {"lint_script": "eslint . && prettier --write ."})
+    assert w("npm run lint", {"lint_script": "eslint $(git ls-files)"})
+    assert not w("npm run lint", {"lint_script": "eslint . && prettier --check ."})
+
+
+def test_npm_pre_and_post_lint_scripts_are_inspected(tmp_path):
+    from services import stack_profiles
+
+    (tmp_path / "package.json").write_text(
+        json.dumps(
+            {
+                "scripts": {
+                    "prelint": "prettier --write .",
+                    "lint": "eslint .",
+                    "postlint": "echo done",
+                }
+            }
+        )
+    )
+    profile = stack_profiles.detect(str(tmp_path))
+    assert profile["lint"] == "npm run lint --if-present"
+    assert "prettier --write ." in profile["lint_script"]
+    assert "eslint ." in profile["lint_script"]
+    why = edit_lint.writes_files(profile["lint"], profile)
+    assert "--write" in why and "lint script" in why
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"lint": "eslint .", "postlint": "eslint . --fix"}})
+    )
+    profile = stack_profiles.detect(str(tmp_path))
+    assert "--fix" in edit_lint.writes_files(profile["lint"], profile)
+    (tmp_path / "package.json").write_text(
+        json.dumps({"scripts": {"lint": "eslint .", "prelint": "tsc --noEmit"}})
+    )
+    profile = stack_profiles.detect(str(tmp_path))
+    assert not edit_lint.writes_files(profile["lint"], profile)

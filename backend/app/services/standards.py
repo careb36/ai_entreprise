@@ -349,7 +349,10 @@ _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "a password or secret assigned in code",
         re.compile(
-            r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['\"][^'\"\s]{8,}['\"]"
+            # An optional type annotation (``password: str = "…"``) and
+            # string prefix (``f"…"``) before the quoted value.
+            r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b\s*"
+            r"(?::[^=\n'\"]{1,80}?)?[:=]\s*[bfru]{0,2}['\"][^'\"\s]{8,}['\"]"
         ),
     ),
 )

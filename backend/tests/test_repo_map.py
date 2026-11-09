@@ -425,3 +425,67 @@ def test_a_fifo_named_like_source_is_never_read(project):
             pass
         pytest.fail("the map blocked on a FIFO")
     assert "class Store" in results[0]["map"]
+
+
+# --- second review ------------------------------------------------------------
+
+
+# Fake secrets for the redaction tests, built at runtime so the source never
+# holds a credential-shaped literal (secret scanners read test files too).
+FAKE_DB_PASS = "bluebird-" + "production-pass"
+FAKE_TOKEN = "opaqueSecret" + "Value987654321"
+FAKE_JS_PASS = "s3cr3t" + "ValueXYZ123abc"
+FAKE_TYPED_PASS = "production-" + "value-123"
+
+
+def test_python_secret_defaults_are_redacted_in_the_tree(project, map_state):
+    (project / "src" / "conn.py").write_text(
+        "from typing import Annotated\n\n\n"
+        f'def connect(password: Annotated[str, "database"] = "{FAKE_DB_PASS}",\n'
+        '            host="db", api_key=None):\n    pass\n\n\n'
+        f'def open_session(*, token=f"{FAKE_TOKEN}", retries=3):\n    pass\n'
+    )
+    text = daemon_map.build_map(str(project), 20000)["map"]
+    on_disk = "".join(p.read_text() for p in map_state.glob("*.json"))
+    for value in (FAKE_DB_PASS, FAKE_TOKEN):
+        assert value not in text and value not in on_disk
+    assert "password: Annotated[str, 'database']=" in text
+    assert "host='db'" in text and "api_key=None" in text and "retries=3" in text
+    assert text.count("[redacted]") >= 2
+    assert daemon_map.MAP_VERSION >= 3
+
+
+def test_javascript_string_literals_never_become_references(project, map_state):
+    (project / "web" / "config.js").write_text(
+        f'const password = "{FAKE_JS_PASS}";\n'
+        "// commentWordAbc is not code\n"
+        "const greeting = `templateWordAbc`;\n"
+        "/* blockWordAbc */\n"
+        "export function load(a) { return a + realReference; }\n"
+    )
+    parsed = daemon_map.parse_javascript((project / "web" / "config.js").read_text())
+    for word in (
+        FAKE_JS_PASS,
+        "commentWordAbc",
+        "templateWordAbc",
+        "blockWordAbc",
+    ):
+        assert word not in parsed["refs"]
+    assert "realReference" in parsed["refs"] and "password" in parsed["refs"]
+    result = daemon_map.build_map(str(project), 20000)
+    on_disk = "".join(p.read_text() for p in map_state.glob("*.json"))
+    assert FAKE_JS_PASS not in result["map"] + on_disk
+
+
+def test_a_typed_secret_in_an_older_daemons_map_is_redacted_at_the_prompt():
+    shown = prompt_map.map_text(
+        {
+            "map": "src/db.py:\n"
+            f'    1| def connect(password: str = "{FAKE_TYPED_PASS}")\n'
+            f'    4| password: str = "{FAKE_TYPED_PASS}"\n'
+            '    7| def ok(password: str = "changeme")'
+        }
+    )
+    assert FAKE_TYPED_PASS not in shown
+    assert shown.count("[line redacted: it looks like a secret]") == 2
+    assert 'def ok(password: str = "changeme")' in shown
