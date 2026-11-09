@@ -349,10 +349,11 @@ _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "a password or secret assigned in code",
         re.compile(
-            # An optional type annotation (``password: str = "…"``) and
+            # An optional type annotation (``password: str = "…"``, quoted
+            # parts included: ``Annotated[str, "db"]``, ``"str"``) and
             # string prefix (``f"…"``) before the quoted value.
             r"(?i)\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b\s*"
-            r"(?::[^=\n'\"]{1,80}?)?[:=]\s*[bfru]{0,2}['\"][^'\"\s]{8,}['\"]"
+            r"(?::[^=\n]{1,80}?(?==))?[:=]\s*[bfru]{0,2}['\"][^'\"\s]{8,}['\"]"
         ),
     ),
 )
@@ -398,6 +399,36 @@ def secrets_in(path: str, content: str) -> list[str]:
             found.append(f"{what} at {path}:{line}")
             break
     return found
+
+
+# The prompt boundary fails closed: a line naming a secret-looking thing,
+# then ``=`` or ``:``, then anywhere later a quoted run of 8 or more
+# characters without a space that is no placeholder, is treated as holding
+# a secret whatever syntax sits between (``Annotated[str, "db"] = "…"``,
+# ``password: "str" = "…"``, a call, a dict). Only for what the model is
+# shown; a delivery is refuted by ``secrets_in`` alone.
+_SECRET_NAMED = re.compile(
+    r"(?i)[\w$]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w$]*['\"]?\s*[:=]"
+)
+_QUOTED = re.compile(r"(['\"`])((?:\\.|(?!\1).)*?)\1")
+_FROM_ENVIRONMENT = re.compile(r"(?i)os\.environ|getenv|process\.env|\benv\(")
+
+
+def secret_line(line: str) -> bool:
+    """Whether *line* may hold a secret, failing closed (``_SECRET_NAMED``):
+    for the text shown to a model, never for a verdict."""
+    named = _SECRET_NAMED.search(line)
+    if not named or _FROM_ENVIRONMENT.search(line):
+        return False
+    for match in _QUOTED.finditer(line, named.end()):
+        value = match.group(2)
+        if (
+            len(value) >= 8
+            and not re.search(r"\s", value)
+            and not _PLACEHOLDER.match(value)
+        ):
+            return True
+    return False
 
 
 def todos_in(path: str, content: str) -> list[str]:
