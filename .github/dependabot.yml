@@ -89,6 +89,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "vitest"
         update-types: ["version-update:semver-major"]
+      # Tailwind 4 moves its PostCSS plugin to @tailwindcss/postcss and needs
+      # a config migration; #463 broke the build. Majors wait for that change.
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
     groups:
       frontend-minor-patch:
         applies-to: version-updates
