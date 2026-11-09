@@ -1853,7 +1853,7 @@ async def _deliver_artifacts(
                         "sprint_id": sprint["id"],
                         **({"git": git_spec} if git_spec else {}),
                     },
-                    timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
+                    timeout=git_workflow.delivery_timeout(git_spec),
                 )
                 writes = reply.get("files") if isinstance(reply, dict) else None
                 evidence["workspace_writes"] = (

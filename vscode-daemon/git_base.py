@@ -39,7 +39,12 @@ from typing import Any, Dict, Optional, Tuple
 from git_workspace import GitError, run_git, valid_branch
 
 # A fetch is one branch; a remote that does not answer in this time is offline.
-FETCH_TIMEOUT_SECONDS = 30
+# It runs inside the backend's ``workspace.generate`` request, which waits
+# ``WORKSPACE_WRITE_TIMEOUT_SECONDS`` (30) plus ``git_workflow.FETCH_ALLOWANCE_SECONDS``
+# (15) for a delivery with a git spec: keep this well below that budget, so a
+# stalled fetch falls back to the local base and the reply still arrives in time
+# (a backend that gave up would queue the same delivery again).
+FETCH_TIMEOUT_SECONDS = 10
 # The settings page asks without a delivery waiting on it: a shorter bound.
 STATUS_FETCH_TIMEOUT_SECONDS = 15
 
@@ -94,7 +99,7 @@ def _count(root: Path, left: str, right: str) -> int:
     return int(run_git(["rev-list", "--count", f"{left}..{right}"], root).stdout.strip() or 0)
 
 
-def observe(root: Path, base: str, fetch_timeout: float = FETCH_TIMEOUT_SECONDS) -> Dict[str, Any]:
+def observe(root: Path, base: str, fetch_timeout: Optional[float] = None) -> Dict[str, Any]:
     """The base as it is here and at its remote: never refuses, only observes.
 
     ``base_commit`` is the local base; with a remote that answered,
@@ -121,7 +126,7 @@ def observe(root: Path, base: str, fetch_timeout: float = FETCH_TIMEOUT_SECONDS)
     observed["base_remote"] = f"{remote}/{there}"
     try:
         fetched = run_git(["fetch", "--no-tags", "--quiet", remote, f"+refs/heads/{there}:{tracking}"],
-                          root, check=False, timeout=fetch_timeout)
+                          root, check=False, timeout=fetch_timeout or FETCH_TIMEOUT_SECONDS)
         reason = None if fetched.returncode == 0 else ((fetched.stderr or fetched.stdout).strip() or "git fetch failed")
     except GitError as e:
         reason = str(e)

@@ -16,6 +16,7 @@ clone whose local base is behind it, a plain folder and an unreachable URL.
 import asyncio
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -168,6 +169,36 @@ def test_an_unreachable_remote_proceeds_from_the_local_base(behind, tmp_path):
     assert "base_behind_remote" not in reply["git"]
 
 
+def test_a_stalled_fetch_falls_back_to_the_local_base_within_the_budget(
+    behind, monkeypatch
+):
+    clone, _ = behind
+    local_main = git(clone, "rev-parse", "main")
+    # A remote that never answers: git's ext:: transport running `sleep`.
+    git(clone, "config", "protocol.ext.allow", "always")
+    git(clone, "remote", "set-url", "origin", "ext::sleep 60")
+    monkeypatch.setattr(git_base, "FETCH_TIMEOUT_SECONDS", 1)
+
+    started = time.monotonic()
+    reply = daemon.deliver_files(str(clone), _files(), SPEC)
+    elapsed = time.monotonic() - started
+
+    assert reply["ok"], reply
+    assert reply["git"]["parent"] == local_main
+    assert "took more than 1 s" in reply["git"]["remote_unreachable"]
+    assert elapsed < 10, elapsed
+
+
+def test_the_fetch_bound_stays_well_inside_the_backend_delivery_wait():
+    budget = git_workflow.delivery_timeout(SPEC)
+    assert git_base.FETCH_TIMEOUT_SECONDS < git_workflow.FETCH_ALLOWANCE_SECONDS
+    # The fetch, then the worktree, commit and reply, all before the backend gives up.
+    assert git_base.FETCH_TIMEOUT_SECONDS * 3 <= budget
+    assert git_workflow.delivery_timeout(None) == (
+        task_worker.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+    )
+
+
 def test_the_base_status_observes_without_starting_anything(behind, tmp_path):
     clone, upstream = behind
     status = git_base.status(str(clone), "")
@@ -305,9 +336,19 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
     sqlite_session.add(item)
     sqlite_session.commit()
 
+    class _Timed(_DaemonOverNATS):
+        def __init__(self):
+            super().__init__()
+            self.timeouts = []
+
+        async def request(self, subject, payload, timeout=5.0):
+            self.timeouts.append(timeout)
+            return await super().request(subject, payload, timeout)
+
+    nats = _Timed()
     asyncio.run(
         task_worker._deliver_artifacts(
-            _DaemonOverNATS(),
+            nats,
             {"id": item.id, "title": item.title, "description": ""},
             {"role": "Developer", "name": "Dev", "model": "m", "served_model": "m"},
             {"id": sprint.id, "company_id": company.id, "name": sprint.sprint_name},
@@ -330,6 +371,12 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
     note = comments[-1]
     assert note["author"] == "System"
     assert "delivered without the Git workflow (not a repository)" in note["text"]
+    assert "with a snapshot to undo them" in note["text"]
+    # A git spec may fetch the base first: the request waits the fetch allowance too.
+    assert nats.timeouts == [
+        task_worker.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+        + git_workflow.FETCH_ALLOWANCE_SECONDS
+    ]
 
 
 def test_the_workflow_follows_what_was_observed_in_the_folder(sqlite_session, tmp_path):
@@ -504,3 +551,23 @@ def test_the_board_note_is_said_only_when_the_workflow_was_skipped():
     assert "not a repository" in git_workflow.skipped_note(
         {"git_workflow_skipped": "not a repository"}
     )
+
+
+def test_the_board_note_promises_an_undo_only_when_a_snapshot_was_kept():
+    kept = git_workflow.skipped_note(
+        {"git_workflow_skipped": "not a repository", "snapshot": {"id": "s1"}}
+    )
+    assert "with a snapshot to undo them" in kept
+
+    failed = git_workflow.skipped_note(
+        {
+            "git_workflow_skipped": "not a repository",
+            "snapshot_error": "no snapshot was taken, this delivery cannot be undone: disk full",
+        }
+    )
+    assert "snapshot to undo" not in failed
+    assert "no snapshot was taken, this delivery cannot be undone: disk full" in failed
+
+    neither = git_workflow.skipped_note({"git_workflow_skipped": "not a repository"})
+    assert "snapshot to undo" not in neither
+    assert "cannot be undone" in neither

@@ -515,6 +515,33 @@ def test_the_clis_word_that_tests_pass_is_held_to_a_test_run(world, cli_path):
     assert verification.verdict != "verified"
 
 
+@pytest.mark.parametrize("delivers", [True, False], ids=["changed", "failed"])
+def test_the_base_the_branch_started_from_is_kept_on_the_console_run(
+    world, cli_path, repo, tmp_path, delivers
+):
+    main = git(repo, "rev-parse", "main")
+    git(repo, "remote", "add", "origin", (tmp_path / "nowhere.git").as_uri())
+    fake_cli(cli_path, "claude", EDIT_CALC if delivers else "echo 'Done.'\n")
+    nats = _DaemonOverNATS()
+    item, agent, sprint = world["item"], world["agent"], world["sprint"]
+
+    if delivers:
+        deliverable = asyncio.run(console_producer.produce(nats, item, agent, sprint))
+        asyncio.run(
+            task_worker._deliver_artifacts(nats, item, agent, sprint, deliverable)
+        )
+    else:
+        with pytest.raises(console_producer.ConsoleProducerError):
+            asyncio.run(console_producer.produce(nats, item, agent, sprint))
+
+    runs = _runs(world["engine"], item["id"])
+    evidence = runs[0][1].evidence["console_run"]
+    assert evidence["base_ref"] == "main" and evidence["base_commit"] == main
+    assert evidence["started_from"] == "main"
+    assert evidence["base_remote"] == "origin/main"
+    assert evidence["remote_unreachable"]
+
+
 def test_a_cli_that_times_out_is_refuted_and_its_half_work_discarded(
     world, cli_path, monkeypatch, repo
 ):

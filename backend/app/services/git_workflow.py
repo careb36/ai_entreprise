@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from config import settings
 from models.company import Company
 from models.sprint import BacklogItem
 from sqlalchemy.engine import Engine
@@ -30,6 +31,12 @@ from sqlmodel import Session, select
 from services import dependencies
 
 TASK_BRANCH = "fabrique/task-{id}"
+# A delivery with a git spec may first fetch the base from its remote, bounded
+# by the daemon's ``git_base.FETCH_TIMEOUT_SECONDS`` (10). The request waits
+# that long on top of the plain write budget, so a stalled fetch that falls
+# back to the local base still answers before the backend gives up and queues
+# the delivery a second time. Keep it above the daemon's bound.
+FETCH_ALLOWANCE_SECONDS = 15.0
 # A base a Manager may name: what git accepts as a branch, without ranges or options.
 _BASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{0,199}$")
 
@@ -102,12 +109,27 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
         )
 
 
+def delivery_timeout(spec: dict[str, Any] | None) -> float:
+    """How long the backend waits for ``workspace.generate``: longer when the daemon may fetch the base."""
+    base = settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+    return base + (FETCH_ALLOWANCE_SECONDS if spec else 0.0)
+
+
 def skipped_note(evidence: dict[str, Any] | None) -> str:
-    """The board's words when the daemon delivered without the Git workflow it was asked for."""
-    reason = (evidence or {}).get("git_workflow_skipped")
+    """The board's words when the daemon delivered without the Git workflow it was asked for.
+
+    The undo snapshot is promised only when the evidence holds one; otherwise
+    the note says what the daemon recorded instead (``snapshot_error``).
+    """
+    evidence = evidence or {}
+    reason = evidence.get("git_workflow_skipped")
     if not reason:
         return ""
-    return (
-        f" — delivered without the Git workflow ({reason}): no task branch,"
-        " the files are in the folder with a snapshot to undo them"
+    note = f" — delivered without the Git workflow ({reason}): no task branch, the files are in the folder"
+    if evidence.get("snapshot"):
+        return note + " with a snapshot to undo them"
+    failure = str(
+        evidence.get("snapshot_error")
+        or "no snapshot was recorded, this delivery cannot be undone"
     )
+    return f"{note}; {failure[:300]}"

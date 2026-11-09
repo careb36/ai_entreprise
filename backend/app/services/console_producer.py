@@ -170,6 +170,22 @@ async def _telemetry(
     )
 
 
+# What the daemon observed of the base when it started the task's branch
+# (``vscode-daemon/git_base.py``), kept on ``console_run`` as observed.
+BASE_OBSERVATIONS = (
+    "base_ref",
+    "base_commit",
+    "base_remote",
+    "base_remote_commit",
+    "base_behind_remote",
+    "base_ahead_of_remote",
+    "base_local_commit",
+    "base_not_on_remote",
+    "started_from",
+    "remote_unreachable",
+)
+
+
 async def _ask(nats_client: Any, subject: str, payload: dict, timeout: float) -> dict:
     """The daemon's answer, or one that says why there is none."""
     try:
@@ -345,6 +361,7 @@ async def produce(
         await _fail(nats_client, item, agent, sprint, run, "", workspace_root)
     worktree, head = prepared["worktree"], prepared["head"]
     run.update(worktree=worktree, head=head, merged=prepared.get("merged") or [])
+    run.update({k: prepared[k] for k in BASE_OBSERVATIONS if k in prepared})
 
     timeout = int(settings.CONSOLE_PRODUCER_TIMEOUT_SECONDS)
     started = time.monotonic()
