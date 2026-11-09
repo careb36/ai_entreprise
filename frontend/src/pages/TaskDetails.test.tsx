@@ -4,8 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TaskDetails from './TaskDetails'
 import { useAgentRuns, useCapabilities, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
+import { useTaskCost } from '../services/cost'
 import { useAppStore } from '../store/useAppStore'
 
+vi.mock('../services/cost', async importOriginal => ({
+  ...(await importOriginal<typeof import('../services/cost')>()),
+  useTaskCost: vi.fn(() => ({ data: undefined })),
+}))
 vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),
@@ -142,6 +147,34 @@ describe('carry-over lineage', () => {
     expect(within(lineage).getByRole('link', { name: 'task #7' })).toHaveAttribute('href', '/task/7')
     expect(lineage).toHaveTextContent('Given another attempt in Sprint 2: task #15')
     expect(within(lineage).getByRole('link', { name: 'task #15' })).toHaveAttribute('href', '/sprints/10/tasks/15')
+  })
+
+  it("shows the task's cost, or that its price is unknown", () => {
+    boardQuery.mockReturnValue({
+      data: {
+        sprint: { id: 9, sprint_name: 'Hardening' },
+        columns: { done: [{
+          id: 12, sprint_id: 9, title: 'Encrypt credentials', description: '',
+          status: 'done', priority: 'high', assignee: 'Developer', comments: [],
+          created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z',
+        }] },
+      },
+      isLoading: false,
+      isError: false,
+    } as never)
+    runsQuery.mockReturnValue({ data: { agent_runs: [] }, isLoading: false, isError: false } as never)
+    vi.mocked(useTaskCost).mockReturnValue({
+      data: {
+        task_id: 12, runs: [], turns: 1, reported_turns: 1, estimated_turns: 0, unavailable_turns: 0,
+        reported_tokens: 20, input_tokens: 10, output_tokens: 10, estimated_tokens: 0,
+        cost_cents: null, reason: 'price_unknown', unpriced_models: ['mystery'], models: ['mystery'], price_source: 'models.dev',
+      },
+    } as never)
+    setup('/sprints/9/tasks/12')
+    const card = screen.getByRole('region', { name: 'Cost of this task' })
+    expect(card).toHaveTextContent('price unknown')
+    expect(card).not.toHaveTextContent('$')
+    expect(useTaskCost).toHaveBeenCalledWith(12)
   })
 
   it('shows nothing for an ordinary task', () => {

@@ -395,6 +395,14 @@ def test_gemini_reports_its_own_count_or_the_estimate_stays_apart(client, upstre
     assert estimated["usage_status"] == "estimated"
 
 
+def test_gemini_keeps_the_input_and_output_split_with_thinking_as_output(client, upstream):
+    """The backend prices a turn from the split (``services/run_cost.py``)."""
+    meta = {"totalTokenCount": 40, "promptTokenCount": 25, "candidatesTokenCount": 10, "thoughtsTokenCount": 5}
+    upstream.set("gemini", FakeResponse(200, {"candidates": [{"content": {"parts": [{"text": "hi"}]}}], "usageMetadata": meta}))
+    usage = _chat(client, "gemini-3.8-flash").get_json()["usage"]
+    assert (usage["prompt_tokens"], usage["completion_tokens"], usage["total_tokens"]) == (25, 15, 40)
+
+
 def _empty_with_usage(tokens: int) -> FakeResponse:
     return FakeResponse(
         200,
