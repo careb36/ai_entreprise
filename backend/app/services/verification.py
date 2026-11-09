@@ -16,12 +16,13 @@ from services import (
     standards,
 )
 from services.agent_service import AgentService
-from services.orchestration_metrics import (
-    ACTION_AGENT_RUN_VERIFIED,
+from services.contracts.manifest import parse_file_manifest
+from services.contracts.verdicts import (
     VERDICT_REFUTED,
     VERDICT_UNVERIFIABLE,
     VERDICT_VERIFIED,
 )
+from services.orchestration_metrics import ACTION_AGENT_RUN_VERIFIED
 
 _PATH_PATTERN = re.compile(
     # Longest extension first, and no continuation after it, so `a.tsx` is not
@@ -386,8 +387,6 @@ def aggregate_verdict(checks: list[dict]) -> str:
 
 
 def _declared_files(artifact: str | None) -> list[dict]:
-    from services.task_worker import parse_file_manifest
-
     return parse_file_manifest(artifact or "")
 
 

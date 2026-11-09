@@ -10,8 +10,9 @@ from __future__ import annotations
 from typing import Any
 
 from services import mcp_tools
+from services.contracts.tool_calls import WORKSPACE_SERVER
 
-SERVER = "workspace"
+SERVER = WORKSPACE_SERVER
 RUN_TESTS = "run_tests"
 EDIT = "edit"
 FIND = "find_file"

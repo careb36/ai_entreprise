@@ -37,7 +37,8 @@ from urllib.parse import urlsplit
 
 from config import settings
 
-from services import edit_blocks, mcp_tools
+from services import mcp_tools
+from services.contracts import edit_blocks
 from services.research_registries import (
     ECOSYSTEMS,
     OSV_ECOSYSTEMS,

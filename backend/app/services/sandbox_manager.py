@@ -7,7 +7,10 @@ import urllib.request
 import uuid
 from typing import Any
 
-from services.sandbox_schemas import SandboxExecutionRequest, SandboxExecutionResponse
+from services.contracts.sandbox_schemas import (
+    SandboxExecutionRequest,
+    SandboxExecutionResponse,
+)
 
 logger = logging.getLogger(__name__)
 

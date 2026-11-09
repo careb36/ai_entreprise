@@ -36,8 +36,8 @@ from typing import Any
 from models import Agent, BacklogItem, Sprint
 from sqlmodel import Session, select
 
-from services import roles as catalogue
 from services import task_events
+from services.contracts import roles as catalogue
 
 SUGGESTED, AUTOMATIC, PERSON, ALL = "suggested", "automatic", "person", "all"
 TEAM_SELECTIONS = (SUGGESTED, AUTOMATIC)

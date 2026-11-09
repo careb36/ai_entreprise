@@ -30,7 +30,7 @@ from services import (
     sprint_team,
     standards,
 )
-from services import roles as catalogue
+from services.contracts import roles as catalogue
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,

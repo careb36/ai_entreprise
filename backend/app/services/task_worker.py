@@ -9,7 +9,6 @@ comment, and publish to Glassroom.
 
 import asyncio
 import functools
-import hashlib
 import json
 import os
 import re
@@ -43,7 +42,6 @@ from services import (
     delivery_gate,
     dependencies,
     developer_tools,
-    edit_blocks,
     edit_plan,
     git_workflow,
     integration_jobs,
@@ -91,6 +89,16 @@ from services.board import (
 )
 from services.carry_over import carry_over_on_the_companys_own, previous_attempt_context
 from services.console_assistants import normalize_utc
+from services.contracts import edit_blocks
+from services.contracts.manifest import (
+    ALLOWED_ARTIFACT_EXTENSIONS,
+    MANIFEST_BLOCK,
+    expected_hashes,
+    parse_file_manifest,
+)
+from services.contracts.manifest import (
+    sanitize_relative_path as _sanitize_relative_path,
+)
 from services.glassroom import publish_glassroom
 from services.orchestration_metrics import (
     ACTION_ARCHITECT_CONSULT,
@@ -156,46 +164,6 @@ def _mark_queued(item_id: int, now: datetime) -> None:
 def _clear_queue_marker(item_id: int) -> None:
     LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
 
-
-ALLOWED_ARTIFACT_EXTENSIONS = {
-    ".md",
-    ".txt",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".jsx",
-    ".css",
-    ".scss",
-    ".html",
-    ".sql",
-    ".sh",
-    ".go",
-    ".java",
-    ".kt",
-    ".rs",
-    ".rb",
-    ".php",
-    ".cs",
-    ".vue",
-    ".svelte",
-    ".xml",
-    ".ini",
-    ".cfg",
-    ".graphql",
-}
-
-# Fenced block whose info string carries ``path=<relative path>``, e.g.
-# ```python path=src/auth/login.py
-_MANIFEST_BLOCK = re.compile(
-    r"^```(?P<info>[^\n`]*\bpath=[^\n`]*)\n(?P<body>.*?)^```[ \t]*$",
-    flags=re.DOTALL | re.MULTILINE,
-)
-_MANIFEST_PATH = re.compile(r"""\bpath=(?:"([^"]+)"|'([^']+)'|(\S+))""")
 
 FILE_MANIFEST_INSTRUCTIONS = (
     "\n\n## Output format for files\n"
@@ -694,14 +662,6 @@ def _resolve_workspace_root(company_id: int) -> str | None:
     return os.getenv("AGENT_WORKSPACE_ROOT") or None
 
 
-def _sanitize_relative_path(path: str) -> str | None:
-    """Normalize a relative path and reject unsafe values."""
-    p = (path or "").strip().replace("\\", "/")
-    if not p or p.startswith("/") or ".." in p.split("/"):
-        return None
-    return p
-
-
 def _normalize_artifact_content(path: str, deliverable: str) -> str:
     """Trim wrapper text so persisted files contain only final artifact content."""
     text_content = (deliverable or "").strip().replace("\r\n", "\n")
@@ -750,36 +710,6 @@ def _extract_artifact_targets(
         dedup.append(a)
 
     return dedup
-
-
-def parse_file_manifest(deliverable: str) -> list[dict[str, str]]:
-    """
-    Extract the files an agent declared with ```` ```<lang> path=<file> ```` blocks.
-
-    Each block becomes one ``{"path", "content"}`` entry (plus ``edits`` when marked ``edit``).
-    Unsafe paths (absolute, ``..``) and disallowed extensions are dropped.  When
-    the same path appears twice the last block wins, keeping the position of
-    the first.  Returns ``[]`` when the answer declares no files.
-    """
-    files: dict[str, dict] = {}
-    for block in _MANIFEST_BLOCK.finditer(deliverable or ""):
-        match = _MANIFEST_PATH.search(block.group("info"))
-        if not match:
-            continue
-        rel = _sanitize_relative_path(next(g for g in match.groups() if g))
-        if not rel:
-            continue
-        if os.path.splitext(rel)[1].lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
-            continue
-        files[rel] = {"path": rel, "content": block.group("body")}
-        if edit_blocks.is_edit_block(block.group("info"), match):
-            files[rel]["edits"] = edit_blocks.parse(block.group("body"))
-    return list(files.values())
-
-
-def expected_hashes(targets: list[dict[str, Any]]) -> dict[str, str]:
-    """The sha256 of what was sent; none for an edit, whose result only the daemon knows."""
-    return {t["path"]: _sha256_text(t["content"]) for t in targets if "edits" not in t}
 
 
 def _build_review_payload(
@@ -1553,13 +1483,9 @@ def _latest_task_verification(company_id: int, item_id: int) -> Verification | N
     return delivery_gate.latest_verification(engine, company_id, item_id)
 
 
-def _sha256_text(content: str) -> str:
-    return hashlib.sha256((content or "").encode("utf-8")).hexdigest()
-
-
 def _summarize_deliverable(deliverable: str, limit: int = 500) -> str:
     """The agent's prose outside the file blocks: its own account of the work."""
-    prose = _MANIFEST_BLOCK.sub("", deliverable or "").strip()
+    prose = MANIFEST_BLOCK.sub("", deliverable or "").strip()
     return prose[:limit]
 
 

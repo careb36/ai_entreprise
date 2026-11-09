@@ -40,6 +40,8 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
+from services.contracts.manifest import parse_file_manifest
+from services.contracts.verdicts import VERDICT_VERIFIED
 from services.criteria_tests import (
     ACCEPTANCE_KIND,
     CHECK_CRITERIA,
@@ -47,7 +49,6 @@ from services.criteria_tests import (
     is_test_file,
     token,
 )
-from services.orchestration_metrics import VERDICT_VERIFIED
 
 QA_ROLE = "QA"
 TITLE_PREFIX = "Acceptance tests for "
@@ -258,7 +259,6 @@ def test_sources_of(engine: Engine, sprint_id: int, paths: list[str]) -> dict[st
     A file QA delivered as SEARCH/REPLACE edits has no source here: it is
     reported tampered and not restored, so ``check_untouched`` refutes."""
     from services import context_read
-    from services.task_worker import parse_file_manifest
 
     sources: dict[str, str] = {}
     with Session(engine) as session:

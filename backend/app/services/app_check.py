@@ -42,8 +42,8 @@ from config import settings
 
 from services import browser_smoke, stack_profiles
 from services.browser_smoke import CHECK_E2E, check_e2e
+from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 from services.criteria_tests import ACCEPTANCE_KIND
-from services.orchestration_metrics import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 
 logger = logging.getLogger(__name__)
 

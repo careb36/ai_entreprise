@@ -6,7 +6,11 @@ The backend's dependency rule between contexts, checked from the imports.
 contexts. Each context names the contexts it may import (``depends_on``,
 which must not run in a circle) and the flat modules it holds (``modules``);
 a module already moved into ``services/<context>/`` belongs to that context
-by its folder. The imports are read with ``ast`` (no module is imported or
+by its folder (the folder's ``__init__`` too). While a context migrates
+(ADR 0016), the flat ``services/<module>.py`` it left behind is a re-export
+shim of ``services/<context>/<module>.py``: it stays listed in ``modules``
+under that same context, so its importers are held to the rule as if they
+imported the owner, and the check fails when it is listed anywhere else. The imports are read with ``ast`` (no module is imported or
 run): ``from services import x``, ``from services.x import y``,
 ``import services.x``, the same through a context package
 (``services.evidence.risk``) and relative imports inside one.
@@ -15,7 +19,7 @@ The check fails when:
 
 - a flat module of ``services`` is in no context, or in more than one, or a
   context lists a module that does not exist, or a folder under ``services``
-  is not a context;
+  is not a context, or a shim is listed in another context than its owner's;
 - the contexts' ``depends_on`` names an unknown context or runs in a circle;
 - a module imports a module of another context its own context may not
   import, and that edge is not in the ``allowlist``.
@@ -167,11 +171,24 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             owner.setdefault(module, name)
             if module not in modules:
                 problems.append(f"{module}: listed in {name}, but no such module")
-    for key in modules:
+    shims: dict[str, str] = {}
+    for key, path in modules.items():
         if "." in key:
             owner[key] = key.split(".")[0]
+        elif key in contexts and path.name == "__init__.py":
+            owner[key] = key
         elif key not in owner:
             problems.append(f"{key}: in no context; add it to {DATA.name}")
+    for key in modules:
+        if "." in key or key in contexts:
+            continue
+        homes = [c for c in contexts if f"{c}.{key}" in modules]
+        if homes:
+            shims[key] = homes[0]
+            if owner.get(key) not in (None, homes[0]):
+                problems.append(
+                    f"{key}: a shim of {homes[0]}.{key}, but listed in {owner[key]}"
+                )
 
     allowed = {n: set(c.get("depends_on", [])) | {n} for n, c in contexts.items()}
     edges: list[tuple[str, str]] = []
@@ -194,6 +211,7 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
     return {
         "modules": modules,
         "owner": owner,
+        "shims": shims,
         "edges": edges,
         "violations": sorted(violations),
         "new": new,
@@ -225,7 +243,8 @@ def main(argv: list[str], data_path: Path = DATA, services: Path = SERVICES) -> 
         print(problem, file=sys.stderr)
     if not result["problems"]:
         print(
-            f"{len(result['modules'])} modules in {len(data['contexts'])} contexts, "
+            f"{len(result['modules']) - len(result['shims'])} modules "
+            f"(and {len(result['shims'])} shim(s)) in {len(data['contexts'])} contexts, "
             f"{len(result['edges'])} imports, {len(result['violations'])} allowlisted "
             "edge(s) against the rule."
         )

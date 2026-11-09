@@ -61,10 +61,10 @@ from services import (
     mcp_tools,
     repo_map,
     research_tools,
-    roles,
     sandbox,
     workspace_edits,
 )
+from services.contracts import roles
 
 logger = logging.getLogger("fabrique-task-worker")
 

@@ -5,7 +5,8 @@ with ``ast`` and holds them to ``docs/architecture/contexts.json``. These
 tests run it on the repository (it must pass with today's code thanks to its
 allowlist) and on small trees of their own: an unassigned module, a new
 edge against the rule, a cycle between contexts, a module moved into a
-context folder, and an allowlist that only shrinks. They also keep the
+context folder, a shim left at the flat path, and an allowlist that only
+shrinks. They also keep the
 records under ``docs/architecture`` approvable by the product's own checks
 and ``docs/ARCHITECTURE.md`` equal to their rendering.
 """
@@ -66,10 +67,21 @@ def test_the_repository_keeps_to_the_rule():
     data = check_architecture.load()
     analysis = check_architecture.analyse(data)
     assert analysis["problems"] == []
-    # Every module of services is in exactly one context.
+    # Every flat module of services is in exactly one context; a module in a
+    # context folder belongs to it by the folder.
     listed = [m for c in data["contexts"].values() for m in c["modules"]]
     assert len(listed) == len(set(listed))
-    assert set(analysis["modules"]) == set(listed)
+    flat = {k for k in analysis["modules"] if "." not in k} - set(data["contexts"])
+    assert flat == set(listed)
+    # A shim left at the flat path is listed with its owner's context.
+    for shim, context in analysis["shims"].items():
+        assert analysis["owner"][shim] == context
+    # The contracts context imports nothing else of services.
+    assert not [
+        (a, b)
+        for a, b in analysis["edges"]
+        if analysis["owner"][a] == "contracts" and analysis["owner"][b] != "contracts"
+    ]
     # The evidence imports only contracts and platform.
     assert data["contexts"]["evidence"]["depends_on"] == ["contracts", "platform"]
     assert data["contexts"]["contracts"]["depends_on"] == []
@@ -142,6 +154,30 @@ def test_a_module_in_a_context_folder_belongs_to_it(tmp_path):
     stray = _tree(tmp_path / "other", {**FILES, "misc/__init__.py": ""})
     problems = check_architecture.analyse(_data(**BASE), stray)["problems"]
     assert any("services/misc/ is not a context" in p for p in problems)
+
+
+def test_a_shim_belongs_to_its_owners_context(tmp_path):
+    files = {
+        **FILES,
+        "contracts/__init__.py": "",
+        "contracts/shapes.py": "VERIFIED = 'verified'\n",
+        "shapes.py": "from services.contracts import shapes\n",
+    }
+    services = _tree(tmp_path, files)
+    result = check_architecture.analyse(_data(**BASE), services)
+    assert result["problems"] == []
+    assert result["owner"]["contracts"] == "contracts"
+    assert result["shims"] == {"shapes": "contracts"}
+    assert ("shapes", "contracts.shapes") in result["edges"]
+
+    contexts = json.loads(json.dumps(BASE))
+    contexts["contracts"]["modules"] = []
+    contexts["evidence"]["modules"] += ["shapes"]
+    problems = check_architecture.analyse(_data(**contexts), services)["problems"]
+    assert any(
+        "shapes: a shim of contracts.shapes, but listed in evidence" in p
+        for p in problems
+    )
 
 
 def test_update_only_shrinks_the_allowlist(tmp_path):
