@@ -167,12 +167,51 @@ def test_a_module_in_a_context_folder_belongs_to_it(tmp_path):
     assert any("services/misc/ is not a context" in p for p in problems)
 
 
+SHIM = (
+    "import sys\n"
+    "from services.{ctx} import {mod} as _owner\n"
+    "sys.modules[__name__] = _owner\n"
+)
+
+
+def test_one_stem_never_names_two_modules(tmp_path):
+    # The allowlist names edges by stem: a second module with an allowlisted
+    # stem must not inherit its exception (contracts may not import evidence).
+    contexts = json.loads(json.dumps(BASE))
+    contexts["loop"]["modules"] += ["probe"]
+    allowlist = ["probe -> verify"]
+    files = {
+        **FILES,
+        "contracts/__init__.py": "",
+        "contracts/probe.py": "from services import verify\n",
+        "loop/__init__.py": "",
+        "loop/probe.py": "from services import verify\n",
+    }
+    problems = check_architecture.analyse(
+        _data(allowlist, **contexts), _tree(tmp_path, files)
+    )["problems"]
+    assert any("probe: names contracts.probe and loop.probe" in p for p in problems)
+
+    # A flat module beside a packaged one of the same stem must be its shim.
+    files = {
+        **FILES,
+        "contracts/__init__.py": "",
+        "contracts/verify.py": "VERIFIED = 'verified'\n",
+    }
+    problems = check_architecture.analyse(
+        _data(**BASE), _tree(tmp_path / "flat", files)
+    )["problems"]
+    assert any(
+        "verify: a module of its own beside contracts.verify" in p for p in problems
+    )
+
+
 def test_a_shim_belongs_to_its_owners_context(tmp_path):
     files = {
         **FILES,
         "contracts/__init__.py": "",
         "contracts/shapes.py": "VERIFIED = 'verified'\n",
-        "shapes.py": "from services.contracts import shapes\n",
+        "shapes.py": SHIM.format(ctx="contracts", mod="shapes"),
     }
     services = _tree(tmp_path, files)
     result = check_architecture.analyse(_data(**BASE), services)
