@@ -166,8 +166,14 @@ def test_the_client_sends_the_connection_and_refuses_what_it_cannot_route(
 def test_scrum_master_and_authoring_clients_carry_the_company(monkeypatch):
     """A ``conn:`` model needs the company on the client: the ScrumMaster's
     questions and the PO's and Architect's drafts pass it on."""
-    from app.services import scrum_master, spec_author
+    import llm_proxy_client
+    from services import scrum_master
 
+    from app.services import spec_author
+
+    # Through its shim, ``app.services.scrum_master`` is now the one module
+    # conftest stubs, so the real client is put back for this test.
+    monkeypatch.setattr(scrum_master, "LLMProxyClient", llm_proxy_client.LLMProxyClient)
     seen = []
 
     def fake_chat(self, messages, model, role=None, bu_id=None, **kwargs):

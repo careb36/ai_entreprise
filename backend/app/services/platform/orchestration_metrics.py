@@ -344,7 +344,7 @@ def build_architect_consult_prompt(
     """Prompt asking the Architect for a compact technical brief on a task.
 
     *record* is how tasks went after its earlier briefs
-    (``services.architect.track_record_context``), or ''.
+    (``services.learning.architect.track_record_context``), or ''.
     """
     feedback_lines = [
         f"- {line.strip()[:600]}" for line in prior_feedback if line and line.strip()
