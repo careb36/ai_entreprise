@@ -22,10 +22,15 @@ working copy (``workspace.edit.finish`` would neither restore nor deliver
 it, and the next edit of it would fail the saved-hash check). A command
 naming an autofix or write option (``--fix``, ``--write``, ``-w``,
 ``rubocop -a``, ``ruff format``, ``cargo fix``, ``dotnet format`` without
-``--verify-no-changes``…), or the package's ``lint`` script when its text
-names one (``npm run lint`` with ``eslint . --fix``), is not run, and the
-result says why; dry runs (``--fix-dry-run``) are fine. What else a company's
-own wrapper does is not visible here.
+``--verify-no-changes``…), or the package's ``lint`` script (with the
+``prelint`` and ``postlint`` scripts npm runs around it) when its text names
+one (``npm run lint`` with ``eslint . --fix``), is not run, and the result
+says why; dry runs (``--fix-dry-run``) are fine. The command is split into
+its simple commands (``&&``, ``||``, ``;``, ``|``, line breaks) and each is
+judged on its own words, quotes removed (``ruff check '--fix' .``, ``black
+--check . && isort .``); a substitution, a here-document, ``eval`` or a
+nested ``sh -c`` is refused, since what it runs cannot be read before it
+runs. What else a company's own wrapper does is not visible here.
 
 What the linter printed is shown with every secret-looking line redacted
 (``context_read.redact_secrets``, as the read replies are), before it is
@@ -38,6 +43,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import shlex
 from typing import Any
 
 from config import settings
@@ -145,10 +151,52 @@ def profile_of(box: Any) -> dict[str, Any] | None:
     return profile
 
 
-def writes_files(command: str, profile: dict[str, Any] | None = None) -> str:
-    """Why *command* (or the package ``lint`` script it runs) may rewrite
-    files, or ``""``."""
-    words = command.split()
+# Shell syntax whose effect the words alone do not show: what it runs is
+# decided when it runs (a substitution, a here-document, a nested shell).
+_OPAQUE_TEXT = ("$(", "`", "<<")
+_SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+_SHELL_C = re.compile(r"^-[A-Za-z]*c[A-Za-z]*$")  # -c, -lc, -ec…
+_SEPARATORS = {"&&", "||", ";", "|", "&", ";;", "|&", "(", ")"}
+
+
+def simple_commands(command: str) -> list[list[str]] | str:
+    """*command* split into its simple commands (on ``&&``, ``||``, ``;``,
+    ``|``, ``&`` and line breaks), each as the words the shell would pass,
+    quotes removed; or why it cannot be read that way."""
+    for marker in _OPAQUE_TEXT:
+        if marker in command:
+            return f"it uses `{marker}`, whose effect cannot be read before it runs"
+    commands: list[list[str]] = []
+    for line in command.splitlines():
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        try:
+            tokens = list(lexer)
+        except ValueError:
+            return "its quoting cannot be read"
+        current: list[str] = []
+        for token in tokens:
+            if token in _SEPARATORS or set(token) <= set("&|;()"):
+                if current:
+                    commands.append(current)
+                current = []
+            else:
+                current.append(token)
+        if current:
+            commands.append(current)
+    for words in commands:
+        bare = [w.rsplit("/", 1)[-1] for w in words]
+        if "eval" in bare or any(
+            w in _SHELLS and any(_SHELL_C.match(o) for o in bare[i + 1 :])
+            for i, w in enumerate(bare)
+        ):
+            return "it runs text through `eval` or a nested shell, which cannot be read before it runs"
+    return commands
+
+
+def _writes(words: list[str]) -> str:
+    """Why one simple command may rewrite files, or ``""``."""
     for word in words:
         flag = word.split("=", 1)[0]
         if flag in _WRITE_FLAGS:
@@ -172,11 +220,30 @@ def writes_files(command: str, profile: dict[str, Any] | None = None) -> str:
             and "--verify-no-changes" not in bare
         ):
             return "`dotnet format` without --verify-no-changes rewrites files"
+    return ""
+
+
+def writes_files(command: str, profile: dict[str, Any] | None = None) -> str:
+    """Why *command* (or the package ``lint`` script it runs, with its
+    ``prelint`` and ``postlint``) may rewrite files, or ``""``. Each simple
+    command is judged on its own words; syntax that cannot be read safely
+    is refused."""
+    commands = simple_commands(command)
+    if isinstance(commands, str):
+        return commands
     script = str((profile or {}).get("lint_script") or "")
-    if script and any(tuple(bare[: len(r)]) == r for r in _SCRIPT_RUNNERS):
-        why = writes_files(script)
+    for words in commands:
+        why = _writes(words)
         if why:
-            return f"the package's lint script (`{script[:120]}`): {why}"
+            return why
+        bare = [
+            w.rsplit("/", 1)[-1] for w in words if "=" not in w or w.startswith("-")
+        ]
+        if script and any(tuple(bare[: len(r)]) == r for r in _SCRIPT_RUNNERS):
+            why = writes_files(script)
+            if why:
+                shown = "; ".join(script.splitlines())[:120]
+                return f"the package's lint script (`{shown}`): {why}"
     return ""
 
 

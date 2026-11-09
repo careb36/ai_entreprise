@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
 import hashlib
 import json
 import math
@@ -60,7 +61,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import workspace_read
 
-MAP_VERSION = 2  # 2: signatures redacted for secrets
+MAP_VERSION = 3  # 2: signatures redacted for secrets; 3: AST defaults, JS literals
 MAP_MAX_FILES = 2000
 MAP_MAX_FILE_BYTES = 256 * 1024
 MAP_MAX_TOTAL_BYTES = 24 * 1024 * 1024
@@ -135,13 +136,37 @@ def _clip(text: str) -> str:
     return text if len(text) <= SIGNATURE_CHARS else text[: SIGNATURE_CHARS - 1] + "…"
 
 
+_SECRET_PARAM = re.compile(rf"(?i)^{_SECRET_NAME}$")
+
+
+def _redacted_args(args: ast.arguments) -> ast.arguments:
+    """*args* with the default of every secret-named parameter replaced by
+    ``"[redacted]"``, whatever its form (an f-string, a call, an annotation
+    holding commas): the text regex cannot see all of them."""
+    args = copy.deepcopy(args)
+    positional = args.posonlyargs + args.args
+    pairs = list(zip(positional[len(positional) - len(args.defaults):], range(len(args.defaults))))
+    for arg, i in pairs:
+        if _SECRET_PARAM.match(arg.arg) and not _is_none(args.defaults[i]):
+            args.defaults[i] = ast.Constant("[redacted]")
+    for i, arg in enumerate(args.kwonlyargs):
+        default = args.kw_defaults[i]
+        if default is not None and _SECRET_PARAM.match(arg.arg) and not _is_none(default):
+            args.kw_defaults[i] = ast.Constant("[redacted]")
+    return args
+
+
+def _is_none(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and node.value is None
+
+
 def _py_signature(node: ast.AST) -> str:
     if isinstance(node, ast.ClassDef):
         bases = ", ".join(ast.unparse(b) for b in node.bases)
         return _clip(f"class {node.name}({bases})" if bases else f"class {node.name}")
     prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
     returns = f" -> {ast.unparse(node.returns)}" if node.returns is not None else ""
-    return _clip(f"{prefix} {node.name}({ast.unparse(node.args)}){returns}")
+    return _clip(f"{prefix} {node.name}({ast.unparse(_redacted_args(node.args))}){returns}")
 
 
 def parse_python(text: str) -> Dict[str, Any]:
@@ -177,6 +202,20 @@ def parse_python(text: str) -> Dict[str, Any]:
     return {"defs": defs, "refs": refs}
 
 
+# Comments and string, template and character literals, left to right, so a
+# quote inside a comment (or ``//`` inside a string) is read as the language does.
+_JS_LITERALS = re.compile(
+    r"//[^\n]*|/\*.*?(?:\*/|\Z)|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`",
+    re.S,
+)
+
+
+def _strip_literals(text: str) -> str:
+    """*text* without what its literals and comments hold (their line breaks
+    kept): a password in a string is not a name the file refers to."""
+    return _JS_LITERALS.sub(lambda m: "\n" * m.group(0).count("\n") or " ", text)
+
+
 def parse_javascript(text: str) -> Dict[str, Any]:
     """Declarations at the start of a line (exported, or at the top level),
     methods inside a class, and every identifier as a reference, less the
@@ -206,7 +245,7 @@ def parse_javascript(text: str) -> Dict[str, Any]:
             if match and match.group(1) not in _JS_KEYWORDS and len(line) - len(line.lstrip()) <= 4:
                 defs.append([match.group(1), _clip(f"{match.group(1)}{match.group(2)}"), number, 1])
     refs: Dict[str, int] = {}
-    for name in _JS_IDENT.findall(text):
+    for name in _JS_IDENT.findall(_strip_literals(text)):
         if name not in _COMMON_NAMES:
             refs[name] = refs.get(name, 0) + 1
     for name, _sig, _line, _depth in defs:
