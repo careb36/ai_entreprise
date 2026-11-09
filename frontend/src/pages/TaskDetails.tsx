@@ -11,6 +11,7 @@ import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
 import { carryOverLineage } from '../lib/carryOver'
+import { TaskCostCard } from '../components/CostSummary'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { lineagePath } from './Lineage'
 
@@ -284,6 +285,7 @@ export default function TaskDetails() {
       </div>
 
       {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
+      {companyId !== null && <TaskCostCard taskId={task.id} />}
 
       {companyId !== null && (
         <div className="card p-4 mb-4">

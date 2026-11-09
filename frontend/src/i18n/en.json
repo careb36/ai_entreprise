@@ -2204,5 +2204,23 @@
       "automatic": "Chosen automatically from the PO's suggestion.",
       "all": "No team chosen: every role the company hired."
     }
+  },
+  "cost": {
+    "runTitle": "Cost of this run",
+    "taskTitle": "Cost of this task",
+    "priceUnknown": "price unknown",
+    "tokensInOut": "{{input}} in · {{output}} out tokens",
+    "estimatedTokens": "{{tokens}} estimated tokens, not priced",
+    "estimatedHint": "Estimated tokens are the proxy's guess where the provider reported no count: they are never part of the cost.",
+    "models": "Models: {{models}} · prices from {{source}}",
+    "reason": {
+      "no_turns": "no model calls recorded",
+      "no_reported_usage": "no reported usage, cost unknown",
+      "token_split_unknown": "price unknown (input/output split not recorded)",
+      "price_unknown": "price unknown",
+      "price_ambiguous": "price unknown (model listed at several prices)",
+      "model_unknown": "price unknown (model not recorded)"
+    },
+    "reportedTokens": "{{tokens}} reported tokens"
   }
 }

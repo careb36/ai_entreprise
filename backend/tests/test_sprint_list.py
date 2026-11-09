@@ -94,7 +94,11 @@ def test_member_lists_own_sprints_newest_first_with_progress(
     )
 
     assert response.status_code == 200
-    assert response.json() == [
+    listed = response.json()
+    # Each sprint's cost (``services/run_cost.py``, tested in test_run_cost.py):
+    # nothing recorded yet, so no cents and the reason why.
+    assert [s.pop("cost")["reason"] for s in listed] == ["no_turns", "no_turns"]
+    assert listed == [
         {
             "id": newer.id,
             "sprint_name": "Hardening",

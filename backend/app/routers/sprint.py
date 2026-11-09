@@ -34,6 +34,7 @@ from services import (
     acceptance,
     board_moves,
     dependencies,
+    run_cost,
     spec_check,
     spec_planning,
     sprint_archive,
@@ -266,7 +267,8 @@ async def list_sprints(
     assistant advised on and those none did, with how many got done and how
     many rework requests each group drew, so whether that advice helps is a
     number too. ``architect_advice`` does the same for the Architect's
-    briefs. Archived sprints are left out unless ``include_archived``.
+    briefs. ``cost`` is the sprint's tokens and US cents (``run_cost``).
+    Archived sprints are left out unless ``include_archived``.
     """
     require_company_role(session, user, company_id, "Viewer")
     query = select(Sprint).where(Sprint.company_id == company_id)
@@ -312,6 +314,7 @@ async def list_sprints(
             count_architect_advice(
                 briefs.setdefault(sid, no_architect_advice()), status, comments
             )
+    costs = run_cost.sprint_costs(session, company_id, sprint_ids)
     return [
         {
             "id": s.id,
@@ -334,6 +337,7 @@ async def list_sprints(
             "second_attempts": attempts.get(s.id, no_second_attempts()),
             "console_advice": advice.get(s.id, no_console_advice()),
             "architect_advice": briefs.get(s.id, no_architect_advice()),
+            "cost": costs.get(s.id) or run_cost.summarize([]),
         }
         for s in sprints
     ]

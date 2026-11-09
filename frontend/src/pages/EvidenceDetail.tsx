@@ -16,6 +16,7 @@ import {
 import { useAppStore } from '../store/useAppStore'
 import { Verdict } from '../components/Verdict'
 import { ReviewChanges } from '../components/ReviewChanges'
+import { RunCostCard } from '../components/CostSummary'
 import { ReviewPanel } from '../components/ReviewPanel'
 import { useRunChanges } from '../services/reviewChanges'
 import { parseRouteId } from '../lib/routeId'
@@ -120,6 +121,8 @@ function RunDetail({ companyId, runId }: { companyId: number; runId: number }) {
           )}
         </div>
       </header>
+
+      <RunCostCard companyId={companyId} runId={runId} />
 
       <div role="tablist" aria-label={t('review.tabs.label')} className="flex gap-1 border-b border-surface-700">
         {RUN_TABS.map(name => (
