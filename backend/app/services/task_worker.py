@@ -57,6 +57,7 @@ from services import (
     scrum_master,
     spec_planning,
     sprint_control,
+    sprint_team,
     standards,
     task_events,
     task_projection,
@@ -1015,7 +1016,7 @@ def _complete_sprint_and_plan_follow_up(
             {"title": item.title, "description": item.description or ""}
             for item in carried
         )
-        result["carried_over"] = [item.id for item in carried]
+        result["carried_over"] = sprint_team.automatic_team(next_sprint, plan, carried)
 
         session.add(
             OutboxEvent(
@@ -1212,11 +1213,10 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             )
             return None
         if sprint_control.is_halted(getattr(sprint, "status", None)):
-            logger.info(
-                "Sprint %s is not running — skipping item %s",
-                item.sprint_id,
-                backlog_item_id,
-            )
+            logger.info("Sprint %s is not running: item %s", sprint.id, item.id)
+            return None
+        # A task assigned outside the sprint's team never runs (blocked for a person).
+        if sprint_team.refuse_off_team(session, sprint, item):
             return None
 
         agent_row = session.exec(
@@ -1226,7 +1226,6 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             )
         ).first()
         cm = model_routing.company_model(session, sprint.company_id, item.assignee)
-        agent_dict = {}
         if agent_row:
             agent_dict = {
                 "role": agent_row.role,
