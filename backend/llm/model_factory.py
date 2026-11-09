@@ -1,80 +1,55 @@
-"""
-LLM Model Factory — multi-model LLM configuration and routing.
-
-Maps each AI agent role to a specific Gemini or DeepSeek model configuration,
-caches instantiated ``ChatOpenAI`` objects to avoid recreating HTTP sessions,
-and exposes a convenience ``create_completion()`` function used by every
-LangGraph node.
-
-Model selection rationale:
-- **PO / Architect / SecOps**: Gemini 2.5 Pro — best at natural language,
-  architecture and security reasoning.
-- **Developer / QA**: DeepSeek Coder — lower latency and cost for code-heavy
-  tasks.
-- **TechWriter / fallback**: Gemini 2.5 Flash — fast and fluent for
-  documentation and general prompts.
-- **EngramProcessor**: DeepSeek Coder — deterministic (low temperature) for
-  structured JSON extraction from decision summaries.
-
-All requests are routed through the internal LLM proxy (``llm-proxy/app.py``)
-so API keys and token budgets are enforced centrally.
-"""
-
-import os
 import logging
-from typing import Any, Optional, Dict
+import os
 from enum import Enum
-from pydantic import BaseModel
-from langchain_openai import ChatOpenAI
+from typing import Any, Dict, Optional, Union
+
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
+
+from backend.llm.retry import (
+    DEFAULT_BACKOFF_FACTOR,
+    DEFAULT_INITIAL_DELAY,
+    DEFAULT_MAX_DELAY,
+    DEFAULT_MAX_RETRIES,
+    ResilientChatModelWrapper,
+    with_llm_retry,
+    wrap_model_with_retry,
+)
 
 logger = logging.getLogger(__name__)
 
-class AgentRole(str, Enum):
-    """Enumeration of all AI agent roles in the Fabrique workflow."""
 
-    PO = "PO"
-    ARCHITECT = "Architect"
-    SCRUM_MASTER = "ScrumMaster"
+class AgentRole(str, Enum):
+    ORCHESTRATOR = "Orchestrator"
     DEVELOPER = "Developer"
     QA = "QA"
+    ARCHITECT = "Architect"
+    PO = "PO"
+    SCRUM_MASTER = "ScrumMaster"
     SECOPS = "SecOps"
     TECH_WRITER = "TechWriter"
-    ENGRAM_PROCESSOR = "EngramProcessor"
 
 
 class LLMConfig(BaseModel):
-    """LLM model configuration bound to a specific agent role."""
-
     model_name: str
-    temperature: float = 0.7
-    max_tokens: int = 2048
+    temperature: float = 0.2
+    max_tokens: Optional[int] = None
 
 
 class ModelFactory:
-    """
-    Factory that instantiates and caches ``ChatOpenAI`` clients per agent role.
-
-    The ``_model_cache`` class variable is intentionally shared across all
-    instances so that the same ``ChatOpenAI`` HTTP session is reused throughout
-    the process lifetime, reducing connection overhead.
-    """
-
-    # Maps each role to its preferred model and generation parameters.
-    # Using DeepSeek + Qwen Cloud (token plan) instead of Gemini.
     ROLE_MODEL_MAP: Dict[AgentRole, LLMConfig] = {
-        AgentRole.PO:               LLMConfig(model_name="qwen3.7-plus",     temperature=0.3, max_tokens=4096),
-        AgentRole.ARCHITECT:        LLMConfig(model_name="qwen3.7-plus",     temperature=0.2, max_tokens=4096),
-        AgentRole.SCRUM_MASTER:     LLMConfig(model_name="qwen3.7-plus",     temperature=0.5, max_tokens=2048),
-        AgentRole.DEVELOPER:        LLMConfig(model_name="deepseek-v4-pro",  temperature=0.2, max_tokens=4096),
-        AgentRole.QA:               LLMConfig(model_name="deepseek-v4-pro",  temperature=0.2, max_tokens=4096),
-        AgentRole.SECOPS:           LLMConfig(model_name="qwen3.7-plus",     temperature=0.1, max_tokens=4096),  # precision-critical
-        AgentRole.TECH_WRITER:      LLMConfig(model_name="qwen3.6-flash",    temperature=0.4, max_tokens=4096),
-        AgentRole.ENGRAM_PROCESSOR: LLMConfig(model_name="deepseek-v4-pro",  temperature=0.1, max_tokens=2048),
+        AgentRole.ORCHESTRATOR: LLMConfig(model_name="gemini-2.5-flash", temperature=0.1),
+        AgentRole.DEVELOPER: LLMConfig(model_name="gemini-2.5-flash", temperature=0.2),
+        AgentRole.QA: LLMConfig(model_name="gemini-2.5-flash", temperature=0.1),
+        AgentRole.ARCHITECT: LLMConfig(model_name="gemini-2.5-flash", temperature=0.2),
+        AgentRole.PO: LLMConfig(model_name="gemini-2.5-flash", temperature=0.3),
+        AgentRole.SCRUM_MASTER: LLMConfig(model_name="gemini-2.5-flash", temperature=0.2),
+        AgentRole.SECOPS: LLMConfig(model_name="gemini-2.5-flash", temperature=0.1),
+        AgentRole.TECH_WRITER: LLMConfig(model_name="gemini-2.5-flash", temperature=0.3),
     }
 
-    # Class-level cache so each role is instantiated at most once per process.
-    _model_cache: Dict[AgentRole, Optional[ChatOpenAI]] = {}
+    _model_cache: Dict[AgentRole, Optional[Union[ChatOpenAI, ResilientChatModelWrapper]]] = {}
 
     @staticmethod
     def model_for_role(role: AgentRole) -> str:
@@ -104,44 +79,50 @@ class ModelFactory:
         return os.getenv(tier_var) or os.getenv("NEMOTRON_MODEL", "") or default
 
     @classmethod
-    def get_model(cls, role: AgentRole) -> ChatOpenAI:
+    def get_model(cls, role: AgentRole) -> ResilientChatModelWrapper:
         """
-        Return (or create and cache) the ``ChatOpenAI`` client for *role*.
+        Return (or create and cache) the resilient ``ChatOpenAI`` client for *role*.
 
-        The client is configured to target the internal LLM proxy via
-        ``base_url``.  The ``X-Agent-Role`` header lets the proxy apply the
-        correct token budget for the calling agent.
+        The client is wrapped with ``ResilientChatModelWrapper`` providing exponential
+        backoff retry handling for 502/504 timeouts.
 
         Args:
             role: The agent role whose model is needed.
 
         Returns:
-            A configured ``ChatOpenAI`` instance.
+            A resilient configured ChatOpenAI wrapper instance.
         """
-        if role in cls._model_cache:
-            return cls._model_cache[role]
+        if role in cls._model_cache and cls._model_cache[role] is not None:
+            return cls._model_cache[role]  # type: ignore
 
         config = cls.ROLE_MODEL_MAP.get(role, LLMConfig(model_name="gemini-2.5-flash"))
         proxy_url = os.getenv("LLM_PROXY_URL", "http://localhost:5100")
+        api_key = os.getenv("OPENAI_API_KEY", "proxy-managed")
 
-        model = ChatOpenAI(
+        raw_model = ChatOpenAI(
             model=cls.model_for_role(role),
             temperature=config.temperature,
             max_tokens=config.max_tokens,
-            # "proxy-managed" signals to the OpenAI SDK that auth is handled externally.
-            api_key="proxy-managed",
+            api_key=api_key,
             base_url=f"{proxy_url}/v1",
-            # Forwarded to the proxy for per-role token budget tracking.
             default_headers={"X-Agent-Role": role.value},
+            timeout=float(os.getenv("LLM_TIMEOUT", "120.0")),
         )
-        cls._model_cache[role] = model
-        return model
+
+        resilient_model = wrap_model_with_retry(
+            model=raw_model,
+            max_retries=int(os.getenv("LLM_MAX_RETRIES", str(DEFAULT_MAX_RETRIES))),
+            initial_delay=float(os.getenv("LLM_RETRY_INITIAL_DELAY", str(DEFAULT_INITIAL_DELAY))),
+            max_delay=float(os.getenv("LLM_RETRY_MAX_DELAY", str(DEFAULT_MAX_DELAY))),
+            backoff_factor=float(os.getenv("LLM_RETRY_BACKOFF_FACTOR", str(DEFAULT_BACKOFF_FACTOR))),
+        )
+        cls._model_cache[role] = resilient_model
+        return resilient_model
 
 
 # Role names stored on Agent rows that are not AgentRole values, keyed by their
 # normalised form (lowercase, no spaces, dashes or underscores).
 _ROLE_ALIASES: Dict[str, AgentRole] = {
-    # The Reviewer agent judges deliverables, as QA does.
     "reviewer": AgentRole.QA,
     "dev": AgentRole.DEVELOPER,
     "backenddev": AgentRole.DEVELOPER,
@@ -180,36 +161,30 @@ def role_for_name(role: str) -> AgentRole:
 def default_model_for_role(role: str) -> str:
     """
     The model id an agent of *role* uses when its own ``model`` is empty.
-
-    This is the single source of role defaults: the LangGraph producer and
-    the task worker both read ``ModelFactory.ROLE_MODEL_MAP``.
     """
     return ModelFactory.ROLE_MODEL_MAP[role_for_name(role)].model_name
 
 
-def get_llm_for_role(role: str) -> ChatOpenAI:
+def get_llm_for_role(role: str) -> ResilientChatModelWrapper:
     """
     Convenience wrapper that converts a role *string* to an ``AgentRole`` enum.
 
-    Falls back to ``AgentRole.DEVELOPER`` for unknown role strings to avoid
-    hard failures in dynamic caller contexts (e.g. LangGraph state machines).
-
-    Args:
-        role: String role name (must match an ``AgentRole`` value).
-
-    Returns:
-        Configured ``ChatOpenAI`` instance.
+    Falls back to ``AgentRole.DEVELOPER`` for unknown role strings.
     """
     try:
         return ModelFactory.get_model(AgentRole(role))
     except Exception:
-        # Unknown or invalid role — fall back to the Developer model.
         return ModelFactory.get_model(AgentRole.DEVELOPER)
 
 
-def create_completion(role: str, prompt: str, system_message: Optional[str] = None, bu_id: Optional[int] = None) -> str:
+def create_completion(
+    role: str,
+    prompt: str,
+    system_message: Optional[str] = None,
+    bu_id: Optional[int] = None,
+) -> str:
     """
-    Execute a single-turn LLM completion for the given agent role with Governance.
+    Execute a single-turn LLM completion for the given agent role with retry resilience.
 
     Args:
         role:           Agent role string (e.g. ``"Architect"``).
@@ -221,8 +196,7 @@ def create_completion(role: str, prompt: str, system_message: Optional[str] = No
         The model's text response as a plain string.
 
     Raises:
-        RuntimeError: If the LLM proxy is unreachable or returns an error,
-                      so callers can map it to a structured error state.
+        RuntimeError: If all retries are exhausted or a non-retryable failure occurs.
     """
     try:
         model = get_llm_for_role(role)
@@ -239,13 +213,14 @@ def create_completion(role: str, prompt: str, system_message: Optional[str] = No
         config["headers"] = {"X-Business-Unit-ID": str(bu_id)}
 
     try:
-        return model.invoke(messages, **config).content
+        response = model.invoke(messages, **config)
+        return response.content if hasattr(response, "content") else str(response)
     except Exception as e:
-        # Log with full traceback so the request ID shows up in the logs.
         logger.error(
-            "LLM completion failed for role=%s bu_id=%s: %s",
-            role, bu_id, e, exc_info=True,
+            "LLM completion failed permanently for role=%s bu_id=%s: %s",
+            role,
+            bu_id,
+            e,
+            exc_info=True,
         )
-        raise RuntimeError(
-            f"LLM proxy error for role '{role}': {type(e).__name__}: {e}"
-        ) from e
+        raise RuntimeError(f"LLM call failed after retries: {e}") from e
