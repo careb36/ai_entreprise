@@ -2167,6 +2167,7 @@
     "producer": "Producido por",
     "model": "El modelo (sin productor de consola)",
     "evidence": "El informe del propio CLI se guarda como afirmación; los archivos, el comando, el código de salida y la duración son observaciones, verificadas como cualquier entrega.",
-    "saved": "Productores de consola guardados."
+    "saved": "Productores de consola guardados.",
+    "sandboxWarning": "Ningún CLI se ejecuta hasta entonces: {{reason}}. El modelo produce estas tareas y el tablero dice por qué. Un productor de consola solo se ejecuta en un sandbox container o bwrap con red, y solo ve las variables listadas en la configuración del sandbox (lista ahí la clave del proveedor)."
   }
 }

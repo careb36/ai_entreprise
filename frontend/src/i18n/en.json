@@ -2167,6 +2167,7 @@
     "producer": "Produced by",
     "model": "The model (no console producer)",
     "evidence": "The CLI's own report is kept as a claim; the files, command, exit status and duration are observations, verified like any delivery.",
-    "saved": "Console producers saved."
+    "saved": "Console producers saved.",
+    "sandboxWarning": "No CLI runs until then: {{reason}}. The model produces these tasks, and the board says why. A console producer runs only in a container or bwrap sandbox with network on, and sees only the variables listed in the sandbox settings (list the provider key there)."
   }
 }

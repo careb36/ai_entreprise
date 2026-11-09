@@ -15,6 +15,10 @@ export interface ConsoleProducers {
   roles: string[]
   clis: ConsoleCli[]
   git_workflow: boolean
+  /** The sandbox the CLI would run in: only `container` or `bwrap` with network on. */
+  sandbox: { mode: string; network: boolean }
+  /** Why no CLI runs while the setting stays saved (the model produces the tasks). */
+  warnings: string[]
 }
 
 const url = (companyId: number) => `/v1/companies/${companyId}/console_producers`

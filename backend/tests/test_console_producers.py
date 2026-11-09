@@ -278,10 +278,13 @@ class _DaemonOverNATS:
         if subject == "workspace.console.collect":
             return console_run.collect(root, payload, _resolve)
         if subject == "workspace.execute":
+            # The company's container stands in as the host here (no docker
+            # in the tests); the request still names the container.
+            box = payload.get("sandbox")
             return daemon.execute_shell_command(
                 payload["command"],
                 root,
-                payload.get("sandbox"),
+                {"mode": "host"} if box else None,
                 payload.get("command_policy"),
                 payload.get("timeout_seconds"),
             )
@@ -300,10 +303,13 @@ def world(sqlite_session, repo, monkeypatch, tmp_path):
     AssistantRuntimeState.__table__.create(engine, checkfirst=True)
     for module in (task_worker, console_assistants):
         monkeypatch.setattr(module, "engine", engine)
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "host")
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
     company = Company(
         company_name=f"Console {secrets.token_hex(3)}",
         git_workflow=True,
         console_producers={"Developer": "claude"},
+        delivery_sandbox="container",
     )
     sqlite_session.add(company)
     sqlite_session.commit()
@@ -379,7 +385,8 @@ def test_a_console_producer_delivers_what_the_daemon_observed_and_it_is_verified
         "mode": "allow",
         "allow": ["claude -p --permission-mode bypassPermissions"],
     }
-    assert execute["sandbox"]["mode"] == "host"
+    assert execute["sandbox"]["mode"] == "container"
+    assert execute["sandbox"]["network"] is True
     assert execute["workspace_root"].endswith(f"fabrique__task-{item['id']}")
 
     asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, deliverable))
@@ -402,6 +409,60 @@ def test_a_console_producer_delivers_what_the_daemon_observed_and_it_is_verified
     assert git(repo, "rev-parse", branch) == verification.evidence["git"]["commit"]
     assert "return a + b" in git(repo, "show", f"{branch}:calc.py")
     assert (repo / "calc.py").read_text().endswith("return 0\n")
+
+
+def _board(engine, item_id):
+    with Session(engine) as session:
+        return session.get(BacklogItem, item_id).comments or []
+
+
+@pytest.mark.parametrize(
+    ("mode", "network", "said"),
+    [
+        ("host", True, "need a container or bwrap sandbox"),
+        ("bwrap", False, "network on"),
+    ],
+)
+def test_the_host_sandbox_or_no_network_leaves_the_task_to_the_model_and_says_why(
+    world, cli_path, sqlite_session, monkeypatch, mode, network, said
+):
+    # A CLI that would edit the file: it must never run.
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", network)
+    company = sqlite_session.get(Company, world["company"].id)
+    company.delivery_sandbox = mode
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    nats = _DaemonOverNATS()
+    item, agent, sprint = world["item"], world["agent"], world["sprint"]
+
+    assert asyncio.run(console_producer.produce(nats, item, agent, sprint)) is None
+    assert nats.requests == []  # Nothing prepared, nothing run.
+    assert said in agent["console_skipped"]["reason"]
+    notes = [c["text"] for c in _board(world["engine"], item["id"])]
+    assert any(
+        "Console producer Claude Code not used" in n and said in n for n in notes
+    )
+    assert nats.published[-1]["producer_decision"] == "skipped"
+
+    # The model's delivery that follows carries why on its evidence.
+    answer = "Fixed.\n\n```python path=calc.py\ndef add(a, b):\n    return a + b\n```\n"
+    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, answer))
+    [(_, verification)] = _runs(world["engine"], item["id"])
+    skipped = verification.evidence["console_producer_skipped"]
+    assert skipped["via"] == "console:claude" and said in skipped["reason"]
+    assert "console_run" not in verification.evidence
+
+
+def test_codex_keeps_its_own_sandbox_and_no_cli_runs_outside_ours():
+    assert console_clis.CLIS["codex"]["argv"][:3] == ["codex", "exec", "--full-auto"]
+    flat = " ".join(" ".join(c["argv"]) for c in console_clis.CLIS.values())
+    assert "dangerously-bypass-approvals-and-sandbox" not in flat
+    assert console_clis.sandbox_refusal({"mode": "host", "network": True})
+    assert console_clis.sandbox_refusal(None)
+    assert console_clis.sandbox_refusal({"mode": "container", "network": False})
+    assert console_clis.sandbox_refusal({"mode": "container", "network": True}) is None
+    assert console_clis.sandbox_refusal({"mode": "bwrap", "network": True}) is None
 
 
 def test_a_cli_that_only_claims_success_is_never_a_pass(world, cli_path):
@@ -584,10 +645,15 @@ def _member(session, company_id, role):
 
 
 def test_a_manager_names_a_console_producer_and_a_viewer_reads_it(
-    sqlite_session, test_client, enforcement
+    sqlite_session, test_client, enforcement, monkeypatch
 ):
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", False)
     AssistantRuntimeState.__table__.create(sqlite_session.get_bind(), checkfirst=True)
-    company = Company(company_name=f"Set {secrets.token_hex(3)}", git_workflow=False)
+    company = Company(
+        company_name=f"Set {secrets.token_hex(3)}",
+        git_workflow=False,
+        delivery_sandbox="host",
+    )
     sqlite_session.add(company)
     sqlite_session.commit()
     manager = _member(sqlite_session, company.id, "Manager")
@@ -618,6 +684,16 @@ def test_a_manager_names_a_console_producer_and_a_viewer_reads_it(
     assert saved.status_code == 200 and saved.json()["producers"] == {
         "Developer": "claude"
     }
+    # Accepted on the host sandbox, with the warning that no CLI runs there.
+    assert saved.json()["sandbox"]["mode"] == "host"
+    assert "container or bwrap" in saved.json()["warnings"][0]
+    sqlite_session.refresh(company)
+    company.delivery_sandbox = "container"
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    assert "network on" in test_client.get(url, headers=viewer).json()["warnings"][0]
+    monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
+    assert test_client.get(url, headers=viewer).json()["warnings"] == []
     assert test_client.get(url, headers=viewer).json()["producers"] == {
         "Developer": "claude"
     }

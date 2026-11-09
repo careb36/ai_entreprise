@@ -15,6 +15,19 @@ from typing import Any
 from services import console_assistants
 
 # The CLIs a company may name, headless (Flow's adapters, ``session_command``).
+#
+# Flow runs every one of them inside a container, which is why it turns their
+# permission prompts off. The same holds here: these commands run only in the
+# company's ``container`` or ``bwrap`` sandbox (``sandbox_refusal``), which is
+# the boundary; on the ``host`` sandbox they would act on the person's
+# computer with their home folder, credentials and network, so the host is
+# refused and the model produces the task instead.
+# - claude: ``-p`` headless; ``bypassPermissions`` is acceptable only because
+#   the sandbox is the boundary.
+# - codex: ``exec --full-auto`` keeps Codex's own sandbox (workspace-write,
+#   no approval prompts), inside ours; never the flag that bypasses both.
+# - gemini ``--yolo`` and cursor ``--force``: auto-approval, acceptable only
+#   inside the sandbox, for the same reason as claude.
 CLIS: dict[str, dict[str, Any]] = {
     "claude": {
         "label": "Claude Code",
@@ -23,12 +36,7 @@ CLIS: dict[str, dict[str, Any]] = {
     },
     "codex": {
         "label": "OpenAI Codex CLI",
-        "argv": [
-            "codex",
-            "exec",
-            "--dangerously-bypass-approvals-and-sandbox",
-            "--skip-git-repo-check",
-        ],
+        "argv": ["codex", "exec", "--full-auto", "--skip-git-repo-check"],
         "provider": "openai",
     },
     "gemini": {
@@ -115,6 +123,27 @@ def producer_for(company: Any, role: str | None) -> str | None:
         return None
     cli = str(producers.get(role_key(role)) or "").strip().lower()
     return cli if cli in CLIS else None
+
+
+# The sandbox modes a console producer may run in (``services/sandbox.py``).
+SANDBOX_MODES = ("container", "bwrap")
+
+
+def sandbox_refusal(box: dict[str, Any] | None) -> str | None:
+    """Why a console producer may not run in the sandbox *box*, else ``None``."""
+    mode = (box or {}).get("mode") or "host"
+    if mode not in SANDBOX_MODES:
+        return (
+            "console producers need a container or bwrap sandbox "
+            f"(the company's sandbox is {mode}, and the CLI runs with its "
+            "permission prompts off)"
+        )
+    if not (box or {}).get("network"):
+        return (
+            "console producers need the sandbox's network on "
+            "(DELIVERY_SANDBOX_NETWORK) to reach the CLI's provider"
+        )
+    return None
 
 
 def command_prefix(cli: str) -> str:

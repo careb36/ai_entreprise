@@ -176,11 +176,13 @@ def observe_tools(evidence: Any, agent: dict[str, Any]) -> Any:
         if isinstance(f, dict) and f.get("error")
     ]
     console = agent.get("console_run")  # A console producer's run (console_producer).
-    if not (calls or files or conflicts or console):
+    if not (calls or files or conflicts or console or agent.get("console_skipped")):
         return evidence
     evidence = evidence if isinstance(evidence, dict) else {}
     if console:
         evidence["console_run"] = console
+    if agent.get("console_skipped"):  # Why the model produced it instead.
+        evidence["console_producer_skipped"] = agent["console_skipped"]
     for key, value in (
         ("tool_calls", calls),
         ("tool_edit_files", files),

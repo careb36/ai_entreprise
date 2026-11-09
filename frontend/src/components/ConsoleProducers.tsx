@@ -52,6 +52,9 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
       </div>
       <p className="text-sm text-gray-400">{t('consoleProducers.subtitle')}</p>
       {!data.git_workflow && <p className="text-sm text-amber-300">{t('consoleProducers.needsGit')}</p>}
+      {(data.warnings ?? []).map(warning => (
+        <p key={warning} role="note" className="text-sm text-amber-300">{t('consoleProducers.sandboxWarning', { reason: warning })}</p>
+      ))}
       {cooling.map(cli => (
         <p key={cli.id} className="text-xs text-amber-300">
           {t('consoleProducers.cooldown', { cli: cli.label, until: new Date(cli.cooldown_until as string).toLocaleString() })}

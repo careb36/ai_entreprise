@@ -6,7 +6,9 @@ Console producers router: which terminal coding agent produces which role's task
   is on (a console producer needs it) and each CLI's cooldown.
 - ``PUT /v1/companies/{id}/console_producers`` (Manager): replace them; an
   empty value turns a role back to its model. Refused (422) for an unknown
-  role or CLI, or while the Git workflow is off.
+  role or CLI, or while the Git workflow is off. Accepted with a warning
+  while the company's sandbox is ``host`` or has its network off: no CLI runs
+  there (``console_clis.sandbox_refusal``), the model produces the tasks.
 
 The run itself is ``services/console_producer.py``.
 """
@@ -19,7 +21,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import AssistantRuntimeState, Company, User
 from pydantic import BaseModel, Field
-from services import console_assistants, console_clis
+from services import console_assistants, console_clis, sandbox
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -48,6 +50,8 @@ def _cooldowns(session: Session, company_id: int) -> dict[str, str | None]:
 
 def _payload(session: Session, company: Company) -> dict:
     cooldowns = _cooldowns(session, company.id)
+    box = sandbox.request_for(company)
+    refusal = console_clis.sandbox_refusal(box)
     return {
         "company_id": company.id,
         "producers": dict(company.console_producers or {}),
@@ -62,6 +66,10 @@ def _payload(session: Session, company: Company) -> dict:
             for cli, spec in console_clis.CLIS.items()
         ],
         "git_workflow": bool(company.git_workflow),
+        "sandbox": {"mode": box["mode"], "network": bool(box.get("network"))},
+        # Accepted, but no CLI runs while the sandbox refuses it: the model
+        # produces the tasks and the board says why.
+        "warnings": [refusal] if refusal and company.console_producers else [],
     }
 
 

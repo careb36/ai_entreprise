@@ -194,6 +194,39 @@ async def _fail(nats_client, item, agent, sprint, run, output, root) -> NoReturn
     )
 
 
+async def _sandbox_for(nats_client, item, agent, sprint, cli: str) -> dict | None:
+    """The company's sandbox for this task when a console producer may run in
+    it (``container`` or ``bwrap``, network on), else ``None``: the model
+    produces the task, and the board, the run's evidence and the Glassroom say
+    why. The CLIs run with their permission prompts off (``console_clis.CLIS``),
+    so the sandbox is the only boundary: fail closed, never on the host."""
+    from services import sandbox
+    from services.task_worker import _update_item_status
+
+    try:
+        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, _engine())
+        why = console_clis.sandbox_refusal(box)
+    except sandbox.PolicyUnavailable as exc:
+        box, why = None, f"console producers need a known sandbox: {exc}"
+    if why is None:
+        return box
+    label = CLIS[cli]["label"]
+    agent["console_skipped"] = {"cli": cli, "via": f"console:{cli}", "reason": why}
+    note = f"Console producer {label} not used: {why}. The model produces this task."
+    await asyncio.to_thread(
+        _update_item_status,
+        item["id"],
+        "in_progress",
+        comment_text=note,
+        comment_author="System",
+        kind="note",
+    )
+    await _telemetry(
+        nats_client, sprint, item, cli, message=note, producer_decision="skipped"
+    )
+    return None
+
+
 async def _where(nats_client, item, sprint, cli: str) -> tuple | None:
     """The task's Git spec and project, or ``None`` (said in the Glassroom)
     when the CLI cools down, the Git workflow is off or there is no project."""
@@ -234,9 +267,9 @@ async def produce(
 ) -> str | None:
     """The deliverable a console producer made for *item*, or ``None`` when the
     model produces it (no CLI named for the role, the CLI cooling down, no Git
-    workflow or no project). Raises ``ConsoleProducerError`` after recording a
+    workflow, no project, or a sandbox that is not ``container`` or ``bwrap``
+    with network on). Raises ``ConsoleProducerError`` after recording a
     run that delivered nothing."""
-    from services import sandbox
     from services.task_worker import _load_procedures_context
 
     company_id, role = sprint["company_id"], agent.get("role")
@@ -245,6 +278,9 @@ async def produce(
     if where is None:
         return None
     git_spec, workspace_root = where
+    box = await _sandbox_for(nats_client, item, agent, sprint, cli)
+    if box is None:
+        return None
     procedures = await asyncio.to_thread(_load_procedures_context, company_id, role)
     prompt = build_prompt(
         item, agent, sprint, requirements_context, architect_advice, procedures
@@ -280,11 +316,6 @@ async def produce(
         await _fail(nats_client, item, agent, sprint, run, "", workspace_root)
     worktree, head = prepared["worktree"], prepared["head"]
     run.update(worktree=worktree, head=head, merged=prepared.get("merged") or [])
-    try:
-        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, _engine())
-    except sandbox.PolicyUnavailable as exc:
-        run.update(kind="not_run", outcome="failed", reason=str(exc))
-        await _fail(nats_client, item, agent, sprint, run, "", worktree)
 
     timeout = int(settings.CONSOLE_PRODUCER_TIMEOUT_SECONDS)
     started = time.monotonic()

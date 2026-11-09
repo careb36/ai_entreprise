@@ -19,6 +19,8 @@ const SETTINGS = {
   roles: ['Developer', 'QA', 'SecOps', 'TechWriter'],
   clis: CLIS,
   git_workflow: true,
+  sandbox: { mode: 'container', network: true },
+  warnings: [] as string[],
 }
 
 function stubApi(settings: object = SETTINGS, put?: (init: RequestInit) => Response) {
@@ -79,6 +81,12 @@ describe('ConsoleProducers', () => {
     expect(await screen.findByText(/turn the Git workflow on first/)).toBeInTheDocument()
     expect(screen.getByLabelText('Developer')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('warns that no CLI runs on the host sandbox', async () => {
+    stubApi({ ...SETTINGS, sandbox: { mode: 'host', network: true }, warnings: ['console producers need a container or bwrap sandbox'] })
+    renderAs(true)
+    expect(await screen.findByRole('note')).toHaveTextContent('No CLI runs until then: console producers need a container or bwrap sandbox')
   })
 
   it('shows the backend refusing a save', async () => {
