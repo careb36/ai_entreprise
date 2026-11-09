@@ -1866,7 +1866,8 @@
     "git": "Git branch per task",
     "gitError": "Git settings unavailable",
     "loading": "Loading…",
-    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched."
+    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
+    "autonomySaved": "Autonomy level saved"
   },
   "review": {
     "tabs": {
