@@ -16,12 +16,18 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
   const queryClient = useQueryClient()
   const key = ['console-producers', companyId]
   const settings = useQuery({ queryKey: key, queryFn: () => consoleProducersApi.get(companyId) })
-  const [draft, setDraft] = useState<Record<string, string> | null>(null)
+  // The draft belongs to the company it was read for: switching companies
+  // never shows (or saves) another company's choices.
+  const [edit, setEdit] = useState<{ companyId: number; producers: Record<string, string> } | null>(null)
   const [saved, setSaved] = useState(false)
+  const draft = edit && edit.companyId === companyId ? edit.producers : null
+  const setDraft = (update: (current: Record<string, string>) => Record<string, string>) =>
+    setEdit(current => ({ companyId, producers: update(current && current.companyId === companyId ? current.producers : {}) }))
 
   useEffect(() => {
-    if (settings.data) setDraft({ ...settings.data.producers })
-  }, [settings.data])
+    if (settings.data) setEdit({ companyId, producers: { ...settings.data.producers } })
+  }, [settings.data, companyId])
+  useEffect(() => setSaved(false), [companyId])
 
   const save = useMutation({
     mutationFn: () => consoleProducersApi.save(companyId, Object.fromEntries(Object.entries(draft ?? {}).filter(([, v]) => v))),
@@ -31,7 +37,7 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
     },
   })
 
-  if (settings.isLoading || !draft) {
+  if (settings.isLoading || !settings.data || !draft) {
     return settings.isError ? (
       <div role="alert" className="alert-error text-sm">{errorDetail(settings.error)}</div>
     ) : (
@@ -40,7 +46,7 @@ export default function ConsoleProducers({ companyId, canManage }: { companyId: 
       </div>
     )
   }
-  const data = settings.data as Settings
+  const data: Settings = settings.data
   const locked = !canManage || save.isPending || !data.git_workflow
   const cooling = data.clis.filter(cli => cli.cooldown_until)
 

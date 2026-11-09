@@ -20,6 +20,7 @@ import configparser
 import os
 import re
 import shutil
+import stat
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -79,11 +80,88 @@ def valid_branch(name: str) -> bool:
     )
 
 
+def admin_dir(worktree: Path) -> Path:
+    """A La Fabrique worktree's own git dir, found from the common dir (never from ``.git``).
+
+    A task worktree is ``<common>/fabrique-worktrees/<name>`` and git records
+    it in ``<common>/worktrees/<id>/gitdir``: both outside what a sandbox
+    mounts."""
+    if worktree.parent.name != WORKTREES_DIR:
+        raise GitError("not a task worktree La Fabrique made")
+    common = worktree.parent.parent
+    real = worktree.resolve()
+    admins = common / "worktrees"
+    for admin in sorted(admins.iterdir()) if admins.is_dir() else []:
+        try:
+            recorded = Path((admin / "gitdir").read_text(encoding="utf-8").strip())
+        except (OSError, UnicodeDecodeError):
+            continue
+        if recorded.name == ".git" and recorded.parent.resolve() == real:
+            return admin
+    raise GitError("not a task worktree La Fabrique made")
+
+
+def pointer_problem(worktree: Path, admin: Path) -> Optional[str]:
+    """Why the worktree's ``.git`` is not git's pointer to *admin*, else ``None``."""
+    dotgit = worktree / ".git"
+    try:
+        if not stat.S_ISREG(os.lstat(dotgit).st_mode):
+            return "the worktree's .git is no longer the file La Fabrique wrote"
+        text = dotgit.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return "the worktree's .git cannot be read"
+    lines = text.splitlines()
+    if len(lines) != 1 or not lines[0].startswith("gitdir: "):
+        return "the worktree's .git was rewritten"
+    named = Path(lines[0][len("gitdir: "):])
+    named = named if named.is_absolute() else worktree / named
+    if os.path.realpath(named) != os.path.realpath(admin):
+        return "the worktree's .git points at another git dir"
+    return None
+
+
+def restore_pointer(worktree: Path, admin: Path) -> None:
+    """The worktree's ``.git`` written back as git writes it: plain file operations, no git.
+
+    A folder there (a console producer's private repository) is removed
+    without following a symlink; a symlink is removed, never its target."""
+    dotgit = worktree / ".git"
+    if dotgit.is_dir() and not dotgit.is_symlink():
+        shutil.rmtree(dotgit)
+    elif os.path.lexists(dotgit):
+        dotgit.unlink()
+    dotgit.write_text(f"gitdir: {admin}\n", encoding="utf-8")
+
+
+def repair_pointer(worktree: Path) -> Optional[str]:
+    """Put a La Fabrique worktree's ``.git`` back to git's own pointer before
+    any git runs there (a console producer's private repository left by a run
+    never collected, or a rewritten pointer): why it was needed, else ``None``."""
+    try:
+        admin = admin_dir(worktree)
+    except (OSError, GitError):
+        return None
+    problem = pointer_problem(worktree, admin)
+    if problem:
+        restore_pointer(worktree, admin)
+    return problem
+
+
 def worktree_for(root: Path, branch: str, start_point: str) -> Path:
     """The worktree where *branch* is checked out, made (and the branch with it) when missing."""
     common = Path(_out(["rev-parse", "--git-common-dir"], root))
     common = common if common.is_absolute() else (root / common).resolve()
     path = common / WORKTREES_DIR / branch.replace("/", "__")
+    # Before git looks at it (``prune`` included): its .git is git's pointer.
+    if os.path.lexists(path / ".git"):
+        # A command still running there (a console producer's CLI a restarted
+        # backend no longer waits for) keeps its repository: never repaired
+        # under it, the attempt is refused until that command ends.
+        import sprint_integration  # noqa: PLC0415 - it imports this module
+
+        if sprint_integration.is_active(path) and pointer_problem(path, admin_dir(path)):
+            raise GitError(f"a command is still running in {path}; try again once it ends")
+        repair_pointer(path)
     run_git(["worktree", "prune"], root, check=False)
     if (path / ".git").exists():
         return path

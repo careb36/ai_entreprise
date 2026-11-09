@@ -19,6 +19,8 @@ import hashlib
 import importlib.util
 import os
 import secrets
+import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -220,12 +222,29 @@ def test_hooks_secrets_symlinks_and_binaries_are_never_delivered(
     _, deliver = console_clis.observed_files(collected)
     assert [f["path"] for f in deliver] == ["calc.py"]
 
-    # A hook planted in the repository: nothing is delivered, and it is said.
+    # A hook planted through the git the CLI sees lands in its private
+    # repository, which is discarded: the person's repository never gets it.
     fake_cli(
         cli_path,
         "claude",
         EDIT_CALC
         + "echo 'echo pwned' > \"$(git rev-parse --git-common-dir)/hooks/pre-commit\"\n",
+    )
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    _run(prepared["worktree"], console_clis.render_command("claude", "go"))
+    collected = console_run.collect(
+        prepared["worktree"],
+        {"head": prepared["head"], "guard": prepared["guard"]},
+        _resolve,
+    )
+    assert collected["ok"] and not (repo / ".git" / "hooks" / "pre-commit").exists()
+    assert (Path(prepared["worktree"]) / ".git").is_file()
+    # A hook written into the repository's own metadata (reachable only on
+    # the host sandbox): nothing is delivered, and it is said.
+    fake_cli(
+        cli_path,
+        "claude",
+        EDIT_CALC + f"echo 'echo pwned' > {repo}/.git/hooks/pre-commit\n",
     )
     prepared = console_run.prepare(str(repo), {"git": SPEC})
     _run(prepared["worktree"], console_clis.render_command("claude", "go"))
@@ -766,22 +785,141 @@ FSMONITOR_PAYLOAD = (
 )
 
 
-def test_a_rewritten_dot_git_is_refused_and_no_git_runs_on_the_host(
+def test_the_private_git_is_discarded_and_its_config_never_runs_on_the_host(
     repo, cli_path, tmp_path, monkeypatch
 ):
+    """The CLI may configure its private repository as it likes (here an
+    fsmonitor that writes a marker): collect discards it with file
+    operations and writes the pointer back before any host git runs."""
     marker = tmp_path / "pwned"
     monkeypatch.setenv("MARKER", str(marker))
     fake_cli(cli_path, "claude", EDIT_CALC + FSMONITOR_PAYLOAD)
     prepared = console_run.prepare(str(repo), {"git": SPEC})
     worktree = Path(prepared["worktree"])
     _run(str(worktree), console_clis.render_command("claude", "go"))
-    assert (worktree / ".git").is_dir()  # The CLI did plant it.
+    marker.unlink(missing_ok=True)  # The CLI's own git ran it, in its sandbox.
+    collected = console_run.collect(
+        str(worktree), {"head": prepared["head"], "guard": prepared["guard"]}, _resolve
+    )
+    assert collected["ok"], collected
+    assert "calc.py" in [f["path"] for f in collected["files"]]
+    assert not marker.exists()
+    assert (worktree / ".git").is_file()
+    assert git(str(worktree), "rev-parse", "HEAD") == prepared["head"]
+    assert not marker.exists()
+
+
+def test_the_worktree_carries_a_private_git_the_sandbox_can_use(repo, tmp_path):
+    """A linked worktree's .git names the host's git dir, which no sandbox
+    mounts: prepare gives it a repository of its own, at the task's head,
+    that names nothing of the host, so git works wherever the folder is
+    mounted (copied elsewhere here, as at /workspace)."""
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    assert prepared["ok"] and prepared["private_git"] is True
+    worktree = Path(prepared["worktree"])
+    assert (worktree / ".git").is_dir()
+    common = str((repo / ".git").resolve())
+    for path in (worktree / ".git").rglob("*"):
+        if path.is_file():
+            assert common.encode() not in path.read_bytes(), path
+    assert not (worktree / ".git" / "objects" / "info" / "alternates").exists()
+    mounted = tmp_path / "workspace"
+    shutil.copytree(worktree, mounted, symlinks=True)
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+    def inside(*args):
+        return subprocess.run(
+            ["git", *args],
+            cwd=mounted,
+            env=clean,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    assert inside("rev-parse", "HEAD") == prepared["head"]
+    assert inside("status", "--porcelain") == ""
+    assert inside("remote") == ""
+    (mounted / "calc.py").write_text("x = 1\n")
+    assert "calc.py" in inside("diff", "--name-only", "HEAD")
+    # The person's repository gained no object, ref or remote from it.
+    assert git(repo, "remote") == ""
+
+
+def test_a_private_git_left_by_a_run_never_collected_is_removed_before_host_git(
+    repo, cli_path, tmp_path, monkeypatch
+):
+    """A run whose collect never came (the backend stopped) leaves the
+    private repository, configured by the CLI; the next delivery in that
+    worktree puts git's pointer back before any git runs there."""
+    marker = tmp_path / "pwned"
+    monkeypatch.setenv("MARKER", str(marker))
+    fake_cli(
+        cli_path,
+        "claude",
+        EDIT_CALC
+        + "printf '#!/bin/sh\\ntouch %s\\nexit 1\\n' \"$MARKER\" > fsm.sh\n"
+        + "chmod +x fsm.sh\n"
+        + 'git config core.fsmonitor "$PWD/fsm.sh"\n',
+    )
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    _run(str(worktree), console_clis.render_command("claude", "go"))
+    marker.unlink(missing_ok=True)
+    result = daemon.deliver_files(
+        str(repo), [{"path": "other.py", "content": "Y = 2\n"}], SPEC
+    )
+    assert result["ok"], result
+    assert result["git"]["commit"] != prepared["head"]
+    assert not marker.exists()
+    assert (worktree / ".git").is_file()
+
+
+def test_a_worktree_with_a_command_still_running_keeps_its_private_git(
+    repo, cli_path, tmp_path
+):
+    """A backend that restarted re-queues the task while the daemon still runs
+    its CLI: the next attempt in that worktree is refused and the running
+    CLI's private repository is left alone."""
+    import sprint_integration
+
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    assert (worktree / ".git").is_dir()
+
+    def again():
+        return daemon.deliver_files(
+            str(repo), [{"path": "other.py", "content": "Y = 2\n"}], SPEC
+        )
+
+    result = sprint_integration.while_active(str(worktree), again)
+    assert not result["ok"]
+    assert "still running" in str(result)
+    assert (worktree / ".git").is_dir()
+
+
+def test_a_replaced_private_git_is_refused_and_no_git_runs_on_the_host(
+    repo, cli_path, tmp_path, monkeypatch
+):
+    marker = tmp_path / "pwned"
+    monkeypatch.setenv("MARKER", str(marker))
+    payload = FSMONITOR_PAYLOAD.replace("rm -f .git", "rm -rf .git")
+    planted = tmp_path / "planted"
+    payload += f"mv .git {planted} && ln -s {planted} .git\n"
+    fake_cli(cli_path, "claude", EDIT_CALC + payload)
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    _run(str(worktree), console_clis.render_command("claude", "go"))
+    assert (worktree / ".git").is_symlink()  # The CLI did replace it.
+    marker.unlink(missing_ok=True)
     collected = console_run.collect(
         str(worktree), {"head": prepared["head"], "guard": prepared["guard"]}, _resolve
     )
     assert collected["ok"] is False and collected["files"] == []
     assert ".git" in collected["refused"][0]
     assert not marker.exists()
+    assert (planted / "config").is_file()  # The symlink removed, never its target.
     # The pointer is La Fabrique's again (a file write), and the next prepare
     # puts the worktree back without ever running the payload.
     assert (worktree / ".git").is_file()
@@ -800,7 +938,11 @@ def test_a_rewritten_dot_git_is_refused_and_no_git_runs_on_the_host(
 def test_a_dot_git_pointing_at_another_git_dir_is_refused(repo, cli_path, tmp_path):
     evil = tmp_path / "evil.git"
     git(tmp_path, "init", "-q", "--bare", str(evil))
-    fake_cli(cli_path, "claude", EDIT_CALC + f"printf 'gitdir: {evil}\\n' > .git\n")
+    fake_cli(
+        cli_path,
+        "claude",
+        EDIT_CALC + f"rm -rf .git && printf 'gitdir: {evil}\\n' > .git\n",
+    )
     prepared = console_run.prepare(str(repo), {"git": SPEC})
     _run(prepared["worktree"], console_clis.render_command("claude", "go"))
     collected = console_run.collect(
@@ -809,7 +951,7 @@ def test_a_dot_git_pointing_at_another_git_dir_is_refused(repo, cli_path, tmp_pa
         _resolve,
     )
     assert collected["ok"] is False
-    assert "another git dir" in collected["refused"][0]
+    assert "private .git was replaced" in collected["refused"][0]
     assert (
         (Path(prepared["worktree"]) / ".git")
         .read_text()
@@ -938,6 +1080,55 @@ def test_a_prompt_ending_in_a_dollar_passes_the_policy():
             command_policy.refusal(command, console_clis.command_policy("claude"))
             is None
         ), (prompt, command)
+
+
+def test_the_command_line_stays_within_one_arguments_limit_in_bytes():
+    """The sandbox passes the command as one ``sh -c`` argument (Linux:
+    128 KiB, bytes). 100,000 characters of accents and apostrophes quote to
+    far more; the prompt is cut, with a note, until the command fits."""
+    prompt = "é'" * 50_000
+    old = f"{console_clis.command_prefix('claude')} {shlex.quote(prompt)}"
+    assert len(old.encode()) > 128 * 1024  # What the char cap alone allowed.
+    for cli in console_clis.CLIS:
+        command = console_clis.render_command(cli, prompt)
+        assert len(command.encode()) <= console_clis.COMMAND_MAX_BYTES
+        sent = console_clis.sent_prompt(cli, prompt)
+        assert sent.endswith(console_clis.CUT_NOTE)
+        assert shlex.split(command)[-1] == sent
+        assert console_clis.sent_prompt(cli, sent) == sent  # A fixed point.
+        assert command_policy.refusal(command, console_clis.command_policy(cli)) is None
+    # The real exec takes it as one argument.
+    done = subprocess.run(
+        [
+            "/bin/sh",
+            "-c",
+            console_clis.render_command("claude", prompt).replace(
+                console_clis.command_prefix("claude"), "printf %s", 1
+            ),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    assert done.stdout.decode() == console_clis.sent_prompt("claude", prompt)
+    # A prompt that fits is sent whole.
+    assert console_clis.sent_prompt("claude", "Fix add.") == "Fix add."
+
+
+def test_the_recorded_prompt_hash_is_the_argument_the_cli_got(
+    world, cli_path, tmp_path
+):
+    got = tmp_path / "argument"
+    fake_cli(cli_path, "claude", f'printf %s "$4" > {got}\n' + EDIT_CALC)
+    item = dict(world["item"], description="é'" * 50_000)
+    asyncio.run(
+        console_producer.produce(
+            _DaemonOverNATS(), item, world["agent"], world["sprint"]
+        )
+    )
+    run = world["agent"]["console_run"]
+    assert run["prompt_cut"] is True
+    assert run["prompt_sha256"] == hashlib.sha256(got.read_bytes()).hexdigest()
+    assert run["prompt_chars"] == len(got.read_bytes().decode())
 
 
 def test_the_providers_key_reaches_only_the_console_run(
