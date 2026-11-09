@@ -1109,6 +1109,7 @@ Token budgets are enforced per company at the proxy layer — the backend never 
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
+- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — Proposal (not approved): workflows per board column or task kind, as typed-step DAGs whose invariants keep the Verifier, the holds and the history checker
 - [`docs/STANDARDS.md`](docs/STANDARDS.md) — The quality standards every project is held to, and which the loop checks without a model
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — The operations runbook: deploy, upgrade, key rotation, `/health` and `/metrics`, the daemon absent, a sprint stuck, a provider out of credit, backups and restore, retention, and how many workers may run
 - [`bench/README.md`](bench/README.md) — The bench: reference specifications graded by person-written tests, scorecards, and how to add a specification
