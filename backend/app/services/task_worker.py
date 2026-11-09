@@ -195,7 +195,7 @@ def _fetch_memory_context(
     task_text = f"{item.get('title', '')} {item.get('description', '')}".strip()
     role = agent.get("role") or None
     try:
-        from memory.engram_processor import get_engram_processor
+        from services.platform.engram_processor import get_engram_processor
 
         processor = get_engram_processor()
         return processor.query_relevant_engrams(
@@ -1036,7 +1036,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     # Burn retrospective engram to memory so future sprints can learn from it.
     if retro_metrics:
         try:
-            from memory.engram_processor import (
+            from services.platform.engram_processor import (
                 RETROSPECTIVE_AGENT_PREFIX,
                 get_engram_processor,
             )
