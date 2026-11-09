@@ -23,6 +23,16 @@ export function gitChoiceFor(inspection: WorkspaceInspection | null | undefined,
   return { git_workflow: isRepo, git_base_branch: inspection?.git?.branch ?? null }
 }
 
+/**
+ * The wizard's Git choice, kept for the folder it was made for: another folder
+ * (typed or picked) starts again from its own inspection.
+ */
+export function useFolderGitChoice(folder: string | null | undefined): [GitWorkflowChoice | null, (choice: GitWorkflowChoice) => void] {
+  const [state, setState] = useState<{ folder: string; choice: GitWorkflowChoice } | null>(null)
+  const key = folder ?? ''
+  return [state && state.folder === key ? state.choice : null, choice => setState({ folder: key, choice })]
+}
+
 /** What the daemon observed in the folder: not a repository, behind its remote, diverged, offline. */
 export function BaseStatusNotes({ status }: { status: GitBaseStatus | undefined }) {
   const { t } = useTranslation()
@@ -90,14 +100,18 @@ export default function GitWorkflowPanel({ companyId, canManage }: { companyId: 
   const { t } = useTranslation()
   const git = useGitWorkflow(companyId, true)
   const save = useSetGitWorkflow(companyId)
-  const [draft, setDraft] = useState<GitWorkflowChoice | null>(null)
+  // The draft names the company it was read for, so another company's settings are never saved here.
+  const [edit, setEdit] = useState<{ companyId: number; choice: GitWorkflowChoice } | null>(null)
   const [saved, setSaved] = useState(false)
+  const setDraft = (choice: GitWorkflowChoice) => setEdit({ companyId, choice })
 
   useEffect(() => {
-    if (git.data) setDraft({ git_workflow: git.data.git_workflow, git_base_branch: git.data.git_base_branch })
-  }, [git.data])
+    const data = git.data
+    if (data && data.company_id === companyId) setEdit({ companyId, choice: { git_workflow: data.git_workflow, git_base_branch: data.git_base_branch } })
+  }, [git.data, companyId])
 
-  if (git.isLoading || !draft) {
+  const draft = edit?.companyId === companyId ? edit.choice : null
+  if (git.isLoading || git.isError || !draft) {
     return git.isError ? (
       <div role="alert" className="alert-error text-sm">{errorDetail(git.error)}</div>
     ) : (

@@ -597,6 +597,41 @@ describe('project folder on the user\'s computer', () => {
     expect(init.mock.calls[0][0]).toMatchObject({ git_workflow: true, git_base_branch: 'main' })
   })
 
+  it('starts the Git choice again from the new folder when the person goes back and picks another', async () => {
+    const folder = (path: string, branch: string): WorkspaceInspection => ({
+      host: { hostname: 'laptop', platform: 'linux', home: '/home/ana' } as WorkspaceInspection['host'],
+      path, name: path.split('/').pop() ?? path, exists: true, is_dir: true,
+      git: { is_repo: true, branch, remote_url: null, provider: null, web_url: null },
+    })
+    const folders: Record<string, WorkspaceInspection> = { '/home/ana/app': folder('/home/ana/app', 'main'), '/home/ana/other': folder('/home/ana/other', 'trunk') }
+    vi.spyOn(api, 'inspectWorkspace').mockImplementation(async path => folders[path])
+    vi.spyOn(api, 'discoverTeam').mockImplementation(async (_id, path) => ({
+      discovery_id: 5, project_path: path, project: folders[path],
+      detected_stack: { name: 'app', language: 'Python', frameworks: [], databases: [], infra: [], complexity: 'Low', file_count: 2 },
+      suggested_team: [],
+    }))
+    const init = vi.spyOn(api, 'initCompany').mockImplementation(() => new Promise(() => {}))
+    renderWizard()
+    const scan = async (path: string) => {
+      fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: path } })
+      fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+      await waitFor(() => expect(screen.getByLabelText('Project folder')).toHaveValue(path))
+      await screen.findByText(/Stack detected/)
+    }
+
+    await scan('/home/ana/app')
+    for (let step = 0; step < 5; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+    fireEvent.change(screen.getByLabelText('Base branch task branches start from'), { target: { value: 'release' } })
+    for (let step = 0; step < 5; step++) fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+
+    await scan('/home/ana/other')
+    for (let step = 0; step < 5; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+    expect(screen.getByLabelText('Base branch task branches start from')).toHaveValue('trunk')
+    fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
+    await waitFor(() => expect(init).toHaveBeenCalledOnce())
+    expect(init.mock.calls[0][0]).toMatchObject({ project_path: '/home/ana/other', git_workflow: true, git_base_branch: 'trunk' })
+  })
+
   it('scans with one inspection when leaving the field by clicking Scan', async () => {
     let resolveInspect!: (value: WorkspaceInspection) => void
     const inspect = vi.spyOn(api, 'inspectWorkspace')

@@ -18,8 +18,7 @@ import {
 import { FolderPicker } from '../components/FolderPicker'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
 import { StartChoice } from '../components/SprintControls'
-import { GitSetupChoice, gitChoiceFor } from '../components/GitWorkflowPanel'
-import type { GitWorkflowChoice } from '../services/workControl'
+import { GitSetupChoice, gitChoiceFor, useFolderGitChoice } from '../components/GitWorkflowPanel'
 import { clientPlatform } from '../lib/workspace'
 import {
   useModels,
@@ -553,7 +552,7 @@ export default function CompanyNew() {
   // Step 2 — Autonomy
   const [autonomyLevel, setAutonomyLevel] = useState(2)
   const [startNow, setStartNow] = useState(false)
-  const [gitChoice, setGitChoice] = useState<GitWorkflowChoice | null>(null) // null: as the inspection observed
+  const [gitChoice, setGitChoice] = useFolderGitChoice(inspected?.path ?? projectPath.trim()) // null: as the folder's inspection observed
 
   // Step 3 — Permissions
   const [permissions, setPermissions] = useState<Permissions>(DEFAULT_PERMISSIONS)

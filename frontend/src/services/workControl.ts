@@ -104,8 +104,12 @@ export function useSetGitWorkflow(companyId: number) {
     mutationFn: (git: GitWorkflowChoice) => workControlApi.setGit(companyId, git),
     onSuccess: data => {
       queryClient.setQueryData(gitKey(companyId), data)
-      // The checked view keeps its observation and follows the saved choice.
-      queryClient.setQueryData<GitWorkflow>(gitKey(companyId, true), old => old ? { ...old, ...data } : old)
+      // The checked view follows the saved choice; its observation holds only for the base it observed,
+      // so another base drops it, and the daemon is asked again either way.
+      queryClient.setQueryData<GitWorkflow>(gitKey(companyId, true), old => old
+        ? { ...old, ...data, base_status: old.git_base_branch === data.git_base_branch ? old.base_status : undefined }
+        : old)
+      queryClient.invalidateQueries({ queryKey: gitKey(companyId, true) })
       queryClient.invalidateQueries({ queryKey: ['console-producers', companyId] })
     },
   })

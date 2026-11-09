@@ -62,7 +62,7 @@ export default function Models() {
           </div>
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
-          <GitWorkflowPanel companyId={companyId} canManage={canManage} />
+          <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>
       )}

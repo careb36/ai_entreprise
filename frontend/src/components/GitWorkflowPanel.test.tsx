@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import GitWorkflowPanel, { GitSetupChoice, gitChoiceFor } from './GitWorkflowPanel'
 import { queryClient } from '../lib/queryClient'
-import type { WorkspaceInspection } from '../services/api'
+import { ApiError, type WorkspaceInspection } from '../services/api'
 import { type GitWorkflow, type GitWorkflowChoice, workControlApi } from '../services/workControl'
 
 const OBSERVED: GitWorkflow = {
@@ -92,6 +92,41 @@ describe('the Git workflow on the company settings', () => {
     })
     wrap(<GitWorkflowPanel companyId={4} canManage />)
     expect(await screen.findByText('Could not check the folder just now: No workspace daemon answered')).toBeInTheDocument()
+  })
+
+  it('never offers one company\'s settings to save on another whose read failed', async () => {
+    vi.spyOn(workControlApi, 'getGit').mockImplementation(async id => {
+      if (id === 4) return { ...OBSERVED, git_base_branch: 'release' }
+      throw new ApiError(403, 'Forbidden', 'Not a member of this company')
+    })
+    const setGit = vi.spyOn(workControlApi, 'setGit')
+    const view = wrap(<GitWorkflowPanel companyId={4} canManage />)
+    expect(await screen.findByLabelText('Base branch task branches start from')).toHaveValue('release')
+
+    // The same panel instance, now for company 5 (as if not re-keyed).
+    view.rerender(<QueryClientProvider client={queryClient}><GitWorkflowPanel companyId={5} canManage /></QueryClientProvider>)
+    expect(await screen.findByText('Not a member of this company')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Base branch task branches start from')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+    expect(setGit).not.toHaveBeenCalled()
+  })
+
+  it('drops the observation of the old base after saving another, and asks the daemon again', async () => {
+    const getGit = vi.spyOn(workControlApi, 'getGit')
+      .mockResolvedValueOnce(OBSERVED)
+      .mockImplementation(() => new Promise(() => {}))
+    vi.spyOn(workControlApi, 'setGit').mockResolvedValue({ company_id: 4, git_workflow: true, git_base_branch: 'develop' })
+    wrap(<GitWorkflowPanel companyId={4} canManage />)
+    expect(await screen.findByText(/424 commit\(s\) behind origin\/main/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Base branch task branches start from'), { target: { value: 'develop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Git settings saved')).toBeInTheDocument()
+    expect(screen.queryByText(/424 commit\(s\) behind/)).not.toBeInTheDocument()
+    expect(queryClient.getQueryData<GitWorkflow>(['company', 4, 'git', 'checked'])?.base_status).toBeUndefined()
+    await waitFor(() => expect(getGit).toHaveBeenCalledTimes(2))
+    expect(getGit).toHaveBeenLastCalledWith(4, true)
   })
 
   it('names a diverged base and an unreachable remote', async () => {
