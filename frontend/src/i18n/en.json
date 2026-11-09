@@ -1864,6 +1864,8 @@
     "startNowHint": "Leave it unchecked to review the plan first and start it from the sprint page.",
     "startNowHumanLed": "At level 1 you always start it yourself.",
     "git": "Git branch per task",
+    "gitError": "Git settings unavailable",
+    "loading": "Loading…",
     "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched."
   },
   "review": {

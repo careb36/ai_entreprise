@@ -1864,6 +1864,8 @@
     "startNowHint": "Dejalo sin marcar para revisar el plan primero e iniciarlo desde la página del sprint.",
     "startNowHumanLed": "En el nivel 1 siempre lo iniciás vos.",
     "git": "Rama de Git por tarea",
+    "gitError": "La configuración de Git no está disponible",
+    "loading": "Cargando…",
     "gitHint": "Las entregas de cada tarea son commits en su propia rama, fabrique/task-<id>, en un worktree: tu checkout, tu índice y tu rama nunca se tocan."
   },
   "review": {
