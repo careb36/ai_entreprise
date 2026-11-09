@@ -1,27 +1,40 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     target: 'es2020',
-    cssCodeSplit: true,
+    outDir: 'dist',
+    assetsDir: 'assets',
     sourcemap: false,
-    minify: 'esbuild',
-    chunkSizeWarningLimit: 500,
+    cssCodeSplit: true,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+    },
     rollupOptions: {
       output: {
-        // Granular vendor chunking to maximize browser caching and minimize initial bundle load
-        manualChunks(id: string) {
+        // Granular manual chunking strategy to optimize initial bundle size & leverage CDN caching
+        manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
               return 'vendor-core';
             }
             if (id.includes('lucide-react')) {
               return 'vendor-icons';
             }
-            return 'vendor-utils';
+            return 'vendor';
           }
         },
         entryFileNames: 'assets/[name]-[hash].js',
@@ -29,11 +42,9 @@ export default defineConfig({
         assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
+    chunkSizeWarningLimit: 500,
   },
   server: {
     port: 3000,
-    headers: {
-      'Cache-Control': 'no-store',
-    },
   },
 });
