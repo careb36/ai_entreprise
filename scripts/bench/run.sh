@@ -53,7 +53,7 @@
 #                                    only behind a flag. Empty: the fake.
 #   BENCH_RESEARCH_TOOLS [false with the fake, true otherwise]
 #   AGENT_MODEL_POLICY [empty]       the routing policy the backend runs under
-#                                    (services/model_routing.py), passed through
+#                                    (services/models/model_routing.py), passed through
 #   BENCH_POLICY [default, or the policy itself]  the policy's label on the
 #                                    scorecard, so compare.py can tell two runs apart
 #

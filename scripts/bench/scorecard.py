@@ -16,7 +16,7 @@ Subcommands, used by ``scripts/bench/run.sh``:
   audit log (only rows whose usage the provider reported, ``tokens:
   reported``), and writes one spec entry. The entry splits the tasks by
   difficulty and the model of their last delivery (``routing``, read by the
-  backend's ``services/routing_record.py``, the same split the Sprints page
+  backend's ``services/models/routing_record.py``, the same split the Sprints page
   shows), so two runs under different ``AGENT_MODEL_POLICY`` values compare
   band by band.
 - ``write --out-dir DIR [--policy LABEL] ENTRY...`` joins the entries into
@@ -208,9 +208,9 @@ def _board():
 
 
 def _routing_record():
-    """The backend's split by difficulty and model (``services/routing_record.py``)."""
+    """The backend's split by difficulty and model (``services/models/routing_record.py``)."""
     _backend_app()
-    from services import routing_record
+    from services.models import routing_record
 
     return routing_record
 

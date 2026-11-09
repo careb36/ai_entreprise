@@ -44,7 +44,7 @@ bench/
 | Status | `completed`, `timeout`, or `error` when a step failed or a number could not be read: a missing observation is never a green zero. |
 | Tokens | The audit log's task-worker turns whose usage the provider reported (`tokens: reported`); turns without a reported count are counted apart, never estimated. |
 | Models | The model served per role, from the same turns. |
-| By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/routing_record.py` makes the split, the same one the Sprints page shows. |
+| By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/models/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/models/routing_record.py` makes the split, the same one the Sprints page shows. |
 | Policy | The routing policy's label on the card (`policy`): `BENCH_POLICY`, else the `AGENT_MODEL_POLICY` the run passed to the backend, else `default`. |
 
 ## Running it

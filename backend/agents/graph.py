@@ -13,7 +13,7 @@ from langgraph.errors import GraphRecursionError
 
 from agents.tools.openproject_tools import create_work_package
 from llm_proxy_client import LLMProxyClient
-from llm.model_factory import default_model_for_role
+from services.models.model_factory import default_model_for_role
 from services.platform.engram_processor import get_engram_processor
 from telemetry import configure_telemetry, get_tracer
 from opentelemetry.trace import StatusCode

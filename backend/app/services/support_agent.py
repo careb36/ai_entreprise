@@ -28,8 +28,8 @@ from logging_config import logger
 from models import BugReport
 from sqlmodel import Session, select
 
-from llm.model_factory import default_model_for_role
 from services import locks
+from services.models.model_factory import default_model_for_role
 
 SUPPORT_AGENT_NAME = "Support agent"
 SUPPORT_ROLE = "Support"

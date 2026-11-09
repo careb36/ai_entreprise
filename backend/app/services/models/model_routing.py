@@ -1,0 +1,156 @@
+"""Choosing the model by the task, not only by the role.
+
+A deterministic difficulty estimate is computed from what is known before a
+task runs (criteria covered, modules touched, whether it is a rework); a
+routing policy maps difficulty bands to models (or to the proxy's
+``fast``/``powerful`` tiers), with the role defaults as the fallback. The
+model actually served stays recorded on the run (``served_model``).
+
+Nothing here asks a model: the estimate is a function of the plan, and the
+policy is data a Manager writes. When no policy is configured the role
+default is used, so nothing changes for existing deployments.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from config import settings
+
+logger = logging.getLogger("fabrique-task-worker")
+
+
+def estimate_difficulty(
+    item: Any,
+    spec: dict[str, Any] | None = None,
+    arch: dict[str, Any] | None = None,
+    rework: bool = False,
+) -> int:
+    """A 1..5 difficulty estimate for *item*.
+
+    Criteria covered, modules the architecture maps to those criteria, and
+    rework history each add weight. The result is clamped to 1..5.
+    """
+    covers = (
+        item.get("covers") if isinstance(item, dict) else getattr(item, "covers", None)
+    )
+    covers = covers if isinstance(covers, list) else []
+    score = 1 + min(len(covers), 3)
+    if arch and isinstance(arch.get("modules"), list):
+        covered_reqs = {str(c).rsplit(".", 1)[0] for c in covers}
+        touched = 0
+        for mod in arch["modules"]:
+            mod_cov = {str(c) for c in (mod.get("covers") or [])}
+            if mod_cov & covered_reqs:
+                touched += 1
+        score += min(touched, 2)
+    if rework:
+        score += 1
+    return max(1, min(5, score))
+
+
+def _policy() -> dict[str, Any]:
+    raw = (getattr(settings, "AGENT_MODEL_POLICY", "") or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def current_policy() -> dict[str, Any]:
+    """The deployment's ``AGENT_MODEL_POLICY``, parsed; ``{}`` when none or unreadable."""
+    return _policy()
+
+
+_TIERS = {"fast", "balanced", "code", "strategic", "powerful", "preview"}
+
+
+def _bands(policy: dict[str, Any] | None) -> list[tuple[int, int, str, str]]:
+    """The policy's readable bands as ``(lo, hi, key, model)``, lowest first."""
+    pol = policy if policy is not None else _policy()
+    bands = pol.get("bands") if isinstance(pol.get("bands"), dict) else {}
+    out = []
+    for band, model in bands.items():
+        try:
+            lo, hi = band.split("-", 1)
+            out.append((int(lo), int(hi), band, str(model).strip() if model else ""))
+        except (ValueError, AttributeError):
+            continue
+    return sorted(out)
+
+
+def _concrete(value: str) -> str | None:
+    """A model id, never a proxy tier name (those fall back to the role default)."""
+    return None if not value or value.lower() in _TIERS else value
+
+
+def model_for(
+    role: str, difficulty: int, policy: dict[str, Any] | None = None
+) -> str | None:
+    """The model id a *role* should use at *difficulty*, or None to fall back.
+
+    *policy* maps ``{"bands": {"1-2": "fast", "3-5": "powerful"}}`` or
+    ``{"bands": {"1-2": "<model id>"}}``. Band keys are ``"lo-hi"``.
+    """
+    for lo, hi, _key, model in _bands(policy):
+        if lo <= difficulty <= hi:
+            return _concrete(model)
+    return None
+
+
+def band_of(difficulty: int, policy: dict[str, Any] | None = None) -> str | None:
+    """The policy's band key holding *difficulty* (``"3-5"``), or None."""
+    return next((k for lo, hi, k, _m in _bands(policy) if lo <= difficulty <= hi), None)
+
+
+def cheapest_model(policy: dict[str, Any] | None = None) -> str | None:
+    """The model of the policy's lowest band that names one: the editor's."""
+    return next((m for *_r, m in _bands(policy) if _concrete(m)), None)
+
+
+def company_model(session: Any, company_id: int | None, role: str | None) -> str:
+    """The company's model for *role*, or its default (``company_models``); ``""``.
+
+    The task worker puts it where the agent's own model is empty, so a choice
+    the company made is never re-routed by difficulty.
+    """
+    from services.models import company_models
+
+    return company_models.model_for(session, company_id, role) or ""
+
+
+def resolve_agent_model(
+    agent: dict[str, Any],
+    default_role: str = "Dev",
+    item: dict[str, Any] | None = None,
+    rework: bool = False,
+    editor: bool = False,
+) -> str:
+    """The agent's model, else the company's, else routed by difficulty.
+
+    *editor*: the task carries an Architect's edit plan to apply
+    (``services/edit_plan.py``), so the policy's cheapest band model runs it.
+    A model a person chose is never re-routed.
+    """
+    from services.models.model_factory import default_model_for_role
+
+    configured = (agent.get("model") or "").strip()
+    if configured:
+        return configured
+    role = agent.get("role") or default_role
+    base = default_model_for_role(role)
+    if item is None:
+        return base
+    editor_model = cheapest_model() if editor else None
+    if editor_model:
+        return editor_model
+    difficulty = estimate_difficulty(item, rework=rework)
+    routed = model_for(role, difficulty)
+    if routed:
+        return routed
+    return base
