@@ -76,7 +76,7 @@ export function SprintStatusBanner({ sprint }: { sprint: SprintState }) {
   )
 }
 
-function AutonomyControl({ companyId, canManage }: { companyId: number; canManage: boolean }) {
+export function AutonomyControl({ companyId, canManage }: { companyId: number; canManage: boolean }) {
   const { t } = useTranslation()
   const autonomy = useAutonomy(companyId)
   const toast = useToast()

@@ -20,9 +20,9 @@ import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 import { Conversation } from '../components/Conversation'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import SprintOverview from './Dashboard'
-import { useSprintBoard } from '../hooks/useQueries'
+import { useCurrentRole, useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
-import { SprintControls, SprintStatusBanner } from '../components/SprintControls'
+import { AutonomyControl, SprintControls, SprintStatusBanner } from '../components/SprintControls'
 import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { parseRouteId } from '../lib/routeId'
@@ -172,6 +172,8 @@ export const SprintWorkspace: React.FC = () => {
   }
 
   const board = boardQuery.data
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
   const sprintName = board?.sprint.sprint_name || t('workspace.sprintLabel', { id: sprintId, defaultValue: 'Sprint #{{id}}' })
   const wide = tab === 'board' || tab === 'live'
 
@@ -200,6 +202,9 @@ export const SprintWorkspace: React.FC = () => {
             <span className="rounded-full border border-surface-700 bg-surface-900 px-2 py-0.5 text-[11px] text-gray-400">
               {t(`dashboard.status.${board.sprint.status}`, { defaultValue: board.sprint.status })}
             </span>
+          )}
+          {board && (
+            <AutonomyControl companyId={board.sprint.company_id} canManage={canManage} />
           )}
         </div>
         {board && <SprintTeamChips team={board.sprint.team} source={board.sprint.team_source} />}
