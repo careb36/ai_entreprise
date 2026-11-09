@@ -235,7 +235,9 @@ def db(monkeypatch, sqlite_session, tmp_path):
 
 
 def _task(db, project: Path):
-    company = Company(company_name=f"Queue {project.name}", autonomy_level=2)
+    company = Company(
+        company_name=f"Queue {project.name}", autonomy_level=2, git_workflow=False
+    )
     db.add(company)
     db.commit()
     db.refresh(company)
