@@ -505,3 +505,43 @@ def test_npm_pre_and_post_lint_scripts_are_inspected(tmp_path):
     )
     profile = stack_profiles.detect(str(tmp_path))
     assert not edit_lint.writes_files(profile["lint"], profile)
+
+
+# --- third review: fail closed ------------------------------------------------
+
+
+def test_quoted_annotations_the_linter_prints_are_redacted(project, daemon):
+    db_pass = "bluebird-" + "production-pass"
+    typed_pass = "production-" + "value-123"
+    (project / "leak.py").write_text(
+        "import sys\n"
+        f"print('src/greet.py:1:1: S105 ' + 'password: Annotated[str, \"database\"] = \"{db_pass}\"')\n"
+        f"print('src/greet.py:2:1: S105 ' + 'password: \"str\" = \"{typed_pass}\"')\n"
+        "print('src/greet.py:3:5: E501 line too long')\n"
+        "sys.exit(1)\n"
+    )
+    box = _box(daemon, project, f"{PY} leak.py .")
+    _observation, text = box.call(
+        _call(
+            "workspace__edit",
+            path="src/greet.py",
+            search="return name",
+            replace="return name.upper()",
+        ),
+        1,
+    )
+    assert db_pass not in text and typed_pass not in text
+    assert text.count("[line redacted: it looks like a secret]") == 2
+    assert "src/greet.py:3:5: E501 line too long" in text
+    box.close()
+
+
+def test_a_shell_comment_in_a_lint_command_is_refused():
+    w = edit_lint.writes_files
+    for command in ("black . # --check", "black --check . #x", "ruff check .;# x"):
+        assert "comment" in w(command), command
+    assert "comment" in w("npm run lint", {"lint_script": "prettier . # --check"})
+    # A # inside quotes or within a word is text.
+    assert not w('eslint --rule "#x" .')
+    assert not w("eslint --rule '# y' .")
+    assert not w("ruff check a#b .")

@@ -489,3 +489,49 @@ def test_a_typed_secret_in_an_older_daemons_map_is_redacted_at_the_prompt():
     assert FAKE_TYPED_PASS not in shown
     assert shown.count("[line redacted: it looks like a secret]") == 2
     assert 'def ok(password: str = "changeme")' in shown
+
+
+# --- third review: fail closed ------------------------------------------------
+
+FAKE_NESTED = "opaque" + "Value987654321"
+
+
+def test_quoted_annotations_are_redacted_in_an_older_daemons_map():
+    shown = prompt_map.map_text(
+        {
+            "map": "src/db.py:\n"
+            f'    1| def connect(password: Annotated[str, "database"] = "{FAKE_DB_PASS}")\n'
+            f'    4| def login(password: "str" = "{FAKE_TYPED_PASS}")\n'
+            "    7| def ok(password: str | None = None)\n"
+            '    9| def env(password=os.environ.get("DB_PASSWORD_NAME"))'
+        }
+    )
+    assert FAKE_DB_PASS not in shown and FAKE_TYPED_PASS not in shown
+    assert shown.count("[line redacted: it looks like a secret]") == 2
+    assert "def ok(password: str | None = None)" in shown
+    assert 'os.environ.get("DB_PASSWORD_NAME")' in shown
+
+
+def test_nested_template_literals_leave_no_refs_in_the_parse_map_or_cache(
+    project, map_state
+):
+    source = (
+        f"const banner = `outer ${{`{FAKE_NESTED}`}}`;\n"
+        "export function render(a) { return a + otherName; }\n"
+    )
+    (project / "web" / "nested.ts").write_text(source)
+    parsed = daemon_map.parse_javascript(source)
+    assert parsed["refs"] == {} and parsed["refs_skipped"]
+    assert [d[0] for d in parsed["defs"]] == ["render"]
+    result = daemon_map.build_map(str(project), 20000)
+    on_disk = "".join(p.read_text() for p in map_state.glob("*.json"))
+    assert FAKE_NESTED not in result["map"] + on_disk
+    assert "web/nested.ts" in result["files_without_refs"]
+    assert "render(a)" in result["map"]
+    assert daemon_map.MAP_VERSION >= 4
+    # A plain template, an unclosed comment and an unbalanced quote.
+    plain = daemon_map.parse_javascript("const t = `a ${x} b`;\nuse(realRef);\n")
+    assert "realRef" in plain["refs"] and "refs_skipped" not in plain
+    for text in (f"/* {FAKE_NESTED}\n", f"const s = 'it is {FAKE_NESTED};\n"):
+        broken = daemon_map.parse_javascript(text)
+        assert broken["refs"] == {} and broken["refs_skipped"]

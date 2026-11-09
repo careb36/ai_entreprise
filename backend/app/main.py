@@ -27,6 +27,7 @@ from routers import (
     auth_router,
     board_moves_router,
     console_producers_router,
+    costs_router,
     enterprise_router,
     events_router,
     github_router,
@@ -113,6 +114,7 @@ app.include_router(sprint_router)
 app.include_router(sprint_control_router)
 app.include_router(sprint_crud_router)
 app.include_router(board_moves_router)
+app.include_router(costs_router)
 app.include_router(agents_router)
 app.include_router(agent_runs_router)
 app.include_router(api_tokens_router)

@@ -14,9 +14,15 @@ import {
 import { useAppStore } from '../store/useAppStore'
 import { ApiError } from '../services/api'
 import { useRunChanges } from '../services/reviewChanges'
+import { useRunCost } from '../services/cost'
 
 vi.mock('../services/reviewChanges', () => ({
   useRunChanges: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+}))
+
+vi.mock('../services/cost', async importOriginal => ({
+  ...(await importOriginal<typeof import('../services/cost')>()),
+  useRunCost: vi.fn(() => ({ data: undefined })),
 }))
 
 vi.mock('../services/runReviews', () => {
@@ -161,6 +167,22 @@ describe('Evidence detail', () => {
     const observedPanel = screen.getByText(i18n.t('evidence.observed')).closest('.card') as HTMLElement
     expect(within(observedPanel).getByText('claims present but artifact is empty (0 bytes)')).toBeInTheDocument()
     expect(screen.getByText('artifact_nonempty')).toBeInTheDocument()
+  })
+
+  it("shows the run's tokens and cost, and the estimate apart", () => {
+    vi.mocked(useRunCost).mockReturnValue({
+      data: {
+        run_id: 7, version: 1, turns: 2, reported_turns: 1, estimated_turns: 1, unavailable_turns: 0,
+        reported_tokens: 1500, input_tokens: 1000, output_tokens: 500, estimated_tokens: 900,
+        cost_cents: 42, reason: null, unpriced_models: [], models: ['coder'], price_source: 'models.dev',
+      },
+    } as never)
+    setup()
+    const card = screen.getByRole('region', { name: 'Cost of this run' })
+    expect(card).toHaveTextContent('$0.42')
+    expect(card).toHaveTextContent('1.0k in · 500 out tokens')
+    expect(card).toHaveTextContent('900 estimated tokens, not priced')
+    expect(card).toHaveTextContent('Models: coder · prices from models.dev')
   })
 
   it("shows the Reviewer agent's suggestion as a claim beside the review form", () => {
