@@ -1,0 +1,64 @@
+name: Visual Regression Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/visual-regression.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/visual-regression.yml'
+
+concurrency:
+  group: visual-regression-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  visual-regression:
+    name: Playwright Visual Regression
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install Playwright Browsers with Dependencies
+        run: |
+          cd frontend
+          npx playwright install --with-deps chromium
+
+      - name: Build React Application
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Execute Playwright Visual Regression Tests
+        run: |
+          cd frontend
+          npx playwright test --reporter=list,html,json
+
+      - name: Upload Visual Test Report on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-report
+          path: |
+            frontend/playwright-report/
+            frontend/e2e/__screenshots__/
+          retention-days: 14
