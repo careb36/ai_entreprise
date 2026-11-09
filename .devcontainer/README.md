@@ -10,39 +10,32 @@ Jaeger) are started from inside with `docker compose up -d`.
 The repo's remote is SSH (`git@github.com:careb36/la-fabrique-private.git`), so
 the container needs access to your GitHub credentials. Two options:
 
-### 1. SSH agent forwarding (configured by default)
+### 1. SSH keys from the host (configured by default)
 
-`devcontainer.json` forwards your host SSH agent into the container via
-`SSH_AUTH_SOCK`. For it to work, your key must be loaded into the agent on the
-host **before** you open the container:
+`devcontainer.json` mounts your host `~/.ssh` into the container read-only, so
+the container uses the same keys and `known_hosts` you already use on the host.
+Make sure your key exists on the host:
 
 ```bash
-# macOS (host), once:
-ssh-add --apple-use-keychain ~/.ssh/id_ed25519   # or the path to your key
-
-# Linux (host), once:
-ssh-add ~/.ssh/id_ed25519
-
-# Windows (host), start the OpenSSH Authentication Agent service, then:
-ssh-add $env:USERPROFILE\.ssh\id_ed25519
+ls ~/.ssh          # you should see id_ed25519 / id_rsa and known_hosts
 ```
 
-> The mount reads `SSH_AUTH_SOCK` from the host environment, so the agent must
-> be running and have your key loaded **before** the container is created or
-> rebuilt; otherwise the socket isn't forwarded.
-
-Then, inside the container, `git push` just works over SSH. Check the agent is
+Then, inside the container, `git push` just works over SSH. Check the key is
 visible with:
 
 ```bash
-ssh-add -l          # should list your key
 ssh -T git@github.com   # should greet you as your GitHub user
 ```
 
-> **Troubleshooting:** if `ssh-add -l` returns "Could not open a connection to
-> your authentication agent", the socket wasn't forwarded. Rebuild the
-> container (`Dev Containers: Rebuild Container`) with the agent running on the
-> host, or fall back to option 2.
+> **Why not agent forwarding?** The common `SSH_AUTH_SOCK` mount does not work
+> on macOS: Docker Desktop can't bind-mount the launchd socket that macOS's
+> `ssh-agent` uses (`/var/run/com.apple.launchd.*/Listeners`). Mounting `~/.ssh`
+> is the reliable cross-platform approach, at the cost of giving the (read-only)
+> container access to the key material.
+>
+> **Troubleshooting:** if the host's `known_hosts` doesn't contain `github.com`
+> yet, run `ssh -T git@github.com` once on the host to accept the host key, or
+> fall back to option 2.
 
 ### 2. HTTPS with the GitHub CLI
 
@@ -60,8 +53,10 @@ local-only (remotes aren't committed).
 
 ## Git identity
 
-The `git` devcontainer feature usually picks up your host `user.name`/`user.email`.
-If commits fail with "Please tell me who you are", set it once inside the container:
+Your host `~/.gitconfig` is mounted into the container, so `user.name` and
+`user.email` are available out of the box. If your host keeps its git config
+elsewhere (e.g. `~/.config/git/config`) or you see "Please tell me who you
+are", set it once inside the container:
 
 ```bash
 git config --global user.name "Your Name"

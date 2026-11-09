@@ -38,10 +38,12 @@ if [[ ! -f .env ]]; then
 fi
 
 # Pre-seed github.com in known_hosts so the first `git push` over SSH does not
-# stall on the "authenticity of host" prompt. Idempotent.
-echo "🔑 Adding github.com to known_hosts…"
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+# stall on the "authenticity of host" prompt. Skipped when the host's ~/.ssh is
+# mounted read-only (the host's own known_hosts is used directly then).
+if [[ -d ~/.ssh && -w ~/.ssh ]]; then
+  echo "🔑 Adding github.com to known_hosts…"
+  ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+fi
 
 # Fall back to a sensible git identity if the host's wasn't picked up, so
 # commits made from the container don't fail with "Please tell me who you are".

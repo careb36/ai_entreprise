@@ -11,11 +11,9 @@
     "ghcr.io/devcontainers/features/git:1": {}
   },
   "mounts": [
-    "source=${localEnv:SSH_AUTH_SOCK},target=/home/vscode/.ssh-agent.sock,type=bind"
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/vscode/.gitconfig,type=bind,readonly"
   ],
-  "containerEnv": {
-    "SSH_AUTH_SOCK": "/home/vscode/.ssh-agent.sock"
-  },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "forwardPorts": [8000, 5173, 5100, 16686],
   "portsAttributes": {
