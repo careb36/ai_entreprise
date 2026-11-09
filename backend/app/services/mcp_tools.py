@@ -30,6 +30,7 @@ from database import engine as default_engine
 from sqlmodel import Session
 
 from services import mcp_client, mcp_config, tool_history
+from services.contracts.tool_calls import summarize  # noqa: F401 - re-exported
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -284,21 +285,3 @@ def chat_with_tools(
     return client.chat(
         messages=history, model=model, role=role, **billing
     ), observations
-
-
-def summarize(observations: list[dict[str, Any]]) -> str:
-    """One line for the Verifier: how many calls, to what, how many erred."""
-    if not observations:
-        return "no MCP tool calls"
-    counts: dict[str, int] = {}
-    for obs in observations:
-        key = f"{obs.get('server')}.{obs.get('tool')}"
-        counts[key] = counts.get(key, 0) + 1
-    errors = sum(1 for obs in observations if obs.get("is_error"))
-    named = ", ".join(
-        f"{key} ×{n}" if n > 1 else key for key, n in sorted(counts.items())
-    )
-    line = f"{len(observations)} MCP tool call(s): {named}"
-    if errors:
-        line += f"; {errors} returned an error"
-    return line

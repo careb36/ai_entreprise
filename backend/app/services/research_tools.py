@@ -38,7 +38,11 @@ from urllib.parse import urlsplit
 from config import settings
 
 from services import mcp_tools
-from services.contracts import edit_blocks
+from services.evidence.sources import (  # noqa: F401 - re-exported
+    check_sources,
+    packages_in,
+    sources_of,
+)
 from services.research_registries import (
     ECOSYSTEMS,
     OSV_ECOSYSTEMS,
@@ -490,110 +494,3 @@ def toolbox_for(
                 "Could not read the research hosts of company=%s: %s", company_id, exc
             )
     return ResearchToolbox(hosts=allowed_hosts(extra))
-
-
-def sources_of(tool_calls: Any) -> list[dict[str, Any]]:
-    """The sources a run consulted: every research call, as recorded."""
-    return [
-        {
-            k: c.get(k)
-            for k in (
-                "tool",
-                "url",
-                "host",
-                "allowed",
-                "fetched_at",
-                "status",
-                "sha256",
-                "bytes",
-                "package",
-                "ecosystem",
-                "version",
-                "is_error",
-            )
-            if k in c
-        }
-        for c in tool_calls or []
-        if isinstance(c, dict) and c.get("server") == SERVER
-    ]
-
-
-_REQUIREMENT = re.compile(
-    r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(?:[=<>!~]=?|$)"
-)
-
-
-def packages_in(files: list[dict[str, Any]]) -> dict[str, set[str]]:
-    """The dependencies the delivered manifests name, by ecosystem:
-    ``requirements*.txt`` and ``pyproject.toml`` (pypi), ``package.json`` (npm)."""
-    found: dict[str, set[str]] = {"pypi": set(), "npm": set()}
-    for file in files:
-        path = str(file.get("path") or "")
-        content = edit_blocks.scanned_text(file)
-        base = path.rsplit("/", 1)[-1].lower()
-        if base.startswith("requirements") and base.endswith(".txt"):
-            for line in content.splitlines():
-                line = line.split("#", 1)[0].strip()
-                if not line or line.startswith(("-", "git+", "http://", "https://")):
-                    continue
-                match = _REQUIREMENT.match(line)
-                if match:
-                    found["pypi"].add(match.group(1).lower())
-        elif base == "pyproject.toml":
-            for match in re.finditer(
-                r'^\s*"([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*[=<>!~^]',
-                content,
-                re.MULTILINE,
-            ):
-                found["pypi"].add(match.group(1).lower())
-        elif base == "package.json":
-            try:
-                doc = json.loads(content)
-            except ValueError:  # An edit's fragment: the pairs that look like versions.
-                doc = {"dependencies": edit_blocks.json_dependency_pairs(content)}
-            for key in ("dependencies", "devDependencies"):
-                for dep in (doc.get(key) or {}) if isinstance(doc, dict) else {}:
-                    found["npm"].add(str(dep).lower())
-    return found
-
-
-def check_sources(
-    evidence: dict[str, Any] | None, files: list[dict[str, Any]] | None = None
-) -> dict[str, Any] | None:
-    """The Verifier's ``sources`` check: the sources a run consulted, with
-    their hashes, and the dependencies its manifests name that it never
-    looked up at a registry. A record, never the verdict; absent when the
-    research tools were not used and no manifest was delivered."""
-    if not evidence or "tool_calls" not in evidence:
-        return None
-    sources = sources_of(evidence.get("tool_calls"))
-    named = packages_in(files or [])
-    looked_up = {
-        (s.get("ecosystem"), str(s.get("package") or "").lower())
-        for s in sources
-        if s.get("tool") in (PACKAGE, ADVISORIES) and not s.get("is_error")
-    }
-    unchecked = sorted(
-        f"{eco}:{name}"
-        for eco, names in named.items()
-        for name in names
-        if (eco, name) not in looked_up
-    )
-    if not sources and not any(named.values()):
-        return None
-    fetched = [s for s in sources if not s.get("is_error") and s.get("allowed")]
-    refused = [s for s in sources if s.get("allowed") is False]
-    parts = [f"{len(fetched)} source(s) consulted"]
-    if refused:
-        parts.append(f"{len(refused)} refused (host not allowed)")
-    if unchecked:
-        parts.append(
-            "dependencies named without a registry lookup: " + ", ".join(unchecked[:8])
-        )
-    return {
-        "name": "sources",
-        "outcome": "pass",
-        "observation": "; ".join(parts),
-        "sources": sources,
-        "unchecked_dependencies": unchecked,
-    }

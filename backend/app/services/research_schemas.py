@@ -6,10 +6,16 @@ from __future__ import annotations
 from typing import Any
 
 from services import mcp_tools
+from services.contracts.tool_calls import (
+    RESEARCH_ADVISORIES,
+    RESEARCH_FETCH,
+    RESEARCH_PACKAGE,
+    RESEARCH_SERVER,
+)
 from services.research_registries import ECOSYSTEMS
 
-SERVER = "research"
-FETCH, PACKAGE, ADVISORIES = "fetch", "package", "advisories"
+SERVER = RESEARCH_SERVER
+FETCH, PACKAGE, ADVISORIES = RESEARCH_FETCH, RESEARCH_PACKAGE, RESEARCH_ADVISORIES
 
 SCHEMAS: list[dict[str, Any]] = [
     {

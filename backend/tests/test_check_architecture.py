@@ -149,7 +149,18 @@ def test_a_module_in_a_context_folder_belongs_to_it(tmp_path):
     assert result["owner"]["evidence.verify"] == "evidence"
     assert ("evidence.verify", "evidence.checks") in result["edges"]
     assert ("worker", "evidence.verify") in result["edges"]
-    assert result["new"] == ["evidence.checks -> worker"]
+    # An edge is named by the modules' stems, whichever folder holds them, so
+    # an allowlisted edge keeps its name when its module moves (ADR 0016).
+    assert result["new"] == ["checks -> worker"]
+    assert any(
+        p.startswith("checks -> worker: evidence may not import loop")
+        for p in result["problems"]
+    )
+    moved = check_architecture.analyse(
+        _data(["checks -> worker"], **contexts), services
+    )
+    assert moved["problems"] == []
+    assert moved["stale"] == []
 
     stray = _tree(tmp_path / "other", {**FILES, "misc/__init__.py": ""})
     problems = check_architecture.analyse(_data(**BASE), stray)["problems"]

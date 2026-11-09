@@ -14,6 +14,7 @@ from typing import Any
 
 from services import console_assistants
 from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
+from services.evidence.console_run import check_console_run  # noqa: F401 - re-exported
 
 # The CLIs a company may name, headless (Flow's adapters, ``session_command``).
 #
@@ -337,42 +338,6 @@ def partial_reason(collected: dict[str, Any]) -> str | None:
     if gone:
         return f"the CLI deleted or renamed {', '.join(gone[:5])}, which a delivery cannot apply"
     return None
-
-
-def check_console_run(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
-    """The Verifier's record of a console producer's run: who ran, how it ended, what it changed."""
-    run = (evidence or {}).get("console_run")
-    if not isinstance(run, dict):
-        return None
-    files = [f for f in run.get("files") or [] if isinstance(f, dict)]
-    delivered = [f["path"] for f in files if f.get("delivered")]
-    how = f"{run.get('label') or run.get('cli')} (exit {run.get('exit_code')}, {run.get('duration_seconds')} s)"
-    left = [
-        f"{f.get('path')} ({f.get('reason') or f.get('status')})"
-        for f in files
-        if not f.get("delivered")
-    ]
-    if run.get("outcome") == "changed":
-        outcome, text = (
-            "pass",
-            f"{how} changed {len(delivered)} file(s): {', '.join(delivered)}",
-        )
-        if left:
-            text += f"; {len(left)} change(s) not delivered: {', '.join(left[:10])}"
-    else:
-        outcome = "unverifiable" if run.get("kind") == "not_run" else "refuted"
-        text = f"{how}: {run.get('reason')}"
-    return {
-        "name": "console_run",
-        "outcome": outcome,
-        "observation": text,
-        "via": run.get("via"),
-        "command": run.get("command"),
-        "exit_code": run.get("exit_code"),
-        "duration_seconds": run.get("duration_seconds"),
-        "not_delivered": left,
-        "daemon_refused": run.get("daemon_refused") or [],
-    }
 
 
 def claim(output: str) -> str:
