@@ -57,6 +57,8 @@ class CompanyService:
         detected_stack: dict[str, Any] | None = None,
         owner_user_id: int | None = None,
         start_now: bool = True,
+        git_workflow: bool = False,
+        git_base_branch: str | None = None,
     ) -> dict[str, Any]:
         """
         Bootstrap a new company tenant with its AI agents and project credentials.
@@ -64,6 +66,9 @@ class CompanyService:
         With ``start_now`` Sprint 0 is active and its tasks are dispatched at
         once; without it (and always at the human-led autonomy level) Sprint 0
         is ``planned`` and waits for ``POST /v1/sprints/{id}/start``.
+
+        ``git_workflow`` is what the caller observed in the folder
+        (``services/git_setup.py``): off unless it is a repository.
 
         This involves multiple tables and a non-critical Neo4j seed operation.
         Returns a summary of the created entities.
@@ -73,6 +78,8 @@ class CompanyService:
             company_name=company_name,
             default_scope_size=default_scope_size,
             autonomy_level=autonomy_level,
+            git_workflow=git_workflow,
+            git_base_branch=git_base_branch,
         )
         self.session.add(company)
         self.session.flush()

@@ -1618,6 +1618,7 @@ def _delivery_comment(
     recorded: tuple[int, str] | None,
 ) -> str:
     run_note = f" — evidence run #{recorded[0]} ({recorded[1]})" if recorded else ""
+    run_note += git_workflow.skipped_note(evidence)
     outcome, observation = evaluate_workspace_writes(
         [target["path"] for target in targets], evidence
     )
@@ -1633,7 +1634,6 @@ def _delivery_comment(
 # The project's test command is detected in services/workspace_daemon.
 _detect_test_command = detect_test_command
 _detect_project_test_command = workspace_daemon.detect_project_test_command
-
 
 _run_delivery_tests = workspace_daemon.run_delivery_tests
 
@@ -1853,7 +1853,7 @@ async def _deliver_artifacts(
                         "sprint_id": sprint["id"],
                         **({"git": git_spec} if git_spec else {}),
                     },
-                    timeout=settings.WORKSPACE_WRITE_TIMEOUT_SECONDS,
+                    timeout=git_workflow.delivery_timeout(git_spec),
                 )
                 writes = reply.get("files") if isinstance(reply, dict) else None
                 evidence["workspace_writes"] = (

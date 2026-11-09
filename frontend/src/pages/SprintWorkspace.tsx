@@ -151,7 +151,6 @@ export const SprintWorkspace: React.FC = () => {
   }, [sprintId, boardQuery.data, boardQuery.isError, companyId, setActiveSprint])
 
   const sprintsLabel = t('nav.sprints', { defaultValue: 'Sprints' })
-
   if (sprintId === null || (boardQuery.isError && !boardQuery.data)) {
     const message = sprintId === null
       ? t('workspace.invalidId', { id, defaultValue: 'Invalid sprint ID: {{id}}.' })

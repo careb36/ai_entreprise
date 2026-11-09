@@ -18,6 +18,7 @@ import {
 import { FolderPicker } from '../components/FolderPicker'
 import { WorkspaceDaemonHelp } from '../components/WorkspaceDaemonHelp'
 import { StartChoice } from '../components/SprintControls'
+import { GitSetupChoice, gitChoiceFor, useFolderGitChoice } from '../components/GitWorkflowPanel'
 import { clientPlatform } from '../lib/workspace'
 import {
   useModels,
@@ -51,8 +52,7 @@ interface ModelInfo {
   description: string
 }
 
-// Static display metadata keyed by tier — used when model ID is not in the
-// live catalogue (e.g. while loading or for legacy agents).
+// Static display metadata keyed by tier, for a model not in the live catalogue (loading, legacy agents).
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
   'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'Europe/London', 'Europe/Paris',
@@ -527,11 +527,8 @@ export default function CompanyNew() {
   const navigate = useNavigate()
   const setCompany = useAppStore(state => state.setCompany)
 
-  // Wizard state
   const [step, setStep] = useState(0)
-
-  // Step 0 — Project. Paths are host-native strings from the user's own
-  // computer (macOS, Ubuntu or Windows), so the field starts empty.
+  // Step 0 — Project: a host-native path on the user's computer, so the field starts empty.
   const [projectPath, setProjectPath] = useState('')
   const [discoveryResult, setDiscoveryResult] = useState<DetectedStack | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -555,6 +552,7 @@ export default function CompanyNew() {
   // Step 2 — Autonomy
   const [autonomyLevel, setAutonomyLevel] = useState(2)
   const [startNow, setStartNow] = useState(false)
+  const [gitChoice, setGitChoice] = useFolderGitChoice(inspected?.path ?? projectPath.trim()) // null: as the folder's inspection observed
 
   // Step 3 — Permissions
   const [permissions, setPermissions] = useState<Permissions>(DEFAULT_PERMISSIONS)
@@ -589,8 +587,6 @@ export default function CompanyNew() {
     return () => clearTimeout(timer)
   }, [loading])
   const mutationError = (discoverTeamMutation.error as any)?.message || (initCompanyMutation.error as any)?.message || null
-
-  // ── Discover ──────────────────────────────────────────────────────────────
 
   // ── Project folder ────────────────────────────────────────────────────────
 
@@ -736,6 +732,7 @@ export default function CompanyNew() {
       governance: { require_approval_deploy, require_approval_db_write },
       project_path: projectPath.trim() || undefined,
       detected_stack: discoveryResult || undefined,
+      ...gitChoiceFor(inspected, gitChoice),
     }
 
     initCompanyMutation.mutate(payload, {
@@ -1126,6 +1123,7 @@ export default function CompanyNew() {
               <button type="button" onClick={() => setStep(2)} className="text-xs text-brand-400 hover:underline">{t('companyNew.edit')}</button>
             </div>
             <StartChoice checked={startNow} humanLed={autonomyLevel === 1} onChange={setStartNow} />
+            <GitSetupChoice inspection={inspected} choice={gitChoice} onChange={setGitChoice} />
           </div>
 
           {/* Permissions */}

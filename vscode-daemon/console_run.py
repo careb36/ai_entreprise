@@ -213,15 +213,16 @@ def _task_worktree(workspace_root: str, spec: Dict[str, Any]) -> tuple:
     if not folder.is_dir():
         raise git_workspace.GitError(f"the project is not a folder on this machine: {workspace_root}")
     root = Path(git_workspace._out(["rev-parse", "--show-toplevel"], folder))
-    worktree = git_workspace.worktree_for(root, branch, str(spec.get("base") or "HEAD"))
-    return root, worktree, branch
+    # A new branch starts from the base as its remote has it (git_base).
+    start, started = git_workspace.fresh_start(root, branch, str(spec.get("base") or "HEAD"))
+    return root, git_workspace.worktree_for(root, branch, start), branch, started
 
 
 def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str, Any]:
     """The task's worktree, clean at its ``HEAD``, and the guard taken before the run."""
     spec = data.get("git") if isinstance(data.get("git"), dict) else {}
     try:
-        root, worktree, branch = _task_worktree(workspace_root, spec)
+        root, worktree, branch, started = _task_worktree(workspace_root, spec)
         with project_lock.lock_for(str(worktree)):
             admin = admin_dir(worktree)
             # A pointer a run left behind (one never collected) is put back first.
@@ -237,7 +238,7 @@ def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str
             return {
                 "ok": True, "repository": str(root), "worktree": str(worktree), "branch": branch,
                 "head": head, "merged": merged, "guard": taken,
-                "pointer_restored": restored, "private_git": True,
+                "pointer_restored": restored, "private_git": True, **started,
             }
     except (OSError, git_workspace.GitError) as exc:
         return {"ok": False, "error": str(exc)}

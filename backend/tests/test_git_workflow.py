@@ -139,11 +139,9 @@ def test_what_git_refuses_is_an_error_the_backend_can_read(repo, tmp_path):
     assert bad["ok"] is False
     assert "branch name" in bad["error"]
 
-    plain = tmp_path / "not-a-repo"
-    plain.mkdir()
-    outside = _deliver(plain, [{"path": "x.py", "content": "x\n"}])
-    assert outside["ok"] is False
-    assert outside["error"]
+    missing = _deliver(tmp_path / "gone", [{"path": "x.py", "content": "x\n"}])
+    assert missing["ok"] is False
+    assert missing["files"][0]["status"] == "workspace_missing"
 
 
 # --- the backend ---------------------------------------------------------------

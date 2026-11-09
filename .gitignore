@@ -107,6 +107,8 @@ frontend/coverage/
 test-results/
 playwright-report/
 .playwright/
+# Snapshots the Playwright MCP server writes while it browses the app
+.playwright-mcp/
 
 # --- VS Code extension compiled output ---
 vscode-extension/out/

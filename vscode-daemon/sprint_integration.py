@@ -4,7 +4,9 @@ With the company's Git workflow on, each task is a branch
 (``fabrique/task-<id>``, ``git_workspace.deliver``). When the sprint closes
 the backend asks for ``workspace.git.integrate``: the branch
 ``fabrique/sprint-<id>`` is started from the company's base (or the commit
-the repository has checked out), in a worktree under the repository's git
+the repository has checked out), as its remote has it when the local copy is
+behind (``git_base``; a branch started earlier gets that base merged in
+first), in a worktree under the repository's git
 directory like a task's, and the task branches are merged into it in the
 order the backend names (their dependencies first). The person's checkout,
 index and branch are never touched; nothing is pushed.
@@ -34,6 +36,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+import git_base
 from git_workspace import GitError, merge_one, run_git, valid_branch, worktree_for
 
 SPRINT_BRANCH_PREFIX = "fabrique/sprint-"
@@ -168,12 +171,25 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         raise GitError(f"the project folder does not exist on this machine: {workspace_root}")
     root = Path(run_git(["rev-parse", "--show-toplevel"], folder).stdout.strip())
     base = str(spec.get("base") or "HEAD")
-    worktree = worktree_for(root, branch, base)
+    # The base as its remote has it when the local copy is behind (git_base).
+    base_commit, base_status = git_base.start_point(root, base)
+    worktree = worktree_for(root, branch, base_commit)
     start = _head(worktree)
     merged, already, missing, refused = [], [], [], []
     sources: Dict[str, str] = {}
-    conflict = None
+    conflict, base_merge = None, None
     not_attempted: list = []
+    if run_git(["merge-base", "--is-ancestor", base_commit, "HEAD"], worktree, check=False).returncode != 0:
+        # A branch started earlier lacks what the base gained since: merged in
+        # first, as a pull request's "update branch" does, so it only moves forward.
+        ref = str(base_status.get("started_from") or base)
+        result = merge_one(worktree, base_commit, f"Merge {ref} into {branch}")
+        if result.returncode != 0:
+            conflict = _conflict(worktree, ref, result)
+            run_git(["merge", "--abort"], worktree, check=False)
+            not_attempted, refs = list(refs), []
+        else:
+            base_merge = {"branch": ref, "source": base_commit, "commit": _head(worktree)}
     for index, ref in enumerate(refs):
         state, tip = _resolve(root, worktree, ref)
         if state == "skip":
@@ -213,6 +229,9 @@ def integrate(workspace_root: str, spec: Dict[str, Any]) -> Dict[str, Any]:
         "refused": refused,
         "conflict": conflict,
         "not_attempted": not_attempted,
+        # Where the base stood here and at its remote, and its merge into an older branch.
+        "base_status": base_status,
+        "base_merge": base_merge,
     }
 
 

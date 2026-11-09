@@ -84,6 +84,9 @@ export interface InitCompanyRequest {
   governance?: Record<string, boolean>
   project_path?: string
   detected_stack?: DetectedStack
+  /** Kept only when the daemon observes a repository at project_path; the base is where task branches start. */
+  git_workflow?: boolean
+  git_base_branch?: string | null
 }
 
 export interface InitCompanyResponse {
@@ -218,10 +221,7 @@ export interface TicketUpdateRequest {
   status: TicketStatus
   resolution?: string
   assigned_to?: string
-  /**
-   * The support admin's decision, stored apart from the reporter's choice and
-   * the agent's suggestion. Omitted keeps the earlier decision; '' clears it.
-   */
+  /** The support admin's decision, apart from the reporter's choice and the agent's suggestion. Omitted keeps the earlier one; '' clears it. */
   severity?: TicketSeverity | ''
   category?: TicketCategory | ''
 }

@@ -9,6 +9,12 @@ its parent) is an observation kept on the run's evidence as ``git``, the
 tests the daemon runs after a delivery run in that worktree, and the run's
 Files changed show the commit. Merging the branch is a person's call, or the
 platform's it is published to.
+
+A new branch starts from the base as its remote has it when the local copy
+is behind (``vscode-daemon/git_base.py``: ``base_commit``,
+``base_behind_remote``, ``remote_unreachable`` on the ``git`` evidence). A
+folder that is not a repository is delivered without a branch, with a
+snapshot, and the evidence says why (``git_workflow_skipped``).
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from config import settings
 from models.company import Company
 from models.sprint import BacklogItem
 from sqlalchemy.engine import Engine
@@ -24,6 +31,12 @@ from sqlmodel import Session, select
 from services import dependencies
 
 TASK_BRANCH = "fabrique/task-{id}"
+# A delivery with a git spec may first fetch the base from its remote, bounded
+# by the daemon's ``git_base.FETCH_TIMEOUT_SECONDS`` (10). The request waits
+# that long on top of the plain write budget, so a stalled fetch that falls
+# back to the local base still answers before the backend gives up and queues
+# the delivery a second time. Keep it above the daemon's bound.
+FETCH_ALLOWANCE_SECONDS = 15.0
 # A base a Manager may name: what git accepts as a branch, without ranges or options.
 _BASE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{0,199}$")
 
@@ -73,11 +86,13 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
 
     With a branch, the tests run where the files are: the task's worktree.
     Without one, the daemon's snapshot that undoes the delivery
-    (``services/delivery_undo.py``), or why it kept none, is kept too.
+    (``services/delivery_undo.py``), or why it kept none, is kept too, and
+    ``git_workflow_skipped`` when the workflow was on but the daemon found
+    the folder is not a repository and delivered without a branch.
     """
     if not isinstance(reply, dict):
         return
-    for key in ("snapshot", "snapshot_error"):
+    for key in ("snapshot", "snapshot_error", "git_workflow_skipped"):
         if reply.get(key):
             evidence[key] = reply[key]
     git = reply.get("git")
@@ -92,3 +107,29 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
         evidence["reason"] = (
             f"the workspace daemon could not write the files: {reply['error']}"
         )
+
+
+def delivery_timeout(spec: dict[str, Any] | None) -> float:
+    """How long the backend waits for ``workspace.generate``: longer when the daemon may fetch the base."""
+    base = settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+    return base + (FETCH_ALLOWANCE_SECONDS if spec else 0.0)
+
+
+def skipped_note(evidence: dict[str, Any] | None) -> str:
+    """The board's words when the daemon delivered without the Git workflow it was asked for.
+
+    The undo snapshot is promised only when the evidence holds one; otherwise
+    the note says what the daemon recorded instead (``snapshot_error``).
+    """
+    evidence = evidence or {}
+    reason = evidence.get("git_workflow_skipped")
+    if not reason:
+        return ""
+    note = f" — delivered without the Git workflow ({reason}): no task branch, the files are in the folder"
+    if evidence.get("snapshot"):
+        return note + " with a snapshot to undo them"
+    failure = str(
+        evidence.get("snapshot_error")
+        or "no snapshot was recorded, this delivery cannot be undone"
+    )
+    return f"{note}; {failure[:300]}"
