@@ -17,7 +17,7 @@ services:
 
   nats:
     # The alpine image has a shell for nats/start.sh.
-    image: nats:2.10-alpine
+    image: nats:2.15-alpine
     container_name: factory-nats
     # JetStream keeps task assignments and queued deliveries on disk, so they
     # survive a backend or daemon that is down when they are published.
