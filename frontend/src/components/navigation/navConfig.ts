@@ -1,177 +1,120 @@
 import {
+  LayoutDashboard,
+  ClipboardCheck,
   ShieldCheck,
-  GitFork,
-  Scale,
-  Activity,
-  ClipboardList,
-  Bot,
-  Sliders,
-  CheckCircle2,
-  FileSearch,
-  Building,
-  Terminal,
+  Code2,
+  Database,
+  type LucideIcon,
 } from 'lucide-react'
-import type { NavGroup } from './types'
 
-/**
- * Global Navigation Configuration (Hick's Law Redesign)
- *
- * Hick's Law states that decision time increases logarithmically with the number
- * of options: T = b * log2(n + 1). By condensing previously sprawling top-level links
- * into exactly 5 logical, high-cohesion top-level groups, cognitive friction and
- * decision fatigue are significantly reduced while preserving instant access to all
- * deep views.
- *
- * The 5 Top-Level Groups:
- * 1. Evidence & Lineage (Evidence store, Artifact verification, Knowledge graph)
- * 2. Governance & Review (Human-in-the-loop inbox, Policy gates)
- * 3. Execution & Runs (Agent workflow executions, Sandboxed validation)
- * 4. Audit & Compliance (Immutable audit trail, Telemetry logs)
- * 5. Workspace & Settings (Agent fleet configuration, Quotas, Workspaces)
- */
-export function getNavGroups(waitingReviewsCount: number = 0): NavGroup[] {
-  return [
-    {
-      id: 'evidence',
-      section: 'evidence',
-      primaryTo: '/evidence',
-      labelKey: 'nav.groups.evidence',
-      defaultLabel: 'Evidence & Graph',
-      icon: ShieldCheck,
-      items: [
-        {
-          id: 'evidence-store',
-          to: '/evidence',
-          labelKey: 'nav.items.evidenceStore',
-          defaultLabel: 'Evidence Records',
-          description: 'Cryptographically signed agent artifacts and execution proofs',
-          icon: FileSearch,
-        },
-        {
-          id: 'knowledge-graph',
-          to: '/graph',
-          labelKey: 'nav.items.knowledgeGraph',
-          defaultLabel: 'Knowledge Graph',
-          description: 'Interactive artifact lineage and dependency visualization',
-          icon: GitFork,
-        },
-      ],
-    },
-    {
-      id: 'governance',
-      section: 'governance',
-      primaryTo: '/governance',
-      labelKey: 'nav.groups.governance',
-      defaultLabel: 'Governance',
-      icon: Scale,
-      badgeCount: waitingReviewsCount,
-      items: [
-        {
-          id: 'review-inbox',
-          to: '/governance',
-          labelKey: 'nav.items.reviewInbox',
-          defaultLabel: 'Review Inbox',
-          description: 'Pending human approvals and gate verification requests',
-          icon: CheckCircle2,
-          badgeCount: waitingReviewsCount,
-        },
-        {
-          id: 'policies',
-          to: '/governance/policies',
-          labelKey: 'nav.items.policies',
-          defaultLabel: 'Security Policies',
-          description: 'Active compliance gates and AST enforcement thresholds',
-          icon: Scale,
-        },
-      ],
-    },
-    {
-      id: 'executions',
-      section: 'runs',
-      primaryTo: '/runs',
-      labelKey: 'nav.groups.executions',
-      defaultLabel: 'Executions',
-      icon: Activity,
-      items: [
-        {
-          id: 'active-runs',
-          to: '/runs',
-          labelKey: 'nav.items.activeRuns',
-          defaultLabel: 'Agent Runs',
-          description: 'Active orchestrations, state machines, and task execution',
-          icon: Activity,
-        },
-        {
-          id: 'terminal',
-          to: '/runs/console',
-          labelKey: 'nav.items.console',
-          defaultLabel: 'Execution Logs',
-          description: 'Live daemon stdout/stderr and sandbox status',
-          icon: Terminal,
-        },
-      ],
-    },
-    {
-      id: 'audit',
-      section: 'audit',
-      primaryTo: '/audit',
-      labelKey: 'nav.groups.audit',
-      defaultLabel: 'Audit Trail',
-      icon: ClipboardList,
-      items: [
-        {
-          id: 'audit-log',
-          to: '/audit',
-          labelKey: 'nav.items.auditLog',
-          defaultLabel: 'Audit Records',
-          description: 'Non-repudiable system event ledger and access claims',
-          icon: ClipboardList,
-        },
-        {
-          id: 'telemetry',
-          to: '/audit/telemetry',
-          labelKey: 'nav.items.telemetry',
-          defaultLabel: 'System Telemetry',
-          description: 'Health metrics, latency counters, and token consumption',
-          icon: Activity,
-        },
-      ],
-    },
-    {
-      id: 'workspace',
-      section: 'workspace',
-      primaryTo: '/agents',
-      labelKey: 'nav.groups.workspace',
-      defaultLabel: 'Workspace',
-      icon: Sliders,
-      items: [
-        {
-          id: 'agents',
-          to: '/agents',
-          labelKey: 'nav.items.agents',
-          defaultLabel: 'Agent Fleet',
-          description: 'Configure autonomous workers, tools, and LLM providers',
-          icon: Bot,
-        },
-        {
-          id: 'quotas',
-          to: '/company/quotas',
-          labelKey: 'nav.items.quotas',
-          defaultLabel: 'Quotas & Limits',
-          description: 'Token limits, compute budgets, and rate limiting',
-          icon: Sliders,
-        },
-        {
-          id: 'companies',
-          to: '/companies/select',
-          labelKey: 'nav.items.selectCompany',
-          defaultLabel: 'Switch Company',
-          description: 'Manage tenant context and organizational units',
-          icon: Building,
-        },
-      ],
-    },
-  ]
+export interface NavChildItem {
+  id: string
+  label: string
+  path: string
+  description?: string
+  badge?: string | number
+  isExternal?: boolean
 }
 
-export const TOP_LEVEL_GROUPS_LIMIT = 5
+export interface NavGroup {
+  id: string
+  label: string
+  path: string
+  icon: LucideIcon
+  description: string
+  badgeKey?: 'waiting' | 'activeTasks'
+  capability?: string
+  children: NavChildItem[]
+}
+
+/**
+ * Hick's Law: Decision time increases logarithmically with the number of options: T = b * log2(n + 1).
+ * Grouping related items into 5 top-level categories minimizes decision fatigue.
+ */
+export const HICKS_LAW_NAV_LIMIT = 5
+
+export const NAV_ITEMS: NavGroup[] = [
+  {
+    id: 'sprints',
+    label: 'Sprints & Work',
+    path: '/sprints',
+    icon: LayoutDashboard,
+    description: 'Sprint planning, backlog & agent execution',
+    badgeKey: 'activeTasks',
+    children: [
+      { id: 'all-sprints', label: 'All Sprints', path: '/sprints', description: 'Sprint boards and velocity' },
+      { id: 'active-tasks', label: 'Task Execution', path: '/sprints?view=tasks', description: 'Agent task lifecycle' },
+      { id: 'backlog', label: 'Backlog Planning', path: '/sprints?view=backlog', description: 'Task breakdown & readiness' },
+    ],
+  },
+  {
+    id: 'evidence',
+    label: 'Evidence & Runs',
+    path: '/evidence',
+    icon: ClipboardCheck,
+    description: 'Attestations, verification logs & artifacts',
+    children: [
+      { id: 'evidence-vault', label: 'Evidence Vault', path: '/evidence', description: 'Cryptographic execution evidence' },
+      { id: 'verifications', label: 'Verification Runs', path: '/evidence?tab=verifications', description: 'Automated test & AST check results' },
+      { id: 'attestations', label: 'Attestations', path: '/evidence?tab=attestations', description: 'Signed security attestations' },
+    ],
+  },
+  {
+    id: 'governance',
+    label: 'Governance & Review',
+    path: '/governance',
+    icon: ShieldCheck,
+    description: 'Human-in-the-loop approvals & audit trail',
+    badgeKey: 'waiting',
+    children: [
+      { id: 'review-inbox', label: 'Review Inbox', path: '/governance', description: 'Items requiring human review' },
+      { id: 'governance-rules', label: 'Policies & Gates', path: '/governance?tab=rules', description: 'Autonomous safety gates' },
+      { id: 'audit-log', label: 'Audit Trail', path: '/governance?tab=audit', description: 'Tamper-evident activity logs' },
+    ],
+  },
+  {
+    id: 'generate',
+    label: 'Agent Studio',
+    path: '/generate',
+    icon: Code2,
+    description: 'Autonomous agent graph & code generation',
+    capability: 'agent_graph',
+    children: [
+      { id: 'agent-orchestrator', label: 'Graph Orchestrator', path: '/generate', description: 'LangGraph multi-agent pipelines' },
+      { id: 'code-gen', label: 'Code Synthesis', path: '/generate?tab=code', description: 'AST validation and code emission' },
+      { id: 'sandbox-runs', label: 'Sandbox Execution', path: '/generate?tab=sandbox', description: 'Ephemeral container execution' },
+    ],
+  },
+  {
+    id: 'memory',
+    label: 'Knowledge & Memory',
+    path: '/memory',
+    icon: Database,
+    description: 'Episodic memory, Neo4j graph & pgvector index',
+    capability: 'memory',
+    children: [
+      { id: 'episodic-memory', label: 'Episodic Memory', path: '/memory', description: 'Sprint retrospectives & decisions' },
+      { id: 'graph-explorer', label: 'Graph Relationships', path: '/memory?tab=graph', description: 'Neo4j knowledge graph explorer' },
+      { id: 'vector-search', label: 'Vector Similarity', path: '/memory?tab=vectors', description: 'pgvector semantic context retrieval' },
+    ],
+  },
+]
+
+export function isNavGroupActive(group: NavGroup, currentPath: string): boolean {
+  if (currentPath === group.path) return true
+  if (currentPath.startsWith(`${group.path}/`) || currentPath.startsWith(`${group.path}?`)) return true
+  return group.children.some(child => currentPath === child.path || currentPath.startsWith(`${child.path}/`))
+}
+
+export function filterNavByCapabilities(
+  items: NavGroup[] = NAV_ITEMS,
+  capabilities?: { agent_graph?: boolean; memory?: boolean } | null
+): NavGroup[] {
+  return items.filter(item => {
+    if (!item.capability) return true
+    if (!capabilities) return true
+    if (item.capability === 'agent_graph') return capabilities.agent_graph !== false
+    if (item.capability === 'memory') return capabilities.memory !== false
+    return true
+  }).slice(0, HICKS_LAW_NAV_LIMIT)
+}

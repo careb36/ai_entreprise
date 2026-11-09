@@ -1,125 +1,134 @@
+import React from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { GlobalNav } from '../GlobalNav'
 import { SidebarNavigation } from '../SidebarNavigation'
-import { getNavGroups, TOP_LEVEL_GROUPS_LIMIT } from '../navConfig'
+import { GlobalNav } from '../GlobalNav'
+import {
+  NAV_ITEMS,
+  HICKS_LAW_NAV_LIMIT,
+  filterNavByCapabilities,
+  isNavGroupActive,
+} from '../navConfig'
 
-// Mock react-i18next
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: { defaultValue?: string }) => opts?.defaultValue || key,
-    i18n: { language: 'en', changeLanguage: vi.fn() },
-  }),
-}))
+describe("Hick's Law Navigation Architecture", () => {
+  it('enforces Hick’s Law with at most 5 top-level choices', () => {
+    expect(HICKS_LAW_NAV_LIMIT).toBe(5)
+    expect(NAV_ITEMS.length).toBeLessThanOrEqual(HICKS_LAW_NAV_LIMIT)
+    expect(NAV_ITEMS.length).toBe(5)
 
-describe('Hick\'s Law Global Navigation', () => {
-  it('enforces exactly 5 top-level navigation groups to minimize decision fatigue', () => {
-    const groups = getNavGroups(0)
-    expect(groups.length).toBe(5)
-    expect(TOP_LEVEL_GROUPS_LIMIT).toBe(5)
-
-    const expectedGroupIds = ['evidence', 'governance', 'executions', 'audit', 'workspace']
-    expect(groups.map((g) => g.id)).toEqual(expectedGroupIds)
+    const ids = NAV_ITEMS.map(item => item.id)
+    expect(ids).toEqual(['sprints', 'evidence', 'governance', 'generate', 'memory'])
   })
 
-  it('renders all 5 top-level group dropdowns in desktop mode', () => {
-    render(
-      <MemoryRouter initialEntries={['/evidence']}>
-        <GlobalNav waitingReviewsCount={3} />
+  it('filters capabilities while maintaining <= 5 top-level choices', () => {
+    const all = filterNavByCapabilities(NAV_ITEMS, { agent_graph: true, memory: true })
+    expect(all.length).toBe(5)
+
+    const withoutOptional = filterNavByCapabilities(NAV_ITEMS, { agent_graph: false, memory: false })
+    expect(withoutOptional.length).toBe(3)
+    expect(withoutOptional.map(i => i.id)).toEqual(['sprints', 'evidence', 'governance'])
+  })
+
+  it('accurately identifies active groups including nested child routes', () => {
+    const sprintsGroup = NAV_ITEMS.find(item => item.id === 'sprints')!
+    expect(isNavGroupActive(sprintsGroup, '/sprints')).toBe(true)
+    expect(isNavGroupActive(sprintsGroup, '/sprints/123')).toBe(true)
+    expect(isNavGroupActive(sprintsGroup, '/sprints?view=tasks')).toBe(true)
+    expect(isNavGroupActive(sprintsGroup, '/governance')).toBe(false)
+  })
+})
+
+describe('SidebarNavigation Component', () => {
+  const renderSidebar = (props = {}) => {
+    return render(
+      <MemoryRouter initialEntries={['/sprints']}>
+        <SidebarNavigation {...props} />
       </MemoryRouter>
     )
+  }
 
-    const desktopNav = screen.getByTestId('desktop-nav')
-    expect(desktopNav).toBeInTheDocument()
+  it('renders all 5 top-level items on desktop', () => {
+    renderSidebar()
 
-    // 5 top-level choices
-    expect(screen.getByTestId('nav-group-evidence')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-group-governance')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-group-executions')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-group-audit')).toBeInTheDocument()
-    expect(screen.getByTestId('nav-group-workspace')).toBeInTheDocument()
+    expect(screen.getByText('Sprints & Work')).toBeDefined()
+    expect(screen.getByText('Evidence & Runs')).toBeDefined()
+    expect(screen.getByText('Governance & Review')).toBeDefined()
+    expect(screen.getByText('Agent Studio')).toBeDefined()
+    expect(screen.getByText('Knowledge & Memory')).toBeDefined()
   })
 
-  it('displays pending reviews badge count on the Governance group', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <GlobalNav waitingReviewsCount={5} />
-      </MemoryRouter>
-    )
+  it('expands and collapses group sub-items when toggled', () => {
+    renderSidebar()
 
-    const badge = screen.getByTestId('nav-badge-governance')
-    expect(badge).toBeInTheDocument()
-    expect(badge).toHaveTextContent('5')
+    // Sprints sub-items should be present when expanded
+    const toggleButton = screen.getByLabelText('Toggle Sprints & Work sub-items')
+    expect(toggleButton).toBeDefined()
+
+    // Toggle collapse
+    fireEvent.click(toggleButton)
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('false')
+
+    // Toggle expand
+    fireEvent.click(toggleButton)
+    expect(toggleButton.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('All Sprints')).toBeDefined()
+    expect(screen.getByText('Task Execution')).toBeDefined()
   })
 
-  it('opens and closes sub-item dropdown when caret button is clicked', () => {
-    render(
-      <MemoryRouter initialEntries={['/evidence']}>
-        <GlobalNav waitingReviewsCount={0} />
-      </MemoryRouter>
-    )
+  it('displays badge counters accurately', () => {
+    renderSidebar({
+      badges: { waiting: 7, activeTasks: 3 },
+    })
 
-    // Initially sub-menu is closed
-    expect(screen.queryByTestId('dropdown-menu-evidence')).not.toBeInTheDocument()
-
-    // Click toggle button
-    const toggleBtn = screen.getByRole('button', { name: /toggle evidence & graph menu/i })
-    fireEvent.click(toggleBtn)
-
-    // Now sub-menu is visible
-    expect(screen.getByTestId('dropdown-menu-evidence')).toBeInTheDocument()
-    expect(screen.getByText('Evidence Records')).toBeInTheDocument()
-    expect(screen.getByText('Knowledge Graph')).toBeInTheDocument()
-
-    // Click again to close
-    fireEvent.click(toggleBtn)
-    expect(screen.queryByTestId('dropdown-menu-evidence')).not.toBeInTheDocument()
+    expect(screen.getByText('7')).toBeDefined()
+    expect(screen.getByText('3')).toBeDefined()
   })
 
-  it('closes dropdown when Escape key is pressed', () => {
-    render(
-      <MemoryRouter initialEntries={['/evidence']}>
-        <GlobalNav waitingReviewsCount={0} />
-      </MemoryRouter>
-    )
+  it('handles desktop collapse toggle state', () => {
+    renderSidebar()
 
-    const toggleBtn = screen.getByRole('button', { name: /toggle evidence & graph menu/i })
-    fireEvent.click(toggleBtn)
-    expect(screen.getByTestId('dropdown-menu-evidence')).toBeInTheDocument()
+    const collapseButton = screen.getByLabelText('Collapse sidebar')
+    fireEvent.click(collapseButton)
 
-    const navGroup = screen.getByTestId('nav-group-evidence')
-    fireEvent.keyDown(navGroup, { key: 'Escape', code: 'Escape' })
-
-    expect(screen.queryByTestId('dropdown-menu-evidence')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Expand sidebar')).toBeDefined()
   })
 
-  it('renders responsive mobile sidebar with 5 grouped accordions when opened', () => {
+  it('supports mobile off-canvas drawer open and close triggers', () => {
     const handleClose = vi.fn()
+    renderSidebar({
+      isOpenMobile: true,
+      onCloseMobile: handleClose,
+    })
+
+    const backdrop = screen.getByTestId('mobile-backdrop')
+    fireEvent.click(backdrop)
+    expect(handleClose).toHaveBeenCalled()
+
+    const closeBtn = screen.getByLabelText('Close navigation')
+    fireEvent.click(closeBtn)
+    expect(handleClose).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('GlobalNav Integration', () => {
+  it('renders the top header with mobile toggle and content', () => {
     render(
-      <MemoryRouter initialEntries={['/graph']}>
-        <SidebarNavigation
-          isOpen={true}
-          onClose={handleClose}
-          currentPath="/graph"
-          waitingReviewsCount={2}
-        />
+      <MemoryRouter initialEntries={['/governance']}>
+        <GlobalNav appName="La Fabrique" waitingCount={4}>
+          <div data-testid="page-content">Dashboard Content</div>
+        </GlobalNav>
       </MemoryRouter>
     )
 
-    const sidebar = screen.getByTestId('responsive-sidebar')
-    expect(sidebar).toBeInTheDocument()
+    expect(screen.getByText('La Fabrique')).toBeDefined()
+    expect(screen.getByText('4 Reviews')).toBeDefined()
+    expect(screen.getByTestId('page-content')).toBeDefined()
 
-    // Ensure 5 groups are present
-    expect(screen.getByTestId('sidebar-group-evidence')).toBeInTheDocument()
-    expect(screen.getByTestId('sidebar-group-governance')).toBeInTheDocument()
-    expect(screen.getByTestId('sidebar-group-executions')).toBeInTheDocument()
-    expect(screen.getByTestId('sidebar-group-audit')).toBeInTheDocument()
-    expect(screen.getByTestId('sidebar-group-workspace')).toBeInTheDocument()
+    // Toggle mobile drawer
+    const mobileToggle = screen.getByTestId('mobile-menu-toggle')
+    fireEvent.click(mobileToggle)
 
-    // Click close button
-    const closeBtn = screen.getByRole('button', { name: /close sidebar/i })
-    fireEvent.click(closeBtn)
-    expect(handleClose).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('mobile-drawer')).toBeDefined()
   })
 })

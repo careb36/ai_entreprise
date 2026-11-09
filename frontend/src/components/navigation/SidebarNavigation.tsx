@@ -1,190 +1,269 @@
-import { useState, type FC } from 'react'
-import { Link } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronRight, X } from 'lucide-react'
-import { getNavGroups, TOP_LEVEL_GROUPS_LIMIT } from './navConfig'
-import type { NavigationProps } from './types'
+import React, { useState, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  X,
+  Menu,
+} from 'lucide-react'
+import {
+  NAV_ITEMS,
+  HICKS_LAW_NAV_LIMIT,
+  isNavGroupActive,
+  filterNavByCapabilities,
+  type NavGroup,
+} from './navConfig'
+import { NavDropdown } from './NavDropdown'
 
-interface SidebarProps extends NavigationProps {
-  isOpen: boolean
-  onClose: () => void
+export interface SidebarNavigationProps {
+  isOpenMobile?: boolean
+  onCloseMobile?: () => void
+  badges?: {
+    waiting?: number
+    activeTasks?: number
+  }
+  capabilities?: {
+    agent_graph?: boolean
+    memory?: boolean
+  } | null
+  defaultCollapsed?: boolean
+  className?: string
 }
 
-export const SidebarNavigation: FC<SidebarProps> = ({
-  currentPath,
-  waitingReviewsCount = 0,
-  isOpen,
-  onClose,
-  onNavigate,
+export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
+  isOpenMobile = false,
+  onCloseMobile,
+  badges = {},
+  capabilities = null,
+  defaultCollapsed = false,
+  className = '',
 }) => {
-  const { t } = useTranslation()
-  const navGroups = getNavGroups(waitingReviewsCount).slice(0, TOP_LEVEL_GROUPS_LIMIT)
+  const location = useLocation()
+  const currentPath = location.pathname + location.search
+  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
 
-  // Track expanded groups in sidebar (accordion state)
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
-    // Automatically expand the group corresponding to currentPath
-    const initial: Record<string, boolean> = {}
-    for (const group of navGroups) {
-      if (
-        currentPath.startsWith(group.primaryTo) ||
-        group.items.some((item) => currentPath.startsWith(item.to))
-      ) {
-        initial[group.id] = true
+  const activeNavItems = filterNavByCapabilities(NAV_ITEMS, capabilities).slice(0, HICKS_LAW_NAV_LIMIT)
+
+  // Automatically expand active group on route transition
+  useEffect(() => {
+    activeNavItems.forEach(group => {
+      if (isNavGroupActive(group, location.pathname)) {
+        setExpandedGroups(prev => ({ ...prev, [group.id]: true }))
       }
-    }
-    return initial
-  })
+    })
+  }, [location.pathname])
 
   const toggleGroup = (groupId: string) => {
-    setExpandedGroups((prev) => ({
+    setExpandedGroups(prev => ({
       ...prev,
       [groupId]: !prev[groupId],
     }))
   }
 
-  if (!isOpen) return null
+  const renderBadge = (group: NavGroup) => {
+    if (!group.badgeKey) return null
+    const count = badges[group.badgeKey]
+    if (!count || count <= 0) return null
 
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('nav.sidebarNavigation', { defaultValue: 'Global navigation' })}
-      className="fixed inset-0 z-50 flex lg:hidden animate-in fade-in duration-200"
-    >
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Drawer panel */}
-      <div
-        data-testid="responsive-sidebar"
-        className="relative flex w-full max-w-xs flex-1 flex-col bg-surface-900 border-r border-surface-700 pt-5 pb-4 shadow-2xl"
+    return (
+      <span
+        aria-label={`${count} pending`}
+        className="ml-auto inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-brand-600 rounded-full"
       >
-        <div className="flex items-center justify-between px-4 pb-4 border-b border-surface-800">
-          <Link
-            to="/evidence"
-            onClick={() => {
-              onClose()
-              onNavigate?.()
-            }}
-            className="flex items-center gap-2.5"
-          >
-            <img src="/fabrique-icon.svg" alt="La Fabrique" width={28} height={28} className="rounded" />
-            <span className="text-base font-bold text-white tracking-tight">La Fabrique</span>
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('nav.closeSidebar', { defaultValue: 'Close sidebar' })}
-            className="rounded-lg p-1.5 text-gray-400 hover:text-white hover:bg-surface-800"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        {count > 99 ? '99+' : count}
+      </span>
+    )
+  }
 
-        {/* Hick's Law: Exactly 5 Top-Level Groups in mobile accordion */}
-        <nav
-          aria-label={t('nav.mainNavigation', { defaultValue: 'Main navigation' })}
-          className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5"
-        >
-          <div className="px-2 pb-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-              {t('nav.primaryMenu', { defaultValue: 'Primary Modules' })}
-            </span>
+  const navContent = (
+    <div className="flex h-full flex-col justify-between overflow-y-auto overflow-x-hidden p-3">
+      <div className="space-y-4">
+        {/* Navigation Category Header */}
+        {!collapsed && (
+          <div className="px-3 pt-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+              Navigation (5 Domains)
+            </p>
           </div>
+        )}
 
-          {navGroups.map((group) => {
-            const GroupIcon = group.icon
-            const isGroupExpanded = Boolean(expandedGroups[group.id])
-            const isGroupActive =
-              currentPath.startsWith(group.primaryTo) ||
-              group.items.some((item) => currentPath.startsWith(item.to))
-            const label = t(group.labelKey, { defaultValue: group.defaultLabel })
+        {/* Hick's Law 5 Groups List */}
+        <nav aria-label="Main Navigation" className="space-y-1">
+          {activeNavItems.map(group => {
+            const Icon = group.icon
+            const isGroupActive = isNavGroupActive(group, location.pathname)
+            const isExpanded = !!expandedGroups[group.id]
 
             return (
               <div
                 key={group.id}
-                data-testid={`sidebar-group-${group.id}`}
-                className="rounded-xl border border-surface-800/80 bg-surface-950/40 overflow-hidden"
+                className="relative"
+                onMouseEnter={() => collapsed && setHoveredGroupId(group.id)}
+                onMouseLeave={() => collapsed && setHoveredGroupId(null)}
               >
-                <div className="flex items-center justify-between p-1">
+                <div
+                  className={`group flex items-center rounded-xl transition-all ${
+                    isGroupActive
+                      ? 'bg-brand-600/15 text-brand-300 font-medium'
+                      : 'text-gray-300 hover:bg-surface-800 hover:text-white'
+                  }`}
+                >
                   <Link
-                    to={group.primaryTo}
-                    onClick={() => {
-                      onClose()
-                      onNavigate?.()
-                    }}
-                    className={`flex flex-1 items-center gap-2.5 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                      isGroupActive
-                        ? 'text-white bg-brand-600/25 border border-brand-500/40'
-                        : 'text-gray-300 hover:text-white hover:bg-surface-800/60'
+                    to={group.path}
+                    aria-current={location.pathname === group.path ? 'page' : undefined}
+                    className={`flex items-center gap-3 flex-1 py-2.5 ${
+                      collapsed ? 'justify-center px-2' : 'px-3'
                     }`}
+                    title={collapsed ? group.label : undefined}
                   >
-                    <GroupIcon size={18} className={isGroupActive ? 'text-brand-400' : 'text-gray-400'} />
-                    <span className="truncate">{label}</span>
-                    {group.badgeCount !== undefined && group.badgeCount > 0 && (
-                      <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/30 text-brand-300">
-                        {group.badgeCount}
-                      </span>
+                    <Icon
+                      size={20}
+                      className={`shrink-0 transition-transform ${
+                        isGroupActive ? 'text-brand-400' : 'text-gray-400 group-hover:text-white'
+                      }`}
+                    />
+                    {!collapsed && (
+                      <div className="flex flex-col text-left">
+                        <span className="text-sm font-medium tracking-tight">
+                          {group.label}
+                        </span>
+                        <span className="text-[11px] text-gray-400 group-hover:text-gray-300 truncate max-w-[150px]">
+                          {group.description}
+                        </span>
+                      </div>
                     )}
                   </Link>
 
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.id)}
-                    aria-expanded={isGroupExpanded}
-                    aria-label={t('nav.toggleSubMenu', {
-                      group: label,
-                      defaultValue: `Expand ${label} sub-items`,
-                    })}
-                    className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-800 transition-colors"
-                  >
-                    {isGroupExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  </button>
+                  {!collapsed && (
+                    <div className="flex items-center pr-2 gap-1">
+                      {renderBadge(group)}
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-label={`Toggle ${group.label} sub-items`}
+                        onClick={() => toggleGroup(group.id)}
+                        className="p-1 rounded-md text-gray-400 hover:text-white hover:bg-surface-700/50 transition-colors"
+                      >
+                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {isGroupExpanded && (
-                  <div className="px-3 pb-2 pt-1 space-y-1 border-t border-surface-800/50">
-                    {group.items.map((subItem) => {
-                      const SubIcon = subItem.icon
-                      const isSubActive =
-                        currentPath === subItem.to || currentPath.startsWith(`${subItem.to}/`)
-                      const subLabel = t(subItem.labelKey, { defaultValue: subItem.defaultLabel })
-
+                {/* Sub-items Accordion (Expanded mode) */}
+                {!collapsed && isExpanded && (
+                  <ul
+                    aria-label={`${group.label} child routes`}
+                    className="mt-1 ml-6 space-y-0.5 border-l border-surface-700/60 pl-3 animate-in slide-in-from-top-1 duration-150"
+                  >
+                    {group.children.map(child => {
+                      const isChildActive = currentPath === child.path
                       return (
-                        <Link
-                          key={subItem.id}
-                          to={subItem.to}
-                          onClick={() => {
-                            onClose()
-                            onNavigate?.()
-                          }}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                            isSubActive
-                              ? 'bg-brand-600/20 text-white font-medium'
-                              : 'text-gray-400 hover:text-white hover:bg-surface-800/50'
-                          }`}
-                        >
-                          {SubIcon && <SubIcon size={14} className={isSubActive ? 'text-brand-400' : 'text-gray-500'} />}
-                          <span className="truncate">{subLabel}</span>
-                          {subItem.badgeCount !== undefined && subItem.badgeCount > 0 && (
-                            <span className="ml-auto text-[10px] bg-brand-500/25 text-brand-300 px-1.5 py-0.5 rounded-full">
-                              {subItem.badgeCount}
-                            </span>
-                          )}
-                        </Link>
+                        <li key={child.id}>
+                          <Link
+                            to={child.path}
+                            aria-current={isChildActive ? 'page' : undefined}
+                            className={`flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs transition-colors ${
+                              isChildActive
+                                ? 'bg-brand-600/25 text-brand-300 font-semibold'
+                                : 'text-gray-400 hover:text-gray-100 hover:bg-surface-800'
+                            }`}
+                          >
+                            <span>{child.label}</span>
+                            {child.badge !== undefined && (
+                              <span className="text-[10px] text-brand-300 bg-brand-500/20 px-1.5 py-0.2 rounded">
+                                {child.badge}
+                              </span>
+                            )}
+                          </Link>
+                        </li>
                       )
                     })}
-                  </div>
+                  </ul>
+                )}
+
+                {/* Popover Flyout for Collapsed Sidebar */}
+                {collapsed && (
+                  <NavDropdown
+                    isOpen={hoveredGroupId === group.id}
+                    onClose={() => setHoveredGroupId(null)}
+                    items={group.children}
+                    currentPath={currentPath}
+                    title={group.label}
+                  />
                 )}
               </div>
             )
           })}
         </nav>
       </div>
+
+      {/* Sidebar Collapse Toggle (Desktop) */}
+      <div className="border-t border-surface-800 pt-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className={`hidden lg:flex w-full items-center gap-2 rounded-lg py-2 px-3 text-xs text-gray-400 hover:bg-surface-800 hover:text-gray-200 transition-colors ${
+            collapsed ? 'justify-center' : 'justify-between'
+          }`}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {!collapsed && <span>Collapse Sidebar</span>}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        </button>
+      </div>
     </div>
+  )
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside
+        data-testid="desktop-sidebar"
+        aria-label="Sidebar Navigation"
+        className={`hidden lg:flex flex-col bg-surface-900 border-r border-surface-700 transition-all duration-200 ease-in-out select-none ${
+          collapsed ? 'w-20' : 'w-64'
+        } ${className}`}
+      >
+        {navContent}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {isOpenMobile && (
+        <div
+          data-testid="mobile-backdrop"
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden transition-opacity animate-in fade-in duration-200"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Mobile Off-canvas Drawer */}
+      <div
+        data-testid="mobile-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Mobile Navigation"
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-surface-900 border-r border-surface-700 shadow-2xl transition-transform duration-250 ease-in-out lg:hidden ${
+          isOpenMobile ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex h-14 items-center justify-between border-b border-surface-800 px-4">
+          <span className="text-sm font-bold text-white tracking-tight">Navigation</span>
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-surface-800 hover:text-white"
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="h-[calc(100%-3.5rem)]">{navContent}</div>
+      </div>
+    </>
   )
 }
