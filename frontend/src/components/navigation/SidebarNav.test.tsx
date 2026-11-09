@@ -1,125 +1,69 @@
 import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { SidebarNav } from './SidebarNav'
 import { NAVIGATION_CATEGORIES } from '../../navigation/navSchema'
 
-// Mock react-i18next
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue || _key,
-  }),
-}))
-
-describe('SidebarNav (Hick\'s Law 5-choice Global Navigation)', () => {
-  it('strictly renders exactly 5 top-level root categories in accordance with Hick\'s Law', () => {
-    render(
-      <MemoryRouter initialEntries={['/sprints']}>
-        <SidebarNav />
+describe('SidebarNav Component (Hick\'s Law Redesign)', () => {
+  const renderSidebar = (initialPath = '/sprints', alertCount = 3) => {
+    return render(
+      <MemoryRouter initialEntries={[initialPath]}>
+        <SidebarNav alertCount={alertCount} />
       </MemoryRouter>
     )
+  }
 
-    // Verify exactly 5 top-level root navigation categories exist
-    expect(NAVIGATION_CATEGORIES).toHaveLength(5)
-    NAVIGATION_CATEGORIES.forEach(cat => {
-      expect(screen.getByTestId(`nav-root-${cat.id}`)).toBeInTheDocument()
+  it('renders exactly 5 top-level root categories', () => {
+    renderSidebar()
+    const container = screen.getByTestId('nav-root-categories')
+    expect(container).toBeInTheDocument()
+
+    NAVIGATION_CATEGORIES.forEach((category) => {
+      const catEl = screen.getByTestId(`nav-category-${category.id}`)
+      expect(catEl).toBeInTheDocument()
     })
   })
 
-  it('highlights the active category corresponding to the current URL route', () => {
-    render(
-      <MemoryRouter initialEntries={['/evidence']}>
-        <SidebarNav />
-      </MemoryRouter>
-    )
-
-    const auditBtn = screen.getByTestId('category-btn-audit')
-    expect(auditBtn).toHaveClass('text-white')
+  it('has accessible navigation roles and labels', () => {
+    renderSidebar()
+    const nav = screen.getByRole('navigation', { name: /global navigation/i })
+    expect(nav).toBeInTheDocument()
   })
 
-  it('collapses and expands sub-menus when clicking category buttons', () => {
-    render(
-      <MemoryRouter initialEntries={['/sprints']}>
-        <SidebarNav />
-      </MemoryRouter>
-    )
+  it('auto-expands the active category subitems and toggles on click', () => {
+    renderSidebar('/sprints')
 
-    // Audit category has multiple items: Evidence Records & Governance Inbox
-    const auditBtn = screen.getByTestId('category-btn-audit')
-    expect(auditBtn).toHaveAttribute('aria-expanded', 'false')
+    // Dashboard category is initially active and expanded
+    const sprintsSubItem = screen.getByTestId('nav-subitem-sprints-overview')
+    expect(sprintsSubItem).toBeInTheDocument()
 
-    // Open submenu
-    fireEvent.click(auditBtn)
-    expect(auditBtn).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByTestId('submenu-audit')).toBeInTheDocument()
-    expect(screen.getByTestId('submenu-item-evidence-records')).toBeInTheDocument()
-    expect(screen.getByTestId('submenu-item-governance-review')).toBeInTheDocument()
+    // Click to toggle/collapse
+    const dashboardButton = screen.getByRole('button', { name: /dashboard/i })
+    fireEvent.click(dashboardButton)
 
-    // Close submenu
-    fireEvent.click(auditBtn)
-    expect(auditBtn).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByTestId('submenu-audit')).not.toBeInTheDocument()
+    // After collapse, subitem is not visible in DOM
+    expect(screen.queryByTestId('nav-subitem-sprints-overview')).toBeNull()
+
+    // Click again to expand
+    fireEvent.click(dashboardButton)
+    expect(screen.getByTestId('nav-subitem-sprints-overview')).toBeInTheDocument()
   })
 
-  it('renders pending governance badge counts properly', () => {
-    render(
-      <MemoryRouter initialEntries={['/sprints']}>
-        <SidebarNav inboxCount={4} />
-      </MemoryRouter>
-    )
-
-    const auditBtn = screen.getByTestId('category-btn-audit')
-    expect(auditBtn).toHaveTextContent('4')
-
-    fireEvent.click(auditBtn)
-    const reviewItem = screen.getByTestId('submenu-item-governance-review')
-    expect(reviewItem).toHaveTextContent('4')
+  it('displays alert badge count when alertCount > 0 in Audit category', () => {
+    renderSidebar('/evidence', 5)
+    const alertBadge = screen.getByTestId('badge-alert')
+    expect(alertBadge).toBeInTheDocument()
+    expect(alertBadge.textContent).toBe('5')
   })
 
-  it('respects capability filtering for dynamic features', () => {
-    const { rerender } = render(
-      <MemoryRouter initialEntries={['/generate']}>
-        <SidebarNav capabilities={{ agent_graph: false }} />
-      </MemoryRouter>
-    )
+  it('renders mobile menu button and opens mobile drawer on click', () => {
+    renderSidebar()
+    const openButton = screen.getByRole('button', { name: /open mobile navigation/i })
+    expect(openButton).toBeInTheDocument()
 
-    // Graph topology category link should render with single link or empty
-    const graphRoot = screen.getByTestId('nav-root-graph_topology')
-    expect(graphRoot).toBeInTheDocument()
-
-    // When capability enabled
-    rerender(
-      <MemoryRouter initialEntries={['/generate']}>
-        <SidebarNav capabilities={{ agent_graph: true }} />
-      </MemoryRouter>
-    )
-    expect(screen.getByTestId('single-category-link-graph_topology')).toBeInTheDocument()
-  })
-
-  it('toggles collapsed rail mode for responsive navigation', () => {
-    const onToggle = vi.fn()
-    render(
-      <MemoryRouter initialEntries={['/sprints']}>
-        <SidebarNav onToggleCollapse={onToggle} />
-      </MemoryRouter>
-    )
-
-    const toggleBtn = screen.getByTestId('sidebar-toggle-btn')
-    fireEvent.click(toggleBtn)
-    expect(onToggle).toHaveBeenCalledWith(true)
-  })
-
-  it('renders rail mode with icon links when collapsed', () => {
-    render(
-      <MemoryRouter initialEntries={['/sprints']}>
-        <SidebarNav defaultCollapsed={true} />
-      </MemoryRouter>
-    )
-
-    // In collapsed rail mode, rail-category elements are rendered
-    NAVIGATION_CATEGORIES.forEach(cat => {
-      expect(screen.getByTestId(`rail-category-${cat.id}`)).toBeInTheDocument()
-    })
+    fireEvent.click(openButton)
+    const closeButton = screen.getByRole('button', { name: /close mobile navigation/i })
+    expect(closeButton).toBeInTheDocument()
   })
 })

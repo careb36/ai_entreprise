@@ -20,8 +20,8 @@ export interface NavSubItem {
   defaultLabel: string
   to: string
   icon: ComponentType<{ size?: number; className?: string }>
-  badgeKey?: 'inboxCount'
-  capability?: 'agent_graph' | 'memory'
+  badgeKey?: 'inboxCount' | 'alertCount'
+  capability?: 'agent_graph' | 'memory' | 'audit'
   exact?: boolean
 }
 
@@ -35,8 +35,8 @@ export interface NavRootCategory {
 }
 
 /**
- * Global Navigation Schema adhering to Hick's Law.
- * Reduces top-level choices to exactly 5 hierarchical categories to minimize decision fatigue:
+ * Global Navigation Schema adhering strictly to Hick's Law.
+ * Top-level choices are capped at exactly 5 categories to minimize decision fatigue:
  * 1. Dashboard (Workspaces & Sprints)
  * 2. Graph Topology (Agent Artifact Graphs & DAGs)
  * 3. Orchestration (Memory, RAG & Autonomous Execution)
@@ -57,6 +57,13 @@ export const NAVIGATION_CATEGORIES: readonly NavRootCategory[] = [
         defaultLabel: 'Sprints & Tasks',
         to: '/sprints',
         icon: LayoutDashboard,
+      },
+      {
+        id: 'tasks-board',
+        labelKey: 'nav.items.tasks',
+        defaultLabel: 'Sprint Board',
+        to: '/board',
+        icon: CheckSquare,
       },
     ],
   },
@@ -102,47 +109,47 @@ export const NAVIGATION_CATEGORIES: readonly NavRootCategory[] = [
     defaultPath: '/evidence',
     items: [
       {
-        id: 'evidence-records',
+        id: 'evidence-log',
         labelKey: 'nav.items.evidence',
-        defaultLabel: 'Evidence Records',
+        defaultLabel: 'Verification Evidence',
         to: '/evidence',
-        icon: ClipboardCheck,
+        icon: ShieldCheck,
+        badgeKey: 'alertCount',
       },
       {
-        id: 'governance-review',
-        labelKey: 'nav.items.governance',
-        defaultLabel: 'Governance Inbox',
-        to: '/governance',
-        icon: CheckSquare,
-        badgeKey: 'inboxCount',
+        id: 'audit-trail',
+        labelKey: 'nav.items.audit',
+        defaultLabel: 'Audit Logs',
+        to: '/audit',
+        icon: ClipboardCheck,
       },
     ],
   },
   {
     id: 'settings',
     labelKey: 'nav.categories.settings',
-    defaultLabel: 'Settings',
+    defaultLabel: 'Settings & Governance',
     icon: Settings,
     defaultPath: '/company',
     items: [
       {
-        id: 'organization',
+        id: 'company-settings',
         labelKey: 'nav.items.company',
-        defaultLabel: 'Organization',
+        defaultLabel: 'Company Profile',
         to: '/company',
         icon: Building2,
       },
       {
-        id: 'agent-config',
+        id: 'agents-config',
         labelKey: 'nav.items.agents',
-        defaultLabel: 'Agents & Policies',
+        defaultLabel: 'Configured Agents',
         to: '/agents',
         icon: Bot,
       },
       {
-        id: 'support-admin',
+        id: 'support-docs',
         labelKey: 'nav.items.support',
-        defaultLabel: 'Support & Diagnostics',
+        defaultLabel: 'Support & Help',
         to: '/support',
         icon: LifeBuoy,
       },
@@ -150,26 +157,30 @@ export const NAVIGATION_CATEGORIES: readonly NavRootCategory[] = [
   },
 ] as const
 
-export function isPathActive(pathname: string, targetPath: string, exact = false): boolean {
-  if (exact) {
-    return pathname === targetPath
-  }
-  return pathname === targetPath || pathname.startsWith(`${targetPath}/`)
-}
-
-export function findActiveCategory(
+/**
+ * Returns the active root category based on current pathname.
+ */
+export function getActiveCategory(
   pathname: string,
   categories: readonly NavRootCategory[] = NAVIGATION_CATEGORIES
-): NavRootCategory['id'] | null {
+): NavRootCategory | undefined {
+  return categories.find((cat) =>
+    cat.items.some((sub) => (sub.exact ? pathname === sub.to : pathname.startsWith(sub.to)))
+  )
+}
+
+/**
+ * Finds a subitem by matching its route to the pathname.
+ */
+export function findSubItemByPath(
+  pathname: string,
+  categories: readonly NavRootCategory[] = NAVIGATION_CATEGORIES
+): NavSubItem | undefined {
   for (const cat of categories) {
-    if (isPathActive(pathname, cat.defaultPath)) {
-      return cat.id
-    }
-    for (const item of cat.items) {
-      if (isPathActive(pathname, item.to, item.exact)) {
-        return cat.id
-      }
-    }
+    const match = cat.items.find((sub) =>
+      sub.exact ? pathname === sub.to : pathname.startsWith(sub.to)
+    )
+    if (match) return match
   }
-  return null
+  return undefined
 }

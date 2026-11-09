@@ -1,261 +1,175 @@
-import React, { useState, useEffect, useId } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import {
-  ChevronDown,
-  ChevronRight,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from 'lucide-react'
-import {
-  NAVIGATION_CATEGORIES,
-  findActiveCategory,
-  isPathActive,
-  type NavRootCategory,
-  type NavSubItem,
-} from '../../navigation/navSchema'
+import React, { useState, useEffect } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react'
+import { NAVIGATION_CATEGORIES, getActiveCategory, type NavRootCategory } from '../../navigation/navSchema'
 
-export interface SidebarNavProps {
-  /** Capabilities map from useCapabilities */
-  capabilities?: {
-    agent_graph?: boolean
-    memory?: boolean
-  }
-  /** Number of pending governance inbox items */
-  inboxCount?: number
-  /** Initial collapsed state for responsive rail mode */
-  defaultCollapsed?: boolean
-  /** Controlled collapsed state */
-  collapsed?: boolean
-  /** Callback on collapse toggle */
-  onToggleCollapse?: (collapsed: boolean) => void
-  /** Custom categories schema override if needed */
-  categories?: readonly NavRootCategory[]
+interface SidebarNavProps {
   className?: string
+  inboxCount?: number
+  alertCount?: number
 }
 
-export function SidebarNav({
-  capabilities,
-  inboxCount = 0,
-  defaultCollapsed = false,
-  collapsed: controlledCollapsed,
-  onToggleCollapse,
-  categories = NAVIGATION_CATEGORIES,
+export const SidebarNav: React.FC<SidebarNavProps> = ({
   className = '',
-}: SidebarNavProps) {
-  const { t } = useTranslation()
+  inboxCount = 0,
+  alertCount = 0,
+}) => {
   const location = useLocation()
-  const baseId = useId()
+  const activeCategory = getActiveCategory(location.pathname)
 
-  const [isInternalCollapsed, setIsInternalCollapsed] = useState(defaultCollapsed)
-  const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : isInternalCollapsed
-
-  const activeCategoryId = findActiveCategory(location.pathname, categories)
-
-  // Localized accordion state for submenus
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>(() => {
+  // Track expanded category IDs. Default open active category.
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {}
-    if (activeCategoryId) {
-      initial[activeCategoryId] = true
+    if (activeCategory) {
+      initial[activeCategory.id] = true
+    } else if (NAVIGATION_CATEGORIES.length > 0) {
+      initial[NAVIGATION_CATEGORIES[0].id] = true
     }
     return initial
   })
 
-  // Auto-expand category when route changes to an item under it
+  // Mobile drawer state
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  // Auto-expand active category when route changes
   useEffect(() => {
-    if (activeCategoryId) {
-      setExpandedCategories(prev => ({
+    if (activeCategory) {
+      setOpenCategories((prev) => ({
         ...prev,
-        [activeCategoryId]: true,
+        [activeCategory.id]: true,
       }))
     }
-  }, [activeCategoryId])
+    setMobileOpen(false)
+  }, [location.pathname, activeCategory])
 
   const toggleCategory = (categoryId: string) => {
-    setExpandedCategories(prev => ({
+    setOpenCategories((prev) => ({
       ...prev,
       [categoryId]: !prev[categoryId],
     }))
   }
 
-  const handleToggleCollapse = () => {
-    const next = !isCollapsed
-    if (controlledCollapsed === undefined) {
-      setIsInternalCollapsed(next)
+  const renderBadge = (badgeKey?: 'inboxCount' | 'alertCount') => {
+    if (badgeKey === 'inboxCount' && inboxCount > 0) {
+      return (
+        <span
+          data-testid="badge-inbox"
+          className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+        >
+          {inboxCount}
+        </span>
+      )
     }
-    onToggleCollapse?.(next)
+    if (badgeKey === 'alertCount' && alertCount > 0) {
+      return (
+        <span
+          data-testid="badge-alert"
+          className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+        >
+          {alertCount}
+        </span>
+      )
+    }
+    return null
   }
 
-  // Filter items by capability flags if set
-  const filterItems = (items: readonly NavSubItem[]) => {
-    return items.filter(item => {
-      if (!item.capability) return true
-      if (item.capability === 'agent_graph') {
-        return capabilities?.agent_graph === true
-      }
-      if (item.capability === 'memory') {
-        return capabilities?.memory === true
-      }
-      return true
-    })
-  }
-
-  return (
-    <aside
-      aria-label={t('nav.sidebarTitle', { defaultValue: 'Global Navigation' })}
-      className={`relative flex flex-col bg-surface-900 border-r border-surface-700 transition-all duration-300 ease-in-out select-none ${
-        isCollapsed ? 'w-16' : 'w-64'
-      } ${className}`}
-      data-testid="sidebar-navigation"
+  const navContent = (
+    <nav
+      aria-label="Global Navigation"
+      role="navigation"
+      className="flex flex-col h-full bg-slate-900 text-slate-100 w-64 border-r border-slate-800 select-none"
     >
-      {/* Top Header & Collapse Toggle */}
-      <div className="flex items-center justify-between h-14 px-3 border-b border-surface-800">
-        {!isCollapsed && (
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 pl-2">
-            {t('nav.workspace', { defaultValue: 'Workspaces' })}
+      {/* Brand Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white shadow-sm">
+            LF
+          </div>
+          <span className="font-semibold text-base tracking-tight text-white">
+            La Fabrique
           </span>
-        )}
+        </div>
         <button
           type="button"
-          onClick={handleToggleCollapse}
-          aria-label={isCollapsed ? t('nav.expandSidebar', { defaultValue: 'Expand navigation' }) : t('nav.collapseSidebar', { defaultValue: 'Collapse navigation' })}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-surface-800 transition-colors ml-auto focus:outline-none focus:ring-2 focus:ring-brand-500"
-          data-testid="sidebar-toggle-btn"
+          aria-label="Close mobile navigation"
+          onClick={() => setMobileOpen(false)}
+          className="md:hidden text-slate-400 hover:text-white p-1 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          <X size={20} />
         </button>
       </div>
 
-      {/* 5 Top-Level Navigation Choices (Hick's Law) */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1" role="navigation">
-        {categories.map(category => {
-          const visibleItems = filterItems(category.items)
-          const isCategoryActive = activeCategoryId === category.id
-          const isExpanded = Boolean(expandedCategories[category.id])
+      {/* Top-Level Choices (Capped at 5 per Hick's Law) */}
+      <div
+        data-testid="nav-root-categories"
+        className="flex-1 overflow-y-auto px-3 py-4 space-y-2"
+      >
+        <div className="px-2 pb-2 text-[11px] font-semibold tracking-wider uppercase text-slate-400">
+          Core Workspaces ({NAVIGATION_CATEGORIES.length})
+        </div>
+
+        {NAVIGATION_CATEGORIES.map((category: NavRootCategory) => {
           const Icon = category.icon
-          const subMenuId = `${baseId}-sub-${category.id}`
+          const isCategoryActive = activeCategory?.id === category.id
+          const isExpanded = !!openCategories[category.id]
 
-          const hasMultipleItems = visibleItems.length > 1
-          const singleDestination = visibleItems.length === 1 ? visibleItems[0].to : category.defaultPath
-          const hasInboxBadge = visibleItems.some(i => i.badgeKey === 'inboxCount') && inboxCount > 0
-
-          if (isCollapsed) {
-            // Collapsed Rail View: Compact icon triggers
-            return (
-              <div key={category.id} className="relative group flex justify-center py-1">
-                <Link
-                  to={singleDestination}
-                  title={t(category.labelKey, { defaultValue: category.defaultLabel })}
-                  aria-label={t(category.labelKey, { defaultValue: category.defaultLabel })}
-                  aria-current={isCategoryActive ? 'page' : undefined}
-                  className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors relative ${
-                    isCategoryActive
-                      ? 'bg-brand-600/20 text-white border border-brand-500/30'
-                      : 'text-gray-400 hover:text-white hover:bg-surface-800'
-                  }`}
-                  data-testid={`rail-category-${category.id}`}
-                >
-                  <Icon size={20} />
-                  {hasInboxBadge && (
-                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-brand-500 rounded-full ring-2 ring-surface-900" />
-                  )}
-                </Link>
-                {/* Tooltip for collapsed mode */}
-                <div className="absolute left-full ml-2 px-2 py-1 bg-surface-800 text-gray-200 text-xs rounded shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity z-50">
-                  {t(category.labelKey, { defaultValue: category.defaultLabel })}
-                </div>
-              </div>
-            )
-          }
-
-          // Expanded View with Collapsible Nested Menus
           return (
-            <div key={category.id} className="space-y-1" data-testid={`nav-root-${category.id}`}>
-              {hasMultipleItems ? (
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(category.id)}
-                  aria-expanded={isExpanded}
-                  aria-controls={subMenuId}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                    isCategoryActive
-                      ? 'text-white bg-surface-800/80 font-semibold'
-                      : 'text-gray-300 hover:text-white hover:bg-surface-800/50'
-                  }`}
-                  data-testid={`category-btn-${category.id}`}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <Icon size={18} className={isCategoryActive ? 'text-brand-400' : 'text-gray-400'} />
-                    <span className="truncate">{t(category.labelKey, { defaultValue: category.defaultLabel })}</span>
-                  </span>
-                  <span className="flex items-center gap-1.5 ml-2">
-                    {hasInboxBadge && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-brand-600 text-white rounded-full">
-                        {inboxCount}
-                      </span>
-                    )}
-                    {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                  </span>
-                </button>
-              ) : (
-                <Link
-                  to={singleDestination}
-                  aria-current={isCategoryActive ? 'page' : undefined}
-                  className={`flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 ${
-                    isCategoryActive
-                      ? 'text-white bg-brand-600/20 border border-brand-500/30'
-                      : 'text-gray-300 hover:text-white hover:bg-surface-800/50'
-                  }`}
-                  data-testid={`single-category-link-${category.id}`}
-                >
-                  <span className="flex items-center gap-2.5 min-w-0">
-                    <Icon size={18} className={isCategoryActive ? 'text-brand-400' : 'text-gray-400'} />
-                    <span className="truncate">{t(category.labelKey, { defaultValue: category.defaultLabel })}</span>
-                  </span>
-                  {hasInboxBadge && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-brand-600 text-white rounded-full">
-                      {inboxCount}
-                    </span>
-                  )}
-                </Link>
-              )}
+            <div
+              key={category.id}
+              data-testid={`nav-category-${category.id}`}
+              className="rounded-lg transition-colors"
+            >
+              <button
+                type="button"
+                onClick={() => toggleCategory(category.id)}
+                aria-expanded={isExpanded}
+                aria-controls={`subnav-${category.id}`}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  isCategoryActive
+                    ? 'bg-slate-800/90 text-white font-semibold'
+                    : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center space-x-3 truncate">
+                  <Icon
+                    size={18}
+                    className={isCategoryActive ? 'text-indigo-400' : 'text-slate-400'}
+                  />
+                  <span className="truncate">{category.defaultLabel}</span>
+                </div>
+                <div className="text-slate-400 flex items-center pl-1">
+                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </div>
+              </button>
 
-              {/* Collapsible Sub-menu */}
-              {hasMultipleItems && isExpanded && (
+              {/* Sub-items drawer */}
+              {isExpanded && (
                 <div
-                  id={subMenuId}
-                  role="group"
-                  aria-label={t(category.labelKey, { defaultValue: category.defaultLabel })}
-                  className="pl-7 pr-2 py-1 space-y-1 transition-all duration-200"
-                  data-testid={`submenu-${category.id}`}
+                  id={`subnav-${category.id}`}
+                  role="region"
+                  aria-label={`${category.defaultLabel} sub-items`}
+                  className="mt-1 ml-4 pl-3 border-l border-slate-800 space-y-1"
                 >
-                  {visibleItems.map(item => {
-                    const active = isPathActive(location.pathname, item.to, item.exact)
-                    const SubIcon = item.icon
-                    const showBadge = item.badgeKey === 'inboxCount' && inboxCount > 0
-
+                  {category.items.map((sub) => {
+                    const SubIcon = sub.icon
                     return (
-                      <Link
-                        key={item.id}
-                        to={item.to}
-                        aria-current={active ? 'page' : undefined}
-                        className={`flex items-center justify-between px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                          active
-                            ? 'text-brand-300 bg-brand-600/15 font-semibold'
-                            : 'text-gray-400 hover:text-gray-200 hover:bg-surface-800'
-                        }`}
-                        data-testid={`submenu-item-${item.id}`}
+                      <NavLink
+                        key={sub.id}
+                        to={sub.to}
+                        end={sub.exact}
+                        data-testid={`nav-subitem-${sub.id}`}
+                        className={({ isActive }) =>
+                          `group flex items-center px-2.5 py-1.5 text-xs rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-indigo-600/20 text-indigo-300 font-semibold border-l-2 border-indigo-500 -ml-[13px] pl-[11px]'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                          }`
+                        }
                       >
-                        <span className="flex items-center gap-2 min-w-0">
-                          <SubIcon size={14} className={active ? 'text-brand-400' : 'text-gray-500'} />
-                          <span className="truncate">{t(item.labelKey, { defaultValue: item.defaultLabel })}</span>
-                        </span>
-                        {showBadge && (
-                          <span className="ml-auto px-1.5 py-0.2 text-[10px] font-bold bg-brand-600 text-white rounded-full">
-                            {inboxCount}
-                          </span>
-                        )}
-                      </Link>
+                        <SubIcon size={14} className="mr-2 text-slate-400 group-hover:text-slate-200" />
+                        <span className="truncate">{sub.defaultLabel}</span>
+                        {renderBadge(sub.badgeKey)}
+                      </NavLink>
                     )
                   })}
                 </div>
@@ -263,15 +177,58 @@ export function SidebarNav({
             </div>
           )
         })}
-      </nav>
+      </div>
 
-      {/* Footer subtle brand indicator */}
-      {!isCollapsed && (
-        <div className="p-3 border-t border-surface-800 text-[11px] text-gray-500 flex items-center justify-between">
-          <span>La Fabrique</span>
-          <span className="text-gray-600">v0.9</span>
-        </div>
+      {/* Footer Status */}
+      <div className="p-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+        <span className="flex items-center space-x-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Evidence Engine: Online</span>
+        </span>
+        <span className="text-slate-500">v1.2</span>
+      </div>
+    </nav>
+  )
+
+  return (
+    <>
+      {/* Mobile hamburger button */}
+      <div className="md:hidden flex items-center p-3 bg-slate-900 border-b border-slate-800 text-white">
+        <button
+          type="button"
+          aria-label="Open mobile navigation"
+          onClick={() => setMobileOpen(true)}
+          className="p-1 rounded text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <Menu size={22} />
+        </button>
+        <span className="ml-3 font-semibold text-sm">La Fabrique</span>
+      </div>
+
+      {/* Mobile Drawer Backdrop */}
+      {mobileOpen && (
+        <div
+          role="presentation"
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+        />
       )}
-    </aside>
+
+      {/* Mobile Drawer Panel */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 transform md:hidden transition-transform duration-200 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {navContent}
+      </div>
+
+      {/* Desktop Persistent Sidebar */}
+      <aside className={`hidden md:flex md:flex-shrink-0 h-screen sticky top-0 ${className}`}>
+        {navContent}
+      </aside>
+    </>
   )
 }
+
+export default SidebarNav
