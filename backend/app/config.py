@@ -85,8 +85,9 @@ class Settings(BaseSettings):
     DELIVERY_APP_PROBE_PATH: str = "/"
     # With DELIVERY_TESTS_ENABLED: install the dependencies before the tests
     # when a manifest the delivery wrote differs from the last install's
-    # (services/app_check.py), in the same sandbox, with the network open
-    # (a registry is needed) unless DELIVERY_INSTALL_NETWORK is false.
+    # (services/workspace/dependency_install.py), in the same sandbox, with
+    # the network open (a registry is needed) unless DELIVERY_INSTALL_NETWORK
+    # is false.
     DELIVERY_INSTALL_ENABLED: bool = True
     DELIVERY_INSTALL_TIMEOUT_SECONDS: float = 600.0
     DELIVERY_INSTALL_NETWORK: bool = True

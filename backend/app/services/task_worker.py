@@ -39,6 +39,7 @@ from services import (
     agent_run_service,
     console_assistants,
     console_producer,
+    delivery_checks,
     delivery_gate,
     dependencies,
     developer_tools,
@@ -1560,8 +1561,7 @@ def _delivery_comment(
 # The project's test command is detected in services/workspace_daemon.
 _detect_test_command = detect_test_command
 _detect_project_test_command = workspace_daemon.detect_project_test_command
-
-_run_delivery_tests = workspace_daemon.run_delivery_tests
+_run_delivery_tests = delivery_checks.run_delivery_tests
 
 
 def _plan_queued_delivery(
@@ -1697,7 +1697,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
         evidence["acceptance"] = await asyncio.to_thread(
             acceptance.evidence_for, engine, item_id
         )
-        await acceptance.guard_test_files(
+        await delivery_checks.guard_test_files(
             nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
         )
         await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
@@ -1805,7 +1805,7 @@ async def _deliver_artifacts(
             evidence["acceptance"] = await asyncio.to_thread(
                 acceptance.evidence_for, engine, item["id"]
             )
-            await acceptance.guard_test_files(
+            await delivery_checks.guard_test_files(
                 nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
             )
             await _run_delivery_tests(nats_client, sprint, evidence, engine)

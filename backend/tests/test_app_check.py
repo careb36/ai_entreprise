@@ -24,7 +24,14 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import app_check, delivery_gate, stack_profiles, task_worker
+from services import (
+    app_check,
+    delivery_checks,
+    delivery_gate,
+    stack_profiles,
+    task_worker,
+)
+from services.workspace import dependency_install, project_profile
 from sqlmodel import select
 from test_delivery_tests import _load_daemon
 from test_git_workflow import _member, enforcement  # noqa: F401
@@ -307,10 +314,10 @@ def test_only_a_written_manifest_whose_hash_changed_calls_for_an_install():
         ],
     }
     installs = {"/p": {"package.json": "bbb"}, "/other": {"requirements.txt": "aaa"}}
-    changed = app_check.changed_manifests(evidence, installs)
+    changed = dependency_install.changed_manifests(evidence, installs)
     assert changed == [{"path": "requirements.txt", "sha256": "aaa", "previous": None}]
     assert (
-        app_check.changed_manifests(
+        dependency_install.changed_manifests(
             evidence, {"/p": {"requirements.txt": "aaa", "package.json": "bbb"}}
         )
         == []
@@ -405,8 +412,8 @@ def test_install_runs_when_the_manifest_changed_and_not_again_for_the_same_bytes
 
     def install(text):
         evidence = _install_evidence(root, text)
-        ctx = app_check.Context(daemon, sprint, evidence, bind)
-        asyncio.run(app_check.install_if_needed(ctx))
+        ctx = project_profile.Context(daemon, sprint, evidence, bind)
+        asyncio.run(dependency_install.install_if_needed(ctx))
         return evidence
 
     first = install("flask==3.0.0\n")
@@ -454,8 +461,8 @@ def test_a_failed_install_is_refuted_and_retried_next_time(
     bind = sqlite_session.get_bind()
     evidence = _install_evidence(root, "nopackage==9\n")
     asyncio.run(
-        app_check.install_if_needed(
-            app_check.Context(daemon, {"company_id": company.id}, evidence, bind)
+        dependency_install.install_if_needed(
+            project_profile.Context(daemon, {"company_id": company.id}, evidence, bind)
         )
     )
     check = app_check.check_install(evidence)
@@ -468,8 +475,8 @@ def test_a_failed_install_is_refuted_and_retried_next_time(
     assert not sqlite_session.get(Company, company.id).dependency_installs
     again = _install_evidence(root, "nopackage==9\n")
     asyncio.run(
-        app_check.install_if_needed(
-            app_check.Context(daemon, {"company_id": company.id}, again, bind)
+        dependency_install.install_if_needed(
+            project_profile.Context(daemon, {"company_id": company.id}, again, bind)
         )
     )
     assert again["dependency_install"]["exit_code"] == 1
@@ -481,8 +488,8 @@ def test_install_is_off_when_disabled(sqlite_session, tmp_path, monkeypatch):
     daemon = _Daemon()
     evidence = _install_evidence(tmp_path, "flask\n")
     asyncio.run(
-        app_check.install_if_needed(
-            app_check.Context(
+        dependency_install.install_if_needed(
+            project_profile.Context(
                 daemon, {"company_id": company.id}, evidence, sqlite_session.get_bind()
             )
         )
@@ -610,7 +617,13 @@ def test_the_command_policy_refuses_before_anything_runs(tmp_path, monkeypatch):
     assert reply["refused"] and "started" not in reply
     assert not app_run.port_in_use(port)
     check = app_check.check_app(
-        {"app_run": {"command": SERVE, "port": port, **app_check._app_record(reply)}}
+        {
+            "app_run": {
+                "command": SERVE,
+                "port": port,
+                **delivery_checks._app_record(reply),
+            }
+        }
     )
     assert check["outcome"] == "unverifiable"
 
@@ -988,7 +1001,7 @@ def test_a_manager_sets_the_stack_profile_and_a_viewer_reads_it(
 
 def _install(session, daemon, company, root, writes, profile=None):
     evidence = {"workspace_root": str(root), "workspace_writes": writes}
-    ctx = app_check.Context(
+    ctx = project_profile.Context(
         daemon, {"company_id": company.id}, evidence, session.get_bind()
     )
     ctx._company = {"id": company.id, "overrides": {}, "installs": {}}
@@ -1003,14 +1016,14 @@ def test_install_network_follows_its_own_setting_both_ways(
     company = _company(sqlite_session)
     monkeypatch.setattr(settings, "DELIVERY_INSTALL_COMMAND", f'{PY} -c "pass"')
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
-    monkeypatch.setattr(app_check, "_record_installed", lambda *a: None)
+    monkeypatch.setattr(dependency_install, "_record_installed", lambda *a: None)
     for allowed in (False, True):
         monkeypatch.setattr(settings, "DELIVERY_INSTALL_NETWORK", allowed)
         daemon = _Daemon()
         ctx, _evidence = _install(
             sqlite_session, daemon, company, tmp_path, [_write("requirements.txt", "a")]
         )
-        asyncio.run(app_check.install_if_needed(ctx))
+        asyncio.run(dependency_install.install_if_needed(ctx))
         _subject, payload = daemon.requests[-1]
         assert payload["sandbox"]["network"] is allowed
 
@@ -1022,7 +1035,9 @@ def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
     company = _company(sqlite_session)
     recorded = []
     monkeypatch.setattr(
-        app_check, "_record_installed", lambda _e, _c, _r, m: recorded.append(m)
+        dependency_install,
+        "_record_installed",
+        lambda _e, _c, _r, m: recorded.append(m),
     )
     profile = stack_profiles.resolve(
         {
@@ -1036,7 +1051,7 @@ def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
     ctx, evidence = _install(
         sqlite_session, _Daemon(), company, tmp_path, writes, profile
     )
-    asyncio.run(app_check.install_if_needed(ctx))
+    asyncio.run(dependency_install.install_if_needed(ctx))
     record = evidence["dependency_install"]
     assert record["exit_code"] == 0
     assert [m["path"] for m in record["manifests"]] == ["package.json"]
@@ -1046,7 +1061,7 @@ def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
     daemon = _Daemon()
     only = [_write("backend/requirements.txt", "r1")]
     ctx, evidence = _install(sqlite_session, daemon, company, tmp_path, only, profile)
-    asyncio.run(app_check.install_if_needed(ctx))
+    asyncio.run(dependency_install.install_if_needed(ctx))
     record = evidence["dependency_install"]
     assert (
         record["command"] is None
@@ -1059,7 +1074,7 @@ def test_a_manifest_the_install_does_not_cover_is_never_recorded_as_installed(
 
 def _test_ctx(root, overrides=None):
     evidence = {"workspace_root": str(root)}
-    ctx = app_check.Context(_Daemon(), {}, evidence, None)
+    ctx = project_profile.Context(_Daemon(), {}, evidence, None)
     ctx._company = {"id": None, "overrides": overrides or {}, "installs": {}}
     return ctx
 
@@ -1104,10 +1119,8 @@ def test_a_delivery_runs_the_profile_s_test_command(
     _files(tmp_path, {"Gemfile": "", "Rakefile": ""})
     daemon = _Daemon()
     evidence = {"workspace_root": str(tmp_path)}
-    from services import workspace_daemon
-
     asyncio.run(
-        workspace_daemon.run_delivery_tests(
+        delivery_checks.run_delivery_tests(
             daemon,
             {"id": None, "company_id": company.id},
             evidence,
@@ -1151,7 +1164,7 @@ def test_the_reply_wait_covers_the_container_launch_and_teardown(monkeypatch):
             waits[subject] = timeout
             return {"started": True}
 
-    ctx = app_check.Context(_Nats(), {}, {"workspace_root": "/p"}, None)
+    ctx = project_profile.Context(_Nats(), {}, {"workspace_root": "/p"}, None)
     ctx._company = {"id": None, "overrides": {}, "installs": {}}
     ctx._profile = stack_profiles.resolve(
         {"stack": "node", "start": "npm start", "port": 3000}, {}
@@ -1159,7 +1172,7 @@ def test_the_reply_wait_covers_the_container_launch_and_teardown(monkeypatch):
     monkeypatch.setattr(
         "services.sandbox.request_for_sprint", lambda *_a: {"mode": "container"}
     )
-    asyncio.run(app_check.check_application(ctx))
+    asyncio.run(delivery_checks.check_application(ctx))
     # docker run (120 s) and the runtime calls after the ready bound (4 x 30 s).
     assert (
         waits["workspace.app.check"]

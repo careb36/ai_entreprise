@@ -19,9 +19,10 @@ fails before its implementation, by design), and never any other failure.
 A deliverable of an implementation task that edits an acceptance test is
 refuted (``acceptance_tests_untouched``): a change to a criterion's test is
 the specification's to decide, never silently accepted. Before the tests
-run, ``guard_test_files`` asks the daemon for the sha256 of the acceptance
-test files as they are on disk (``workspace.hash``) and compares them with
-what QA's delivery wrote; a file changed behind the loop's back is restored
+run, the loop (``services/delivery_checks.py``, ``guard_test_files``) asks
+the daemon for the sha256 of the acceptance test files as they are on disk
+(``workspace.hash``) and compares them with what QA's delivery wrote
+(``test_hashes_of``); a file changed behind the loop's back is restored
 from QA's deliverable, so no criterion is ever judged against a weakened
 test, and the tampering is refuted as an edit.
 
@@ -283,71 +284,6 @@ def test_sources_of(engine: Engine, sprint_id: int, paths: list[str]) -> dict[st
                 if target["path"] in paths:
                     sources[target["path"]] = target["content"]
     return sources
-
-
-async def guard_test_files(
-    nats_client: Any, engine: Engine, evidence: dict[str, Any], timeout: float
-) -> None:
-    """Before an implementation task's tests run: the acceptance test files on
-    disk must be the ones QA delivered. The daemon reports their sha256
-    (``workspace.hash``); a file that differs or is missing is restored from
-    QA's deliverable and recorded in ``acceptance["tampered"]`` and
-    ``acceptance["restored"]``, so ``check_untouched`` refutes the delivery
-    and the criteria are judged against QA's tests. A daemon without the
-    operation leaves things as they were."""
-    from services.workspace_daemon import daemon_request
-
-    acceptance = evidence.get("acceptance") or {}
-    hashes = acceptance.get("test_hashes") or {}
-    if not hashes or acceptance.get("kind") == ACCEPTANCE_KIND:
-        return
-    root = evidence.get("workspace_root")
-    try:
-        reply = await daemon_request(
-            nats_client,
-            "workspace.hash",
-            {"workspace_root": root, "paths": list(hashes)},
-            timeout,
-        )
-    except Exception as exc:  # noqa: BLE001 - An older daemon has no workspace.hash; the delivery is judged as before.
-        logger.warning("Acceptance test files not checked on disk: %s", exc)
-        return
-    on_disk = {
-        f.get("path"): f.get("sha256")
-        for f in reply.get("files") or []
-        if isinstance(f, dict)
-    }
-    tampered = [path for path, sha in hashes.items() if on_disk.get(path) != sha]
-    if not tampered:
-        return
-    acceptance["tampered"] = tampered
-    sources = test_sources_of(engine, acceptance.get("sprint_id"), tampered)
-    files = [
-        {"path": path, "content": sources[path], "overwrite_existing": True}
-        for path in tampered
-        if path in sources
-    ]
-    restored: list[str] = []
-    if files:
-        try:
-            written = await daemon_request(
-                nats_client,
-                "workspace.generate",
-                {
-                    "workspace_root": root,
-                    "files": files,
-                    "interaction_id": "acceptance-restore",
-                },
-                timeout,
-            )
-            restored = [
-                f["path"]
-                for f in written.get("files") or []
-                if isinstance(f, dict) and f.get("status") == "written"
-            ]
-        except Exception as exc:  # noqa: BLE001 - Recorded as tampered and not restored.
-            logger.warning("Acceptance test files not restored: %s", exc)
-    acceptance["restored"] = restored
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from models import BacklogItem, Sprint
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
+from services.contracts.task_dependencies import depends_on_of
 from services.tasks import task_events, task_projection
 
 WAITING_PREFIX = "Waits for task"
@@ -35,24 +36,6 @@ class DependencyError(Exception):
         super().__init__(detail)
         self.status = status
         self.detail = detail
-
-
-def depends_on_of(item: Any) -> list[int]:
-    """The task ids an item (row or dict) depends on."""
-    raw = (
-        item.get("depends_on")
-        if isinstance(item, dict)
-        else getattr(item, "depends_on", None)
-    )
-    if not isinstance(raw, list):
-        return []
-    ids = []
-    for value in raw:
-        try:
-            ids.append(int(value))
-        except (TypeError, ValueError):
-            continue
-    return list(dict.fromkeys(ids))
 
 
 def find_cycle(graph: dict[int, list[int]]) -> list[int] | None:

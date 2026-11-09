@@ -120,7 +120,7 @@ def load_profile(
 ) -> dict[str, Any] | None:
     """The stack profile of *root* with the company's overrides, through the
     worker's loop (the tool loop runs in a thread)."""
-    from services import app_check, stack_profiles
+    from services.workspace import project_profile, stack_profiles
 
     overrides: dict[str, Any] = {}
     if engine is not None:
@@ -131,7 +131,7 @@ def load_profile(
             company = session.get(Company, company_id)
             overrides = dict(company.stack_profile or {}) if company else {}
     detected = asyncio.run_coroutine_threadsafe(
-        app_check._detect_profile(bridge.get("nats"), root), bridge["loop"]
+        project_profile.detect_profile(bridge.get("nats"), root), bridge["loop"]
     ).result(60)
     return stack_profiles.resolve(detected, overrides)
 

@@ -324,7 +324,7 @@ def check_workspace_snapshot() -> None:
         if c not in _sys.path:
             _sys.path.insert(0, c)
         try:
-            ws = importlib.import_module("services.workspace_snapshot")
+            ws = importlib.import_module("services.workspace.workspace_snapshot")
             loaded = True
             break
         except ImportError:

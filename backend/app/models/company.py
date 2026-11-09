@@ -51,7 +51,7 @@ class Company(SQLModel, table=True):
     # probe_path; an empty command turns that step off. A Manager writes it.
     stack_profile: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # The dependency manifests as the last successful install saw them, per
-    # folder ({root: {path: sha256}}, services/app_check.py): written only
+    # folder ({root: {path: sha256}}, workspace/dependency_install.py): written only
     # from the daemon's report, so an install runs when one changed.
     dependency_installs: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON)
