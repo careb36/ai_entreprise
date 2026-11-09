@@ -146,6 +146,47 @@ def sandbox_refusal(box: dict[str, Any] | None) -> str | None:
     return None
 
 
+def validate_env(names: Any) -> list[str]:
+    """The company's ``console_env``: the variable names only its console
+    producers' runs see (the provider's key), never its delivery tests,
+    installs or application checks; a ``ValueError`` (a ``TypeError`` for a body that is
+    not a list) says why not."""
+    from services.sandbox import valid_env_name
+
+    if not isinstance(names, list):
+        raise TypeError("env must be a list of environment variable names")
+    chosen: list[str] = []
+    for name in names:
+        value = str(name or "").strip()
+        if not value:
+            continue
+        if not valid_env_name(value):
+            raise ValueError(f"not an environment variable name: {name}")
+        if value not in chosen:
+            chosen.append(value)
+    return chosen
+
+
+def console_env(company: Any) -> list[str]:
+    """The names in the company's ``console_env``."""
+    names = getattr(company, "console_env", None) or []
+    return [str(n) for n in names if isinstance(n, str) and n.strip()]
+
+
+def run_sandbox(box: dict[str, Any], extra: list[str]) -> dict[str, Any]:
+    """The sandbox of a console producer's run: the company's, plus the names
+    in its ``console_env`` (``sandbox_env`` alone reaches the other runs)."""
+    return {**box, "env": list(dict.fromkeys([*(box.get("env") or []), *extra]))}
+
+
+def cooldown_key(cli: str) -> str:
+    """The ``AssistantRuntimeState`` key of a console producer's cooldown, apart
+    from the host console adviser's (``console_assistants``): a CLI missing
+    from the sandbox image, or a quota on the key the sandbox sees, says
+    nothing about the CLI on the host."""
+    return f"producer:{cli}"
+
+
 def command_prefix(cli: str) -> str:
     return shlex.join(CLIS[cli]["argv"])
 
@@ -158,6 +199,8 @@ _POLICY_UNREADABLE = (
     (re.compile(r"(^|[\s;&|()])#"), "\\1\uff03"),
     (re.compile(r"<<"), "\u00ab"),
     (re.compile(r"\$(['\"])"), "\uff04\\1"),
+    # A trailing ``$`` would meet the closing quote ``shlex.quote`` adds: ``$'``.
+    (re.compile(r"\$\Z"), "\uff04"),
 )
 
 
@@ -191,8 +234,14 @@ def quota_hit(cli: str, output: str) -> bool:
 
 
 def missing_binary(result: dict[str, Any]) -> bool:
-    if result.get("exit_code") in MISSING_EXIT_CODES:
+    """The shell could not find (126/127) the CLI, or the daemon could not
+    spawn anything (no exit status) and said so; never a run that exited 0,
+    whatever its output says."""
+    code = result.get("exit_code")
+    if code in MISSING_EXIT_CODES:
         return True
+    if code is not None or result.get("success"):
+        return False
     text = f"{result.get('stderr') or ''}{result.get('error') or ''}".lower()
     return any(t in text for t in console_assistants.ASSISTANT_UNAVAILABLE_PATTERNS)
 
@@ -200,7 +249,12 @@ def missing_binary(result: dict[str, Any]) -> bool:
 def failure(
     result: dict[str, Any], collected: dict[str, Any], files: list
 ) -> tuple[str, str] | None:
-    """``(kind, reason)`` when the run delivers nothing: ``not_run`` (unverifiable) or ``failed`` (refuted)."""
+    """``(kind, reason)`` when the run delivers nothing: ``not_run`` (unverifiable) or ``failed`` (refuted).
+
+    The daemon's alarm (the metadata changed, the worktree's ``.git`` was
+    rewritten) wins over every other outcome."""
+    if collected.get("refused"):
+        return "failed", "; ".join(str(r) for r in collected["refused"])
     if result.get("refused"):
         return "not_run", f"the command policy refused the CLI: {result.get('error')}"
     if result.get("timed_out"):
@@ -214,18 +268,37 @@ def failure(
         return "not_run", f"the daemon could not run the CLI: {result.get('error')}"
     if not result.get("success"):
         return "failed", f"the CLI failed (exit {result.get('exit_code')})"
-    if collected.get("refused"):
-        return "failed", "; ".join(collected["refused"])
     if not collected.get("ok"):
         return (
             "not_run",
             f"the daemon could not read what the CLI changed: {collected.get('error')}",
         )
+    partial = partial_reason(collected)
+    if partial:
+        return "failed", partial
     if not files:
         return (
             "failed",
             "the CLI reported success but changed no file La Fabrique delivers",
         )
+    return None
+
+
+def partial_reason(collected: dict[str, Any]) -> str | None:
+    """Why what the daemon read back is not the CLI's result as it ran, else
+    ``None``: a listing cut at its bound (nobody knows what was left out), a
+    text past the reply's bound, or a deletion (the old path of a rename too),
+    which a delivery cannot make. Delivering the rest would hand the Verifier
+    and QA a tree the CLI never produced."""
+    if collected.get("truncated"):
+        return "the CLI changed more files than the daemon reads back; nothing is delivered from a partial listing"
+    files = [f for f in collected.get("files") or [] if isinstance(f, dict)]
+    cut = [str(f.get("path")) for f in files if f.get("status") == "past_bound"]
+    if cut:
+        return f"the changes exceed the reply's bound ({', '.join(cut[:5])}); nothing is delivered in part"
+    gone = [str(f.get("path")) for f in files if f.get("change") == "deleted"]
+    if gone:
+        return f"the CLI deleted or renamed {', '.join(gone[:5])}, which a delivery cannot apply"
     return None
 
 
@@ -237,11 +310,18 @@ def check_console_run(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
     files = [f for f in run.get("files") or [] if isinstance(f, dict)]
     delivered = [f["path"] for f in files if f.get("delivered")]
     how = f"{run.get('label') or run.get('cli')} (exit {run.get('exit_code')}, {run.get('duration_seconds')} s)"
+    left = [
+        f"{f.get('path')} ({f.get('reason') or f.get('status')})"
+        for f in files
+        if not f.get("delivered")
+    ]
     if run.get("outcome") == "changed":
         outcome, text = (
             "pass",
             f"{how} changed {len(delivered)} file(s): {', '.join(delivered)}",
         )
+        if left:
+            text += f"; {len(left)} change(s) not delivered: {', '.join(left[:10])}"
     else:
         outcome = "unverifiable" if run.get("kind") == "not_run" else "refuted"
         text = f"{how}: {run.get('reason')}"
@@ -253,6 +333,8 @@ def check_console_run(evidence: dict[str, Any] | None) -> dict[str, Any] | None:
         "command": run.get("command"),
         "exit_code": run.get("exit_code"),
         "duration_seconds": run.get("duration_seconds"),
+        "not_delivered": left,
+        "daemon_refused": run.get("daemon_refused") or [],
     }
 
 

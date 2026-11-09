@@ -9,6 +9,10 @@ Console producers router: which terminal coding agent produces which role's task
   role or CLI, or while the Git workflow is off. Accepted with a warning
   while the company's sandbox is ``host`` or has its network off: no CLI runs
   there (``console_clis.sandbox_refusal``), the model produces the tasks.
+  ``env`` (optional; omitted keeps it) replaces ``console_env``: the
+  variable names only the console producers' runs see, such as the
+  provider's key, kept apart from ``sandbox_env``, which every delivery
+  test, install and application check sees.
 
 The run itself is ``services/console_producer.py``.
 """
@@ -29,6 +33,7 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 
 class ConsoleProducersRequest(BaseModel):
     producers: dict[str, Any] = Field(default_factory=dict)
+    env: list[Any] | None = None
 
 
 def _cooldowns(session: Session, company_id: int) -> dict[str, str | None]:
@@ -37,7 +42,9 @@ def _cooldowns(session: Session, company_id: int) -> dict[str, str | None]:
     rows = session.exec(
         select(AssistantRuntimeState).where(
             AssistantRuntimeState.company_id == company_id,
-            AssistantRuntimeState.assistant_key.in_(list(console_clis.CLIS)),
+            AssistantRuntimeState.assistant_key.in_(
+                [console_clis.cooldown_key(cli) for cli in console_clis.CLIS]
+            ),
         )
     ).all()
     found = {}
@@ -45,7 +52,7 @@ def _cooldowns(session: Session, company_id: int) -> dict[str, str | None]:
         deadline = console_assistants.normalize_utc(row.cooldown_until)
         if deadline and deadline > now:
             found[row.assistant_key] = deadline.isoformat()
-    return {cli: found.get(cli) for cli in console_clis.CLIS}
+    return {cli: found.get(console_clis.cooldown_key(cli)) for cli in console_clis.CLIS}
 
 
 def _payload(session: Session, company: Company) -> dict:
@@ -55,6 +62,7 @@ def _payload(session: Session, company: Company) -> dict:
     return {
         "company_id": company.id,
         "producers": dict(company.console_producers or {}),
+        "env": console_clis.console_env(company),
         "roles": list(console_clis.ROLES),
         "clis": [
             {
@@ -103,9 +111,12 @@ async def set_console_producers(
     company = _company(session, company_id)
     try:
         chosen = console_clis.validate(req.producers, bool(company.git_workflow))
+        env = None if req.env is None else console_clis.validate_env(req.env)
     except (TypeError, ValueError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     company.console_producers = chosen or None
+    if env is not None:
+        company.console_env = env or None
     session.add(company)
     session.commit()
     return _payload(session, company)

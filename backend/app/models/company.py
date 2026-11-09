@@ -67,6 +67,10 @@ class Company(SQLModel, table=True):
     console_producers: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON)
     )
+    # The environment variable names only the console producers' runs see
+    # (the provider's key, e.g. ANTHROPIC_API_KEY), beside sandbox_env; never
+    # the delivery tests, installs or application checks. A Manager writes it.
+    console_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
 
 
 class Agent(SQLModel, table=True):

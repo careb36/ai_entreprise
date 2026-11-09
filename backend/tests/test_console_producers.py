@@ -237,7 +237,8 @@ def test_hooks_secrets_symlinks_and_binaries_are_never_delivered(
     assert collected["ok"] is False
     assert "metadata" in collected["refused"][0]
     assert all("content" not in f for f in collected["files"])
-    # The person's checkout changed while it ran: refused too.
+    # The person keeps working in their checkout while it runs: no sandbox
+    # mounts it, so their edits never refuse the run.
     fake_cli(cli_path, "claude", EDIT_CALC + f"echo x > {repo}/stray.py\n")
     prepared = console_run.prepare(str(repo), {"git": SPEC})
     _run(prepared["worktree"], console_clis.render_command("claude", "go"))
@@ -246,7 +247,8 @@ def test_hooks_secrets_symlinks_and_binaries_are_never_delivered(
         {"head": prepared["head"], "guard": prepared["guard"]},
         _resolve,
     )
-    assert "checkout changed" in collected["refused"][-1]
+    assert collected["ok"] and collected["refused"] == []
+    assert "checkout" not in prepared["guard"]
 
 
 def test_collect_reads_only_a_task_worktree(repo):
@@ -513,7 +515,7 @@ def test_a_cli_that_times_out_is_refuted_and_its_half_work_discarded(
     assert (worktree / "calc.py").read_text().endswith("return 0\n")
 
 
-def test_a_missing_binary_is_unverifiable_and_the_model_takes_over_while_it_cools_down(
+def test_a_missing_binary_hands_the_task_to_the_model_while_it_cools_down(
     world, cli_path, sqlite_session
 ):
     company = sqlite_session.get(Company, world["company"].id)
@@ -521,41 +523,69 @@ def test_a_missing_binary_is_unverifiable_and_the_model_takes_over_while_it_cool
     sqlite_session.add(company)
     sqlite_session.commit()
     nats = _DaemonOverNATS()
-    with pytest.raises(console_producer.ConsoleProducerError, match="not installed"):
-        asyncio.run(
-            console_producer.produce(
-                nats, world["item"], world["agent"], world["sprint"]
-            )
-        )
-    [(_, verification)] = _runs(world["engine"], world["item"]["id"])
-    assert verification.verdict == "unverifiable"
-    assert verification.evidence["console_run"]["cooldown"] == "missing"
-    assert console_assistants.cooldown_until(company.id, "gemini") is not None
+    item, agent, sprint = world["item"], world["agent"], world["sprint"]
+    # Not installed: the model produces this very task, and says why.
+    assert asyncio.run(console_producer.produce(nats, item, agent, sprint)) is None
+    skipped = agent["console_skipped"]
+    assert "not installed" in skipped["reason"]
+    assert skipped["attempt"]["cooldown"] == "missing"
+    assert skipped["attempt"]["exit_code"] == 127
+    assert "console_run" not in agent and not agent.get("tool_edits")
+    notes = [c["text"] for c in _board(world["engine"], item["id"])]
+    assert any("Gemini CLI not used" in n and "not installed" in n for n in notes)
+    assert _runs(world["engine"], item["id"]) == []  # No refuted run of its own.
+    assert console_assistants.cooldown_until(company.id, "producer:gemini")
+    # The host adviser's cooldown is its own.
+    assert console_assistants.cooldown_until(company.id, "gemini") is None
+    # The model's delivery carries the attempt on its evidence.
+    answer = "Fixed.\n\n```python path=calc.py\ndef add(a, b):\n    return a + b\n```\n"
+    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, answer))
+    [(_, verification)] = _runs(world["engine"], item["id"])
+    on_evidence = verification.evidence["console_producer_skipped"]
+    assert on_evidence["attempt"]["cooldown"] == "missing"
+    assert "console_run" not in verification.evidence
     # Cooling down: the model produces the next task; nothing is asked of the daemon.
     again = _DaemonOverNATS()
     assert (
-        asyncio.run(
-            console_producer.produce(
-                again, world["item"], dict(world["agent"]), world["sprint"]
-            )
-        )
-        is None
+        asyncio.run(console_producer.produce(again, item, dict(agent), sprint)) is None
     )
     assert again.requests == []
     assert again.published[-1]["producer_decision"] == "skipped"
 
 
-def test_a_quota_stop_starts_the_cooldown(world, cli_path):
+def test_a_quota_stop_starts_the_cooldown_and_the_model_produces(world, cli_path):
     fake_cli(cli_path, "claude", "echo 'Credit balance is too low' >&2\nexit 1\n")
-    with pytest.raises(console_producer.ConsoleProducerError, match="exit 1"):
+    agent = world["agent"]
+    assert (
         asyncio.run(
             console_producer.produce(
-                _DaemonOverNATS(), world["item"], world["agent"], world["sprint"]
+                _DaemonOverNATS(), world["item"], agent, world["sprint"]
             )
         )
-    [(_, verification)] = _runs(world["engine"], world["item"]["id"])
-    assert verification.evidence["console_run"]["cooldown"] == "quota"
-    assert console_assistants.cooldown_until(world["company"].id, "claude")
+        is None
+    )
+    assert agent["console_skipped"]["attempt"]["cooldown"] == "quota"
+    assert "quota" in agent["console_skipped"]["reason"]
+    assert console_assistants.cooldown_until(world["company"].id, "producer:claude")
+    assert console_assistants.cooldown_until(world["company"].id, "claude") is None
+
+
+def test_the_host_advisers_cooldown_does_not_stop_the_producer(world, cli_path):
+    from datetime import UTC, datetime, timedelta
+
+    console_assistants.set_runtime_state(
+        world["company"].id,
+        "claude",
+        cooldown_until=datetime.now(UTC) + timedelta(hours=1),
+    )
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    agent = world["agent"]
+    assert asyncio.run(
+        console_producer.produce(
+            _DaemonOverNATS(), world["item"], agent, world["sprint"]
+        )
+    )
+    assert [e["path"] for e in agent["tool_edits"]] == ["calc.py"]
 
 
 def test_without_the_git_workflow_or_a_cli_the_model_produces(
@@ -718,3 +748,236 @@ def test_the_daemon_image_copies_the_module():
     dockerfile = (_DAEMON_DIR / "Dockerfile").read_text()
     assert "console_run.py" in dockerfile
     assert os.path.exists(_DAEMON_DIR / "console_run.py")
+
+
+# ---------------------------------------------------------------------------
+# Review findings on PR #447: the host git, the bounds, the alarms
+# ---------------------------------------------------------------------------
+
+# A fake CLI that replaces the worktree's .git with a repository of its own
+# whose core.fsmonitor writes a marker: any host git run there would run it.
+FSMONITOR_PAYLOAD = (
+    "printf '#!/bin/sh\\ntouch %s\\nexit 1\\n' \"$MARKER\" > fsm.sh\n"
+    "chmod +x fsm.sh\n"
+    "rm -f .git\n"
+    "git init -q .\n"
+    "git add -A && git -c user.name=x -c user.email=x@x commit -qm planted\n"
+    'git config core.fsmonitor "$PWD/fsm.sh"\n'
+)
+
+
+def test_a_rewritten_dot_git_is_refused_and_no_git_runs_on_the_host(
+    repo, cli_path, tmp_path, monkeypatch
+):
+    marker = tmp_path / "pwned"
+    monkeypatch.setenv("MARKER", str(marker))
+    fake_cli(cli_path, "claude", EDIT_CALC + FSMONITOR_PAYLOAD)
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    _run(str(worktree), console_clis.render_command("claude", "go"))
+    assert (worktree / ".git").is_dir()  # The CLI did plant it.
+    collected = console_run.collect(
+        str(worktree), {"head": prepared["head"], "guard": prepared["guard"]}, _resolve
+    )
+    assert collected["ok"] is False and collected["files"] == []
+    assert ".git" in collected["refused"][0]
+    assert not marker.exists()
+    # The pointer is La Fabrique's again (a file write), and the next prepare
+    # puts the worktree back without ever running the payload.
+    assert (worktree / ".git").is_file()
+    again = console_run.prepare(str(repo), {"git": SPEC})
+    assert again["ok"], again
+    assert not (worktree / "fsm.sh").exists()
+    assert (worktree / "calc.py").read_text().endswith("return 0\n")
+    assert not marker.exists()
+    # The daemon's alarm wins over every other outcome and is kept on the run.
+    failure = console_clis.failure(
+        {"timed_out": True, "timeout_seconds": 5}, collected, []
+    )
+    assert failure == ("failed", collected["refused"][0])
+
+
+def test_a_dot_git_pointing_at_another_git_dir_is_refused(repo, cli_path, tmp_path):
+    evil = tmp_path / "evil.git"
+    git(tmp_path, "init", "-q", "--bare", str(evil))
+    fake_cli(cli_path, "claude", EDIT_CALC + f"printf 'gitdir: {evil}\\n' > .git\n")
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    _run(prepared["worktree"], console_clis.render_command("claude", "go"))
+    collected = console_run.collect(
+        prepared["worktree"],
+        {"head": prepared["head"], "guard": prepared["guard"]},
+        _resolve,
+    )
+    assert collected["ok"] is False
+    assert "another git dir" in collected["refused"][0]
+    assert (
+        (Path(prepared["worktree"]) / ".git")
+        .read_text()
+        .strip()
+        .endswith(Path(console_run.admin_dir(Path(prepared["worktree"]))).name)
+    )
+
+
+def test_every_host_git_run_is_hardened_against_the_repositorys_config(
+    repo, cli_path, tmp_path, monkeypatch
+):
+    """An fsmonitor configured in the repository itself never runs either:
+    every command names the git dir and turns fsmonitor and hooks off."""
+    marker = tmp_path / "fsmonitor-ran"
+    hook = tmp_path / "fsm.sh"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\nexit 1\n")
+    hook.chmod(0o755)
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    _run(str(worktree), console_clis.render_command("claude", "go"))
+    git(repo, "config", "core.fsmonitor", str(hook))
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "nowhere"))  # Never inherited.
+    collected = console_run.collect(
+        str(worktree), {"head": prepared["head"], "guard": prepared["guard"]}, _resolve
+    )
+    assert [f["path"] for f in collected["files"]] == ["calc.py"]
+    assert not marker.exists()
+    assert "core.fsmonitor=false" in console_run.SAFE_CONFIG
+    assert "core.hooksPath=/dev/null" in console_run.SAFE_CONFIG
+
+
+def test_a_deletion_or_a_rename_refutes_the_run(repo, cli_path):
+    fake_cli(cli_path, "claude", EDIT_CALC + "mv README.md README.txt\n")
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    _run(prepared["worktree"], console_clis.render_command("claude", "go"))
+    collected = console_run.collect(
+        prepared["worktree"],
+        {"head": prepared["head"], "guard": prepared["guard"]},
+        _resolve,
+    )
+    by_path = {f["path"]: f for f in collected["files"]}
+    assert by_path["README.md"]["change"] == "deleted"
+    _, deliver = console_clis.observed_files(collected)
+    kind, reason = console_clis.failure(
+        {"success": True, "exit_code": 0}, collected, deliver
+    )
+    assert kind == "failed" and "README.md" in reason and "cannot apply" in reason
+    # A listing cut at its bound is never delivered in part.
+    cut = dict(collected, files=[by_path["calc.py"]], truncated=True)
+    assert (
+        "partial listing"
+        in console_clis.failure({"success": True, "exit_code": 0}, cut, [1])[1]
+    )
+
+
+def test_the_reply_bound_counts_encoded_bytes_and_the_worktree_waits_for_it(
+    repo, cli_path, monkeypatch
+):
+    monkeypatch.setattr(console_run, "MAX_REPLY_BYTES", 8 * 1024)
+    # 2000 characters, 4000 UTF-8 bytes, 12000 bytes once json escapes them.
+    fake_cli(
+        cli_path,
+        "claude",
+        EDIT_CALC + "python3 -c \"open('wide.py','w').write('# ' + chr(233)*2000)\"\n",
+    )
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    _run(prepared["worktree"], console_clis.render_command("claude", "go"))
+    collected = console_run.collect(
+        prepared["worktree"],
+        {"head": prepared["head"], "guard": prepared["guard"]},
+        _resolve,
+    )
+    import json
+
+    assert len(json.dumps(collected)) <= 8 * 1024
+    by_path = {f["path"]: f for f in collected["files"]}
+    assert by_path["wide.py"]["status"] == "past_bound"
+    assert "content" not in by_path["wide.py"]
+    assert git(prepared["worktree"], "status", "--porcelain") == ""
+    _, deliver = console_clis.observed_files(collected)
+    reason = console_clis.failure({"success": True, "exit_code": 0}, collected, deliver)
+    assert reason and "reply's bound" in reason[1]
+
+
+def test_changes_not_delivered_are_said_by_the_check():
+    check = console_clis.check_console_run(
+        {
+            "console_run": {
+                "cli": "claude",
+                "label": "Claude Code",
+                "outcome": "changed",
+                "exit_code": 0,
+                "files": [
+                    {"path": "calc.py", "delivered": True},
+                    {"path": "logo.png", "delivered": False, "status": "binary"},
+                ],
+            }
+        }
+    )
+    assert check["outcome"] == "pass"
+    assert "1 change(s) not delivered: logo.png (binary)" in check["observation"]
+    assert check["not_delivered"] == ["logo.png (binary)"]
+
+
+def test_a_missing_binary_is_never_read_from_the_output_of_a_run_that_exited_0():
+    ok = {
+        "success": True,
+        "exit_code": 0,
+        "stderr": "open x: No such file or directory",
+    }
+    assert console_clis.missing_binary(ok) is False
+    assert console_clis.missing_binary({"exit_code": 127}) is True
+    assert console_clis.missing_binary(
+        {"success": False, "exit_code": None, "error": "No such file or directory"}
+    )
+    collected = {"ok": True, "files": [{"path": "a.py"}]}
+    assert console_clis.failure(ok, collected, [{"path": "a.py"}]) is None
+
+
+def test_a_prompt_ending_in_a_dollar_passes_the_policy():
+    for prompt in ("costs 5$", "a$", "$", "x$\n"):
+        command = console_clis.render_command("claude", prompt)
+        assert "$'" not in command and '$"' not in command
+        assert (
+            command_policy.refusal(command, console_clis.command_policy("claude"))
+            is None
+        ), (prompt, command)
+
+
+def test_the_providers_key_reaches_only_the_console_run(
+    world, cli_path, sqlite_session
+):
+    from services import sandbox
+
+    company = sqlite_session.get(Company, world["company"].id)
+    company.sandbox_env = ["CI"]
+    company.console_env = ["ANTHROPIC_API_KEY"]
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    nats = _DaemonOverNATS()
+    asyncio.run(
+        console_producer.produce(nats, world["item"], world["agent"], world["sprint"])
+    )
+    execute = next(p for s, p in nats.requests if s == "workspace.execute")
+    assert execute["sandbox"]["env"] == ["CI", "ANTHROPIC_API_KEY"]
+    # The delivery tests, installs and application checks see sandbox_env alone.
+    sqlite_session.refresh(company)
+    assert sandbox.request_for(company)["env"] == ["CI"]
+
+
+def test_a_manager_sets_the_console_env(
+    sqlite_session, test_client, enforcement, monkeypatch
+):
+    AssistantRuntimeState.__table__.create(sqlite_session.get_bind(), checkfirst=True)
+    company = Company(company_name=f"Env {secrets.token_hex(3)}", git_workflow=True)
+    sqlite_session.add(company)
+    sqlite_session.commit()
+    manager = _member(sqlite_session, company.id, "Manager")
+    url = f"/v1/companies/{company.id}/console_producers"
+    body = {"producers": {"Developer": "claude"}, "env": ["OPENAI_API_KEY", ""]}
+    saved = test_client.put(url, json=body, headers=manager)
+    assert saved.status_code == 200 and saved.json()["env"] == ["OPENAI_API_KEY"]
+    # Omitted, it is kept; a bad name is refused.
+    kept = test_client.put(url, json={"producers": {}}, headers=manager)
+    assert kept.json()["env"] == ["OPENAI_API_KEY"]
+    bad = test_client.put(url, json={"producers": {}, "env": ["A B"]}, headers=manager)
+    assert bad.status_code == 422
+    sqlite_session.refresh(company)
+    assert company.sandbox_env is None

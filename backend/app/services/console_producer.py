@@ -32,8 +32,11 @@ Verifier, the tests, the acceptance guard, the standards, the risk tier and
 QA see them as any delivery's. The CLI's output is a claim, kept in the
 deliverable's text; the command, exit status, duration, sandbox and files
 are observations on the evidence (``console_run``, the ``console_run`` check).
-A CLI that fails, times out, is missing, is refused or changes nothing is a
-refuted or unverifiable run with the reason, and the task is blocked with it.
+A CLI that fails, times out, is refused or changes nothing is a refuted or
+unverifiable run with the reason, and the task is blocked with it; one its
+provider stops for quota, or that is not installed where it runs, starts a
+cooldown and the model produces the task, the attempt on the board and on the
+model's run (``console_producer_skipped``).
 
 The run keeps the task worker's producer (``le-fabrique-task-worker``) with
 ``via: console:<cli>`` on its evidence: the review loop, the inbox, the
@@ -70,12 +73,16 @@ class ConsoleProducerError(RuntimeError):
     """A console producer that delivered nothing; its text goes on the board."""
 
 
-def _configured(company_id: int, role: str | None) -> str | None:
+def _configured(company_id: int, role: str | None) -> tuple[str | None, list[str]]:
+    """The CLI the company named for *role* and the names in its ``console_env``."""
     from models import Company
     from sqlmodel import Session
 
     with Session(_engine()) as session:
-        return console_clis.producer_for(session.get(Company, company_id), role)
+        company = session.get(Company, company_id)
+        return console_clis.producer_for(company, role), console_clis.console_env(
+            company
+        )
 
 
 def build_prompt(
@@ -119,8 +126,9 @@ def build_prompt(
 def start_cooldown(
     company_id: int, cli: str, result: dict[str, Any], output: str
 ) -> str | None:
-    """The cooldown a quota stop or a missing binary starts, by kind (the
-    ``AssistantRuntimeState`` row ``console_assistants`` keeps per CLI)."""
+    """The cooldown a quota stop or a missing binary starts, by kind (an
+    ``AssistantRuntimeState`` row under ``console_clis.cooldown_key``, apart
+    from the host adviser's)."""
     if console_clis.quota_hit(cli, output):
         minutes, kind = console_assistants.CLAUDE_CLI_DEFAULT_COOLDOWN_MINUTES, "quota"
         reset = console_assistants.parse_claude_reset_time(output)
@@ -134,7 +142,10 @@ def start_cooldown(
         return None
     deadline = reset or datetime.now(UTC) + timedelta(minutes=max(1, minutes))
     console_assistants.set_runtime_state(
-        company_id, cli, cooldown_until=deadline, last_error=output
+        company_id,
+        console_clis.cooldown_key(cli),
+        cooldown_until=deadline,
+        last_error=output,
     )
     return kind
 
@@ -194,24 +205,18 @@ async def _fail(nats_client, item, agent, sprint, run, output, root) -> NoReturn
     )
 
 
-async def _sandbox_for(nats_client, item, agent, sprint, cli: str) -> dict | None:
-    """The company's sandbox for this task when a console producer may run in
-    it (``container`` or ``bwrap``, network on), else ``None``: the model
-    produces the task, and the board, the run's evidence and the Glassroom say
-    why. The CLIs run with their permission prompts off (``console_clis.CLIS``),
-    so the sandbox is the only boundary: fail closed, never on the host."""
-    from services import sandbox
+async def _skip(nats_client, item, agent, sprint, cli: str, why: str, **extra) -> None:
+    """The model produces the task: the board, the model's run (its evidence's
+    ``console_producer_skipped``) and the Glassroom say why."""
     from services.task_worker import _update_item_status
 
-    try:
-        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, _engine())
-        why = console_clis.sandbox_refusal(box)
-    except sandbox.PolicyUnavailable as exc:
-        box, why = None, f"console producers need a known sandbox: {exc}"
-    if why is None:
-        return box
     label = CLIS[cli]["label"]
-    agent["console_skipped"] = {"cli": cli, "via": f"console:{cli}", "reason": why}
+    agent["console_skipped"] = {
+        "cli": cli,
+        "via": f"console:{cli}",
+        "reason": why,
+        **extra,
+    }
     note = f"Console producer {label} not used: {why}. The model produces this task."
     await asyncio.to_thread(
         _update_item_status,
@@ -224,6 +229,27 @@ async def _sandbox_for(nats_client, item, agent, sprint, cli: str) -> dict | Non
     await _telemetry(
         nats_client, sprint, item, cli, message=note, producer_decision="skipped"
     )
+
+
+async def _sandbox_for(
+    nats_client, item, agent, sprint, cli: str, extra_env: list[str]
+) -> dict | None:
+    """The company's sandbox for this task when a console producer may run in
+    it (``container`` or ``bwrap``, network on), with the names in its
+    ``console_env`` added, else ``None``: the model produces the task, and the
+    board, the run's evidence and the Glassroom say why. The CLIs run with
+    their permission prompts off (``console_clis.CLIS``), so the sandbox is
+    the only boundary: fail closed, never on the host."""
+    from services import sandbox
+
+    try:
+        box = await asyncio.to_thread(sandbox.request_for_sprint, sprint, _engine())
+        why = console_clis.sandbox_refusal(box)
+    except sandbox.PolicyUnavailable as exc:
+        box, why = None, f"console producers need a known sandbox: {exc}"
+    if why is None:
+        return console_clis.run_sandbox(box, extra_env)
+    await _skip(nats_client, item, agent, sprint, cli, why)
     return None
 
 
@@ -235,7 +261,7 @@ async def _where(nats_client, item, sprint, cli: str) -> tuple | None:
 
     label, company_id = CLIS[cli]["label"], sprint["company_id"]
     deadline = await asyncio.to_thread(
-        console_assistants.cooldown_until, company_id, cli
+        console_assistants.cooldown_until, company_id, console_clis.cooldown_key(cli)
     )
     spec = await asyncio.to_thread(git_workflow.delivery_spec, _engine(), sprint, item)
     root = await asyncio.to_thread(_resolve_workspace_root, company_id)
@@ -268,17 +294,17 @@ async def produce(
     """The deliverable a console producer made for *item*, or ``None`` when the
     model produces it (no CLI named for the role, the CLI cooling down, no Git
     workflow, no project, or a sandbox that is not ``container`` or ``bwrap``
-    with network on). Raises ``ConsoleProducerError`` after recording a
-    run that delivered nothing."""
+    with network on, or a quota stop or a missing CLI just now). Raises
+    ``ConsoleProducerError`` after recording a run that delivered nothing."""
     from services.task_worker import _load_procedures_context
 
     company_id, role = sprint["company_id"], agent.get("role")
-    cli = await asyncio.to_thread(_configured, company_id, role)
+    cli, extra_env = await asyncio.to_thread(_configured, company_id, role)
     where = await _where(nats_client, item, sprint, cli) if cli else None
     if where is None:
         return None
     git_spec, workspace_root = where
-    box = await _sandbox_for(nats_client, item, agent, sprint, cli)
+    box = await _sandbox_for(nats_client, item, agent, sprint, cli, extra_env)
     if box is None:
         return None
     procedures = await asyncio.to_thread(_load_procedures_context, company_id, role)
@@ -346,15 +372,40 @@ async def produce(
         io_timeout,
     )
     observed, deliver = console_clis.observed_files(collected)
-    run.update(files=observed, committed_by_cli=bool(collected.get("committed_by_cli")))
+    run.update(
+        files=observed,
+        committed_by_cli=bool(collected.get("committed_by_cli")),
+        truncated=bool(collected.get("truncated")),
+        daemon_refused=list(collected.get("refused") or []),
+    )
     failure = console_clis.failure(result, collected, deliver)
     if failure:
-        cooldown = await asyncio.to_thread(
-            start_cooldown, company_id, cli, result, output
-        )
+        # The daemon's alarm is never cooled down nor handed to the model.
+        cooldown = None
+        if not run["daemon_refused"]:
+            cooldown = await asyncio.to_thread(
+                start_cooldown, company_id, cli, result, output
+            )
         run.update(
             kind=failure[0], outcome="failed", reason=failure[1], cooldown=cooldown
         )
+        if cooldown:
+            # What the cooldown is for: the model produces this task too.
+            why = (
+                "its provider stopped it for quota"
+                if cooldown == "quota"
+                else "it is not installed where it runs"
+            )
+            await _skip(
+                nats_client,
+                item,
+                agent,
+                sprint,
+                cli,
+                f"{why} ({failure[1]}); it cools down",
+                attempt=run,
+            )
+            return None
         await _fail(nats_client, item, agent, sprint, run, output, worktree)
 
     run["outcome"] = "changed"
