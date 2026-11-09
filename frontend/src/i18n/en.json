@@ -1864,7 +1864,10 @@
     "startNowHint": "Leave it unchecked to review the plan first and start it from the sprint page.",
     "startNowHumanLed": "At level 1 you always start it yourself.",
     "git": "Git branch per task",
-    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched."
+    "gitHint": "Each task's deliveries become commits on its own branch, fabrique/task-<id>, in a worktree: your checkout, index and branch are never touched.",
+    "autonomySaved": "Autonomy level saved",
+    "gitError": "Git settings unavailable",
+    "loading": "Loading…"
   },
   "review": {
     "tabs": {
@@ -2235,5 +2238,21 @@
       "model_unknown": "price unknown (model not recorded)"
     },
     "reportedTokens": "{{tokens}} reported tokens"
+  },
+  "gitSettings": {
+    "title": "Git workflow",
+    "baseBranch": "Base branch task branches start from",
+    "basePlaceholder": "Empty: the branch the folder has checked out",
+    "save": "Save",
+    "saved": "Git settings saved",
+    "statusUnknown": "Could not check the folder just now: {{reason}}",
+    "notRepo": "{{path}} is not a git repository: deliveries are written in the folder with a snapshot to undo them, without task branches.",
+    "isRepo": "Repository at {{path}}; base {{base}} at {{commit}}.",
+    "behind": "The local {{base}} is {{count}} commit(s) behind {{remote}}: new task and sprint branches start from {{remote}}, and your checkout is left as it is.",
+    "diverged": "The local {{base}} and {{remote}} have diverged ({{ahead}} commit(s) only here, {{behind}} only there): new branches are refused until you bring {{base}} up to date.",
+    "localOnly": "No remote: branches start from the local base.",
+    "remoteUnreachable": "{{remote}} could not be reached ({{reason}}): branches start from the local base.",
+    "wizardNotRepo": "This folder is not a git repository: the agents write in the folder, without task branches. Run git init there to use them.",
+    "wizardUnobserved": "The folder has not been inspected: the Git workflow stays off until the daemon sees a repository there."
   }
 }

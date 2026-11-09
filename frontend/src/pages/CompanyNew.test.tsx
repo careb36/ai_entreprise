@@ -566,6 +566,35 @@ describe('project folder on the user\'s computer', () => {
     fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
     await waitFor(() => expect(init).toHaveBeenCalledOnce())
     expect(init.mock.calls[0][0].project_path).toBe('C:\\Users\\ana\\source\\repos\\la-fabrique')
+    // Nothing observed the folder: the Git workflow is not asked for.
+    expect(init.mock.calls[0][0].git_workflow).toBe(false)
+  })
+
+  it('pre-sets the Git workflow and its base branch from the folder the daemon inspected', async () => {
+    const project: WorkspaceInspection = {
+      host: { hostname: 'laptop', platform: 'linux', home: '/home/ana' } as WorkspaceInspection['host'],
+      path: '/home/ana/app', name: 'app', exists: true, is_dir: true,
+      git: { is_repo: true, branch: 'main', remote_url: null, provider: null, web_url: null },
+    }
+    vi.spyOn(api, 'inspectWorkspace').mockResolvedValue(project)
+    vi.spyOn(api, 'discoverTeam').mockResolvedValue({
+      discovery_id: 4, project_path: '/home/ana/app', project,
+      detected_stack: { name: 'app', language: 'Python', frameworks: [], databases: [], infra: [], complexity: 'Low', file_count: 2 },
+      suggested_team: [],
+    })
+    const init = vi.spyOn(api, 'initCompany').mockImplementation(() => new Promise(() => {}))
+    renderWizard()
+
+    fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: '/home/ana/app' } })
+    fireEvent.click(screen.getByRole('button', { name: '🔍 Scan' }))
+    await screen.findByText(/Stack detected/)
+    for (let step = 0; step < 5; step++) fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+
+    expect(screen.getByRole('checkbox', { name: /Git branch per task/ })).toBeChecked()
+    expect(screen.getByLabelText('Base branch task branches start from')).toHaveValue('main')
+    fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
+    await waitFor(() => expect(init).toHaveBeenCalledOnce())
+    expect(init.mock.calls[0][0]).toMatchObject({ git_workflow: true, git_base_branch: 'main' })
   })
 
   it('scans with one inspection when leaving the field by clicking Scan', async () => {

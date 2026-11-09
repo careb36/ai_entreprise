@@ -21,15 +21,39 @@ export const workControlApi = {
     api.put<{ company_id: number; autonomy_level: number }>(`/v1/companies/${companyId}/autonomy`, {
       autonomy_level: autonomyLevel,
     }),
-  getGit: (companyId: number) => api.get<GitWorkflow>(`/v1/companies/${companyId}/git`),
-  setGit: (companyId: number, git: Omit<GitWorkflow, 'company_id'>) => api.put<GitWorkflow>(`/v1/companies/${companyId}/git`, git),
+  getGit: (companyId: number, check = false) =>
+    api.get<GitWorkflow>(`/v1/companies/${companyId}/git`, check ? { check: 'true' } : undefined),
+  setGit: (companyId: number, git: GitWorkflowChoice) => api.put<GitWorkflow>(`/v1/companies/${companyId}/git`, git),
+}
+
+/** What a Manager sets: the workflow and the branch task branches start from. */
+export interface GitWorkflowChoice {
+  git_workflow: boolean
+  git_base_branch: string | null
+}
+
+/**
+ * How the company's folder and base branch stand, as the daemon observed them
+ * just now (`GET /v1/companies/{id}/git?check=true`), or why that is unknown.
+ */
+export interface GitBaseStatus {
+  state: 'observed' | 'unknown'
+  reason?: string
+  path?: string
+  is_repo?: boolean
+  base_ref?: string
+  base_commit?: string
+  base_remote?: string | null
+  base_remote_commit?: string
+  base_behind_remote?: number
+  base_ahead_of_remote?: number
+  remote_unreachable?: string
 }
 
 /** Each task's deliveries as commits on its own branch, never in the person's checkout. */
-export interface GitWorkflow {
+export interface GitWorkflow extends GitWorkflowChoice {
   company_id: number
-  git_workflow: boolean
-  git_base_branch: string | null
+  base_status?: GitBaseStatus
 }
 
 const autonomyKey = (companyId: number) => ['company', companyId, 'autonomy'] as const
@@ -63,12 +87,13 @@ export function useSetAutonomy(companyId: number) {
   })
 }
 
-const gitKey = (companyId: number) => ['company', companyId, 'git'] as const
+const gitKey = (companyId: number, check = false) => ['company', companyId, 'git', check ? 'checked' : 'plain'] as const
 
-export function useGitWorkflow(companyId: number | null | undefined) {
+/** The company's Git workflow; with `check`, also how its folder and base stand (asks the daemon). */
+export function useGitWorkflow(companyId: number | null | undefined, check = false) {
   return useQuery({
-    queryKey: gitKey(companyId ?? 0),
-    queryFn: () => workControlApi.getGit(companyId as number),
+    queryKey: gitKey(companyId ?? 0, check),
+    queryFn: () => workControlApi.getGit(companyId as number, check),
     enabled: Boolean(companyId),
   })
 }
@@ -76,7 +101,12 @@ export function useGitWorkflow(companyId: number | null | undefined) {
 export function useSetGitWorkflow(companyId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (git: Omit<GitWorkflow, 'company_id'>) => workControlApi.setGit(companyId, git),
-    onSuccess: data => queryClient.setQueryData(gitKey(companyId), data),
+    mutationFn: (git: GitWorkflowChoice) => workControlApi.setGit(companyId, git),
+    onSuccess: data => {
+      queryClient.setQueryData(gitKey(companyId), data)
+      // The checked view keeps its observation and follows the saved choice.
+      queryClient.setQueryData<GitWorkflow>(gitKey(companyId, true), old => old ? { ...old, ...data } : old)
+      queryClient.invalidateQueries({ queryKey: ['console-producers', companyId] })
+    },
   })
 }
