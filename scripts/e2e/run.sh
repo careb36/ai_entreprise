@@ -416,11 +416,14 @@ check "the planning prompt carried the approved architecture" test "$(prompt_see
 check "the PO planned tasks that name the criteria they cover; nothing uncovered" test "$(echo "$PLAN" | json "[t['covers'] for t in d['tasks'] if not t['kind']], d['uncovered']")" = "[['REQ-1.1', 'REQ-1.2'], ['REQ-2.1']] []"
 check "QA's test-writing task of each requirement comes first, and each implementation waits for its tests" test "$(echo "$PLAN" | json "[(t['kind'], t['assignee'], t['depends_on']) for t in d['tasks']]")" = "[('acceptance_tests', 'QA', []), ('acceptance_tests', 'QA', []), (None, 'Developer', [0]), (None, 'Developer', [1, 2])]"
 check "and the counter after the greeting, by position" test "$(echo "$PLAN" | json "d['tasks'][3]['depends_on'][-1]")" = 2
+check "the PO suggested the sprint's team, with QA added for its test-writing tasks, and said why" test "$(echo "$PLAN" | json "d['suggested_team'], d['team_reasons'], d['team_selection']")" = "['Developer', 'QA'] {'Developer': 'the greeting is code to write and test'} suggested"
 NEW4=$(api -X POST "$API/v1/start_sprint" -H 'Content-Type: application/json' -d "{
   \"company_id\": $CID, \"sprint_name\": \"Greeting 1\", \"start_date\": \"2026-01-05\", \"scope_size\": \"S\", \"specification_id\": $SPEC_ID,
+  \"team\": $(echo "$PLAN" | json "json.dumps(d['suggested_team'])"), \"suggested_team\": $(echo "$PLAN" | json "json.dumps(d['suggested_team'])"),
   \"backlog_items\": $(echo "$PLAN" | json "json.dumps(d['tasks'])")}")
 S4=$(echo "$NEW4" | json "d.get('sprint_id', '')")
 check "the sprint starts from the specification" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['specification_id']")" = "$SPEC_ID"
+check "the sprint keeps the team a Manager confirmed from the PO's suggestion" test "$(api "$API/v1/sprints/$S4/board" | json "d['sprint']['team'], d['sprint']['team_source']")" = "['Developer', 'QA'] suggested"
 TESTS2_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][1]")
 GREETING_ID=$(echo "$NEW4" | json "d['backlog_item_ids'][2]")
 check "the counter waits for its tests and for the greeting on the board" test "$(api "$API/v1/sprints/$S4/board" | json "next((i['depends_on'], i['waiting_for'], i['kind']) for c in d['columns'].values() for i in c if i['title'] == 'Add greeting counter')")" = "([$TESTS2_ID, $GREETING_ID], [$TESTS2_ID, $GREETING_ID], None)"

@@ -22,7 +22,15 @@ from models.specification import Specification
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
-from services import acceptance, dependencies, spec_author, spec_check, standards
+from services import (
+    acceptance,
+    dependencies,
+    spec_author,
+    spec_check,
+    sprint_team,
+    standards,
+)
+from services import roles as catalogue
 from services.sprint_planner import (
     _build_team_roster,
     _ensure_execution_team,
@@ -218,8 +226,11 @@ def uncovered(spec: dict[str, Any], tasks: list[dict[str, Any]]) -> list[str]:
     return [cid for cid in spec_check.criterion_ids(spec) if cid not in covered]
 
 
-def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
-    """One task per requirement, in order, when no model answers."""
+def plan_fallback(
+    spec: dict[str, Any], item_limit: int, allowed: list[str] | None = None
+) -> dict[str, Any]:
+    """One task per requirement, in order, when no model answers; with
+    *allowed* (a sprint team), only for those roles."""
     tasks = [
         {
             "title": f"{r['id']}: {r.get('title', '')}"[:TASK_TITLE_LIMIT],
@@ -234,13 +245,27 @@ def plan_fallback(spec: dict[str, Any], item_limit: int) -> dict[str, Any]:
         }
         for index, r in enumerate(spec.get("requirements") or [])
     ][:item_limit]
-    tasks = acceptance.with_test_tasks(tasks, spec, item_limit)
+    tasks = _with_tests(
+        sprint_team.fit_tasks(tasks, allowed or []), spec, item_limit, allowed
+    )
     return {
         "sprint_name": f"Sprint - {spec.get('title', '')[:40]}".strip(),
         "goal": (spec.get("summary") or spec.get("title") or "")[:140],
         "tasks": tasks,
         "uncovered": uncovered(spec, tasks),
     }
+
+
+def _with_tests(
+    tasks: list[dict[str, Any]],
+    spec: dict[str, Any],
+    item_limit: int,
+    allowed: list[str] | None,
+) -> list[dict[str, Any]]:
+    """QA's test tasks before *tasks*, unless a sprint team leaves QA out."""
+    if allowed and acceptance.QA_ROLE not in {catalogue.canonical(r) for r in allowed}:
+        return tasks
+    return acceptance.with_test_tasks(tasks, spec, item_limit)
 
 
 def prepare_plan(
@@ -250,15 +275,19 @@ def prepare_plan(
     item_limit: int,
     agents: list[dict[str, Any]],
     note: str = "",
+    sprint_roles: list[str] | None = None,
 ) -> dict[str, Any]:
     """Everything ``plan_from`` needs, read with *session*: plain values, so
     the call to the proxy can run in another thread without the session.
 
-    *note* is what the person planning added for the PO.
+    *note* is what the person planning added for the PO; *sprint_roles* the
+    sprint's team a Manager chose (``services/sprint_team.py``), the only
+    roles the plan may assign.
     """
     content = spec_content(spec)
     team = _ensure_execution_team(agents)
-    roles = sorted({a.get("role", "Developer") for a in team})
+    hired = sprint_team.roles_of(agents)
+    roles = sprint_team.planning_roles(hired, sprint_roles)
     model, system_prompt, po_name = spec_author.po_profile(session, spec.company_id)
     po_name = _find_po_agent(team).get("name") or po_name
     from services import arch_author
@@ -270,6 +299,8 @@ def prepare_plan(
         "summary": spec.summary,
         "content": content,
         "roles": roles,
+        "hired": hired,
+        "team": sprint_roles,
         "item_limit": item_limit,
         "model": model,
         "system_prompt": system_prompt,
@@ -278,10 +309,11 @@ def prepare_plan(
             content,
             scope_size,
             item_limit,
-            _build_team_roster(team),
+            _build_team_roster(sprint_team.team_agents(team, sprint_roles)),
             roles,
             note,
         )
+        + sprint_team.prompt_section(hired, sprint_roles)
         + arch_author.planning_context(session, spec.id)
         + standards.prompt_section(spec_author.PO_ROLE),
         "bu_id": spec_author.business_unit_id(session, spec.company_id),
@@ -293,6 +325,8 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
     request, and what stays uncovered; no database. A failed or unusable
     answer falls back to one task per requirement."""
     content, item_limit = request["content"], request["item_limit"]
+    allowed = request["roles"] if request.get("team") else None
+    parsed: Any = None
     try:
         answer = spec_author.ask(
             request["model"],
@@ -311,23 +345,36 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
             request["specification_id"],
             exc,
         )
-        return plan_fallback(content, item_limit)
-    tasks = _validate_tasks(
-        parsed.get("tasks"),
-        set(spec_check.criterion_ids(content)),
-        set(request["roles"]),
-        item_limit,
+    tasks = (
+        _validate_tasks(
+            parsed.get("tasks"),
+            set(spec_check.criterion_ids(content)),
+            set(request["roles"]),
+            item_limit,
+        )
+        if isinstance(parsed, dict)
+        else []
     )
     if not tasks:
-        return plan_fallback(content, item_limit)
-    tasks = acceptance.with_test_tasks(tasks, content, item_limit)
-    title = request["title"]
-    return {
-        "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {title[:40]}")[:70],
-        "goal": str(parsed.get("goal") or request["summary"] or title)[:140],
-        "tasks": tasks,
-        "uncovered": uncovered(content, tasks),
-    }
+        plan = plan_fallback(content, item_limit, allowed)
+    else:
+        tasks = sprint_team.fit_tasks(tasks, allowed or [])
+        tasks = _with_tests(tasks, content, item_limit, allowed)
+        title = request["title"]
+        plan = {
+            "sprint_name": str(parsed.get("sprint_name") or f"Sprint - {title[:40]}")[
+                :70
+            ],
+            "goal": str(parsed.get("goal") or request["summary"] or title)[:140],
+            "tasks": tasks,
+            "uncovered": uncovered(content, tasks),
+        }
+    team, reasons = sprint_team.suggested(
+        parsed,
+        request.get("team") or request.get("hired") or request["roles"],
+        plan["tasks"],
+    )
+    return {**plan, "suggested_team": team, "team_reasons": reasons}
 
 
 def plan(
@@ -337,9 +384,12 @@ def plan(
     item_limit: int,
     agents: list[dict[str, Any]],
     note: str = "",
+    sprint_roles: list[str] | None = None,
 ) -> dict[str, Any]:
     """``prepare_plan`` then ``plan_from``, in one thread."""
-    return plan_from(prepare_plan(session, spec, scope_size, item_limit, agents, note))
+    return plan_from(
+        prepare_plan(session, spec, scope_size, item_limit, agents, note, sprint_roles)
+    )
 
 
 # ---------------------------------------------------------------------------

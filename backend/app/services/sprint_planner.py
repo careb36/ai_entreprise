@@ -639,32 +639,45 @@ def plan_foundation_sprint(
         }
 
 
-def plan_execution_sprint(
-    company_name: str,
+def _plan_with_po(
+    template: str,
+    fallback: Any,
+    label: str,
+    default_name: str,
     objective: str,
     scope_size: str,
     agents: list[dict[str, Any]],
-    detected_stack: dict[str, Any] | None = None,
-    project_path: str | None = None,
+    detected_stack: dict[str, Any] | None,
+    project_path: str | None,
+    team: list[str] | None,
 ) -> dict[str, Any]:
-    """Plan an executable sprint from a strategic prompt."""
-    team = _ensure_execution_team(agents)
-    po = _find_po_agent(team)
+    """The PO's plan from *template*, or *fallback(team_agents, scope)* when no
+    model answers usably. With a sprint *team* (``services/sprint_team.py``)
+    only its roles get tasks; the PO also suggests the team for the request."""
+    from services import sprint_team
+
+    everyone = _ensure_execution_team(agents)
+    po = _find_po_agent(everyone)
     po_model = po.get("model", "")
     normalized_scope = scope_size.upper()
     item_limit = {"S": 4, "M": 8, "L": 12}.get(normalized_scope, 8)
-    available_roles = sorted({a.get("role", "Developer") for a in team})
+    hired = sprint_team.roles_of(agents)
+    available_roles = sprint_team.planning_roles(hired, team)
+    roster = sprint_team.team_agents(everyone, team) or everyone
+    parsed: Any = None
+
+    def finish(plan: dict[str, Any]) -> dict[str, Any]:
+        plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], team or [])
+        suggested, reasons = sprint_team.suggested(parsed, team or hired, plan["tasks"])
+        return {**plan, "suggested_team": suggested, "team_reasons": reasons}
 
     if not po_model:
-        logger.info("No planning model available — using execution fallback")
-        return _build_execution_fallback(objective, team, normalized_scope)
-
-    client = _client(po)
-
-    prompt = _EXECUTION_PROMPT.format(
+        logger.info("No planning model available — using %s fallback", label)
+        return finish(fallback(roster, normalized_scope))
+    prompt = template.format(
         agent_name=po.get("name") or "PO",
         seniority=po.get("seniority", "Senior"),
-        team_roster=_build_team_roster(team),
+        team_roster=_build_team_roster(roster),
         objective=objective.strip(),
         scope_size=normalized_scope,
         item_limit=item_limit,
@@ -673,27 +686,20 @@ def plan_execution_sprint(
         if project_path
         else "(no project path)",
         available_roles=", ".join(available_roles),
-    )
-
+    ) + sprint_team.prompt_section(hired, team)
     logger.info(
-        "PO planning execution sprint with model=%s scope=%s",
+        "PO planning %s sprint with model=%s scope=%s",
+        label,
         po_model,
         normalized_scope,
     )
-
     try:
-        result = client.chat(
-            messages=[{"role": "user", "content": prompt}],
-            model=po_model,
-            role="PO",
+        result = _client(po).chat(
+            messages=[{"role": "user", "content": prompt}], model=po_model, role="PO"
         )
-
         if result.get("error"):
-            logger.warning(
-                "LLM error during execution sprint planning: %s", result["error"]
-            )
-            return _build_execution_fallback(objective, team, normalized_scope)
-
+            logger.warning("LLM error during %s planning: %s", label, result["error"])
+            return finish(fallback(roster, normalized_scope))
         raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
         cleaned = raw.strip()
         if cleaned.startswith("```"):
@@ -701,21 +707,12 @@ def plan_execution_sprint(
         if cleaned.endswith("```"):
             cleaned = cleaned.rsplit("```", 1)[0]
         parsed = json.loads(cleaned.strip())
-
-        sprint_name = str(
-            parsed.get("sprint_name") or f"Sprint - {objective[:40].strip()}"
-        )[:70]
-        goal = str(parsed.get("goal") or objective.strip())[:140]
-        tasks = parsed.get("tasks", [])
-
         valid_roles = set(available_roles)
         validated = []
-        for task in tasks:
+        for task in parsed.get("tasks", []):
             if not isinstance(task, dict) or not task.get("title"):
                 continue
             assignee = str(task.get("assignee", "PO"))
-            if assignee not in valid_roles:
-                assignee = "PO"
             validated.append(
                 {
                     "title": str(task.get("title", ""))[:80],
@@ -723,28 +720,50 @@ def plan_execution_sprint(
                     "priority": task.get("priority", "medium")
                     if task.get("priority") in ("critical", "high", "medium", "low")
                     else "medium",
-                    "assignee": assignee,
+                    "assignee": assignee if assignee in valid_roles else "PO",
                 }
             )
-
         validated = validated[:item_limit]
         if len(validated) < 2:
-            logger.warning(
-                "Planner returned too few valid execution tasks — using fallback"
-            )
-            return _build_execution_fallback(objective, team, normalized_scope)
-
-        return {
-            "sprint_name": sprint_name,
-            "goal": goal,
-            "tasks": validated,
-        }
-    except (json.JSONDecodeError, KeyError, IndexError) as exc:
-        logger.warning("Failed to parse execution sprint plan: %s", exc)
-        return _build_execution_fallback(objective, team, normalized_scope)
+            logger.warning("Planner returned too few valid %s tasks", label)
+            return finish(fallback(roster, normalized_scope))
+        return finish(
+            {
+                "sprint_name": str(parsed.get("sprint_name") or default_name)[:70],
+                "goal": str(parsed.get("goal") or objective.strip())[:140],
+                "tasks": validated,
+            }
+        )
+    except (json.JSONDecodeError, KeyError, IndexError, AttributeError) as exc:
+        logger.warning("Failed to parse %s sprint plan: %s", label, exc)
+        return finish(fallback(roster, normalized_scope))
     except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
-        logger.error("Unexpected error planning execution sprint: %s", exc)
-        return _build_execution_fallback(objective, team, normalized_scope)
+        logger.error("Unexpected error planning %s sprint: %s", label, exc)
+        return finish(fallback(roster, normalized_scope))
+
+
+def plan_execution_sprint(
+    company_name: str,
+    objective: str,
+    scope_size: str,
+    agents: list[dict[str, Any]],
+    detected_stack: dict[str, Any] | None = None,
+    project_path: str | None = None,
+    team: list[str] | None = None,
+) -> dict[str, Any]:
+    """Plan an executable sprint from a strategic prompt."""
+    return _plan_with_po(
+        _EXECUTION_PROMPT,
+        lambda roster, scope: _build_execution_fallback(objective, roster, scope),
+        "execution",
+        f"Sprint - {objective[:40].strip()}",
+        objective,
+        scope_size,
+        agents,
+        detected_stack,
+        project_path,
+        team,
+    )
 
 
 def plan_self_improvement_sprint(
@@ -754,106 +773,20 @@ def plan_self_improvement_sprint(
     agents: list[dict[str, Any]],
     detected_stack: dict[str, Any] | None = None,
     project_path: str | None = None,
+    team: list[str] | None = None,
 ) -> dict[str, Any]:
     """Plan a bounded self-improvement sprint using explicit preservation and Scrumban rules."""
-    team = _ensure_execution_team(agents)
-    po = _find_po_agent(team)
-    po_model = po.get("model", "")
-    normalized_scope = scope_size.upper()
-    item_limit = {"S": 4, "M": 8, "L": 12}.get(normalized_scope, 8)
-    available_roles = sorted({a.get("role", "Developer") for a in team})
-
-    if not po_model:
-        logger.info("No planning model available — using self-improvement fallback")
-        return _build_self_improvement_fallback(company_name, team, normalized_scope)
-
-    client = _client(po)
-
-    prompt = _SELF_IMPROVEMENT_PROMPT.format(
-        agent_name=po.get("name") or "PO",
-        seniority=po.get("seniority", "Senior"),
-        team_roster=_build_team_roster(team),
-        objective=objective.strip(),
-        scope_size=normalized_scope,
-        item_limit=item_limit,
-        stack_summary=_build_stack_summary(detected_stack or {}),
-        file_listing=_list_root_files(project_path)
-        if project_path
-        else "(no project path)",
-        available_roles=", ".join(available_roles),
+    return _plan_with_po(
+        _SELF_IMPROVEMENT_PROMPT,
+        lambda roster, scope: _build_self_improvement_fallback(
+            company_name, roster, scope
+        ),
+        "self-improvement",
+        f"Sprint - Improve {company_name}",
+        objective,
+        scope_size,
+        agents,
+        detected_stack,
+        project_path,
+        team,
     )
-
-    logger.info(
-        "PO planning self-improvement sprint with model=%s scope=%s",
-        po_model,
-        normalized_scope,
-    )
-
-    try:
-        result = client.chat(
-            messages=[{"role": "user", "content": prompt}],
-            model=po_model,
-            role="PO",
-        )
-
-        if result.get("error"):
-            logger.warning(
-                "LLM error during self-improvement sprint planning: %s", result["error"]
-            )
-            return _build_self_improvement_fallback(
-                company_name, team, normalized_scope
-            )
-
-        raw = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[-1]
-        if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("```", 1)[0]
-        parsed = json.loads(cleaned.strip())
-
-        sprint_name = str(
-            parsed.get("sprint_name") or f"Sprint - Improve {company_name}"
-        )[:70]
-        goal = str(parsed.get("goal") or objective.strip())[:140]
-        tasks = parsed.get("tasks", [])
-
-        valid_roles = set(available_roles)
-        validated = []
-        for task in tasks:
-            if not isinstance(task, dict) or not task.get("title"):
-                continue
-            assignee = str(task.get("assignee", "PO"))
-            if assignee not in valid_roles:
-                assignee = "PO"
-            validated.append(
-                {
-                    "title": str(task.get("title", ""))[:80],
-                    "description": str(task.get("description", ""))[:500],
-                    "priority": task.get("priority", "medium")
-                    if task.get("priority") in ("critical", "high", "medium", "low")
-                    else "medium",
-                    "assignee": assignee,
-                }
-            )
-
-        validated = validated[:item_limit]
-        if len(validated) < 2:
-            logger.warning(
-                "Planner returned too few valid self-improvement tasks — using fallback"
-            )
-            return _build_self_improvement_fallback(
-                company_name, team, normalized_scope
-            )
-
-        return {
-            "sprint_name": sprint_name,
-            "goal": goal,
-            "tasks": validated,
-        }
-    except (json.JSONDecodeError, KeyError, IndexError) as exc:
-        logger.warning("Failed to parse self-improvement sprint plan: %s", exc)
-        return _build_self_improvement_fallback(company_name, team, normalized_scope)
-    except Exception as exc:  # noqa: BLE001 - Planning failures use the deterministic fallback.
-        logger.error("Unexpected error planning self-improvement sprint: %s", exc)
-        return _build_self_improvement_fallback(company_name, team, normalized_scope)

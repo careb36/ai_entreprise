@@ -419,7 +419,7 @@
         "description": "Tests and validates quality"
       },
       "DevOps": {
-        "label": "DevOps Engineer",
+        "label": "DevOps / SRE Engineer",
         "description": "CI/CD and infrastructure"
       },
       "Security": {
@@ -427,8 +427,24 @@
         "description": "Vulnerability and compliance"
       },
       "Data": {
-        "label": "Data Engineer",
+        "label": "Data Engineer / DBA",
         "description": "Pipelines and analytics"
+      },
+      "BackendDeveloper": {
+        "label": "Backend Developer",
+        "description": "Server-side logic, APIs and services"
+      },
+      "FrontendDeveloper": {
+        "label": "Frontend Developer",
+        "description": "User interfaces in the browser"
+      },
+      "Designer": {
+        "label": "UX/UI Designer",
+        "description": "UX flows, UI specs and accessibility"
+      },
+      "TechWriter": {
+        "label": "Technical Writer",
+        "description": "Project and API documentation"
       }
     },
     "seniorities": {
@@ -1991,7 +2007,9 @@
       "audit": "Evidence and audit",
       "documentation": "Documentation",
       "operations": "Operations",
-      "product": "Product"
+      "product": "Product",
+      "data": "Data",
+      "ux": "UX"
     }
   },
   "sources": {
@@ -2157,6 +2175,35 @@
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
     "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
     "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
+  },
+  "teamRoles": {
+    "PO": "Product Owner",
+    "Architect": "Architect",
+    "ScrumMaster": "Scrum Master",
+    "Developer": "Developer",
+    "QA": "QA Engineer",
+    "SecOps": "Security (SecOps)",
+    "TechWriter": "Technical Writer",
+    "BackendDeveloper": "Backend Developer",
+    "FrontendDeveloper": "Frontend Developer",
+    "DevOps": "DevOps / SRE",
+    "Designer": "UX/UI Designer",
+    "DataEngineer": "Data Engineer / DBA"
+  },
+  "sprintTeam": {
+    "title": "Sprint team",
+    "hint": "The roles this sprint's tasks go to. The PO suggested them for this request; tick or untick, then plan again if a task's role is no longer on the team.",
+    "suggested": "suggested by the PO",
+    "reason": "PO: {{why}}",
+    "replan": "A task is assigned to a role outside the team: plan again with this team before launching.",
+    "sprintLabel": "Team:",
+    "everyRole": "every role the company hired",
+    "source": {
+      "suggested": "Chosen by the PO's suggestion, confirmed by a Manager.",
+      "person": "Chosen by a Manager, who changed the PO's suggestion.",
+      "automatic": "Chosen automatically from the PO's suggestion.",
+      "all": "No team chosen: every role the company hired."
+    }
   },
   "cost": {
     "runTitle": "Cost of this run",

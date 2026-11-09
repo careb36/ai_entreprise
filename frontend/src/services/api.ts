@@ -401,7 +401,7 @@ export interface SprintBoard {
     start_date: string
     scope_size: string
     item_limit: number
-    specification_id?: number | null
+    specification_id?: number | null; team?: string[] | null; team_source?: string // The roles its tasks may go to (null: every hired role), and who chose them.
   }
   columns: Record<string, BacklogItem[]>
   total: number
@@ -414,7 +414,7 @@ export interface SprintSummary {
   goal: string | null
   start_date: string | null
   scope_size: string
-  specification_id?: number | null
+  specification_id?: number | null; team?: string[] | null; team_source?: string
   total: number
   done: number
   /** Tasks blocked on the board, and rework requests over the sprint: the numbers procedures are judged by. */
@@ -461,8 +461,8 @@ export interface SprintPlanResponse {
   scope_size: 'S' | 'M' | 'L'
   specification_id?: number | null
   tasks: PlannedSprintTask[]
-  /** Criteria no task covers. */
-  uncovered?: string[]
+  /** Criteria no task covers; the team the PO suggests (why, per role) among the company's hired roles. */
+  uncovered?: string[]; suggested_team?: string[]; team_reasons?: Record<string, string>; hired_roles?: string[]; team_selection?: 'suggested' | 'automatic'
 }
 
 // ── Orchestration Health types ────────────────────────────────────────────────
@@ -994,10 +994,10 @@ export const api = {
   updateBacklogItem: (itemId: number, data: { status?: string; priority?: string; assignee?: string; comment?: string }) =>
     api.patch<BacklogItem>(`/v1/backlog/${itemId}`, data),
 
-  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number }) =>
+  startSprint: (data: { company_id: number; sprint_name: string; start_date: string; scope_size: string; goal?: string; backlog_items: any[]; carry_over_ids?: number[]; specification_id?: number; team?: string[]; suggested_team?: string[] }) =>
     api.post<{ sprint_id: number; backlog_item_ids?: number[]; sprint_url?: string }>('/v1/start_sprint', data),
 
-  planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number }) =>
+  planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number; team?: string[] }) =>
     api.post<SprintPlanResponse>('/v1/plan_sprint', data),
 
   planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>

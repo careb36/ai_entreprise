@@ -32,8 +32,17 @@ from typing import Any
 
 from services import model_catalog, model_record, provider_connections
 
-DECIDING_ROLES = ("PO", "Architect", "ScrumMaster", "SecOps")
-CODE_ROLES = ("Developer", "QA", "Reviewer")
+DECIDING_ROLES = ("PO", "Architect", "ScrumMaster", "SecOps", "Designer")
+# The specialised coding roles are suggested as the Developer is.
+CODE_ROLES = (
+    "Developer",
+    "BackendDeveloper",
+    "FrontendDeveloper",
+    "DevOps",
+    "DataEngineer",
+    "QA",
+    "Reviewer",
+)
 WRITING_ROLES = ("TechWriter",)
 
 

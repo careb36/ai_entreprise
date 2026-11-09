@@ -14,6 +14,8 @@ import { useAppStore } from '../store/useAppStore'
 import { useInitCompany, usePlanSprint, usePlanSelfImprovementSprint, useStartSprint, useInbox, useSprints } from '../hooks/useQueries'
 import { secondAttempts } from '../lib/learningTrend'
 import { useSpecifications } from '../services/specifications'
+import { SprintTeamChips, SprintTeamPicker } from './SprintTeam'
+import { planFitsTeam, sameTeam, useRoleLabel } from '../lib/sprintTeam'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,10 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   // An approved specification to plan from: then the goal is optional and
   // each planned task says which acceptance criteria it covers.
   const [specificationId, setSpecificationId] = useState<number | null>(null)
+  // The sprint's team: the PO suggests it with the plan, the Manager adjusts
+  // it; planning again with a changed team plans only with those roles.
+  const [team, setTeam] = useState<string[]>([])
+  const roleLabel = useRoleLabel()
   const { companyId, companyName, setCompany } = useAppStore()
   const specifications = useSpecifications(companyId)
   const approvedSpecifications = (specifications.data?.specifications ?? []).filter(s => s.status === 'approved')
@@ -115,7 +121,21 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
     setPlannedSprint(null)
     setPlanSource(null)
     setCarryOver([])
+    setTeam([])
   }
+
+  function showPlan(plan: SprintPlanResponse, source: 'manual' | 'autonomous') {
+    setPlannedSprint(plan)
+    setPlanSource(source)
+    setTeam(plan.suggested_team ?? plan.hired_roles ?? [])
+  }
+
+  // In automatic mode the PO's suggestion is the team: shown, not asked.
+  const automaticTeam = plannedSprint?.team_selection === 'automatic'
+  // The team as the Manager left it differs from what the PO suggested.
+  const teamChanged = plannedSprint !== null && team.length > 0 && !sameTeam(team, plannedSprint.suggested_team ?? [])
+  // A task assigned outside the chosen team: plan again before launching.
+  const teamFits = !plannedSprint || team.length === 0 || planFitsTeam(team, plannedSprint.tasks.map(task => task.assignee))
 
   async function generatePlan() {
     if (busy || !hasGoal) return
@@ -133,10 +153,10 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         ...(goal.trim() ? { prompt: goal.trim() } : {}),
         scope_size: scope,
         ...(specificationId !== null ? { specification_id: specificationId } : {}),
+        ...(teamChanged ? { team } : {}),
       })
 
-      setPlannedSprint(plan)
-      setPlanSource('manual')
+      showPlan(plan, 'manual')
     } catch {
       return
     }
@@ -159,15 +179,14 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         scope_size: scope,
       })
 
-      setPlannedSprint(plan)
-      setPlanSource('autonomous')
+      showPlan(plan, 'autonomous')
     } catch {
       return
     }
   }
 
   async function launch() {
-    if (busy || !plannedSprint) return
+    if (busy || !plannedSprint || !teamFits) return
 
     initMutation.reset()
     planMutation.reset()
@@ -189,6 +208,10 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         // The plan shown, not the selector: a selector changed after planning
         // (or an autonomous plan) must not link unrelated tasks to a specification.
         ...(plannedSprint.specification_id ? { specification_id: plannedSprint.specification_id } : {}),
+        // The PO's suggestion goes back unchanged: the team in automatic mode,
+        // and what tells a confirmed team from a changed one.
+        ...(plannedSprint.suggested_team ? { suggested_team: plannedSprint.suggested_team } : {}),
+        ...(team.length > 0 && !automaticTeam ? { team } : {}),
       })
 
       onSuccess(sprint.sprint_id)
@@ -294,7 +317,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         )}
         <button
           onClick={plannedSprint ? launch : generatePlan}
-          disabled={busy || (!plannedSprint && !hasGoal)}
+          disabled={busy || (!plannedSprint && !hasGoal) || !teamFits}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
@@ -367,7 +390,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                     <p className="text-[10px] uppercase tracking-wide text-brand-300">
                       {ROLE_DISPLAY[task.assignee]
                         ? t(`dashboard.roles.${task.assignee}.label`, { defaultValue: ROLE_DISPLAY[task.assignee].label })
-                        : task.assignee}
+                        : roleLabel(task.assignee)}
                     </p>
                     <p className="text-[10px] text-gray-500 mt-1">
                       {t(`dashboard.priorities.${task.priority}`, { defaultValue: PRIORITY_LABELS[task.priority] ?? task.priority })}
@@ -386,6 +409,20 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
                 defaultValue: '{{count}} criteria stay uncovered: {{ids}}. The sprint can still start.',
               })}
             </p>
+          )}
+
+          {automaticTeam && <SprintTeamChips team={plannedSprint.suggested_team} source="automatic" />}
+          {!automaticTeam && (plannedSprint.hired_roles ?? []).length > 0 && (
+            <SprintTeamPicker
+              hired={plannedSprint.hired_roles ?? []}
+              team={team}
+              suggested={plannedSprint.suggested_team ?? []}
+              reasons={plannedSprint.team_reasons ?? {}}
+              onChange={setTeam}
+            />
+          )}
+          {!teamFits && (
+            <p role="note" className="text-[11px] text-amber-300">{t('sprintTeam.replan')}</p>
           )}
 
           {blockedTasks.length > 0 && (

@@ -1,18 +1,14 @@
 """
 Sprint router — Kanban board management and backlog item lifecycle.
 
-Endpoints:
-- ``POST /v1/start_sprint``          — create a sprint with initial backlog items.
-- ``GET  /v1/sprints``               — list a company's sprints with progress counts.
-- ``GET  /v1/sprints/{id}/board``    — retrieve sprint metadata and Kanban columns.
-- ``PATCH /v1/backlog/{item_id}``    — update status, priority, assignee, or add a comment.
-
-New backlog items are dispatched to agents via the transactional outbox:
-an ``OutboxEvent`` row is inserted atomically in the same DB transaction and
+Endpoints: ``POST /v1/start_sprint`` (a sprint, its team and its backlog
+items), ``GET /v1/sprints``, ``GET /v1/sprints/{id}/board`` and ``PATCH
+/v1/backlog/{item_id}``; the planning routes are ``routers/sprint_planning.py``.
+New backlog items are dispatched to agents via the transactional outbox: an
+``OutboxEvent`` row is inserted atomically in the same DB transaction and
 delivered to NATS by the ``process_outbox`` background worker.
 """
 
-import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -20,13 +16,18 @@ from auth_policy import current_user_if_required, require_company_role
 from auth_tokens import STREAM_TICKET_MINUTES, create_stream_ticket
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
-from models import BacklogItem, BusinessUnit, OutboxEvent, Sprint, User
+from models import (
+    BacklogItem,
+    BusinessUnit,
+    Company,
+    OutboxEvent,
+    Sprint,
+    User,
+)
 from schemas import (
     SCOPE_HARD_MAX,
     SCOPE_LIMITS,
     BacklogItemUpdate,
-    SelfImprovementSprintRequest,
-    SprintPlanRequest,
     SprintStartRequest,
 )
 from services import (
@@ -37,6 +38,7 @@ from services import (
     spec_check,
     spec_planning,
     sprint_archive,
+    sprint_team,
     task_events,
 )
 from services.board import (
@@ -49,135 +51,18 @@ from services.board import (
     rework_request_count,
 )
 from services.carry_over import CarryOverError, carry_over
-from services.sprint_planner import (
-    build_self_improvement_objective,
-    plan_execution_sprint,
-)
-from services.sprint_planner import (
-    plan_self_improvement_sprint as build_self_improvement_plan,
-)
 from sqlalchemy import case, func
 from sqlmodel import Session, select
 
+from routers.sprint_planning import _refused, _specification
+from routers.sprint_planning import router as planning_router
+
 router = APIRouter(prefix="/v1", tags=["Core"])
+router.include_router(planning_router)
 
 # Allowed values for validation; rejected values return HTTP 422.
 VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
-
-
-def _refused(call, *args):
-    """Call into ``spec_planning`` or ``dependencies``; a refusal is the response's status."""
-    try:
-        return call(*args)
-    except (spec_planning.PlanRefused, dependencies.DependencyError) as exc:
-        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
-
-
-def _specification(session: Session, company_id: int, spec_id: int):
-    return _refused(spec_planning.approved_specification, session, company_id, spec_id)
-
-
-def _serialize_plan_response(
-    plan: dict, scope_size: str, fallback_name: str, fallback_goal: str
-):
-    return {
-        "sprint_name": plan.get("sprint_name", fallback_name),
-        "goal": plan.get("goal", fallback_goal),
-        "scope_size": scope_size,
-        "tasks": plan.get("tasks", []),
-        # Criteria of the specification no task covers (planned from one).
-        "uncovered": plan.get("uncovered", []),
-        "specification_id": plan.get("specification_id"),
-    }
-
-
-@router.post("/plan_sprint")
-async def plan_sprint(
-    req: SprintPlanRequest,
-    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
-):
-    """Turn a strategic prompt into a scoped sprint backlog before sprint creation."""
-    require_company_role(session, user, req.company_id, "Manager")
-    scope_size = req.scope_size.upper()
-    if scope_size not in SCOPE_LIMITS:
-        raise HTTPException(
-            status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
-        )
-    company, agent_dicts, discovery = _refused(
-        spec_planning.planning_context_of, session, req.company_id
-    )
-
-    if req.specification_id is not None:
-        spec = _specification(session, req.company_id, req.specification_id)
-        # What the PO is asked is read here, with the request's session; only
-        # the call to the proxy runs in a thread (a session is not shared).
-        request = spec_planning.prepare_plan(
-            session, spec, scope_size, SCOPE_LIMITS[scope_size], agent_dicts, req.prompt
-        )
-        plan = await asyncio.to_thread(spec_planning.plan_from, request)
-        plan["specification_id"] = spec.id
-        return _serialize_plan_response(
-            plan, scope_size, f"Sprint - {spec.title[:40]}", spec.summary or spec.title
-        )
-    if not req.prompt.strip():
-        raise HTTPException(status_code=422, detail="Prompt is required")
-
-    plan = plan_execution_sprint(
-        company_name=company.company_name,
-        objective=req.prompt,
-        scope_size=scope_size,
-        agents=agent_dicts,
-        detected_stack=discovery.detected_stack if discovery else None,
-        project_path=discovery.project_path if discovery else None,
-    )
-
-    return _serialize_plan_response(
-        plan,
-        scope_size,
-        f"Sprint - {company.company_name}",
-        req.prompt.strip(),
-    )
-
-
-@router.post("/plan_self_improvement_sprint")
-async def plan_self_improvement_sprint(
-    req: SelfImprovementSprintRequest,
-    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
-    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
-):
-    """Create a bounded autonomous-improvement plan from the repository's own context."""
-    require_company_role(session, user, req.company_id, "Manager")
-    scope_size = req.scope_size.upper()
-    if scope_size not in SCOPE_LIMITS:
-        raise HTTPException(
-            status_code=422, detail="Invalid scope_size. Valid values: S, M, L"
-        )
-
-    company, agent_dicts, discovery = _refused(
-        spec_planning.planning_context_of, session, req.company_id
-    )
-    objective = build_self_improvement_objective(
-        company_name=company.company_name,
-        detected_stack=discovery.detected_stack if discovery else None,
-    )
-
-    plan = build_self_improvement_plan(
-        company_name=company.company_name,
-        objective=objective,
-        scope_size=scope_size,
-        agents=agent_dicts,
-        detected_stack=discovery.detected_stack if discovery else None,
-        project_path=discovery.project_path if discovery else None,
-    )
-
-    return _serialize_plan_response(
-        plan,
-        scope_size,
-        f"Sprint - Improve {company.company_name}",
-        objective,
-    )
 
 
 @router.post("/start_sprint")
@@ -216,6 +101,18 @@ async def start_sprint(
             detail=f"Scope '{scope_size}' allows up to {item_limit} items, got {item_count}. Use scope 'L' or split this sprint.",
         )
 
+    # The sprint's team: hired roles only, and every task assigned within it.
+    hired = sprint_team.hired_roles(session, req.company_id)
+    team, team_source = sprint_team.decide(
+        sprint_team.selection_of(session.get(Company, req.company_id)),
+        _refused(sprint_team.check_team, req.team, hired),
+        _refused(sprint_team.check_team, req.suggested_team or None, hired),
+    )
+    _refused(
+        sprint_team.check_assignees,
+        team,
+        [i.get("assignee", "PO") for i in backlog_items],
+    )
     known: set[str] | None = None
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
@@ -228,6 +125,8 @@ async def start_sprint(
         scope_size=scope_size,
         goal=req.goal,
         specification_id=req.specification_id,
+        team=team,
+        team_source=team_source,
     )
 
     # Resolve the company's default business unit for quota tracking.
@@ -295,7 +194,8 @@ async def start_sprint(
                 user.email if user is not None else "a person",
                 "Manager",
             )
-        except CarryOverError as exc:
+            sprint_team.check_assignees(team, [item.assignee for item in carried])
+        except (CarryOverError, sprint_team.TeamRefused) as exc:
             session.rollback()
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
         item_ids.extend(item.id for item in carried)
@@ -426,6 +326,8 @@ async def list_sprints(
             "scope_size": s.scope_size,
             "specification_id": s.specification_id,
             "duration_days": s.duration_days,
+            "team": sprint_team.team_of(s),
+            "team_source": sprint_team.source_of(s),
             "archived_at": s.archived_at.isoformat() if s.archived_at else None,
             "archived_by": s.archived_by,
             "total": counts.get(s.id, (0, 0, 0))[0],
@@ -494,6 +396,8 @@ async def get_sprint_board(
         "goal": sprint.goal,
         "specification_id": sprint.specification_id,
         "archived_at": sprint.archived_at.isoformat() if sprint.archived_at else None,
+        "team": sprint_team.team_of(sprint),
+        "team_source": sprint_team.source_of(sprint),
     }
 
     items_db = session.exec(
@@ -569,7 +473,10 @@ async def update_backlog_item(
 
     if req.priority:
         item.priority = req.priority
-    if req.assignee is not None:
+    if req.assignee is not None:  # Within the sprint's team (services/sprint_team.py).
+        _refused(
+            sprint_team.check_assignees, sprint_team.team_of(sprint), [req.assignee]
+        )
         item.assignee = req.assignee
     if req.status or comment:
         # A person's transition: its event first, the comment its rendering.

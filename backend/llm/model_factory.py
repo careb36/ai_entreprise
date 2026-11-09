@@ -11,6 +11,9 @@ Model selection rationale:
   architecture and security reasoning.
 - **Developer / QA**: DeepSeek Coder — lower latency and cost for code-heavy
   tasks.
+- **BackendDeveloper / FrontendDeveloper / DevOps / DataEngineer**: as the
+  Developer (and ``AGENT_MODEL_DEVELOPER`` when they have no setting of their own).
+- **Designer**: the deciding roles' model, for specifications and markup.
 - **TechWriter / fallback**: Gemini 2.5 Flash — fast and fluent for
   documentation and general prompts.
 - **EngramProcessor**: DeepSeek Coder — deterministic (low temperature) for
@@ -40,6 +43,11 @@ class AgentRole(str, Enum):
     QA = "QA"
     SECOPS = "SecOps"
     TECH_WRITER = "TechWriter"
+    BACKEND_DEVELOPER = "BackendDeveloper"
+    FRONTEND_DEVELOPER = "FrontendDeveloper"
+    DEVOPS = "DevOps"
+    DESIGNER = "Designer"
+    DATA_ENGINEER = "DataEngineer"
     ENGRAM_PROCESSOR = "EngramProcessor"
 
 
@@ -70,8 +78,24 @@ class ModelFactory:
         AgentRole.QA:               LLMConfig(model_name="deepseek-v4-pro",  temperature=0.2, max_tokens=4096),
         AgentRole.SECOPS:           LLMConfig(model_name="qwen3.7-plus",     temperature=0.1, max_tokens=4096),  # precision-critical
         AgentRole.TECH_WRITER:      LLMConfig(model_name="qwen3.6-flash",    temperature=0.4, max_tokens=4096),
+        # The specialised coding roles run what the Developer runs; the
+        # Designer writes specifications and markup, as the deciding roles do.
+        AgentRole.BACKEND_DEVELOPER:  LLMConfig(model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096),
+        AgentRole.FRONTEND_DEVELOPER: LLMConfig(model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096),
+        AgentRole.DEVOPS:             LLMConfig(model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096),
+        AgentRole.DATA_ENGINEER:      LLMConfig(model_name="deepseek-v4-pro", temperature=0.2, max_tokens=4096),
+        AgentRole.DESIGNER:           LLMConfig(model_name="qwen3.7-plus",    temperature=0.4, max_tokens=4096),
         AgentRole.ENGRAM_PROCESSOR: LLMConfig(model_name="deepseek-v4-pro",  temperature=0.1, max_tokens=2048),
     }
+
+    # The coding roles that read the Developer's settings when they have none
+    # of their own, so a deployment that set AGENT_MODEL_DEVELOPER keeps it.
+    DEVELOPER_FAMILY = frozenset({
+        AgentRole.BACKEND_DEVELOPER,
+        AgentRole.FRONTEND_DEVELOPER,
+        AgentRole.DEVOPS,
+        AgentRole.DATA_ENGINEER,
+    })
 
     # Class-level cache so each role is instantiated at most once per process.
     _model_cache: Dict[AgentRole, Optional[ChatOpenAI]] = {}
@@ -85,7 +109,11 @@ class ModelFactory:
         1. ``AGENT_MODEL_<ROLE>`` (``AGENT_MODEL_PO``, ``AGENT_MODEL_ARCHITECT``,
            ``AGENT_MODEL_SCRUM_MASTER``, ``AGENT_MODEL_DEVELOPER``,
            ``AGENT_MODEL_QA``, ``AGENT_MODEL_SECOPS``,
-           ``AGENT_MODEL_TECH_WRITER``, ``AGENT_MODEL_ENGRAM_PROCESSOR``);
+           ``AGENT_MODEL_TECH_WRITER``, ``AGENT_MODEL_BACKEND_DEVELOPER``,
+           ``AGENT_MODEL_FRONTEND_DEVELOPER``, ``AGENT_MODEL_DEVOPS``,
+           ``AGENT_MODEL_DESIGNER``, ``AGENT_MODEL_DATA_ENGINEER``,
+           ``AGENT_MODEL_ENGRAM_PROCESSOR``); a coding role without its own
+           falls back to ``AGENT_MODEL_DEVELOPER``;
         2. ``NEMOTRON_ROLES``, for the roles it names: ``NEMOTRON_MODEL``
            (with ``NEMOTRON_MODEL_STRATEGIC`` / ``_FAST`` overrides);
         3. ``AGENT_MODEL``, for every role (one provider for the whole team);
@@ -94,7 +122,10 @@ class ModelFactory:
         Unset means the default, so nothing changes for existing deployments.
         An agent's own ``model`` (the Agents page) still wins over all of it.
         """
-        own = os.getenv(f"AGENT_MODEL_{role.name}", "").strip()
+        family = role in ModelFactory.DEVELOPER_FAMILY
+        own = os.getenv(f"AGENT_MODEL_{role.name}", "").strip() or (
+            os.getenv("AGENT_MODEL_DEVELOPER", "").strip() if family else ""
+        )
         if own:
             return own
         default = ModelFactory.ROLE_MODEL_MAP[role].model_name
@@ -103,13 +134,14 @@ class ModelFactory:
             for r in os.getenv("NEMOTRON_ROLES", "").split(",")
             if r.strip()
         }
-        if role.value.lower() not in opted_in:
+        if role.value.lower() not in opted_in and not (family and "developer" in opted_in):
             return os.getenv("AGENT_MODEL", "").strip() or default
         tier_var = {
             AgentRole.PO: "NEMOTRON_MODEL_STRATEGIC",
             AgentRole.ARCHITECT: "NEMOTRON_MODEL_STRATEGIC",
             AgentRole.SECOPS: "NEMOTRON_MODEL_STRATEGIC",
             AgentRole.TECH_WRITER: "NEMOTRON_MODEL_FAST",
+            AgentRole.DESIGNER: "NEMOTRON_MODEL_STRATEGIC",
         }.get(role, "NEMOTRON_MODEL")
         return os.getenv(tier_var) or os.getenv("NEMOTRON_MODEL", "") or default
 
@@ -154,13 +186,13 @@ _ROLE_ALIASES: Dict[str, AgentRole] = {
     # The Reviewer agent judges deliverables, as QA does.
     "reviewer": AgentRole.QA,
     "dev": AgentRole.DEVELOPER,
-    "backenddev": AgentRole.DEVELOPER,
-    "frontenddev": AgentRole.DEVELOPER,
+    "backenddev": AgentRole.BACKEND_DEVELOPER,
+    "frontenddev": AgentRole.FRONTEND_DEVELOPER,
     "fullstackdev": AgentRole.DEVELOPER,
     "mobiledev": AgentRole.DEVELOPER,
-    "dataengineer": AgentRole.DEVELOPER,
     "mlengineer": AgentRole.DEVELOPER,
-    "devops": AgentRole.DEVELOPER,
+    "data": AgentRole.DATA_ENGINEER,
+    "sre": AgentRole.DEVOPS,
     "productowner": AgentRole.PO,
     "sm": AgentRole.SCRUM_MASTER,
     "security": AgentRole.SECOPS,
