@@ -17,14 +17,15 @@ from services.developer_tool_schemas import SERVER
 
 def redact_secrets(path: str, text: str) -> str:
     """*text* with every line that looks like it holds a secret replaced
-    (``standards.secrets_in``): what the daemon read is shown to the model
-    without the value."""
+    (``standards.secrets_in``, or ``standards.secret_line``, which fails
+    closed on a secret-looking name followed by a quoted value whatever sits
+    between): what the daemon read is shown to the model without the value."""
     from services import standards
 
     lines = text.splitlines()
     out = []
     for line in lines:
-        if standards.secrets_in(path or "file", line):
+        if standards.secrets_in(path or "file", line) or standards.secret_line(line):
             out.append("[line redacted: it looks like a secret]")
         else:
             out.append(line)
