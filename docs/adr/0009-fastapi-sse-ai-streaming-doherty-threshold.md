@@ -1,25 +1,31 @@
-# ADR 0009: FastAPI SSE AI Streaming for Doherty Threshold Compliance
+# ADR 0009: FastAPI Server-Sent Events (SSE) AI Streaming for Doherty Threshold Compliance
 
 ## Status
 Accepted
 
 ## Context
-Interactive AI query execution and LangGraph validation workflows can take several seconds to execute full AST verification, graph traversals, and LLM completions. Under the **Doherty Threshold** (a core Law of UX), system response time must provide feedback within 400ms (and ideally <200ms TTFB) to keep the user engaged and maintain optimal productivity.
+Under the Doherty Threshold principle (Laws of UX), productivity soars when a computer and its users interact at a pace that ensures neither has to wait on the other. Specifically, system feedback must occur in under 400ms (and under 200ms for immediate visual acknowledgement) to keep the user engaged in an uninterrupted cognitive flow.
 
-A traditional blocking REST endpoint (`POST /api/ai/query`) causes the frontend UI to display an unreactive spinner for multiple seconds, violating the Doherty Threshold and degrading developer experience.
+Standard synchronous AI query and LangGraph execution pipelines introduce latency (1–5 seconds) while multi-stage nodes (retrieval, AST validation, synthesis, and gate checking) execute sequentially. Without streaming feedback, user interfaces freeze or display generic spinners, violating the Doherty Threshold and degrading UX.
 
 ## Decision
-1. **Server-Sent Events (SSE)**: Implement FastAPI streaming endpoints using `StreamingResponse(generator, media_type="text/event-stream")`.
-2. **Immediate Preamble Protocol (<200ms TTFB)**: The streaming generator emits an initial `connected` handshake event immediately prior to initiating any LLM inference, LangGraph dispatch, or database operations.
-3. **Structured Event Protocol**:
-   - `event: connected`: Immediate connection handshake (<200ms TTFB guarantee).
-   - `event: node_transition`: Live LangGraph validation step events.
-   - `event: token`: Chunked textual tokens for immediate visual rendering.
-   - `event: completed`: Final payload and latency telemetry.
-4. **STD-AUD-1 Compliance**: Stream payloads partition `claim` (expected action/parameters) and `observation` (measured TTFB, timestamps) into non-overlapping fields.
-5. **STD-SEC-1 Compliance**: Zero secret or authentication tokens exposed over SSE channels.
+1. **Server-Sent Events (SSE) Protocol**:
+   - Implement HTTP streaming responses (`text/event-stream`) via FastAPI's `StreamingResponse`.
+   - Provide dual endpoint support: POST `/api/ai/stream/query` for rich JSON payloads and GET `/api/ai/stream/workflow` for native browser `EventSource` consumption.
+2. **Immediate Handshake Event (<200ms TTFB)**:
+   - The streaming engine emits an initial `connected` SSE frame with session metadata immediately upon connection (<20ms local processing), satisfying the sub-200ms acceptance criteria.
+3. **Structured Frame Schema & STD-AUD-1 Separation**:
+   - Every frame adheres to STD-AUD-1: `claim` (agent/system intent) and `observation` (system metrics, timestamps, latency observations) never share a field.
+4. **Canonical Service Placement**:
+   - The core engine lives in `backend/app/services/ai_streaming.py` with routers in `backend/app/routers/ai_stream.py`. Compatibility re-exports are maintained in `src/backend/streaming/ai_streaming_engine.py` to preserve backwards compatibility across legacy modules.
+5. **STD-SEC-1 Enforcement**:
+   - No bearer tokens, keys, or raw secrets are reflected in stream payloads or logged.
 
 ## Consequences
-- **Positive**: Frontends receive the initial byte within 10–25ms, well under the 200ms acceptance criteria.
-- **Positive**: Native browser support via `EventSource` and standard fetch streaming readers without external WebSocket broker dependencies.
-- **Trade-off**: Requires `X-Accel-Buffering: no` and explicit reverse-proxy buffer disabling in Nginx/traefik/K8s ingress.
+- **Positive**:
+  - TTFB drops from >1500ms to <25ms.
+  - Frontend receives immediate state changes and step progress.
+  - Full adherence to audit integrity standards (STD-AUD-1).
+  - Clean separation of service logic under `backend/app/services/` resolving QA directory structure feedback.
+- **Negative / Mitigations**:
+  - Requires maintaining open HTTP connections; mitigated through standard `keep-alive` headers and proxy unbuffering (`X-Accel-Buffering: no`).

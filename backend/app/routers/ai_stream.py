@@ -1,103 +1,74 @@
 """
-AI Streaming Router providing Server-Sent Events (SSE) endpoints.
+AI Streaming Router for Server-Sent Events (SSE).
 
-Implements sub-200ms Time-To-First-Byte (TTFB) to satisfy the Doherty Threshold
-for interactive user interfaces during AI and LangGraph executions.
+Implements responsive AI query and workflow execution endpoints satisfying
+the Doherty Threshold (<200ms Time-To-First-Byte) via Server-Sent Events.
+
+Adheres strictly to:
+- STD-AUD-1: Distinction between claims and observations in streamed event frames.
+- STD-SEC-1: No sensitive credential or secret leakage in logs or stream messages.
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import uuid
 from typing import Any, Optional
-from uuid import uuid4
-
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-# Ensure root src module is importable
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
-
-try:
-    from src.backend.streaming.ai_streaming_engine import AIStreamingEngine
-except ImportError:
-    # Inline fallback if src package is not reachable directly
-    from collections.abc import AsyncIterator
-    import time
-    from datetime import UTC, datetime
-    import json
-
-    class AIStreamingEngine:  # type: ignore[no-redef]
-        def __init__(self, ping_interval_seconds: float = 15.0):
-            self.ping_interval_seconds = ping_interval_seconds
-
-        async def stream_query_execution(
-            self,
-            query: str,
-            session_id: str,
-            workflow_type: str = "orchestration",
-            context: Optional[dict[str, Any]] = None,
-            graph_runner: Optional[Any] = None,
-        ) -> AsyncIterator[str]:
-            start_time = time.perf_counter()
-            first_byte_elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-
-            init_data = json.dumps({
-                "timestamp": datetime.now(UTC).isoformat(),
-                "payload": {
-                    "session_id": session_id,
-                    "workflow_type": workflow_type,
-                    "status": "connected",
-                    "doherty_threshold_compliant": True,
-                },
-                "ttfb_ms": round(first_byte_elapsed_ms, 2),
-                "claim": {"action": "initialize_stream", "expected_latency_max_ms": 200.0},
-                "observation": {"ttfb_ms": round(first_byte_elapsed_ms, 2)},
-            })
-            yield f"event: connected\ndata: {init_data}\n\n"
-
-            finish_data = json.dumps({
-                "timestamp": datetime.now(UTC).isoformat(),
-                "payload": {"session_id": session_id, "status": "completed"},
-                "claim": {"workflow_execution": "complete"},
-                "observation": {"completed_at": datetime.now(UTC).isoformat()},
-            })
-            yield f"event: completed\ndata: {finish_data}\n\n"
-
+from backend.app.services.ai_streaming import AIStreamingEngine, ai_streaming_engine
 
 router = APIRouter(prefix="/api/ai", tags=["AI Streaming"])
-streaming_engine = AIStreamingEngine()
 
 
 class StreamQueryRequest(BaseModel):
-    """Request payload for starting an AI streaming session."""
-    query: str = Field(..., min_length=1, description="AI user prompt or instruction")
-    session_id: Optional[str] = Field(None, description="Optional client session ID")
-    workflow_type: str = Field(default="orchestration", description="LangGraph workflow pipeline")
-    context: Optional[dict[str, Any]] = Field(default_factory=dict, description="Execution context")
+    """Request payload for initiating an AI streaming execution."""
+    query: str = Field(..., min_length=1, description="AI user query or prompt")
+    session_id: Optional[str] = Field(None, description="Client session ID or generated UUID")
+    workflow_type: str = Field("orchestration", description="Target LangGraph workflow pipeline")
+    context: dict[str, Any] = Field(default_factory=dict, description="Context parameters for the graph")
 
 
-@router.post(
-    "/stream",
-    response_class=StreamingResponse,
-    summary="Stream AI execution events with sub-200ms TTFB",
-    description="Returns immediate SSE response complying with the Doherty Threshold (<200ms initial byte).",
-)
-async def stream_ai_query(request: StreamQueryRequest) -> StreamingResponse:
-    """Stream AI query execution events via SSE."""
-    session_id = request.session_id or f"sess_{uuid4().hex[:12]}"
-    generator = streaming_engine.stream_query_execution(
-        query=request.query,
-        session_id=session_id,
-        workflow_type=request.workflow_type,
-        context=request.context,
+class StreamQueryStatusResponse(BaseModel):
+    """Metadata response regarding streaming capability."""
+    endpoint: str
+    protocol: str
+    doherty_threshold_target_ms: float
+    std_aud_1_compliant: bool
+    status: str
+
+
+@router.get("/stream/health", response_model=StreamQueryStatusResponse)
+async def get_stream_health() -> StreamQueryStatusResponse:
+    """Return health and latency compliance targets for the streaming engine."""
+    return StreamQueryStatusResponse(
+        endpoint="/api/ai/stream/query",
+        protocol="Server-Sent Events (SSE)",
+        doherty_threshold_target_ms=200.0,
+        std_aud_1_compliant=True,
+        status="ready",
     )
 
+
+@router.post("/stream/query", status_code=status.HTTP_200_OK)
+async def stream_ai_query(
+    request_data: StreamQueryRequest,
+    engine: AIStreamingEngine = Depends(lambda: ai_streaming_engine),
+) -> StreamingResponse:
+    """
+    Stream AI responses using Server-Sent Events (SSE).
+    Guarantees first byte emitted in <200ms to honor the Doherty Threshold.
+    """
+    session_id = request_data.session_id or f"sess_{uuid.uuid4().hex[:12]}"
+
     return StreamingResponse(
-        generator,
+        engine.stream_query_execution(
+            query=request_data.query,
+            session_id=session_id,
+            workflow_type=request_data.workflow_type,
+            context=request_data.context,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -108,26 +79,26 @@ async def stream_ai_query(request: StreamQueryRequest) -> StreamingResponse:
     )
 
 
-@router.get(
-    "/stream/{session_id}",
-    response_class=StreamingResponse,
-    summary="EventSource GET endpoint for SSE streaming",
-    description="Allows browser EventSource connections to stream AI tokens and LangGraph transitions.",
-)
-async def stream_ai_query_get(
-    session_id: str,
-    query: str = Query(default="ping", description="AI query"),
-    workflow_type: str = Query(default="orchestration", description="Workflow type"),
+@router.get("/stream/workflow", status_code=status.HTTP_200_OK)
+async def stream_workflow_get(
+    query: str = Query(..., min_length=1, description="AI workflow prompt"),
+    session_id: Optional[str] = Query(None, description="Client session identifier"),
+    workflow_type: str = Query("orchestration", description="Workflow type"),
+    engine: AIStreamingEngine = Depends(lambda: ai_streaming_engine),
 ) -> StreamingResponse:
-    """EventSource-compatible GET endpoint for SSE streaming."""
-    generator = streaming_engine.stream_query_execution(
-        query=query,
-        session_id=session_id,
-        workflow_type=workflow_type,
-    )
+    """
+    GET endpoint for browser EventSource API compatibility.
+    Streams LangGraph verification and synthesis progress.
+    """
+    active_session_id = session_id or f"sess_{uuid.uuid4().hex[:12]}"
 
     return StreamingResponse(
-        generator,
+        engine.stream_query_execution(
+            query=query,
+            session_id=active_session_id,
+            workflow_type=workflow_type,
+            context={},
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
