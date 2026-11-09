@@ -52,7 +52,6 @@ from models.manager import ManagerDecision
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from llm.model_factory import default_model_for_role
 from services import (
     company_models,
     locks,
@@ -68,6 +67,7 @@ from services.manager_inbox import (  # noqa: F401 - Re-exported: the agent's vi
     run_facts,
     waiting_tasks,
 )
+from services.models.model_factory import default_model_for_role
 
 MANAGER_AGENT_NAME = manager_actions.MANAGER_AGENT_NAME
 # The Manager agent runs the model the company chose for the ScrumMaster.

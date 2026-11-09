@@ -2,7 +2,7 @@
 """Refresh the model catalogue snapshot the backend ships with.
 
 The backend reads models.dev (https://models.dev/api.json, MIT) at run time
-when it can (``services/model_catalog.py``) and falls back to this snapshot
+when it can (``services/models/model_catalog.py``) and falls back to this snapshot
 when it cannot: offline, in tests, behind a firewall. The snapshot keeps the
 providers in ``SNAPSHOT_PROVIDERS`` and, for each model, only the fields
 La Fabrique uses (capabilities, limits, price).
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # Loaded by path: the services package imports the whole backend.
 _spec = importlib.util.spec_from_file_location(
-    "model_catalog", ROOT / "backend" / "app" / "services" / "model_catalog.py"
+    "model_catalog", ROOT / "backend" / "app" / "services" / "models" / "model_catalog.py"
 )
 _catalog = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_catalog)

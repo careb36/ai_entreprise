@@ -3,7 +3,7 @@
 Roles are stored as free text on ``Agent.role`` and ``BacklogItem.assignee``;
 this module is the one place that says which names the factory knows and
 which of them take the Developer's path. The names are the ``AgentRole``
-values of ``llm/model_factory.py`` (``tests/test_roles.py`` keeps the two in
+values of ``services/models/model_factory.py`` (``tests/test_roles.py`` keeps the two in
 step): CamelCase, no spaces, as ``ScrumMaster`` and ``TechWriter`` already
 were. ``Developer`` keeps working for existing companies; the specialised
 coding roles (``BackendDeveloper``, ``FrontendDeveloper``, ``DevOps``,

@@ -39,8 +39,8 @@ from models.agent_run import (
 )
 from sqlmodel import Session, or_, select
 
-from llm.model_factory import default_model_for_role
 from services import company_models, locks
+from services.models.model_factory import default_model_for_role
 
 REVIEWER_AGENT_NAME = "Reviewer agent"
 REVIEWER_ROLE = "Reviewer"
