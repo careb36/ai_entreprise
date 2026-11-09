@@ -2176,6 +2176,18 @@
     "unreported_one": "{{count}} turno sin conteo de tokens informado, fuera de los tokens.",
     "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens."
   },
+  "consoleProducers": {
+    "title": "Productores de consola",
+    "subtitle": "Un agente de programación de terminal puede producir las tareas de un rol en lugar del modelo. El daemon del espacio de trabajo lo ejecuta sin interfaz en el worktree de la tarea, con el sandbox de la empresa; la entrega es lo que el daemon vio cambiar, nunca lo que el agente dice.",
+    "needsGit": "Un productor de consola trabaja en el worktree propio de la tarea: activa primero el flujo de Git.",
+    "cooldown": "{{cli}} está en pausa hasta {{until}} (cuota agotada o ausente en la máquina del daemon); mientras tanto el modelo produce sus tareas.",
+    "role": "Rol",
+    "producer": "Producido por",
+    "model": "El modelo (sin productor de consola)",
+    "evidence": "El informe del propio CLI se guarda como afirmación; los archivos, el comando, el código de salida y la duración son observaciones, verificadas como cualquier entrega.",
+    "saved": "Productores de consola guardados.",
+    "sandboxWarning": "Ningún CLI se ejecuta hasta entonces: {{reason}}. El modelo produce estas tareas y el tablero dice por qué. Un productor de consola solo se ejecuta en un sandbox container o bwrap con red, y solo ve las variables listadas en la configuración del sandbox (lista ahí la clave del proveedor)."
+  },
   "teamRoles": {
     "PO": "Product Owner",
     "Architect": "Arquitecto",

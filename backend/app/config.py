@@ -117,6 +117,9 @@ class Settings(BaseSettings):
     REVIEWER_VERIFY_GRACE_SECONDS: float = 60.0
     # Per-call timeout for a console assistant run requested from the daemon.
     CONSOLE_ASSISTANT_TIMEOUT_SECONDS: float = 90.0
+    # A console producer's run (services/console_producer.py): the CLI's wall clock
+    # on the daemon (which caps a request at 900 s).
+    CONSOLE_PRODUCER_TIMEOUT_SECONDS: float = 600.0
     # MCP tools (``services/mcp_tools.py``): how many rounds of tool calls a
     # task may make before the model must answer, how long one call and one
     # connection may take, and how much of a result the model is shown.
