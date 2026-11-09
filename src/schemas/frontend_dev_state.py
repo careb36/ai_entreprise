@@ -1,113 +1,111 @@
-"""
-LangGraph State Schemas for Frontend Dev Agent and TS Pre-validation.
+"""Frontend Dev Agent State Schema.
 
-Strictly adheres to STD-AUD-1: Claims and observations never share a field.
-Agent claims (what the agent says it produced or fixed) are isolated from
-runtime observations (what the tsc/compiler saw and executed).
+Defines the LangGraph state models for frontend code generation, TypeScript pre-validation,
+and single-pass self-correction. Strictly enforces STD-AUD-1: Claims and observations
+never share a field.
 """
 
-from typing import Dict, List, Literal, Optional
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-class TSError(BaseModel):
-    """Structured TypeScript compiler error."""
-    file_path: str = Field(description="Relative path of the file containing the error")
-    line: int = Field(description="Line number of error")
-    column: int = Field(description="Column number of error")
-    code: str = Field(description="TypeScript error code (e.g., TS2322)")
-    message: str = Field(description="Human-readable error message from tsc")
-
-
 class AgentClaims(BaseModel):
+    """What the agent asserts it has performed or fixed (claims).
+    
+    Per STD-AUD-1, claims represent agent declarations and are never
+    mixed with observed compiler output or verification metrics.
     """
-    STD-AUD-1: What the agent claims it did.
-    Unverified self-reported claims from the LLM generator or corrector.
-    """
-    claimed_files: List[str] = Field(
+
+    files_written: List[str] = Field(
         default_factory=list,
-        description="List of files the agent claims to have generated or modified"
+        description="List of file paths the agent claims to have created or modified.",
     )
-    claim_summary: str = Field(
+    tests_run: List[str] = Field(
+        default_factory=list,
+        description="List of tests the agent claims to have executed.",
+    )
+    claimed_fixes: List[str] = Field(
+        default_factory=list,
+        description="Explanations of bug or type error fixes the agent claims to have applied.",
+    )
+    rationale: str = Field(
         default="",
-        description="Agent's self-reported summary of the changes made"
+        description="Agent rationale or commentary explaining the design decisions.",
     )
-    claimed_resolved: bool = Field(
-        default=False,
-        description="Whether the agent claims it resolved the compilation issue"
-    )
+
+
+class TSError(BaseModel):
+    """Structured TypeScript compiler diagnostic."""
+
+    file: str = Field(..., description="File path where the diagnostic occurred.")
+    line: int = Field(default=1, description="Line number (1-based).")
+    column: int = Field(default=1, description="Column number (1-based).")
+    code: str = Field(..., description="TypeScript diagnostic code (e.g., TS2322).")
+    message: str = Field(..., description="Compiler error message text.")
+    raw: str = Field(default="", description="Original raw error line from tsc.")
 
 
 class CompilerObservations(BaseModel):
+    """Observed outcomes from tsc / Vite compilation checks.
+    
+    Per STD-AUD-1, observations represent independently verified facts captured
+    by the compiler/daemon runtime, strictly separated from agent claims.
     """
-    STD-AUD-1: What the compilation engine and execution environment observed.
-    Hard observation telemetry collected directly from tsc --noEmit.
-    """
-    observed_exit_code: int = Field(description="Exit code returned by tsc process")
-    observed_compilation_success: bool = Field(description="True if tsc --noEmit passed with 0 errors")
-    observed_error_count: int = Field(default=0, description="Number of observed errors")
-    observed_stdout: str = Field(default="", description="Raw stdout emitted by compiler")
-    observed_stderr: str = Field(default="", description="Raw stderr emitted by compiler")
-    observed_errors: List[TSError] = Field(
-        default_factory=list,
-        description="Structured list of compiler errors parsed from stdout"
-    )
-    checked_files: List[str] = Field(
-        default_factory=list,
-        description="Files inspected during the compile check"
-    )
-    execution_time_ms: float = Field(default=0.0, description="Duration of validation execution")
 
-
-class TSValidationResult(BaseModel):
-    """Aggregated validation result separating observations and derived feedback."""
-    is_valid: bool
-    observations: CompilerObservations
-    formatted_feedback: str = Field(
-        default="",
-        description="Formatted diagnostic string fed to LLM during self-correction pass"
+    passed: bool = Field(..., description="Whether compilation succeeded without errors.")
+    exit_code: int = Field(..., description="Process exit code from tsc --noEmit.")
+    stdout: str = Field(default="", description="Observed stdout from the compilation run.")
+    stderr: str = Field(default="", description="Observed stderr from the compilation run.")
+    errors: List[TSError] = Field(
+        default_factory=list,
+        description="Structured diagnostics extracted from compiler output.",
+    )
+    attempt: int = Field(
+        default=1,
+        description="Compilation attempt index (1 for initial pre-val, 2 for post-correction).",
+    )
+    execution_time_ms: float = Field(
+        default=0.0,
+        description="Duration of the compilation check in milliseconds.",
     )
 
 
 class FrontendDevState(BaseModel):
-    """
-    State container for the Frontend Dev LangGraph orchestration graph.
-    Maintains self-correction loop state, artifact buffers, claims, and observations.
-    """
-    task_id: str = Field(..., description="Unique task identifier")
-    prompt: str = Field(..., description="User requirement or issue description")
-    code_artifacts: Dict[str, str] = Field(
+    """LangGraph state representation for Frontend Dev Agent workflow."""
+
+    task_id: str = Field(..., description="Task or sprint backlog identifier.")
+    prompt: str = Field(..., description="User or requirement prompt describing desired UI.")
+    artifacts: Dict[str, str] = Field(
         default_factory=dict,
-        description="File path to file content mapping for generated frontend code"
+        description="Generated candidate frontend files mapped by relative path.",
     )
-    current_phase: Literal[
-        "generation",
-        "validating",
-        "self_correction",
-        "ready_for_qa",
-        "validation_failed"
-    ] = Field(default="generation")
-    error_feedback: Optional[str] = Field(
-        default=None,
-        description="Compiler error output supplied to the agent on retry"
-    )
-    retry_count: int = Field(
+    correction_count: int = Field(
         default=0,
-        description="Number of self-correction attempts made"
+        description="Number of self-correction attempts executed so far.",
     )
-    max_retries: int = Field(
+    max_corrections: int = Field(
         default=1,
-        description="Maximum allowed self-correction passes (default: 1)"
+        description="Maximum allowed self-correction passes (bounded to 1 per ADR-004).",
     )
     claims: AgentClaims = Field(
         default_factory=AgentClaims,
-        description="Agent self-reported claims"
+        description="Agent-asserted declarations (files written, claimed fixes).",
     )
-    observations: Optional[CompilerObservations] = Field(
-        default=None,
-        description="Observed compilation results from tsc"
-    )
-    history: List[str] = Field(
+    observations: List[CompilerObservations] = Field(
         default_factory=list,
-        description="Execution step log tracking transitions"
+        description="Observed compilation results captured directly from compiler execution.",
+    )
+    status: str = Field(
+        default="initialized",
+        description="Current state: initialized, generated, needs_correction, ready_for_qa, validation_failed.",
+    )
+    next_step: Optional[str] = Field(
+        default=None,
+        description="Routing destination for subsequent LangGraph node.",
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Execution metadata and tracing context.",
     )
