@@ -3,8 +3,8 @@ that produces a role's tasks instead of the LLM call (``{"Developer":
 "claude"}``, ``services/console_producer.py``). Empty for every company: each
 role stays produced by its model until a Manager names a CLI.
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0020
+Revises: 0019
 Create Date: 2026-11-09 18:00:00 UTC
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0019"
-down_revision = "0018"
+revision = "0020"
+down_revision = "0019"
 branch_labels = None
 depends_on = None
 

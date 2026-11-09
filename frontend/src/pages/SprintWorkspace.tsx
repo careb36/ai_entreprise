@@ -23,6 +23,7 @@ import SprintOverview from './Dashboard'
 import { useSprintBoard } from '../hooks/useQueries'
 import { ApiError } from '../services/api'
 import { SprintControls, SprintStatusBanner } from '../components/SprintControls'
+import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
 import { parseRouteId } from '../lib/routeId'
 
@@ -201,6 +202,7 @@ export const SprintWorkspace: React.FC = () => {
             </span>
           )}
         </div>
+        {board && <SprintTeamChips team={board.sprint.team} source={board.sprint.team_source} />}
         {board && <SprintStatusBanner sprint={board.sprint} />}
         <div className="flex flex-wrap items-end gap-2 border-b border-surface-700">
           <SprintTabs sprintId={sprintId} selected={tab} />

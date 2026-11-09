@@ -2,7 +2,7 @@
 
 A task used to be written in one shot from a prompt, with a listing of the
 project's root files as all the model saw of the code it was changing. Here
-the roles that deliver files (Developer, QA) get these tools through the
+the roles that deliver files (the Developer roles, QA, the Designer) get these tools through the
 workspace daemon, offered beside the company's MCP tools in the same loop
 (``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
 agent-computer interface (``developer_tool_replies``):
@@ -61,6 +61,7 @@ from services import (
     mcp_tools,
     repo_map,
     research_tools,
+    roles,
     sandbox,
     workspace_edits,
 )
@@ -68,7 +69,8 @@ from services import (
 logger = logging.getLogger("fabrique-task-worker")
 
 SERVER = developer_tool_schemas.SERVER
-TOOL_ROLES = {"developer", "dev", "qa", "tester"}
+# The roles that deliver files (services/roles.py; aliases such as Dev read too).
+TOOL_ROLES = frozenset(roles.FILE_ROLES)
 READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
 RUN_TESTS = developer_tool_schemas.RUN_TESTS
 EDIT = developer_tool_schemas.EDIT
@@ -103,10 +105,7 @@ def _runs_with(command: str, runner: str) -> bool:
 
 def offered_to(role: str | None) -> bool:
     """Whether a role gets the workspace tools."""
-    return (
-        settings.DEVELOPER_TOOLS_ENABLED
-        and str(role or "").strip().lower() in TOOL_ROLES
-    )
+    return settings.DEVELOPER_TOOLS_ENABLED and roles.canonical(role) in TOOL_ROLES
 
 
 class WorkspaceToolbox:

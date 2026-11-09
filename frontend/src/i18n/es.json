@@ -419,7 +419,7 @@
         "description": "Prueba y valida la calidad"
       },
       "DevOps": {
-        "label": "Ingeniero de DevOps",
+        "label": "Ingeniero DevOps / SRE",
         "description": "CI/CD e infraestructura"
       },
       "Security": {
@@ -427,8 +427,24 @@
         "description": "Vulnerabilidades y cumplimiento normativo"
       },
       "Data": {
-        "label": "Ingeniero de datos",
+        "label": "Ingeniero de datos / DBA",
         "description": "Canalizaciones y análisis"
+      },
+      "BackendDeveloper": {
+        "label": "Desarrollador backend",
+        "description": "Lógica de servidor, APIs y servicios"
+      },
+      "FrontendDeveloper": {
+        "label": "Desarrollador frontend",
+        "description": "Interfaces de usuario en el navegador"
+      },
+      "Designer": {
+        "label": "Diseñador UX/UI",
+        "description": "Flujos UX, especificaciones de UI y accesibilidad"
+      },
+      "TechWriter": {
+        "label": "Redactor técnico",
+        "description": "Documentación del proyecto y de la API"
       }
     },
     "seniorities": {
@@ -1991,7 +2007,9 @@
       "audit": "Evidencia y auditoría",
       "documentation": "Documentación",
       "operations": "Operaciones",
-      "product": "Producto"
+      "product": "Producto",
+      "data": "Datos",
+      "ux": "UX"
     }
   },
   "sources": {
@@ -2169,6 +2187,35 @@
     "evidence": "El informe del propio CLI se guarda como afirmación; los archivos, el comando, el código de salida y la duración son observaciones, verificadas como cualquier entrega.",
     "saved": "Productores de consola guardados.",
     "sandboxWarning": "Ningún CLI se ejecuta hasta entonces: {{reason}}. El modelo produce estas tareas y el tablero dice por qué. Un productor de consola solo se ejecuta en un sandbox container o bwrap con red, y solo ve las variables listadas en la configuración del sandbox (lista ahí la clave del proveedor)."
+  },
+  "teamRoles": {
+    "PO": "Product Owner",
+    "Architect": "Arquitecto",
+    "ScrumMaster": "Scrum Master",
+    "Developer": "Desarrollador",
+    "QA": "Ingeniero de QA",
+    "SecOps": "Seguridad (SecOps)",
+    "TechWriter": "Redactor técnico",
+    "BackendDeveloper": "Desarrollador backend",
+    "FrontendDeveloper": "Desarrollador frontend",
+    "DevOps": "DevOps / SRE",
+    "Designer": "Diseñador UX/UI",
+    "DataEngineer": "Ingeniero de datos / DBA"
+  },
+  "sprintTeam": {
+    "title": "Equipo del sprint",
+    "hint": "Los roles a los que van las tareas de este sprint. El PO los sugirió para este pedido; marcá o desmarcá y volvé a planificar si el rol de una tarea ya no está en el equipo.",
+    "suggested": "sugerido por el PO",
+    "reason": "PO: {{why}}",
+    "replan": "Hay una tarea asignada a un rol fuera del equipo: volvé a planificar con este equipo antes de lanzar.",
+    "sprintLabel": "Equipo:",
+    "everyRole": "todos los roles que contrató la empresa",
+    "source": {
+      "suggested": "Elegido por sugerencia del PO, confirmada por un Manager.",
+      "person": "Elegido por un Manager, que cambió la sugerencia del PO.",
+      "automatic": "Elegido automáticamente a partir de la sugerencia del PO.",
+      "all": "Sin equipo elegido: todos los roles que contrató la empresa."
+    }
   },
   "cost": {
     "runTitle": "Costo de esta ejecución",

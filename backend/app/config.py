@@ -158,7 +158,7 @@ class Settings(BaseSettings):
     MODELS_CATALOG_URL: str = "https://models.dev/api.json"
     MODELS_CATALOG_REFRESH_HOURS: float = 24.0
     RESEARCH_TOOLS_ENABLED: bool = True
-    RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter"
+    RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter,Designer"
     RESEARCH_ALLOWED_HOSTS: str = ""
     RESEARCH_TOOL_ROUNDS: int = 6
     RESEARCH_TIMEOUT_SECONDS: float = 20.0

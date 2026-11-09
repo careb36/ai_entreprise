@@ -64,6 +64,12 @@ class Sprint(SQLModel, table=True):
     archived_at: datetime | None = None
     archived_by: str | None = None
     archive_reason: str | None = None
+    # The roles this sprint's tasks may go to (``services/sprint_team.py``):
+    # the PO suggests them, a Manager confirms. Empty: every role the company
+    # hired, as before.
+    team: Any | None = Field(default=None, sa_column=Column(JSON))
+    # Who chose it: "suggested", "person", "automatic" or "all" (no team).
+    team_source: str | None = None
 
 
 class BacklogItem(SQLModel, table=True):

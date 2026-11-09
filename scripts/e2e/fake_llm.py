@@ -190,6 +190,8 @@ def answer(prompt: str) -> str:
                     {"title": "Add greeting", "description": "greet(name) with its tests.", "priority": "high", "assignee": "Developer", "covers": ["REQ-1.1", "REQ-1.2"]},
                     {"title": "Add greeting counter", "description": "A counter with its test.", "priority": "medium", "assignee": "Developer", "covers": ["REQ-2.1"], "depends_on": ["Add greeting"]},
                 ],
+                "team": ["Developer"],
+                "team_reasons": {"Developer": "the greeting is code to write and test"},
             }
         )
     if "You are the ScrumMaster. A task was blocked" in prompt:

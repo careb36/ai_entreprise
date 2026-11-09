@@ -98,6 +98,19 @@ describe('AgentSettings model selector', () => {
     fireEvent.change(select, { target: { value: '' } })
     expect(select.value).toBe('')
   })
+
+  it('offers the new roles, named, with the Backend Developer as the new agent default', () => {
+    render(<AgentSettings />)
+    fireEvent.click(screen.getByRole('button', { name: 'New agent' }))
+
+    const roleSelect = screen.getByRole('option', { name: 'UX/UI Designer' }).closest('select')
+    if (!roleSelect) throw new Error('role select not rendered')
+    const labels = optionLabels(roleSelect)
+    for (const role of ['Developer', 'Backend Developer', 'Frontend Developer', 'DevOps / SRE', 'UX/UI Designer', 'Data Engineer / DBA', 'Security (SecOps)', 'Technical Writer']) {
+      expect(labels).toContain(role)
+    }
+    expect(roleSelect.value).toBe('BackendDeveloper')
+  })
 })
 
 describe('AgentSettings for a Viewer', () => {

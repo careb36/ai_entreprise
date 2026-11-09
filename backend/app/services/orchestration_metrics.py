@@ -34,6 +34,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
+from services import roles
 from services.token_usage import usage_fields
 
 logger = logging.getLogger("fabrique-task-worker")
@@ -114,6 +115,9 @@ def canonical_kpi_role(role: str | None) -> str:
     """
     raw = (role or "").strip()
     if not raw:
+        return KPI_ROLE_DEVELOPER
+    # The specialised coding roles (services/roles.py) are Developer turns.
+    if roles.is_developer(raw):
         return KPI_ROLE_DEVELOPER
     return _ROLE_ALIASES.get(raw.lower(), raw)
 
