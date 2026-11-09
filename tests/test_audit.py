@@ -1,98 +1,82 @@
 import pytest
-from datetime import datetime
-from unittest.mock import MagicMock
-from src.models.audit import AuditLog, AgentClaims, SystemObservations
+import time
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from src.models.audit import Base, AgentExecutionAudit
+from src.services.audit_service import AuditService
 
-def test_audit_log_creation_with_timeout():
+@pytest.fixture
+def db_session():
+    # In-memory SQLite for isolated test execution
+    engine = create_engine('sqlite:///:memory:')
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.close()
+
+def test_audit_logging_simulated_timeout(db_session):
     """
-    Test that we can create an audit log simulating a timeout,
-    capturing LLM timeout durations, retry counts, and self-correction loops.
+    Verify that the audit logging accurately records timeout durations,
+    retry counts, and self-correction iterations when an exception occurs.
     """
-    claims = AgentClaims(
-        files_written=["src/main.py"],
-        tests_run=["tests/test_main.py"],
-        self_correction_loops_claimed=1
+    audit_service = AuditService(db_session)
+    
+    # Simulate a timeout event
+    start_time = time.time()
+    time.sleep(0.05) # 50ms simulated delay
+    end_time = time.time()
+    
+    timeout_duration_ms = (end_time - start_time) * 1000
+    
+    # Log the execution observation
+    record = audit_service.log_execution(
+        agent_id="agent-alpha",
+        task_id="task-404",
+        claimed_files=["src/main.py"],
+        claimed_tests=["tests/test_main.py"],
+        observed_timeout_ms=timeout_duration_ms,
+        observed_retries=3,
+        observed_iterations=2,
+        observed_files=["src/main.py"],
+        observed_tests=[],
+        status="TIMEOUT_RECOVERED",
+        error_message="504 Gateway Timeout"
     )
     
-    observations = SystemObservations(
-        files_observed=["src/main.py"],
-        tests_passed=[],
-        llm_timeout_duration_ms=5000,
-        retry_count=3,
-        self_correction_loop_iterations=2
+    # Validate the record was persisted
+    assert record.id is not None
+    assert record.agent_id == "agent-alpha"
+    
+    # Validate specific exception tracking requirements
+    assert record.observed_retry_count == 3
+    assert record.observed_self_correction_iterations == 2
+    assert record.observed_llm_timeout_duration_ms >= 50.0
+    assert record.status == "TIMEOUT_RECOVERED"
+    
+    # Validate STD-AUD-1 compliance (Claims vs Observations)
+    assert record.claimed_tests_run == ["tests/test_main.py"]
+    assert record.observed_tests_run == [] # Observation differs from claim
+
+def test_audit_model_to_dict():
+    """
+    Verify the serialization of the audit model for API responses.
+    """
+    record = AgentExecutionAudit(
+        agent_id="agent-beta",
+        task_id="task-500",
+        claimed_files_written=["src/utils.py"],
+        claimed_tests_run=["tests/test_utils.py"],
+        observed_llm_timeout_duration_ms=150.0,
+        observed_retry_count=1,
+        observed_self_correction_iterations=1,
+        observed_files_written=["src/utils.py"],
+        observed_tests_run=["tests/test_utils.py"],
+        status="SUCCESS"
     )
     
-    log = AuditLog(
-        agent_id="agent-xyz",
-        task_id="task-123",
-        claims=claims,
-        observations=observations
-    )
-    
-    assert log.agent_id == "agent-xyz"
-    assert log.observations.llm_timeout_duration_ms == 5000
-    assert log.observations.retry_count == 3
-    assert log.observations.self_correction_loop_iterations == 2
-    
-    # Verify STD-AUD-1: Claims and observations are strictly separated
-    assert not hasattr(log.claims, "llm_timeout_duration_ms")
-    assert not hasattr(log.observations, "self_correction_loops_claimed")
-    assert log.claims.files_written == ["src/main.py"]
-    assert log.observations.files_observed == ["src/main.py"]
-
-def test_audit_log_default_values():
-    """
-    Test that an empty audit log initializes with safe defaults.
-    """
-    log = AuditLog(agent_id="agent-abc", task_id="task-456")
-    
-    assert log.claims.files_written == []
-    assert log.observations.retry_count == 0
-    assert log.observations.llm_timeout_duration_ms == 0
-    assert isinstance(log.timestamp, datetime)
-
-def test_std_aud_1_compliance():
-    """
-    Ensure no field is shared between AgentClaims and SystemObservations.
-    """
-    claims_fields = set(AgentClaims.model_fields.keys())
-    observations_fields = set(SystemObservations.model_fields.keys())
-    
-    # Intersection of field names should be empty
-    shared_fields = claims_fields.intersection(observations_fields)
-    assert len(shared_fields) == 0, f"STD-AUD-1 Violation: Shared fields found: {shared_fields}"
-
-def test_simulated_timeout_db_insertion():
-    """
-    Simulates a timeout scenario and verifies the resulting audit log
-    would be correctly formatted for PostgreSQL insertion, satisfying the AC.
-    """
-    simulated_timeout_ms = 5020
-    simulated_retries = 4
-    
-    log = AuditLog(
-        agent_id="agent-timeout-test",
-        task_id="task-999",
-        observations=SystemObservations(
-            llm_timeout_duration_ms=simulated_timeout_ms,
-            retry_count=simulated_retries,
-            self_correction_loop_iterations=1
-        )
-    )
-    
-    # Mock DB session for PostgreSQL insertion
-    mock_db_session = MagicMock()
-    mock_db_session.insert.return_value = True
-    
-    # Serialize for DB
-    log_dict = log.model_dump()
-    
-    # Verify the dictionary sent to DB contains the correct metrics
-    assert log_dict["observations"]["llm_timeout_duration_ms"] == 5020
-    assert log_dict["observations"]["retry_count"] == 4
-    assert log_dict["observations"]["self_correction_loop_iterations"] == 1
-    
-    # Execute mock insert
-    result = mock_db_session.insert("audit_logs", log_dict)
-    assert result is True
-    mock_db_session.insert.assert_called_once_with("audit_logs", log_dict)
+    data = record.to_dict()
+    assert data["agent_id"] == "agent-beta"
+    assert data["claims"]["files_written"] == ["src/utils.py"]
+    assert data["observations"]["retry_count"] == 1
+    assert data["observations"]["llm_timeout_duration_ms"] == 150.0
