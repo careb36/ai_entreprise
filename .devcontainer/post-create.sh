@@ -8,7 +8,13 @@ export POETRY_NO_INTERACTION=1
 export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 
 echo "📦 Installing Poetry…"
+# The base image (FROM python:3.12-bookworm) does not ship Poetry.
 pip install poetry >/dev/null
+
+# Create virtualenvs inside each project so the interpreter path in
+# devcontainer.json (`backend/.venv/bin/python`) resolves after install and
+# VS Code picks it up for IntelliSense, tests and debugging.
+poetry config virtualenvs.in-project true
 
 echo "🐍 Backend: poetry install…"
 (cd backend && poetry install --no-interaction)

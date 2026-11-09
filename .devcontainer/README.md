@@ -17,9 +17,19 @@ the container needs access to your GitHub credentials. Two options:
 host **before** you open the container:
 
 ```bash
-# On your Mac (host), once:
+# macOS (host), once:
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519   # or the path to your key
+
+# Linux (host), once:
+ssh-add ~/.ssh/id_ed25519
+
+# Windows (host), start the OpenSSH Authentication Agent service, then:
+ssh-add $env:USERPROFILE\.ssh\id_ed25519
 ```
+
+> The mount reads `SSH_AUTH_SOCK` from the host environment, so the agent must
+> be running and have your key loaded **before** the container is created or
+> rebuilt; otherwise the socket isn't forwarded.
 
 Then, inside the container, `git push` just works over SSH. Check the agent is
 visible with:
