@@ -1,39 +1,114 @@
-/**
- * LoadingSkeleton — reusable loading placeholder.
- */
-
-import { Loader2 } from 'lucide-react'
+import React from 'react';
+import {
+  SkeletonBase,
+  SkeletonText,
+  SkeletonCard,
+  SkeletonTable,
+  SkeletonGraph,
+} from './skeleton';
 
 interface LoadingSkeletonProps {
-  message?: string
-  className?: string
+  variant?: 'card' | 'table' | 'text' | 'graph' | 'avatar' | 'rect';
+  count?: number;
+  className?: string;
+  rows?: number;
+  cols?: number;
+  height?: string | number;
+  width?: string | number;
 }
 
-export function LoadingSkeleton({ message, className = '' }: LoadingSkeletonProps) {
-  return (
-    <div className={`flex flex-col items-center justify-center p-8 ${className}`}>
-      <Loader2 size={24} className="text-brand-400 animate-spin mb-3" />
-      {message && <p className="text-sm text-gray-500">{message}</p>}
-    </div>
-  )
-}
+/**
+ * Standardized Loading Skeleton component adhering to Doherty Threshold (<400ms UX feedback).
+ * Wraps modular primitives from the standardized skeleton library.
+ */
+export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
+  variant = 'card',
+  count = 1,
+  className = '',
+  rows = 5,
+  cols = 4,
+  height,
+  width,
+}) => {
+  const items = Array.from({ length: count });
 
-export function CardSkeleton() {
-  return (
-    <div className="rounded-xl border border-surface-700 bg-surface-900 p-4 animate-pulse">
-      <div className="h-4 bg-surface-700 rounded w-1/3 mb-3" />
-      <div className="h-3 bg-surface-700 rounded w-2/3 mb-2" />
-      <div className="h-3 bg-surface-700 rounded w-1/2" />
-    </div>
-  )
-}
+  switch (variant) {
+    case 'avatar':
+      return (
+        <div className={`flex gap-3 items-center ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonBase
+              key={i}
+              variant="circular"
+              width={width || '2.5rem'}
+              height={height || '2.5rem'}
+            />
+          ))}
+        </div>
+      );
 
-export function TableSkeleton({ rows = 5 }: { rows?: number }) {
-  return (
-    <div className="space-y-2">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-10 bg-surface-800 rounded-lg animate-pulse" />
-      ))}
-    </div>
-  )
-}
+    case 'rect':
+      return (
+        <div className={`space-y-3 ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonBase
+              key={i}
+              variant="rectangular"
+              width={width || '100%'}
+              height={height || '6rem'}
+            />
+          ))}
+        </div>
+      );
+
+    case 'text':
+      return (
+        <div className={`space-y-4 ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonText
+              key={i}
+              lines={rows}
+              lineHeight={height || '1rem'}
+            />
+          ))}
+        </div>
+      );
+
+    case 'table':
+      return (
+        <div className={`space-y-4 ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonTable
+              key={i}
+              rows={rows}
+              columns={cols}
+            />
+          ))}
+        </div>
+      );
+
+    case 'graph':
+      return (
+        <div className={`space-y-4 ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonGraph
+              key={i}
+              height={height || '18rem'}
+            />
+          ))}
+        </div>
+      );
+
+    case 'card':
+    default:
+      return (
+        <div className={`grid gap-4 ${count > 1 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'} ${className}`}>
+          {items.map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      );
+  }
+};
+
+export default LoadingSkeleton;
