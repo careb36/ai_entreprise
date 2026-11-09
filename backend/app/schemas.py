@@ -128,6 +128,8 @@ class SelfImprovementSprintRequest(BaseModel):
 
     company_id: int
     scope_size: str = "M"
+    # Plan only with these roles (the sprint's team a Manager chose).
+    team: list[str] | None = None
 
 
 class GenerateRequest(BaseModel):

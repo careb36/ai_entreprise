@@ -2208,6 +2208,7 @@
     "suggested": "sugerido por el PO",
     "reason": "PO: {{why}}",
     "replan": "Hay una tarea asignada a un rol fuera del equipo: volvé a planificar con este equipo antes de lanzar.",
+    "carriedOffTeam": "Una tarea bloqueada que marcaste está asignada a un rol fuera del equipo: desmárcala o añade su rol al equipo antes de lanzar.",
     "sprintLabel": "Equipo:",
     "everyRole": "todos los roles que contrató la empresa",
     "source": {

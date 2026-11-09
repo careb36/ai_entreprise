@@ -21,7 +21,13 @@ from uuid import uuid4
 from models import AgentMessage, BacklogItem, OutboxEvent, Sprint
 from sqlmodel import Session, select
 
-from services import dependencies, scrum_master, task_events, task_projection
+from services import (
+    dependencies,
+    scrum_master,
+    sprint_team,
+    task_events,
+    task_projection,
+)
 from services.board import (
     CARRIED_FROM_PREFIX,
     CARRIED_TO_PREFIX,
@@ -100,6 +106,15 @@ def _left_for_a_person(triage: dict[str, Any] | None) -> bool:
     return bool(triage) and triage["decision"] == scrum_master.DECISION_PERSON
 
 
+def off_team_reason(item: BacklogItem, sprint: Sprint) -> str:
+    """Why *item* cannot go to *sprint*: its assignee is not on the team."""
+    return (
+        f"Task {item.id} is assigned to {item.assignee or '(none)'}, who is not on "
+        f"sprint {sprint.id}'s team ({', '.join(sprint_team.team_of(sprint) or [])}); "
+        "pick a sprint whose team has that role"
+    )
+
+
 def carry_over(
     session: Session,
     company_id: int,
@@ -140,6 +155,10 @@ def carry_over(
             )
         if carried_over(item, record):
             raise CarryOverError(409, f"Task {item_id} was already carried over")
+        # Checked before the original is marked: a clone the worker would
+        # refuse must not use up the task's one carry-over.
+        if not sprint_team.on_team(new_sprint, item.assignee):
+            raise CarryOverError(409, off_team_reason(item, new_sprint))
         originals.append((item, sprint, record))
 
     now = datetime.now(UTC)

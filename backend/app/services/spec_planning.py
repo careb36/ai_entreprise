@@ -230,7 +230,7 @@ def plan_fallback(
     spec: dict[str, Any], item_limit: int, allowed: list[str] | None = None
 ) -> dict[str, Any]:
     """One task per requirement, in order, when no model answers; with
-    *allowed* (a sprint team), only for those roles."""
+    *allowed* (the sprint's team, else the hired roles), only for those roles."""
     tasks = [
         {
             "title": f"{r['id']}: {r.get('title', '')}"[:TASK_TITLE_LIMIT],
@@ -325,7 +325,9 @@ def plan_from(request: dict[str, Any]) -> dict[str, Any]:
     request, and what stays uncovered; no database. A failed or unusable
     answer falls back to one task per requirement."""
     content, item_limit = request["content"], request["item_limit"]
-    allowed = request["roles"] if request.get("team") else None
+    # The sprint's team, else every hired role: a fallback or a QA test task
+    # never goes to a role the company does not have.
+    allowed = request["roles"]
     parsed: Any = None
     try:
         answer = spec_author.ask(

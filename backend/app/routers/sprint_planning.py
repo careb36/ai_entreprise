@@ -5,7 +5,8 @@ specification, and the team it suggests for the request.
   company's hired roles, every one of them without a usable answer),
   ``team_reasons`` and ``hired_roles``; with ``team``, only those roles get
   tasks (``services/sprint_team.py``).
-- ``POST /v1/plan_self_improvement_sprint``: the factory's own next slice.
+- ``POST /v1/plan_self_improvement_sprint``: the factory's own next slice,
+  with ``team`` too.
 - ``GET``/``PUT /v1/companies/{id}/team_selection`` (Viewer / Manager): how a
   sprint's team is chosen, ``suggested`` (the default) or ``automatic``.
 
@@ -155,6 +156,8 @@ async def plan_self_improvement_sprint(
     company, agent_dicts, discovery = _refused(
         spec_planning.planning_context_of, session, req.company_id
     )
+    hired = sprint_team.roles_of(agent_dicts)
+    team = _refused(sprint_team.check_team, req.team, hired)
     objective = build_self_improvement_objective(
         company_name=company.company_name,
         detected_stack=discovery.detected_stack if discovery else None,
@@ -167,6 +170,7 @@ async def plan_self_improvement_sprint(
         agents=agent_dicts,
         detected_stack=discovery.detected_stack if discovery else None,
         project_path=discovery.project_path if discovery else None,
+        team=team,
     )
 
     return _serialize_plan_response(
@@ -174,7 +178,7 @@ async def plan_self_improvement_sprint(
         scope_size,
         f"Sprint - Improve {company.company_name}",
         objective,
-        sprint_team.roles_of(agent_dicts),
+        hired,
         sprint_team.selection_of(company),
     )
 

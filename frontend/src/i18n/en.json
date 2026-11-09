@@ -2208,6 +2208,7 @@
     "suggested": "suggested by the PO",
     "reason": "PO: {{why}}",
     "replan": "A task is assigned to a role outside the team: plan again with this team before launching.",
+    "carriedOffTeam": "A blocked task you ticked is assigned to a role outside the team: untick it or add its role to the team before launching.",
     "sprintLabel": "Team:",
     "everyRole": "every role the company hired",
     "source": {
