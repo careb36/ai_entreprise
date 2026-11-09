@@ -23,7 +23,7 @@ from models import Company, ProviderConnection
 from sqlmodel import Session
 
 # The roles a company can give a model to. The Reviewer agent judges other
-# producers' runs and gets its own entry; without one it follows QA's.
+# producers' runs and gets its own entry.
 ROLES: tuple[str, ...] = (
     "PO",
     "Architect",
@@ -32,9 +32,22 @@ ROLES: tuple[str, ...] = (
     "QA",
     "SecOps",
     "TechWriter",
+    "BackendDeveloper",
+    "FrontendDeveloper",
+    "DevOps",
+    "DataEngineer",
+    "Designer",
     "Reviewer",
 )
-_FALLBACK = {"Reviewer": "QA"}
+# Without an entry of its own, the Reviewer follows QA and the specialised
+# coding roles follow the Developer (services/roles.py), as they always did.
+_FALLBACK = {
+    "Reviewer": "QA",
+    "BackendDeveloper": "Developer",
+    "FrontendDeveloper": "Developer",
+    "DevOps": "Developer",
+    "DataEngineer": "Developer",
+}
 MAX_MODEL_CHARS = 200
 
 

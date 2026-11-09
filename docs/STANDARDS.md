@@ -17,6 +17,12 @@ architecture's cycles, the audit chain, the history check) are named where
 they apply. `GET /v1/standards` serves the catalogue; the Procedures page
 shows it.
 
+The specialised developer roles (`BackendDeveloper`, `FrontendDeveloper`,
+`DevOps`, `DataEngineer`) are developers: every standard below that binds the
+Developer binds them too, beside the ones of their own discipline
+(`standards.DISCIPLINES`). The Designer is bound by the standards for every
+role and by the UX standard. No role is ever held to less than it was.
+
 A test (`backend/tests/test_standards.py`) keeps this document in step with
 the catalogue: every standard below is in the code, and every standard in the
 code is below.
@@ -123,8 +129,30 @@ A module starts with what it is for and what it never does; a comment says why s
 ## Operations
 
 **STD-OPS-1** — Configured by environment, observable by default  
-*Binds:* Developer, Architect.  
+*Binds:* Developer, Architect, DevOps.  
 Configuration comes from the environment with safe defaults; a service exposes a health check, logs in a structured form with no secret in it, and fails loudly rather than silently.  
+*Checked:* in the prompt alone; QA and the reviewers hold the deliverable to it.
+
+
+**STD-OPS-2** — Pipelines and infrastructure are reviewed code  
+*Binds:* DevOps, Architect.  
+CI pipelines, container files and infrastructure are code in the repository: pinned images and actions, least-privilege credentials taken from the environment, every step reproducible locally, and a rollback written down before the change ships.  
+*Checked:* the risk tier holds a CI pipeline change for a person (high) and marks container files medium.
+
+
+## Data
+
+**STD-DATA-1** — Schema changes are migrations, reversible and tested  
+*Binds:* DataEngineer, BackendDeveloper, Architect.  
+A change to a schema is a versioned migration with its downgrade, written so it runs on a table that already holds rows (a default or a backfill for a required column), with a test that applies it; data is never changed by hand outside a migration.  
+*Checked:* the risk tier marks a migration medium.
+
+
+## UX
+
+**STD-UX-1** — Accessible by default  
+*Binds:* Designer, FrontendDeveloper.  
+Every screen meets WCAG 2.2 AA: it works with the keyboard alone, names every control for a screen reader, keeps text contrast at 4.5:1 or more, never says something with colour alone, and holds at a phone's width; every user-facing string is translatable.  
 *Checked:* in the prompt alone; QA and the reviewers hold the deliverable to it.
 
 

@@ -364,7 +364,13 @@ def test_a_manager_adds_hosts_and_a_viewer_reads_them(sqlite_session, test_clien
     read = test_client.get(url, headers=viewer)
     assert read.status_code == 200, read.text
     assert read.json()["hosts"] == [] and "pypi.org" in read.json()["default_hosts"]
-    assert read.json()["roles"] == ["architect", "po", "secops", "techwriter"]
+    assert read.json()["roles"] == [
+        "architect",
+        "designer",
+        "po",
+        "secops",
+        "techwriter",
+    ]
     assert test_client.get(url, headers=outsider).status_code == 403
     assert (
         test_client.put(

@@ -32,6 +32,22 @@ PO, ARCHITECT, DEVELOPER, QA, SCRUM_MASTER = (
     "QA",
     "ScrumMaster",
 )
+BACKEND, FRONTEND, DEVOPS, DESIGNER, DATA = (
+    "BackendDeveloper",
+    "FrontendDeveloper",
+    "DevOps",
+    "Designer",
+    "DataEngineer",
+)
+# The specialised coding roles are developers: every standard that binds the
+# Developer binds them too, beside the ones of their own discipline. Nothing
+# a role was held to is ever taken away.
+DISCIPLINES: dict[str, tuple[str, ...]] = {
+    BACKEND: (DEVELOPER,),
+    FRONTEND: (DEVELOPER,),
+    DEVOPS: (DEVELOPER,),
+    DATA: (DEVELOPER,),
+}
 CHECK_NAME = "standards"
 
 # Each entry: id, area, roles, title, rule, checked (how the factory checks
@@ -240,12 +256,53 @@ STANDARDS: list[dict[str, Any]] = [
     {
         "id": "STD-OPS-1",
         "area": "operations",
-        "roles": [DEVELOPER, ARCHITECT],
+        "roles": [DEVELOPER, ARCHITECT, DEVOPS],
         "title": "Configured by environment, observable by default",
         "rule": (
             "Configuration comes from the environment with safe defaults; a service "
             "exposes a health check, logs in a structured form with no secret in it, "
             "and fails loudly rather than silently."
+        ),
+        "checked": None,
+    },
+    {
+        "id": "STD-OPS-2",
+        "area": "operations",
+        "roles": [DEVOPS, ARCHITECT],
+        "title": "Pipelines and infrastructure are reviewed code",
+        "rule": (
+            "CI pipelines, container files and infrastructure are code in the "
+            "repository: pinned images and actions, least-privilege credentials "
+            "taken from the environment, every step reproducible locally, and a "
+            "rollback written down before the change ships."
+        ),
+        "checked": "the risk tier holds a CI pipeline change for a person (high) and marks container files medium",
+    },
+    # --- data ---------------------------------------------------------------
+    {
+        "id": "STD-DATA-1",
+        "area": "data",
+        "roles": [DATA, BACKEND, ARCHITECT],
+        "title": "Schema changes are migrations, reversible and tested",
+        "rule": (
+            "A change to a schema is a versioned migration with its downgrade, "
+            "written so it runs on a table that already holds rows (a default or "
+            "a backfill for a required column), with a test that applies it; data "
+            "is never changed by hand outside a migration."
+        ),
+        "checked": "the risk tier marks a migration medium",
+    },
+    # --- ux -----------------------------------------------------------------
+    {
+        "id": "STD-UX-1",
+        "area": "ux",
+        "roles": [DESIGNER, FRONTEND],
+        "title": "Accessible by default",
+        "rule": (
+            "Every screen meets WCAG 2.2 AA: it works with the keyboard alone, "
+            "names every control for a screen reader, keeps text contrast at 4.5:1 "
+            "or more, never says something with colour alone, and holds at a "
+            "phone's width; every user-facing string is translatable."
         ),
         "checked": None,
     },
@@ -281,8 +338,13 @@ def catalogue() -> list[dict[str, Any]]:
 
 
 def for_role(role: str | None) -> list[dict[str, Any]]:
-    """The standards that bind *role* (every role gets the ones for all)."""
-    return [s for s in STANDARDS if ALL in s["roles"] or (role and role in s["roles"])]
+    """The standards that bind *role* (every role gets the ones for all; a
+    specialised developer every Developer standard too, ``DISCIPLINES``)."""
+    from services import roles as catalogue
+
+    name = catalogue.canonical(role) if role else ""
+    bound = {name, *DISCIPLINES.get(name, ())} - {""}
+    return [s for s in STANDARDS if ALL in s["roles"] or bound & set(s["roles"])]
 
 
 def prompt_section(role: str | None, heading: str = "Quality standards") -> str:
