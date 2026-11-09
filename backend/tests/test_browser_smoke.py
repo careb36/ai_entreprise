@@ -304,6 +304,18 @@ def test_a_failing_browser_test_of_the_task_s_criterion_refutes_it():
             "package is not installed",
         ),
         ("npm error could not determine executable to run\n", 1, "not installed"),
+        (
+            # npm 10+ (the self-hosted runner's), with no Playwright in the
+            # project: npx resolves the name and refuses to install it.
+            (
+                "npm error npx canceled due to missing packages and no YES option: "
+                '["playwright@1.65.0"]\n'
+                "npm error A complete log of this run can be found in: /h/.npm/x.log\n"
+            ),
+            1,
+            "not installed",
+        ),
+        ("npm ERR! canceled\n", 1, "not installed"),
         ("sh: 1: npx: not found\n", 127, "not installed"),
         ("", 127, "exit 127"),
         ("Host system is missing dependencies to run browsers.\n", 1, "libraries"),

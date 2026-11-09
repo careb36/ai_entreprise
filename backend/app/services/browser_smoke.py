@@ -76,6 +76,9 @@ _RUNTIME_MISSING: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"could not determine executable to run"
+            # npx --no-install refusing a package the project does not have:
+            # npm 8+ names it, npm 7 says only "canceled".
+            r"|^npm (?:ERR!|error) (?:npx )?canceled(?: due to missing packages)?\b"
             r"|^(?:sh: \d+: |/bin/sh: )?(?:npx|playwright): (?:command )?not found",
             re.MULTILINE,
         ),
