@@ -25,7 +25,7 @@ daemon read them, so the Verifier can say which of the files a delivery
 modified the Developer had read first (``context_read``), and raise the risk
 tier for one it had not. What the model says it learned stays a claim; its
 own account of a test run is never evidence, the daemon's exit status after
-the delivery is (``workspace_daemon.run_delivery_tests``).
+the delivery is (``delivery_checks.run_delivery_tests``).
 
 An edit is an observation with the file's sha256 before and after, and a
 working copy delivered with the answer's files (``services/workspace_edits.py``).

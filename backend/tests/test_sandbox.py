@@ -17,7 +17,13 @@ import sandbox as daemon_sandbox  # the daemon's module, on sys.path via conftes
 import shell_exec
 from config import settings
 from models.company import Company
-from services import developer_tools, sandbox, verification, workspace_daemon
+from services import (
+    delivery_checks,
+    developer_tools,
+    sandbox,
+    verification,
+    workspace_daemon,
+)
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 
@@ -352,7 +358,7 @@ def test_the_delivery_test_run_sends_the_companys_sandbox(sqlite_session, monkey
     )
     evidence = {"workspace_root": "/w"}
     asyncio.run(
-        workspace_daemon.run_delivery_tests(
+        delivery_checks.run_delivery_tests(
             _Nats(), {"id": 1, "company_id": company.id}, evidence
         )
     )
@@ -389,7 +395,7 @@ def test_a_policy_that_cannot_be_read_runs_nothing(monkeypatch):
     import asyncio
 
     evidence = {"workspace_root": "/w"}
-    asyncio.run(workspace_daemon.run_delivery_tests(_Nats(), {"id": 1}, evidence))
+    asyncio.run(delivery_checks.run_delivery_tests(_Nats(), {"id": 1}, evidence))
     assert "workspace.execute" not in subjects
     assert evidence["test_run"]["reason"].startswith("the sprint's company")
     assert evidence["test_run"].get("exit_code") is None

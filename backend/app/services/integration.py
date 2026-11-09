@@ -10,7 +10,7 @@ the workspace daemon merges the done tasks' branches into
 ``fabrique/sprint-<id>`` with real git (``vscode-daemon/sprint_integration.py``,
 ``workspace.git.integrate``), and, with ``DELIVERY_TESTS_ENABLED``, runs the
 project's test command on the integrated worktree through the same path and
-sandbox as a delivery's tests (``workspace_daemon.run_delivery_tests``). The
+sandbox as a delivery's tests (``delivery_checks.run_delivery_tests``). The
 backend never shells out. What the daemon answered is kept as a
 ``SprintIntegration``: the merges, the conflict (files and hunks) at the
 first merge git could not make, and the test run. A conflict or a failing
@@ -41,7 +41,7 @@ from models.agent_run import TASK_WORKER_PRODUCER
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, create_engine, select
 
-from services import integration_events, locks, workspace_daemon
+from services import delivery_checks, integration_events, locks, workspace_daemon
 from services.agent_service import AgentService
 from services.spec_planning import acceptance_summaries
 
@@ -315,7 +315,7 @@ async def _run_suite(
         return {"command": None, "reason": "the daemon named no worktree at the commit"}
     # An empty acceptance asks for per-test lines, so the failing tests are named.
     evidence: dict[str, Any] = {"workspace_root": worktree, "acceptance": {"all": []}}
-    await workspace_daemon.run_delivery_tests(
+    await delivery_checks.run_delivery_tests(
         nats_client,
         {"id": context["sprint_id"], "company_id": context["company_id"]},
         evidence,

@@ -469,10 +469,11 @@ async def task_requirements_context(
     """``requirements_context``, plus the browser checks QA writes in a
     project that serves pages (``services.browser_smoke``)."""
     from services import browser_smoke
+    from services.workspace import project_profile
 
     text = await asyncio.to_thread(requirements_context, engine, item_id)
     return await browser_smoke.with_browser_checks(
-        nats_client, engine, item_id, resolve_root, text
+        nats_client, engine, item_id, resolve_root, text, project_profile.resolved
     )
 
 

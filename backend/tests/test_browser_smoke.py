@@ -20,7 +20,14 @@ import app_run  # the daemon's module, on sys.path via conftest
 import pytest
 from config import settings
 from models.sprint import BacklogItem, Sprint
-from services import app_check, browser_smoke, criteria_tests, stack_profiles
+from services import (
+    app_check,
+    browser_smoke,
+    criteria_tests,
+    delivery_checks,
+    stack_profiles,
+)
+from services.workspace import project_profile
 from test_specifications import _company
 
 PY = sys.executable
@@ -133,7 +140,12 @@ class _NoDaemon:
 def _prompt(session, item, root):
     return asyncio.run(
         browser_smoke.with_browser_checks(
-            _NoDaemon(), session.get_bind(), item.id, lambda _cid: str(root), "REQS"
+            _NoDaemon(),
+            session.get_bind(),
+            item.id,
+            lambda _cid: str(root),
+            "REQS",
+            project_profile.resolved,
         )
     )
 
@@ -384,7 +396,7 @@ def host_box(monkeypatch):
 
 
 def _ctx(nats, evidence, profile, overrides=None):
-    ctx = app_check.Context(nats, {"id": 1, "company_id": 1}, evidence, None)
+    ctx = project_profile.Context(nats, {"id": 1, "company_id": 1}, evidence, None)
     ctx._company = {"id": 1, "overrides": overrides or {}, "installs": {}}
     ctx._profile = {"stack": "node", "probe_path": "/", "source": {}, **profile}
     return ctx
@@ -408,7 +420,7 @@ def test_the_application_check_runs_the_smoke_suite_and_reads_it_back(host_box):
     }
     nats = _Recorder(reply)
     ctx = _ctx(nats, evidence, {"start": "npm start", "port": 3000, "e2e": None})
-    asyncio.run(app_check.check_application(ctx))
+    asyncio.run(delivery_checks.check_application(ctx))
     ((subject, payload),) = nats.requests
     assert subject == "workspace.app.check"
     assert payload["e2e_command"] == browser_smoke.SMOKE_COMMAND
@@ -426,7 +438,7 @@ def test_qa_s_own_delivery_does_not_start_the_application(host_box):
     evidence["workspace_root"] = "/project"
     nats = _Recorder({})
     ctx = _ctx(nats, evidence, {"start": "npm start", "port": 3000, "e2e": None})
-    asyncio.run(app_check.check_application(ctx))
+    asyncio.run(delivery_checks.check_application(ctx))
     assert nats.requests == []
     assert (
         evidence["app_run"]["skipped"]

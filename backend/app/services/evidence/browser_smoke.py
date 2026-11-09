@@ -164,11 +164,20 @@ def _task_facts(engine: Any, item_id: int) -> dict[str, Any] | None:
 
 
 async def with_browser_checks(
-    nats_client: Any, engine: Any, item_id: int, resolve_root: Any, text: str
+    nats_client: Any,
+    engine: Any,
+    item_id: int,
+    resolve_root: Any,
+    text: str,
+    profile_of: Any,
 ) -> str:
     """*text* (the task's requirements context), plus the browser checks
     section when *item_id* is QA's test-writing task of a project that
-    ``serves_web``. Anything that cannot be read leaves *text* as it was."""
+    ``serves_web``. Anything that cannot be read leaves *text* as it was.
+
+    *profile_of* resolves the project's stack profile through the daemon
+    (``workspace.project_profile.resolved``): the caller passes it, since the
+    evidence does not call the workspace."""
     if not settings.DELIVERY_APP_CHECK_ENABLED:
         return text
     try:
@@ -178,15 +187,13 @@ async def with_browser_checks(
         root = await asyncio.to_thread(resolve_root, facts["company_id"])
         if not root:
             return text
-        from services.evidence import app_check
-
-        ctx = app_check.Context(
+        profile = await profile_of(
             nats_client,
             {"id": facts["sprint_id"], "company_id": facts["company_id"]},
-            {"workspace_root": root},
+            root,
             engine,
         )
-        if serves_web(await ctx.profile()):
+        if serves_web(profile):
             return text + section(facts["covers"])
     except Exception as exc:  # noqa: BLE001 - Context only; the unit tests still get written.
         logger.warning("Browser checks not offered for item=%s: %s", item_id, exc)

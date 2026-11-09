@@ -9,7 +9,7 @@ daemon's reply (``app_check``, ``browser_smoke``), the sources a run consulted
 (``secops_checks``), the gate before QA (``delivery_gate``), the changes of a
 run (``review_changes``), governance and the ingestion of AgentRun records
 (``agent_run_service``). It imports only ``contracts`` and ``platform`` among
-the contexts, except for the daemon calls still allowlisted in
-``docs/architecture/contexts.json``; ``scripts/check_architecture.py`` keeps it
+the contexts: the daemon calls whose replies it judges are the loop's
+(``services/delivery_checks.py``); ``scripts/check_architecture.py`` keeps it
 so.
 """
