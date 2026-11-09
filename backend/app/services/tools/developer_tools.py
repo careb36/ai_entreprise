@@ -1,0 +1,547 @@
+"""The Developer's workspace tools: read the project and run its tests before delivering.
+
+A task used to be written in one shot from a prompt, with a listing of the
+project's root files as all the model saw of the code it was changing. Here
+the roles that deliver files (the Developer roles, QA, the Designer) get these tools through the
+workspace daemon, offered beside the company's MCP tools in the same loop
+(``services/mcp_tools.chat_with_tools``); the replies follow SWE-agent's
+agent-computer interface (``developer_tool_replies``):
+
+- ``workspace__list``: the tree under a folder, bounded;
+- ``workspace__read``: a window of 100 numbered lines, paged with ``start_line``;
+- ``workspace__search``: the lines matching a pattern; past the bound, how many;
+- ``workspace__find_file``: files by name or glob; past the bound, how many;
+- ``workspace__edit``: change a line range or one SEARCH/REPLACE block of an
+  existing file, applied by the daemon only if the file still parses
+  (``vscode-daemon/workspace_edit.py``); offered only where the task's files
+  may be touched (its worktree, or a project without the Git workflow);
+- ``workspace__run_tests``: the project's test command (or a narrower one
+  within the same runner), bounded output.
+
+Every call is an observation the backend made, recorded on the run's
+evidence like an MCP call (``tools_used``): tool, arguments, error, duration,
+sha256 of the result. A read also records the file's sha256 and size as the
+daemon read them, so the Verifier can say which of the files a delivery
+modified the Developer had read first (``context_read``), and raise the risk
+tier for one it had not. What the model says it learned stays a claim; its
+own account of a test run is never evidence, the daemon's exit status after
+the delivery is (``delivery_checks.run_delivery_tests``).
+
+An edit is an observation with the file's sha256 before and after, and a
+working copy delivered with the answer's files (``services/workspace_edits.py``).
+
+The other tools are read-only on the project. ``run_tests`` executes the project's
+test command, which ``DELIVERY_TESTS_ENABLED`` already runs after every
+delivery; it is offered only when that setting is on, since it runs
+project code on the daemon's machine.
+
+A repository map (the top of the tree and the definitions ranked by use,
+``services/repo_map.py``) goes into the prompt of a task on an existing
+project, so the model knows what to read.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import functools
+import hashlib
+import json
+import logging
+import time
+import uuid
+from collections.abc import Callable
+from typing import Any
+
+from config import settings
+
+from services.contracts import roles
+from services.tools import (
+    developer_tool_replies,
+    developer_tool_schemas,
+    edit_lint,
+    mcp_tools,
+    repo_map,
+    research_tools,
+    workspace_edits,
+)
+from services.workspace import sandbox
+
+logger = logging.getLogger("fabrique-task-worker")
+
+SERVER = developer_tool_schemas.SERVER
+# The roles that deliver files (services/roles.py; aliases such as Dev read too).
+TOOL_ROLES = frozenset(roles.FILE_ROLES)
+READ_TOOLS = ("list", "read", "search", developer_tool_schemas.FIND)
+RUN_TESTS = developer_tool_schemas.RUN_TESTS
+EDIT = developer_tool_schemas.EDIT
+LIST_TIMEOUT_SECONDS = 20.0
+READ_TIMEOUT_SECONDS = 20.0
+SEARCH_TIMEOUT_SECONDS = 40.0
+MAP_MAX_CHARS = 2500
+# The command the model may narrow the test run to must start with the
+# project's own runner: never an arbitrary shell command.
+RUNNERS = (
+    "python -m pytest",
+    "pytest",
+    "npm test",
+    "npx vitest",
+    "npx jest",
+    "go test",
+    "cargo test",
+)
+
+Requester = Callable[[str, dict[str, Any], float], dict[str, Any]]
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _runs_with(command: str, runner: str) -> bool:
+    """Whether *command* is *runner* itself or *runner* followed by arguments:
+    ``python -m pytest_custom`` is not ``python -m pytest``."""
+    return command == runner or command.startswith(runner + " ")
+
+
+def offered_to(role: str | None) -> bool:
+    """Whether a role gets the workspace tools."""
+    return settings.DEVELOPER_TOOLS_ENABLED and roles.canonical(role) in TOOL_ROLES
+
+
+class WorkspaceToolbox:
+    """The daemon's read tools (and the test run) for one task, in the
+    ``mcp_tools.Toolbox`` shape: ``schemas``, ``call``, ``close``."""
+
+    def __init__(
+        self,
+        requester: Requester,
+        workspace_root: str,
+        *,
+        test_command: str | None = None,
+        result_max_chars: int | None = None,
+        sandbox: dict[str, Any] | None = None,
+        sandbox_error: str | None = None,
+        can_edit: bool = False,
+        edit_suffixes: set[str] | None = None,
+    ) -> None:
+        self.requester = requester
+        self.workspace_root = workspace_root
+        self.test_command = test_command
+        # Where its test runs execute (services/sandbox.py): agent code.
+        self.sandbox = sandbox
+        # The company's sandbox could not be read: its test runs are refused.
+        self.sandbox_error = sandbox_error
+        self.result_max_chars = result_max_chars or settings.MCP_RESULT_MAX_CHARS
+        self.unavailable: dict[str, str] = {}
+        self.max_rounds = settings.DEVELOPER_TOOL_ROUNDS
+        # The edit tool: where it may write, which file types a delivery takes,
+        # the daemon's session for the originals, and what ``close`` brought back.
+        self.can_edit = can_edit
+        self.edit_suffixes = edit_suffixes
+        self.edit_session = uuid.uuid4().hex
+        self.edits_made = False
+        self.edited_files: list[dict[str, Any]] = []
+        self.finish_error: str | None = None
+
+    @property
+    def tools(self) -> dict[str, dict[str, Any]]:
+        return {
+            s["function"]["name"]: {
+                "server": SERVER,
+                "read_only": not s["function"]["name"].endswith(EDIT),
+            }
+            for s in self.schemas()
+        }
+
+    def schemas(self) -> list[dict[str, Any]]:
+        schemas = [
+            s
+            for s in developer_tool_schemas.SCHEMAS
+            if self.test_command or not s["function"]["name"].endswith(RUN_TESTS)
+        ]
+        if self.can_edit:
+            schemas.append(developer_tool_schemas.EDIT_SCHEMA)
+        return schemas
+
+    def call(
+        self, tool_call: dict[str, Any], round_no: int
+    ) -> tuple[dict[str, Any], str]:
+        """Run one call: the observation to record and the text the model sees."""
+        function = tool_call.get("function") or {}
+        full_name = str(function.get("name") or "")
+        tool = full_name.partition(mcp_tools.TOOL_NAME_SEP)[2]
+        raw = function.get("arguments")
+        try:
+            arguments = (json.loads(raw) if isinstance(raw, str) else raw) or {}
+            if not isinstance(arguments, dict):
+                raise TypeError("arguments must be an object")
+        except (ValueError, TypeError) as exc:
+            observation = self._observation(
+                tool, {"_raw": str(raw)[:500]}, round_no, True, 0, ""
+            )
+            observation["reason"] = f"malformed arguments: {exc}"
+            return observation, f"Error: malformed arguments ({exc})."
+        if full_name not in self.tools:
+            observation = self._observation(tool, arguments, round_no, True, 0, "")
+            observation["reason"] = "unknown tool"
+            return observation, mcp_tools.NO_TOOL_NOTE
+        started = time.monotonic()
+        extra: dict[str, Any] = {}
+        try:
+            text = self._run(tool, arguments, extra)
+            is_error = False
+        except DaemonReplyError as exc:
+            text, is_error = f"Error: {str(exc)[:300]}", True
+        except Exception as exc:  # noqa: BLE001 - The failure is the result the model sees.
+            reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            text, is_error = f"Error: {reason[:300]}", True
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        observation = self._observation(
+            tool, arguments, round_no, is_error, elapsed_ms, text
+        )
+        observation["read_only"] = tool != EDIT
+        observation.update(extra)
+        if len(text) > self.result_max_chars:
+            observation["truncated"] = True
+            text = text[: self.result_max_chars] + "\n[result cut here]"
+        return observation, text
+
+    def _run(self, tool: str, arguments: dict[str, Any], extra: dict[str, Any]) -> str:
+        root = self.workspace_root
+        if tool == "list":
+            reply = self.requester(
+                "workspace.list",
+                {
+                    "workspace_root": root,
+                    "path": arguments.get("path"),
+                    "depth": arguments.get("depth"),
+                },
+                LIST_TIMEOUT_SECONDS,
+            )
+            return developer_tool_replies.list_text(reply)
+        if tool == "read":
+            reply = self.requester(
+                "workspace.read",
+                {
+                    "workspace_root": root,
+                    "path": arguments.get("path"),
+                    "start_line": arguments.get("start_line"),
+                },
+                READ_TIMEOUT_SECONDS,
+            )
+            extra.update(
+                {
+                    "path": reply.get("path"),
+                    "sha256": reply.get("sha256"),
+                    "bytes": reply.get("bytes"),
+                    "lines": reply.get("lines"),
+                    "first_line": reply.get("first_line"),
+                    "last_line": reply.get("last_line"),
+                    "file_truncated": bool(reply.get("truncated")),
+                }
+            )
+            return developer_tool_replies.read_text(
+                str(arguments.get("path") or ""), reply, self.result_max_chars
+            )
+        if tool in ("search", developer_tool_schemas.FIND):
+            subject = "workspace.search" if tool == "search" else "workspace.find"
+            pattern = arguments.get("pattern")
+            reply = self.requester(
+                subject,
+                {
+                    "workspace_root": root,
+                    "pattern": pattern,
+                    "path": arguments.get("path"),
+                },
+                SEARCH_TIMEOUT_SECONDS,
+            )
+            extra["match_count"] = reply.get("match_count")
+            if tool == "search":
+                extra["files_scanned"] = reply.get("files_scanned")
+                return developer_tool_replies.search_text(str(pattern), reply)
+            return developer_tool_replies.find_text(str(pattern), reply)
+        if tool == EDIT:
+            return workspace_edits.edit(self, arguments, extra)
+        if tool == RUN_TESTS:
+            command = self._test_command(arguments.get("command"))
+            extra["command"] = command
+            if self.sandbox_error:
+                raise RuntimeError(f"tests not run: {self.sandbox_error}")
+            request: dict[str, Any] = {"workspace_root": root, "command": command}
+            if self.sandbox is not None:
+                request["sandbox"] = self.sandbox
+            reply = self.requester(
+                "workspace.execute", request, settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            )
+            exit_code = reply.get("exit_code")
+            extra["exit_code"] = exit_code
+            if isinstance(reply.get("sandbox"), dict):
+                extra["sandbox"] = reply["sandbox"]
+            extra["timed_out"] = bool(reply.get("timed_out"))
+            output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+            if reply.get("timed_out"):
+                return f"The tests ran past the time limit and were stopped.\n{output[-2000:]}"
+            if reply.get("error") and exit_code is None:
+                raise RuntimeError(str(reply["error"]))
+            return developer_tool_replies.tests_text(
+                exit_code, output, self.result_max_chars
+            )
+        raise RuntimeError("unknown tool")
+
+    def _test_command(self, requested: Any) -> str:
+        """The project's test command, or a narrower one on the same runner."""
+        base = str(self.test_command or "")
+        wanted = str(requested or "").strip()
+        if not wanted:
+            return base
+        runner = next((r for r in RUNNERS if _runs_with(base, r)), None)
+        if (
+            runner
+            and _runs_with(wanted, runner)
+            and all(ch not in wanted for ch in ";&|`$><\n")
+        ):
+            return wanted
+        return base
+
+    def close(self) -> None:
+        """The edits' files to deliver come back; the originals go back on disk."""
+        workspace_edits.finish(self)
+
+    def _observation(
+        self,
+        tool: str,
+        arguments: dict[str, Any],
+        round_no: int,
+        is_error: bool,
+        elapsed_ms: int,
+        text: str,
+    ) -> dict[str, Any]:
+        return {
+            "server": SERVER,
+            "tool": tool,
+            "arguments": json.loads(json.dumps(arguments, default=str))
+            if arguments
+            else {},
+            "round": round_no,
+            "is_error": bool(is_error),
+            "duration_ms": elapsed_ms,
+            "result_sha256": _sha256(text),
+            "result_chars": len(text),
+            "truncated": False,
+            "read_only": True,
+        }
+
+
+class CombinedToolbox:
+    """The built-in toolboxes (the workspace's, the research one) beside the
+    company's MCP tools, as one toolbox."""
+
+    def __init__(
+        self,
+        workspace: WorkspaceToolbox | None,
+        mcp: mcp_tools.Toolbox | None,
+        research: Any = None,
+    ) -> None:
+        self.builtin = [box for box in (workspace, research) if box is not None]
+        self.workspace = workspace
+        self.mcp = mcp
+        self.max_rounds = max(box.max_rounds for box in self.builtin)
+
+    @property
+    def unavailable(self) -> dict[str, str]:
+        return dict(self.mcp.unavailable) if self.mcp is not None else {}
+
+    @property
+    def edited_files(self) -> list[dict[str, Any]]:
+        return self.workspace.edited_files if self.workspace is not None else []
+
+    def schemas(self) -> list[dict[str, Any]]:
+        schemas: list[dict[str, Any]] = []
+        for box in self.builtin:
+            schemas += box.schemas()
+        return schemas + (self.mcp.schemas() if self.mcp is not None else [])
+
+    def call(
+        self, tool_call: dict[str, Any], round_no: int
+    ) -> tuple[dict[str, Any], str]:
+        name = str(((tool_call.get("function") or {}).get("name")) or "")
+        # The built-in tools by their exact names; everything else, the MCP
+        # servers' (an MCP server cannot be named ``workspace`` or
+        # ``research``: the names are reserved in ``mcp_config``, so nothing
+        # is shadowed).
+        for box in self.builtin:
+            if name in box.tools:
+                return box.call(tool_call, round_no)
+        if self.mcp is None:
+            return self.builtin[0].call(tool_call, round_no)
+        return self.mcp.call(tool_call, round_no)
+
+    def close(self) -> None:
+        for box in self.builtin:
+            box.close()
+        if self.mcp is not None:
+            self.mcp.close()
+
+
+# ---------------------------------------------------------------------------
+# Wiring: the worker's NATS client, reached from the thread the LLM call runs in
+# ---------------------------------------------------------------------------
+
+_bridge: dict[str, Any] = {}
+
+
+def bind(
+    nats_client: Any,
+    loop: asyncio.AbstractEventLoop,
+    resolve_root: Callable[[int], str | None],
+) -> None:
+    """Give this module the worker's NATS client and event loop, and the
+    resolver of a company's project path. Called once when the worker starts."""
+    _bridge.update({"nats": nats_client, "loop": loop, "resolve_root": resolve_root})
+
+
+def unbind() -> None:
+    _bridge.clear()
+
+
+def _request_from_thread(
+    subject: str, payload: dict[str, Any], timeout: float
+) -> dict[str, Any]:
+    """A daemon request made from a worker thread, on the worker's loop."""
+    nats_client, loop = _bridge.get("nats"), _bridge.get("loop")
+    if nats_client is None or loop is None:
+        raise RuntimeError("the workspace daemon is not reachable from this worker")
+    future = asyncio.run_coroutine_threadsafe(
+        nats_client.request(subject, payload, timeout=timeout), loop
+    )
+    reply = future.result(timeout + 5)
+    return _checked(reply)
+
+
+def _checked(reply: Any) -> dict[str, Any]:
+    """The daemon's reply, or the error it carried as an exception."""
+    if not isinstance(reply, dict):
+        raise DaemonReplyError("the workspace daemon sent an unreadable reply")
+    error = reply.get("error")
+    if isinstance(error, dict):
+        raise DaemonReplyError(str(error.get("message") or "workspace daemon error"))
+    return reply
+
+
+class DaemonReplyError(RuntimeError):
+    """The daemon could not serve a tool call; the message is what the model sees."""
+
+
+def _detect_test_command(workspace_root: str) -> str | None:
+    """The project's test command, when the loop would run it after the delivery."""
+    if not settings.DELIVERY_TESTS_ENABLED:
+        return None
+    from services.workspace import workspace_daemon
+
+    loop = _bridge.get("loop")
+    if loop is None:
+        return None
+    try:
+        return asyncio.run_coroutine_threadsafe(
+            workspace_daemon.detect_project_test_command(
+                _bridge.get("nats"), workspace_root
+            ),
+            loop,
+        ).result(40)
+    except Exception as exc:  # noqa: BLE001 - Without a command the tool is not offered.
+        logger.warning("Could not detect the test command for the tools: %s", exc)
+        return None
+
+
+def tool_root(
+    company_id: int, item_id: int | None = None, *, engine: Any = None
+) -> str | None:
+    """Where the tools look: the task's own worktree once it has delivered
+    there (the Git workflow; ``git_workflow.record_reply`` keeps it on the
+    evidence), else the company's project. On rework the reads and the test
+    run then see the previous delivery and the merged dependencies."""
+    try:
+        root = _bridge["resolve_root"](company_id)
+    except Exception as exc:  # noqa: BLE001 - No project path, no workspace tools.
+        logger.warning(
+            "Could not resolve the project path for company=%s: %s", company_id, exc
+        )
+        return None
+    if not root or item_id is None or engine is None:
+        return root
+    try:
+        from services.evidence import delivery_gate
+
+        verification = delivery_gate.latest_verification(engine, company_id, item_id)
+    except Exception as exc:  # noqa: BLE001 - The project root is the fallback.
+        logger.warning("Could not read the task's last delivery: %s", exc)
+        return root
+    evidence = (verification.evidence if verification is not None else None) or {}
+    worktree = evidence.get("workspace_root") if evidence.get("git") else None
+    return worktree if isinstance(worktree, str) and worktree else root
+
+
+def toolbox_for(
+    company_id: int | None,
+    role: str | None,
+    *,
+    engine: Any = None,
+    item_id: int | None = None,
+) -> Any:
+    """The toolbox for a task: the company's MCP tools, plus the workspace
+    tools for a role that delivers files when a project path is known.
+    Returns ``None`` when there is nothing to offer, as the MCP loader does."""
+    mcp = mcp_tools.Toolbox.load(company_id, role, engine=engine)
+    workspace = None
+    if company_id is not None and offered_to(role) and "nats" in _bridge:
+        root = tool_root(company_id, item_id, engine=engine)
+        if root:
+            box, box_error = None, None
+            try:
+                box = sandbox.request_for_company_id(company_id, engine)
+            except sandbox.PolicyUnavailable as e:
+                box_error = str(e)
+            workspace = WorkspaceToolbox(
+                _request_from_thread,
+                root,
+                test_command=_detect_test_command(root),
+                sandbox=box,
+                sandbox_error=box_error,
+                can_edit=workspace_edits.allowed(_bridge, company_id, root, engine),
+                edit_suffixes=workspace_edits.delivery_suffixes(),
+            )
+            if workspace.can_edit:  # The linter after each edit, read once.
+                workspace.lint_profile = functools.partial(
+                    edit_lint.load_profile, _bridge, company_id, root, engine
+                )
+    # The research tools for the roles that decide (``services/research_tools.py``).
+    research = research_tools.toolbox_for(company_id, role, engine=engine)
+    if workspace is None and research is None:
+        return mcp
+    return CombinedToolbox(workspace, mcp, research)
+
+
+def repository_section(
+    company_id: int | None,
+    role: str | None,
+    item_id: int | None = None,
+    *,
+    engine: Any = None,
+) -> str:
+    """The prompt's "## Repository" section (``services/repo_map.py``): the
+    top of the project's tree and its definitions ranked by use, bounded,
+    with a word on the tools for a role that has them. The Architect gets it
+    too, as context for its brief. Empty when neither applies or the project
+    cannot be listed."""
+    tools = offered_to(role)
+    architect = str(role or "").strip().lower() in repo_map.ARCHITECT_ROLES
+    if company_id is None or "nats" not in _bridge:
+        return ""
+    if not (tools or (architect and settings.REPO_MAP_MAX_CHARS > 0)):
+        return ""
+    root = tool_root(company_id, item_id, engine=engine)
+    if not root:
+        return ""
+    return repo_map.section(
+        _request_from_thread, root, tools=tools, tree_chars=MAP_MAX_CHARS
+    )
