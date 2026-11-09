@@ -2,12 +2,13 @@
 Public re-export surface for all FastAPI routers.
 
 Import these objects in ``main.py`` via ``from routers import ...`` instead of
-importing each router module individually.  This keeps ``main.py`` clean and
+importing each router module individually. This keeps ``main.py`` clean and
 makes it easy to rename or split router modules in the future.
 """
 
 from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
+from routers.ai_stream import router as ai_stream_router
 from routers.auth import router as auth_router
 from routers.enterprise import router as enterprise_router
 from routers.github import router as github_router
@@ -24,6 +25,7 @@ from routers.workspace import router as workspace_router
 __all__ = [
     "agent_runs_router",
     "agents_router",
+    "ai_stream_router",
     "auth_router",
     "enterprise_router",
     "github_router",
