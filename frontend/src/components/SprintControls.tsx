@@ -101,6 +101,7 @@ function GitWorkflowControl({ companyId, canManage }: { companyId: number; canMa
   const { t } = useTranslation()
   const git = useGitWorkflow(companyId)
   const setGit = useSetGitWorkflow(companyId)
+  if (git.isLoading) return <span className="text-xs text-gray-500">{t('workControl.loading')}</span>
   if (!git.data) return null
   return (
     <label className="flex items-center gap-1.5 text-xs text-gray-400" title={t('workControl.gitHint')}>

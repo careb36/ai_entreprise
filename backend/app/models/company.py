@@ -32,7 +32,7 @@ class Company(SQLModel, table=True):
     # Each task's deliveries as commits on its own branch, in a worktree, never
     # in the person's checkout (services/git_workflow.py); the branch starts
     # from git_base_branch, or from what the repository has checked out.
-    git_workflow: bool = False
+    git_workflow: bool = True
     git_base_branch: str | None = None
     # Hosts the research tools may read beside the defaults
     # (services/research_tools.py); a Manager writes it.
