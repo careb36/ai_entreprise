@@ -2254,5 +2254,22 @@
     "remoteUnreachable": "No se pudo acceder a {{remote}} ({{reason}}): las ramas parten de la base local.",
     "wizardNotRepo": "Esta carpeta no es un repositorio git: los agentes escriben en la carpeta, sin ramas de tarea. Ejecuta git init allí para usarlas.",
     "wizardUnobserved": "La carpeta no se ha inspeccionado: el flujo con Git queda apagado hasta que el daemon vea un repositorio allí."
+  },
+  "graphSkeleton": {
+    "loadingTopology": "Cargando la topología del grafo (umbral de Doherty <400 ms)",
+    "loadingVisualization": "Cargando la visualización del grafo...",
+    "loadingData": "Cargando los datos y las relaciones del grafo desde LangGraph y Neo4j..."
+  },
+  "primaryActions": {
+    "label": "Acciones rápidas principales",
+    "exportGraphLabel": "Exportar el grafo de conocimiento",
+    "exportGraph": "Exportar grafo",
+    "runAudit": "Ejecutar auditoría con IA"
+  },
+  "skeleton": {
+    "text": "Cargando el contenido de texto",
+    "card": "Cargando el elemento",
+    "table": "Cargando los datos de la tabla",
+    "graph": "Cargando la visualización del grafo"
   }
 }

@@ -2254,5 +2254,22 @@
     "remoteUnreachable": "{{remote}} could not be reached ({{reason}}): branches start from the local base.",
     "wizardNotRepo": "This folder is not a git repository: the agents write in the folder, without task branches. Run git init there to use them.",
     "wizardUnobserved": "The folder has not been inspected: the Git workflow stays off until the daemon sees a repository there."
+  },
+  "graphSkeleton": {
+    "loadingTopology": "Loading graph topology (<400ms Doherty threshold)",
+    "loadingVisualization": "Loading graph visualization...",
+    "loadingData": "Loading graph data and relationships from LangGraph and Neo4j..."
+  },
+  "primaryActions": {
+    "label": "Primary Quick Actions",
+    "exportGraphLabel": "Export Knowledge Graph",
+    "exportGraph": "Export Graph",
+    "runAudit": "Run AI Audit"
+  },
+  "skeleton": {
+    "text": "Loading text content",
+    "card": "Loading card item",
+    "table": "Loading table data",
+    "graph": "Loading graph visualization"
   }
 }
