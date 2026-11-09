@@ -405,3 +405,137 @@ def test_team_selection_is_read_by_a_viewer_and_changed_by_a_manager(
         "team_selection"
     ] == ("automatic")
     assert test_client.get(url, headers=viewer).json()["team_selection"] == "automatic"
+
+
+# ── Review fixes: hired roles only, and carry-over within the team ───────────
+
+ONLY_BACKEND = ["BackendDeveloper", "PO", "TechWriter"]
+
+
+def test_without_a_team_the_spec_planners_fallback_keeps_to_the_hired_roles(
+    monkeypatch,
+):
+    monkeypatch.setattr(spec_planning.spec_author, "ask", lambda *a, **k: "no json")
+    request = {**_spec_request(roles=ONLY_BACKEND), "hired": ONLY_BACKEND}
+    plan = spec_planning.plan_from(request)
+    # No Developer and no QA hired: the task goes to the backend developer and
+    # no test-writing task is added for a role the company lacks.
+    assert [t["assignee"] for t in plan["tasks"]] == ["BackendDeveloper"]
+    # Every hired role (an unusable answer), and so every task's role: it starts.
+    assert plan["suggested_team"] == ONLY_BACKEND
+
+    answer = {"tasks": [{"title": "Readme", "assignee": "Developer"}]}
+    monkeypatch.setattr(
+        spec_planning.spec_author, "ask", lambda *a, **k: json.dumps(answer)
+    )
+    assert [t["assignee"] for t in spec_planning.plan_from(request)["tasks"]] == [
+        "BackendDeveloper"
+    ]
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [sprint_planner.plan_execution_sprint, sprint_planner.plan_self_improvement_sprint],
+)
+def test_without_a_team_the_planners_fallback_keeps_to_the_hired_roles(planner):
+    agents = [{"role": r, "name": r, "model": ""} for r in ["BackendDeveloper"]]
+    plan = planner("Acme", "Build it", "S", agents)
+    assert plan["tasks"]
+    assert {t["assignee"] for t in plan["tasks"]} == {"BackendDeveloper"}
+    assert plan["suggested_team"] == ["BackendDeveloper"]
+
+
+def test_the_self_improvement_plan_keeps_to_the_team_sent(sqlite_session, test_client):
+    company = _company(sqlite_session)
+    url = "/v1/plan_self_improvement_sprint"
+    body = test_client.post(
+        url, json={"company_id": company.id, "scope_size": "S", "team": ["TechWriter"]}
+    ).json()
+    assert {t["assignee"] for t in body["tasks"]} == {"TechWriter"}
+    assert body["suggested_team"] == ["TechWriter"]
+    refused = test_client.post(url, json={"company_id": company.id, "team": ["Wizard"]})
+    assert refused.status_code == 422
+
+
+def _blocked_task(session, company, assignee="BackendDeveloper", status="blocked"):
+    from test_board_moves import NEEDS_WORK, TRIAGE
+
+    source = Sprint(company_id=company.id, sprint_name="Old", status="completed")
+    session.add(source)
+    session.commit()
+    comments = [NEEDS_WORK, NEEDS_WORK, {"author": "Quality gate", "text": TRIAGE}]
+    item = BacklogItem(
+        sprint_id=source.id,
+        title="Endpoint",
+        description="d",
+        assignee=assignee,
+        status=status,
+        comments=comments if status == "blocked" else [],
+    )
+    session.add(item)
+    session.commit()
+    return item
+
+
+@pytest.mark.parametrize("status", ["blocked", "todo"])
+def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_over(
+    sqlite_session, test_client, monkeypatch, status
+):
+    from services import carry_over
+
+    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    company = _company(sqlite_session)
+    item = _blocked_task(sqlite_session, company, status=status)
+    docs = Sprint(
+        company_id=company.id, sprint_name="Docs", status="active", team=["TechWriter"]
+    )
+    sqlite_session.add(docs)
+    sqlite_session.commit()
+
+    refused = test_client.post(
+        f"/v1/backlog/{item.id}/carry_over", json={"target_sprint_id": docs.id}
+    )
+    assert refused.status_code == 409
+    assert "not on sprint" in refused.json()["detail"]
+    sqlite_session.expire_all()
+    original = sqlite_session.get(BacklogItem, item.id)
+    assert original.status == status
+    assert not carry_over.carried_over(original)
+    clones = sqlite_session.exec(
+        select(BacklogItem).where(BacklogItem.sprint_id == docs.id)
+    ).all()
+    assert clones == []
+
+    # A sprint whose team has the role takes it.
+    team = Sprint(
+        company_id=company.id,
+        sprint_name="API",
+        status="active",
+        team=["BackendDeveloper"],
+    )
+    sqlite_session.add(team)
+    sqlite_session.commit()
+    moved = test_client.post(
+        f"/v1/backlog/{item.id}/carry_over", json={"target_sprint_id": team.id}
+    )
+    assert moved.status_code == 200, moved.text
+
+
+def test_start_sprint_refuses_a_carried_task_off_its_team_before_marking_it(
+    sqlite_session, test_client
+):
+    from services import carry_over
+
+    company = _company(sqlite_session)
+    item = _blocked_task(sqlite_session, company)
+    response = _start(
+        test_client,
+        company,
+        ["TechWriter"],
+        team=["TechWriter"],
+        carry_over_ids=[item.id],
+    )
+    assert response.status_code == 409
+    assert "not on sprint" in response.json()["detail"]
+    sqlite_session.expire_all()
+    assert not carry_over.carried_over(sqlite_session.get(BacklogItem, item.id))

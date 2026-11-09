@@ -135,6 +135,73 @@ describe("the sprint's team in the planner", () => {
     expect(sent.team).toBeUndefined()
   })
 
+  it('keeps the team it sent for a constrained plan, not the narrower suggestion that comes back', async () => {
+    const planMutation = mutation({ mutateAsync: vi.fn().mockResolvedValueOnce(backendPlan).mockResolvedValueOnce({ ...backendPlan, tasks: [backendPlan.tasks[0]], suggested_team: ['BackendDeveloper'] }) })
+    const start = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(usePlanSprint).mockReturnValue(planMutation as never)
+    vi.mocked(useStartSprint).mockReturnValue(start as never)
+    renderPlanner()
+    await plan()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Technical Writer/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /QA Engineer/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await screen.findByText('Plan Preview')
+    expect(await screen.findByRole('checkbox', { name: /QA Engineer/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Backend Developer/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Technical Writer/ })).not.toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Sprint' }))
+    expect(await screen.findByTestId('board')).toBeInTheDocument()
+    expect(start.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ team: ['BackendDeveloper', 'QA'] }))
+  })
+
+  it('sends the chosen team when Auto-Improve plans again', async () => {
+    const autoPlan = mutation({ mutateAsync: vi.fn().mockResolvedValueOnce(backendPlan).mockResolvedValueOnce({ ...backendPlan, tasks: [backendPlan.tasks[0]] }) })
+    vi.mocked(usePlanSelfImprovementSprint).mockReturnValue(autoPlan as never)
+    vi.mocked(usePlanSprint).mockReturnValue(mutation() as never)
+    vi.mocked(useStartSprint).mockReturnValue(mutation() as never)
+    renderPlanner()
+    fireEvent.click(screen.getByRole('button', { name: 'Auto-Improve' }))
+    expect(await screen.findByText('Autonomous Plan Preview')).toBeInTheDocument()
+    expect(autoPlan.mutateAsync).toHaveBeenLastCalledWith({ company_id: 42, scope_size: 'M' })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Technical Writer/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await screen.findByText('Autonomous Plan Preview')
+    expect(autoPlan.mutateAsync).toHaveBeenLastCalledWith({ company_id: 42, scope_size: 'M', team: ['BackendDeveloper'] })
+    expect(await screen.findByRole('checkbox', { name: /Backend Developer/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Technical Writer/ })).not.toBeChecked()
+  })
+
+  it('holds the launch while a ticked blocked task is assigned off the team, and does not pre-tick it', async () => {
+    const blocked = {
+      id: 7, title: 'Fix the endpoint', assignee: 'BackendDeveloper', sprint_id: 3, sprint_name: 'Sprint 3',
+      sprint_status: 'completed', reason: 'tests failed', frozen: false, updated_at: null,
+      triage: { decision: 'retry', why: 'a narrower slice', brief: 'b' },
+    }
+    vi.mocked(useInbox).mockReturnValue({ data: { blocked_tasks: [blocked], proposals: [], pending_runs: 0, total: 1 } } as never)
+    const start = mutation({ mutateAsync: vi.fn().mockResolvedValue({ sprint_id: 23 }) })
+    vi.mocked(usePlanSprint).mockReturnValue(mutation({ mutateAsync: vi.fn().mockResolvedValue(docsPlan) }) as never)
+    vi.mocked(useStartSprint).mockReturnValue(start as never)
+    renderPlanner()
+    await plan()
+
+    const carried = screen.getByRole('checkbox', { name: /Fix the endpoint/ })
+    expect(carried).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Launch Sprint' })).toBeEnabled()
+    fireEvent.click(carried)
+    expect(screen.getByRole('note')).toHaveTextContent('untick it or add its role to the team')
+    expect(screen.getByRole('button', { name: 'Launch Sprint' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Backend Developer/ }))
+    expect(screen.getByRole('button', { name: 'Launch Sprint' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Launch Sprint' }))
+    expect(await screen.findByTestId('board')).toBeInTheDocument()
+    const sent = start.mutateAsync.mock.calls[0][0]
+    expect(sent.carry_over_ids).toEqual([7])
+    expect([...sent.team].sort()).toEqual(['BackendDeveloper', 'TechWriter'])
+  })
+
   it('shows the team on the sprint page, or every hired role without one', () => {
     const { unmount } = render(<SprintTeamChips team={['BackendDeveloper', 'QA']} source="person" />)
     expect(screen.getByText('Backend Developer')).toBeInTheDocument()

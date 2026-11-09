@@ -83,11 +83,14 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
     if (pretickedPlan.current === plannedSprint || !inbox.data) return
     pretickedPlan.current = plannedSprint
     const room = Math.max(0, SCOPE_META[scope].limit - plannedSprint.tasks.length)
+    const suggestedTeam = plannedSprint.suggested_team ?? []
     setCarryOver(
       inbox.data.blocked_tasks
         // The ScrumMaster's retries, and the tasks the Manager agent marked
-        // for the next sprint under the company's policy.
+        // for the next sprint under the company's policy; not one whose role
+        // is off the suggested team (the person may still tick it).
         .filter(task => !task.frozen && (task.triage?.decision === 'retry' || (task as InboxTaskWithManager).marked_for_carry_over))
+        .filter(task => suggestedTeam.length === 0 || planFitsTeam(suggestedTeam, [task.assignee ?? '']))
         .slice(0, room)
         .map(task => task.id),
     )
@@ -124,10 +127,12 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
     setTeam([])
   }
 
-  function showPlan(plan: SprintPlanResponse, source: 'manual' | 'autonomous') {
+  // *sentTeam*: the team a constrained plan was asked for, kept as the
+  // Manager left it; an unconstrained plan starts from the PO's suggestion.
+  function showPlan(plan: SprintPlanResponse, source: 'manual' | 'autonomous', sentTeam?: string[]) {
     setPlannedSprint(plan)
     setPlanSource(source)
-    setTeam(plan.suggested_team ?? plan.hired_roles ?? [])
+    setTeam(sentTeam ?? plan.suggested_team ?? plan.hired_roles ?? [])
   }
 
   // In automatic mode the PO's suggestion is the team: shown, not asked.
@@ -136,6 +141,13 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
   const teamChanged = plannedSprint !== null && team.length > 0 && !sameTeam(team, plannedSprint.suggested_team ?? [])
   // A task assigned outside the chosen team: plan again before launching.
   const teamFits = !plannedSprint || team.length === 0 || planFitsTeam(team, plannedSprint.tasks.map(task => task.assignee))
+  // A blocked task ticked to bring back whose role is off the team: the
+  // backend refuses it (409), so launching waits until it is unticked or its
+  // role is added to the team.
+  const carriedFit = !plannedSprint || team.length === 0 || planFitsTeam(
+    team,
+    blockedTasks.filter(task => carryOver.includes(task.id)).map(task => task.assignee ?? ''),
+  )
 
   async function generatePlan() {
     if (busy || !hasGoal) return
@@ -148,15 +160,16 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
       const cid = await ensureCompany()
       if (!cid) return
 
+      const sentTeam = teamChanged ? team : undefined
       const plan = await planMutation.mutateAsync({
         company_id: cid,
         ...(goal.trim() ? { prompt: goal.trim() } : {}),
         scope_size: scope,
         ...(specificationId !== null ? { specification_id: specificationId } : {}),
-        ...(teamChanged ? { team } : {}),
+        ...(sentTeam ? { team: sentTeam } : {}),
       })
 
-      showPlan(plan, 'manual')
+      showPlan(plan, 'manual', sentTeam)
     } catch {
       return
     }
@@ -174,19 +187,21 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
       const cid = await ensureCompany()
       if (!cid) return
 
+      const sentTeam = teamChanged ? team : undefined
       const plan = await autoPlanMutation.mutateAsync({
         company_id: cid,
         scope_size: scope,
+        ...(sentTeam ? { team: sentTeam } : {}),
       })
 
-      showPlan(plan, 'autonomous')
+      showPlan(plan, 'autonomous', sentTeam)
     } catch {
       return
     }
   }
 
   async function launch() {
-    if (busy || !plannedSprint || !teamFits) return
+    if (busy || !plannedSprint || !teamFits || !carriedFit) return
 
     initMutation.reset()
     planMutation.reset()
@@ -317,7 +332,7 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
         )}
         <button
           onClick={plannedSprint ? launch : generatePlan}
-          disabled={busy || (!plannedSprint && !hasGoal) || !teamFits}
+          disabled={busy || (!plannedSprint && !hasGoal) || !teamFits || !carriedFit}
           className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
@@ -423,6 +438,9 @@ export function QuickLaunch({ onSuccess }: { onSuccess: (id: number) => void }) 
           )}
           {!teamFits && (
             <p role="note" className="text-[11px] text-amber-300">{t('sprintTeam.replan')}</p>
+          )}
+          {teamFits && !carriedFit && (
+            <p role="note" className="text-[11px] text-amber-300">{t('sprintTeam.carriedOffTeam')}</p>
           )}
 
           {blockedTasks.length > 0 && (

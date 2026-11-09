@@ -653,7 +653,7 @@ def _plan_with_po(
 ) -> dict[str, Any]:
     """The PO's plan from *template*, or *fallback(team_agents, scope)* when no
     model answers usably. With a sprint *team* (``services/sprint_team.py``)
-    only its roles get tasks; the PO also suggests the team for the request."""
+    only its roles get tasks, else only hired ones; the PO suggests the team."""
     from services import sprint_team
 
     everyone = _ensure_execution_team(agents)
@@ -667,7 +667,7 @@ def _plan_with_po(
     parsed: Any = None
 
     def finish(plan: dict[str, Any]) -> dict[str, Any]:
-        plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], team or [])
+        plan["tasks"] = sprint_team.fit_tasks(plan["tasks"], available_roles)
         suggested, reasons = sprint_team.suggested(parsed, team or hired, plan["tasks"])
         return {**plan, "suggested_team": suggested, "team_reasons": reasons}
 

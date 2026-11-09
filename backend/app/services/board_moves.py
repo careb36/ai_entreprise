@@ -65,6 +65,7 @@ from services import (
     locks,
     sprint_archive,
     sprint_control,
+    sprint_team,
     task_events,
 )
 from services.agent_service import AgentService
@@ -328,6 +329,10 @@ def _carry(
             "moving it would leave them behind: send it back to work here instead",
         )
     target, created = _target(session, source, target_sprint_id)
+    # Before the task is blocked here or marked carried: the worker would
+    # refuse it in a sprint whose team lacks its role (services/sprint_team.py).
+    if not sprint_team.on_team(target, item.assignee):
+        raise BoardMoveError(409, carry_over.off_team_reason(item, target))
     if item.status == "todo":
         # A person decided; the System signs the block, as a stop does.
         task_events.record(

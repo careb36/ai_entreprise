@@ -1000,7 +1000,7 @@ export const api = {
   planSprint: (data: { company_id: number; prompt?: string; scope_size: 'S' | 'M' | 'L'; specification_id?: number; team?: string[] }) =>
     api.post<SprintPlanResponse>('/v1/plan_sprint', data),
 
-  planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L' }) =>
+  planSelfImprovementSprint: (data: { company_id: number; scope_size: 'S' | 'M' | 'L'; team?: string[] }) =>
     api.post<SprintPlanResponse>('/v1/plan_self_improvement_sprint', data),
 
   generate: (data: { company_id: number; story: string; constraints?: string; interaction_id?: string }) =>
