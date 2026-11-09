@@ -1,36 +1,39 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => ({
+// https://vitejs.dev/config/
+export default defineConfig({
   plugins: [react()],
-  // Electron loads dist/index.html from file://, so it needs relative asset
-  // URLs. The web build is served from the site root and must use absolute
-  // ones: with './' a deep link such as /evidence/1 would request
-  // /evidence/assets/... and render a blank page.
-  // `npm run electron:build` selects it with `--mode electron` (an env var
-  // prefix such as ELECTRON=1 does not work in Windows' cmd.exe); ELECTRON=1
-  // is still honoured.
-  base: process.env.ELECTRON || mode === 'electron' ? './' : '/',
-  test: {
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
-  },
   build: {
-    outDir: 'dist',
-    emptyOutDir: true
-  },
-  server: {
-    port: 5173,
-    strictPort: true,
-    proxy: {
-      '/v1': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
+    target: 'es2020',
+    cssCodeSplit: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 500,
+    rollupOptions: {
+      output: {
+        // Granular vendor chunking to maximize browser caching and minimize initial bundle load
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+              return 'vendor-core';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            return 'vendor-utils';
+          }
+        },
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
-    watch: {
-      usePolling: true,
-      interval: 1000,
+  },
+  server: {
+    port: 3000,
+    headers: {
+      'Cache-Control': 'no-store',
     },
-  }
-}))
+  },
+});
