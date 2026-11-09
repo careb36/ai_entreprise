@@ -25,6 +25,7 @@ import logging
 from typing import Any
 
 from services import developer_tool_replies, edit_lint
+from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 
 logger = logging.getLogger("fabrique-task-worker")
 
@@ -52,8 +53,6 @@ def allowed(bridge: dict[str, Any], company_id: int, root: str, engine: Any) -> 
 
 def delivery_suffixes() -> set[str]:
     """The file types a delivery writes: an edit to another would be dropped."""
-    from services.task_worker import ALLOWED_ARTIFACT_EXTENSIONS
-
     return set(ALLOWED_ARTIFACT_EXTENSIONS)
 
 

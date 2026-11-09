@@ -22,8 +22,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from services import edit_blocks
-from services.standards_catalogue import (  # noqa: F401 - re-exported
+from services.contracts import edit_blocks
+from services.contracts.manifest import parse_file_manifest
+from services.contracts.standards_catalogue import (  # noqa: F401 - re-exported
     ALL,
     ARCHITECT,
     BACKEND,
@@ -60,7 +61,7 @@ def catalogue() -> list[dict[str, Any]]:
 def for_role(role: str | None) -> list[dict[str, Any]]:
     """The standards that bind *role* (every role gets the ones for all; a
     specialised developer every Developer standard too, ``DISCIPLINES``)."""
-    from services import roles as catalogue
+    from services.contracts import roles as catalogue
 
     name = catalogue.canonical(role) if role else ""
     bound = {name, *DISCIPLINES.get(name, ())} - {""}
@@ -328,8 +329,6 @@ def check_delivery(
     """``check_files`` over the files an artifact declares and the ones the
     edit tool changed (*edited*, the daemon's read-back; a file the artifact
     declares itself keeps its block, as in the delivery); ``None`` without files."""
-    from services.task_worker import parse_file_manifest
-
     files = parse_file_manifest(artifact or "")
     have = {f["path"] for f in files}
     files += [f for f in edited or [] if f.get("path") not in have]

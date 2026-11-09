@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.developer_tool_schemas import SERVER
+from services.contracts.tool_calls import WORKSPACE_SERVER as SERVER
 
 
 def redact_secrets(path: str, text: str) -> str:

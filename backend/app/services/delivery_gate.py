@@ -17,7 +17,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
 from services import app_check, criteria_tests, standards
-from services.orchestration_metrics import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
+from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 
 _TASK_WORKER = "le-fabrique-task-worker"
 DELIVERY_QUEUED = "delivery queued"

@@ -13,6 +13,7 @@ import shlex
 from typing import Any
 
 from services import console_assistants
+from services.contracts.manifest import ALLOWED_ARTIFACT_EXTENSIONS
 
 # The CLIs a company may name, headless (Flow's adapters, ``session_command``).
 #
@@ -408,9 +409,7 @@ def deliverable_text(run: dict[str, Any], output: str) -> str:
 
 def observed_files(collected: dict[str, Any]) -> tuple[list, list]:
     """Each file the daemon read back, with whether it is delivered; the ones that are."""
-    from services import workspace_edits
-
-    suffixes = workspace_edits.delivery_suffixes()
+    suffixes = set(ALLOWED_ARTIFACT_EXTENSIONS)
     observed, deliver = [], []
     for f in collected.get("files") or []:
         if not isinstance(f, dict) or not isinstance(f.get("path"), str):

@@ -33,6 +33,7 @@ from typing import Any
 from config import settings
 from logging_config import logger
 
+from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 from services.criteria_tests import (
     ACCEPTANCE_KIND,
     RESULT_MISSING,
@@ -41,7 +42,6 @@ from services.criteria_tests import (
     results_from_output,
     token,
 )
-from services.orchestration_metrics import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 
 CHECK_E2E = "e2e_run"
 SOURCE_SMOKE = "smoke"

@@ -1,5 +1,5 @@
 {
-  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update).",
+  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update). A module in services/<context>/ belongs to that context by its folder; the flat services/<module>.py a migrated module leaves behind is a re-export shim listed under its owner's context until nothing imports it (ADR 0016).",
   "contexts": {
     "contracts": {
       "path": "backend/app/services/contracts/",
@@ -299,7 +299,6 @@
     }
   },
   "allowlist": [
-    "acceptance -> task_worker",
     "acceptance -> workspace_daemon",
     "app_check -> sandbox",
     "app_check -> stack_profiles",
@@ -307,17 +306,13 @@
     "console_producer -> carry_over",
     "console_producer -> edit_plan",
     "console_producer -> task_worker",
-    "context_read -> developer_tool_schemas",
     "git_workflow -> dependencies",
-    "standards -> task_worker",
     "task_worker -> integration_jobs",
     "verification -> console_clis",
     "verification -> mcp_tools",
     "verification -> research_tools",
     "verification -> sandbox",
-    "verification -> task_worker",
     "workspace_daemon -> app_check",
-    "workspace_daemon -> criteria_tests",
-    "workspace_edits -> task_worker"
+    "workspace_daemon -> criteria_tests"
   ]
 }

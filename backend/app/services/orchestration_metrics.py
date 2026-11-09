@@ -34,7 +34,12 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from services import roles
+from services.contracts import roles
+from services.contracts.verdicts import (  # noqa: F401 - re-exported
+    VERDICT_REFUTED,
+    VERDICT_UNVERIFIABLE,
+    VERDICT_VERIFIED,
+)
 from services.token_usage import usage_fields
 
 logger = logging.getLogger("fabrique-task-worker")
@@ -58,9 +63,6 @@ ACTION_QA_REVIEW = "qa_review"
 ACTION_ARCHITECT_CONSULT = "architect_consult"
 ACTION_AGENT_RUN_VERIFIED = "agent_run_verified"
 
-VERDICT_VERIFIED = "verified"
-VERDICT_REFUTED = "refuted"
-VERDICT_UNVERIFIABLE = "unverifiable"
 
 # Agent roles are free text in the ``agents`` table ("Dev", "Developer",
 # "QA", "Tester", ...).  The KPI queries filter on canonical names, so every
