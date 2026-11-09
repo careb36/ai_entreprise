@@ -198,10 +198,11 @@ def _backend_app() -> None:
 
 
 def _board():
-    """The backend's reader of a task's comment thread (``services/board.py``),
-    the one the sprint list and the procedures count rework with."""
+    """The backend's reader of a task's comment thread
+    (``services/tasks/board.py``), the one the sprint list and the procedures
+    count rework with."""
     _backend_app()
-    from services import board
+    from services.tasks import board
 
     return board
 
