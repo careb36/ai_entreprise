@@ -235,7 +235,11 @@ def db(monkeypatch, sqlite_session, tmp_path):
 
 
 def _task(db, project: Path):
-    company = Company(company_name=f"Queue {project.name}", autonomy_level=2)
+    # A plain folder, not a repository: the delivery goes without the Git
+    # workflow, which is on by default since #446.
+    company = Company(
+        company_name=f"Queue {project.name}", autonomy_level=2, git_workflow=False
+    )
     db.add(company)
     db.commit()
     db.refresh(company)
