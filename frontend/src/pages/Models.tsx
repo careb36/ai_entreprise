@@ -60,9 +60,9 @@ export default function Models() {
               <div className="text-xs text-gray-400">{t('models.statValidated', { defaultValue: 'Validated' })}</div>
             </div>
           </div>
+          <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
-          <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>
       )}
