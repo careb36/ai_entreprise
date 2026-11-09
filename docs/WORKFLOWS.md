@@ -1,7 +1,9 @@
 # Workflows per board column: a design
 
-> **Status: proposal, 2026-11-09. Not approved.** No product code changes
-> until the owner approves this document. It answers the owner's request to
+> **Status: proposal, 2026-11-09; the owner's decisions on its open
+> questions are recorded in [§9](#9-decisions) and applied throughout.**
+> Code starts slice by slice (§7), each slice briefed on its own. It answers
+> the owner's request to
 > adopt Aixle Flow's "workflow per board column" idea, and says how to do it
 > without weakening the rules in [`POSITIONING.md`](POSITIONING.md): claims
 > are never evidence, the Verifier and the numbers decide, and a person
@@ -27,6 +29,19 @@ repository; the others are relative to this repository.
   a workflow which could break them, and in a terminal guard on the `done`
   transition that no workflow can remove. Autonomy, risk and the Manager
   policy are read there, the same way they are read today.
+- `verify` and the terminal guard are mandatory in every workflow. QA's
+  `review` is optional: without it, a task closes on verified evidence and
+  the guard, never on a claim.
+- A Manager drafts and validates workflows; only an Owner activates or
+  deactivates one. `change_workflow` joins `ALWAYS_ESCALATE`, so neither the
+  Manager agent nor an API token can activate one.
+- A company may add its own board columns. Each column is a view over
+  exactly one of the five statuses, which remain the only thing the loop
+  reasons on.
+- Each workflow version is measured over two completed sprints, like a
+  procedure, and a clearly worse one reverts to the version it replaced.
+- A sprint has its own workflow, bound to its close (`integrate`, then
+  optionally `publish` and `notify`); its default is today's integration.
 - Task events stay the only writer of a task's state. Steps emit events.
 - Runs resume from Postgres, as the loop does today, without Temporal.
 - Slice 1 adds the built-in default workflow, which equals today's loop, and
@@ -284,6 +299,41 @@ the loop stays bounded.
 Every workflow ends in an implicit **terminal guard**, `close`. A company
 cannot place it, configure it or remove it (§4).
 
+Which steps a company may leave out:
+
+- In a **work workflow** (bound to a `todo` column or a kind),
+  `produce` and `verify` are mandatory (at least one of each, I1).
+  After-done and sprint workflows follow other rules (below).
+- `review` is **optional**. Without it, the attempt goes from `verify` to
+  `approve` (if any) and `close`. The task closes only when the latest
+  Verification is `verified` and the guard allows it; nothing a model said
+  closes it (I10).
+- `run_tests` is present whenever the company runs delivery tests
+  (`DELIVERY_TESTS_ENABLED`, or the company's own test command); the
+  validator adds it back if a draft drops it while tests are on.
+- `approve` is optional; the guard holds where autonomy, risk or the
+  policy require a person anyway.
+
+The task worker's other run, the **sprint workflow**, is a separate
+definition bound to the sprint's close (§3.5). Its steps are `integrate`,
+then optionally `publish` and `notify`.
+
+Validation depends on the lifecycle point (`scope` and binding point):
+
+| Lifecycle | Allowed types | Required | May change the task's completion |
+|---|---|---|---|
+| work (`todo` column, kind) | `produce`, `run_tests`, `verify`, `review`, `approve`, `notify` | `produce`, `verify` | yes, only through `close` and the guard |
+| after done (`done` column) | `publish`, `notify` (and local merge, slice 8) | none | **never** |
+| sprint close | `integrate`, `publish`, `notify` | `integrate` | **never** |
+
+After-done and sprint workflows consume the run that was already accepted:
+the task's latest `AgentRun` and `Verification`, or the sprint's
+`SprintIntegration`. They neither produce nor verify, and no outcome of
+theirs (a failed publication, a conflict, a webhook down) moves a task out
+of `done` or writes a verdict. Their failures are recorded on their own
+rows and, where today's code does so, in the inbox (an integration that
+waits for a person).
+
 ### 3.2 Step types and their evidence
 
 The types are a closed list in code (a registry, `services/workflow_steps.py`
@@ -296,9 +346,9 @@ workflow cannot change these declarations.
 | `produce` | a role (Developer, QA, TechWriter); `producer: llm` or `console` (a terminal assistant on the daemon, slice 7) | task, covered requirements, architecture, `NEEDS WORK:` feedback, procedures, lessons (all prompt context) | **claims**: answer text, declared files, summary. **Observations**, recorded by the backend: tool calls, workspace reads and edits, the daemon's write reply (sha256 read back, diff, snapshot or commit) | nothing; the text gate may send the answer back on its form, as today |
 | `run_tests` | the daemon | the worktree as written (observation) | **observations**: install exit status, test exit status and per-test lines, criterion results, application start and e2e, the sandbox report | nothing by itself; `verify` reads it |
 | `verify` | the Verifier (deterministic) | every observation of the attempt; the claims, labelled as claims | **observation**: the `Verification` (verdict `verified` / `refuted` / `unverifiable`, checks, `risk_tier`) | the delivery gate: send back, or block after the limit |
-| `review` | a role (QA by default; SecOps or a second reviewer allowed) | the digest of the delivery and the Verification | **claim**: `APPROVED:` or `NEEDS WORK:` with a reason | send back; it never closes a task alone |
-| `approve` | `person`, or `manager_agent` under the company's `ManagerPolicy` | the facts `manager_inbox.run_facts` reads | a person's decision event, or a `ManagerDecision` | accept or send back |
-| `integrate` | the daemon (sprint scope; see the open questions) | the done tasks' branches | **observation**: `SprintIntegration` | nothing about a task |
+| `review` (optional) | a role (QA by default; SecOps or a second reviewer allowed) | the digest of the delivery and the Verification | **claim**: `APPROVED:` or `NEEDS WORK:` with a reason | send back; it never closes a task alone |
+| `approve` | `person`, or `manager_agent` under the company's `ManagerPolicy`, which the step may narrow (`person_only`, or a subset of the policy's rules) and never widen | the facts `manager_inbox.run_facts` reads | a person's decision event, or a `ManagerDecision` | accept or send back |
+| `integrate` | the daemon (sprint workflow only) | the done tasks' branches | **observation**: `SprintIntegration` | nothing about a task |
 | `publish` | the daemon, with a person's or the Manager agent's `publish` rule | a branch, its evidence | **observation**: `RunPublication` | nothing about a task |
 | `notify` | the backend's webhook outbox | an event | a delivery record (`last_status`), which is not evidence | nothing; a failure never blocks |
 
@@ -328,11 +378,36 @@ step type may run in parallel only when its declared effect allows it:
 
 ### 3.4 Retries with limits
 
-- Each `produce` step has a **rework budget** (`limits.rework`, today 2). A
-  company may lower it, or raise it up to a ceiling fixed in code (proposed:
-  5).
-- Each `review` step has a budget for **unusable answers** (today 3), with
-  the same kind of ceiling.
+- **Defaults equal today's values** (`backend/app/services/task_worker.py`):
+  - rework: **2** per counter, which is `AUTOPILOT_MAX_REWORK_CYCLES`, read
+    from the environment variable of that name and defaulting to
+    `MAX_QA_REWORK_CYCLES = 2`;
+  - unusable answers per `review` step (`limits.review_failures`): **3**,
+    `MAX_QA_REVIEW_FAILURES`.
+- **Rework is counted on independent counters, as today.** The loop keeps
+  one counter per source of rejection, each read from the board by its
+  author (`record.rework_requests_by`), and each compared on its own with
+  `AUTOPILOT_MAX_REWORK_CYCLES`:
+  - the text gate (`QUALITY_GATE_AUTHOR`, `_send_back_from_quality_gate`,
+    `task_worker.py` ~1946–1949);
+  - the delivery gate (`DELIVERY_GATE_AUTHOR`, `_review_cycle_body`
+    ~2649–2650);
+  - each reviewer (the reviewer's name, ~2800–2804; QA rework at all only
+    while `AUTOPILOT_QA_REWORK_ENABLED`).
+
+  So a task may today be sent back twice by the text gate, twice by the
+  delivery gate and twice by QA before it blocks. The built-in default keeps
+  exactly these counters, and the parity checks of slice 3 compare them. In
+  a configured workflow, `limits.rework` is per counter by default
+  (`limits.rework_counting: "per_source"`); one budget shared by every
+  source (`"shared"`) is **opt-in per workflow**, and a second `review`
+  step gets a counter of its own.
+- **A hard ceiling of 5** for every budget, fixed in code
+  (`workflow_steps.BUDGET_CEILING`). A company may lower a budget, down to
+  0 for rework (the first send-back blocks), or raise it up to the ceiling.
+  A deployment that sets `AUTOPILOT_MAX_REWORK_CYCLES` above 5 is capped at
+  5 for configured workflows and keeps its value for the built-in default,
+  so slice 3 changes no behaviour.
 - Infrastructure retries (a daemon that is not there, a lost lease) are not
   counted against these budgets. They stay `DELIVERY_QUEUED` and `recovered`,
   as today.
@@ -341,32 +416,121 @@ step type may run in parallel only when its declared effect allows it:
   The single exception is `notify`: its failure is recorded and never affects
   the task.
 
-### 3.5 Binding: column and kind
+### 3.5 Binding: columns, kinds and the sprint's close
 
-La Fabrique's columns are task statuses, not boards that people draw. The
-settlement rules, the inbox and the history checker read those statuses. So
-a binding names a **lifecycle point** and, optionally, a **task kind**:
+**Columns.** Today the board's columns are the five task statuses (`todo`,
+`in_progress`, `in_review`, `done`, `blocked`). A company may add **custom
+columns** (for example "Design review" or "Ready for release"). Each custom
+column maps to **exactly one** of the five statuses, so a column is a view
+over a status:
+
+- A card's status decides which status a column belongs to; the column only
+  refines where the card is shown. A card in a custom column has exactly the
+  status its column maps to.
+- Task events, the history checker, dependencies, the inbox and sprint
+  closing reason only on the five statuses. No code outside the board view
+  and the bindings reads a custom column.
+- Moving a card between two columns of the same status changes no status,
+  records no task event and starts nothing, unless that column is bound to a
+  workflow. Moving it to a column of another status is the status move it is
+  today (`PATCH /v1/backlog`, `board_moves`), with its rules (a move to To do
+  starts the task, other moves stay refused where they are refused today).
+- A status with no custom column shows as today's column. Deleting a custom
+  column moves its cards to the status's default column; a column that a
+  binding names cannot be deleted until the binding is removed, as in Flow.
+
+**Bindings.** A binding names a **column** (a status's default column or a
+custom one, which stands for its status) and, optionally, a **task kind**:
 
 | Binding point | When it runs | Default |
 |---|---|---|
-| `todo` (the work column) | when a task is dispatched: the start, the dispatch, or a person moving the card to To do (`board_moves.start_moved_task`) | today's loop |
-| `done` (after done) | once a task closes `done` | nothing (today, merge and publish are a Manager's or a policy's action) |
+| a `todo` column (the work column) | when a task is dispatched: the start, the dispatch, or a person moving the card to that column (`board_moves.start_moved_task`) | today's loop |
+| a `done` column (after done) | once a task closes `done` and lands in that column | nothing (today, merge and publish are a Manager's or a policy's action) |
 | `kind` | `BacklogItem.kind`, for example `acceptance_tests` | QA's test-writing variant of today's loop |
+| the sprint's close | once the sprint closes (`replicas.close_once`) | `integrate`, as today's `integration.schedule_after_close` (runs only with the Git workflow on, retried while no daemon answers) |
 
-A workflow is resolved, most specific first, from:
+Only columns of `todo` and `done` take a task workflow: a workflow runs
+while a task is `in_progress` and `in_review`, and `blocked` waits for a
+person. Where a task lands when its workflow settles is its status's
+default column, or a custom column the binding names as its landing column
+(same status).
+
+A task workflow is resolved, most specific first, from:
 
 1. the company's binding for `(column, kind)`;
 2. the company's binding for `(column, any kind)`;
-3. the built-in workflow for the kind;
-4. the built-in default.
+3. for a `todo` column only, the built-in workflow for the kind;
+4. for a `todo` column only, the built-in default.
 
-A company with no binding runs the built-in default, which equals today's
-loop step for step. **Nothing changes unless a company configures
-something.**
+Steps 3 and 4 exist only for the work lifecycle point. A `done` column
+with no binding resolves to **no workflow**: nothing runs after a task
+closes, and nothing can produce again for a closed task. After-done work
+stays what it is today (a person's or the Manager policy's merge and
+publish) until a company binds a `done` workflow.
 
-A run pins the definition's id, version and server-computed sha256 when it
-starts, as Flow does with `step_runs.workflow_version_id`. Editing a
-workflow never changes a task that is already running.
+The sprint workflow is the company's binding for the sprint's close, else
+the built-in one. A company with no binding runs the built-in defaults,
+which equal today's loop and today's integration step for step. **Nothing
+changes unless a company configures something.**
+
+**Versions and running tasks.** A run pins the definition's id, version and
+server-computed sha256 when it starts, as Flow does with
+`step_runs.workflow_version_id`:
+
+- A newly activated version applies to tasks **started after** its
+  activation.
+- A task in progress keeps the version it pinned until it **settles**, for
+  reproducibility.
+- A waiting task that is re-attempted (a person's "Send back to work" on a
+  task blocked for a person, a request for changes on a hold, a release from
+  a dependency hold) counts as in progress: the re-attempt runs on the
+  version it pinned. A task carried into another sprint is a new task and
+  starts on the version active then.
+- A sprint workflow pins its version when the sprint closes; a retry of the
+  integration keeps it.
+
+### 3.6 Measuring versions, proposals and reverts
+
+Workflow versions are measured the way procedures are
+(`services/procedures.py`), by the board's numbers and never by a model:
+
+- **Baseline.** On activation, the numbers of the company's last two
+  completed sprints (`BASELINE_SPRINTS = 2`) are recorded on the version.
+- **Measurement.** Once two completed sprints ran tasks pinned to the
+  version (`MEASURE_AFTER_SPRINTS = 2`), it is measured over those tasks
+  only:
+  - rework requests per task (`board.rework_request_count`);
+  - the share of blocked tasks (`blocked_rate`);
+  - the share of tasks done at the first attempt (done, no `NEEDS WORK:`
+    and no send-back on the board, at most one delivery; the same reading as
+    `routing_record` and the bench's `scorecard.py collect`).
+- **Verdict.** The version is `kept`, or `reverted` when it is clearly
+  worse: rework per task above the baseline by more than
+  `REWORK_TOLERANCE` (0.25), the blocked share by more than
+  `BLOCKED_TOLERANCE` (0.10), or the first-attempt share **below** the
+  baseline by more than a new `FIRST_ATTEMPT_TOLERANCE` (proposed 0.10, the
+  same size as the blocked tolerance). With fewer than two sprints to
+  compare it is `unmeasured`, never kept.
+- **Revert.** A reverted version is deactivated and the version it replaced
+  (`supersedes_id`) is active again, for tasks started from then on. The
+  revert is done by the platform from the numbers, as a procedure's is, and
+  is audited as `workflow_reverted` with the baseline, the measurement and
+  both versions. It is the one deactivation that is not an Owner's click:
+  it never activates anything the Owner had not activated before.
+- **Proposals.** At a sprint's retrospective the ScrumMaster may propose a
+  workflow change in a fixed format a parser checks (as `PROCEDURE … END`),
+  naming the workflow, the change and the reason. A proposal becomes a
+  **draft** version, marked as proposed by the ScrumMaster, and waits in the
+  inbox. Only an Owner activates it; never automatically, not even at
+  autonomy level 3, because `change_workflow` is in `ALWAYS_ESCALATE`. A
+  draft whose graph has the same sha256 as a version reverted or rejected
+  before is dropped, as `propose(skip_failed=True)` does for procedures.
+  The ScrumMaster is shown what earlier versions did (kept, reverted,
+  unmeasured, rejected) with their numbers.
+
+The sprint workflow is measured the same way only on what it changes
+(integrations that end `tests_passed`, `conflict` or `tests_failed`); its
+first version is the built-in default and has nothing to revert to.
 
 ---
 
@@ -379,14 +543,17 @@ behind the API, still cannot break a rule.
 
 | # | Invariant | Validator | Run time |
 |---|---|---|---|
-| I1 | **`verify` follows every `produce`.** | On every path from a `produce` to anything that is not `run_tests`, there is a `verify`. Only `run_tests` may sit between them. `verify` has no config that turns it off, no skip and no failure policy. | The engine refuses to start a step that consumes the attempt's deliverable, other than `run_tests`, unless a `Verification` exists for the attempt's `AgentRun`. `close` refuses `done` without one. |
+| I1 | **`verify` follows every `produce`.** `verify` and the terminal guard are mandatory in every workflow; `review` is not. | On every path from a `produce` to anything that is not `run_tests`, there is a `verify`. Only `run_tests` may sit between them. `verify` has no config that turns it off, no skip and no failure policy. While the company runs delivery tests, a `run_tests` sits between every `produce` and its `verify`. | The engine refuses to start a step that consumes the attempt's deliverable unless a `Verification` exists for the attempt's `AgentRun`. Two types are exempt, because they come before that record: `run_tests` (it produces observations `verify` reads) and `verify` itself (the only step that creates the Verification). `close` refuses `done` without one. |
 | I2 | **High risk always gets a person.** A delivery whose `risk_tier` is high, or whose browser check was not observed, closes only by a person's decision, or by the strict `accept_high_risk` rule that a person enabled, exactly as today. | Not a graph property, so it cannot be configured away. The validator only refuses an `approve` step whose actor setting would claim to bypass it. | `close` reads `risk.is_high` and `sprint_control.person_acceptance_reason` from the latest Verification, whatever steps ran before. A workflow may add `approve` steps. It never removes this hold. |
 | I3 | **The autonomy level still applies.** Level 1 holds every approved task; level 3 runs follow-ups and procedures on the company's own. | No workflow field reads or sets autonomy. | `close` calls `sprint_control.needs_person_acceptance`, as `_review_cycle_body` does today. |
-| I4 | **The confirmation set stays.** | `approve` with `manager_agent` names no rule. It means "the company's `ManagerPolicy`", and the validator refuses any rule list, any `ALWAYS_ESCALATE` category (`cancel_sprint`, `delete_sprint`, `change_autonomy`, `spend_above_budget`) and any type that would act on one. **Proposed:** add `change_workflow` to `ALWAYS_ESCALATE`, so the Manager agent can never edit or activate a workflow. | The Manager agent decides through `manager_policy.evaluate` and `manager_actions.act`, which are unchanged. A workflow grants no rule. |
+| I4 | **The confirmation set stays, and grows by `change_workflow`.** Activating or deactivating a workflow is an Owner's action, like `delete_sprint`. | The validator refuses any `ALWAYS_ESCALATE` category (`cancel_sprint`, `delete_sprint`, `change_autonomy`, `spend_above_budget`, `change_workflow`) on a step and any type that would act on one. `change_workflow` in `ALWAYS_ESCALATE` means no `ManagerPolicy` can name it (a 422, as for the others). | The activate and deactivate routes require the Owner role. An API token (at most a Manager) and the Manager agent therefore cannot activate, deactivate or revert-by-hand a workflow. The Manager agent decides through `manager_policy.evaluate` and `manager_actions.act`, which are unchanged. A workflow grants no rule. |
 | I5 | **A step cannot mark a claim as evidence.** | The registry fixes each type's consumed and produced kinds, and `config` is checked against a schema per type with no free-form mapping. A step whose input is declared as an observation can only follow a type that produces one. | Only `verification.py` writes a `Verification`. Claims and observations keep their separate fields on `AgentRun`. Tests assert that no step handler writes evidence from a claim. |
-| I6 | **The history checker still holds.** | A property test generates valid workflows and random step outcomes, runs them through the engine against SQLite, and runs `app/history_check.py` on every history produced. | Every state change goes through `task_events.record`, with the existing kinds and actors. `history_check.py` keeps importing no production reader. It gains its own independent rules for the new payload fields (step key, attempt, run id). The e2e keeps running it. |
-| I7 | **A task always settles.** | The graph is acyclic, has at least one `produce` and one `verify`, every step is reachable, and every budget is finite and within its ceiling. | An attempt that cannot proceed (unsatisfiable, as in Flow's `unsatisfiable_dependencies!`) blocks the task for a person. The sprint can still close. |
+| I6 | **The history checker still holds.** | A property test generates valid workflows and random step outcomes, runs them through the engine against SQLite, and runs `app/history_check.py` on every history produced. | Every state change goes through `task_events.record`, with the existing kinds and actors. `history_check.py` keeps importing no production reader. It gains its own independent rules for the new payload fields (step key, attempt, run id, pinned version and sha256). Its rule "done needs an approval or a person" gains one independent alternative: a pinned workflow with no `review` step closes on a `closed_on_evidence` event (actor `system`) that follows a verified latest run and no hold (I10). The e2e keeps running it. |
+| I7 | **A task always settles.** | The graph is acyclic, every step is reachable, the step types are those its lifecycle allows (§3.1: a work workflow has at least one `produce` and one `verify`; an after-done or sprint workflow has neither and no step that can change completion), and every budget is finite and at most the ceiling of 5. | An attempt that cannot proceed (unsatisfiable, as in Flow's `unsatisfiable_dependencies!`) blocks the task for a person. The sprint can still close. |
 | I8 | **Dependencies between tasks are unchanged.** | Workflows have no field that touches `depends_on`. | `dependencies.is_ready` and `settle_active` gate dispatch before any workflow starts. |
+| I9 | **A step may narrow the Manager policy, never widen it.** | `approve` with `manager_agent` takes `person_only: true`, or `rules`: a list that must be a subset of `manager_policy.RULES` minus `ALWAYS_ESCALATE`. Anything else is refused. | At decision time the engine allows the agent only rules in the **intersection** of the step's list and the company's current `ManagerPolicy` (a rule the policy later drops is dropped here too). `person_only` hands the item to a person whatever the policy says. |
+| I10 | **No task closes on a claim.** With `review` removed, a task closes on verified evidence plus the guard. | No step type's output can stand in for the Verification; `review` and `approve` outcomes are kept apart from the evidence. | `close` requires the latest Verification of the attempt to be `verified`; `unverifiable` or `refuted` never closes a task (it is sent back by the gate or blocked). Without `review`, the guard (risk tier, autonomy, Manager policy) still decides whether a person must accept. |
+| I11 | **Custom columns are views over a status.** | A custom column maps to exactly one of the five statuses; a binding may name only a column of `todo` or `done` (or the sprint's close). | Task events, `history_check.py`, `dependencies` and sprint closing read `BacklogItem.status` only. A move between columns of one status writes no status. |
 
 Each invariant gets a named refusal reason (the same style as `spec_check`
 and `arch_check`). `POST /v1/workflows/{id}/validate` returns them, and
@@ -402,14 +569,40 @@ Every table carries a required `company_id`, as `test_tenant_scoping.py`
 requires.
 
 - **`workflow_definitions`**: `id`, `company_id`, `name`, `version`,
-  `status` (`draft` / `active` / `retired`), `graph` (JSON), `graph_sha256`
-  (computed by the server from the canonical JSON, never sent by the client),
-  `created_by`, `activated_by`, `activated_at`, `supersedes_id`. The pair
+  `scope` (`task` / `sprint`), `status` (`draft` / `active` / `retired` /
+  `reverted` / `rejected`), `graph` (JSON), `graph_sha256` (computed by the
+  server from the canonical JSON, never sent by the client), `created_by`,
+  `proposed_by` (`ScrumMaster` for a proposal, else null), `activated_by` (an
+  Owner), `activated_at`, `deactivated_by`, `deactivated_at`,
+  `supersedes_id`, and the measurement: `baseline` (JSON), `measured`
+  (JSON), `outcome` (`kept` / `reverted` / `unmeasured`), `measured_at`. The pair
   `(company_id, name, version)` is unique. An active version is never edited.
   `/revise` opens the next version, as specifications do.
-- **`workflow_bindings`**: `id`, `company_id`, `column` (`todo` / `done`),
-  `kind` (nullable), `definition_id`, `created_by`, `created_at`. The triple
-  `(company_id, column, kind)` is unique. A definition cannot be retired
+- **`board_columns`**: `id`, `company_id`, `name`, `status` (one of the
+  five), `position`, `created_by`. Custom columns only; a status with none
+  shows its default column. `(company_id, name)` is unique. Cards record
+  their custom column in a nullable `BacklogItem.board_column_id`, which
+  must map to the card's status (checked on every write; a status change
+  that leaves it inconsistent clears it).
+- **`workflow_bindings`**: `id`, `company_id`, `point` (`column` /
+  `sprint_close`), `column` (a status's default column or a
+  `board_columns.id`, mapping to `todo` or `done`; null for the sprint's
+  close), `landing_column_id` (nullable, same status), `kind` (nullable),
+  `definition_id`, `created_by`, `created_at`. A composite UNIQUE on
+  `(company_id, column, kind)` would not stop two wildcard rows, since
+  NULLs are distinct in both Postgres and SQLite. Uniqueness is therefore
+  two **partial unique indexes**, which both databases support
+  (`CREATE UNIQUE INDEX … WHERE …`; SQLAlchemy `postgresql_where` and
+  `sqlite_where`):
+  - `(company_id, point, column) WHERE kind IS NULL` for the wildcard
+    bindings;
+  - `(company_id, point, column, kind) WHERE kind IS NOT NULL` for the
+    kind-specific ones.
+
+  `column` is stored as a non-null key (the status's default column has a
+  fixed key, `status:todo`, and the sprint's close `sprint_close`), so it
+  never adds a NULL of its own. `test_migrations.py` covers both indexes on
+  SQLite and the e2e on Postgres. A definition cannot be retired
   while a binding names it, as in Flow's `check_column_bindings`.
 - **`task_workflow_runs`**: `id`, `company_id`, `backlog_item_id`,
   `definition_id`, `version`, `graph_sha256` (pinned at start), `state`
@@ -421,6 +614,10 @@ requires.
   `agent_run_id`, `verification_id`, `first_event_id`, `last_event_id`,
   `error`. The pair `(run_id, step_key, attempt)` is unique, so a step
   attempt is inserted once, however many replicas try.
+- **`sprint_workflow_runs`**: the same shape as `task_workflow_runs` for a
+  sprint (`sprint_id`, the pinned version and sha256), with its step rows in
+  `task_step_runs` keyed by run. The `integrate` step keeps writing its
+  `SprintIntegration` rows as today (`integration_jobs`).
 
 ### 5.2 Relation to `task_events`: the events stay the single writer
 
@@ -438,11 +635,13 @@ requires.
   can be checked against the events. The history checker can therefore
   refuse a step row whose outcome has no matching event, or an event that
   names a step the run does not have.
-- **New event kinds are avoided.** Steps reuse today's kinds, and starting a
-  step is not an event. This keeps `history_check.py`, the projection
-  (`task_projection`) and the migration `0014` backfill valid without
-  changes. If a later step type needs a kind of its own, that kind goes into
-  `task_events.KINDS` and the checker in the same pull request.
+- **New event kinds are kept to one.** Steps reuse today's kinds, and
+  starting a step is not an event. The only new kind is
+  `closed_on_evidence` (actor `system`), written by `close` when a workflow
+  without `review` closes a task on a verified run (I10). It goes into
+  `task_events.KINDS`, the projection and `history_check.py` in the same
+  pull request (slice 5). Moves between custom columns of one status are
+  not task events. Any later kind follows the same rule.
 
 ### 5.3 Resumption after a restart, without Temporal
 
@@ -457,12 +656,36 @@ What we would use is what the loop already uses:
   its lock is released with its connection.
 - **Recovery** extends `replicas.recover_stale`, which runs at the start of
   every review cycle. A `running` step attempt that nobody holds goes back to
-  `pending` if its type is idempotent: `produce` (a new attempt, the daemon's
-  journal replays a write that already happened), `run_tests`, `verify` and
-  `review`. If its type has side effects (`publish`, `integrate`), it is
-  first **read back**: the `RunPublication`, the `SprintIntegration` row and
-  the daemon's answer are checked, never assumed. This is what
+  `pending` only if its type is idempotent: `run_tests`, `verify` and
+  `review`. Every other type is **side-effecting** and is first **read
+  back**, never assumed: `produce`, `publish` and `integrate`. For
+  `publish` and `integrate` that is the `RunPublication`, the
+  `SprintIntegration` row and the daemon's answer, which is what
   `integration_jobs` already does for `running` rows.
+- **`produce` is side-effecting.** Its model call can be repeated, but its
+  delivery writes the project. The daemon's journal
+  (`vscode-daemon/delivery_journal.py`) covers only **queued**
+  `workspace.deliver` jobs (`process_queued_delivery`, `delivery_journal.once`
+  keyed by `job_id`, `vscode-daemon/daemon.py` ~540). A **synchronous**
+  `workspace.generate` request (`daemon.py` ~216) calls `deliver_files`
+  directly, with no identity and no stored result. A replica that dies after
+  the daemon wrote but before the step completed would, on a blind retry,
+  apply SEARCH/REPLACE edits a second time, or take a new diff and undo
+  snapshot over files already changed, replacing the ones the first write
+  produced. So **slice 3 has a prerequisite**, shipped before the engine:
+  - **durable delivery identity**: the backend gives every delivery, queued
+    or synchronous, an id (the step run and attempt) and records it before
+    sending;
+  - **persisted output**: the daemon journals the synchronous reply under
+    that id as it does for queued jobs (files, sha256 read back, diffs,
+    snapshot or commit), and the backend stores the reply on the step row
+    before the step can complete;
+  - **replay or reconciliation**: a retried delivery with a known id
+    replays the journalled reply instead of writing again; with no journal
+    entry (a daemon that lost its state), the backend reconciles by asking
+    `workspace.hash` for the files' sha256 and compares them with what it
+    sent, and an unclear result blocks the task for a person instead of
+    writing again.
 - **Wake-ups** are the JetStream `task.assign` durable consumer (for
   `produce`), the outbox (for side effects) and the review cycle (for
   everything else). A step waiting for a person is a row in
@@ -487,21 +710,33 @@ What we would use is what the loop already uses:
 
 ### 5.4 API and permissions
 
-All routes are company-scoped. A **Viewer** reads, a **Manager** writes, an
-API token acts with its role, and the Manager agent cannot write (I4).
+All routes are company-scoped. A **Viewer** reads, a **Manager** drafts and
+validates, and only an **Owner** changes what runs: activating,
+deactivating and binding a workflow (a binding decides which workflow runs,
+so it is an activation too). An API token acts with its role, at most a
+Manager, so it can never activate; the Manager agent cannot write at all
+(I4).
 
 | Route | Who | What |
 |---|---|---|
-| `GET /v1/companies/{id}/workflows` | Viewer | definitions with status and version, and the built-in ones (read-only) |
+| `GET /v1/companies/{id}/workflows` | Viewer | definitions with status, version, outcome and numbers, and the built-in ones (read-only) |
 | `POST /v1/companies/{id}/workflows` | Manager | create a draft |
 | `GET /v1/workflows/{id}` | Viewer | the definition and the validator's findings |
 | `PATCH /v1/workflows/{id}` | Manager | edit a draft (an active version is a 409) |
 | `POST /v1/workflows/{id}/validate` | Viewer | the findings, without saving |
-| `POST /v1/workflows/{id}/activate` | Manager | 409 while a finding blocks; audited as `workflow_activated` with the sha256 |
-| `POST /v1/workflows/{id}/revise` / `retire` | Manager | the next draft / retire (a 409 while bound) |
-| `GET` / `PUT /v1/companies/{id}/workflow_bindings` | Viewer / Manager | the bindings, audited as `workflow_binding_changed` with before and after |
-| `GET /v1/tasks/{id}/workflow` | Viewer | the task's run: steps, attempts, states, the events and the runs and verifications behind each step |
+| `POST /v1/workflows/{id}/revise` | Manager | open the next draft |
+| `POST /v1/workflows/{id}/activate` | **Owner** | 409 while a finding blocks; audited as `workflow_activated` with the sha256; the version it supersedes is deactivated |
+| `POST /v1/workflows/{id}/deactivate` | **Owner** | back to the version it replaced, or to the built-in default; audited as `workflow_deactivated` |
+| `POST /v1/workflows/{id}/reject` | **Owner** | reject a draft (a ScrumMaster proposal included); audited |
+| `GET` / `PUT /v1/companies/{id}/workflow_bindings` | Viewer / **Owner** | the bindings (task columns, kinds, the sprint's close), audited as `workflow_binding_changed` with before and after |
+| `GET` / `POST` / `PATCH` / `DELETE /v1/companies/{id}/board_columns` | Viewer / Manager | custom columns (name, status, position); deleting one a binding names is a 409 |
+| `GET /v1/tasks/{id}/workflow` | Viewer | the task's run: pinned version and sha256, steps, attempts, states, the events and the runs and verifications behind each step |
+| `GET /v1/sprints/{id}/workflow` | Viewer | the sprint workflow's run, linking its `SprintIntegration` rows |
 | `POST /v1/tasks/{id}/workflow/steps/{key}/retry` | Manager | retry a `failed` infrastructure step (not a spent budget) |
+
+The platform's own revert of a measured version (§3.6) is not a route: it
+runs at a sprint's close with the procedures' measurement, audited as
+`workflow_reverted`.
 
 There is **no new approval endpoint.** Approvals keep going through the
 inbox's accept, `run_review` and the Manager agent's actions, so they are
@@ -518,8 +753,11 @@ recorded exactly as today, with the actor in a chained event.
 Workflows                                              [New workflow]
 ┌───────────────────────────────────────────────────────────────────┐
 │ fabrique.default  v1  built-in        bound: To do (any kind)     │
-│ two-reviewers     v3  active          bound: To do (kind: none)   │
+│ two-reviewers     v3  active  kept    bound: To do (kind: none)   │
+│                       rework 0.4 → 0.3 · blocked 10% → 5% · 1st 60% → 70% │
 │ two-reviewers     v4  draft  ⚠ 1 finding                          │
+│ tests-only        v1  draft  proposed by ScrumMaster              │
+│ fabrique.sprint   v1  built-in        bound: sprint close         │
 └───────────────────────────────────────────────────────────────────┘
 
 two-reviewers v4 (draft)
@@ -532,12 +770,24 @@ two-reviewers v4 (draft)
   ·  close        guard: risk tier, autonomy      🔒 not editable
 Findings:
   ✖ I1  step "lint" (run_tests) after review: tests must come before verify
-[Validate] [Activate]   (Viewer: read-only, no buttons)
+[Validate]  [Activate]  [Reject]
+ (Manager: Validate only; Owner: all three; Viewer: read-only, no buttons)
 ```
 
 The editor is an ordered list with `after` pickers, not a free canvas. The
 graphs are small, and a list shows the invariants better. The locked rows
 cannot be dragged or deleted.
+
+A workflow without `review` shows, under its steps, the sentence "Tasks
+close on verified evidence and the guard; no reviewer." The binding editor
+(Owner only) lists the board's columns of `todo` and `done`, the task kinds
+and the sprint's close, each with its bound workflow.
+
+**Board → Columns** (Manager): add, rename, reorder and delete custom
+columns; each is created under one status and shows it (`Design review ·
+in review`). A drag between columns of one status only moves the card; a
+drag to a column of another status is today's status move, with its
+confirmations and refusals.
 
 **Board:** each column header shows its binding as a chip
 (`To do · two-reviewers v3`). Each card shows a strip of step dots for the
@@ -556,10 +806,11 @@ Each slice can ship on its own, with its own tests, and leaves the product
 working.
 
 1. **The default workflow as data, with no behaviour change.**
-   - The step registry (types, evidence declarations, config schemas) and
-     the validator, in code.
-   - `fabrique.default.v1` and the `acceptance_tests` variant, as built-in
-     definitions in code.
+   - The step registry (types, evidence declarations, config schemas, the
+     budget defaults 2 and 3 and the ceiling 5) and the validator, in code.
+   - `fabrique.default.v1`, the `acceptance_tests` variant and
+     `fabrique.sprint.v1` (today's integration), as built-in definitions in
+     code.
    - A read-only projection that maps a task's existing events to the
      default workflow's steps.
    - `GET /v1/tasks/{id}/workflow` and the task page's Workflow tab.
@@ -567,36 +818,70 @@ working.
    - Tests: the validator passes the built-ins and refuses one example of
      each invariant; the projection matches the events of every outcome in
      `test_review_gate.py` and `test_task_events.py`.
-2. **Definitions and validation.**
-   - The `workflow_definitions` table, the CRUD and validate routes, and the
-     Workflows page.
-   - Drafts can be created and activated, but **bindings are not read** by
-     the worker yet. Activation is audited.
-   - `change_workflow` is added to `ALWAYS_ESCALATE`.
-3. **The engine runs the default workflow.**
-   - The `task_workflow_runs` and `task_step_runs` tables, with leases and
-     recovery.
+2. **Definitions, validation and Owner-only activation.**
+   - The `workflow_definitions` table, the CRUD, validate, revise, activate,
+     deactivate and reject routes, and the Workflows page.
+   - A Manager drafts and validates; **only an Owner activates, deactivates
+     or rejects**, as for `delete_sprint`. `change_workflow` is added to
+     `ALWAYS_ESCALATE`; tests show a Manager, an API token and the Manager
+     agent refused.
+   - Activation is audited, but **bindings are not read** by the worker yet.
+3. **The engine runs the default workflows.**
+   - **Prerequisite, shipped first (its own pull request):** durable
+     delivery identity, a journalled reply for synchronous
+     `workspace.generate` writes, and replay or reconciliation by
+     `workspace.hash` (§5.3). Without it, `produce` cannot be recovered
+     safely, so the engine does not ship before it.
+   - The `task_workflow_runs`, `task_step_runs` and `sprint_workflow_runs`
+     tables, with leases, recovery and the pinned version and sha256.
    - The worker's phases become step handlers, called by the engine with
-     the built-in default.
+     the built-in default; the sprint's close runs `fabrique.sprint.v1`
+     around `integration.schedule_after_close`.
    - Behaviour must be identical. The e2e's event sequences are compared
-     before and after (a golden file per task), `history_check.py` runs
-     unchanged, and the replica tests cover step leases.
-4. **Bindings with knobs inside today's shape.**
-   - `workflow_bindings`, resolved by column and kind.
-   - Configurable budgets within the ceilings.
-   - Add-only steps: a second `review` (in sequence), a person's `approve`,
-     and `notify`.
+     before and after (a golden file per task), the text gate's, the
+     delivery gate's and QA's rework counters stay independent and are
+     compared too, `history_check.py` runs unchanged, and the replica tests
+     cover step leases and a replica that dies between a daemon write and
+     the step's completion.
+4. **Custom columns.**
+   - `board_columns`, `BacklogItem.board_column_id`, the columns routes and
+     the board's Columns editor.
+   - Each column maps to exactly one status (I11). Tests show task events,
+     `history_check.py`, dependencies and sprint closing unchanged by moves
+     between columns of one status.
+   - No binding yet: columns are views only.
+5. **Bindings with knobs inside today's shape.**
+   - `workflow_bindings` (Owner), resolved by column and kind, and by the
+     sprint's close; new versions apply to tasks started after activation.
+   - Budgets within the ceiling (lower, or raise up to 5).
+   - Steps: a second `review` (in sequence), a person's `approve`, `notify`,
+     **removing `review`** (with the `closed_on_evidence` event, I10, and its
+     rule in `history_check.py`), and narrowing the Manager policy on an
+     `approve` step (I9).
    - The property test of I6.
-5. **Parallel steps.** Parallel `review` branches and the join rule (§3.3).
-6. **After-done workflows** bound to `done`: `publish`, local merge and
-   `notify` as steps. Each of them still acts only through a person or the
-   Manager agent's existing rules.
-7. **Console producer.** `produce` with `producer: console` (a terminal
+6. **Measurement, revert and proposals.**
+   - Baseline at activation, measurement over two completed sprints
+     (rework per task, blocked share, first-attempt done), the platform's
+     revert to the replaced version, audited (§3.6).
+   - The ScrumMaster's workflow proposals as drafts in the inbox; only an
+     Owner activates one, at every autonomy level.
+7. **Parallel steps.** Parallel `review` branches and the join rule (§3.3).
+8. **After-done and sprint workflows configured.** `publish`, local merge
+   and `notify` after a task is done, and `publish` / `notify` after
+   `integrate` in the sprint workflow. Each acts only through a person or
+   the Manager agent's existing rules.
+9. **Console producer.** `produce` with `producer: console` (a terminal
    assistant on the daemon writes the files). Its output goes through the
    same `verify`.
 
-Slices 1–3 change nothing a company can see, except the read-only Workflow
-tab. Slice 4 is the first slice that lets a company change its loop.
+Slices 1–4 change nothing about how work is done, except the read-only
+Workflow tab and the custom columns as views. Slice 5 is the first slice
+that lets a company change its loop.
+
+Future work, not in these slices: workflows for **runs ingested from other
+producers**. Their runs keep today's path (the Verifier, then a person's
+decision, with the Reviewer agent's suggestion and the Manager agent under
+its `approve_run` rule).
 
 ---
 
@@ -616,8 +901,21 @@ tab. Slice 4 is the first slice that lets a company change its loop.
   cross-checks them.
 - **Numbers that cannot be compared.** Rework per task, the blocked share
   and procedure measurements mean something else under another workflow.
-  Mitigation: store the workflow version on each run and each sprint's
-  numbers, and compare only like with like (see the open questions).
+  Mitigation: store the workflow version on each run and measure each
+  version only over the tasks pinned to it (§3.6). A procedure measured in a
+  sprint where the workflow also changed is marked `unmeasured` rather than
+  credited or blamed (to confirm when slice 6 is built).
+- **Removing QA.** A company that drops `review` loses the only reading of
+  the code by a second party before close. Mitigations: `verify` and the
+  guard stay (I1, I10); the high-risk hold still needs a person (I2); the
+  version is measured and a clearly worse one reverts (§3.6); the UI says
+  plainly that no reviewer reads the work.
+- **Custom columns leaking into the loop.** If code starts reading a custom
+  column, two notions of state appear. Mitigation: I11, and a test that no
+  module outside the board view and the bindings imports `board_columns`.
+- **An automatic revert surprising the Owner.** Mitigation: it only goes
+  back to a version the Owner activated before, it is audited with the
+  numbers, and the brief and the inbox say it happened.
 - **The cost of slice 3.** Rewriting `_review_cycle_body` as step handlers
   touches the most tested and most load-bearing file. Mitigation: no
   behaviour change, and the golden event sequences.
@@ -652,35 +950,53 @@ What we **do** take, and will name in the pull requests:
 
 ---
 
-## 9. Open questions for the owner
+## 9. Decisions
 
-1. **Can `review` (QA) be removed?** The proposal keeps at least one
-   `review` in every workflow. `POSITIONING.md` says a green test outweighs
-   a reviewer's `APPROVED`, so a company might want "tests and Verifier
-   only" for some kinds. Is that allowed, and from which slice?
-2. **Who activates a workflow: a Manager or the Owner?** The proposal says a
-   Manager. Activating a workflow changes the loop for every future task,
-   which is closer to changing autonomy (Owner-level in spirit).
-3. **Columns people define.** Should La Fabrique ever have columns beyond
-   the five statuses, as Flow does? The proposal says no: bindings attach to
-   `todo`, `done` and kinds.
-4. **Measuring workflows like procedures.** Should a workflow version be
-   kept or reverted by the board's numbers after two sprints? And may the
-   ScrumMaster *propose* workflow changes at retrospectives, adopted only by
-   a person?
-5. **Ceilings.** Are 5 for rework and 5 for unusable reviews the right hard
-   limits?
-6. **Running tasks.** Should a newly activated version apply only to tasks
-   that start afterwards (proposed), or also to waiting tasks at their next
-   attempt?
-7. **`integrate`.** Integration is a sprint-level step. Should it be part of
-   a separate sprint workflow, bound to the sprint's close, rather than a
-   task step?
-8. **Outside producers.** Should runs ingested from other producers (the
-   Reviewer agent's queue) also get a configurable workflow, or stay out of
-   scope?
-9. **The `approve` actor.** Is "the company's `ManagerPolicy`, unchanged"
-   the only way the Manager agent may appear in a workflow? Or may a
-   workflow *narrow* the policy for one step, for example "a person only,
-   even if a rule would allow the agent"? Narrowing is safe, widening is
-   not.
+The owner answered the open questions on 2026-11-09. Where she asked for
+"whatever is best practice", the call was made for her and is marked
+*(best practice)*.
+
+1. **QA review is optional per workflow.** A company may remove `review`.
+   `verify` and the terminal guard stay mandatory, and `run_tests` stays
+   wherever the company runs delivery tests. Without QA, a task closes on
+   verified evidence plus the guard (risk tier, autonomy, Manager policy),
+   never on a claim. (§3.1, I1, I10, slice 5.)
+2. **Activation is an Owner's action.** A Manager edits and validates
+   drafts; only an Owner activates or deactivates a workflow, the same way
+   `delete_sprint` is Owner-only. Binding a workflow is an activation too,
+   so it is Owner-only *(best practice)*. `change_workflow` joins
+   `ALWAYS_ESCALATE`: the Manager agent can never activate one, and an API
+   token (at most a Manager) cannot either. (§5.4, I4, slice 2.)
+3. **Custom columns, yes.** Each custom column maps to exactly one of the
+   five statuses, so a column is a view over a status. Task events, the
+   history checker, dependencies and sprint closing still reason only on
+   the five statuses. (§3.5, I11, slice 4.)
+4. **Versions are measured and may revert.** Each version is measured over
+   two completed sprints with the board's numbers, as procedures are: rework
+   per task, blocked share, first-attempt done. A clearly worse version
+   reverts to the version it replaced by the procedures' rule, audited. The
+   tolerance for first-attempt done (0.10) is new and set *(best practice)*
+   to match the blocked share's. The ScrumMaster may propose a workflow
+   change; only an Owner activates it, never automatically, not even at
+   autonomy 3. (§3.6, slice 6.)
+5. **Retry budgets.** Defaults equal today's values: rework **2**
+   (`AUTOPILOT_MAX_REWORK_CYCLES`, defaulting to `MAX_QA_REWORK_CYCLES = 2`)
+   and unusable reviews **3** (`MAX_QA_REVIEW_FAILURES`), in
+   `backend/app/services/task_worker.py`. The hard ceiling is **5**, fixed
+   in code. A company may lower a budget, or raise it up to the ceiling.
+   (§3.4, I7.)
+6. **New versions apply to tasks started after activation.** A task in
+   progress keeps the version and sha256 it pinned until it settles; a
+   waiting task that is re-attempted counts as in progress. (§3.5.)
+7. **Integration is a separate sprint workflow** bound to the sprint's
+   close: `integrate`, then optionally `publish` and `notify`. Its default
+   equals today's `integration.schedule_after_close`. (§3.1, §3.5, slices 3
+   and 8.)
+8. **External producers are future work.** Their runs keep today's path:
+   the Verifier, then the decision of a person, with the Reviewer agent's
+   suggestion and the Manager agent under its policy. (§7.)
+9. **A step may narrow the Manager policy, never widen it.** An `approve`
+   step may say "a person only", or allow the agent a subset of the policy's
+   rules; the validator refuses anything wider, and at run time only the
+   intersection with the company's current policy applies. (§3.2, I9,
+   slice 5.)
