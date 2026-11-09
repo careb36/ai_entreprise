@@ -79,6 +79,7 @@ export function SprintStatusBanner({ sprint }: { sprint: SprintState }) {
 function AutonomyControl({ companyId, canManage }: { companyId: number; canManage: boolean }) {
   const { t } = useTranslation()
   const autonomy = useAutonomy(companyId)
+  const toast = useToast()
   const setAutonomy = useSetAutonomy(companyId)
   const level = autonomy.data?.autonomy_level
   if (level === undefined) return null
@@ -87,7 +88,9 @@ function AutonomyControl({ companyId, canManage }: { companyId: number; canManag
       title={t(`workControl.autonomyHint.${level}`, { defaultValue: '' })}>
       {t('workControl.autonomy', { defaultValue: 'Autonomy' })}
       <select value={level} disabled={!canManage || setAutonomy.isPending}
-        onChange={event => setAutonomy.mutate(Number(event.target.value))}
+        onChange={event => setAutonomy.mutate(Number(event.target.value), {
+          onSuccess: () => toast.success(t('workControl.autonomySaved', { defaultValue: 'Autonomy level saved' })),
+        })}
         className="rounded border border-surface-700 bg-surface-900 px-1.5 py-0.5 text-xs text-gray-200">
         {AUTONOMY_LEVELS.map(value => (
           <option key={value} value={value}>{t(`workControl.autonomyLevel.${value}`, { defaultValue: String(value) })}</option>
