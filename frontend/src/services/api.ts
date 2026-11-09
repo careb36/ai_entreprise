@@ -868,10 +868,6 @@ export const api = {
   dispatchSprint: (sprintId: number) =>
     api.post<{ dispatched: number; sprint_id?: number; message?: string }>(`/v1/sprints/${sprintId}/dispatch`, {}),
 
-  /** The sprint's task branches and their merge order (Viewer). */
-  sprintIntegration: (sprintId: number) =>
-    api.get<any>(`/v1/sprints/${sprintId}/integration`),
-
   login: (email: string, password: string) =>
     fetchApi<LoginResponse>('/v1/auth/login', {
       method: 'POST',
