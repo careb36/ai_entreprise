@@ -1,5 +1,9 @@
-# Pre-commit hooks: enforce the same gates CI runs, locally, before commit.
-# Install: pip install pre-commit && pre-commit install
+# Pre-commit hooks: enforce the same gates CI runs, locally, before commit,
+# and reinstall the frontend's dependencies after a pull that changed them.
+# Install:
+#   pip install pre-commit
+#   pre-commit install --hook-type pre-commit --hook-type post-merge --hook-type post-rewrite
+default_stages: [pre-commit]
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.17.1
@@ -16,3 +20,13 @@ repos:
         entry: bash -c 'if git diff --cached --name-only | grep -qE "(^|/)\\.env(\\.|$)"; then echo "Do not commit .env files"; exit 1; fi'
         language: system
         pass_filenames: false
+      - id: sync-frontend-deps
+        name: npm ci when frontend/package-lock.json changed
+        entry: scripts/hooks/sync-frontend-deps.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+        # Its warnings (npm missing, a failed install) exit 0; without this
+        # pre-commit would hide them behind "Passed".
+        verbose: true
+        stages: [post-merge, post-rewrite]
