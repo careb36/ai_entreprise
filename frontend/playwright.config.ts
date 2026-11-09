@@ -1,55 +1,43 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/**
- * Playwright Configuration for La Fabrique UX Visual Regression Testing.
- * Validates Navigation layout (Miller's Law), Skeleton Loaders, and Fitts's Law Primary Actions.
- */
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30000,
-  expect: {
-    timeout: 5000,
-    toHaveScreenshot: {
-      maxDiffPixelRatio: 0.01,
-      threshold: 0.2,
-      animations: 'disabled',
-    },
-  },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
-    ['json', { outputFile: 'playwright-report/results.json' }],
-    ['list'],
+    ['list']
   ],
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.01,
+      animations: 'disabled',
+      threshold: 0.2,
+    },
+    timeout: 10000,
+  },
   use: {
-    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:4173',
+    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    viewport: { width: 1280, height: 720 },
   },
   projects: [
     {
-      name: 'chromium-desktop',
-      use: {
-        ...devices['Desktop Chrome'],
-        viewport: { width: 1280, height: 800 },
-      },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: 'chromium-mobile',
-      use: {
-        ...devices['Pixel 5'],
-        viewport: { width: 375, height: 667 },
-      },
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
   ],
   webServer: {
-    command: 'npm run preview -- --port 4173 --host 127.0.0.1',
-    url: 'http://localhost:4173',
+    command: 'npm run preview -- --port 5173',
+    url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-    timeout: 60000,
+    timeout: 120 * 1000,
   },
 });

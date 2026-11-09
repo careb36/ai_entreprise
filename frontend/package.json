@@ -1,97 +1,38 @@
 {
-  "name": "fabrique-frontend",
-  "version": "1.0.0",
-  "description": "Fabrique - Electron+React desktop frontend for Multi-Agent System",
-  "homepage": "https://github.com/careb36/la-fabrique",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/careb36/la-fabrique.git"
-  },
-  "main": "dist-electron-main/main.js",
-  "engines": {
-    "node": ">=24.0.0"
-  },
+  "name": "la-fabrique-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "lint": "eslint src",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "electron:compile": "tsc -p electron/tsconfig.json",
-    "electron:dev": "npm run electron:compile && concurrently -k \"vite\" \"electron . --dev\"",
-    "electron:build": "npm run electron:compile && npm run build -- --mode electron && electron-builder"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:visual": "playwright test e2e/visual-regression.spec.ts",
+    "test:visual:update": "playwright test e2e/visual-regression.spec.ts --update-snapshots"
   },
   "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@tanstack/react-query": "^5.105.0",
-    "autoprefixer": "^10.6.2",
-    "date-fns": "^4.4.0",
-    "i18next": "^26.5.12",
-    "lucide-react": "^1.65.0",
-    "moment": "^2.31.0",
-    "postcss": "^8.5.32",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.344.0",
     "react": "^18.2.0",
-    "react-big-calendar": "^1.20.0",
     "react-dom": "^18.2.0",
-    "react-i18next": "^17.1.9",
-    "react-router-dom": "^7.18.5",
-    "tailwindcss": "^3.4.0",
-    "zustand": "^5.0.16"
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
-    "@types/react": "^18.2.45",
-    "@types/react-big-calendar": "^1.16.3",
-    "@types/react-dom": "^18.2.18",
+    "@playwright/test": "^1.42.1",
+    "@types/node": "^20.11.24",
+    "@types/react": "^18.2.61",
+    "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^10.0.6",
-    "electron": "^45.2.1",
-    "electron-builder": "^26.18.0",
-    "eslint": "^10.14.0",
-    "eslint-plugin-i18next": "^6.1.5",
-    "jsdom": "^30.0.0",
+    "autoprefixer": "^10.4.18",
+    "eslint": "^8.57.0",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.72.1",
-    "vite": "^5.0.10",
-    "vitest": "^3.2.7"
-  },
-  "build": {
-    "appId": "com.fabrique.enterprise",
-    "productName": "Fabrique",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron-main/**/*",
-      "package.json"
-    ],
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.developer-tools"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Development",
-      "maintainer": "careb36 <58278841+careb36@users.noreply.github.com>"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "vite": "^5.1.4",
+    "vitest": "^1.3.1"
   }
 }

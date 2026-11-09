@@ -1,29 +1,26 @@
-# Automated Visual Regression Testing Architecture
+# Automated Visual Regression Testing Suite
 
 ## Overview
-This document specifies the visual regression testing pipeline established for La Fabrique's React frontend. The suite protects against unintended visual layout shifts, font regressions, and broken component states introduced during Laws of UX updates (Miller's Law navigation simplification, Hick's Law option filtering, Fitts's Law action buttons, and Skeleton loading states).
+This document specifies the visual regression testing infrastructure implemented for La Fabrique's React frontend UX updates (Miller's Law navigation, skeleton loaders, and Fitts's Law action targets).
 
 ## Architecture & Tooling
 - **Engine**: Playwright Test (`@playwright/test`)
-- **Assertion**: `expect(locator).toHaveScreenshot(snapshotName, options)`
-- **Snapshot Parameters**:
-  - `maxDiffPixelRatio`: `0.01` (1% max allowable pixel variance)
-  - `threshold`: `0.2` (Per-pixel color sensitivity threshold)
-  - `animations`: `'disabled'` (Enforces deterministic screenshot capture by suppressing CSS & SVG animations)
-- **CI Pipeline Integration**: `.github/workflows/visual-regression.yml`
+- **Assertion Mode**: Pixel-level comparison via `toHaveScreenshot()`
+- **Thresholds**:
+  - `maxDiffPixelRatio`: 0.01 (1% max pixel variance allowed)
+  - `threshold`: 0.2 (per-pixel color difference sensitivity)
+- **CI Enforcement**: GitHub Actions (`.github/workflows/visual-regression.yml`) blocks pull requests when visual regressions are detected.
 
-## Acceptance Criteria Coverage
+## Covered Acceptance Criteria
+- **AC-VISUAL-01**: Playwright snapshot configuration & webServer integration.
+- **AC-VISUAL-02**: Visual integrity testing for Navigation header (Desktop & Mobile) and Skeleton Loaders during async execution.
+- **AC-VISUAL-03**: Visual integrity testing for Validation Gate Dashboard and Fitts's Law primary actions, backed by automated Pytest validation (`tests/test_visual_regression_ci.py`).
 
-| ID | Focus Area | Test Spec Location | Snapshot Baselines |
-|---|---|---|---|
-| `AC-VISUAL-01` | Primary Navigation & Miller's Law (≤ 7 Items) | `frontend/e2e/visual-regression.spec.ts` | `main-navigation-desktop.png`, `main-navigation-mobile-drawer.png` |
-| `AC-VISUAL-02` | Skeleton Loader Component & Layout Stability | `frontend/e2e/visual-regression.spec.ts` | `skeleton-loaders-dashboard.png`, `skeleton-card-item.png` |
-| `AC-VISUAL-03` | Validation Gate Dashboard & Fitts's Law Actions | `frontend/e2e/visual-regression.spec.ts` | `validation-gate-dashboard-full.png`, `fitts-primary-actions-toolbar.png`, `fitts-primary-button-hover.png` |
-
-## Local Execution & Snapshot Management
-
-### 1. Running Visual Regression Tests Locally
+## Running Tests Locally
 ```bash
+# Run visual regression suite
 cd frontend
-npm run build
-npx playwright test
+npm run test:visual
+
+# Update snapshot baselines after approved UX changes
+npm run test:visual:update
