@@ -366,7 +366,8 @@ Copy `.env.example` to `.env` and fill in:
   the implementation's to change. A browser runtime missing on the daemon's
   machine (the launch errors themselves: `Executable doesn't exist at`,
   `browserType.launch:`, missing system libraries, `@playwright/test` not
-  found, no `npx`, exit 127; never a mere mention of the installer) is
+  found, `npx --no-install` refusing a package the project lacks, no `npx`,
+  exit 127; never a mere mention of the installer) is
   `runtime_missing`: `e2e_run` is unverifiable with the reason, never a pass
   and never a refutation, and the task QA approves waits for a person at
   every autonomy level (`sprint_control.person_acceptance_reason`,
