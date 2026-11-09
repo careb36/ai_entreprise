@@ -52,8 +52,16 @@ CLIS: dict[str, dict[str, Any]] = {
 }
 # The roles whose tasks deliver files through the task worker.
 ROLES = ("Developer", "QA", "SecOps", "TechWriter")
-# One argument may hold 128 KiB on Linux; the prompt stays under it.
+# The prompt's length in characters (``console_producer.build_prompt``).
 PROMPT_MAX_CHARS = 100_000
+# The sandbox passes the whole command as one ``/bin/sh -c`` argument, and
+# one argument holds 128 KiB on Linux (MAX_ARG_STRLEN, bytes): the command,
+# encoded and quoted, stays under this, the prompt cut with a note if needed.
+COMMAND_MAX_BYTES = 100 * 1024
+CUT_NOTE = (
+    "\n\n[La Fabrique cut the task's prompt here: the command line has a size "
+    "limit. Read the files in this folder for the rest of the context.]"
+)
 CLAIM_EXCERPT_CHARS = 4000
 MISSING_EXIT_CODES = {126, 127}
 # Flow's quota_error_detector.rb, per provider (Apache 2.0).
@@ -210,11 +218,39 @@ def policy_readable(prompt: str) -> str:
     return prompt
 
 
+def _command(cli: str, text: str) -> str:
+    return f"{command_prefix(cli)} {shlex.quote(text)}"
+
+
+def _fits(cli: str, text: str) -> bool:
+    return len(_command(cli, text).encode("utf-8")) <= COMMAND_MAX_BYTES
+
+
+def sent_prompt(cli: str, prompt: str) -> str:
+    """The exact text the CLI gets as its last argument: readable by the
+    policy, and cut (with ``CUT_NOTE``) so the quoted command, in UTF-8
+    bytes, stays within ``COMMAND_MAX_BYTES`` whatever its characters and
+    apostrophes cost. Its sha256 is the one the run records, and it is a
+    fixed point: ``sent_prompt(cli, sent_prompt(cli, p))`` is the same text."""
+    text = policy_readable(prompt[:PROMPT_MAX_CHARS])
+    if _fits(cli, text):
+        return text
+    low, high = 0, len(text)
+    while low < high:  # The longest head that fits with the note.
+        mid = (low + high + 1) // 2
+        candidate = policy_readable(text[:mid] + CUT_NOTE)
+        if len(candidate) <= PROMPT_MAX_CHARS and _fits(cli, candidate):
+            low = mid
+        else:
+            high = mid - 1
+    return policy_readable(text[:low] + CUT_NOTE)
+
+
 def render_command(cli: str, prompt: str) -> str:
     """The CLI's headless command with the prompt shell-quoted as its last
-    argument (as ``console_assistants`` quotes it), readable by the policy."""
-    text = policy_readable(prompt[:PROMPT_MAX_CHARS])
-    return f"{command_prefix(cli)} {shlex.quote(text)}"
+    argument (as ``console_assistants`` quotes it), readable by the policy
+    and within ``COMMAND_MAX_BYTES`` (``sent_prompt``)."""
+    return _command(cli, sent_prompt(cli, prompt))
 
 
 def command_policy(cli: str) -> dict[str, Any]:

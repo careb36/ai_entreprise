@@ -133,6 +133,9 @@ export const SprintWorkspace: React.FC = () => {
   const requestedTab = rawTab?.toLowerCase()
   const tab: SprintTab = requestedTab && isSprintTab(requestedTab) ? requestedTab : 'overview'
   const boardQuery = useSprintBoard(sprintId)
+  // Before the early returns below: a hook must run on every render.
+  const role = useCurrentRole()
+  const canManage = role === 'Owner' || role === 'Manager'
   const notFound = boardQuery.error instanceof ApiError && boardQuery.error.status === 404
   const noAccess = boardQuery.error instanceof ApiError && boardQuery.error.status === 403
   const terminalMessage = noAccess
@@ -148,9 +151,6 @@ export const SprintWorkspace: React.FC = () => {
   }, [sprintId, boardQuery.data, boardQuery.isError, companyId, setActiveSprint])
 
   const sprintsLabel = t('nav.sprints', { defaultValue: 'Sprints' })
-  // Before the early returns below: a hook must run on every render.
-  const role = useCurrentRole()
-
   if (sprintId === null || (boardQuery.isError && !boardQuery.data)) {
     const message = sprintId === null
       ? t('workspace.invalidId', { id, defaultValue: 'Invalid sprint ID: {{id}}.' })
@@ -174,7 +174,6 @@ export const SprintWorkspace: React.FC = () => {
   }
 
   const board = boardQuery.data
-  const canManage = role === 'Owner' || role === 'Manager'
   const sprintName = board?.sprint.sprint_name || t('workspace.sprintLabel', { id: sprintId, defaultValue: 'Sprint #{{id}}' })
   const wide = tab === 'board' || tab === 'live'
 

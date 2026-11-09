@@ -25,23 +25,24 @@ company's sandbox and command policy, so this module only prepares and reads.
   delivery's. A change to the repository's metadata while the CLI ran is
   reported (``refused``) and nothing is delivered.
 
-The CLI runs in the sandbox with the worktree as its only writable folder,
-so the one piece of Git it can reach is the worktree's ``.git`` file, the
-pointer to its git dir. Rewritten (to an attacker's git dir, or replaced by a
-``.git`` folder), any host git run in the worktree would read that config:
-``core.fsmonitor``, hooks, ``diff.external`` or a textconv would run on the
-person's computer. So ``collect`` checks the pointer before any git command,
-against the git dir La Fabrique made (found from the common dir, which the
-sandbox never mounts); a pointer that differs refuses the run with no git
-run in the worktree (the pointer is rewritten, a plain file write, and the
-next ``prepare`` puts the worktree back). And every git command here names
-``--git-dir`` and ``--work-tree`` from those known paths (``.git`` is never
-read), without the inherited ``GIT_*`` environment, with ``core.fsmonitor``
-off, no hooks, no submodule recursion, and ``--no-ext-diff --no-textconv`` on
-diff. The one remote call, the fetch of the base before a new task branch
-starts (``git_base``), runs in the person's checkout before the CLI runs,
-never in a worktree a CLI had. The person's checkout is not guarded: no
-sandbox mounts it.
+The CLI runs in the sandbox with the worktree as its only folder. A linked
+worktree's ``.git`` is a pointer into the host repository's git dir, which no
+sandbox mounts (a git run there finds no repository), and mounting it would
+hand the CLI the person's config and hooks. So ``prepare`` replaces the
+pointer with a private repository inside the worktree (``private_repository``:
+a shallow bare clone of the task's branch at ``head``, no remote, nothing
+naming the host), which the CLI may diff, stage or commit in. ``collect``
+discards it with file operations (never following a symlink) and writes the
+pointer back before any host git runs in the worktree; a ``.git`` that is no
+longer a folder refuses the run. ``git_workspace.worktree_for`` does the same
+for a private repository a run never collected, before any git there. The
+CLI's commits are read from the private repository's files as text
+(``private_head``, informative only); what it changed is the worktree
+against ``head`` in the real git dir. Every host git command here names
+``--git-dir`` and ``--work-tree`` from known paths (``.git`` is never read),
+without the inherited ``GIT_*`` environment, with ``core.fsmonitor`` off, no
+hooks, no submodule recursion, and ``--no-ext-diff --no-textconv`` on diff.
+The person's checkout is not guarded: no sandbox mounts it.
 """
 
 from __future__ import annotations
@@ -51,7 +52,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -60,6 +60,7 @@ from typing import Any, Callable, Dict, List, Optional
 import git_workspace
 import project_lock
 import workspace_read
+from git_workspace import admin_dir, pointer_problem, restore_pointer
 
 MAX_FILES = 200
 MAX_FILE_BYTES = 512 * 1024
@@ -82,65 +83,18 @@ SAFE_CONFIG = (
 )
 
 
-def admin_dir(worktree: Path) -> Path:
-    """The worktree's own git dir, found from the common dir (never from ``.git``).
-
-    A task worktree is ``<common>/fabrique-worktrees/<name>`` and git records
-    it in ``<common>/worktrees/<id>/gitdir``: both outside what the sandbox
-    mounts."""
-    if worktree.parent.name != git_workspace.WORKTREES_DIR:
-        raise git_workspace.GitError("not a task worktree La Fabrique made")
-    common = worktree.parent.parent
-    real = worktree.resolve()
-    admins = common / "worktrees"
-    for admin in sorted(admins.iterdir()) if admins.is_dir() else []:
-        try:
-            recorded = Path((admin / "gitdir").read_text(encoding="utf-8").strip())
-        except (OSError, UnicodeDecodeError):
-            continue
-        if recorded.name == ".git" and recorded.parent.resolve() == real:
-            return admin
-    raise git_workspace.GitError("not a task worktree La Fabrique made")
-
-
-def pointer_problem(worktree: Path, admin: Path) -> Optional[str]:
-    """Why the worktree's ``.git`` is not the pointer to *admin*, else ``None``."""
-    dotgit = worktree / ".git"
-    try:
-        mode = os.lstat(dotgit).st_mode
-        if not stat.S_ISREG(mode):
-            return "the worktree's .git is no longer the file La Fabrique wrote"
-        text = dotgit.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return "the worktree's .git cannot be read"
-    lines = text.splitlines()
-    if len(lines) != 1 or not lines[0].startswith("gitdir: "):
-        return "the worktree's .git was rewritten"
-    named = Path(lines[0][len("gitdir: "):])
-    named = named if named.is_absolute() else worktree / named
-    if os.path.realpath(named) != os.path.realpath(admin):
-        return "the worktree's .git points at another git dir"
-    return None
-
-
-def restore_pointer(worktree: Path, admin: Path) -> None:
-    """The worktree's ``.git`` written back as git writes it: a plain file write, no git."""
-    dotgit = worktree / ".git"
-    if dotgit.is_dir() and not dotgit.is_symlink():
-        shutil.rmtree(dotgit)
-    elif os.path.lexists(dotgit):
-        dotgit.unlink()
-    dotgit.write_text(f"gitdir: {admin}\n", encoding="utf-8")
-
-
 def git(worktree: Path, admin: Path, args: List[str], check: bool = True) -> subprocess.CompletedProcess:
     """``git`` on *admin* and *worktree* named explicitly, hardened (``SAFE_CONFIG``)."""
+    return _hardened([f"--git-dir={admin}", f"--work-tree={worktree}"], worktree, args, check)
+
+
+def _hardened(prefix: List[str], cwd: Path, args: List[str], check: bool = True) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update({"GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"})
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv, no shell.
-            ["git", f"--git-dir={admin}", f"--work-tree={worktree}", *SAFE_CONFIG, *args],
-            cwd=str(worktree), env=env, capture_output=True, text=True,
+            ["git", *prefix, *SAFE_CONFIG, *args],
+            cwd=str(cwd), env=env, capture_output=True, text=True,
             timeout=git_workspace.GIT_TIMEOUT_SECONDS, check=False,
         )
     except FileNotFoundError as e:
@@ -186,6 +140,71 @@ def _put_back(worktree: Path, admin: Path, head: str) -> None:
     git(worktree, admin, ["clean", "-ffdq"])
 
 
+def private_repository(worktree: Path, branch: str, head: str) -> None:
+    """Give the worktree a Git of its own for the run, inside the folder the sandbox mounts.
+
+    A linked worktree's ``.git`` names the host repository's git dir, which no
+    sandbox mounts, so a git the CLI runs there finds no repository; mounting
+    the person's git dir would hand the CLI their config and hooks. Instead
+    the pointer is replaced by a shallow bare clone of *branch* at *head*
+    (``core.bare`` off, no remote, its index built from ``HEAD``): the CLI sees
+    the task's commit and may diff, stage or commit against it, and nothing in
+    it names or reaches the host repository. ``collect`` discards it with
+    plain file operations, before any host git runs, and writes the pointer
+    back; no host git ever runs in it after the CLI had it."""
+    dotgit = worktree / ".git"
+    common = worktree.parent.parent.resolve()
+    dotgit.unlink()
+    try:
+        _hardened([], worktree.parent, [
+            "-c", "protocol.file.allow=always", "clone", "-q", "--bare", "--depth", "1",
+            "--single-branch", "--no-tags", "--branch", branch, common.as_uri(), str(dotgit),
+        ])
+        git(worktree, dotgit, ["config", "core.bare", "false"])
+        git(worktree, dotgit, ["remote", "remove", "origin"])
+        if git(worktree, dotgit, ["rev-parse", "HEAD"]).stdout.strip() != head:
+            raise git_workspace.GitError("the private repository is not at the task's head")
+        git(worktree, dotgit, ["reset", "-q"])  # The index from HEAD; no file changes.
+    except BaseException:
+        restore_pointer(worktree, git_workspace.admin_dir(worktree))
+        raise
+
+
+_REF = re.compile(r"^refs/heads/[A-Za-z0-9][A-Za-z0-9/_.-]{0,199}$")
+
+
+def _small_file(dotgit: Path, relative: str) -> Optional[str]:
+    """A file of the private repository read as text, no symlink, no git; else ``None``."""
+    path = dotgit / relative
+    try:
+        if os.path.realpath(path) != os.path.join(os.path.realpath(dotgit), *relative.split("/")):
+            return None
+        if not stat.S_ISREG(os.lstat(path).st_mode) or os.lstat(path).st_size > 64 * 1024:
+            return None
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def private_head(dotgit: Path) -> Optional[str]:
+    """The commit the private repository's ``HEAD`` names, read from its files
+    (never by running git in it): informative only, the CLI wrote them."""
+    text = (_small_file(dotgit, "HEAD") or "").strip()
+    if _SHA.match(text):
+        return text
+    ref = text[len("ref: "):] if text.startswith("ref: ") else ""
+    if not _REF.match(ref) or ".." in ref:
+        return None
+    loose = (_small_file(dotgit, ref) or "").strip()
+    if _SHA.match(loose):
+        return loose
+    for line in (_small_file(dotgit, "packed-refs") or "").splitlines():
+        sha, _, name = line.partition(" ")
+        if name == ref and _SHA.match(sha):
+            return sha
+    return None
+
+
 def _task_worktree(workspace_root: str, spec: Dict[str, Any]) -> tuple:
     branch = str(spec.get("branch") or "")
     if not git_workspace.valid_branch(branch) or not branch.startswith(git_workspace.TASK_BRANCH_PREFIX):
@@ -214,10 +233,12 @@ def prepare(workspace_root: str, data: Dict[str, Any], resolve=None) -> Dict[str
             merged = git_workspace.merge_branches(root, worktree, [str(b) for b in spec.get("merge") or []])
             head = git(worktree, admin, ["rev-parse", "HEAD"]).stdout.strip()
             _put_back(worktree, admin, head)
+            taken = guard(worktree, admin)
+            private_repository(worktree, branch, head)
             return {
                 "ok": True, "repository": str(root), "worktree": str(worktree), "branch": branch,
-                "head": head, "merged": merged, "guard": guard(worktree, admin),
-                "pointer_restored": restored, **started,
+                "head": head, "merged": merged, "guard": taken,
+                "pointer_restored": restored, "private_git": True, **started,
             }
     except (OSError, git_workspace.GitError) as exc:
         return {"ok": False, "error": str(exc)}
@@ -304,17 +325,21 @@ def collect(workspace_root: str, data: Dict[str, Any], resolve: Callable[[str, s
         return {"ok": False, "error": "not a task worktree La Fabrique made"}
     try:
         with project_lock.lock_for(str(worktree)):
-            problem = pointer_problem(worktree, admin)
+            dotgit = worktree / ".git"
+            problem = None
+            if dotgit.is_symlink() or not dotgit.is_dir():
+                problem = "the worktree's private .git was replaced"
+            head_after = None if problem else private_head(dotgit)
+            # The private repository is discarded and the pointer written back
+            # (file operations) before any host git runs in this worktree.
+            restore_pointer(worktree, admin)
             if problem:
-                # No git runs in this worktree: its pointer is written back
-                # (a file write) and the next prepare puts the worktree back.
-                restore_pointer(worktree, admin)
+                # The next prepare puts the worktree back.
                 return {
                     "ok": False, "worktree": str(worktree), "head": head, "files": [], "truncated": False,
                     "refused": [f"{problem} while the CLI ran; nothing is read from the worktree"],
                     "restored": False,
                 }
-            head_after = git(worktree, admin, ["rev-parse", "HEAD"]).stdout.strip()
             before = data.get("guard") if isinstance(data.get("guard"), dict) else {}
             after = guard(worktree, admin)
             refused: List[str] = []
@@ -329,7 +354,7 @@ def collect(workspace_root: str, data: Dict[str, Any], resolve: Callable[[str, s
                 files.append(entry)
             reply = {
                 "ok": not refused, "worktree": str(worktree), "head": head, "head_after": head_after,
-                "committed_by_cli": head_after != head, "files": [], "truncated": len(changes) > MAX_FILES,
+                "committed_by_cli": bool(head_after) and head_after != head, "files": [], "truncated": len(changes) > MAX_FILES,
                 "refused": refused, "restored": True,
             }
             files, cut = _bounded(files, reply)

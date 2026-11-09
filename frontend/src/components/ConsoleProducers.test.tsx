@@ -89,6 +89,29 @@ describe('ConsoleProducers', () => {
     expect(await screen.findByRole('note')).toHaveTextContent('No CLI runs until then: console producers need a container or bwrap sandbox')
   })
 
+  it('shows the API error instead of crashing when another company fails to load', async () => {
+    const fetch = vi.fn(async (url: string) => {
+      const { pathname } = new URL(url)
+      if (pathname === '/v1/companies/4/console_producers') return response(200, SETTINGS)
+      return response(403, { detail: 'not a member of this company' })
+    })
+    vi.stubGlobal('fetch', fetch)
+    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [] })
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConsoleProducers companyId={4} canManage />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByLabelText('Developer')).toHaveValue('claude')
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <ConsoleProducers companyId={5} canManage />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('not a member of this company')
+    expect(screen.queryByLabelText('Developer')).not.toBeInTheDocument()
+  })
+
   it('shows the backend refusing a save', async () => {
     stubApi(SETTINGS, () => response(422, { detail: 'not a console producer: x' }))
     renderAs(true)

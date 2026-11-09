@@ -311,14 +311,17 @@ async def produce(
     prompt = build_prompt(
         item, agent, sprint, requirements_context, architect_advice, procedures
     )
+    sent = console_clis.sent_prompt(cli, prompt)
     run: dict[str, Any] = {
         "via": f"console:{cli}",
         "cli": cli,
         "label": CLIS[cli]["label"],
         "command": console_clis.command_prefix(cli),
         "branch": git_spec["branch"],
-        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-        "prompt_chars": len(prompt),
+        # What the CLI is given, after the command line's bound: what was sent.
+        "prompt_sha256": hashlib.sha256(sent.encode()).hexdigest(),
+        "prompt_chars": len(sent),
+        "prompt_cut": sent.endswith(console_clis.CUT_NOTE),
         "exit_code": None,
         "duration_seconds": None,
     }
@@ -350,7 +353,7 @@ async def produce(
         "workspace.execute",
         {
             "workspace_root": worktree,
-            "command": console_clis.render_command(cli, prompt),
+            "command": console_clis.render_command(cli, sent),
             "sprint_id": sprint["id"],
             "sandbox": box,
             "command_policy": console_clis.command_policy(cli),
