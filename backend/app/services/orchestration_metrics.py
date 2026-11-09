@@ -34,6 +34,8 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
+from services.token_usage import usage_fields
+
 logger = logging.getLogger("fabrique-task-worker")
 
 # ---------------------------------------------------------------------------
@@ -403,6 +405,9 @@ def record_agent_turn(
     )
     # Unknown is not zero: the KPI average reads this to leave such turns out.
     details["tokens"] = usage_status(llm_result)
+    # The input/output split, the estimate apart and the provider: what
+    # ``run_cost`` prices the turn from (``token_usage``).
+    details.update(usage_fields(llm_result))
     result_payload: dict[str, Any] = {"result_type": result_type} if result_type else {}
     if result_preview:
         result_payload["preview"] = result_preview[:500]

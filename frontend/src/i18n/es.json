@@ -2157,5 +2157,23 @@
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} hechas)",
     "unreported_one": "{{count}} turno sin conteo de tokens informado, fuera de los tokens.",
     "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens."
+  },
+  "cost": {
+    "runTitle": "Costo de esta ejecución",
+    "taskTitle": "Costo de esta tarea",
+    "priceUnknown": "precio desconocido",
+    "tokensInOut": "{{input}} de entrada · {{output}} de salida (tokens)",
+    "estimatedTokens": "{{tokens}} tokens estimados, sin precio",
+    "estimatedHint": "Los tokens estimados son el cálculo del proxy cuando el proveedor no informó el recuento: nunca forman parte del costo.",
+    "models": "Modelos: {{models}} · precios de {{source}}",
+    "reason": {
+      "no_turns": "no hay llamadas al modelo registradas",
+      "no_reported_usage": "sin uso informado, costo desconocido",
+      "token_split_unknown": "precio desconocido (no se registró la división entrada/salida)",
+      "price_unknown": "precio desconocido",
+      "price_ambiguous": "precio desconocido (el modelo figura con varios precios)",
+      "model_unknown": "precio desconocido (modelo no registrado)"
+    },
+    "reportedTokens": "{{tokens}} tokens informados"
   }
 }

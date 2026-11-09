@@ -168,5 +168,10 @@ def call_gemini(
     if message.get("tool_calls"):
         finish = "tool_calls"
     result = {"choices": [{"message": message, "finish_reason": finish}], "model": model}
-    reported = reported_count((res.get("usageMetadata") or {}).get("totalTokenCount"))
+    meta = res.get("usageMetadata") or {}
+    reported = reported_count(meta.get("totalTokenCount"))
+    # The split prices a turn (backend ``services/run_cost.py``); thinking is billed as output.
+    prompt, candidates = reported_count(meta.get("promptTokenCount")), reported_count(meta.get("candidatesTokenCount"))
+    if prompt is not None and candidates is not None:
+        result["usage"] = {"prompt_tokens": prompt, "completion_tokens": candidates + (reported_count(meta.get("thoughtsTokenCount")) or 0)}
     return with_usage(result, reported, messages, message["content"] or "")

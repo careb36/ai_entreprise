@@ -8,6 +8,8 @@ import { specificationsApi } from '../services/specifications'
 import { managerApi, type ManagerRecord } from '../services/manager'
 import { routingApi } from '../services/routing'
 import { queryClient } from '../lib/queryClient'
+import type { CostSummary } from '../services/cost'
+import type { ManagedSprint } from '../services/sprintAdmin'
 import { useAppStore } from '../store/useAppStore'
 
 const sprints: SprintSummary[] = [
@@ -64,6 +66,26 @@ describe('Sprints list', () => {
     expect(rows[2]).toHaveTextContent('Needs Split')
     expect(rows[2]).toHaveTextContent('Not started')
     expect(list).toHaveBeenCalledWith(42)
+  })
+
+  it("shows each sprint's tokens and cost, and price unknown when it could not be priced", async () => {
+    const cost: CostSummary = {
+      turns: 3, reported_turns: 3, estimated_turns: 0, unavailable_turns: 0, reported_tokens: 4000,
+      input_tokens: 3000, output_tokens: 1000, estimated_tokens: 0, cost_cents: 42, reason: null,
+      unpriced_models: [], models: ['coder'], price_source: 'models.dev',
+    }
+    const costed: ManagedSprint[] = [
+      { ...sprints[0], cost },
+      { ...sprints[1], cost: { ...cost, cost_cents: null, reason: 'price_unknown', unpriced_models: ['mystery'] } },
+    ]
+    vi.spyOn(api, 'listSprints').mockResolvedValue(costed)
+    renderPage()
+    const table = await screen.findByRole('list', { name: 'Sprints' })
+    const [hardening, docs] = within(table).getAllByRole('listitem')
+    expect(docs).toHaveTextContent('$0.42')
+    expect(docs).toHaveTextContent('3.0k in · 1.0k out tokens')
+    expect(hardening).toHaveTextContent('price unknown')
+    expect(hardening).not.toHaveTextContent('$')
   })
 
   it('offers a new company and sprint planning when the company has no sprints', async () => {

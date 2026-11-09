@@ -8,12 +8,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type SprintSummary } from './api'
 import { QUERY_KEYS } from '../hooks/useQueries'
+import type { CostSummary } from './cost'
 
 /** A sprint in the list, with what the archive and the edit form read. */
 export type ManagedSprint = SprintSummary & {
   duration_days?: number | null
   archived_at?: string | null
   archived_by?: string | null
+  /** Tokens and US cents (`services/cost.ts`). */
+  cost?: CostSummary
 }
 
 export interface SprintEdit {

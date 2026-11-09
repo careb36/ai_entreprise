@@ -10,6 +10,7 @@ import { useAppStore } from '../store/useAppStore'
 import { useCurrentRole, useSprints } from '../hooks/useQueries'
 import type { SprintSummary } from '../services/api'
 import { useSprintsWithArchived, type ManagedSprint } from '../services/sprintAdmin'
+import { CostLine } from '../components/CostSummary'
 import { SprintAdminActions } from '../components/SprintAdminActions'
 import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
@@ -68,6 +69,7 @@ function SprintRow({ sprint, current, companyId, role }: { sprint: ManagedSprint
             ].filter(Boolean).join(' · ')}
           </p>
         )}
+        {sprint.cost && <div className="mt-1"><CostLine cost={sprint.cost} /></div>}
       </div>
       <p className="flex items-center gap-1 text-xs text-gray-400">
         <CalendarDays size={12} className="shrink-0" />
