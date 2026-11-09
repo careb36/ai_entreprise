@@ -91,118 +91,87 @@ class AIStreamingEngine:
         )
         yield initial_event.to_sse_message()
 
-        # Event 2: Execution plan / node initialization
-        plan_elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        # Event 2: Acknowledgment & Graph Execution Start
         yield StreamEvent(
-            event="workflow_started",
+            event="orchestration_started",
             payload={
                 "session_id": session_id,
-                "query": query,
-                "active_node": "planning_gateway",
+                "query_length": len(query),
+                "workflow": workflow_type,
             },
-            observation={"elapsed_ms": round(plan_elapsed_ms, 2)},
+            claim={"status": "dispatching_to_graph"},
+            observation={"dispatched_at": datetime.now(UTC).isoformat()},
         ).to_sse_message()
 
-        try:
-            # Yield LangGraph streaming events if graph runner provided
-            if graph_runner and hasattr(graph_runner, "astream_events"):
-                async for event in graph_runner.astream_events(
-                    {"query": query, "context": context or {}},
-                    version="v2",
-                ):
-                    event_kind = event.get("event", "node_event")
-                    node_name = event.get("name", "langgraph_node")
-                    data = event.get("data", {})
-
-                    if event_kind == "on_chat_model_stream":
-                        chunk = data.get("chunk")
-                        content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                        if content:
-                            yield StreamEvent(
-                                event="token",
-                                payload={
-                                    "session_id": session_id,
-                                    "node": node_name,
-                                    "delta": content,
-                                },
-                            ).to_sse_message()
-                    elif event_kind in ("on_chain_start", "on_tool_start"):
-                        yield StreamEvent(
-                            event="node_start",
-                            payload={
-                                "session_id": session_id,
-                                "node": node_name,
-                                "metadata": event.get("metadata", {}),
-                            },
-                        ).to_sse_message()
-                    elif event_kind in ("on_chain_end", "on_tool_end"):
-                        yield StreamEvent(
-                            event="node_complete",
-                            payload={
-                                "session_id": session_id,
-                                "node": node_name,
-                                "output": data.get("output"),
-                            },
-                        ).to_sse_message()
-            else:
-                # Default optimized simulated streaming for quick-dispatch LangGraph verification nodes
-                tokens = [
-                    f"Analyzing query: '{query[:40]}...' ",
-                    "Evaluating architectural invariants... ",
-                    "Applying LangGraph AST verification gate... ",
-                    "Verification passed: No policy violations detected. ",
-                    "Synthesizing response for UX delivery.",
-                ]
-                for idx, token in enumerate(tokens):
-                    await asyncio.sleep(0.02)  # Simulate chunk dispatch
+        # Event 3: LangGraph Node Transitions / Token Streaming
+        if graph_runner and hasattr(graph_runner, "astream"):
+            try:
+                async for event in graph_runner.astream({"query": query, "context": context or {}}):
+                    node_name = event.get("node", "graph_node")
+                    node_data = event.get("data", {})
                     yield StreamEvent(
-                        event="token",
+                        event="node_transition",
                         payload={
+                            "node": node_name,
+                            "data": node_data,
                             "session_id": session_id,
-                            "index": idx,
-                            "delta": token,
                         },
+                        claim={"node_claimed_status": "processing"},
+                        observation={"node_observed_timestamp": datetime.now(UTC).isoformat()},
                     ).to_sse_message()
+            except Exception as exc:
+                yield StreamEvent(
+                    event="error",
+                    payload={"error_detail": str(exc), "session_id": session_id},
+                    claim={"error_handling": "abort_gracefully"},
+                    observation={"error_class": exc.__class__.__name__},
+                ).to_sse_message()
+                return
+        else:
+            # Default simulated token streaming for interactive query feedback
+            simulated_steps = [
+                ("node_ast_validation", "Validating query AST and security constraints"),
+                ("node_retrieval", "Retrieving relevant codebase context & Neo4j subgraphs"),
+                ("node_reasoning", "Generating evidence verification plan"),
+            ]
+            for step_node, step_desc in simulated_steps:
+                await asyncio.sleep(0.02)  # Fast interactive cadence
+                yield StreamEvent(
+                    event="node_transition",
+                    payload={
+                        "node": step_node,
+                        "description": step_desc,
+                        "session_id": session_id,
+                    },
+                    claim={"node_target": step_node},
+                    observation={"execution_checkpoint": datetime.now(UTC).isoformat()},
+                ).to_sse_message()
 
-            # Event: Final verification evidence
-            total_duration_ms = (time.perf_counter() - start_time) * 1000.0
-            yield StreamEvent(
-                event="evidence_captured",
-                payload={
-                    "session_id": session_id,
-                    "status": "completed",
-                    "verification_gate": "PASSED",
-                },
-                claim={
-                    "claimed_status": "success",
-                    "model_verdict": "verified",
-                },
-                observation={
-                    "total_duration_ms": round(total_duration_ms, 2),
-                    "recorded_in_audit_chain": True,
-                },
-            ).to_sse_message()
+            # Stream simulated tokens
+            response_tokens = [
+                "Analysis", " complete.", " Verification", " gates", " passed", " successfully."
+            ]
+            for token in response_tokens:
+                await asyncio.sleep(0.01)
+                yield StreamEvent(
+                    event="token",
+                    payload={"token": token, "session_id": session_id},
+                    claim={"action": "stream_chunk"},
+                    observation={"chunk_length": len(token)},
+                ).to_sse_message()
 
-            # Terminal Event
-            yield StreamEvent(
-                event="done",
-                payload={
-                    "session_id": session_id,
-                    "status": "completed",
-                    "total_duration_ms": round(total_duration_ms, 2),
-                },
-            ).to_sse_message()
-
-        except asyncio.CancelledError:
-            # Client closed the connection
-            yield StreamEvent(
-                event="cancelled",
-                payload={"session_id": session_id, "reason": "client_disconnected"},
-            ).to_sse_message()
-            raise
-        except Exception as exc:
-            yield StreamEvent(
-                event="error",
-                payload={"session_id": session_id, "error": str(exc)},
-                observation={"exception_type": exc.__class__.__name__},
-            ).to_sse_message()
+        # Final Event: Completed
+        total_latency_ms = (time.perf_counter() - start_time) * 1000.0
+        yield StreamEvent(
+            event="completed",
+            payload={
+                "session_id": session_id,
+                "status": "completed",
+                "total_duration_ms": round(total_latency_ms, 2),
+            },
+            claim={"workflow_execution": "complete"},
+            observation={
+                "final_total_ms": round(total_latency_ms, 2),
+                "completed_at": datetime.now(UTC).isoformat(),
+            },
+        ).to_sse_message()

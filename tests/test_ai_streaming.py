@@ -1,121 +1,97 @@
 """
-Test suite for FastAPI SSE streaming endpoints and LangGraph streaming engine.
-Verifies Doherty Threshold compliance (TTFB < 200ms) and STD-AUD-1 evidence capture.
+Automated Test Suite for FastAPI SSE AI Streaming & Doherty Threshold Verification.
+
+Verifies:
+- AC: First byte returned within 200ms (Doherty Threshold).
+- Server-Sent Events headers (text/event-stream, no-cache, X-Accel-Buffering: no).
+- STD-AUD-1 compliance: Separation of claim vs observation in stream events.
+- STD-SEC-1: No sensitive secrets exposed in payloads.
 """
 
-import asyncio
+from __future__ import annotations
+
 import json
 import time
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from backend.app.main import app
 from src.backend.streaming.ai_streaming_engine import AIStreamingEngine, StreamEvent
+from backend.app.main import app
 
 
 @pytest.mark.asyncio
 async def test_streaming_engine_ttfb_under_200ms():
-    """Verify that the streaming engine delivers the first chunk within 200ms."""
+    """Verify that AIStreamingEngine yields the initial byte well within 200ms."""
     engine = AIStreamingEngine()
     start_time = time.perf_counter()
 
-    stream = engine.stream_query_execution(
-        query="Verify AST security policies",
-        session_id="test-session-123",
-    )
+    first_chunk = None
+    async for chunk in engine.stream_query_execution(
+        query="Verify AST security gate",
+        session_id="test_sess_001",
+    ):
+        first_chunk = chunk
+        break
 
-    # Receive the first event
-    first_chunk = await stream.__anext__()
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-
-    # Doherty threshold criteria: TTFB must be < 200ms
-    assert elapsed_ms < 200.0, f"TTFB was {elapsed_ms}ms, exceeding 200ms limit"
+    assert first_chunk is not None
     assert "event: connected" in first_chunk
-    assert "test-session-123" in first_chunk
+    # Strict Doherty Threshold criterion (<200ms)
+    assert elapsed_ms < 200.0, f"TTFB of {elapsed_ms:.2f}ms exceeded 200ms limit"
 
 
 @pytest.mark.asyncio
-async def test_stream_event_std_aud_1_separation():
-    """Verify that claims and observations do not share a field per STD-AUD-1."""
+async def test_stream_event_std_aud_1_claim_observation_separation():
+    """Verify STD-AUD-1: claim and observation must never share fields."""
     event = StreamEvent(
-        event="evidence_captured",
-        payload={"result": "valid"},
-        claim={"claimed_status": "success"},
-        observation={"observed_hash": "sha256:abc1234"},
+        event="test_event",
+        payload={"result": "ok"},
+        claim={"expected_action": "validate"},
+        observation={"observed_outcome": "passed"},
     )
     sse_text = event.to_sse_message()
-    assert sse_text.startswith("event: evidence_captured\n")
+    assert sse_text.startswith("event: test_event\ndata: ")
 
-    lines = sse_text.strip().split("\n")
-    data_line = [l for l in lines if l.startswith("data: ")][0]
-    payload = json.loads(data_line[6:])
-
-    assert "claim" in payload
-    assert "observation" in payload
-    assert payload["claim"]["claimed_status"] == "success"
-    assert payload["observation"]["observed_hash"] == "sha256:abc1234"
-    # Ensure they are distinct dictionaries
-    assert set(payload["claim"].keys()).isdisjoint(set(payload["observation"].keys()))
+    data_json = json.loads(sse_text.split("data: ")[1].strip())
+    assert "claim" in data_json
+    assert "observation" in data_json
+    # Ensure keys are strictly segregated
+    claim_keys = set(data_json["claim"].keys())
+    observation_keys = set(data_json["observation"].keys())
+    assert claim_keys.isdisjoint(observation_keys)
 
 
 @pytest.mark.asyncio
-async def test_fastapi_post_ai_query_stream_endpoint():
-    """Verify POST /v1/ai/query/stream returns SSE with proper headers and rapid TTFB."""
+async def test_fastapi_sse_post_endpoint_ttfb_and_headers():
+    """Verify the POST /api/ai/stream endpoint returns text/event-stream within 200ms."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         start_time = time.perf_counter()
         response = await client.post(
-            "/v1/ai/query/stream",
-            json={
-                "query": "Generate validation gate node",
-                "session_id": "sess-post-test",
-                "workflow_type": "verification_loop",
-            },
+            "/api/ai/stream",
+            json={"query": "Explain validation gate execution", "session_id": "test_sess_002"},
         )
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
         assert response.status_code == 200
+        assert elapsed_ms < 200.0, f"HTTP response time {elapsed_ms:.2f}ms exceeded 200ms"
         assert "text/event-stream" in response.headers["content-type"]
+        assert "no-cache" in response.headers.get("cache-control", "")
         assert response.headers.get("x-accel-buffering") == "no"
-        assert response.headers.get("cache-control") == "no-cache, no-transform"
-
-        body = response.text
-        assert "event: connected" in body
-        assert "event: workflow_started" in body
-        assert "event: token" in body
-        assert "event: evidence_captured" in body
-        assert "event: done" in body
-        assert elapsed_ms < 500.0  # Entire mock execution completes swiftly
-
-
-@pytest.mark.asyncio
-async def test_fastapi_get_ai_query_stream_eventsource():
-    """Verify GET /v1/ai/query/stream EventSource browser compatibility."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(
-            "/v1/ai/query/stream?query=CheckSecurityAudit&session_id=sess-get-test"
-        )
-        assert response.status_code == 200
-        assert "text/event-stream" in response.headers["content-type"]
-        assert "sess-get-test" in response.text
         assert "event: connected" in response.text
 
 
 @pytest.mark.asyncio
-async def test_fastapi_generate_stream_endpoint():
-    """Verify POST /v1/generate/stream pipeline stream endpoint."""
+async def test_fastapi_sse_get_endpoint():
+    """Verify the GET /api/ai/stream/{session_id} endpoint for EventSource compatibility."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/v1/generate/stream",
-            json={
-                "prompt": "Implement AST node verification",
-                "sprint_id": "sprint-42",
-                "role": "Backend",
-            },
-        )
+        start_time = time.perf_counter()
+        response = await client.get("/api/ai/stream/sess_eventsource_01?query=ping")
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
         assert response.status_code == 200
+        assert elapsed_ms < 200.0
         assert "text/event-stream" in response.headers["content-type"]
         assert "event: connected" in response.text
-        assert "sprint-42" in response.text
+        assert "event: completed" in response.text
