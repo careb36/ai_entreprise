@@ -30,6 +30,18 @@ Cache: the map is kept under ``FABRIQUE_MAP_STATE`` (default
 files' sha256 and the budget: the same files give the same map without
 parsing them again, and a changed file is parsed again alone (each file's
 parse is cached by its sha256).
+
+Secrets: a signature can carry a literal (``def connect(password="…")``,
+``apiKey = "sk-…"``). A string literal bound to a name that says it is a
+secret, and a value shaped like a known token (private key, AWS, GitHub,
+Slack, Google, Stripe, OpenAI-style keys, JWTs), is replaced by
+``"[redacted]"`` before the signature is clipped or cached. The backend
+redacts the map again at the prompt (``context_read.redact_secrets``).
+``MAP_VERSION`` is part of the cache: a version change discards older caches.
+
+Only regular files are read (a FIFO or a device named ``x.py`` would block
+or never end), and the ranking skips names defined in more than
+``MAP_MAX_DEFINERS`` files and stops at the same deadline as the parsing.
 """
 
 from __future__ import annotations
@@ -41,13 +53,14 @@ import json
 import math
 import os
 import re
+import stat
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import workspace_read
 
-MAP_VERSION = 1
+MAP_VERSION = 2  # 2: signatures redacted for secrets
 MAP_MAX_FILES = 2000
 MAP_MAX_FILE_BYTES = 256 * 1024
 MAP_MAX_TOTAL_BYTES = 24 * 1024 * 1024
@@ -58,6 +71,8 @@ SIGNATURE_CHARS = 120
 PAGERANK_DAMPING = 0.85
 PAGERANK_ITERATIONS = 40
 PARSE_CACHE_LIMIT = 5000
+# A name defined in more files than this says nothing about which one is meant.
+MAP_MAX_DEFINERS = 20
 
 PY_SUFFIXES = {".py"}
 JS_SUFFIXES = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
@@ -96,8 +111,27 @@ def _state_dir() -> Path:
 # ---------------------------------------------------------------------------
 
 
+_SECRET_NAME = r"[\w$]*(?:password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credential)[\w$]*"
+# A quoted literal assigned to a secret-looking name (``password="…"``,
+# ``apiKey: str = '…'``, ``token = `…` ``), within the signature's text.
+_SECRET_ASSIGNED = re.compile(
+    rf"(?i)(\b{_SECRET_NAME}\b\s*(?::[^=,()]*)?=\s*)[bru]{{0,2}}(['\"`])(?:\\.|(?!\2).)*\2"
+)
+_SECRET_TOKENS = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}"
+    r"|\bxox[abprs]-[0-9A-Za-z-]{10,}|\bAIza[0-9A-Za-z_-]{20,}|\b[sr]k_(?:live|test)_[0-9A-Za-z]{10,}"
+    r"|\bsk-[A-Za-z0-9_-]{16,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_.-]{8,}"
+)
+
+
+def redact(text: str) -> str:
+    """*text* with secret-looking literals replaced by ``"[redacted]"``."""
+    text = _SECRET_ASSIGNED.sub(lambda m: f'{m.group(1)}"[redacted]"', text)
+    return _SECRET_TOKENS.sub("[redacted]", text)
+
+
 def _clip(text: str) -> str:
-    text = " ".join(text.split())
+    text = redact(" ".join(text.split()))
     return text if len(text) <= SIGNATURE_CHARS else text[: SIGNATURE_CHARS - 1] + "…"
 
 
@@ -193,15 +227,20 @@ def parse_file(relative: str, text: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _pagerank(nodes: List[str], edges: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+def _pagerank(
+    nodes: List[str], edges: Dict[str, Dict[str, float]], deadline: Optional[float] = None
+) -> Tuple[Dict[str, float], bool]:
     """PageRank over *nodes* with weighted *edges* (source → target → weight),
-    a fixed number of iterations in a fixed order: the same graph, the same ranks."""
+    a fixed number of iterations in a fixed order: the same graph, the same
+    ranks. Past *deadline* it stops early and says so."""
     count = len(nodes)
     if not count:
-        return {}
+        return {}, False
     rank = {node: 1.0 / count for node in nodes}
     totals = {node: sum(edges.get(node, {}).values()) for node in nodes}
     for _ in range(PAGERANK_ITERATIONS):
+        if deadline is not None and time.monotonic() > deadline:
+            return rank, True
         dangling = sum(rank[n] for n in nodes if not totals[n])
         base = (1.0 - PAGERANK_DAMPING) / count + PAGERANK_DAMPING * dangling / count
         nxt = {node: base for node in nodes}
@@ -213,7 +252,7 @@ def _pagerank(nodes: List[str], edges: Dict[str, Dict[str, float]]) -> Dict[str,
             for target, weight in sorted(edges[source].items()):
                 nxt[target] += share * weight
         rank = nxt
-    return rank
+    return rank, False
 
 
 def _name_weight(name: str, defined_in: int) -> float:
@@ -237,11 +276,16 @@ def _is_test(path: str) -> bool:
     )
 
 
-def rank_definitions(parsed: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def rank_definitions(
+    parsed: Dict[str, Dict[str, Any]], deadline: Optional[float] = None
+) -> Tuple[List[Dict[str, Any]], bool]:
     """Every definition with its ``rank`` and ``refs`` (how many other files
     name it), best first; ties by path and line. A definition in a test file,
     or a private one, keeps a tenth of its rank: the map is for the code
-    under change and what it may call."""
+    under change and what it may call. A name defined in more than
+    ``MAP_MAX_DEFINERS`` files gives no edges. Past *deadline* (a
+    ``time.monotonic()`` value) the edges stop growing and PageRank stops
+    iterating; the second value says so."""
     defines: Dict[str, List[str]] = {}
     for path in sorted(parsed):
         for name, *_rest in parsed[path]["defs"]:
@@ -250,16 +294,24 @@ def rank_definitions(parsed: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
                 defines[name].append(path)
     edges: Dict[str, Dict[str, float]] = {}
     by_name: Dict[Tuple[str, str], Dict[str, float]] = {}
+    late = False
     for source in sorted(parsed):
+        if deadline is not None and time.monotonic() > deadline:
+            late = True
+            break
         for name, count in sorted(parsed[source]["refs"].items()):
-            targets = [t for t in defines.get(name, ()) if t != source]
+            definers = defines.get(name, ())
+            if len(definers) > MAP_MAX_DEFINERS:
+                continue
+            targets = [t for t in definers if t != source]
             for target in targets:
                 weight = _name_weight(name, len(defines[name])) * math.sqrt(count) / len(targets)
                 edges.setdefault(source, {})
                 edges[source][target] = edges[source].get(target, 0.0) + weight
                 by_name.setdefault((target, name), {})
                 by_name[(target, name)][source] = by_name[(target, name)].get(source, 0.0) + weight
-    ranks = _pagerank(sorted(parsed), edges)
+    ranks, cut = _pagerank(sorted(parsed), edges, deadline)
+    late = late or cut
     totals = {source: sum(out.values()) for source, out in edges.items()}
     out: List[Dict[str, Any]] = []
     for path in sorted(parsed):
@@ -273,7 +325,7 @@ def rank_definitions(parsed: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "refs": len(given), "rank": score, "file_rank": ranks.get(path, 0.0),
             })
     out.sort(key=lambda d: (-d["rank"], -d["refs"], -d["file_rank"], d["path"], d["line"]))
-    return out
+    return out, late
 
 
 def render(ranked: List[Dict[str, Any]], max_chars: int) -> Tuple[str, int]:
@@ -371,9 +423,18 @@ def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
     partial = files_capped
     for relative, path in files:
         try:
-            if path.stat().st_size > MAP_MAX_FILE_BYTES:
+            info = path.lstat()
+            # A FIFO, a socket or a device would block or never end.
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAP_MAX_FILE_BYTES:
                 continue
-            raw = path.read_bytes()
+            # Non-blocking, so a file swapped for a FIFO since cannot hang the open.
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+            with os.fdopen(fd, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    continue
+                raw = handle.read(MAP_MAX_FILE_BYTES + 1)
+            if len(raw) > MAP_MAX_FILE_BYTES:
+                continue
         except OSError:
             continue
         total += len(raw)
@@ -399,7 +460,8 @@ def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
             entry = parse_file(relative, raw.decode("utf-8", errors="replace"))
             parses[f"{Path(relative).suffix.lower()}:{digest}"] = entry
         parsed[relative] = entry
-    ranked = rank_definitions(parsed)
+    ranked, late = rank_definitions(parsed, started + MAP_DEADLINE_SECONDS)
+    partial = partial or late
     text, shown = render(ranked, budget)
     result = {
         "map": text,
