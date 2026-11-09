@@ -61,7 +61,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import workspace_read
 
-MAP_VERSION = 3  # 2: signatures redacted for secrets; 3: AST defaults, JS literals
+MAP_VERSION = 4  # 2: signatures redacted; 3: AST defaults, JS literals; 4: fail closed on literals
 MAP_MAX_FILES = 2000
 MAP_MAX_FILE_BYTES = 256 * 1024
 MAP_MAX_TOTAL_BYTES = 24 * 1024 * 1024
@@ -210,10 +210,27 @@ _JS_LITERALS = re.compile(
 )
 
 
-def _strip_literals(text: str) -> str:
+def _strip_literals(text: str) -> Tuple[Optional[str], str]:
     """*text* without what its literals and comments hold (their line breaks
-    kept): a password in a string is not a name the file refers to."""
-    return _JS_LITERALS.sub(lambda m: "\n" * m.group(0).count("\n") or " ", text)
+    kept): a password in a string is not a name the file refers to. Fails
+    closed: a template literal nested in another's ``${…}``, an unclosed
+    comment or a quote left unbalanced gives ``None`` and the reason, since
+    the text left could still hold a literal's contents."""
+    problem = ""
+
+    def blank(match: "re.Match[str]") -> str:
+        nonlocal problem
+        literal = match.group(0)
+        if literal.startswith("`") and "${" in literal and "}" not in literal[literal.rindex("${"):]:
+            problem = problem or "a template literal nested in another"
+        elif literal.startswith("/*") and not literal.endswith("*/"):
+            problem = problem or "an unclosed comment"
+        return "\n" * literal.count("\n") or " "
+
+    stripped = _JS_LITERALS.sub(blank, text)
+    if not problem and any(quote in stripped for quote in "`'\""):
+        problem = "a quote the literals do not balance"
+    return (None, problem) if problem else (stripped, "")
 
 
 def parse_javascript(text: str) -> Dict[str, Any]:
@@ -244,8 +261,11 @@ def parse_javascript(text: str) -> Dict[str, Any]:
             match = _JS_METHOD.match(line)
             if match and match.group(1) not in _JS_KEYWORDS and len(line) - len(line.lstrip()) <= 4:
                 defs.append([match.group(1), _clip(f"{match.group(1)}{match.group(2)}"), number, 1])
+    stripped, problem = _strip_literals(text)
+    if stripped is None:  # Definitions only: no reference is safe to keep.
+        return {"defs": defs, "refs": {}, "refs_skipped": problem}
     refs: Dict[str, int] = {}
-    for name in _JS_IDENT.findall(_strip_literals(text)):
+    for name in _JS_IDENT.findall(stripped):
         if name not in _COMMON_NAMES:
             refs[name] = refs.get(name, 0) + 1
     for name, _sig, _line, _depth in defs:
@@ -507,6 +527,9 @@ def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
         "fingerprint": fingerprint,
         "files_parsed": len(parsed),
         "files_unparsed": sorted(r for r, e in parsed.items() if e.get("error"))[:20],
+        # JavaScript or TypeScript whose literals could not be stripped safely:
+        # their definitions are mapped, their references are not counted.
+        "files_without_refs": sorted(r for r, e in parsed.items() if e.get("refs_skipped"))[:20],
         "definitions": len(ranked),
         "shown": shown,
         "truncated": shown < len(ranked),

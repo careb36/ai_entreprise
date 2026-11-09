@@ -28,9 +28,10 @@ one (``npm run lint`` with ``eslint . --fix``), is not run, and the result
 says why; dry runs (``--fix-dry-run``) are fine. The command is split into
 its simple commands (``&&``, ``||``, ``;``, ``|``, line breaks) and each is
 judged on its own words, quotes removed (``ruff check '--fix' .``, ``black
---check . && isort .``); a substitution, a here-document, ``eval`` or a
-nested ``sh -c`` is refused, since what it runs cannot be read before it
-runs. What else a company's own wrapper does is not visible here.
+--check . && isort .``); a substitution, a here-document, ``eval``, a
+nested ``sh -c`` or a shell comment (``black . # --check``, a ``#`` that
+starts a word outside quotes) is refused, since what runs cannot be read
+from the words alone. What else a company's own wrapper does is not visible here.
 
 What the linter printed is shown with every secret-looking line redacted
 (``context_read.redact_secrets``, as the read replies are), before it is
@@ -159,6 +160,31 @@ _SHELL_C = re.compile(r"^-[A-Za-z]*c[A-Za-z]*$")  # -c, -lc, -ec…
 _SEPARATORS = {"&&", "||", ";", "|", "&", ";;", "|&", "(", ")"}
 
 
+def _has_comment(command: str) -> bool:
+    """Whether *command* holds a shell comment: a ``#`` that starts a word
+    outside quotes (``black . # --check``). One inside quotes or within a
+    word (``a#b``) is text."""
+    quote = ""
+    previous = "\n"
+    escaped = False
+    for char in command:
+        if escaped:
+            escaped = False
+        elif quote:
+            if char == quote:
+                quote = ""
+            elif char == "\\" and quote == '"':
+                escaped = True
+        elif char == "\\":
+            escaped = True
+        elif char in "'\"":
+            quote = char
+        elif char == "#" and (previous.isspace() or previous in ";&|()"):
+            return True
+        previous = char
+    return False
+
+
 def simple_commands(command: str) -> list[list[str]] | str:
     """*command* split into its simple commands (on ``&&``, ``||``, ``;``,
     ``|``, ``&`` and line breaks), each as the words the shell would pass,
@@ -166,6 +192,8 @@ def simple_commands(command: str) -> list[list[str]] | str:
     for marker in _OPAQUE_TEXT:
         if marker in command:
             return f"it uses `{marker}`, whose effect cannot be read before it runs"
+    if _has_comment(command):
+        return "it holds a shell comment, which hides words from the shell but not from this check"
     commands: list[list[str]] = []
     for line in command.splitlines():
         lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
