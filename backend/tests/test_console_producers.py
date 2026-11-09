@@ -875,6 +875,30 @@ def test_a_private_git_left_by_a_run_never_collected_is_removed_before_host_git(
     assert (worktree / ".git").is_file()
 
 
+def test_a_worktree_with_a_command_still_running_keeps_its_private_git(
+    repo, cli_path, tmp_path
+):
+    """A backend that restarted re-queues the task while the daemon still runs
+    its CLI: the next attempt in that worktree is refused and the running
+    CLI's private repository is left alone."""
+    import sprint_integration
+
+    fake_cli(cli_path, "claude", EDIT_CALC)
+    prepared = console_run.prepare(str(repo), {"git": SPEC})
+    worktree = Path(prepared["worktree"])
+    assert (worktree / ".git").is_dir()
+
+    def again():
+        return daemon.deliver_files(
+            str(repo), [{"path": "other.py", "content": "Y = 2\n"}], SPEC
+        )
+
+    result = sprint_integration.while_active(str(worktree), again)
+    assert not result["ok"]
+    assert "still running" in str(result)
+    assert (worktree / ".git").is_dir()
+
+
 def test_a_replaced_private_git_is_refused_and_no_git_runs_on_the_host(
     repo, cli_path, tmp_path, monkeypatch
 ):

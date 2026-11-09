@@ -91,6 +91,12 @@ def while_active(path, fn, *args):
                     del _ACTIVE[key]
 
 
+def is_active(path) -> bool:
+    """Whether a command is running in *path* now (``while_active``)."""
+    with _ACTIVE_LOCK:
+        return _snapshot_key(path) in _ACTIVE
+
+
 def _prunable(path: Path) -> bool:
     with _ACTIVE_LOCK:
         if _snapshot_key(path) in _ACTIVE:

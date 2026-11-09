@@ -154,6 +154,13 @@ def worktree_for(root: Path, branch: str, start_point: str) -> Path:
     path = common / WORKTREES_DIR / branch.replace("/", "__")
     # Before git looks at it (``prune`` included): its .git is git's pointer.
     if os.path.lexists(path / ".git"):
+        # A command still running there (a console producer's CLI a restarted
+        # backend no longer waits for) keeps its repository: never repaired
+        # under it, the attempt is refused until that command ends.
+        import sprint_integration  # noqa: PLC0415 - it imports this module
+
+        if sprint_integration.is_active(path) and pointer_problem(path, admin_dir(path)):
+            raise GitError(f"a command is still running in {path}; try again once it ends")
         repair_pointer(path)
     run_git(["worktree", "prune"], root, check=False)
     if (path / ".git").exists():
