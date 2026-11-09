@@ -635,7 +635,7 @@ async def run_fabrique_workflow(
                 import database
                 from models.agent_run import GRAPH_PRODUCER
                 from schemas import AgentRunCreate
-                from services import agent_run_service
+                from services.evidence import agent_run_service
 
                 summary_message = next(
                     (

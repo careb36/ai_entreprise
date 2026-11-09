@@ -25,7 +25,9 @@ The check fails when:
   import, and that edge is not in the ``allowlist``.
 
 The allowlist holds the edges that broke the rule when it was adopted
-(``"acceptance -> task_worker"``). It may only shrink: an edge listed there
+(``"acceptance -> task_worker"``), named by the modules' stems whichever
+folder holds them, so an edge keeps its name when its module moves into a
+context folder. It may only shrink: an edge listed there
 that no longer exists is reported, and ``--update`` drops it; ``--update``
 never adds an edge. Exit status 0 when the code keeps to the rule, 1
 otherwise. Run from anywhere: paths are resolved from the repository root.
@@ -123,6 +125,20 @@ def imports_of(key: str, path: Path, modules: dict[str, Path]) -> set[str]:
     return targets
 
 
+def _name(key: str) -> str:
+    """The module's name in an edge: its stem, whichever folder holds it.
+
+    A migrated module and the shim it left at the flat path are one module, so
+    ``evidence.verification -> sandbox`` is the allowlisted
+    ``verification -> sandbox``: the allowlist survives a move unchanged."""
+    return key.rsplit(".", 1)[-1]
+
+
+def _is_shim(path: Path) -> bool:
+    """A flat module that replaces itself with its owner in ``sys.modules``."""
+    return "sys.modules[__name__]" in path.read_text(encoding="utf-8")
+
+
 def find_cycle(graph: dict[str, list[str]]) -> list[str] | None:
     state: dict[str, int] = {}
     stack: list[str] = []
@@ -179,10 +195,29 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             owner[key] = key
         elif key not in owner:
             problems.append(f"{key}: in no context; add it to {DATA.name}")
+    # Edges are named by stem, so a stem must name one module: a migrated
+    # module and the shim at its flat path, never two modules of their own,
+    # or one would inherit the other's allowlisted edges.
+    stems: dict[str, list[str]] = {}
+    for key in modules:
+        if "." in key:
+            stems.setdefault(_name(key), []).append(key)
+    for stem, keys in sorted(stems.items()):
+        if len(keys) > 1:
+            problems.append(
+                f"{stem}: names {' and '.join(sorted(keys))}; edges are named "
+                "by the module's stem, so give one of them another name"
+            )
     for key in modules:
         if "." in key or key in contexts:
             continue
         homes = [c for c in contexts if f"{c}.{key}" in modules]
+        if homes and not _is_shim(modules[key]):
+            problems.append(
+                f"{key}: a module of its own beside {homes[0]}.{key}; edges are "
+                "named by the module's stem, so leave a shim there "
+                "(sys.modules[__name__] = the owner) or rename one of them"
+            )
         if homes:
             shims[key] = homes[0]
             if owner.get(key) not in (None, homes[0]):
@@ -190,6 +225,8 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
                     f"{key}: a shim of {homes[0]}.{key}, but listed in {owner[key]}"
                 )
 
+    by_name = {_name(key): key for key in modules if "." in key}
+    by_name.update({key: key for key in modules if "." not in key})
     allowed = {n: set(c.get("depends_on", [])) | {n} for n, c in contexts.items()}
     edges: list[tuple[str, str]] = []
     violations: list[str] = []
@@ -198,15 +235,15 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             edges.append((key, target))
             src, dst = owner.get(key), owner.get(target)
             if src and dst and dst not in allowed.get(src, set()):
-                violations.append(f"{key} -> {target}")
+                violations.append(f"{_name(key)} -> {_name(target)}")
     allowlist = set(data.get("allowlist", []))
     new = sorted(v for v in violations if v not in allowlist)
     stale = sorted(allowlist - set(violations))
     for edge in new:
-        src, dst = (part.strip() for part in edge.split("->"))
+        src, dst = (owner[by_name[part.strip()]] for part in edge.split("->"))
         problems.append(
-            f"{edge}: {owner[src]} may not import {owner[dst]} "
-            f"(allowed: {', '.join(sorted(allowed[owner[src]] - {owner[src]})) or 'nothing'})"
+            f"{edge}: {src} may not import {dst} "
+            f"(allowed: {', '.join(sorted(allowed[src] - {src})) or 'nothing'})"
         )
     return {
         "modules": modules,

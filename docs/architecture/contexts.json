@@ -308,10 +308,6 @@
     "console_producer -> task_worker",
     "git_workflow -> dependencies",
     "task_worker -> integration_jobs",
-    "verification -> console_clis",
-    "verification -> mcp_tools",
-    "verification -> research_tools",
-    "verification -> sandbox",
     "workspace_daemon -> app_check",
     "workspace_daemon -> criteria_tests"
   ]

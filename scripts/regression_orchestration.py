@@ -461,10 +461,10 @@ def check_governance() -> None:
             _sys.path.insert(0, c)
 
     try:
-        gov = importlib.import_module("app.services.governance")
+        gov = importlib.import_module("app.services.evidence.governance")
     except ImportError:
         try:
-            gov = importlib.import_module("services.governance")
+            gov = importlib.import_module("services.evidence.governance")
         except ImportError:
             print(warn("  governance module not importable — skipping"))
             return
@@ -476,7 +476,7 @@ def check_governance() -> None:
 
     # Protected paths from CLAUDE.md: SELF_IMPROVEMENT_PROTECTED_PATHS
     protected_examples = [
-        "backend/app/services/governance.py",
+        "backend/app/services/evidence/governance.py",
         "db/init-db/init.sql",
         "docker-compose.yml",
     ]
