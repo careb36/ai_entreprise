@@ -14,6 +14,13 @@ set -u
 
 lock="frontend/package-lock.json"
 
+# post-rewrite also fires for `git commit --amend`, which does not move
+# ORIG_HEAD: comparing against it would rerun npm ci after every amend that
+# follows a pull. pre-commit names the rewrite in PRE_COMMIT_REWRITE_COMMAND.
+if [ "${PRE_COMMIT_REWRITE_COMMAND:-}" = "amend" ]; then
+  exit 0
+fi
+
 # ORIG_HEAD is where HEAD was before the merge or rebase.
 if ! git rev-parse -q --verify ORIG_HEAD >/dev/null; then
   exit 0

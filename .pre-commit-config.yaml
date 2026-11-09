@@ -26,4 +26,7 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+        # Its warnings (npm missing, a failed install) exit 0; without this
+        # pre-commit would hide them behind "Passed".
+        verbose: true
         stages: [post-merge, post-rewrite]
