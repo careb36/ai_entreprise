@@ -1,0 +1,323 @@
+{
+  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update).",
+  "contexts": {
+    "contracts": {
+      "path": "backend/app/services/contracts/",
+      "responsibility": "The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.",
+      "depends_on": [],
+      "modules": [
+        "edit_blocks",
+        "roles",
+        "sandbox_schemas",
+        "standards_catalogue"
+      ]
+    },
+    "platform": {
+      "path": "backend/app/services/platform/",
+      "responsibility": "The infrastructure every context may use: the audit writes (AgentService), the advisory locks across replicas, idempotency claims, the Glassroom publisher, the KPI turn records, token usage, API tokens, run secrets, the health check, the knowledge graph reader and, after the migration, the engram processor from backend/memory. It knows nothing of tasks, runs or companies' decisions.",
+      "depends_on": [
+        "contracts"
+      ],
+      "modules": [
+        "agent_service",
+        "api_tokens",
+        "glassroom",
+        "healthcheck",
+        "idempotency",
+        "locks",
+        "memory_graph",
+        "orchestration_metrics",
+        "run_secrets",
+        "token_usage"
+      ]
+    },
+    "tasks": {
+      "path": "backend/app/services/tasks/",
+      "responsibility": "A task's record: its events and their hash chain (task_events), the projections that answer the board's questions (task_projection, TaskRecord), the comment-thread readers (board), the dependencies between a sprint's tasks. It records and answers; it never dispatches, reviews or calls a model.",
+      "depends_on": [
+        "contracts",
+        "platform"
+      ],
+      "modules": [
+        "board",
+        "dependencies",
+        "events",
+        "task_events",
+        "task_projection"
+      ]
+    },
+    "models": {
+      "path": "backend/app/services/models/",
+      "responsibility": "Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks"
+      ],
+      "modules": [
+        "company_models",
+        "model_catalog",
+        "model_prices",
+        "model_record",
+        "model_routing",
+        "model_suggestions",
+        "provider_connections",
+        "routing_record",
+        "run_cost"
+      ]
+    },
+    "evidence": {
+      "path": "backend/app/services/evidence/",
+      "responsibility": "Judging a run from what was observed: the Verifier's checks and verdict, the risk tier, the quality standards check, acceptance tests per criterion, the context-read check, the application and browser checks as read from the daemon's reply, SecOps scans, the gate before QA, the changes of a run and the ingestion of AgentRun records. It reads the daemon's reply as data from contracts; it never calls the daemon, the loop, the tools or a producer.",
+      "depends_on": [
+        "contracts",
+        "platform"
+      ],
+      "modules": [
+        "acceptance",
+        "agent_run_service",
+        "app_check",
+        "browser_smoke",
+        "context_read",
+        "criteria_tests",
+        "delivery_gate",
+        "governance",
+        "review_changes",
+        "risk",
+        "secops_checks",
+        "standards",
+        "verification"
+      ]
+    },
+    "workspace": {
+      "path": "backend/app/services/workspace/",
+      "responsibility": "The client of the workspace daemon over NATS: requests and their errors, the delivery test run, the project inspection and snapshot, the sandbox modes, the stack profiles and the Git workflow's delivery spec. It sends and returns observations; it never judges them.",
+      "depends_on": [
+        "contracts",
+        "platform"
+      ],
+      "modules": [
+        "git_workflow",
+        "sandbox",
+        "sandbox_manager",
+        "stack_profiles",
+        "workspace_daemon",
+        "workspace_snapshot"
+      ]
+    },
+    "tools": {
+      "path": "backend/app/services/tools/",
+      "responsibility": "What a model may call during a task: the bounded tool loop, MCP servers and their configuration, the Developer's workspace tools and their replies, the checked edits and the lint after an edit, the repository map, the research tools and the compressed history. Each call is recorded as an observation; the tools never decide a verdict.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "evidence",
+        "workspace"
+      ],
+      "modules": [
+        "developer_tool_replies",
+        "developer_tool_schemas",
+        "developer_tools",
+        "edit_lint",
+        "mcp_client",
+        "mcp_config",
+        "mcp_tools",
+        "repo_map",
+        "research_registries",
+        "research_schemas",
+        "research_tools",
+        "tool_history",
+        "workspace_edits"
+      ]
+    },
+    "learning": {
+      "path": "backend/app/services/learning/",
+      "responsibility": "How the company learns from its sprints: procedures kept or reverted by numbers, the retrospective, the ScrumMaster's triage and proposals, the Architect's record. It reads the task record and asks models through the proxy; it never moves a task.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models"
+      ],
+      "modules": [
+        "architect",
+        "procedures",
+        "retrospective",
+        "scrum_master"
+      ]
+    },
+    "planning": {
+      "path": "backend/app/services/planning/",
+      "responsibility": "What is built and in which tasks: the specification and its check, the architecture and its check, their approval, the PO's sprint plan from a specification, the sprint planner and team, the project's stack discovery. It writes plans and documents; it never runs a task.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models",
+        "evidence",
+        "workspace",
+        "tools"
+      ],
+      "modules": [
+        "arch_author",
+        "arch_check",
+        "discovery_service",
+        "document_approval",
+        "spec_author",
+        "spec_check",
+        "spec_diff",
+        "spec_impact",
+        "spec_planning",
+        "sprint_planner",
+        "sprint_team"
+      ]
+    },
+    "producers": {
+      "path": "backend/app/services/producers/",
+      "responsibility": "The interchangeable producers of work other than the task worker's own model call: the terminal assistants and CLI producers, the optional LangGraph kickoff (agent_worker, and backend/agents/graph.py after the migration) and the GitHub adapter that ingests pull requests as runs. A producer's output is a claim handed to the evidence.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models",
+        "evidence",
+        "workspace",
+        "tools"
+      ],
+      "modules": [
+        "agent_worker",
+        "console_assistants",
+        "console_capabilities",
+        "console_clis",
+        "console_producer",
+        "github_adapter"
+      ]
+    },
+    "loop": {
+      "path": "backend/app/services/loop/",
+      "responsibility": "Driving a sprint's tasks: the task worker (dispatch, prompt, execution, delivery, recording, review, closing), the review digest, the edit plan, board moves, carry-over, replicas, sprint control, close and archive, a person's run review, and the company bootstrap. It decides what happens next from the evidence; it never computes a verdict itself.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models",
+        "evidence",
+        "workspace",
+        "tools",
+        "learning",
+        "planning",
+        "producers"
+      ],
+      "modules": [
+        "answers",
+        "board_moves",
+        "carry_over",
+        "company_service",
+        "edit_plan",
+        "replicas",
+        "review_digest",
+        "run_review",
+        "sprint_archive",
+        "sprint_close",
+        "sprint_control",
+        "task_worker"
+      ]
+    },
+    "release": {
+      "path": "backend/app/services/release/",
+      "responsibility": "What leaves the factory once accepted: publishing a branch, merging locally, a sprint's integration and its jobs and events, undoing a delivery from its snapshot, and bringing a request's comments back. It starts when the loop has closed work, through an event, never from inside the loop.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models",
+        "evidence",
+        "workspace",
+        "planning",
+        "loop"
+      ],
+      "modules": [
+        "delivery_undo",
+        "git_publish",
+        "git_setup",
+        "integration",
+        "integration_events",
+        "integration_jobs",
+        "integration_publish",
+        "local_merge",
+        "review_sync"
+      ]
+    },
+    "integrations": {
+      "path": "backend/app/services/integrations/",
+      "responsibility": "Telling the outside world: the company's notification webhook and the outbox processor that posts it. It listens to changes of the task record and the evidence; nothing below it imports it.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "evidence"
+      ],
+      "modules": [
+        "outbox_service",
+        "webhooks"
+      ]
+    },
+    "management": {
+      "path": "backend/app/services/management/",
+      "responsibility": "The owner as a client: the Manager agent with its inbox, policy, rules, observations, actions and record, the client's brief and its mail, the Reviewer agent and the Support agent. It may read and act through every other context; no other context imports it.",
+      "depends_on": [
+        "contracts",
+        "platform",
+        "tasks",
+        "models",
+        "evidence",
+        "workspace",
+        "tools",
+        "learning",
+        "planning",
+        "producers",
+        "loop",
+        "release",
+        "integrations"
+      ],
+      "modules": [
+        "brief_mail",
+        "manager_actions",
+        "manager_actions_extra",
+        "manager_agent",
+        "manager_brief",
+        "manager_inbox",
+        "manager_inbox_extra",
+        "manager_observe",
+        "manager_policy",
+        "manager_record",
+        "manager_record_extra",
+        "manager_rules",
+        "reviewer_agent",
+        "support_agent"
+      ]
+    }
+  },
+  "allowlist": [
+    "acceptance -> task_worker",
+    "acceptance -> workspace_daemon",
+    "app_check -> sandbox",
+    "app_check -> stack_profiles",
+    "app_check -> workspace_daemon",
+    "console_producer -> carry_over",
+    "console_producer -> edit_plan",
+    "console_producer -> task_worker",
+    "context_read -> developer_tool_schemas",
+    "git_workflow -> dependencies",
+    "standards -> task_worker",
+    "task_worker -> integration_jobs",
+    "verification -> console_clis",
+    "verification -> mcp_tools",
+    "verification -> research_tools",
+    "verification -> sandbox",
+    "verification -> task_worker",
+    "workspace_daemon -> app_check",
+    "workspace_daemon -> criteria_tests",
+    "workspace_edits -> task_worker"
+  ]
+}

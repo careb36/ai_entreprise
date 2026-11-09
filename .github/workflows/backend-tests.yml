@@ -8,6 +8,9 @@ on:
     paths:
       - 'backend/**'
       - 'llm-proxy/**'
+      - 'scripts/check_architecture.py'
+      - 'docs/architecture/**'
+      - 'docs/ARCHITECTURE.md'
       - '.github/workflows/backend-tests.yml'
 
 
@@ -71,6 +74,11 @@ jobs:
           pip install "ruff==0.17.1"
           ruff check app tests
           ruff format --check app tests
+
+      - name: Check the dependency rule between contexts
+        # docs/ARCHITECTURE.md, ADR 0012: a new import against the rule or a
+        # module in no context fails; the allowlist may only shrink.
+        run: python3 -I scripts/check_architecture.py
 
       - name: Type check with mypy
         working-directory: ./backend

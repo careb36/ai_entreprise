@@ -1,0 +1,201 @@
+{
+  "$comment": "The specification of La Fabrique's own backend architecture (issue #469), in the PO's shape. Post it with POST /v1/specifications, adding the company_id; the ids are assigned by spec_check.normalize, never kept from this file.",
+  "title": "Backend contexts and their dependency rule",
+  "summary": "La Fabrique's backend keeps 118 modules (34,984 lines) flat in backend/app/services, with 335 import edges and a 26-module import cycle in which the evidence, the loop and the workspace import each other. This specification asks for a division of those modules into contexts with one responsibility and one folder each, a dependency rule between contexts that a script checks in CI, a decision on the parallel trees beside the app and on splitting task_worker.py, and a migration order that moves one context at a time with behaviour unchanged. It is written for the people and agents who change the backend, so that the Verifier's code never depends on the code it verifies.",
+  "requirements": [
+    {
+      "title": "Every backend service module belongs to exactly one context",
+      "description": "The 118 modules of backend/app/services are divided into contexts. Each context has a name, a responsibility in one or two sentences, a folder (backend/app/services/<context>/) and the list of modules it holds. The division is data in docs/architecture/contexts.json, read by people and by the checker alike.",
+      "criteria": [
+        {
+          "given": "docs/architecture/contexts.json and the code of backend/app/services at the commit that adopts it",
+          "when": "python3 scripts/check_architecture.py runs",
+          "then": "it exits 0 and reports 118 modules, each listed in exactly one context"
+        },
+        {
+          "given": "a new module backend/app/services/example.py that no context lists",
+          "when": "the checker runs",
+          "then": "it exits 1 and names example.py as in no context"
+        },
+        {
+          "given": "a module listed in two contexts, or a context listing a module that does not exist",
+          "when": "the checker runs",
+          "then": "it exits 1 and names the module and the contexts"
+        },
+        {
+          "given": "a module moved into backend/app/services/evidence/",
+          "when": "the checker runs",
+          "then": "the module belongs to the evidence context by its folder, and a folder that is not a context makes it exit 1"
+        }
+      ]
+    },
+    {
+      "title": "The contexts depend on each other in one direction only",
+      "description": "Each context names the contexts it may import. Those dependencies form no cycle, and the evidence context (the Verifier and its checks) may import only the shared contracts and the platform: never the task loop, the workspace daemon client, the tools or the producers whose work it judges.",
+      "criteria": [
+        {
+          "given": "the depends_on lists of contexts.json",
+          "when": "the checker builds the graph of contexts",
+          "then": "it finds no cycle, and a depends_on edited into a cycle makes it exit 1 naming the contexts along the cycle"
+        },
+        {
+          "given": "the evidence context",
+          "when": "its depends_on is read",
+          "then": "it lists contracts and platform and nothing else"
+        },
+        {
+          "given": "an import added from an evidence module to a loop, workspace, tools or producers module that the allowlist does not hold",
+          "when": "the checker runs",
+          "then": "it exits 1 naming the edge as source -> target and the contexts the source may import"
+        },
+        {
+          "given": "the architecture record with the contexts as modules",
+          "when": "arch_check.check runs on it",
+          "then": "it reports no dependency_cycle finding"
+        }
+      ]
+    },
+    {
+      "title": "A shared contracts context breaks the 26-module import cycle",
+      "description": "The shapes several contexts read move into a small contracts context that imports no other context: the verdict names, the file manifest of a deliverable (parse_file_manifest and the allowed artifact extensions, today in task_worker.py), the daemon's delivery reply as the evidence reads it, and the task record the board and the governance read. Evidence, workspace and loop then meet in contracts instead of importing each other.",
+      "criteria": [
+        {
+          "given": "the contracts context",
+          "when": "the checker reads its imports",
+          "then": "no contracts module imports a module of another context"
+        },
+        {
+          "given": "the migration finished and the allowlist empty",
+          "when": "the strongly connected components of the services import graph are computed",
+          "then": "no component holds modules of two contexts"
+        },
+        {
+          "given": "standards.py, verification.py and acceptance.py after the contracts step",
+          "when": "their imports are read",
+          "then": "none imports services.task_worker, and parse_file_manifest is imported from the contracts context"
+        }
+      ]
+    },
+    {
+      "title": "The dependency rule is checked in CI and only tightens",
+      "description": "The imports that break the rule today are listed as an allowlist of module edges in contexts.json. The checker fails on any edge outside it and the allowlist may only shrink, the way scripts/check_file_sizes.py treats its baseline, so the backend gets closer to the target with every change and never further from it.",
+      "criteria": [
+        {
+          "given": "an allowlisted edge whose import has been removed from the code",
+          "when": "the checker runs with --update",
+          "then": "the edge is removed from the allowlist and nothing is added"
+        },
+        {
+          "given": "a new edge that breaks the rule",
+          "when": "the checker runs with --update",
+          "then": "it exits 1 and writes nothing"
+        },
+        {
+          "given": "the backend test suite",
+          "when": "pytest runs backend/tests",
+          "then": "a test runs the checker on the repository and fails if it exits 1"
+        },
+        {
+          "given": "a pull request that touches backend/, the checker or contexts.json",
+          "when": "the Backend Tests workflow runs",
+          "then": "a step runs python3 scripts/check_architecture.py and fails the job on exit 1"
+        }
+      ]
+    },
+    {
+      "title": "Each parallel tree beside the app is merged or deleted",
+      "description": "backend/agents, backend/orchestration, backend/llm, backend/memory, backend/eval and the top-level src/ live beside backend/app with code of their own. A decision is recorded per tree, merge into a context or delete, taken from what actually imports it, and carried out in the migration.",
+      "criteria": [
+        {
+          "given": "the decision on the parallel trees",
+          "when": "a person reads the entry for one tree",
+          "then": "it says merge or delete and names the production modules that import it, or says that only tests do"
+        },
+        {
+          "given": "a tree decided as delete, after its migration step",
+          "when": "the repository is searched for imports of it",
+          "then": "no file imports it and its folder no longer exists"
+        },
+        {
+          "given": "a tree decided as merge, after its migration step",
+          "when": "the checker runs",
+          "then": "its modules are inside the context the decision names and the backend tests pass"
+        }
+      ]
+    },
+    {
+      "title": "task_worker.py is split by the stage of the loop",
+      "description": "task_worker.py has 3,299 lines and imports 37 services. It is split into one module per stage of a task's loop (intake and dispatch, prompt, execution, delivery, recording, review, closing, messages) inside the loop context, each under 600 lines, with task_worker.py kept as a shim that re-exports what other modules import from it until they import the stages directly.",
+      "criteria": [
+        {
+          "given": "the split done",
+          "when": "python3 scripts/check_file_sizes.py runs",
+          "then": "it exits 0, no new module is over 600 lines and the entry for task_worker.py is lowered or removed"
+        },
+        {
+          "given": "the split done",
+          "when": "the backend test suite runs",
+          "then": "every test that passed before passes, with patch targets moved to the stage module that owns the name"
+        },
+        {
+          "given": "a module that still imports a name from services.task_worker",
+          "when": "it runs after the split",
+          "then": "it gets the same object the stage module defines"
+        }
+      ]
+    },
+    {
+      "title": "The migration moves one context at a time with behaviour unchanged",
+      "description": "The code moves in an order recorded in the architecture: contracts first, then the contexts from the bottom of the dependency graph up, one context per pull request. Each step moves files, leaves a re-export shim at the old path, shrinks the allowlist and changes no behaviour.",
+      "criteria": [
+        {
+          "given": "a migration pull request",
+          "when": "CI runs",
+          "then": "the backend tests, ruff 0.17.1 check and format, check_file_sizes.py and check_architecture.py all exit 0"
+        },
+        {
+          "given": "a module moved to backend/app/services/<context>/",
+          "when": "code imports it by its old path services.<module>",
+          "then": "the shim gives the same module object, until a later step removes the shim with its last importer"
+        },
+        {
+          "given": "a migration pull request",
+          "when": "its diff is read",
+          "then": "it moves the modules of one context only and the allowlist has the same number of edges or fewer"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "Maintainability (module size)",
+      "target": "0 new modules over 600 lines; task_worker.py from 3,299 lines to a shim under 100 lines at the end of the migration"
+    },
+    {
+      "attribute": "Maintainability (rule violations)",
+      "target": "the allowlist holds 20 edges at adoption and 0 when the migration ends; it never grows between two commits of main"
+    },
+    {
+      "attribute": "Performance of the checker",
+      "target": "check_architecture.py finishes in under 5 seconds on the 118 modules on the CI runner"
+    },
+    {
+      "attribute": "Security of the checker",
+      "target": "0 modules imported or executed by the checker (it parses with ast), 0 network calls and 0 third-party dependencies"
+    },
+    {
+      "attribute": "Reliability of the migration",
+      "target": "100% of the backend tests pass after each migration step, and 0 behaviour changes are merged in a migration pull request"
+    },
+    {
+      "attribute": "Accessibility of the documentation",
+      "target": "100% of docs/ARCHITECTURE.md is text, headings and tables a screen reader reads: 0 diagrams shipped only as images"
+    }
+  ],
+  "constraints": [
+    "This change moves no code: it adds the records, the documents, the checker, its test and its CI step.",
+    "The checker uses the Python standard library only and runs with python3 -I from the repository root.",
+    "The architecture is checked by the product's own spec_check and arch_check and rendered by arch_check.as_markdown.",
+    "Python 3.11 or later, FastAPI and SQLModel as today; no new runtime dependency."
+  ]
+}
