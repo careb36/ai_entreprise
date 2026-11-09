@@ -439,7 +439,7 @@ check "and QA judged the deliverable against the same criteria" test "$(prompt_s
 check "each task's prompt carried the modules its requirements map to, and the decision every task follows" test "$(prompt_seen "## Task: Add greeting counter.*## Architecture.*MOD-2: Counter.*ADR-1: Standard library only")" = yes -a "$(prompt_seen "## Task: Add greeting\.\*## Architecture.*MOD-2: Counter")" = no
 check "the specification's coverage reads every criterion as done" test "$(spec_field "$SPEC_ID" "d['coverage']['done'], d['coverage']['covered'], d['coverage']['total']")" = "3 3 3"
 check "and every criterion verified by its test passing in an observed run" test "$(spec_field "$SPEC_ID" "d['coverage']['verified'], [(c['id'], c['last_result']) for c in d['coverage']['criteria']]")" = "3 [('REQ-1.1', 'pass'), ('REQ-1.2', 'pass'), ('REQ-2.1', 'pass')]"
-# The Developer's workspace tools (services/developer_tools.py): the counter's
+# The Developer's workspace tools (services/tools/developer_tools.py): the counter's
 # Developer reads the greeting's module through the real daemon before each
 # delivery; the read is evidence with the file's hash, and the Verifier says
 # which modified files it had read first.
