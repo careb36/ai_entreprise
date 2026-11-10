@@ -19,12 +19,14 @@ from services.loop.worker import (
     close,
     deliver,
     execute,
+    intake,
     messages,
     procedures_round,
     prompt,
     qa_review,
     record,
     review,
+    task_run,
 )
 
 STAGES = (
@@ -39,6 +41,8 @@ STAGES = (
     procedures_round,
     review,
     qa_review,
+    intake,
+    task_run,
 )
 
 

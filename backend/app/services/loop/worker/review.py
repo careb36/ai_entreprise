@@ -16,8 +16,8 @@ replica's tasks go back to ``todo`` first (``replicas.recover_stale``), then
   named;
 - ``_closing_candidates``: those that settled, which then close
   (``close._finalize_sprint_if_ready``); last, the ``todo`` tasks are
-  dispatched (the intake's ``_dispatch_todo_items``, read from ``task_worker``
-  when used).
+  dispatched (the intake's ``_dispatch_todo_items``, imported when used,
+  since ``intake`` imports this module).
 
 Moved out of ``task_worker``, which still re-exports these names.
 """
@@ -45,11 +45,11 @@ logger = setup_logger("fabrique-task-worker")
 MAX_QA_REVIEW_FAILURES = 3
 
 
-def _worker() -> Any:
-    """The task worker, imported when used (it imports this module)."""
-    from services.loop import task_worker
+def _intake() -> Any:
+    """The intake stage, imported when used (it imports this module)."""
+    from services.loop.worker import intake
 
-    return task_worker
+    return intake
 
 
 async def _review_cycle(nats_client: NATSClient) -> None:
@@ -82,7 +82,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
         await close._finalize_sprint_if_ready(nats_client, sprint_id)
 
     # Re-dispatch any items that just went back to todo
-    await _worker()._dispatch_todo_items(nats_client)
+    await _intake()._dispatch_todo_items(nats_client)
 
 
 async def _review_delivered(
