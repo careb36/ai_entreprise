@@ -16,7 +16,7 @@ from models import Sprint
 from nats_client import NATSClient
 from sqlmodel import Session
 
-from agents.graph import run_fabrique_workflow
+from services.producers.graph import run_fabrique_workflow
 
 logger = logging.getLogger("fabrique-worker")
 

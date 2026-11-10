@@ -1,22 +1,23 @@
 """Multi-agent LangGraph orchestration for sprint kickoff conversations."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
-from typing_extensions import Annotated, TypedDict
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Annotated, Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.errors import GraphRecursionError
-
-from agents.tools.openproject_tools import create_work_package
 from llm_proxy_client import LLMProxyClient
+from opentelemetry.trace import StatusCode
+from typing_extensions import TypedDict
+
 from services.models.model_factory import default_model_for_role
 from services.platform.engram_processor import get_engram_processor
+from services.producers.openproject_tools import create_work_package
 from telemetry import configure_telemetry, get_tracer
-from opentelemetry.trace import StatusCode
 
 configure_telemetry("agent-worker")
 tracer = get_tracer(__name__)
@@ -27,20 +28,20 @@ PublishEvent = Callable[[dict[str, Any]], Awaitable[None]]
 
 class AgentState(TypedDict):
     interaction_id: str
-    company_id: Optional[int]
-    business_unit_id: Optional[int]
-    sprint_id: Optional[int]
+    company_id: int | None
+    business_unit_id: int | None
+    sprint_id: int | None
     story: str
     backlog_items: list[str]
     messages: Annotated[list[AnyMessage], add_messages]
     next_agent: str
-    openproject_ticket_id: Optional[str]
-    engram_id: Optional[Any]
-    last_error: Optional[str]
-    needs_split: Optional[bool]
+    openproject_ticket_id: str | None
+    engram_id: Any | None
+    last_error: str | None
+    needs_split: bool | None
     created_at: str
-    publish_event: Optional[PublishEvent]
-    po_feedback: Optional[str]
+    publish_event: PublishEvent | None
+    po_feedback: str | None
 
 
 def _resolve_model_name(role: str) -> str:
@@ -94,7 +95,7 @@ async def _publish(state: AgentState, event: dict[str, Any]) -> None:
     payload.setdefault("event_id", str(uuid4()))
     payload.setdefault("source", "langgraph")
     payload.setdefault("semantic_version", 1)
-    payload.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+    payload.setdefault("timestamp", datetime.now(UTC).isoformat())
     await publish_event(payload)
 
 
@@ -104,18 +105,23 @@ async def _invoke_agent(
     task: str,
     prompt: str,
 ) -> str:
-    await _publish(
-        state,
-        {
-            "type": "agent_start",
-            "semantic_type": "kickoff.agent_started",
-            "agent": role,
-            "role": role,
-            "task_status": "kickoff",
-            "phase": "kickoff",
-            "task": task,
-            "message": f"{role} is thinking about: {task}",
-        },
+    async def emit(kind: str, semantic: str, message: str) -> None:
+        await _publish(
+            state,
+            {
+                "type": kind,
+                "semantic_type": semantic,
+                "agent": role,
+                "role": role,
+                "task_status": "kickoff",
+                "phase": "kickoff",
+                "task": task,
+                "message": message,
+            },
+        )
+
+    await emit(
+        "agent_start", "kickoff.agent_started", f"{role} is thinking about: {task}"
     )
 
     client = LLMProxyClient()
@@ -153,39 +159,36 @@ async def _invoke_agent(
         )
 
     content = (
-        result.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "")
-        .strip()
+        result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
     )
 
-    await _publish(
-        state,
-        {
-            "type": "message",
-            "semantic_type": "kickoff.agent_message",
-            "agent": role,
-            "role": role,
-            "task_status": "kickoff",
-            "phase": "kickoff",
-            "task": task,
-            "message": content,
-        },
-    )
-    await _publish(
-        state,
-        {
-            "type": "agent_complete",
-            "semantic_type": "kickoff.agent_completed",
-            "agent": role,
-            "role": role,
-            "task_status": "kickoff",
-            "phase": "kickoff",
-            "task": task,
-            "message": f"{role} finished: {task}",
-        },
-    )
+    await emit("message", "kickoff.agent_message", content)
+    await emit("agent_complete", "kickoff.agent_completed", f"{role} finished: {task}")
     return content
+
+
+async def _node_failed(
+    state: AgentState,
+    span: Any,
+    exc: Exception,
+    role: str,
+    task: str,
+    label: str | None = None,
+    kickoff: bool = False,
+) -> dict[str, Any]:
+    """Publish a node's failure, mark its span and route the graph to burn.
+
+    Only the PO's and the Architect's failures carry the kickoff fields."""
+    event: dict[str, Any] = {"type": "error"}
+    if kickoff:
+        event["semantic_type"] = "kickoff.agent_failed"
+    event |= {"agent": role, "role": role}
+    if kickoff:
+        event |= {"task_status": "kickoff", "phase": "kickoff"}
+    event |= {"task": task, "message": f"{label or role} failed: {exc}"}
+    await _publish(state, event)
+    span.set_status(StatusCode.ERROR, str(exc))
+    return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def kickoff_node(state: AgentState) -> dict[str, Any]:
@@ -207,9 +210,15 @@ async def kickoff_node(state: AgentState) -> dict[str, Any]:
     # Retrieve relevant memory from past sprints and inject into planning context.
     try:
         processor = get_engram_processor()
-        memory_context = processor.query_relevant_engrams(state["story"], limit=4, company_id=state.get("company_id"))
+        memory_context = processor.query_relevant_engrams(
+            state["story"], limit=4, company_id=state.get("company_id")
+        )
         if memory_context:
-            messages.append(SystemMessage(content=f"Relevant memory from past sprints:\n{memory_context}"))
+            messages.append(
+                SystemMessage(
+                    content=f"Relevant memory from past sprints:\n{memory_context}"
+                )
+            )
             await _publish(
                 state,
                 {
@@ -223,7 +232,7 @@ async def kickoff_node(state: AgentState) -> dict[str, Any]:
                     "message": "Memory retrieved from past sprints — context injected into agent planning.",
                 },
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Memory is context; the kickoff goes on without it.
         logger.warning("Memory retrieval at kickoff failed (non-fatal): %s", exc)
 
     return {
@@ -240,8 +249,12 @@ async def po_node(state: AgentState) -> dict[str, Any]:
         span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
         span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
-            backlog_items = state.get("backlog_items") or _extract_backlog(state["story"])
-            first_ticket = backlog_items[0] if backlog_items else state["story"].splitlines()[0]
+            backlog_items = state.get("backlog_items") or _extract_backlog(
+                state["story"]
+            )
+            first_ticket = (
+                backlog_items[0] if backlog_items else state["story"].splitlines()[0]
+            )
             tool_result = await create_work_package(
                 {
                     "project_id": 1,
@@ -258,7 +271,9 @@ async def po_node(state: AgentState) -> dict[str, Any]:
                 f"Backlog anchor ticket: {tool_result.get('work_package_id')}\n"
                 "As PO, prioritize the sprint, call out the riskiest item, and give one clear instruction to the Scrum Master."
             )
-            content = await _invoke_agent(state, "PO", "Prioritize sprint backlog", prompt)
+            content = await _invoke_agent(
+                state, "PO", "Prioritize sprint backlog", prompt
+            )
             return {
                 "messages": [AIMessage(content=content, name="PO")],
                 "next_agent": "ScrumMaster",
@@ -266,22 +281,10 @@ async def po_node(state: AgentState) -> dict[str, Any]:
                 "backlog_items": backlog_items,
                 "last_error": None,
             }
-        except Exception as exc:
-            await _publish(
-                state,
-                {
-                    "type": "error",
-                    "semantic_type": "kickoff.agent_failed",
-                    "agent": "PO",
-                    "role": "PO",
-                    "task_status": "kickoff",
-                    "phase": "kickoff",
-                    "task": "Prioritize sprint backlog",
-                    "message": f"PO failed: {exc}",
-                },
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
+            return await _node_failed(
+                state, span, exc, "PO", "Prioritize sprint backlog", kickoff=True
             )
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def architect_node(state: AgentState) -> dict[str, Any]:
@@ -291,7 +294,11 @@ async def architect_node(state: AgentState) -> dict[str, Any]:
         span.set_attribute("company.id", str(state.get("company_id") or ""))
         try:
             backlog_items = state.get("backlog_items") or []
-            items_text = "\n".join(f"- {i}" for i in backlog_items) if backlog_items else "(see sprint brief)"
+            items_text = (
+                "\n".join(f"- {i}" for i in backlog_items)
+                if backlog_items
+                else "(see sprint brief)"
+            )
             prompt = (
                 f"Sprint brief:\n{state['story']}\n\n"
                 f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
@@ -301,28 +308,18 @@ async def architect_node(state: AgentState) -> dict[str, Any]:
                 "and architectural constraints or risks the team must respect. "
                 "Be concrete — one clear paragraph per concern. No verbose preamble."
             )
-            content = await _invoke_agent(state, "Architect", "Define technical approach", prompt)
+            content = await _invoke_agent(
+                state, "Architect", "Define technical approach", prompt
+            )
             return {
                 "messages": [AIMessage(content=content, name="Architect")],
                 "next_agent": "ScrumMaster",
                 "last_error": None,
             }
-        except Exception as exc:
-            await _publish(
-                state,
-                {
-                    "type": "error",
-                    "semantic_type": "kickoff.agent_failed",
-                    "agent": "Architect",
-                    "role": "Architect",
-                    "task_status": "kickoff",
-                    "phase": "kickoff",
-                    "task": "Define technical approach",
-                    "message": f"Architect failed: {exc}",
-                },
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
+            return await _node_failed(
+                state, span, exc, "Architect", "Define technical approach", kickoff=True
             )
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def scrum_master_node(state: AgentState) -> dict[str, Any]:
@@ -337,25 +334,23 @@ async def scrum_master_node(state: AgentState) -> dict[str, Any]:
                 f"OpenProject ticket: {state.get('openproject_ticket_id') or 'pending'}\n"
                 "As Scrum Master, coordinate sequencing, identify one blocker, and assign the first execution move to the Developer."
             )
-            content = await _invoke_agent(state, "ScrumMaster", "Coordinate sprint execution", prompt)
+            content = await _invoke_agent(
+                state, "ScrumMaster", "Coordinate sprint execution", prompt
+            )
             return {
                 "messages": [AIMessage(content=content, name="ScrumMaster")],
                 "next_agent": "Developer",
                 "last_error": None,
             }
-        except Exception as exc:
-            await _publish(
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
+            return await _node_failed(
                 state,
-                {
-                    "type": "error",
-                    "agent": "ScrumMaster",
-                    "role": "ScrumMaster",
-                    "task": "Coordinate sprint execution",
-                    "message": f"Scrum Master failed: {exc}",
-                },
+                span,
+                exc,
+                "ScrumMaster",
+                "Coordinate sprint execution",
+                "Scrum Master",
             )
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def developer_node(state: AgentState) -> dict[str, Any]:
@@ -369,25 +364,18 @@ async def developer_node(state: AgentState) -> dict[str, Any]:
                 f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
                 "As Developer, pick up the first actionable item, state exactly what you will implement first, and mention any dependency or unblock request."
             )
-            content = await _invoke_agent(state, "Developer", "Pick up first sprint task", prompt)
+            content = await _invoke_agent(
+                state, "Developer", "Pick up first sprint task", prompt
+            )
             return {
                 "messages": [AIMessage(content=content, name="Developer")],
                 "next_agent": "PO_WRAP",
                 "last_error": None,
             }
-        except Exception as exc:
-            await _publish(
-                state,
-                {
-                    "type": "error",
-                    "agent": "Developer",
-                    "role": "Developer",
-                    "task": "Pick up first sprint task",
-                    "message": f"Developer failed: {exc}",
-                },
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
+            return await _node_failed(
+                state, span, exc, "Developer", "Pick up first sprint task"
             )
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def po_wrap_node(state: AgentState) -> dict[str, Any]:
@@ -406,19 +394,10 @@ async def po_wrap_node(state: AgentState) -> dict[str, Any]:
                 "next_agent": "burn",
                 "last_error": None,
             }
-        except Exception as exc:
-            await _publish(
-                state,
-                {
-                    "type": "error",
-                    "agent": "PO",
-                    "role": "PO",
-                    "task": "Close sprint kickoff",
-                    "message": f"PO wrap-up failed: {exc}",
-                },
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
+            return await _node_failed(
+                state, span, exc, "PO", "Close sprint kickoff", "PO wrap-up"
             )
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def burn_node(state: AgentState) -> dict[str, Any]:
@@ -441,8 +420,12 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
             },
         )
         engram_id = result.get("engram_id")
-    except Exception as exc:
-        logger.warning("Could not burn engram for interaction_id=%s: %s", state["interaction_id"], exc)
+    except Exception as exc:  # noqa: BLE001 - A lost engram never fails the kickoff.
+        logger.warning(
+            "Could not burn engram for interaction_id=%s: %s",
+            state["interaction_id"],
+            exc,
+        )
         engram_id = None
 
     if last_error:
@@ -515,8 +498,20 @@ async def rejection_node(state: AgentState) -> dict[str, Any]:
         )
 
         # Route to Architect for design/scope concerns, Developer otherwise.
-        design_keywords = {"architect", "design", "scope", "interface", "schema", "model", "api"}
-        route_to = "architect" if any(kw in feedback.lower() for kw in design_keywords) else "developer"
+        design_keywords = {
+            "architect",
+            "design",
+            "scope",
+            "interface",
+            "schema",
+            "model",
+            "api",
+        }
+        route_to = (
+            "architect"
+            if any(kw in feedback.lower() for kw in design_keywords)
+            else "developer"
+        )
 
         try:
             prompt = (
@@ -527,14 +522,16 @@ async def rejection_node(state: AgentState) -> dict[str, Any]:
                 "address the PO's specific concerns point-by-point and propose a revised approach."
             )
             role = "Architect" if route_to == "architect" else "Developer"
-            content = await _invoke_agent(state, role, "Address PO rejection feedback", prompt)
+            content = await _invoke_agent(
+                state, role, "Address PO rejection feedback", prompt
+            )
             return {
                 "messages": [AIMessage(content=content, name=role)],
                 "next_agent": "po_wrap",
                 "last_error": None,
                 "po_feedback": None,  # Clear feedback after processing
             }
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
             span.set_status(StatusCode.ERROR, str(exc))
             return {"last_error": str(exc), "next_agent": "burn"}
 
@@ -550,13 +547,19 @@ def create_agent_graph():
     workflow.add_node("burn", burn_node)
     workflow.add_node("rejection", rejection_node)
 
-    workflow.set_conditional_entry_point(_route_entry, {"kickoff": "kickoff", "rejection": "rejection"})
+    workflow.set_conditional_entry_point(
+        _route_entry, {"kickoff": "kickoff", "rejection": "rejection"}
+    )
+
+    def on_success(success: str) -> Callable[[AgentState], str]:
+        return lambda state: _route_from(state, "burn", success)
+
     workflow.add_edge("kickoff", "po")
-    workflow.add_conditional_edges("po", lambda state: _route_from(state, "burn", "architect"))
-    workflow.add_conditional_edges("architect", lambda state: _route_from(state, "burn", "scrum_master"))
-    workflow.add_conditional_edges("scrum_master", lambda state: _route_from(state, "burn", "developer"))
-    workflow.add_conditional_edges("developer", lambda state: _route_from(state, "burn", "po_wrap"))
-    workflow.add_conditional_edges("rejection", lambda state: _route_from(state, "burn", "po_wrap"))
+    workflow.add_conditional_edges("po", on_success("architect"))
+    workflow.add_conditional_edges("architect", on_success("scrum_master"))
+    workflow.add_conditional_edges("scrum_master", on_success("developer"))
+    workflow.add_conditional_edges("developer", on_success("po_wrap"))
+    workflow.add_conditional_edges("rejection", on_success("po_wrap"))
     workflow.add_edge("po_wrap", "burn")
     workflow.add_edge("burn", END)
     return workflow.compile()
@@ -565,12 +568,12 @@ def create_agent_graph():
 async def run_fabrique_workflow(
     story: str,
     role: str = "Developer",
-    bu_id: Optional[int] = None,
-    sprint_id: Optional[int] = None,
-    company_id: Optional[int] = None,
+    bu_id: int | None = None,
+    sprint_id: int | None = None,
+    company_id: int | None = None,
     nats_client: Any = None,
-    interaction_id: Optional[str] = None,
-    po_feedback: Optional[str] = None,
+    interaction_id: str | None = None,
+    po_feedback: str | None = None,
 ) -> dict[str, Any]:
     interaction_id = interaction_id or str(uuid4())
 
@@ -592,7 +595,7 @@ async def run_fabrique_workflow(
         "engram_id": None,
         "last_error": None,
         "needs_split": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "publish_event": publish_event,
         "po_feedback": po_feedback,
     }
@@ -630,11 +633,11 @@ async def run_fabrique_workflow(
             )
         else:
             try:
-                from sqlmodel import Session
-
                 import database
                 from models.agent_run import GRAPH_PRODUCER
                 from schemas import AgentRunCreate
+                from sqlmodel import Session
+
                 from services.evidence import agent_run_service
 
                 summary_message = next(
@@ -643,9 +646,7 @@ async def run_fabrique_workflow(
                         for message in reversed(result.get("messages", []))
                         if _message_name(message) == "PO"
                     ),
-                    result.get("messages", [])[-1]
-                    if result.get("messages")
-                    else None,
+                    result.get("messages", [])[-1] if result.get("messages") else None,
                 )
                 payload = AgentRunCreate(
                     company_id=company_id,
@@ -667,7 +668,7 @@ async def run_fabrique_workflow(
                     },
                     artifact=_transcript(result.get("messages", [])),
                     started_at=datetime.fromisoformat(initial_state["created_at"]),
-                    finished_at=datetime.now(timezone.utc),
+                    finished_at=datetime.now(UTC),
                 )
                 with Session(database.engine) as session:
                     agent_run_service.ingest_agent_run(session, payload)
@@ -694,11 +695,10 @@ async def run_fabrique_workflow(
             "needs_split": False,
         }
     except Exception as exc:
-        logger.error(
+        logger.exception(
             "Workflow FATAL ERROR interaction_id=%s: %s",
             interaction_id,
-            exc,
-            exc_info=True,
+            exc,  # noqa: TRY401 - Preserve the existing log message as well as its traceback.
         )
         if nats_client and sprint_id is not None:
             await nats_client.publish(
@@ -709,7 +709,7 @@ async def run_fabrique_workflow(
                     "role": "System",
                     "task": "Sprint kickoff",
                     "message": f"LangGraph workflow failed: {type(exc).__name__}: {exc}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
         return {

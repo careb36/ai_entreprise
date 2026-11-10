@@ -4,7 +4,8 @@ OpenTelemetry SDK bootstrap for La Fabrique backend services.
 Call ``configure_telemetry(service_name)`` once at process start — for example
 inside the FastAPI lifespan handler or at module load for the agent worker.
 The function is **idempotent**: subsequent calls after the first are no-ops, so
-it is safe to call from both ``app/main.py`` and ``agents/graph.py``.
+it is safe to call from both ``app/main.py`` and
+``app/services/producers/graph.py``.
 
 Context propagation
 -------------------
