@@ -64,7 +64,7 @@ async def init_company(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Bootstrap a new company (CompanyService); its Git workflow follows the folder (``services/git_setup.py``)."""
+    """Bootstrap a new company (CompanyService); its Git workflow follows the folder (``services/release/git_setup.py``)."""
     require_authenticated(user)
     base = git_setup.clean_base(req.git_base_branch)
     observed = await git_setup.observe(request, req.project_path)
