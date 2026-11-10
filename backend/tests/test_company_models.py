@@ -1,4 +1,4 @@
-"""A company's models (``services/company_models.py``, ``routers/model_settings.py``;
+"""A company's models (``services/models/company_models.py``, ``routers/model_settings.py``;
 issue #356, step 4): an agent's own model wins, then the company's model for
 its role, then the company's default, then the deployment's ``AGENT_MODEL``
 settings; the Reviewer follows QA's choice unless it has its own; a Manager
