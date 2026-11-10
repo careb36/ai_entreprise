@@ -8,6 +8,7 @@ import pytest
 import worker_stages
 from config import settings
 from models import (
+    Agent,
     AgentMessage,
     BacklogItem,
     Company,
@@ -16,7 +17,6 @@ from models import (
     Sprint,
     User,
 )
-from services import task_worker
 from services.learning import procedures, scrum_master
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
@@ -271,8 +271,8 @@ def test_the_scrum_master_proposes_after_a_sprint_with_rework(
     company = _company(db, autonomy=autonomy)
     db.add_all(
         [
-            task_worker.Agent(company_id=company.id, name="Dev", role="Developer"),
-            task_worker.Agent(company_id=company.id, name="Quinn", role="QA"),
+            Agent(company_id=company.id, name="Dev", role="Developer"),
+            Agent(company_id=company.id, name="Quinn", role="QA"),
         ]
     )
     db.commit()
@@ -310,7 +310,7 @@ def test_the_scrum_master_sees_what_earlier_procedures_did_and_cannot_repeat_a_f
 ):
     calls = _scrum_master_answers(monkeypatch, PROPOSAL_TEXT)
     company = _company(db, autonomy=3)
-    db.add(task_worker.Agent(company_id=company.id, name="Dev", role="Developer"))
+    db.add(Agent(company_id=company.id, name="Dev", role="Developer"))
     db.commit()
     # The same "Validate inputs" text was adopted once and the board reverted it;
     # "Small tasks" was proposed once and a person rejected it.

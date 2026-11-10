@@ -1,10 +1,12 @@
 # Verifier benchmark
 
 The product's central claim is that it verifies what a producer says it did.
-This directory measures that claim instead of asserting it.
+This directory measures that claim instead of asserting it. It runs the
+backend's own code, so it runs from `backend/` with `bench/` on the path
+(ADR 0015 moved it here from `backend/eval/verificador/`):
 
 ```bash
-cd backend && PYTHONPATH=.:app poetry run python -m eval.verificador.run
+cd backend && PYTHONPATH=.:app:../bench poetry run python -m verifier.run
 ```
 
 ```
@@ -17,9 +19,9 @@ stored:             14 verification(s), one audit row each
 
 `cases.py` holds each scenario as data: what the producer claims, and the
 independent evidence the workspace daemon reports. `run.py` feeds every case to
-the real `services.verification.verify_agent_run` against an in-memory SQLite
-session, so the aggregation, the stored `Verification` and the audit row are all
-exercised. Nothing is mocked, no model is called, no network is used: the run is
+the real `services.evidence.verification.verify_agent_run` against an in-memory
+SQLite session, so the aggregation, the stored `Verification` and the audit row
+are all exercised. Nothing is mocked, no model is called, no network is used: the run is
 deterministic and takes about a second.
 
 ## The two halves
@@ -54,7 +56,7 @@ not had its claim confirmed.
 | `file_declared_but_the_daemon_is_silent` | a file claim with no daemon report |
 | `claimed_path_never_reached_the_artifact` | `check_claimed_files_present` |
 | `empty_artifact_with_a_full_implementation_claim` | `check_artifact_nonempty` |
-| `producer_cannot_lower_its_own_risk_tier` | `services/risk.py` monotonicity: the tier stays `high` |
+| `producer_cannot_lower_its_own_risk_tier` | `services/evidence/risk.py` monotonicity: the tier stays `high` |
 | `honest_delivery_matching_its_evidence` | control |
 | `honest_delivery_with_no_test_claims` | control |
 
@@ -65,5 +67,7 @@ accept. Give it its own `artifact_text` when it claims a path: a claimed path
 missing from the artifact is refuted by `claimed_files_present` before any later
 check runs, so a case that reuses the wrong artifact measures the wrong thing.
 
-`tests/test_verificador_benchmark.py` runs this in the suite, so the reported
-numbers are a gate rather than a screenshot.
+`backend/tests/test_verificador_benchmark.py` runs this in the suite (the
+suite's `conftest.py` puts `bench/` on `sys.path`, and a change here runs the
+backend tests in CI), so the reported numbers are a gate rather than a
+screenshot.

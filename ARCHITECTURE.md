@@ -156,7 +156,7 @@ The claim the project makes is verified in code, not asserted in a slide.
 | Risk classification | `backend/app/services/risk.py` |
 | Review loop | `backend/app/services/reviewer_agent.py` |
 | Board state machine | `backend/app/services/board.py` |
-| Benchmark of the verifier itself | `backend/eval/verificador/` |
+| Benchmark of the verifier itself | `bench/verifier/` |
 
 ## Related documents
 

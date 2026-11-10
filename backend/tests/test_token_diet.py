@@ -9,9 +9,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 from services import answers, reviewer_agent, support_agent
-from services import task_worker as tw
 from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
+from services.loop.worker import qa_review, task_run
 from services.planning import sprint_planner
 
 
@@ -24,7 +24,7 @@ def test_a_cut_off_answer_is_named_instead_of_asked_for_again_in_full():
     assert answers.gate_reason(fences, None) == fences
     assert "fewer or smaller files" in answers.CUT_OFF_REASON
     # The worker reads the gate's reason through the same function.
-    assert tw._gate_reason is answers.gate_reason
+    assert task_run._gate_reason is answers.gate_reason
 
 
 def test_the_finish_reason_is_read_from_the_proxy_s_answer():
@@ -68,7 +68,13 @@ def test_every_wait_follows_the_proxy_s_budget():
 
     assert scrum_master.TIMEOUT_SECONDS == DEFAULT_TIMEOUT_SECONDS
     assert scrum_master.TRIAGE_TIMEOUT_SECONDS == DEFAULT_TIMEOUT_SECONDS
-    for module in (sprint_planner, support_agent, reviewer_agent, tw, worker_execute):
+    for module in (
+        sprint_planner,
+        support_agent,
+        reviewer_agent,
+        qa_review,
+        worker_execute,
+    ):
         assert "client.timeout = " not in Path(module.__file__).read_text(
             encoding="utf-8"
         ), module.__name__

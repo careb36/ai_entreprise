@@ -10,8 +10,8 @@ says no is worthless — it would score 100% by rejecting everything. These are
 deliveries that match their evidence, and they must come back ``verified``.
 
 Nothing here mocks the verifier. Each case is fed to the real
-``services.verification.verify_agent_run``, so the number is the product's own
-behaviour, not a re-implementation of it.
+``services.evidence.verification.verify_agent_run``, so the number is the
+product's own behaviour, not a re-implementation of it.
 """
 
 from __future__ import annotations

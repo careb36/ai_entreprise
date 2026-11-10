@@ -16,8 +16,8 @@ from unittest.mock import patch
 import pytest
 import worker_stages
 from models import Agent, BacklogItem, Company, Sprint
-from services import task_worker
 from services.loop.worker import close as worker_close
+from services.loop.worker import task_run
 from services.planning import spec_planning, sprint_planner, sprint_team
 from sqlmodel import select
 from test_work_control import _member, auth_on  # noqa: F401 - fixture used by name.
@@ -325,8 +325,8 @@ def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypat
     sqlite_session.add_all([inside, outside])
     sqlite_session.commit()
 
-    assert task_worker._load_task_context(inside.id) is not None
-    assert task_worker._load_task_context(outside.id) is None
+    assert task_run._load_task_context(inside.id) is not None
+    assert task_run._load_task_context(outside.id) is None
     sqlite_session.expire_all()
     blocked = sqlite_session.get(BacklogItem, outside.id)
     assert blocked.status == "blocked"
@@ -336,7 +336,7 @@ def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypat
 
     assert item_is_settled(blocked)
     # Loading it again writes nothing more.
-    assert task_worker._load_task_context(outside.id) is None
+    assert task_run._load_task_context(outside.id) is None
     sqlite_session.expire_all()
     assert len(sqlite_session.get(BacklogItem, outside.id).comments) == 1
 

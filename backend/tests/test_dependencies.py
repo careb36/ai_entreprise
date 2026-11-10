@@ -6,6 +6,7 @@ one gets done, a carried task keeps a dependency carried with it, and the
 independent history check refuses a task worked before its dependency.
 """
 
+import asyncio
 import json
 import secrets
 
@@ -15,6 +16,7 @@ import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
 from services import sprint_control
+from services.loop.worker import intake, task_run
 from services.planning import spec_author, spec_check
 from services.tasks import dependencies
 from sqlmodel import select
@@ -243,6 +245,50 @@ def test_dispatch_and_the_worker_queue_a_task_only_once_its_dependencies_are_don
     sqlite_session.commit()
     assert dependencies.ready(engine, endpoint.id) is True
     assert sprint_control.dispatch_todo(sqlite_session, sprint) == 1
+
+
+class _AssignNats:
+    def __init__(self):
+        self.queued = []
+
+    async def publish(self, subject, payload, msg_id=None):
+        if subject == "task.assign":
+            self.queued.append(payload["backlog_item_id"])
+
+
+def test_the_intake_queues_and_claims_a_task_only_once_its_dependencies_are_done(
+    sqlite_session, monkeypatch
+):
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
+    ran = []
+
+    async def _run(nats_client, backlog_item_id, ctx):
+        ran.append(backlog_item_id)
+
+    monkeypatch.setattr(task_run, "_run_claimed_task", _run)
+    company = _company(sqlite_session)
+    sprint = _sprint(sqlite_session, company)
+    store = _task(sqlite_session, sprint, "Store", status="in_progress")
+    endpoint = _task(sqlite_session, sprint, "Endpoint", depends_on=[store.id])
+    assignment = {"backlog_item_id": endpoint.id, "sprint_id": sprint.id}
+
+    nats = _AssignNats()
+    asyncio.run(intake._dispatch_todo_items(nats))
+    asyncio.run(intake._on_task_assign(nats, None, assignment))
+    sqlite_session.expire_all()
+    # Neither queued nor claimed while its dependency is in work.
+    assert endpoint.id not in nats.queued and ran == []
+    assert sqlite_session.get(BacklogItem, endpoint.id).status == "todo"
+
+    store = sqlite_session.get(BacklogItem, store.id)
+    store.status = "done"
+    sqlite_session.add(store)
+    sqlite_session.commit()
+    asyncio.run(intake._dispatch_todo_items(nats))
+    asyncio.run(intake._on_task_assign(nats, None, assignment))
+    sqlite_session.expire_all()
+    assert endpoint.id in nats.queued and ran == [endpoint.id]
+    assert sqlite_session.get(BacklogItem, endpoint.id).status == "in_progress"
 
 
 def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_released_when_it_gets_done(

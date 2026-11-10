@@ -1,7 +1,7 @@
 # ADR 0011: LLM Fallback Routing for Resilient Execution
 
 ## Status
-Accepted
+Superseded by ADR 0015 (2026-11-10): step 15 of ADR 0016 (issue #469) deleted the code this decision describes, the `FallbackRouter` in `backend/llm/fallback.py` with `retry.py` and `circuit_breaker.py`, which no production path ran; the fallback that runs stays the LLM proxy's tiers.
 
 ## Context
 Our orchestration layer relies on primary LLMs (e.g., GPT-4o or Claude 3.5 Sonnet) to execute complex autonomous tasks. Occasionally, these providers experience hard outages, rate limiting, or severe latency degradation that exhaust our exponential backoff retry mechanisms. The recent Sprint 3 retrospective highlighted blocked tasks due to `gemini 502 timed out after 110s`. Relying on a single model endpoint introduces a single point of failure.

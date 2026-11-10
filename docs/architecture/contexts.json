@@ -5,9 +5,7 @@
       "path": "backend/app/services/contracts/",
       "responsibility": "The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.",
       "depends_on": [],
-      "modules": [
-        "standards_catalogue"
-      ]
+      "modules": []
     },
     "platform": {
       "path": "backend/app/services/platform/",
@@ -17,8 +15,6 @@
       ],
       "modules": [
         "agent_service",
-        "glassroom",
-        "idempotency",
         "locks",
         "orchestration_metrics"
       ]
@@ -56,7 +52,6 @@
         "platform"
       ],
       "modules": [
-        "governance",
         "review_changes",
         "standards",
         "verification"
@@ -71,8 +66,7 @@
       ],
       "modules": [
         "git_workflow",
-        "workspace_daemon",
-        "workspace_snapshot"
+        "workspace_daemon"
       ]
     },
     "tools": {
@@ -84,11 +78,7 @@
         "evidence",
         "workspace"
       ],
-      "modules": [
-        "developer_tool_schemas",
-        "research_registries",
-        "research_schemas"
-      ]
+      "modules": []
     },
     "learning": {
       "path": "backend/app/services/learning/",
@@ -101,7 +91,6 @@
       ],
       "modules": [
         "procedures",
-        "retrospective",
         "scrum_master"
       ]
     },

@@ -26,9 +26,8 @@ from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
 from nats.js.errors import BadRequestError
 from nats_client import NATSClient
-from services import task_worker
 from services.loop.worker import deliver as worker_deliver
-from services.loop.worker import qa_review
+from services.loop.worker import intake, qa_review
 from services.loop.worker import record as worker_record
 from services.loop.worker import review as worker_review
 from sqlmodel import select
@@ -356,7 +355,7 @@ def test_delivery_to_an_offline_daemon_is_queued_and_the_task_waits(
 
     monkeypatch.setattr(qa_review, "_call_llm_for_review", _review)
     assert worker_record._delivery_gate(sprint["company_id"], item["id"])[0] == (
-        task_worker.DELIVERY_QUEUED
+        intake.DELIVERY_QUEUED
     )
     asyncio.run(worker_review._review_cycle(nats))
     db.expire_all()
@@ -570,9 +569,9 @@ def test_repeated_dispatch_of_the_same_todo_item_has_one_id(db, tmp_path):
     db.commit()
     nats = _OfflineDaemonNATS()
 
-    asyncio.run(task_worker._dispatch_todo_items(nats))
-    task_worker._clear_queue_marker(item["id"])
-    asyncio.run(task_worker._dispatch_todo_items(nats))
+    asyncio.run(intake._dispatch_todo_items(nats))
+    intake._clear_queue_marker(item["id"])
+    asyncio.run(intake._dispatch_todo_items(nats))
 
     ids = [
         msg_id

@@ -21,7 +21,7 @@ import worker_stages
 from models import AgentRun, BacklogItem, Company, Sprint, Verification
 from services import carry_over, sprint_control, task_worker
 from services.learning import procedures, scrum_master
-from services.loop.worker import qa_review
+from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review
 from services.tasks import board, dependencies, task_events, task_projection
 from sqlalchemy import text
@@ -258,7 +258,7 @@ def test_a_task_frozen_by_its_event_stays_out_of_dispatch(db):
     _alter(db, item.id, 0, text="Carry on.")
     nats = _FakeNATS()
 
-    asyncio.run(task_worker._dispatch_todo_items(nats))
+    asyncio.run(intake._dispatch_todo_items(nats))
 
     db.expire_all()
     assert db.get(BacklogItem, item.id).status == "blocked"
