@@ -1,4 +1,4 @@
-"""A sprint's team (``services/sprint_team.py``): the roles its tasks may go to.
+"""A sprint's team (``services/planning/sprint_team.py``): the roles its tasks may go to.
 
 The PO suggests the team for the request in a fixed shape beside the plan,
 an unusable answer meaning every hired role; planning with a ``team`` uses
