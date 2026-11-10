@@ -6,7 +6,7 @@
 - ``DELETE /v1/companies/{id}/webhook`` (Manager).
 - ``POST /v1/companies/{id}/webhook/ping`` (Manager): queue a ``ping`` delivery.
 
-How deliveries are queued, signed and sent: ``services/webhooks.py``.
+How deliveries are queued, signed and sent: ``services/integrations/webhooks.py``.
 """
 
 from auth_policy import current_user_if_required, require_company_role
