@@ -381,7 +381,7 @@ def test_a_comment_anyone_appends_does_not_hide_the_hold_and_a_send_back_is_held
 def test_a_sprint_reconciles_its_holds_before_it_counts_as_settled(
     sqlite_session, monkeypatch
 ):
-    from services import task_worker
+    from services.loop.worker import close as worker_close
 
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
@@ -407,7 +407,7 @@ def test_a_sprint_reconciles_its_holds_before_it_counts_as_settled(
     assert held.status == "todo"
     assert not dependencies.sprint_settled(sqlite_session, 999999)
     assert (
-        task_worker._complete_sprint_and_plan_follow_up(sprint.id)["reason"]
+        worker_close._complete_sprint_and_plan_follow_up(sprint.id)["reason"]
         == "not_all_done"
     )
 

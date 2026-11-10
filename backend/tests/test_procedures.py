@@ -17,8 +17,9 @@ from models import (
     User,
 )
 from services import procedures, scrum_master, task_worker
+from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import prompt
+from services.loop.worker import procedures_round, prompt
 from sqlmodel import select
 from test_review_gate import _FakeNATS
 
@@ -275,9 +276,9 @@ def test_the_scrum_master_proposes_after_a_sprint_with_rework(
     )
     db.commit()
     sprint = _sprint(db, company, tasks=2, reworks=2)
-    metrics = task_worker._build_sprint_retrospective(sprint.id)
+    metrics = worker_close._build_sprint_retrospective(sprint.id)
 
-    task_worker._propose_procedures(company.id, sprint.id, metrics)
+    procedures_round._propose_procedures(company.id, sprint.id, metrics)
 
     assert calls[0]["role"] == "ScrumMaster"
     assert "QA rework cycles: 2" in calls[0]["prompt"]
@@ -332,8 +333,8 @@ def test_the_scrum_master_sees_what_earlier_procedures_did_and_cannot_repeat_a_f
     db.commit()
     sprint = _sprint(db, company, tasks=2, reworks=2)
 
-    task_worker._propose_procedures(
-        company.id, sprint.id, task_worker._build_sprint_retrospective(sprint.id)
+    procedures_round._propose_procedures(
+        company.id, sprint.id, worker_close._build_sprint_retrospective(sprint.id)
     )
 
     prompt = calls[0]["prompt"]
@@ -394,8 +395,8 @@ def test_no_proposal_after_a_clean_sprint(db, monkeypatch):
     calls = _scrum_master_answers(monkeypatch, PROPOSAL_TEXT)
     company = _company(db, autonomy=3)
     sprint = _sprint(db, company, tasks=2)
-    task_worker._propose_procedures(
-        company.id, sprint.id, task_worker._build_sprint_retrospective(sprint.id)
+    procedures_round._propose_procedures(
+        company.id, sprint.id, worker_close._build_sprint_retrospective(sprint.id)
     )
     assert calls == []
 
@@ -415,7 +416,7 @@ def test_sprint_close_measures_procedures_and_tells_the_team(db, monkeypatch):
     _sprint(db, company, tasks=2, reworks=1)
     closing = _sprint(db, company, tasks=1, status="active")
 
-    asyncio.run(task_worker._finalize_sprint_if_ready(_FakeNATS(), closing.id))
+    asyncio.run(worker_close._finalize_sprint_if_ready(_FakeNATS(), closing.id))
 
     db.expire_all()
     assert db.get(Procedure, procedure.id).outcome["result"] == "kept"

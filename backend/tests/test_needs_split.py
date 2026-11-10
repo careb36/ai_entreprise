@@ -131,8 +131,8 @@ def test_complete_sprint_skips_when_sprint_not_active(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.task_worker.engine", sqlite_engine):
-        from services.task_worker import _complete_sprint_and_plan_follow_up
+    with patch("services.loop.worker.close.engine", sqlite_engine):
+        from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
@@ -156,8 +156,8 @@ def test_complete_sprint_skips_when_items_not_done(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.task_worker.engine", sqlite_engine):
-        from services.task_worker import _complete_sprint_and_plan_follow_up
+    with patch("services.loop.worker.close.engine", sqlite_engine):
+        from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
@@ -180,8 +180,8 @@ def test_complete_sprint_marks_completed_when_all_done(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.task_worker.engine", sqlite_engine):
-        from services.task_worker import _complete_sprint_and_plan_follow_up
+    with patch("services.loop.worker.close.engine", sqlite_engine):
+        from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
@@ -227,11 +227,11 @@ def test_active_and_needs_split_block_follow_up(sqlite_session):
     from unittest.mock import patch
 
     with (
-        patch("services.task_worker.engine", sqlite_engine),
+        patch("services.loop.worker.close.engine", sqlite_engine),
         # Also stub out plan_self_improvement_sprint so no LLM call happens
-        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
+        patch("services.loop.worker.close.AUTO_SELF_IMPROVEMENT_ENABLED", True),
     ):
-        from services.task_worker import _complete_sprint_and_plan_follow_up
+        from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 
         result = _complete_sprint_and_plan_follow_up(sprint_to_complete_id)
 

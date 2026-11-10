@@ -27,8 +27,10 @@ from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import locks, replicas, scrum_master, task_events, task_worker
+from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import messages as worker_messages
+from services.loop.worker import procedures_round
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
 from test_review_gate import _FakeNATS
@@ -338,15 +340,15 @@ def test_two_workers_closing_one_sprint_open_one_follow_up(engine, monkeypatch):
         release.wait(10)
         return plan
 
-    monkeypatch.setattr(task_worker, "AUTO_SELF_IMPROVEMENT_ENABLED", True)
-    monkeypatch.setattr(task_worker, "plan_self_improvement_sprint", slow_planner)
+    monkeypatch.setattr(worker_close, "AUTO_SELF_IMPROVEMENT_ENABLED", True)
+    monkeypatch.setattr(worker_close, "plan_self_improvement_sprint", slow_planner)
     monkeypatch.setattr(
-        task_worker, "build_self_improvement_objective", lambda **k: "Improve"
+        worker_close, "build_self_improvement_objective", lambda **k: "Improve"
     )
 
     def close():
         return replicas.close_once(
-            engine, sprint_id, task_worker._complete_sprint_and_plan_follow_up
+            engine, sprint_id, worker_close._complete_sprint_and_plan_follow_up
         )
 
     results = []
@@ -373,23 +375,23 @@ def test_two_workers_finalizing_one_sprint_post_one_retrospective(engine, monkey
     sprint_id = _sprint(engine, company_id, items=("done", "blocked"))
     evaluated, proposed = [], []
     monkeypatch.setattr(
-        task_worker, "_evaluate_procedures", lambda c, s: evaluated.append(s)
+        procedures_round, "_evaluate_procedures", lambda c, s: evaluated.append(s)
     )
     monkeypatch.setattr(
-        task_worker, "_propose_procedures", lambda c, s, m: proposed.append(s)
+        procedures_round, "_propose_procedures", lambda c, s, m: proposed.append(s)
     )
-    real_close = task_worker._complete_sprint_and_plan_follow_up
+    real_close = worker_close._complete_sprint_and_plan_follow_up
 
     def slow_close(sprint, metrics=None):
         time.sleep(0.3)  # the other worker arrives meanwhile
         return real_close(sprint, metrics)
 
-    monkeypatch.setattr(task_worker, "_complete_sprint_and_plan_follow_up", slow_close)
+    monkeypatch.setattr(worker_close, "_complete_sprint_and_plan_follow_up", slow_close)
 
     async def two_workers():
         await asyncio.gather(
-            task_worker._finalize_sprint_if_ready(_FakeNATS(), sprint_id),
-            task_worker._finalize_sprint_if_ready(_FakeNATS(), sprint_id),
+            worker_close._finalize_sprint_if_ready(_FakeNATS(), sprint_id),
+            worker_close._finalize_sprint_if_ready(_FakeNATS(), sprint_id),
         )
 
     asyncio.run(two_workers())
@@ -540,7 +542,7 @@ def test_postgres_two_workers_claim_and_close_once(pg):
         session.commit()
 
     def close_without_the_lock():
-        return task_worker._complete_sprint_and_plan_follow_up(sprint_id)
+        return worker_close._complete_sprint_and_plan_follow_up(sprint_id)
 
     results = _race(*[close_without_the_lock] * 4)
     assert sorted(r["completed"] for r in results) == [False, False, False, True]

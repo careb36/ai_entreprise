@@ -14,14 +14,26 @@ from typing import Any
 from services.loop import task_worker
 from services.loop.worker import (
     board_writes,
+    close,
     deliver,
     execute,
     messages,
+    procedures_round,
     prompt,
     record,
 )
 
-STAGES = (task_worker, messages, board_writes, prompt, record, deliver, execute)
+STAGES = (
+    task_worker,
+    messages,
+    board_writes,
+    prompt,
+    record,
+    deliver,
+    execute,
+    close,
+    procedures_round,
+)
 
 
 def use_engine(monkeypatch: Any, engine: Any) -> None:
