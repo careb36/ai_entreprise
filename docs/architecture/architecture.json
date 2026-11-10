@@ -205,14 +205,14 @@
       "name": "Sprint loop",
       "kind": "event",
       "module": "loop",
-      "contract": "async process_backlog_tasks(nats) consumes task.assign\nsprint_control.pause / stop / dispatch_todo(session, sprint)\nemits sprint.closed {sprint_id, company_id, first_close: bool} through the outbox when a sprint closes (replaces the call to integration_jobs.schedule_after_close)",
+      "contract": "async process_backlog_tasks(nats) consumes task.assign\nsprint_control.pause / stop / dispatch_todo(session, sprint)\nemits sprint.closed {nats_client, engine, sprint_id} in-process (platform.hooks.emit) when a sprint closes, its first close or one after a reopening, where it called integration_jobs.schedule_after_close; moving the event to the outbox, durable and with company_id and first_close, is a later, deliberate change",
       "consumers": ["release", "management"]
     },
     {
       "name": "Release actions",
       "kind": "function",
       "module": "release",
-      "contract": "integration_jobs.schedule_after_close(sprint_id) on sprint.closed\ngit_publish.publish_spec / record_publication\nlocal_merge.run_merge_spec / record_run_merge\ndelivery_undo.undo_spec / record_undo",
+      "contract": "integration_jobs.on_sprint_closed, registered by integration_jobs.install() at startup, calls schedule_after_close(nats_client, engine, sprint_id) on sprint.closed\ngit_publish.publish_spec / record_publication\nlocal_merge.run_merge_spec / record_run_merge\ndelivery_undo.undo_spec / record_undo",
       "consumers": ["management"]
     },
     {
