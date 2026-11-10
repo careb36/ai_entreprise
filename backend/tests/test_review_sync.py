@@ -3,7 +3,7 @@ Comments from the pull or merge request, brought back to the run.
 
 The workspace daemon reads them with the person's ``gh`` or ``glab`` login
 (``vscode-daemon/platform_reviews.py``); the backend keeps each one as a
-``ReviewComment`` with its source and id there (``services/review_sync.py``).
+``ReviewComment`` with its source and id there (``services/release/review_sync.py``).
 These tests put a fake ``gh`` and ``glab`` on the PATH.
 """
 
