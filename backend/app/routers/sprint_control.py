@@ -12,7 +12,7 @@ Endpoints (Manager):
 - ``GET/PUT /v1/companies/{id}/stack_profile`` — read (Viewer) or replace the
   company's overrides of the detected stack profile (``services/stack_profiles.py``).
 
-The states and what they allow are in ``services/sprint_control.py``.
+The states and what they allow are in ``services/loop/sprint_control.py``.
 """
 
 from typing import Any

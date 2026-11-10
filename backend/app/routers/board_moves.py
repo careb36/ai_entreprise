@@ -1,5 +1,5 @@
 """
-A card moved to another sprint (``services/board_moves.py``).
+A card moved to another sprint (``services/loop/board_moves.py``).
 
 Endpoints:
 - ``GET  /v1/backlog/{id}/carry_targets`` — the company's open sprints the

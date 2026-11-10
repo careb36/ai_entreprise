@@ -1,4 +1,4 @@
-"""A card a person moves on the board (``services/board_moves.py``).
+"""A card a person moves on the board (``services/loop/board_moves.py``).
 
 - Moving a task to To do starts it: the move is a send-back (the rework
   budgets restart), a ``completed`` or ``cancelled`` sprint is reopened and

@@ -84,6 +84,16 @@ def disable_auth_for_legacy_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def release_listens_to_sprint_closed():
+    """A closed sprint's integration starts from ``sprint.closed``, as in the
+    backend, where ``main.py`` installs the handler; a test that closes a
+    sprint without the app gets it too."""
+    from services import integration_jobs
+
+    integration_jobs.install()
+
+
+@pytest.fixture(autouse=True)
 def no_research_tools(monkeypatch):
     """The research tools (``services/research_tools.py``) reach the network;
     a test that wants them turns ``RESEARCH_TOOLS_ENABLED`` on and fakes the

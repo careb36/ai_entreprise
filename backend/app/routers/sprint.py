@@ -447,7 +447,7 @@ async def update_backlog_item(
     new comment.  All fields are optional; only provided fields are changed.
     A comment is a person's note (author ``user``), never a deliverable; one
     starting with ``board.SEND_BACK_MARKER`` restarts the rework budgets. A
-    move to ``todo`` starts the task (``services/board_moves.py``).
+    move to ``todo`` starts the task (``services/loop/board_moves.py``).
     """
     if req.status and req.status not in VALID_STATUSES:
         raise HTTPException(
@@ -466,7 +466,7 @@ async def update_backlog_item(
         if not sprint:
             raise HTTPException(status_code=404, detail="Sprint not found")
         require_company_role(session, user, sprint.company_id, "Manager")
-    try:  # A move to To do starts the task (services/board_moves.py).
+    try:  # A move to To do starts the task (services/loop/board_moves.py).
         starts, comment = board_moves.prepare(sprint, item, req.status, req.comment)
     except board_moves.BoardMoveError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc

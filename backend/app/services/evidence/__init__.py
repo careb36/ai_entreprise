@@ -10,6 +10,6 @@ daemon's reply (``app_check``, ``browser_smoke``), the sources a run consulted
 run (``review_changes``), governance and the ingestion of AgentRun records
 (``agent_run_service``). It imports only ``contracts`` and ``platform`` among
 the contexts: the daemon calls whose replies it judges are the loop's
-(``services/delivery_checks.py``); ``scripts/check_architecture.py`` keeps it
+(``services/loop/delivery_checks.py``); ``scripts/check_architecture.py`` keeps it
 so.
 """

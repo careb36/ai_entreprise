@@ -19,7 +19,7 @@ fails before its implementation, by design), and never any other failure.
 A deliverable of an implementation task that edits an acceptance test is
 refuted (``acceptance_tests_untouched``): a change to a criterion's test is
 the specification's to decide, never silently accepted. Before the tests
-run, the loop (``services/delivery_checks.py``, ``guard_test_files``) asks
+run, the loop (``services/loop/delivery_checks.py``, ``guard_test_files``) asks
 the daemon for the sha256 of the acceptance test files as they are on disk
 (``workspace.hash``) and compares them with what QA's delivery wrote
 (``test_hashes_of``); a file changed behind the loop's back is restored

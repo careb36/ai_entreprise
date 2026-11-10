@@ -51,14 +51,14 @@ class Sprint(SQLModel, table=True):
     scope_size: str = "M"  # "S" (≤4 items) | "M" (≤8) | "L" (≤12)
     duration_days: int | None = None  # deprecated — kept for backwards compat
     # "planned" | "active" | "paused" | "completed" | "cancelled" | "needs_split"
-    # (``services/sprint_control.py`` says which of them let agents work).
+    # (``services/loop/sprint_control.py`` says which of them let agents work).
     status: str = "active"
     goal: str | None = None  # Sprint goal statement for the team
     # Why the sprint is paused, when the worker paused it (e.g. no credit).
     pause_reason: str | None = None
     # The approved specification this sprint was planned from, if any.
     specification_id: int | None = Field(default=None, foreign_key="specifications.id")
-    # Archived by its Owner (``services/sprint_archive.py``): a halted sprint
+    # Archived by its Owner (``services/loop/sprint_archive.py``): a halted sprint
     # with recorded work leaves the lists, the inbox and carry-over, and its
     # board, runs, events and audit rows stay readable by id. Empty: listed.
     archived_at: datetime | None = None

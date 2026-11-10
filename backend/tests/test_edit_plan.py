@@ -1,5 +1,5 @@
 """Architect and editor mode (issue #319, A.10, from Aider;
-``services/edit_plan.py``): off, nothing changes; on, a Developer task at or
+``services/loop/edit_plan.py``): off, nothing changes; on, a Developer task at or
 above the difficulty band asks the Architect for a numbered edit plan in a
 fixed format, the plan is read back only from that format (relative paths,
 every line a step), the Developer's prompt carries it as the plan to apply and

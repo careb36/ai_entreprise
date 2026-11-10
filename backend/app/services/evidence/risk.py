@@ -16,7 +16,7 @@ may also raise the tier itself with ``claims["risk"] = {"tier": ..., "reason":
 nor deletions, so executable bits and removed files are not classified.
 
 A high tier sends an approved task to a person at every autonomy level
-(``services/task_worker.py``): autonomy decides how much routine work goes
+(``services/loop/task_worker.py``): autonomy decides how much routine work goes
 without a person, and this is not routine.
 """
 

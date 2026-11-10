@@ -1,6 +1,8 @@
 """A closed sprint's integration as a job that survives a restart (issue #314).
 
-When a sprint closes with the Git workflow on, ``schedule_after_close`` keeps
+When a sprint closes the loop emits ``sprint.closed`` (``platform.hooks``),
+and ``install`` registers ``on_sprint_closed`` for it in every process that
+closes sprints. With the Git workflow on, ``schedule_after_close`` keeps
 a ``running`` ``SprintIntegration`` before anything is asked of the daemon,
 then integrates in the background (``services/integration.py``). The attempt
 fills that row in place: with what the daemon answered, or as ``pending`` (no
@@ -33,6 +35,7 @@ from services.integration import (
     latest,
     sprint_lock,
 )
+from services.platform import hooks
 
 # How often an integration the daemon could not take at close is tried again.
 RETRY_SECONDS = float(os.getenv("INTEGRATION_RETRY_SECONDS", "60"))
@@ -158,6 +161,16 @@ def schedule_after_close(nats_client: Any, engine: Any, sprint_id: int) -> None:
         return
     _RUNNING.add(task)
     task.add_done_callback(_RUNNING.discard)
+
+
+def on_sprint_closed(*, nats_client: Any, engine: Any, sprint_id: int) -> None:
+    """The ``sprint.closed`` handler: the closed sprint's integration (issue #314)."""
+    schedule_after_close(nats_client, engine, sprint_id)
+
+
+def install() -> None:
+    """Start each closed sprint's integration from the loop's ``sprint.closed`` event."""
+    hooks.on(hooks.SPRINT_CLOSED, on_sprint_closed)
 
 
 async def retry_pending(nats_client: Any, engine: Any) -> int:
