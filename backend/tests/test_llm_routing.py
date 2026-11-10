@@ -18,10 +18,10 @@ from models.agent_message import AgentMessage
 from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import console_assistants, task_worker
+from services import console_assistants
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import prompt, qa_review
+from services.loop.worker import intake, prompt, qa_review, task_run
 from sqlmodel import Session, select
 
 from llm.model_factory import AgentRole, ModelFactory
@@ -161,7 +161,7 @@ def test_architect_consult_with_no_model_uses_the_architect_default(
 def test_task_context_resolves_an_empty_model(db, agent_model):
     _company, _sprint, item = _board(db, role="QA", agent_model=agent_model)
 
-    ctx = task_worker._load_task_context(item.id)
+    ctx = task_run._load_task_context(item.id)
 
     # The context keeps the stored model raw; _resolve_agent_model applies the
     # role default (and any routing policy) when the task runs.
@@ -269,7 +269,7 @@ def _task_assign_handler(monkeypatch):
     monkeypatch.setattr(console_assistants, "collect_advice", _no_assistants)
     nats = _Nats()
     with pytest.raises(_StopAfterSubscribe):
-        asyncio.run(task_worker.process_backlog_tasks(nats))
+        asyncio.run(intake.process_backlog_tasks(nats))
     return nats
 
 
