@@ -23,7 +23,6 @@ ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / "scripts" / "file_size_baseline.json"
 PATTERNS = (
     "backend/app/*.py",
-    "backend/agents/*.py",
     "vscode-daemon/*.py",
     "llm-proxy/*.py",
     "scripts/*.py",

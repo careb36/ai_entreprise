@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
 import httpx
-
 from config import settings
 
 logger = logging.getLogger("fabrique-openproject-tools")
@@ -16,7 +16,7 @@ PublishEvent = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 async def _emit_chat(
-    publish_event: Optional[PublishEvent],
+    publish_event: PublishEvent | None,
     agent: str,
     task: str,
     message: str,
@@ -47,7 +47,7 @@ def _simulated_ticket(subject: str, interaction_id: str) -> dict[str, Any]:
 
 async def create_work_package(
     payload: dict[str, Any],
-    publish_event: Optional[PublishEvent] = None,
+    publish_event: PublishEvent | None = None,
 ) -> dict[str, Any]:
     """
     Create an OpenProject work package, or fall back to a simulated local ticket.
@@ -61,7 +61,11 @@ async def create_work_package(
     sprint_id = payload.get("sprint_id")
 
     if not subject:
-        return {"ok": False, "error": "subject is required", "interaction_id": interaction_id}
+        return {
+            "ok": False,
+            "error": "subject is required",
+            "interaction_id": interaction_id,
+        }
 
     if not settings.OPENPROJECT_TOKEN_PO:
         await _emit_chat(
@@ -105,7 +109,9 @@ async def create_work_package(
             "subject": subject,
         }
     except httpx.ConnectError:
-        logger.warning("OpenProject unreachable for subject=%s; using local simulation", subject)
+        logger.warning(
+            "OpenProject unreachable for subject=%s; using local simulation", subject
+        )
         await _emit_chat(
             publish_event,
             "PO",
@@ -123,7 +129,9 @@ async def create_work_package(
         )
         return _simulated_ticket(subject, interaction_id)
     except httpx.HTTPStatusError as exc:
-        logger.warning("OpenProject returned HTTP error for subject=%s: %s", subject, exc)
+        logger.warning(
+            "OpenProject returned HTTP error for subject=%s: %s", subject, exc
+        )
         await _emit_chat(
             publish_event,
             "PO",

@@ -20,8 +20,7 @@ from models.sprint import BacklogItem, Sprint
 from services.evidence import agent_run_service
 from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 from services.producers import agent_worker
-
-import agents.graph as graph_module
+from services.producers import graph as graph_module
 
 
 class _FakeNATSClient:
