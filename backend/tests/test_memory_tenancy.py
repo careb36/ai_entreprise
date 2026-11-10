@@ -5,8 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from database import ensure_memory_graph_schema
 from memory_client import MemoryClient
-
-from memory.engram_processor import DeepSeekEngramProcessor, EngramType
+from services.platform.engram_processor import DeepSeekEngramProcessor, EngramType
 
 
 def test_memory_store_uses_explicit_company_in_both_stores():

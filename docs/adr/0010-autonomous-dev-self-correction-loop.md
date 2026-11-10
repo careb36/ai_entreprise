@@ -1,7 +1,7 @@
 # ADR 0010: Autonomous Dev Self-Correction Loop
 
 ## Status
-Accepted
+Superseded by ADR 0015 (2026-11-10): step 15 of ADR 0016 (issue #469) deleted the code this decision describes, the self-correction loop in `src/` and `backend/agents/ast_pre_validator.py` with `python_dev_agent.py`, which no production path ran.
 
 ## Context
 In Sprint 5, we introduced a Pre-Flight Check Node to validate AI-generated artifacts using AST parsing and linters before they reach QA. Currently, if an artifact fails validation, the pipeline halts or requires human intervention. To fully realize the autonomous capabilities of La Fabrique, the Dev agent should be able to receive these validation errors and correct its own work without human or QA intervention.

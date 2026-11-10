@@ -8,8 +8,7 @@
       "modules": [
         "edit_blocks",
         "roles",
-        "sandbox_schemas",
-        "standards_catalogue"
+        "sandbox_schemas"
       ]
     },
     "platform": {
@@ -21,9 +20,7 @@
       "modules": [
         "agent_service",
         "api_tokens",
-        "glassroom",
         "healthcheck",
-        "idempotency",
         "locks",
         "memory_graph",
         "orchestration_metrics",
@@ -81,7 +78,6 @@
         "context_read",
         "criteria_tests",
         "delivery_gate",
-        "governance",
         "review_changes",
         "risk",
         "secops_checks",
@@ -101,8 +97,7 @@
         "sandbox",
         "sandbox_manager",
         "stack_profiles",
-        "workspace_daemon",
-        "workspace_snapshot"
+        "workspace_daemon"
       ]
     },
     "tools": {
@@ -116,15 +111,12 @@
       ],
       "modules": [
         "developer_tool_replies",
-        "developer_tool_schemas",
         "developer_tools",
         "edit_lint",
         "mcp_client",
         "mcp_config",
         "mcp_tools",
         "repo_map",
-        "research_registries",
-        "research_schemas",
         "research_tools",
         "tool_history",
         "workspace_edits"
@@ -142,7 +134,6 @@
       "modules": [
         "architect",
         "procedures",
-        "retrospective",
         "scrum_master"
       ]
     },

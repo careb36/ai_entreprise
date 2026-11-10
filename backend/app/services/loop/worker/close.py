@@ -367,6 +367,7 @@ async def _learn_from_close(sprint_id: int, retro_metrics: dict[str, Any]) -> No
 def _burn_retrospective_engram(sprint_id: int, retro_metrics: dict[str, Any]) -> None:
     """Burn retrospective engram to memory so future sprints can learn from it."""
     try:
+        from services.models.model_factory import get_llm_for_role
         from services.platform.engram_processor import (
             RETROSPECTIVE_AGENT_PREFIX,
             get_engram_processor,
@@ -382,6 +383,7 @@ def _burn_retrospective_engram(sprint_id: int, retro_metrics: dict[str, Any]) ->
                 "action_type": "sprint_retrospective",
                 **retro_metrics,
             },
+            llm=get_llm_for_role("EngramProcessor"),
         )
     except Exception as exc:  # noqa: BLE001 - Optional engram writes must not abort sprint completion.
         logger.warning(

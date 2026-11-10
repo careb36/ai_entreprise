@@ -13,11 +13,10 @@ import pytest
 from models import Agent, Company, ProviderConnection
 from services import company_models, model_routing, scrum_master, spec_author
 from services.loop.worker import execute as worker_execute
+from services.models.model_factory import AgentRole
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
 from test_specifications import _company
-
-from llm.model_factory import AgentRole
 
 
 @pytest.fixture(autouse=True)
@@ -163,9 +162,9 @@ def test_the_deciding_roles_run_the_companys_choice(sqlite_session):
 def test_the_worker_gives_a_task_the_companys_model(db, agent_model):  # noqa: F811
     company, _sprint, item = _board(db, role="QA", agent_model=agent_model)
     _choose(db, db.get(Company, company.id), "company-default", {"QA": "qa-model"})
-    from services import task_worker
+    from services.loop.worker import task_run
 
-    ctx = task_worker._load_task_context(item.id)
+    ctx = task_run._load_task_context(item.id)
     assert ctx["agent"]["model"] == "qa-model"
     assert (
         model_routing.resolve_agent_model(ctx["agent"], item=ctx["item"]) == "qa-model"
@@ -175,9 +174,9 @@ def test_the_worker_gives_a_task_the_companys_model(db, agent_model):  # noqa: F
 def test_the_agents_own_model_wins_in_the_worker(db):  # noqa: F811
     company, _sprint, item = _board(db, role="QA", agent_model="own-model")
     _choose(db, db.get(Company, company.id), None, {"QA": "qa-model"})
-    from services import task_worker
+    from services.loop.worker import task_run
 
-    assert task_worker._load_task_context(item.id)["agent"]["model"] == "own-model"
+    assert task_run._load_task_context(item.id)["agent"]["model"] == "own-model"
 
 
 def test_the_architect_consultation_runs_the_companys_model(llm, db, monkeypatch):  # noqa: F811
