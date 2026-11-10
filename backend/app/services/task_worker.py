@@ -304,7 +304,7 @@ def _load_sprint_completed_tasks(
 
 
 def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
-    """Sprint health metrics for the retrospective (``services/retrospective``)."""
+    """Sprint health metrics for the retrospective (``services/learning/retrospective``)."""
     return retrospective.build(engine, sprint_id)
 
 
