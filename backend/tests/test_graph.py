@@ -1,5 +1,5 @@
 """
-Tests for the LangGraph agent graph (backend/agents/graph.py).
+Tests for the LangGraph agent graph (backend/app/services/producers/graph.py).
 
 No network calls are made — LLMProxyClient.chat_async is monkeypatched to
 return canned responses, and the engram processor is stubbed out.
@@ -35,7 +35,7 @@ def _canned_result(content: str = "OK", quota_warning: bool = False) -> dict:
 
 
 def test_resolve_model_name_known_role():
-    from agents.graph import _resolve_model_name
+    from services.producers.graph import _resolve_model_name
 
     model = _resolve_model_name("PO")
     assert model == "qwen3.7-plus"
@@ -43,15 +43,14 @@ def test_resolve_model_name_known_role():
 
 def test_resolve_model_name_unknown_role_falls_back_to_developer():
     from services.models.model_factory import AgentRole, ModelFactory
-
-    from agents.graph import _resolve_model_name
+    from services.producers.graph import _resolve_model_name
 
     expected = ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name
     assert _resolve_model_name("UnknownRole") == expected
 
 
 def test_the_kickoff_follows_agent_model_and_role_overrides(monkeypatch):
-    from agents.graph import _resolve_model_name
+    from services.producers.graph import _resolve_model_name
 
     monkeypatch.delenv("NEMOTRON_ROLES", raising=False)
     monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
@@ -67,7 +66,7 @@ def test_the_kickoff_follows_agent_model_and_role_overrides(monkeypatch):
 
 
 def test_extract_backlog_parses_bullet_lines():
-    from agents.graph import _extract_backlog
+    from services.producers.graph import _extract_backlog
 
     story = """
 Sprint: Alpha
@@ -81,7 +80,7 @@ No-bullet line
 
 
 def test_extract_backlog_empty_when_no_bullets():
-    from agents.graph import _extract_backlog
+    from services.producers.graph import _extract_backlog
 
     story = "Sprint kickoff: no bullets here"
     assert _extract_backlog(story) == []
@@ -94,7 +93,7 @@ def test_extract_backlog_empty_when_no_bullets():
 
 def test_create_agent_graph_compiles():
     """create_agent_graph() must return a compiled graph without raising."""
-    from agents.graph import create_agent_graph
+    from services.producers.graph import create_agent_graph
 
     graph = create_agent_graph()
     assert graph is not None
@@ -102,7 +101,7 @@ def test_create_agent_graph_compiles():
 
 def test_create_agent_graph_has_expected_nodes():
     """The compiled graph exposes all expected node names."""
-    from agents.graph import create_agent_graph
+    from services.producers.graph import create_agent_graph
 
     graph = create_agent_graph()
     # LangGraph stores nodes on the underlying graph object
@@ -122,7 +121,7 @@ def test_create_agent_graph_has_expected_nodes():
 
 def test_route_entry_goes_to_kickoff_without_feedback():
     """_route_entry returns 'kickoff' when po_feedback is absent."""
-    from agents.graph import _route_entry
+    from services.producers.graph import _route_entry
 
     state = {
         "interaction_id": "x",
@@ -146,7 +145,7 @@ def test_route_entry_goes_to_kickoff_without_feedback():
 
 def test_route_entry_goes_to_rejection_with_feedback():
     """_route_entry returns 'rejection' when po_feedback is set."""
-    from agents.graph import _route_entry
+    from services.producers.graph import _route_entry
 
     state = {
         "interaction_id": "x",
@@ -170,7 +169,7 @@ def test_route_entry_goes_to_rejection_with_feedback():
 
 def test_route_from_sends_to_burn_on_error():
     """_route_from returns the fallback ('burn') when last_error is set."""
-    from agents.graph import _route_from
+    from services.producers.graph import _route_from
 
     state = {
         "interaction_id": "x",
@@ -194,7 +193,7 @@ def test_route_from_sends_to_burn_on_error():
 
 def test_route_from_sends_to_success_when_no_error():
     """_route_from returns the success node when last_error is absent."""
-    from agents.graph import _route_from
+    from services.producers.graph import _route_from
 
     state = {
         "interaction_id": "x",
@@ -224,7 +223,7 @@ def test_route_from_sends_to_success_when_no_error():
 @pytest.mark.asyncio
 async def test_invoke_agent_publishes_agent_start_message_complete():
     """_invoke_agent must publish agent_start, message, and agent_complete events."""
-    from agents.graph import _invoke_agent
+    from services.producers.graph import _invoke_agent
 
     published: list[dict] = []
 
@@ -250,7 +249,7 @@ async def test_invoke_agent_publishes_agent_start_message_complete():
     }
 
     with patch(
-        "agents.graph.LLMProxyClient.chat_async",
+        "services.producers.graph.LLMProxyClient.chat_async",
         new=AsyncMock(return_value=_canned_result("Sure, I'll do it")),
     ):
         content = await _invoke_agent(
@@ -267,7 +266,7 @@ async def test_invoke_agent_publishes_agent_start_message_complete():
 @pytest.mark.asyncio
 async def test_invoke_agent_emits_quota_warning_when_flagged():
     """_invoke_agent publishes a quota.warning event when the proxy signals quota_warning."""
-    from agents.graph import _invoke_agent
+    from services.producers.graph import _invoke_agent
 
     published: list[dict] = []
 
@@ -293,7 +292,7 @@ async def test_invoke_agent_emits_quota_warning_when_flagged():
     }
 
     with patch(
-        "agents.graph.LLMProxyClient.chat_async",
+        "services.producers.graph.LLMProxyClient.chat_async",
         new=AsyncMock(return_value=_canned_result("answer", quota_warning=True)),
     ):
         await _invoke_agent(state, "PO", "Plan sprint", "Plan it")
@@ -308,7 +307,7 @@ async def test_invoke_agent_emits_quota_warning_when_flagged():
 @pytest.mark.asyncio
 async def test_invoke_agent_raises_on_error_response():
     """_invoke_agent raises RuntimeError when the proxy returns an error key."""
-    from agents.graph import _invoke_agent
+    from services.producers.graph import _invoke_agent
 
     state = {
         "interaction_id": "inv-err",
@@ -330,7 +329,7 @@ async def test_invoke_agent_raises_on_error_response():
 
     with (
         patch(
-            "agents.graph.LLMProxyClient.chat_async",
+            "services.producers.graph.LLMProxyClient.chat_async",
             new=AsyncMock(return_value={"error": "rate limited"}),
         ),
         pytest.raises(RuntimeError, match="rate limited"),
