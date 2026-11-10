@@ -22,7 +22,7 @@ import workspace_edit
 import workspace_read
 from config import settings
 from models.company import Company
-from services import developer_tools, edit_lint
+from services.tools import developer_tools, edit_lint
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 LINTER = (
@@ -323,7 +323,7 @@ def test_the_profile_is_read_once_with_the_companys_override(project, sqlite_ses
 
 
 def test_the_worker_s_toolbox_lints_only_where_it_may_edit(project, monkeypatch):
-    from services import mcp_tools, workspace_edits
+    from services.tools import mcp_tools, workspace_edits
 
     monkeypatch.setattr(
         mcp_tools.Toolbox, "load", classmethod(lambda cls, *a, **k: None)
@@ -476,7 +476,7 @@ def test_the_write_guard_reads_quotes_and_each_simple_command():
 
 
 def test_npm_pre_and_post_lint_scripts_are_inspected(tmp_path):
-    from services import stack_profiles
+    from services.workspace import stack_profiles
 
     (tmp_path / "package.json").write_text(
         json.dumps(

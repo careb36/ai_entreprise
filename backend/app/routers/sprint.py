@@ -30,17 +30,7 @@ from schemas import (
     BacklogItemUpdate,
     SprintStartRequest,
 )
-from services import (
-    acceptance,
-    board_moves,
-    dependencies,
-    run_cost,
-    spec_check,
-    spec_planning,
-    sprint_archive,
-    sprint_team,
-    task_events,
-)
+from services import board_moves, dependencies, run_cost, sprint_archive, task_events
 from services.board import (
     count_architect_advice,
     count_console_advice,
@@ -51,6 +41,8 @@ from services.board import (
     rework_request_count,
 )
 from services.carry_over import CarryOverError, carry_over
+from services.evidence import acceptance
+from services.planning import spec_check, spec_planning, sprint_team
 from sqlalchemy import case, func
 from sqlmodel import Session, select
 

@@ -23,19 +23,18 @@ from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.integration import SprintIntegration
 from models.review import RunPublication
 from services import (
-    arch_check,
     carry_over,
     manager_actions,
     manager_observe,
     manager_policy,
     manager_record,
     manager_rules,
-    scrum_master,
-    spec_check,
 )
 from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
 from services.carry_over import CARRY_MARK_PREFIX, carry_mark
+from services.learning import scrum_master
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.planning import arch_check, spec_check
 from sqlmodel import select
 from test_architectures import GOOD_ARCH
 from test_manager_agent import _company, _cycle, _hold, _policy, _rows, answer
@@ -806,7 +805,7 @@ def test_a_done_task_s_branch_is_merged_locally_and_the_override_only_recorded(
 def test_no_daemon_leaves_the_merge_pending_and_a_refusal_fails_it(
     sqlite_session, daemon
 ):
-    from services.workspace_daemon import DaemonError, DaemonUnavailable
+    from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 
     _, answers = daemon
     company = _company(sqlite_session)

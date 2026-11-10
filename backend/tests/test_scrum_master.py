@@ -16,8 +16,9 @@ import secrets
 import pytest
 import worker_stages
 from models import Agent, AgentMessage, BacklogItem, Company, Sprint
-from services import carry_over, scrum_master
+from services import carry_over
 from services.board import CARRIED_FROM_PREFIX
+from services.learning import scrum_master
 from sqlmodel import select
 
 TRIAGE = (

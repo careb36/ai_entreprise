@@ -10,7 +10,7 @@ import pytest
 import worker_stages
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import architect
+from services.learning import architect
 from services.loop.worker import execute as worker_execute
 from services.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,

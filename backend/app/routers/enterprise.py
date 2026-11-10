@@ -39,8 +39,8 @@ from schemas import (
 )
 from services import git_setup, memory_graph
 from services.company_service import CompanyService
-from services.discovery_service import DiscoveryService
-from services.workspace_daemon import (
+from services.planning.discovery_service import DiscoveryService
+from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
     DaemonUnavailable,

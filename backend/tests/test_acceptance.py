@@ -22,9 +22,10 @@ from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.specification import Specification
-from services import acceptance, criteria_tests, spec_check, spec_planning
+from services.evidence import acceptance, criteria_tests
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import record as worker_record
+from services.planning import spec_check, spec_planning
 from sqlmodel import select
 from test_specifications import GOOD
 

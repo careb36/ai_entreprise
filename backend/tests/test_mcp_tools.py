@@ -21,9 +21,10 @@ from mcp_types import ToolAnnotations
 from models.agent_run import AgentRun
 from models.company import Company
 from models.mcp import McpServer
-from services import mcp_config, mcp_tools, risk
+from services.evidence import risk
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import record as worker_record
+from services.tools import mcp_config, mcp_tools
 from services.verification import check_risk_tier, check_tools_used
 
 SECRET = "s3cret-token-value"

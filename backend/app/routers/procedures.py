@@ -18,7 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Procedure, User
 from models.procedure import PROCEDURE_STATUSES
 from pydantic import BaseModel, Field
-from services import procedures, standards
+from services.evidence import standards
+from services.learning import procedures
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])

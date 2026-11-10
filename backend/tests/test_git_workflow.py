@@ -22,8 +22,8 @@ from models import Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
 from models.company import ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import git_workflow
 from services.loop.worker import deliver as worker_deliver
+from services.workspace import git_workflow
 from sqlmodel import Session, select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"

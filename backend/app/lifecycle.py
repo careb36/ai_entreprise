@@ -15,9 +15,10 @@ from logging_config import logger
 from memory_client import MemoryClient
 from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
-from services import console_capabilities, integration_jobs
-from services.agent_worker import process_agent_tasks
+from services import integration_jobs
 from services.outbox_service import process_outbox
+from services.producers import console_capabilities
+from services.producers.agent_worker import process_agent_tasks
 from services.task_worker import process_backlog_tasks
 
 # Retained task references for graceful cancellation on shutdown.

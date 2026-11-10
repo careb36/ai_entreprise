@@ -24,13 +24,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import (
-    git_setup,
-    research_tools,
-    sandbox,
-    sprint_control,
-    stack_profiles,
-)
+from services import git_setup, sprint_control
+from services.tools import research_tools
+from services.workspace import sandbox, stack_profiles
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])

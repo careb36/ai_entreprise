@@ -21,14 +21,9 @@ import pytest
 import worker_stages
 from config import settings
 from models.sprint import BacklogItem, Sprint
-from services import (
-    app_check,
-    browser_smoke,
-    criteria_tests,
-    delivery_checks,
-    stack_profiles,
-)
-from services.workspace import project_profile
+from services import delivery_checks
+from services.evidence import app_check, browser_smoke, criteria_tests
+from services.workspace import project_profile, stack_profiles
 from test_specifications import _company
 
 PY = sys.executable
@@ -389,7 +384,7 @@ class _Recorder:
 
 @pytest.fixture()
 def host_box(monkeypatch):
-    from services import sandbox
+    from services.workspace import sandbox
 
     monkeypatch.setattr(
         sandbox, "request_for_sprint", lambda *_a, **_k: {"mode": "host"}
@@ -731,7 +726,7 @@ def test_a_failing_test_that_mentions_the_installer_is_refuted():
 def test_a_manifest_qa_delivers_is_not_guarded_as_an_acceptance_test(sqlite_session):
     """Finding 4: package.json beside QA's tests stays the implementation's."""
     from models.agent_run import AgentRun, Verification
-    from services import acceptance
+    from services.evidence import acceptance
 
     item = _test_task(sqlite_session, WEB)
     sprint_id, company_id = (

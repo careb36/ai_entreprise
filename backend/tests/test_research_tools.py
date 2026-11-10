@@ -14,7 +14,8 @@ import pytest
 from config import settings
 from models.company import Company
 from models.specification import Specification
-from services import developer_tools, mcp_config, research_tools, spec_author
+from services.planning import spec_author
+from services.tools import developer_tools, mcp_config, research_tools
 from test_developer_tools import _answer, _answer_with_calls
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import GOOD, _company

@@ -23,13 +23,12 @@ from services import (
     board,
     carry_over,
     dependencies,
-    procedures,
-    scrum_master,
     sprint_control,
     task_events,
     task_projection,
     task_worker,
 )
+from services.learning import procedures, scrum_master
 from services.loop.worker import qa_review
 from services.loop.worker import review as worker_review
 from sqlalchemy import text

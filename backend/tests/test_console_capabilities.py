@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock
 
 import config
 import pytest
-from services import console_assistants, console_capabilities
+from services.producers import console_assistants, console_capabilities
 
 ITEM = {"id": 11, "title": "Design the storage layer", "description": "Pick a schema."}
 # Architect is a "high value" role, so the default strategy selects both

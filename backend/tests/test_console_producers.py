@@ -34,15 +34,10 @@ from models import AssistantRuntimeState, Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
 from models.company import ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import (
-    console_assistants,
-    console_clis,
-    console_host,
-    console_producer,
-    task_worker,
-)
+from services import console_host, task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import quality_gate
+from services.producers import console_assistants, console_clis, console_producer
 from sqlmodel import Session, select
 
 _DAEMON_DIR = Path(__file__).resolve().parents[2] / "vscode-daemon"
@@ -1220,7 +1215,7 @@ def test_the_recorded_prompt_hash_is_the_argument_the_cli_got(
 def test_the_providers_key_reaches_only_the_console_run(
     world, cli_path, sqlite_session
 ):
-    from services import sandbox
+    from services.workspace import sandbox
 
     company = sqlite_session.get(Company, world["company"].id)
     company.sandbox_env = ["CI"]

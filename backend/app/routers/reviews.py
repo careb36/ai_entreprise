@@ -22,7 +22,7 @@ from services.git_publish import PublishRefused, publish_spec, record_publicatio
 from services.local_merge import record_run_merge, run_merge_spec
 from services.review_sync import SyncRefused, import_comments, sync_spec
 from services.run_review import ReviewRefused, check_comment_target, submit_review
-from services.workspace_daemon import (
+from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
     DaemonUnavailable,

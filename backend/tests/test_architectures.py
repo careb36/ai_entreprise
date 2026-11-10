@@ -14,7 +14,13 @@ from models import BacklogItem, Company, Sprint
 from models.architecture import Architecture
 from models.company import ProjectDiscovery
 from models.specification import Specification
-from services import arch_author, arch_check, spec_author, spec_check, spec_planning
+from services.planning import (
+    arch_author,
+    arch_check,
+    spec_author,
+    spec_check,
+    spec_planning,
+)
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import GOOD
 

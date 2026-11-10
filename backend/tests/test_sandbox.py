@@ -17,13 +17,9 @@ import sandbox as daemon_sandbox  # the daemon's module, on sys.path via conftes
 import shell_exec
 from config import settings
 from models.company import Company
-from services import (
-    delivery_checks,
-    developer_tools,
-    sandbox,
-    verification,
-    workspace_daemon,
-)
+from services import delivery_checks, verification
+from services.tools import developer_tools
+from services.workspace import sandbox, workspace_daemon
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 

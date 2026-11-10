@@ -30,15 +30,9 @@ from models import (
     TaskEvent,
 )
 from models.company import CompanyMember, User
-from services import (
-    acceptance,
-    board_moves,
-    carry_over,
-    locks,
-    replicas,
-    sprint_close,
-)
+from services import board_moves, carry_over, locks, replicas, sprint_close
 from services.board import is_send_back, rework_requests_by
+from services.evidence import acceptance
 from services.loop.worker import close as worker_close
 from services.loop.worker import procedures_round
 from sqlmodel import Session, select

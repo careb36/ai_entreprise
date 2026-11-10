@@ -23,7 +23,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ProjectDiscovery, Specification, User
 from pydantic import BaseModel, Field
-from services import (
+from services.planning import (
     document_approval,
     spec_author,
     spec_check,
