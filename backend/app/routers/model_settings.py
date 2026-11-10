@@ -26,7 +26,12 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, ProviderConnection, User
 from pydantic import BaseModel
-from services import company_models, model_record, model_suggestions, routing_record
+from services.models import (
+    company_models,
+    model_record,
+    model_suggestions,
+    routing_record,
+)
 from sqlmodel import Session, select
 
 logger = logging.getLogger("fabrique")

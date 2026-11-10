@@ -20,10 +20,11 @@ import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import board, scrum_master, task_worker
+from services import scrum_master, task_worker
 from services.loop.worker import close as worker_close
 from services.loop.worker import qa_review
 from services.loop.worker import review as worker_review
+from services.tasks import board
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture

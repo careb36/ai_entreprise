@@ -14,7 +14,7 @@ import pytest
 from config import settings
 from llm_proxy_client import LLMProxyClient
 from models import ProviderConnection
-from services import provider_connections
+from services.models import provider_connections
 from test_specifications import _company
 
 

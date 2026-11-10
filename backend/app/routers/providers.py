@@ -22,8 +22,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import ProviderConnection, User
 from pydantic import BaseModel, Field
-from services import model_catalog
-from services import provider_connections as connections
+from services.models import model_catalog
+from services.models import provider_connections as connections
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Providers"])

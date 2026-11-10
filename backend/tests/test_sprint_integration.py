@@ -22,17 +22,10 @@ from config import settings
 from history_check import check_events
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import (
-    integration,
-    integration_jobs,
-    locks,
-    replicas,
-    sprint_close,
-    task_events,
-    task_worker,
-)
+from services import integration, integration_jobs, replicas, sprint_close, task_worker
 from services.loop.worker import close as worker_close
-from services.platform import hooks
+from services.platform import hooks, locks
+from services.tasks import task_events
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))

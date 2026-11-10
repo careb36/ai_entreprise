@@ -331,7 +331,7 @@ def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypat
     assert blocked.status == "blocked"
     assert blocked.comments[-1]["text"].startswith(sprint_team.OFF_TEAM_PREFIX)
     # Blocked for a person: the sprint can close around it.
-    from services.board import item_is_settled
+    from services.tasks.board import item_is_settled
 
     assert item_is_settled(blocked)
     # Loading it again writes nothing more.

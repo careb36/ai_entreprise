@@ -51,7 +51,7 @@ from routers import (
 )
 from security import get_cors_origins, setup_security
 from services import integration_jobs, webhooks
-from services.healthcheck import aggregate
+from services.platform.healthcheck import aggregate
 
 settings = Settings()
 # A delivery for the company's webhook joins every change it reports.

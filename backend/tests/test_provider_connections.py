@@ -11,7 +11,7 @@ from __future__ import annotations
 import httpx
 import pytest
 from models import ProviderConnection
-from services import provider_connections as connections
+from services.models import provider_connections as connections
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 

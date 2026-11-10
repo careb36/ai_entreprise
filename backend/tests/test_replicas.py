@@ -26,12 +26,14 @@ import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import locks, replicas, scrum_master, task_events
+from services import replicas, scrum_master
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import messages as worker_messages
 from services.loop.worker import procedures_round
 from services.loop.worker import review as worker_review
+from services.platform import locks
+from services.tasks import task_events
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
 from test_review_gate import _FakeNATS

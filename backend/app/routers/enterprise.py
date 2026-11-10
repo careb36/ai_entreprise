@@ -1,5 +1,4 @@
-"""
-Enterprise router — multi-tenancy governance, quota management, and analytics.
+"""Enterprise router — multi-tenancy governance, quota management, and analytics.
 
 Endpoints:
 - ``POST /v1/init_company``        — bootstrap a new company with agents and credentials.
@@ -37,9 +36,10 @@ from schemas import (
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
-from services import git_setup, memory_graph
+from services import git_setup
 from services.company_service import CompanyService
 from services.discovery_service import DiscoveryService
+from services.platform import memory_graph
 from services.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,

@@ -12,7 +12,8 @@ import hashlib
 
 import file_edits
 import pytest
-from services import edit_blocks, research_tools, standards, verification
+from services import research_tools, standards, verification
+from services.contracts import edit_blocks
 from services.task_worker import parse_file_manifest
 from test_task_delivery import _load_daemon
 

@@ -7,8 +7,8 @@ import pytest
 from audit_chain import chain_hash, verify_chain
 from audit_signing import SIGNED_PREFIX, UNSIGNED_PREFIX
 from models.audit import AuditLog
-from services.agent_service import AgentService
-from services.orchestration_metrics import record_agent_turn
+from services.platform.agent_service import AgentService
+from services.platform.orchestration_metrics import record_agent_turn
 from sqlmodel import select
 
 

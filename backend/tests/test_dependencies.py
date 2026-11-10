@@ -14,7 +14,8 @@ import pytest
 import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
-from services import dependencies, spec_author, spec_check, sprint_control
+from services import spec_author, spec_check, sprint_control
+from services.tasks import dependencies
 from sqlmodel import select
 from test_specifications import GOOD
 
@@ -292,7 +293,7 @@ def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_
         == f'Blocked: waits for task {endpoint.id} ("Endpoint"), which waits for a person.'
     )
     # The sprint can close around them: nothing the worker does moves them.
-    from services.board import block_reason, item_is_settled
+    from services.tasks.board import block_reason, item_is_settled
 
     assert item_is_settled(endpoint) and item_is_settled(page)
     assert block_reason(endpoint.comments).startswith("Blocked: waits for task")

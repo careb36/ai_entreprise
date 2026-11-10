@@ -484,7 +484,9 @@ def test_lineage_query_uses_company_column(
     neo_session = driver.session.return_value.__enter__.return_value
     neo_session.run.return_value = [{"engram_id": "owned-engram"}]
     monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-    monkeypatch.setattr("services.memory_graph.get_neo4j_driver", lambda: driver)
+    monkeypatch.setattr(
+        "services.platform.memory_graph.get_neo4j_driver", lambda: driver
+    )
 
     response = test_client.get(
         "/v1/enterprise/lineage",

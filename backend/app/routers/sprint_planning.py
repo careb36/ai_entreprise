@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Company, User
 from pydantic import BaseModel
 from schemas import SCOPE_LIMITS, SelfImprovementSprintRequest, SprintPlanRequest
-from services import dependencies, spec_planning, sprint_team
+from services import spec_planning, sprint_team
 from services.sprint_planner import (
     build_self_improvement_objective,
     plan_execution_sprint,
@@ -29,6 +29,7 @@ from services.sprint_planner import (
 from services.sprint_planner import (
     plan_self_improvement_sprint as build_self_improvement_plan,
 )
+from services.tasks import dependencies
 from sqlmodel import Session
 
 router = APIRouter()

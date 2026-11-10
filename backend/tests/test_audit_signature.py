@@ -15,7 +15,7 @@ from audit_signing import (
     verify_audit_row,
 )
 from models.audit import AuditLog
-from services.agent_service import AgentService
+from services.platform.agent_service import AgentService
 from sqlmodel import Session
 
 

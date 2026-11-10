@@ -7,11 +7,11 @@ import pytest
 from config import settings
 from models import BacklogItem, Company, CompanyMember, Sprint, User
 from services import console_assistants, scrum_master
-from services.board import CARRIED_FROM_PREFIX
-from services.orchestration_metrics import (
+from services.platform.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     format_architect_consult_comment,
 )
+from services.tasks.board import CARRIED_FROM_PREFIX
 from sqlmodel import select
 
 

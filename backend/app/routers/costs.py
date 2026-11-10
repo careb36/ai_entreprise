@@ -11,7 +11,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import BacklogItem, Sprint, User
 from models.agent_run import AgentRun
-from services import run_cost
+from services.models import run_cost
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Costs"])

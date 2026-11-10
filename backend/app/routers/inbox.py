@@ -27,14 +27,9 @@ from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
-from services import (
-    integration,
-    scrum_master,
-    sprint_archive,
-    task_events,
-    task_projection,
-)
+from services import integration, scrum_master, sprint_archive
 from services.carry_over import carried_over, carry_mark
+from services.tasks import task_events, task_projection
 from sqlalchemy import func
 from sqlmodel import Session, select
 

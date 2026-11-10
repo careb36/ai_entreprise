@@ -630,7 +630,7 @@ def test_a_delivery_no_browser_observed_waits_for_a_person_at_any_level(
     hold = item.comments[-1]
     assert hold["author"] == "System"
     assert browser_smoke.UNOBSERVED_REASON in hold["text"]
-    from services.board import awaits_risk_acceptance, pending_rework_feedback
+    from services.tasks.board import awaits_risk_acceptance, pending_rework_feedback
 
     assert awaits_risk_acceptance(item.comments)
     assert not pending_rework_feedback(item.comments)

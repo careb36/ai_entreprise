@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import pytest
 from models import Agent, Company, ProviderConnection
-from services import company_models, model_routing, scrum_master, spec_author
+from services import scrum_master, spec_author
 from services.loop.worker import execute as worker_execute
+from services.models import company_models, model_routing
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
 from test_specifications import _company

@@ -26,7 +26,7 @@ from models.agent_run import (
 )
 from models.review import ReviewComment, RunReview
 from models.sprint import BacklogItem, Sprint
-from services.board import (
+from services.tasks.board import (
     RISK_HOLD_PREFIX,
     is_send_back,
     pending_rework_feedback,

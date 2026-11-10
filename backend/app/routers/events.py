@@ -4,7 +4,7 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
-from services import events, task_events, task_projection
+from services.tasks import events, task_events, task_projection
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Company"])

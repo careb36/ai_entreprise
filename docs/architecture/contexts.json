@@ -6,9 +6,6 @@
       "responsibility": "The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.",
       "depends_on": [],
       "modules": [
-        "edit_blocks",
-        "roles",
-        "sandbox_schemas",
         "standards_catalogue"
       ]
     },
@@ -20,15 +17,10 @@
       ],
       "modules": [
         "agent_service",
-        "api_tokens",
         "glassroom",
-        "healthcheck",
         "idempotency",
         "locks",
-        "memory_graph",
-        "orchestration_metrics",
-        "run_secrets",
-        "token_usage"
+        "orchestration_metrics"
       ]
     },
     "tasks": {
@@ -40,8 +32,6 @@
       ],
       "modules": [
         "board",
-        "dependencies",
-        "events",
         "task_events",
         "task_projection"
       ]
@@ -55,15 +45,7 @@
         "tasks"
       ],
       "modules": [
-        "company_models",
-        "model_catalog",
-        "model_prices",
-        "model_record",
-        "model_routing",
-        "model_suggestions",
-        "provider_connections",
-        "routing_record",
-        "run_cost"
+        "company_models"
       ]
     },
     "evidence": {

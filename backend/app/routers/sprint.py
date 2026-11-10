@@ -33,15 +33,15 @@ from schemas import (
 from services import (
     acceptance,
     board_moves,
-    dependencies,
-    run_cost,
     spec_check,
     spec_planning,
     sprint_archive,
     sprint_team,
-    task_events,
 )
-from services.board import (
+from services.carry_over import CarryOverError, carry_over
+from services.models import run_cost
+from services.tasks import dependencies, task_events
+from services.tasks.board import (
     count_architect_advice,
     count_console_advice,
     count_second_attempt,
@@ -50,7 +50,6 @@ from services.board import (
     no_second_attempts,
     rework_request_count,
 )
-from services.carry_over import CarryOverError, carry_over
 from sqlalchemy import case, func
 from sqlmodel import Session, select
 

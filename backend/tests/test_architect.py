@@ -12,7 +12,7 @@ from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import architect
 from services.loop.worker import execute as worker_execute
-from services.orchestration_metrics import (
+from services.platform.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     format_architect_consult_comment,
 )

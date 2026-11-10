@@ -21,7 +21,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from models import Company, User
 from models.manager import ManagerDecision
 from services import manager_actions, manager_brief, manager_policy, manager_record
-from services.agent_service import AgentService
+from services.platform.agent_service import AgentService
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Company"])

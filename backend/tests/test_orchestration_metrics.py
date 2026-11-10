@@ -11,10 +11,8 @@ import inspect
 
 import pytest
 from models import AuditLog
-from sqlmodel import Session, SQLModel, create_engine, select
-
-from app.services import orchestration_metrics as om
-from app.services.orchestration_metrics import (
+from services.platform import orchestration_metrics as om
+from services.platform.orchestration_metrics import (
     ARCHITECT_CONSULT_MARKER,
     build_agent_turn_details,
     canonical_kpi_role,
@@ -28,6 +26,7 @@ from app.services.orchestration_metrics import (
     should_consult_architect,
     usage_status,
 )
+from sqlmodel import Session, SQLModel, create_engine, select
 
 
 @pytest.fixture

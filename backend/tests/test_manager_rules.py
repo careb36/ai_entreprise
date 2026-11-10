@@ -33,9 +33,9 @@ from services import (
     scrum_master,
     spec_check,
 )
-from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
 from services.carry_over import CARRY_MARK_PREFIX, carry_mark
 from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.tasks.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
 from sqlmodel import select
 from test_architectures import GOOD_ARCH
 from test_manager_agent import _company, _cycle, _hold, _policy, _rows, answer
@@ -990,7 +990,7 @@ def test_a_hold_note_is_never_read_as_a_deliverable_after_a_mark():
         {"author": "System", "text": f"{RISK_HOLD_PREFIX} (auth)."},
         {"author": MANAGER_AGENT_NAME, "text": f"{CARRY_MARK_PREFIX}: x"},
     ]
-    from services.board import blocked_item_next_step
+    from services.tasks.board import blocked_item_next_step
 
     assert blocked_item_next_step(comments, "Developer") is None
     assert is_send_back({"author": "Manager agent", "text": f"{SEND_BACK_MARKER}."})
