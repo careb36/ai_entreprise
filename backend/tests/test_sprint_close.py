@@ -27,7 +27,7 @@ from services.loop.worker import review as worker_review
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
-from test_review_gate import _FakeNATS
+from test_review_gate import DELIVERABLE, _FakeNATS
 
 llm = llm_fixture  # the fake proxy client from test_llm_routing, as a fixture here
 
@@ -206,6 +206,34 @@ def test_a_retry_in_the_same_cycle_keeps_the_sprint_open(db, monkeypatch):
     db.expire_all()
     assert db.get(BacklogItem, failed.id).status == "todo"
     assert db.get(Sprint, sprint.id).status == "active"
+
+
+def test_approving_the_last_open_task_closes_the_sprint_in_that_cycle(db, monkeypatch):
+    """The approval closes its sprint on the spot: the cycle's own closing pass
+    looks only at sprints holding a blocked task, and this one holds none."""
+    sprint = _sprint(db)
+    _item(db, sprint, "done")
+    last = _item(
+        db,
+        sprint,
+        "in_review",
+        comments=[{"author": "Dev", "text": DELIVERABLE, "created_at": ""}],
+    )
+    monkeypatch.setattr(
+        qa_review, "_call_llm_for_review", lambda *a, **k: "APPROVED: complete"
+    )
+
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
+
+    db.expire_all()
+    assert db.get(BacklogItem, last.id).status == "done"
+    assert db.get(Sprint, sprint.id).status == "completed"
+    retro = db.exec(
+        select(AgentMessage).where(
+            AgentMessage.sprint_id == sprint.id, AgentMessage.kind == "retrospective"
+        )
+    ).one()
+    assert "Completed 2/2 tasks" in retro.body
 
 
 # ---------------------------------------------------------------------------

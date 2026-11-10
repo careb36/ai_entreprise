@@ -14,12 +14,13 @@ import pytest
 import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company
+from models.event import TaskEvent
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import qa_review
 from services.loop.worker import review as worker_review
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120
 
@@ -184,6 +185,79 @@ def test_reply_without_a_verdict_is_a_failed_review_not_an_approval(
     assert comments[-1][0] == "System"
     assert comments[-1][1].startswith("QA review failed")
     assert "without APPROVED:/NEEDS WORK:" in comments[-1][1]
+
+
+def _events(session: Session, item_id: int) -> list[TaskEvent]:
+    return session.exec(
+        select(TaskEvent).where(TaskEvent.task_id == item_id).order_by(TaskEvent.id)
+    ).all()
+
+
+def test_after_too_many_failed_reviews_the_task_is_blocked_without_asking_qa(
+    db, monkeypatch
+):
+    """Each unusable answer is a failed review; once ``MAX_QA_REVIEW_FAILURES``
+    are recorded the next cycle blocks the task with the reason instead of
+    asking QA again, even if QA would now approve."""
+    item_id = _item_in_review(db, None)
+    for _ in range(worker_review.MAX_QA_REVIEW_FAILURES):
+        assert len(_run_cycle(monkeypatch, "Looks fine to me.", db, item_id)) == 1
+        assert _state(db, item_id)[0] == "in_review"
+
+    calls = _run_cycle(monkeypatch, "APPROVED: fine now", db, item_id)
+
+    assert calls == []
+    assert _state(db, item_id)[0] == "blocked"
+    events = _events(db, item_id)
+    assert [e.event_type for e in events].count(
+        "review_failed"
+    ) == worker_review.MAX_QA_REVIEW_FAILURES
+    last = events[-1]
+    assert (last.event_type, last.task_status, last.payload.get("reason")) == (
+        "blocked",
+        "blocked",
+        "review retries exhausted",
+    )
+
+
+def test_a_task_qa_blocks_is_not_retried_by_the_same_cycle(db, monkeypatch):
+    """QA's last rework blocks the task for a person; the cycle's retry pass,
+    which runs right after, neither re-queues it nor sends it back to review."""
+    item_id = _item_in_review(db, None)
+    item = db.get(BacklogItem, item_id)
+    item.comments = (
+        item.comments
+        + [
+            {"author": "QA", "text": "NEEDS WORK: earlier", "created_at": ""}
+            for _ in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES)
+        ]
+        + [{"author": "Dev", "text": DELIVERABLE, "created_at": ""}]
+    )
+    db.add(item)
+    db.commit()
+    title = item.title
+    monkeypatch.setattr(
+        qa_review,
+        "_call_llm_for_review",
+        lambda agent, prompt, **kwargs: (
+            "NEEDS WORK: still no tests" if title in prompt else None
+        ),
+    )
+    nats = _FakeNATS()
+
+    asyncio.run(worker_review._review_cycle(nats))
+
+    assert _state(db, item_id)[0] == "blocked"
+    kinds = [e.event_type for e in _events(db, item_id)]
+    assert kinds[kinds.index("reviewed") :] == ["reviewed", "blocked", "escalated"]
+    # No task.assign for it, and no retry or recovery on Glassroom.
+    assert not [p for _s, p in nats.published if p.get("backlog_item_id") == item_id]
+    assert not [
+        p
+        for _s, p in nats.published
+        if p.get("task_id") == item_id
+        and p.get("semantic_type") in {"task.retry_queued", "task.recovered"}
+    ]
 
 
 def test_needs_work_still_schedules_rework(db, monkeypatch):
