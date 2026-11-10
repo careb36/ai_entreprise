@@ -21,6 +21,8 @@ from services import company_service, sprint_control
 from services import task_worker as tw
 from services.board import RISK_HOLD_PREFIX, awaits_risk_acceptance
 from services.loop.worker import execute as worker_execute
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from sqlmodel import Session, select
 from test_risk_tier import _approve, _item_in_review
 
@@ -256,9 +258,11 @@ def test_a_halted_sprint_s_task_is_not_loaded_reviewed_or_dispatched(
     db.commit()
     reviewed = []
     monkeypatch.setattr(
-        tw, "_call_llm_for_review", lambda *a, **k: reviewed.append(1) or "APPROVED: ok"
+        qa_review,
+        "_call_llm_for_review",
+        lambda *a, **k: reviewed.append(1) or "APPROVED: ok",
     )
-    asyncio.run(tw._review_cycle(_Nats()))
+    asyncio.run(worker_review._review_cycle(_Nats()))
     assert reviewed == []
 
 

@@ -20,6 +20,8 @@ from models.agent_run import AgentRun, Verification
 from services import carry_over, task_worker
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from sqlmodel import select
 
 TRIAGE = "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: too short"
@@ -375,9 +377,9 @@ def test_qa_reviews_the_second_attempt_with_the_previous_attempts_context(
             prompts.append(prompt)
         return "APPROVED: covers every level."
 
-    monkeypatch.setattr(task_worker, "_call_llm_for_review", _review)
+    monkeypatch.setattr(qa_review, "_call_llm_for_review", _review)
 
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
     assert len(prompts) == 1
     assert "## Previous attempt" in prompts[0]

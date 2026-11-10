@@ -30,6 +30,8 @@ from services import (
     task_projection,
     task_worker,
 )
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -144,8 +146,8 @@ def _review(monkeypatch, session, item_id, reply, prompts=None):
             prompts.append(prompt)
         return reply
 
-    monkeypatch.setattr(task_worker, "_call_llm_for_review", _answer)
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    monkeypatch.setattr(qa_review, "_call_llm_for_review", _answer)
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
 
 def _blocked_for_a_person(session, sprint, **fields) -> BacklogItem:
@@ -189,7 +191,7 @@ def test_qa_reviews_the_delivered_event_when_its_comment_was_altered(db, monkeyp
 def test_the_rework_budget_is_counted_from_the_events(db, monkeypatch):
     company = _company(db)
     item = _item(db, _sprint(db, company))
-    limit = task_worker.AUTOPILOT_MAX_REWORK_CYCLES
+    limit = qa_review.AUTOPILOT_MAX_REWORK_CYCLES
     for _ in range(limit):
         task_events.record(
             db, item, "reviewed", "QA", author="QA", text="NEEDS WORK: add tests"

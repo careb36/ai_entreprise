@@ -17,6 +17,8 @@ from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
 from services.loop.worker import execute as worker_execute
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from sqlmodel import Session
 
 DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120
@@ -103,8 +105,8 @@ def _run_cycle(monkeypatch, reply: str | None, session: Session, item_id: int):
             calls.append(prompt)
         return reply
 
-    monkeypatch.setattr(task_worker, "_call_llm_for_review", _review)
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    monkeypatch.setattr(qa_review, "_call_llm_for_review", _review)
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
     return calls
 
 
@@ -133,7 +135,7 @@ def test_delivery_gate_blocks_after_the_rework_limit(db, monkeypatch):
     item_id = _item_in_review(db, "refuted")
     item = db.get(BacklogItem, item_id)
     history = []
-    for attempt in range(task_worker.AUTOPILOT_MAX_REWORK_CYCLES):
+    for attempt in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES):
         history.append(
             {
                 "author": "Verifier",

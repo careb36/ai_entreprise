@@ -22,6 +22,8 @@ from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import board, scrum_master, task_worker
 from services.loop.worker import close as worker_close
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
@@ -168,10 +170,10 @@ def test_the_review_cycle_closes_a_sprint_whose_last_task_got_blocked(db, monkey
         comments=[{"author": "Quality gate", "text": TRIAGE}],
     )
     monkeypatch.setattr(
-        task_worker, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
+        qa_review, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
     )
 
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
     db.expire_all()
     assert db.get(Sprint, sprint.id).status == "completed"
@@ -196,10 +198,10 @@ def test_a_retry_in_the_same_cycle_keeps_the_sprint_open(db, monkeypatch):
         comments=[{"author": "System", "text": "Agent error: boom"}],
     )
     monkeypatch.setattr(
-        task_worker, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
+        qa_review, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
     )
 
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
     db.expire_all()
     assert db.get(BacklogItem, failed.id).status == "todo"
@@ -275,7 +277,7 @@ def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
     llm, db, monkeypatch
 ):
     _short_answer(llm)
-    monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
+    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
     sprint, item = _doc_task(db)
     nats = _task_assign_handler(monkeypatch)
 
@@ -298,9 +300,9 @@ def test_the_gate_blocks_after_the_rework_limit_and_the_sprint_closes(
     assert list(kinds) == [("request", "Developer"), ("escalation", "ScrumMaster")]
 
     monkeypatch.setattr(
-        task_worker, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
+        qa_review, "_call_llm_for_review", lambda *a, **k: "APPROVED: n/a"
     )
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
     db.expire_all()
     assert db.get(Sprint, sprint.id).status == "completed"
@@ -318,7 +320,7 @@ def test_the_scrum_master_answers_the_gates_escalation(llm, db, monkeypatch):
     """Blocked by the gate, the task is escalated and the ScrumMaster's triage is
     recorded with what blocked it; the task stays blocked for a person."""
     _short_answer(llm)
-    monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
+    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 0)
     asked = []
 
     def _ask(model, system_prompt, prompt, company_id=None):
@@ -387,7 +389,7 @@ def test_a_send_back_gives_the_gate_a_fresh_rework_budget(llm, db, monkeypatch):
     """After a person sends a gate-blocked task back, its first short deliverable
     is sent back for rework again, not blocked on the spot."""
     _short_answer(llm)
-    monkeypatch.setattr(task_worker, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
+    monkeypatch.setattr(qa_review, "AUTOPILOT_MAX_REWORK_CYCLES", 1)
     sprint, item = _doc_task(db)
     item.comments = [
         {
