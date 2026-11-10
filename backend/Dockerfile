@@ -27,7 +27,6 @@ RUN poetry config virtualenvs.create false \
 COPY app/     /app/app/
 COPY llm/     /app/llm/
 COPY agents/  /app/agents/
-COPY memory/  /app/memory/
 COPY telemetry.py /app/telemetry.py
 COPY alembic.ini /app/alembic.ini
 COPY alembic/  /app/alembic/

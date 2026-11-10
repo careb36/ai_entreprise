@@ -5,7 +5,9 @@ This module handles the "burning" of Engrams into the Neo4j Temporal Knowledge G
 Engrams are immutable episodic memory nodes that capture architectural decisions,
 PRs, test results, and other critical state changes in the LangGraph workflow.
 
-The DeepSeek LLM processes and summarizes decisions before writing to Neo4j.
+The DeepSeek LLM processes and summarizes decisions before writing to Neo4j;
+its caller hands in the model (``burn_engram(llm=...)``): platform may not
+import the models context that builds it (``docs/architecture/contexts.json``).
 
 The graph is optional and off by default (``NEO4J_ENABLED``, issue #328).
 Off, an engram is still kept in pgvector for semantic RAG, its graph node is
@@ -23,8 +25,6 @@ from typing import Any
 
 import neo4j
 from memory_client import GraphNotRecorded, MemoryClient
-
-from llm.model_factory import get_llm_for_role
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +113,7 @@ class DeepSeekEngramProcessor:
         related_semantic_refs: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         company_id: int | None = None,
+        llm: Any | None = None,
     ) -> dict[str, Any]:
         """
         Burn an Engram into the Temporal Knowledge Graph and Vector Store.
@@ -122,6 +123,8 @@ class DeepSeekEngramProcessor:
         2. Creates an Episodic node in Neo4j
         3. Stores the summary in pgvector for semantic RAG
         4. Links it to relevant Semantic nodes in Neo4j
+
+        *llm*, built by the caller, analyses the decision; none keeps it as written.
         """
         if related_semantic_refs is None:
             related_semantic_refs = []
@@ -132,7 +135,9 @@ class DeepSeekEngramProcessor:
         engram_type = self._determine_engram_type(role, metadata)
 
         # Use DeepSeek to process and summarize the decision
-        processed_summary = self._process_with_deepseek(decision_summary, engram_type)
+        processed_summary = self._process_with_deepseek(
+            decision_summary, engram_type, llm
+        )
 
         # 1. Create the Engram in Neo4j, when the graph is kept.
         graph = self.graph_enabled
@@ -230,14 +235,15 @@ class DeepSeekEngramProcessor:
             return EngramType.SPRINT_DECISION
 
     def _process_with_deepseek(
-        self, decision_summary: str, engram_type: EngramType
+        self, decision_summary: str, engram_type: EngramType, model: Any | None = None
     ) -> str:
         """
         Use DeepSeek to process and summarize the decision.
 
         This extracts key architectural decisions, patterns, and relationships.
         """
-        model = get_llm_for_role("EngramProcessor")
+        if model is None:
+            return decision_summary
 
         prompt = f"""Analyze this {engram_type.value} decision and extract:
 1. Key architectural patterns or decisions

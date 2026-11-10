@@ -23,6 +23,11 @@ from services import (
     standards,
 )
 from services.loop.worker import deliver as worker_deliver
+from services.models.model_factory import (
+    AgentRole,
+    ModelFactory,
+    default_model_for_role,
+)
 from services.orchestration_metrics import canonical_kpi_role, should_consult_architect
 from test_task_delivery import (  # noqa: F401 - the db fixture is used by name.
     TWO_FILE_ANSWER,
@@ -32,8 +37,6 @@ from test_task_delivery import (  # noqa: F401 - the db fixture is used by name.
     _task_fixture,
     db,
 )
-
-from llm.model_factory import AgentRole, ModelFactory, default_model_for_role
 
 CODING = ("BackendDeveloper", "FrontendDeveloper", "DevOps", "DataEngineer")
 

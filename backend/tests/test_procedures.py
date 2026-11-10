@@ -403,7 +403,7 @@ def test_no_proposal_after_a_clean_sprint(db, monkeypatch):
 
 def test_sprint_close_measures_procedures_and_tells_the_team(db, monkeypatch):
     _scrum_master_answers(monkeypatch, "NONE")
-    from memory import engram_processor
+    from services.platform import engram_processor
 
     monkeypatch.setattr(
         engram_processor,
