@@ -1,4 +1,4 @@
-"""API tokens for external callers (services.api_tokens)."""
+"""API tokens for external callers (services.platform.api_tokens)."""
 
 import secrets
 
@@ -7,7 +7,7 @@ import pytest
 from auth_tokens import create_access_token
 from config import settings
 from models import Company, CompanyMember, User
-from services import api_tokens
+from services.platform import api_tokens
 
 
 def _company(session):

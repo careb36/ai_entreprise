@@ -27,14 +27,11 @@ from fastapi import APIRouter, Depends, Query
 from models import AgentRun, AgentRunApproval, BacklogItem, Procedure, Sprint, User
 from models.agent_run import IN_HOUSE_PRODUCERS
 from models.manager import ManagerDecision
-from services import (
-    integration,
-    scrum_master,
-    sprint_archive,
-    task_events,
-    task_projection,
-)
-from services.carry_over import carried_over, carry_mark
+from services.learning import scrum_master
+from services.loop import sprint_archive
+from services.loop.carry_over import carried_over, carry_mark
+from services.release import integration
+from services.tasks import task_events, task_projection
 from sqlalchemy import func
 from sqlmodel import Session, select
 
@@ -92,7 +89,7 @@ async def inbox(
     suggestions = _suggestions(session, company_id)
     for item, sprint in rows:
         # From the task's events when they render its whole thread, else
-        # from its comments (services/task_projection.py).
+        # from its comments (services/tasks/task_projection.py).
         next_step = records[item.id].next_step()
         if next_step not in (None, "frozen"):
             continue  # the worker still retries or re-reviews it on its own

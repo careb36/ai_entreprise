@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from models import AssistantRuntimeState, Company
-from services import console_assistants, console_capabilities
+from services.producers import console_assistants, console_capabilities
 from sqlmodel import select
 
 COPILOT = "copilot -p {prompt} --output-format json"

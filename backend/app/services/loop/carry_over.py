@@ -9,7 +9,7 @@ its board, marked as carried over, and leaves the person's inbox.
 
 A task is carried over at most once on the company's own initiative; one
 that blocks again stays for a person. The ScrumMaster's triage of the block
-(``services.scrum_master``) is honoured: a task it left for a person is not
+(``services.learning.scrum_master``) is honoured: a task it left for a person is not
 carried on the company's own, and its brief for the next attempt travels
 with the new task into the agent's prompt.
 """

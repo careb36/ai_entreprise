@@ -9,7 +9,7 @@ from models.agent_run import AgentRunApproval
 from models.audit import AuditLog
 from models.company import Company
 from models.sprint import BacklogItem, OutboxEvent, Sprint
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from sqlmodel import SQLModel, select
 
 

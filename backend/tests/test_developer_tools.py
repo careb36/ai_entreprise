@@ -22,9 +22,10 @@ import workspace_read  # the daemon's module, on sys.path via conftest
 from config import settings
 from models.agent_run import AgentRun
 from models.company import Company
-from services import context_read, developer_tools, mcp_config, mcp_tools, risk
+from services.evidence import context_read, risk
+from services.evidence.verification import check_risk_tier, verify_agent_run
 from services.loop.worker import execute as worker_execute
-from services.verification import check_risk_tier, verify_agent_run
+from services.tools import developer_tools, mcp_config, mcp_tools
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 

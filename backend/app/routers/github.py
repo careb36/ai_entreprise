@@ -10,8 +10,8 @@ from fastapi.concurrency import run_in_threadpool
 from models import User
 from models.github import GitHubRepoBinding
 from pydantic import BaseModel, Field
-from services import github_adapter
-from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from services.evidence.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from services.producers import github_adapter
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 

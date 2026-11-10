@@ -1,4 +1,4 @@
-"""The quality standards' catalogue (``services/standards.py`` reads it).
+"""The quality standards' catalogue (``services/evidence/standards.py`` reads it).
 
 A fixed list by discipline that no model, request or procedure edits; kept
 apart from the checks so each file stays readable.

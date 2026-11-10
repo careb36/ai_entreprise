@@ -24,13 +24,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from logging_config import logger
 from models import Company, Sprint, User
 from pydantic import BaseModel, Field
-from services import (
-    git_setup,
-    research_tools,
-    sandbox,
-    sprint_control,
-    stack_profiles,
-)
+from services.loop import sprint_control
+from services.release import git_setup
+from services.tools import research_tools
+from services.workspace import sandbox, stack_profiles
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -413,7 +410,7 @@ async def set_git_workflow(
     """Turn the Git workflow on or off, and name its base branch (Manager).
 
     On: each task's deliveries are commits on ``fabrique/task-<id>``, in a
-    worktree, never in the person's checkout (``services/git_workflow.py``).
+    worktree, never in the person's checkout (``services/workspace/git_workflow.py``).
     """
     require_company_role(session, user, company_id, "Manager")
     company = session.get(Company, company_id)

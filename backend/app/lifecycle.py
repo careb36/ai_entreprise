@@ -15,10 +15,11 @@ from logging_config import logger
 from memory_client import MemoryClient
 from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
-from services import console_capabilities, integration_jobs
-from services.agent_worker import process_agent_tasks
-from services.outbox_service import process_outbox
-from services.task_worker import process_backlog_tasks
+from services.integrations.outbox_service import process_outbox
+from services.loop.task_worker import process_backlog_tasks
+from services.producers import console_capabilities
+from services.producers.agent_worker import process_agent_tasks
+from services.release import integration_jobs
 
 # Retained task references for graceful cancellation on shutdown.
 _background_tasks: set[asyncio.Task] = set()
@@ -231,7 +232,7 @@ async def startup(app):
     # The Support agent needs only the database and the LLM proxy.
     if settings.SUPPORT_AGENT_ENABLED:
         from database import engine
-        from services.support_agent import run_support_agent
+        from services.management.support_agent import run_support_agent
 
         support_task = asyncio.create_task(
             run_support_agent(engine), name="support_agent"
@@ -242,7 +243,7 @@ async def startup(app):
     # So does the Reviewer agent, which suggests on other producers' runs.
     if settings.REVIEWER_AGENT_ENABLED:
         from database import engine
-        from services.reviewer_agent import run_reviewer_agent
+        from services.management.reviewer_agent import run_reviewer_agent
 
         reviewer_task = asyncio.create_task(
             run_reviewer_agent(engine), name="reviewer_agent"
@@ -253,7 +254,7 @@ async def startup(app):
     # And the Manager agent, which suggests on the inbox (issue #331).
     if settings.MANAGER_AGENT_ENABLED:
         from database import engine
-        from services.manager_agent import run_manager_agent
+        from services.management.manager_agent import run_manager_agent
 
         manager_task = asyncio.create_task(
             run_manager_agent(engine, lambda: app.state.nats_client),
@@ -264,7 +265,7 @@ async def startup(app):
 
         # The client's brief by mail, only where SMTP is configured.
         if settings.SMTP_HOST.strip():
-            from services.brief_mail import run_brief_mail
+            from services.management.brief_mail import run_brief_mail
 
             brief_task = asyncio.create_task(
                 run_brief_mail(engine), name="manager_brief_mail"

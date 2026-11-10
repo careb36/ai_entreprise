@@ -92,7 +92,7 @@ def release_listens_to_sprint_closed():
     """A closed sprint's integration starts from ``sprint.closed``, as in the
     backend, where ``main.py`` installs the handler; a test that closes a
     sprint without the app gets it too."""
-    from services import integration_jobs
+    from services.release import integration_jobs
 
     integration_jobs.install()
 
@@ -135,7 +135,7 @@ def no_scrum_master_proxy(monkeypatch):
     A test that blocks a task gets the deterministic default (no decision)
     unless it patches ``scrum_master.ask`` or ``scrum_master.LLMProxyClient``.
     """
-    from services import scrum_master
+    from services.learning import scrum_master
 
     class _NoProxy:
         def __init__(self, base_url=None):

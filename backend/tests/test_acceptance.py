@@ -1,4 +1,4 @@
-"""An acceptance test per criterion (``services.acceptance``): the plan puts
+"""An acceptance test per criterion (``services.evidence.acceptance``): the plan puts
 QA's test-writing tasks first and the implementation tasks after them; the
 runner's per-test lines are read back into criterion ids; through the real
 daemon, QA's failing tests are expected before their implementation, the
@@ -22,9 +22,10 @@ from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.specification import Specification
-from services import acceptance, criteria_tests, spec_check, spec_planning
+from services.evidence import acceptance, criteria_tests
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import record as worker_record
+from services.planning import spec_check, spec_planning
 from sqlmodel import select
 from test_specifications import GOOD
 

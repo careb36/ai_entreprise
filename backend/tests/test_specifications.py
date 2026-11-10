@@ -1,6 +1,6 @@
 """The specification: numbered requirements with testable criteria, checked
 deterministically, drafted by the PO from a brief, approved by a person, and
-covered by the tasks of the sprints planned from it (``services.spec_check``,
+covered by the tasks of the sprints planned from it (``services.planning.spec_check``,
 ``spec_author``, ``spec_planning``, ``routers/specifications.py``).
 """
 
@@ -10,7 +10,7 @@ import secrets
 import pytest
 from models import BacklogItem, Company, Sprint
 from models.specification import Specification
-from services import spec_author, spec_check, spec_planning
+from services.planning import spec_author, spec_check, spec_planning
 from test_git_workflow import _member, enforcement  # noqa: F401
 
 
@@ -651,7 +651,7 @@ def test_the_po_plans_tasks_that_name_the_criteria_they_cover(
     plan = planned.json()
     assert plan["specification_id"] == spec.id and plan["sprint_name"] == "Board 1"
     # QA's test-writing task of REQ-1 comes first; the implementation tasks
-    # depend on it (``services.acceptance``).
+    # depend on it (``services.evidence.acceptance``).
     assert [t["covers"] for t in plan["tasks"]] == [
         ["REQ-1.1", "REQ-1.2"],
         ["REQ-1.1", "REQ-1.2"],
@@ -829,7 +829,7 @@ def test_the_prompts_carry_the_requirements_a_task_covers_and_nothing_more(
 
 
 def test_a_carried_task_keeps_what_it_covers(sqlite_session, test_client):
-    from services.carry_over import carry_over
+    from services.loop.carry_over import carry_over
 
     company = _company(sqlite_session)
     spec = _approved(sqlite_session, company)

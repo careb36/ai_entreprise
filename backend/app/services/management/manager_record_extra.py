@@ -52,7 +52,7 @@ def _integration(session: Session, row: ManagerDecision) -> str | None:
 def _delivery(session: Session, row: ManagerDecision) -> str | None:
     from models import AgentRun
 
-    from services.delivery_undo import UNDO_ACTION
+    from services.release.delivery_undo import UNDO_ACTION
 
     run = session.get(AgentRun, row.item_id)
     if run is None:

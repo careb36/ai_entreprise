@@ -1,5 +1,5 @@
 """
-services/scrum_master.py: the ScrumMaster answers an escalation.
+services/learning/scrum_master.py: the ScrumMaster answers an escalation.
 
 - The answer is asked for in a fixed format; only that format is a decision.
 - The decision is recorded as a message to the assignee (another attempt,
@@ -16,8 +16,9 @@ import secrets
 import pytest
 import worker_stages
 from models import Agent, AgentMessage, BacklogItem, Company, Sprint
-from services import carry_over, scrum_master
-from services.board import CARRIED_FROM_PREFIX
+from services.learning import scrum_master
+from services.loop import carry_over
+from services.tasks.board import CARRIED_FROM_PREFIX
 from sqlmodel import select
 
 TRIAGE = (

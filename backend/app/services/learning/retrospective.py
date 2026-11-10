@@ -32,7 +32,7 @@ def build(engine: Any, sprint_id: int) -> dict[str, Any]:
 
             sprint = session.get(Sprint, sprint_id)
             # The tasks' events in one query; each answer reads them when they
-            # cover the thread (services/task_projection.py).
+            # cover the thread (services/tasks/task_projection.py).
             records = task_projection.records_for(session, list(items))
             total = len(items)
             done = sum(1 for i in items if i.status == "done")

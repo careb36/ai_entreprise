@@ -36,7 +36,7 @@ Kinds:
 - ``legacy``: the migration found a thread it could not read back whole.
 
 Each event with text carries the flags the board's questions read
-(``services/task_projection.py``): ``verdict``, ``explicit_block``,
+(``services/tasks/task_projection.py``): ``verdict``, ``explicit_block``,
 ``needs_person``, ``retryable``, ``retry``, ``frozen``. The writer passes them
 when it knows them; otherwise they follow from the rendered text, read once
 here, when the event is written.
@@ -116,7 +116,7 @@ def actor_for(author: str | None) -> str:
 def flags_for(author: str, text: str) -> dict[str, Any]:
     """What a rendered comment says for the board's questions, read once.
 
-    The same rules ``services/board.py`` applies to a thread, applied to one
+    The same rules ``services/tasks/board.py`` applies to a thread, applied to one
     comment when its event is written, so a projection over the events and
     the readers over the thread give the same answers.
     """

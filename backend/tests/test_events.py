@@ -1,4 +1,4 @@
-"""Task lifecycle events (services.events)."""
+"""Task lifecycle events (services.tasks.events)."""
 
 import secrets
 
@@ -7,7 +7,7 @@ import pytest
 from auth_tokens import create_access_token
 from config import settings
 from models import Company, CompanyMember, Sprint, User
-from services import events
+from services.tasks import events
 
 
 @pytest.fixture()

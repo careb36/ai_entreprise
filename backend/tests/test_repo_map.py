@@ -16,9 +16,9 @@ import repo_map as daemon_map  # the daemon's module, on sys.path via conftest
 import worker_stages
 import workspace_read
 from config import settings
-from services import developer_tools
-from services import repo_map as prompt_map
 from services.loop.worker import execute as worker_execute
+from services.tools import developer_tools
+from services.tools import repo_map as prompt_map
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 

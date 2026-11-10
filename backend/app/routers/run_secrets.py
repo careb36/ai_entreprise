@@ -7,7 +7,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
 from pydantic import BaseModel, Field
-from services import run_secrets
+from services.platform import run_secrets
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1/run-secrets", tags=["Company"])

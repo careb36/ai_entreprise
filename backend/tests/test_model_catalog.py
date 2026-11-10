@@ -11,7 +11,7 @@ import httpx
 import pytest
 from config import settings
 from models import ProviderConnection
-from services import model_catalog, provider_connections
+from services.models import model_catalog, provider_connections
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 

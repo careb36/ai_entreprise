@@ -34,9 +34,11 @@ from models import (
 )
 from models.company import Company, CompanyMember, User
 from models.manager import ManagerDecision
-from services import api_tokens, manager_policy, sprint_archive, sprint_control
-from services import task_events as te
-from services.carry_over import CarryOverError, carry_over
+from services.loop import sprint_archive, sprint_control
+from services.loop.carry_over import CarryOverError, carry_over
+from services.management import manager_policy
+from services.platform import api_tokens
+from services.tasks import task_events as te
 from sqlmodel import Session, select
 
 
@@ -542,7 +544,7 @@ def test_an_archived_sprint_is_hidden_from_lists_inbox_and_carry_over(
     assert everything[0]["archived_at"] == archived["archived_at"]
     inbox = test_client.get(f"/v1/inbox?company_id={cid}", headers=owner).json()
     assert inbox["blocked_tasks"] == [] and inbox["blocked_total"] == 0
-    from services.manager_inbox import waiting_tasks
+    from services.management.manager_inbox import waiting_tasks
 
     assert waiting_tasks(sqlite_session, cid) == []
     new = Sprint(company_id=cid, sprint_name="next", status="active")
@@ -571,7 +573,7 @@ def test_an_archived_sprint_is_hidden_from_lists_inbox_and_carry_over(
 
 
 def test_an_archived_sprints_integration_leaves_the_inbox(sqlite_session):
-    from services import integration
+    from services.release import integration
 
     sprint = _sprint(sqlite_session, status="completed")
     sqlite_session.add(

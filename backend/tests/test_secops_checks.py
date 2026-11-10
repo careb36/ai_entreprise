@@ -1,6 +1,6 @@
-"""SecOps scans as verification checks (services.secops_checks)."""
+"""SecOps scans as verification checks (services.evidence.secops_checks)."""
 
-from services import secops_checks
+from services.evidence import secops_checks
 
 
 def test_clean_scans_pass():

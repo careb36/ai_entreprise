@@ -1,4 +1,4 @@
-"""Dependencies between the tasks of a sprint (``services.dependencies``):
+"""Dependencies between the tasks of a sprint (``services.tasks.dependencies``):
 the plan names them, ``start_sprint`` keeps and checks them, the worker
 queues a task only once what it depends on is done, a task waiting on one
 a person must act on is blocked with the reason and released when that
@@ -15,8 +15,10 @@ import pytest
 import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
-from services import dependencies, spec_author, spec_check, sprint_control
+from services.loop import sprint_control
 from services.loop.worker import intake, task_run
+from services.planning import spec_author, spec_check
+from services.tasks import dependencies
 from sqlmodel import select
 from test_specifications import GOOD
 
@@ -338,7 +340,7 @@ def test_a_task_waiting_on_one_left_for_a_person_is_blocked_with_the_reason_and_
         == f'Blocked: waits for task {endpoint.id} ("Endpoint"), which waits for a person.'
     )
     # The sprint can close around them: nothing the worker does moves them.
-    from services.board import block_reason, item_is_settled
+    from services.tasks.board import block_reason, item_is_settled
 
     assert item_is_settled(endpoint) and item_is_settled(page)
     assert block_reason(endpoint.comments).startswith("Blocked: waits for task")
@@ -486,7 +488,7 @@ def test_a_closed_sprint_is_left_alone(sqlite_session):
 def test_a_carried_task_keeps_a_dependency_carried_with_it_and_drops_the_rest(
     sqlite_session,
 ):
-    from services.carry_over import carry_over
+    from services.loop.carry_over import carry_over
 
     company = _company(sqlite_session)
     old = _sprint(sqlite_session, company, status="completed")

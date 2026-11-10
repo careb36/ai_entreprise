@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 import auth_tokens
 from config import settings
 from models.company import Company, CompanyMember, User
-from services import mcp_client
+from services.tools import mcp_client
 
 
 @pytest.fixture(autouse=True)

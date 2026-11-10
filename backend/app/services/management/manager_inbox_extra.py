@@ -360,7 +360,7 @@ def _branch_items(
 
 
 def _integration_items(session: Session, company: Company) -> list[dict]:
-    from services import integration
+    from services.release import integration
 
     items = []
     sprints = session.exec(
@@ -417,8 +417,8 @@ def person_since(comments: Any, since: datetime | None, record: Any = None) -> b
 
 
 def _undo_items(session: Session, company: Company) -> list[dict]:
-    from services.delivery_undo import snapshot_of
     from services.evidence.review_changes import latest_workspace_report
+    from services.release.delivery_undo import snapshot_of
 
     items = []
     refs = session.exec(

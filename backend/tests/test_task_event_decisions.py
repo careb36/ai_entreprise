@@ -19,19 +19,11 @@ from uuid import uuid4
 import pytest
 import worker_stages
 from models import AgentRun, BacklogItem, Company, Sprint, Verification
-from services import (
-    board,
-    carry_over,
-    dependencies,
-    procedures,
-    scrum_master,
-    sprint_control,
-    task_events,
-    task_projection,
-    task_worker,
-)
+from services.learning import procedures, scrum_master
+from services.loop import carry_over, sprint_control, task_worker
 from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review
+from services.tasks import board, dependencies, task_events, task_projection
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -388,7 +380,7 @@ def test_the_manager_agents_carry_over_mark_is_read_from_its_events(db):
 def test_qa_approval_and_a_persons_note_are_read_from_the_events(db):
     from datetime import UTC, datetime, timedelta
 
-    from services import manager_inbox_extra
+    from services.management import manager_inbox_extra
 
     item = _item(db, _sprint(db, _company(db)), status="done")
     task_events.record(
@@ -427,7 +419,7 @@ def _risk_hold(session, item, reason="high tier"):
 def test_the_agents_acceptance_takes_the_chain_lock_before_claiming_the_row(
     db, monkeypatch
 ):
-    from services import manager_actions
+    from services.management import manager_actions
     from sqlalchemy import event
 
     item = _item(db, _sprint(db, _company(db, autonomy=1)), status="blocked")
@@ -459,7 +451,7 @@ def test_the_agents_acceptance_takes_the_chain_lock_before_claiming_the_row(
 
 def test_an_integration_note_never_hides_a_risk_hold(db):
     from models.integration import SprintIntegration
-    from services import integration_events
+    from services.release import integration_events
 
     sprint = _sprint(db, _company(db, autonomy=1))
     item = _item(db, sprint, status="blocked")
@@ -511,7 +503,7 @@ def test_an_integration_note_never_hides_a_risk_hold(db):
 
 
 def test_an_autonomy_one_hold_is_told_from_its_event(db):
-    from services import manager_inbox
+    from services.management import manager_inbox
 
     company = _company(db, autonomy=1)
     item = _item(db, _sprint(db, company), status="blocked")

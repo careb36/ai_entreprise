@@ -14,12 +14,12 @@ from models.agent_run import (
     Verification,
 )
 from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificationRequest
-from services.agent_run_service import ArtifactTooLargeError, ingest_agent_run
-from services.delivery_undo import snapshot_of
-from services.review_changes import run_changes
-from services.reviewer_agent import track_record as reviewer_track_record
-from services.run_review import record_approval
-from services.verification import verify_agent_run
+from services.evidence.agent_run_service import ArtifactTooLargeError, ingest_agent_run
+from services.evidence.review_changes import run_changes
+from services.evidence.verification import verify_agent_run
+from services.loop.run_review import record_approval
+from services.management.reviewer_agent import track_record as reviewer_track_record
+from services.release.delivery_undo import snapshot_of
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
 

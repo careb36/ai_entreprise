@@ -22,20 +22,19 @@ from models import (
 from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.integration import SprintIntegration
 from models.review import RunPublication
-from services import (
-    arch_check,
-    carry_over,
+from services.learning import scrum_master
+from services.loop import carry_over
+from services.loop.carry_over import CARRY_MARK_PREFIX, carry_mark
+from services.management import (
     manager_actions,
     manager_observe,
     manager_policy,
     manager_record,
     manager_rules,
-    scrum_master,
-    spec_check,
 )
-from services.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
-from services.carry_over import CARRY_MARK_PREFIX, carry_mark
-from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.management.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.planning import arch_check, spec_check
+from services.tasks.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
 from sqlmodel import select
 from test_architectures import GOOD_ARCH
 from test_manager_agent import _company, _cycle, _hold, _policy, _rows, answer
@@ -806,7 +805,7 @@ def test_a_done_task_s_branch_is_merged_locally_and_the_override_only_recorded(
 def test_no_daemon_leaves_the_merge_pending_and_a_refusal_fails_it(
     sqlite_session, daemon
 ):
-    from services.workspace_daemon import DaemonError, DaemonUnavailable
+    from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 
     _, answers = daemon
     company = _company(sqlite_session)
@@ -990,7 +989,7 @@ def test_a_hold_note_is_never_read_as_a_deliverable_after_a_mark():
         {"author": "System", "text": f"{RISK_HOLD_PREFIX} (auth)."},
         {"author": MANAGER_AGENT_NAME, "text": f"{CARRY_MARK_PREFIX}: x"},
     ]
-    from services.board import blocked_item_next_step
+    from services.tasks.board import blocked_item_next_step
 
     assert blocked_item_next_step(comments, "Developer") is None
     assert is_send_back({"author": "Manager agent", "text": f"{SEND_BACK_MARKER}."})

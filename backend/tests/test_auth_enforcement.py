@@ -19,7 +19,7 @@ from models import (
 )
 from models.agent_run import AgentRun
 from models.github import GitHubRepoBinding
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from sqlmodel import select
 from test_github_adapter import _webhook
 
@@ -167,7 +167,7 @@ def test_only_owner_can_invite(test_client, sqlite_session, identity, role, expe
 @pytest.fixture
 def company_services(monkeypatch):
     monkeypatch.setattr(
-        "services.company_service.plan_foundation_sprint",
+        "services.loop.company_service.plan_foundation_sprint",
         lambda **kwargs: {"goal": "Test", "tasks": []},
     )
     monkeypatch.setattr(CompanyService, "_seed_neo4j", lambda *args: None)
@@ -202,7 +202,9 @@ def test_owner_bootstrap_rolls_back_with_company(
     def fail_plan(**kwargs):
         raise RuntimeError("Planning failed")
 
-    monkeypatch.setattr("services.company_service.plan_foundation_sprint", fail_plan)
+    monkeypatch.setattr(
+        "services.loop.company_service.plan_foundation_sprint", fail_plan
+    )
     response = test_client.post(
         "/v1/init_company", json={"company_name": "Rollback"}, headers=identity[2]
     )
@@ -484,7 +486,9 @@ def test_lineage_query_uses_company_column(
     neo_session = driver.session.return_value.__enter__.return_value
     neo_session.run.return_value = [{"engram_id": "owned-engram"}]
     monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-    monkeypatch.setattr("services.memory_graph.get_neo4j_driver", lambda: driver)
+    monkeypatch.setattr(
+        "services.platform.memory_graph.get_neo4j_driver", lambda: driver
+    )
 
     response = test_client.get(
         "/v1/enterprise/lineage",

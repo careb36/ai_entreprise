@@ -7,7 +7,7 @@ import pytest
 from config import settings
 from models import Company
 from models.agent_run import AgentRun, AgentRunApproval, Verification
-from services import reviewer_agent
+from services.management import reviewer_agent
 
 APPROVE = """DECISION: approve
 CATEGORY: none

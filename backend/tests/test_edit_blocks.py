@@ -12,8 +12,10 @@ import hashlib
 
 import file_edits
 import pytest
-from services import edit_blocks, research_tools, standards, verification
-from services.task_worker import parse_file_manifest
+from services.contracts import edit_blocks
+from services.evidence import standards, verification
+from services.loop.task_worker import parse_file_manifest
+from services.tools import research_tools
 from test_task_delivery import _load_daemon
 
 EDIT_DELIVERABLE = """Changed the greeting.

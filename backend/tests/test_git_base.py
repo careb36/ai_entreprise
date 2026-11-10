@@ -23,8 +23,9 @@ import pytest
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.integration import SprintIntegration
-from services import git_setup, git_workflow, integration_publish
 from services.loop.worker import deliver as worker_deliver
+from services.release import git_setup, integration_publish
+from services.workspace import git_workflow
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))

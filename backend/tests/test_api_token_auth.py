@@ -6,7 +6,7 @@ import auth_tokens
 import pytest
 from config import settings
 from models import Company
-from services import api_tokens
+from services.platform import api_tokens
 
 
 @pytest.fixture()

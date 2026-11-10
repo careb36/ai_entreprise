@@ -25,7 +25,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import AssistantRuntimeState, Company, User
 from pydantic import BaseModel, Field
-from services import console_assistants, console_clis, sandbox
+from services.producers import console_assistants, console_clis
+from services.workspace import sandbox
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Core"])

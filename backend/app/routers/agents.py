@@ -38,8 +38,8 @@ from logging_config import logger
 from models import AuditLog, BacklogItem, BusinessUnit, Sprint, User
 from models.agent_run import AgentRun
 from schemas import AuditRequest, GenerateRequest
-from services import memory_graph
-from services.agent_service import AgentService
+from services.platform import memory_graph
+from services.platform.agent_service import AgentService
 from sqlmodel import Session, or_, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])

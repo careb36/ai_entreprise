@@ -298,7 +298,7 @@ def check_tests_run(evidence: dict) -> dict:
         all_excused, excused = criteria_tests.excused_failures(evidence)
         if all_excused:
             # An acceptance test fails before its implementation, by design;
-            # only those failed here (``services.acceptance``).
+            # only those failed here (``services.evidence.acceptance``).
             return {
                 "name": "tests_run",
                 "outcome": "pass",
@@ -418,7 +418,7 @@ def verify_agent_run(
     # e2e run (``services/app_check.py``), as the daemon reported them.
     checks.extend(app_check.checks(evidence))
     if evidence and evidence.get("acceptance"):
-        # The acceptance tests per criterion (``services.acceptance``): what the
+        # The acceptance tests per criterion (``services.evidence.acceptance``): what the
         # observed run said of this task's criteria, and that an implementation
         # task left the test files alone.
         for check in (
@@ -450,7 +450,7 @@ def verify_agent_run(
     if console_check:
         checks.append(console_check)
     # The factory's standards over the files the deliverable declares
-    # (``services.standards``): a secret refutes, the rest is for the reviewer.
+    # (``services.evidence.standards``): a secret refutes, the rest is for the reviewer.
     # The edit tool's files too: what the delivery wrote for them (an observation).
     standards_check = standards.check_delivery(
         run.artifact_text, context_read.edited_texts(evidence)

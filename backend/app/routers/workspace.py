@@ -10,7 +10,7 @@ not need to see the user's disk.
 from auth_policy import current_user_if_required, require_authenticated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import User
-from services.workspace_daemon import (
+from services.workspace.workspace_daemon import (
     BROWSE_TIMEOUT_SECONDS,
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,

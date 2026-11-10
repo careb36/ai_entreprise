@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from services import spec_check
+from services.planning import spec_check
 
 REPO = Path(__file__).resolve().parents[2]
 BENCH = REPO / "bench"

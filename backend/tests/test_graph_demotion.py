@@ -8,7 +8,8 @@ import database
 import pytest
 from models.agent_run import AgentRun
 from models.company import Company
-from services import agent_run_service, agent_worker
+from services.evidence import agent_run_service
+from services.producers import agent_worker
 from services.producers import graph as graph_module
 from sqlmodel import Session, select
 
@@ -85,7 +86,7 @@ async def test_worker_runs_graph_when_enabled(monkeypatch):
 
 
 def test_generate_rejects_when_graph_is_disabled(monkeypatch, test_client):
-    from services.agent_service import AgentService
+    from services.platform.agent_service import AgentService
 
     monkeypatch.setattr(config.settings, "AGENT_GRAPH_ENABLED", False)
     generate_package = AsyncMock()
@@ -107,7 +108,7 @@ def test_generate_rejects_when_graph_is_disabled(monkeypatch, test_client):
 def test_generate_keeps_existing_behavior_when_graph_is_enabled(
     monkeypatch, test_client
 ):
-    from services.agent_service import AgentService
+    from services.platform.agent_service import AgentService
 
     monkeypatch.setattr(config.settings, "AGENT_GRAPH_ENABLED", True)
     generate_package = AsyncMock(return_value="enabled-route-1")

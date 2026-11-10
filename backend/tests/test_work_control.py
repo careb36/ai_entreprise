@@ -17,11 +17,11 @@ import worker_stages
 from config import settings
 from models.company import Company, CompanyMember, User
 from models.sprint import BacklogItem, OutboxEvent, Sprint
-from services import company_service, sprint_control
-from services.board import RISK_HOLD_PREFIX, awaits_risk_acceptance
+from services.loop import company_service, sprint_control
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import intake, qa_review, task_run
 from services.loop.worker import review as worker_review
+from services.tasks.board import RISK_HOLD_PREFIX, awaits_risk_acceptance
 from sqlmodel import Session, select
 from test_risk_tier import _approve, _item_in_review
 

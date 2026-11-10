@@ -1,15 +1,11 @@
 {
-  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update). A module in services/<context>/ belongs to that context by its folder; the flat services/<module>.py a migrated module leaves behind is a re-export shim listed under its owner's context until nothing imports it (ADR 0016).",
+  "$comment": "The contexts of backend/app/services and the dependency rule between them (docs/ARCHITECTURE.md, ADR 0012). Checked by scripts/check_architecture.py; the allowlist holds the edges that broke the rule when it was adopted and may only shrink (--update). A module in services/<context>/ belongs to that context by its folder. The flat services/<module>.py shims of the migration are gone (ADR 0016, step 15); a context's modules list names a flat module only while one is left.",
   "contexts": {
     "contracts": {
       "path": "backend/app/services/contracts/",
       "responsibility": "The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.",
       "depends_on": [],
-      "modules": [
-        "edit_blocks",
-        "roles",
-        "sandbox_schemas"
-      ]
+      "modules": []
     },
     "platform": {
       "path": "backend/app/services/platform/",
@@ -17,16 +13,7 @@
       "depends_on": [
         "contracts"
       ],
-      "modules": [
-        "agent_service",
-        "api_tokens",
-        "healthcheck",
-        "locks",
-        "memory_graph",
-        "orchestration_metrics",
-        "run_secrets",
-        "token_usage"
-      ]
+      "modules": []
     },
     "tasks": {
       "path": "backend/app/services/tasks/",
@@ -35,13 +22,7 @@
         "contracts",
         "platform"
       ],
-      "modules": [
-        "board",
-        "dependencies",
-        "events",
-        "task_events",
-        "task_projection"
-      ]
+      "modules": []
     },
     "models": {
       "path": "backend/app/services/models/",
@@ -51,17 +32,7 @@
         "platform",
         "tasks"
       ],
-      "modules": [
-        "company_models",
-        "model_catalog",
-        "model_prices",
-        "model_record",
-        "model_routing",
-        "model_suggestions",
-        "provider_connections",
-        "routing_record",
-        "run_cost"
-      ]
+      "modules": []
     },
     "evidence": {
       "path": "backend/app/services/evidence/",
@@ -70,20 +41,7 @@
         "contracts",
         "platform"
       ],
-      "modules": [
-        "acceptance",
-        "agent_run_service",
-        "app_check",
-        "browser_smoke",
-        "context_read",
-        "criteria_tests",
-        "delivery_gate",
-        "review_changes",
-        "risk",
-        "secops_checks",
-        "standards",
-        "verification"
-      ]
+      "modules": []
     },
     "workspace": {
       "path": "backend/app/services/workspace/",
@@ -92,13 +50,7 @@
         "contracts",
         "platform"
       ],
-      "modules": [
-        "git_workflow",
-        "sandbox",
-        "sandbox_manager",
-        "stack_profiles",
-        "workspace_daemon"
-      ]
+      "modules": []
     },
     "tools": {
       "path": "backend/app/services/tools/",
@@ -109,18 +61,7 @@
         "evidence",
         "workspace"
       ],
-      "modules": [
-        "developer_tool_replies",
-        "developer_tools",
-        "edit_lint",
-        "mcp_client",
-        "mcp_config",
-        "mcp_tools",
-        "repo_map",
-        "research_tools",
-        "tool_history",
-        "workspace_edits"
-      ]
+      "modules": []
     },
     "learning": {
       "path": "backend/app/services/learning/",
@@ -131,11 +72,7 @@
         "tasks",
         "models"
       ],
-      "modules": [
-        "architect",
-        "procedures",
-        "scrum_master"
-      ]
+      "modules": []
     },
     "planning": {
       "path": "backend/app/services/planning/",
@@ -149,19 +86,7 @@
         "workspace",
         "tools"
       ],
-      "modules": [
-        "arch_author",
-        "arch_check",
-        "discovery_service",
-        "document_approval",
-        "spec_author",
-        "spec_check",
-        "spec_diff",
-        "spec_impact",
-        "spec_planning",
-        "sprint_planner",
-        "sprint_team"
-      ]
+      "modules": []
     },
     "producers": {
       "path": "backend/app/services/producers/",
@@ -175,14 +100,7 @@
         "workspace",
         "tools"
       ],
-      "modules": [
-        "agent_worker",
-        "console_assistants",
-        "console_capabilities",
-        "console_clis",
-        "console_producer",
-        "github_adapter"
-      ]
+      "modules": []
     },
     "loop": {
       "path": "backend/app/services/loop/",
@@ -199,22 +117,7 @@
         "planning",
         "producers"
       ],
-      "modules": [
-        "answers",
-        "board_moves",
-        "carry_over",
-        "company_service",
-        "console_host",
-        "delivery_checks",
-        "edit_plan",
-        "replicas",
-        "review_digest",
-        "run_review",
-        "sprint_archive",
-        "sprint_close",
-        "sprint_control",
-        "task_worker"
-      ]
+      "modules": []
     },
     "release": {
       "path": "backend/app/services/release/",
@@ -229,17 +132,7 @@
         "planning",
         "loop"
       ],
-      "modules": [
-        "delivery_undo",
-        "git_publish",
-        "git_setup",
-        "integration",
-        "integration_events",
-        "integration_jobs",
-        "integration_publish",
-        "local_merge",
-        "review_sync"
-      ]
+      "modules": []
     },
     "integrations": {
       "path": "backend/app/services/integrations/",
@@ -250,10 +143,7 @@
         "tasks",
         "evidence"
       ],
-      "modules": [
-        "outbox_service",
-        "webhooks"
-      ]
+      "modules": []
     },
     "management": {
       "path": "backend/app/services/management/",
@@ -273,22 +163,7 @@
         "release",
         "integrations"
       ],
-      "modules": [
-        "brief_mail",
-        "manager_actions",
-        "manager_actions_extra",
-        "manager_agent",
-        "manager_brief",
-        "manager_inbox",
-        "manager_inbox_extra",
-        "manager_observe",
-        "manager_policy",
-        "manager_record",
-        "manager_record_extra",
-        "manager_rules",
-        "reviewer_agent",
-        "support_agent"
-      ]
+      "modules": []
     }
   },
   "allowlist": []

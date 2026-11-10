@@ -3,13 +3,13 @@
 A specification is a numbered list of requirements, each with acceptance
 criteria written as *given / when / then*, beside the quality attributes
 (each with a number to measure it by) and the constraints. The ids
-(``REQ-1``, ``REQ-1.2``, ``NFR-1``) are assigned by ``services.spec_check``,
+(``REQ-1``, ``REQ-1.2``, ``NFR-1``) are assigned by ``services.planning.spec_check``,
 never by a model, so a task can name the criteria it covers and the board
 can show which of them got done.
 
 The PO drafts it from a person's brief and asks what it could not decide
 (``questions``); a person answers, edits and approves. A draft is a claim;
-the deterministic check (``services.spec_check``) decides whether it can be
+the deterministic check (``services.planning.spec_check``) decides whether it can be
 approved, and the board decides whether it was met. An approved version is
 never edited: a revision is a new draft that supersedes it on approval.
 """

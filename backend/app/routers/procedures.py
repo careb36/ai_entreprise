@@ -9,7 +9,7 @@ Endpoints:
 - ``POST /v1/procedures/{id}/retire``     — retire an active procedure (Manager).
 
 Adopting records the board's numbers before the procedure; the task worker
-keeps or reverts it from the numbers after (``services.procedures``).
+keeps or reverts it from the numbers after (``services.learning.procedures``).
 """
 
 from auth_policy import current_user_if_required, require_company_role
@@ -18,7 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Procedure, User
 from models.procedure import PROCEDURE_STATUSES
 from pydantic import BaseModel, Field
-from services import procedures, standards
+from services.evidence import standards
+from services.learning import procedures
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])

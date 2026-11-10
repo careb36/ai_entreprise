@@ -1,6 +1,6 @@
 """The company's models: a default (``default_model``) and one per role
 (``role_models``, a JSON object keyed by role), used when an agent's own model
-is empty (``services/company_models.py``). Both nullable: an existing company
+is empty (``services/models/company_models.py``). Both nullable: an existing company
 keeps the deployment's ``AGENT_MODEL`` settings, as before.
 
 Revision ID: 0008

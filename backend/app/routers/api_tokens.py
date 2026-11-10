@@ -5,7 +5,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, User
 from pydantic import BaseModel, Field
-from services import api_tokens
+from services.platform import api_tokens
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/auth/tokens", tags=["Company"])

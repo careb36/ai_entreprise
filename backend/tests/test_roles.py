@@ -13,22 +13,21 @@ import asyncio
 import pytest
 from config import settings
 from models import Company
-from services import (
-    company_models,
-    developer_tools,
-    edit_plan,
-    model_suggestions,
-    research_tools,
-    roles,
-    standards,
-)
+from services.contracts import roles
+from services.evidence import standards
+from services.loop import edit_plan
 from services.loop.worker import deliver as worker_deliver
+from services.models import company_models, model_suggestions
 from services.models.model_factory import (
     AgentRole,
     ModelFactory,
     default_model_for_role,
 )
-from services.orchestration_metrics import canonical_kpi_role, should_consult_architect
+from services.platform.orchestration_metrics import (
+    canonical_kpi_role,
+    should_consult_architect,
+)
+from services.tools import developer_tools, research_tools
 from test_task_delivery import (  # noqa: F401 - the db fixture is used by name.
     TWO_FILE_ANSWER,
     _DaemonOverNATS,

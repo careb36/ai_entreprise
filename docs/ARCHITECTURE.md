@@ -120,7 +120,7 @@ The backend's services are divided into fourteen contexts, each with one respons
 ```
 VERDICT_VERIFIED = "verified"; VERDICT_REFUTED = "refuted"; VERDICT_UNVERIFIABLE = "unverifiable"
 Gate authors: QUALITY_GATE_AUTHOR = "Quality gate", DELIVERY_GATE_AUTHOR = "Verifier"
-(today in services/orchestration_metrics.py and services/board.py; re-exported there after the move)
+(today in services/platform/orchestration_metrics.py and services/tasks/board.py; re-exported there after the move)
 ```
 
 ### IF-2: Delivery manifest

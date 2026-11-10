@@ -9,7 +9,7 @@ import crypto
 import pytest
 from cryptography.fernet import Fernet
 from models import BacklogItem, Company, RunSecret, Sprint
-from services import run_secrets
+from services.platform import run_secrets
 from test_git_workflow import _member, enforcement  # noqa: F401
 
 KEY = Fernet.generate_key().decode()

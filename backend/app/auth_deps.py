@@ -5,7 +5,7 @@ from database import get_session
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from models import User
-from services import api_tokens
+from services.platform import api_tokens
 from sqlmodel import Session
 
 bearer = HTTPBearer(auto_error=False)

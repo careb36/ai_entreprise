@@ -16,7 +16,7 @@ from models.agent_run import AgentRun, Verification
 from models.company import Company
 from models.event import TaskEvent
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services.loop import task_worker
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review

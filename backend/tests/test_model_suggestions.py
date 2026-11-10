@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 from models import ProviderConnection
-from services import model_catalog, model_suggestions
+from services.models import model_catalog, model_suggestions
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 
@@ -179,7 +179,7 @@ def _delivered(session, company, sprint_status, model, outcomes, role="Developer
 
 def test_the_companys_record_decides_once_it_has_one(sqlite_session, catalog):
     """``model_record``: counted from completed sprints, by the last delivery."""
-    from services import model_record
+    from services.models import model_record
 
     company = _company(sqlite_session)
     conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
@@ -214,7 +214,7 @@ def test_the_companys_record_decides_once_it_has_one(sqlite_session, catalog):
 def test_a_record_of_mostly_blocked_tasks_never_outranks_the_rule(
     sqlite_session, catalog
 ):
-    from services import model_record
+    from services.models import model_record
 
     company = _company(sqlite_session)
     conn = _connection(sqlite_session, company, listed=LISTED, ok=True)
@@ -235,7 +235,7 @@ def test_a_record_of_mostly_blocked_tasks_never_outranks_the_rule(
 def test_a_task_counts_for_the_model_of_its_last_delivery(sqlite_session):
     from models import BacklogItem, Sprint
     from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
-    from services import model_record
+    from services.models import model_record
 
     company = _company(sqlite_session)
     sprint = Sprint(company_id=company.id, sprint_name="S", status="completed")

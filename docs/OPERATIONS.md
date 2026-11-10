@@ -219,8 +219,8 @@ the backend has a fixed `container_name` and port, so a second replica is a
 second service or a second host; `docker compose up --scale backend=2` does
 not work as the file stands.
 
-What makes several replicas safe (`backend/app/services/replicas.py`,
-`backend/app/services/locks.py`):
+What makes several replicas safe (`backend/app/services/loop/replicas.py`,
+`backend/app/services/platform/locks.py`):
 
 - **Assignments.** Replicas share one durable JetStream consumer
   (`task-worker`), so each stored assignment goes to one of them. A second

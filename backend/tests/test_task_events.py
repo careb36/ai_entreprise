@@ -1,7 +1,7 @@
 """A task's life as events (issue #324): ``services/task_events.record`` writes
 every transition as an event and renders it as the board comment; the
-projections over the events (``services/task_projection.py``) answer the
-board's questions as the comment readers (``services/board.py``) do; the
+projections over the events (``services/tasks/task_projection.py``) answer the
+board's questions as the comment readers (``services/tasks/board.py``) do; the
 history checker refuses a thread and events that disagree; the migration
 backfills events from a legacy thread; ``GET /v1/tasks/{id}/events`` is
 company-scoped."""
@@ -30,19 +30,11 @@ from models import (
     User,
     Verification,
 )
-from services import (
-    board,
-    carry_over,
-    dependencies,
-    run_review,
-    scrum_master,
-    sprint_control,
-    task_events,
-    task_projection,
-    task_worker,
-)
+from services.learning import scrum_master
+from services.loop import carry_over, run_review, sprint_control, task_worker
 from services.loop.worker import board_writes, qa_review
 from services.loop.worker import review as worker_review
+from services.tasks import board, dependencies, task_events, task_projection
 from sqlalchemy import text
 from sqlmodel import Session, create_engine, select
 

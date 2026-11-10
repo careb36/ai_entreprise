@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
 import platform_reviews
 from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication
-from services.run_review import feedback_text
+from services.loop.run_review import feedback_text
 from test_git_workflow import _company, _member, enforcement  # noqa: F401
 
 PR_URL = "https://github.com/ana/app/pull/12"

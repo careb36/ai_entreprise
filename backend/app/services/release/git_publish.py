@@ -1,7 +1,7 @@
 """Publishing a run's branch as a pull request (GitHub) or merge request (GitLab).
 
 With the Git workflow on, a task's deliveries are commits on
-``fabrique/task-<id>`` (``services/git_workflow.py``). A Manager publishes
+``fabrique/task-<id>`` (``services/workspace/git_workflow.py``). A Manager publishes
 that branch: the workspace daemon pushes it to the repository's ``origin``
 with the person's own Git credentials and opens a draft request with ``gh``
 or ``glab``, or answers with the page where a person opens one

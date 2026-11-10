@@ -17,7 +17,7 @@ import pytest
 import worker_stages
 from models import AgentMessage, BacklogItem, Company, OutboxEvent, Sprint
 from models.agent_run import AgentRun, Verification
-from services import carry_over, task_worker
+from services.loop import carry_over, task_worker
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import qa_review

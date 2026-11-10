@@ -18,7 +18,7 @@ from models.agent_run import TASK_WORKER_PRODUCER  # noqa: F401 - re-exported
 
 from services.contracts.manifest import parse_file_manifest  # noqa: F401 - re-exported
 
-# Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
+# Re-exported for importers of ``services.loop.task_worker`` (ADR 0014); a test
 # patches the stage module (``services.loop.worker.<stage>``), which owns them.
 from services.loop.worker.board_writes import (  # noqa: F401 - re-exported
     _append_item_comment,

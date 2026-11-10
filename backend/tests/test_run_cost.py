@@ -14,9 +14,9 @@ from config import settings
 from models import AuditLog, BacklogItem, Company, CompanyMember, Sprint, User
 from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
 from models.provider import ProviderConnection
-from services import model_catalog, model_prices, run_cost
-from services.orchestration_metrics import record_agent_turn
-from services.token_usage import usage_fields
+from services.models import model_catalog, model_prices, run_cost
+from services.platform.orchestration_metrics import record_agent_turn
+from services.platform.token_usage import usage_fields
 
 CATALOG = {
     "source": "models.dev",

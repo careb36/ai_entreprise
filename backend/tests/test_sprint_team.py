@@ -16,9 +16,9 @@ from unittest.mock import patch
 import pytest
 import worker_stages
 from models import Agent, BacklogItem, Company, Sprint
-from services import spec_planning, sprint_planner, sprint_team
 from services.loop.worker import close as worker_close
 from services.loop.worker import task_run
+from services.planning import spec_planning, sprint_planner, sprint_team
 from sqlmodel import select
 from test_work_control import _member, auth_on  # noqa: F401 - fixture used by name.
 
@@ -332,7 +332,7 @@ def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypat
     assert blocked.status == "blocked"
     assert blocked.comments[-1]["text"].startswith(sprint_team.OFF_TEAM_PREFIX)
     # Blocked for a person: the sprint can close around it.
-    from services.board import item_is_settled
+    from services.tasks.board import item_is_settled
 
     assert item_is_settled(blocked)
     # Loading it again writes nothing more.
@@ -487,7 +487,7 @@ def _blocked_task(session, company, assignee="BackendDeveloper", status="blocked
 def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_over(
     sqlite_session, test_client, monkeypatch, status
 ):
-    from services import carry_over
+    from services.loop import carry_over
 
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
@@ -530,7 +530,7 @@ def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_ove
 def test_start_sprint_refuses_a_carried_task_off_its_team_before_marking_it(
     sqlite_session, test_client
 ):
-    from services import carry_over
+    from services.loop import carry_over
 
     company = _company(sqlite_session)
     item = _blocked_task(sqlite_session, company)

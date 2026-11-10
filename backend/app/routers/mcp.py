@@ -21,7 +21,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import McpServer, User
 from pydantic import BaseModel, Field
-from services import mcp_client, mcp_config
+from services.tools import mcp_client, mcp_config
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Agents"])

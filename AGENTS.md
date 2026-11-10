@@ -107,14 +107,14 @@ venv's interpreter.
   not require `./reset_infra.sh` (or `docker compose down -v`) for a routine
   column addition.
 - **Evidence layer.** Agent work is ingested as `AgentRun` (+ `AgentRunApproval`,
-  `Verification`) and verified deterministically in `services/verification.py`,
-  `services/board.py`, `services/reviewer_agent.py`. Claims (what an agent says
+  `Verification`) and verified deterministically in `services/evidence/verification.py`,
+  `services/tasks/board.py`, `services/management/reviewer_agent.py`. Claims (what an agent says
   it did) and observations (what the daemon reports from disk) never share a
   field; `unverifiable` is a verdict of its own; no LLM decides whether a claim
   holds; hashes or signatures are never taken from the party being recorded.
 - **Async path.** Sprint tasks go sprint → transactional outbox
-  (`OutboxEvent`, `services/outbox_service.py`) → NATS JetStream
-  (`task.assign`) → `services/task_worker.py` (LLM call) → the daemon
+  (`OutboxEvent`, `services/integrations/outbox_service.py`) → NATS JetStream
+  (`task.assign`) → `services/loop/task_worker.py` (LLM call) → the daemon
   (`workspace.generate`, `workspace.execute`) → verification → review loop.
   The LangGraph graph (`backend/agents/graph.py`) is only an optional kickoff
   producer (`AGENT_GRAPH_ENABLED`).

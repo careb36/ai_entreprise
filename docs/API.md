@@ -317,7 +317,7 @@ is not the same as deciding whether it happened. See `services/risk.py`.
 
 No model decides any of these. The checks are deterministic; see
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) and
-`backend/app/services/verification.py`.
+`backend/app/services/evidence/verification.py`.
 
 ### 5. A person decides
 

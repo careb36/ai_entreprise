@@ -4,7 +4,7 @@ It names the modules (each with its responsibility, its place in the
 repository, what it depends on and which requirements it covers), the
 interfaces between them (a contract a test can hold them to), the decisions
 taken and why (ADRs), and the conventions every task follows. The ids
-(``MOD-1``, ``IF-2``, ``ADR-3``) are assigned by ``services.arch_check``,
+(``MOD-1``, ``IF-2``, ``ADR-3``) are assigned by ``services.planning.arch_check``,
 never by a model.
 
 The Architect drafts it from the specification and the project; a person

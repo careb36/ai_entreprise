@@ -22,17 +22,11 @@ from config import settings
 from history_check import check_events
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import (
-    integration,
-    integration_jobs,
-    locks,
-    replicas,
-    sprint_close,
-    task_events,
-    task_worker,
-)
+from services.loop import replicas, sprint_close, task_worker
 from services.loop.worker import close as worker_close
-from services.platform import hooks
+from services.platform import hooks, locks
+from services.release import integration, integration_jobs
+from services.tasks import task_events
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -1282,7 +1276,7 @@ def test_the_acceptance_coverage_is_read_once_per_specification(
     sqlite_session, monkeypatch
 ):
     from models.specification import Specification
-    from services import spec_planning
+    from services.planning import spec_planning
 
     company = _company(sqlite_session)
     spec = Specification(company_id=company.id, title="Auth", status="approved")

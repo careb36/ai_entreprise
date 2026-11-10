@@ -14,7 +14,7 @@ import pytest
 from config import settings
 from llm_proxy_client import LLMProxyClient
 from models import ProviderConnection
-from services import provider_connections
+from services.models import provider_connections
 from test_specifications import _company
 
 
@@ -167,11 +167,10 @@ def test_scrum_master_and_authoring_clients_carry_the_company(monkeypatch):
     """A ``conn:`` model needs the company on the client: the ScrumMaster's
     questions and the PO's and Architect's drafts pass it on."""
     import llm_proxy_client
-    from services import scrum_master
+    from services.learning import scrum_master
+    from services.planning import spec_author
 
-    from app.services import spec_author
-
-    # Through its shim, ``app.services.scrum_master`` is now the one module
+    # Through its shim, ``app.services.learning.scrum_master`` is now the one module
     # conftest stubs, so the real client is put back for this test.
     monkeypatch.setattr(scrum_master, "LLMProxyClient", llm_proxy_client.LLMProxyClient)
     seen = []

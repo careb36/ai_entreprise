@@ -1,5 +1,5 @@
 """
-services/board.py: how a task's comment thread is read.
+services/tasks/board.py: how a task's comment thread is read.
 
 - A carry-over note quotes another task's verdict and never counts as this
   task's: a clone keeps its retry.
@@ -16,11 +16,11 @@ services/board.py: how a task's comment thread is read.
 """
 
 from models import BacklogItem
-from services import board
-from services.orchestration_metrics import (
+from services.platform.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     format_architect_consult_comment,
 )
+from services.tasks import board
 
 TRIAGE = (
     "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: x"

@@ -32,7 +32,7 @@ only moves forward. A sprint reopened from ``cancelled`` never closed, so its
 first close is a full one.
 
 ``carry_to_sprint`` is the board's "Move to sprint…": a blocked task waiting
-for a person is carried (``services.carry_over``: once only, the original
+for a person is carried (``services.loop.carry_over``: once only, the original
 marked, the new task told what blocked it) into another open sprint of the
 company or into a new one. A ``todo`` task is first blocked with a note
 saying a person moved it, and then carried the same way. Refused (409): a task

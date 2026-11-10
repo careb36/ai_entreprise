@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from services import arch_check, spec_check
+from services.planning import arch_check, spec_check
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "check_architecture.py"

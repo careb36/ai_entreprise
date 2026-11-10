@@ -178,7 +178,7 @@ def test_init_company_stores_credentials_through_encrypt_value(
 ):
     """The one production writer must not put a bare value in the column."""
     from models.company import ProjectCredential
-    from services import company_service
+    from services.loop import company_service
     from sqlmodel import select
 
     key = Fernet.generate_key().decode()

@@ -29,9 +29,9 @@ from models.manager import ManagerDecision
 from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
-from services import integration
 from services.management import manager_agent, manager_record
 from services.management.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.release import integration
 from services.tasks import task_projection
 from services.tasks.board import comment_list
 

@@ -20,18 +20,20 @@ import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import procedures, risk, task_worker
-from services.board import (
+from services.evidence import risk
+from services.evidence.verification import check_risk_tier
+from services.learning import procedures
+from services.loop import task_worker
+from services.loop.carry_over import carry_over_on_the_companys_own
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
+from services.tasks.board import (
     RISK_HOLD_PREFIX,
     SEND_BACK_MARKER,
     awaits_risk_acceptance,
     blocked_item_next_step,
     item_is_settled,
 )
-from services.carry_over import carry_over_on_the_companys_own
-from services.loop.worker import qa_review
-from services.loop.worker import review as worker_review
-from services.verification import check_risk_tier
 from sqlmodel import Session, select
 
 DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120

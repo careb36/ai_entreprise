@@ -89,7 +89,7 @@ class LLMProxyClient:
     ) -> tuple[str, dict[str, Any] | None]:
         """The model to send and the headers updated for a company connection;
         an error answer instead when the connection cannot be used."""
-        from services import provider_connections
+        from services.models import provider_connections
 
         try:
             sent, extra = provider_connections.proxy_route(model, self.company_id)

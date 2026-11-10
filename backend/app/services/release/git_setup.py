@@ -1,6 +1,6 @@
 """Whether a company's folder is a git repository, and its Git workflow set from that.
 
-The Git workflow (``services/git_workflow.py``) writes each task on a branch
+The Git workflow (``services/workspace/git_workflow.py``) writes each task on a branch
 in a worktree; a folder that is not a repository has no branch to write on.
 So when a company is created or its folder recorded, the workflow is set
 from what the workspace daemon observed in the folder (``workspace.inspect``:

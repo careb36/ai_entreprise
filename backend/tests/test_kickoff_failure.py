@@ -17,8 +17,9 @@ import config
 import pytest
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import agent_run_service, agent_worker
+from services.evidence import agent_run_service
 from services.loop.worker.close import _complete_sprint_and_plan_follow_up
+from services.producers import agent_worker
 from services.producers import graph as graph_module
 
 
@@ -91,7 +92,7 @@ async def test_kickoff_failure_keeps_sprint_active_and_reports(
     sqlite_engine = sqlite_session.get_bind()
     nats = _FakeNATSClient()
 
-    with patch("services.agent_worker.engine", sqlite_engine):
+    with patch("services.producers.agent_worker.engine", sqlite_engine):
         await agent_worker.process_agent_tasks(nats)
         await nats.callback(
             SimpleNamespace(subject="workspace.generate"),
@@ -145,7 +146,7 @@ async def test_workflow_error_result_does_not_mark_needs_split(
     sprint_id, _ = _insert_sprint_with_items(sqlite_session)
     nats = _FakeNATSClient()
 
-    with patch("services.agent_worker.engine", sqlite_session.get_bind()):
+    with patch("services.producers.agent_worker.engine", sqlite_session.get_bind()):
         await agent_worker.process_agent_tasks(nats)
         await nats.callback(
             SimpleNamespace(subject="workspace.generate"),
@@ -177,7 +178,7 @@ async def test_explicit_split_decision_still_marks_needs_split(
     sprint_id, _ = _insert_sprint_with_items(sqlite_session)
     nats = _FakeNATSClient()
 
-    with patch("services.agent_worker.engine", sqlite_session.get_bind()):
+    with patch("services.producers.agent_worker.engine", sqlite_session.get_bind()):
         await agent_worker.process_agent_tasks(nats)
         await nats.callback(
             SimpleNamespace(subject="workspace.generate"),

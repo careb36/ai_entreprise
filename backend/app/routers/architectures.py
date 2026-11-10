@@ -12,7 +12,7 @@ Endpoints (``/v1/architectures``):
 - ``POST   /{id}/revise``             — a new draft version of an approved one (Manager).
 - ``POST   /{id}/write``              — write it into the repository through the daemon (Manager).
 
-The ids of modules, interfaces and decisions come from ``services.arch_check``,
+The ids of modules, interfaces and decisions come from ``services.planning.arch_check``,
 never from a request or a model; the check decides what can be approved.
 """
 
@@ -26,8 +26,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import BaseModel, Field
-from services import arch_author, arch_check, document_approval, repo_map
-from services.workspace_daemon import DaemonError, DaemonUnavailable
+from services.planning import arch_author, arch_check, document_approval
+from services.tools import repo_map
+from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/architectures", tags=["Core"])

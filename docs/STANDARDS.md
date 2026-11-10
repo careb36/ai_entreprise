@@ -1,7 +1,7 @@
 # Quality standards
 
 What La Fabrique holds every project to, by discipline. The catalogue lives in
-`backend/app/services/standards.py` and is the same for every company: no
+`backend/app/services/evidence/standards.py` and is the same for every company: no
 model, no request and no procedure edits it. The standards go into every
 prompt by role (the PO's draft, the Architect's design, each task, QA's
 review), they bind before any task-specific instruction, and a company

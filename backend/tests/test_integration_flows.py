@@ -414,7 +414,7 @@ class TestGitHubToVerificationPipeline:
         assert bind_response.status_code == 201
 
         # Mock GitHub API calls
-        from services import github_adapter
+        from services.producers import github_adapter
 
         monkeypatch.setattr(
             github_adapter, "fetch_pr_commits", lambda *args, **kwargs: []

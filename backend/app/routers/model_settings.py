@@ -15,7 +15,7 @@ Endpoints:
 
 An agent's own model still wins (the Agents page); without one, the company's
 model for its role, then the company's default, then the deployment's
-``AGENT_MODEL`` settings (``services/company_models.py``).
+``AGENT_MODEL`` settings (``services/models/company_models.py``).
 """
 
 import logging
@@ -26,7 +26,12 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, ProviderConnection, User
 from pydantic import BaseModel
-from services import company_models, model_record, model_suggestions, routing_record
+from services.models import (
+    company_models,
+    model_record,
+    model_suggestions,
+    routing_record,
+)
 from sqlmodel import Session, select
 
 logger = logging.getLogger("fabrique")

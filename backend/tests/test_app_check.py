@@ -25,14 +25,10 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import (
-    app_check,
-    delivery_checks,
-    delivery_gate,
-    stack_profiles,
-)
+from services.evidence import app_check, delivery_gate
+from services.loop import delivery_checks
 from services.loop.worker import deliver as worker_deliver
-from services.workspace import dependency_install, project_profile
+from services.workspace import dependency_install, project_profile, stack_profiles
 from sqlmodel import select
 from test_delivery_tests import _load_daemon
 from test_git_workflow import _member, enforcement  # noqa: F401
@@ -1148,7 +1144,7 @@ def test_the_integration_runs_the_tests_alone(sqlite_session, tmp_path, monkeypa
     monkeypatch.setattr(
         settings, "DELIVERY_TEST_COMMAND", f"{PY} -c \"print('1 passed')\""
     )
-    from services import integration
+    from services.release import integration
 
     daemon = _Daemon()
     test_run = asyncio.run(
@@ -1179,7 +1175,8 @@ def test_the_reply_wait_covers_the_container_launch_and_teardown(monkeypatch):
         {"stack": "node", "start": "npm start", "port": 3000}, {}
     )
     monkeypatch.setattr(
-        "services.sandbox.request_for_sprint", lambda *_a: {"mode": "container"}
+        "services.workspace.sandbox.request_for_sprint",
+        lambda *_a: {"mode": "container"},
     )
     asyncio.run(delivery_checks.check_application(ctx))
     # docker run (120 s) and the runtime calls after the ready bound (4 x 30 s).
