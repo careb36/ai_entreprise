@@ -4,8 +4,8 @@ Viewers of the run's company read them; its Managers write them, since a
 review can send a task back to work or accept a delivery
 (``services/loop/run_review.py``). A Manager also publishes a run's task branch
 as a pull or merge request on the repository's platform
-(``services/git_publish.py``), or, without the Git workflow, undoes its
-delivery from the daemon's snapshot (``services/delivery_undo.py``).
+(``services/release/git_publish.py``), or, without the Git workflow, undoes its
+delivery from the daemon's snapshot (``services/release/delivery_undo.py``).
 """
 
 from datetime import UTC, datetime
