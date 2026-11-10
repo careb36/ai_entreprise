@@ -811,7 +811,6 @@ Test files:
 | `test_edit_plan.py` | Architect and editor mode (issue #319, A.10): the plan read only from its fixed format (prose, no `END`, a stray line, an absolute or `..` path are no plan); off, nothing changes; on, only for Developer tasks at or above the band, once per attempt; the plan goes into the Developer's prompt and the task runs on the policy's cheapest band model, a model a person chose kept, a policy of tier names naming none; through the worker the Architect is asked for a plan and the Developer applies it on the cheap model, or keeps the guidance on the routed model when the answer has no plan |
 | `test_metrics.py` | `/metrics` labels requests by route template, a fixed route by its path, a CORS preflight as `preflight` and a path no route answered as `unmatched`; memory search caps its `limit` |
 | `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema; each entry splits its tasks by difficulty and model (`routing`, from `services/routing_record.py`), the card names its routing policy (`--policy`), schema v2 checks the split and still reads a v1 card, and two runs under different policies compare band by band |
-| `test_verificador_benchmark.py` | The Verifier benchmark (`bench/verifier/`, on `sys.path` via `conftest.py`): of the deliveries whose evidence contradicts or cannot support their claims, the verifier believes none (12/12), and every case, the honest controls included, comes back as specified (14/14) |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
 the workspace daemon and a fake LLM proxy (`scripts/e2e/fake_llm.py`,
@@ -954,17 +953,6 @@ puts both in the job summary (also when the run failed, if a scorecard was writt
 removes its containers; the real-model run is not wired yet. The idea is
 taken from SWE-bench Verified (graded by tests a person wrote) and OpenHands'
 evaluation harness (the version beside every number).
-
-**The Verifier benchmark** (`bench/verifier/`, moved from
-`backend/eval/verificador/` by ADR 0015): `cases.py` holds deliveries whose
-claims the evidence contradicts or cannot support, plus honest controls, and
-`run.py` feeds each to the real `services/evidence/verification.verify_agent_run`
-on in-memory SQLite (no stack, no model): every lie must come back `refuted`
-or `unverifiable`, every control `verified`. By hand: `cd backend &&
-PYTHONPATH=.:app:../bench python -m verifier.run`. In the suite,
-`tests/test_verificador_benchmark.py` imports `verifier.run` (`conftest.py`
-appends `bench/` to `sys.path`), and `backend-tests.yml` runs on a change under
-`bench/verifier/`.
 
 `scripts/check_file_sizes.py` is a ratchet on file size: a source file
 (backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
