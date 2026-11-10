@@ -14,7 +14,7 @@ Console producers router: which terminal coding agent produces which role's task
   provider's key, kept apart from ``sandbox_env``, which every delivery
   test, install and application check sees.
 
-The run itself is ``services/console_producer.py``.
+The run itself is ``services/producers/console_producer.py``.
 """
 
 from datetime import UTC, datetime

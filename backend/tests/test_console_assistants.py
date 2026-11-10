@@ -1,5 +1,5 @@
 """
-services/console_assistants.py: the terminal assistants the daemon can run.
+services/producers/console_assistants.py: the terminal assistants the daemon can run.
 
 - Which assistants are asked: Copilot by default, Claude only for high-value
   work (role, priority or strategic wording).

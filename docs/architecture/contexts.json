@@ -213,6 +213,7 @@
         "board_moves",
         "carry_over",
         "company_service",
+        "console_host",
         "delivery_checks",
         "edit_plan",
         "replicas",
@@ -300,9 +301,6 @@
     }
   },
   "allowlist": [
-    "console_producer -> carry_over",
-    "console_producer -> edit_plan",
-    "console_producer -> task_worker",
     "task_worker -> integration_jobs"
   ]
 }

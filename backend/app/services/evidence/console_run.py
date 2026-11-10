@@ -1,7 +1,7 @@
 """The Verifier's ``console_run`` record of a console producer's run.
 
 Who ran, how it ended and what the daemon saw it change, read from
-``evidence["console_run"]``. Moved out of ``services/console_clis.py``
+``evidence["console_run"]``. Moved out of ``services/producers/console_clis.py``
 (producers), which re-exports it, so the evidence never imports a producer
 (ADR 0012, issue #469 step 5).
 """
