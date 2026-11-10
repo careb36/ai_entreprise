@@ -29,7 +29,7 @@ class Company(SQLModel, table=True):
     default_scope_size: str = "M"  # "S" | "M" | "L" — default scope for new sprints
     default_sprint_length_days: int | None = None  # deprecated
     autonomy_level: int = 2  # 1 = human-led  2 = assisted  3 = autonomous
-    # How a sprint's team is chosen (``services/sprint_team.py``): "suggested"
+    # How a sprint's team is chosen (``services/planning/sprint_team.py``): "suggested"
     # (the PO suggests, a Manager confirms) or "automatic" (the PO's suggestion).
     team_selection: str | None = "suggested"
     # Each task's deliveries as commits on its own branch, in a worktree, never

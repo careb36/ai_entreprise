@@ -62,7 +62,7 @@ _TEST_NAME = re.compile(r"^test_req_(\d+)_(\d+)(?:_|\[|$)")
 
 def criteria_of(spec: dict[str, Any]) -> list[str]:
     """The criterion ids of *spec* in the order the backend numbers them
-    (``services/spec_check.normalize``: REQ-<n>.<m>, from 1, in order)."""
+    (``services/planning/spec_check.normalize``: REQ-<n>.<m>, from 1, in order)."""
     return [
         f"REQ-{i}.{j}"
         for i, requirement in enumerate(spec.get("requirements") or [], start=1)

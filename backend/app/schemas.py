@@ -108,7 +108,7 @@ class SprintStartRequest(BaseModel):
     # are the only ones a task may cover.
     specification_id: int | None = None
     # The roles this sprint's tasks may go to, a subset of the company's
-    # hired roles (``services/sprint_team.py``); None: every hired role.
+    # hired roles (``services/planning/sprint_team.py``); None: every hired role.
     team: list[str] | None = None
     # The PO's suggestion the plan carried, sent back unchanged: the team in
     # automatic mode, and what tells a confirmed team from a person's change.

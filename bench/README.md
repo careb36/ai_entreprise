@@ -109,7 +109,7 @@ into `bench/scorecards/` in a pull request.
    and criteria in order (REQ-1, REQ-1.1, ...). Name the package, its files
    and its functions in the description or the constraints, since the
    acceptance tests import them. The specification must pass the check
-   (`services/spec_check.check`) so it can be approved; a backend test makes
+   (`services/planning/spec_check.check`) so it can be approved; a backend test makes
    sure it does.
 2. Write `acceptance/test_*.py` by hand, at least one test per criterion,
    named `test_req_<n>_<m>_<what>`. Import the code under test inside each

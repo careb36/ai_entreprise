@@ -4,7 +4,7 @@ specification, and the team it suggests for the request.
 - ``POST /v1/plan_sprint``: the plan, ``suggested_team`` (a subset of the
   company's hired roles, every one of them without a usable answer),
   ``team_reasons`` and ``hired_roles``; with ``team``, only those roles get
-  tasks (``services/sprint_team.py``).
+  tasks (``services/planning/sprint_team.py``).
 - ``POST /v1/plan_self_improvement_sprint``: the factory's own next slice,
   with ``team`` too.
 - ``GET``/``PUT /v1/companies/{id}/team_selection`` (Viewer / Manager): how a
@@ -62,7 +62,7 @@ def _serialize_plan_response(
         # Whether the form asks the Manager to confirm the team or shows it.
         "team_selection": selection,
         # The team the PO suggests (every hired role without a usable answer)
-        # and the roles the Manager may choose from (services/sprint_team.py).
+        # and the roles the Manager may choose from (services/planning/sprint_team.py).
         "suggested_team": plan.get("suggested_team") or hired,
         "team_reasons": plan.get("team_reasons") or {},
         "hired_roles": hired,

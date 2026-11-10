@@ -473,7 +473,8 @@ async def update_backlog_item(
 
     if req.priority:
         item.priority = req.priority
-    if req.assignee is not None:  # Within the sprint's team (services/sprint_team.py).
+    # Within the sprint's team (services/planning/sprint_team.py).
+    if req.assignee is not None:
         _refused(
             sprint_team.check_assignees, sprint_team.team_of(sprint), [req.assignee]
         )
