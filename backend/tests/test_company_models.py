@@ -162,9 +162,9 @@ def test_the_deciding_roles_run_the_companys_choice(sqlite_session):
 def test_the_worker_gives_a_task_the_companys_model(db, agent_model):  # noqa: F811
     company, _sprint, item = _board(db, role="QA", agent_model=agent_model)
     _choose(db, db.get(Company, company.id), "company-default", {"QA": "qa-model"})
-    from services import task_worker
+    from services.loop.worker import task_run
 
-    ctx = task_worker._load_task_context(item.id)
+    ctx = task_run._load_task_context(item.id)
     assert ctx["agent"]["model"] == "qa-model"
     assert (
         model_routing.resolve_agent_model(ctx["agent"], item=ctx["item"]) == "qa-model"
@@ -174,9 +174,9 @@ def test_the_worker_gives_a_task_the_companys_model(db, agent_model):  # noqa: F
 def test_the_agents_own_model_wins_in_the_worker(db):  # noqa: F811
     company, _sprint, item = _board(db, role="QA", agent_model="own-model")
     _choose(db, db.get(Company, company.id), None, {"QA": "qa-model"})
-    from services import task_worker
+    from services.loop.worker import task_run
 
-    assert task_worker._load_task_context(item.id)["agent"]["model"] == "own-model"
+    assert task_run._load_task_context(item.id)["agent"]["model"] == "own-model"
 
 
 def test_the_architect_consultation_runs_the_companys_model(llm, db, monkeypatch):  # noqa: F811

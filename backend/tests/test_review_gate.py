@@ -18,7 +18,7 @@ from models.event import TaskEvent
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import qa_review
+from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review
 from sqlmodel import Session, select
 
@@ -280,7 +280,7 @@ def test_reworked_task_is_dispatched_again_not_bounced_back_to_review(db, monkey
     db.commit()
     nats = _FakeNATS()
 
-    asyncio.run(task_worker._dispatch_todo_items(nats))
+    asyncio.run(intake._dispatch_todo_items(nats))
 
     db.expire_all()
     assert db.get(BacklogItem, item_id).status != "in_review"
