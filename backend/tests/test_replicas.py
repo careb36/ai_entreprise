@@ -209,6 +209,38 @@ def test_two_workers_given_one_task_run_it_once(engine, monkeypatch):
     assert len(executed) == 1
 
 
+def test_an_assignment_of_a_task_another_replica_holds_is_left_to_it(
+    engine, monkeypatch
+):
+    """The task's lock decides first: without it, no claim, no event and no run."""
+    sprint_id = _sprint(engine, _company(engine), items=("todo",))
+    item_id = _items(engine, sprint_id)[0].id
+    executed = []
+
+    def execute(*args, **kwargs):
+        executed.append(args)
+        raise RuntimeError("must not run")
+
+    monkeypatch.setattr(worker_execute, "_execute_task", execute)
+    handler = _task_assign_handler(monkeypatch).handler
+    message = {"backlog_item_id": item_id, "sprint_id": sprint_id}
+
+    with replicas.task_lock(engine, item_id) as other_replica:
+        assert other_replica
+        asyncio.run(handler(None, dict(message)))
+
+    assert executed == []
+    item = _items(engine, sprint_id)[0]
+    assert item.status == "todo"
+    assert not item.comments
+    with Session(engine) as session:
+        assert task_events.for_tasks(session, [item_id])[item_id] == []
+
+    # Once the lock is free, the same assignment runs.
+    asyncio.run(handler(None, dict(message)))
+    assert len(executed) == 1
+
+
 # --- recovery after a restart ----------------------------------------------
 
 

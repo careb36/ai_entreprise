@@ -419,14 +419,17 @@ def check_model_factory() -> None:
             print(warn("  services.models.model_factory not importable — skipping"))
             return
 
-    # get_model backward-compat
+    # The role default every caller reads (ModelFactory.model_for_role).
     t0 = time.monotonic()
     try:
-        model = mf.get_model("Developer")
+        model = mf.default_model_for_role("Developer")
         assert isinstance(model, str) and model, f"Expected non-empty str, got {model!r}"
-        print(ok(f"get_model('Developer') → {model!r}  ({time.monotonic()-t0:.2f}s)"))
+        assert model == mf.ModelFactory.model_for_role(mf.AgentRole.DEVELOPER), (
+            f"default_model_for_role and ModelFactory.model_for_role disagree: {model!r}"
+        )
+        print(ok(f"default_model_for_role('Developer') → {model!r}  ({time.monotonic()-t0:.2f}s)"))
     except Exception as exc:  # noqa: BLE001
-        print(fail(f"get_model: {exc}"))
+        print(fail(f"default_model_for_role: {exc}"))
 
     # get_model_for_complexity new API
     t0 = time.monotonic()
