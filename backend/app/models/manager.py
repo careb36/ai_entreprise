@@ -1,7 +1,7 @@
 """The Manager agent's policy and decisions (issue #331).
 
 ``ManagerPolicy`` is what a company's Manager allows the Manager agent to
-decide alone: a list of named rules (``services/manager_policy.py``) and the
+decide alone: a list of named rules (``services/management/manager_policy.py``) and the
 size limits they read. Only a person writes it; the agent never does.
 
 ``ManagerDecision`` is one inbox item the agent looked at: its suggestion
