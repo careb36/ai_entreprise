@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 from models.company import Company, ProjectDiscovery
-from services import task_worker, workspace_daemon
+from services import workspace_daemon
+from services.loop.worker import deliver as worker_deliver
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -448,7 +449,9 @@ def test_delivery_tests_are_detected_on_the_daemon_machine(
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
     nats = _DaemonNATS(daemon)
 
-    command = asyncio.run(task_worker._detect_project_test_command(nats, str(tmp_path)))
+    command = asyncio.run(
+        worker_deliver._detect_project_test_command(nats, str(tmp_path))
+    )
 
     assert command == "python -m pytest -q"
     assert nats.subjects == ["workspace.inspect"]

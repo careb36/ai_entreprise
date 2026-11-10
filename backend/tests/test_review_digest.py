@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 from services import review_digest
 from services import task_worker as tw
+from services.loop.worker import deliver as worker_deliver
 
 
 def _file(path: str, lines: int) -> dict[str, str]:
@@ -57,12 +58,16 @@ def test_the_old_cut_left_files_out_and_the_digest_does_not():
         :4000
     ][:3000]
     assert re.findall(r"# Artifact: (\S+)", old) == ["src/a.py"]
-    new = tw._build_review_payload("prose", targets)[: review_digest.DIGEST_CHARS]
+    new = worker_deliver._build_review_payload("prose", targets)[
+        : review_digest.DIGEST_CHARS
+    ]
     assert re.findall(r"# Artifact: (\S+)", new) == ["src/a.py", "src/b.py", "src/c.py"]
 
 
 def test_text_without_files_goes_to_review_as_it_was():
-    assert tw._build_review_payload("  plain answer  ", []) == "plain answer"
+    assert (
+        worker_deliver._build_review_payload("  plain answer  ", []) == "plain answer"
+    )
     assert not review_digest.is_digest("plain answer")
 
 
