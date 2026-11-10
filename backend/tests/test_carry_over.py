@@ -18,6 +18,7 @@ import worker_stages
 from models import AgentMessage, BacklogItem, Company, OutboxEvent, Sprint
 from models.agent_run import AgentRun, Verification
 from services import carry_over, task_worker
+from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from sqlmodel import select
 
@@ -289,14 +290,16 @@ def test_the_company_carries_its_blocked_tasks_into_the_follow_up_once(
     }
 
     with (
-        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
-        patch("services.task_worker.plan_self_improvement_sprint", return_value=plan),
+        patch("services.loop.worker.close.AUTO_SELF_IMPROVEMENT_ENABLED", True),
         patch(
-            "services.task_worker.build_self_improvement_objective",
+            "services.loop.worker.close.plan_self_improvement_sprint", return_value=plan
+        ),
+        patch(
+            "services.loop.worker.close.build_self_improvement_objective",
             return_value="Improve",
         ),
     ):
-        result = task_worker._complete_sprint_and_plan_follow_up(closing.id)
+        result = worker_close._complete_sprint_and_plan_follow_up(closing.id)
 
     assert result["completed"] is True and result["auto_opened"] is True
     assert len(result["carried_over"]) == 1

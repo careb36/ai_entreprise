@@ -9,6 +9,7 @@ import worker_stages
 from config import settings
 from models import AgentMessage, BacklogItem, Company, CompanyMember, Sprint, User
 from services import task_worker
+from services.loop.worker import close as worker_close
 from services.loop.worker import messages as worker_messages
 from sqlmodel import select
 from test_review_gate import _FakeNATS, _item_in_review, _run_cycle
@@ -256,7 +257,7 @@ def test_a_finished_sprint_posts_its_retrospective_to_the_team(db, monkeypatch):
 
     monkeypatch.setattr(engram_processor, "get_engram_processor", _no_graph)
     monkeypatch.setattr(
-        task_worker, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
+        worker_close, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
     )
     company = Company(company_name=f"Retro {secrets.token_hex(3)}", autonomy_level=2)
     db.add(company)
@@ -267,7 +268,7 @@ def test_a_finished_sprint_posts_its_retrospective_to_the_team(db, monkeypatch):
     db.add(BacklogItem(sprint_id=sprint.id, title="Done one", status="done"))
     db.commit()
 
-    asyncio.run(task_worker._finalize_sprint_if_ready(_FakeNATS(), sprint.id))
+    asyncio.run(worker_close._finalize_sprint_if_ready(_FakeNATS(), sprint.id))
 
     db.expire_all()
     messages = db.exec(

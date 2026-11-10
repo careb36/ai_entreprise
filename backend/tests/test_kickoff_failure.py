@@ -18,7 +18,7 @@ import pytest
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import agent_run_service, agent_worker
-from services.task_worker import _complete_sprint_and_plan_follow_up
+from services.loop.worker.close import _complete_sprint_and_plan_follow_up
 
 import agents.graph as graph_module
 
@@ -119,7 +119,7 @@ async def test_kickoff_failure_keeps_sprint_active_and_reports(
         sqlite_session.add(item)
     sqlite_session.commit()
 
-    with patch("services.task_worker.engine", sqlite_engine):
+    with patch("services.loop.worker.close.engine", sqlite_engine):
         result = _complete_sprint_and_plan_follow_up(sprint_id)
 
     assert result["completed"] is True

@@ -21,6 +21,7 @@ from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import board, scrum_master, task_worker
+from services.loop.worker import close as worker_close
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
 from test_llm_routing import llm as llm_fixture
@@ -37,7 +38,7 @@ TRIAGE = (
 def db(monkeypatch, sqlite_session):
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setattr(
-        task_worker, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
+        worker_close, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
     )
     from memory import engram_processor
 
@@ -127,7 +128,7 @@ def test_a_blocked_task_settles_only_when_a_person_must_act(db, comments, settle
     _item(db, sprint, "done")
     _item(db, sprint, "blocked", comments=comments)
 
-    result = task_worker._complete_sprint_and_plan_follow_up(sprint.id)
+    result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
 
     db.expire_all()
     assert result["completed"] is settled
@@ -138,7 +139,7 @@ def test_a_sprint_with_every_task_blocked_still_closes(db):
     sprint = _sprint(db)
     _item(db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}])
 
-    assert task_worker._complete_sprint_and_plan_follow_up(sprint.id)["completed"]
+    assert worker_close._complete_sprint_and_plan_follow_up(sprint.id)["completed"]
 
 
 @pytest.mark.parametrize("status", ["todo", "in_progress", "in_review"])
@@ -147,7 +148,7 @@ def test_an_open_task_keeps_the_sprint_active(db, status):
     _item(db, sprint, "blocked", comments=[{"author": "Quality gate", "text": TRIAGE}])
     _item(db, sprint, status)
 
-    result = task_worker._complete_sprint_and_plan_follow_up(sprint.id)
+    result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
 
     assert result == {
         "completed": False,

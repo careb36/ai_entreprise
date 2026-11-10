@@ -37,9 +37,10 @@ from services import (
     locks,
     replicas,
     sprint_close,
-    task_worker,
 )
 from services.board import is_send_back, rework_requests_by
+from services.loop.worker import close as worker_close
+from services.loop.worker import procedures_round
 from sqlmodel import Session, select
 from test_review_gate import _FakeNATS
 
@@ -330,23 +331,23 @@ def test_a_reopened_sprint_closes_again_without_a_second_follow_up(
     db.commit()
     proposals, evaluations = [], []
     monkeypatch.setattr(
-        task_worker, "_propose_procedures", lambda *a: proposals.append(a)
+        procedures_round, "_propose_procedures", lambda *a: proposals.append(a)
     )
     monkeypatch.setattr(
-        task_worker, "_evaluate_procedures", lambda *a: evaluations.append(a)
+        procedures_round, "_evaluate_procedures", lambda *a: evaluations.append(a)
     )
     sprints_before = len(
         db.exec(select(Sprint).where(Sprint.company_id == company.id)).all()
     )
 
     with (
-        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
+        patch("services.loop.worker.close.AUTO_SELF_IMPROVEMENT_ENABLED", True),
         patch(
-            "services.task_worker.plan_self_improvement_sprint",
+            "services.loop.worker.close.plan_self_improvement_sprint",
             side_effect=AssertionError("no second follow-up"),
         ),
     ):
-        asyncio.run(task_worker._finalize_sprint_if_ready(_FakeNATS(), sprint.id))
+        asyncio.run(worker_close._finalize_sprint_if_ready(_FakeNATS(), sprint.id))
         db.expire_all()
         assert db.get(Sprint, sprint.id).status == "completed"
         # And the close itself says so, called again by hand on a reopened sprint.
@@ -354,7 +355,7 @@ def test_a_reopened_sprint_closes_again_without_a_second_follow_up(
         reopened.status = "active"
         db.add(reopened)
         db.commit()
-        result = task_worker._complete_sprint_and_plan_follow_up(sprint.id)
+        result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
 
     assert (result["completed"], result["auto_opened"]) == (True, False)
     assert result["reason"] == sprint_close.RECLOSED
@@ -381,13 +382,16 @@ def test_a_first_close_still_plans_the_follow_up(db):
     plan = {"sprint_name": "Next", "goal": "g", "tasks": [{"title": "t"}]}
 
     with (
-        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
-        patch("services.task_worker.plan_self_improvement_sprint", return_value=plan),
+        patch("services.loop.worker.close.AUTO_SELF_IMPROVEMENT_ENABLED", True),
         patch(
-            "services.task_worker.build_self_improvement_objective", return_value="g"
+            "services.loop.worker.close.plan_self_improvement_sprint", return_value=plan
+        ),
+        patch(
+            "services.loop.worker.close.build_self_improvement_objective",
+            return_value="g",
         ),
     ):
-        result = task_worker._complete_sprint_and_plan_follow_up(sprint.id)
+        result = worker_close._complete_sprint_and_plan_follow_up(sprint.id)
 
     assert (result["completed"], result["auto_opened"]) == (True, True)
 

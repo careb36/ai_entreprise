@@ -31,6 +31,7 @@ from services import (
     task_events,
     task_worker,
 )
+from services.loop.worker import close as worker_close
 from services.platform import hooks
 from sqlmodel import Session, select
 
@@ -529,7 +530,7 @@ def test_the_loop_closing_a_sprint_emits_sprint_closed_and_release_integrates_it
         emitted.append(payload)
 
     worker_stages.use_engine(monkeypatch, engine)
-    monkeypatch.setattr(task_worker, "_build_sprint_retrospective", lambda _id: None)
+    monkeypatch.setattr(worker_close, "_build_sprint_retrospective", lambda _id: None)
     monkeypatch.setattr(
         replicas,
         "close_once",

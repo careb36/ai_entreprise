@@ -23,7 +23,7 @@ import pytest
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.integration import SprintIntegration
-from services import git_setup, git_workflow, integration_publish, task_worker
+from services import git_setup, git_workflow, integration_publish
 from services.loop.worker import deliver as worker_deliver
 from sqlmodel import Session, select
 
@@ -197,7 +197,7 @@ def test_the_fetch_bound_stays_well_inside_the_backend_delivery_wait():
     # The fetch, then the worktree, commit and reply, all before the backend gives up.
     assert git_base.FETCH_TIMEOUT_SECONDS * 3 <= budget
     assert git_workflow.delivery_timeout(None) == (
-        task_worker.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+        worker_deliver.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
     )
 
 
@@ -376,7 +376,7 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
     assert "with a snapshot to undo them" in note["text"]
     # A git spec may fetch the base first: the request waits the fetch allowance too.
     assert nats.timeouts == [
-        task_worker.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
+        worker_deliver.settings.WORKSPACE_WRITE_TIMEOUT_SECONDS
         + git_workflow.FETCH_ALLOWANCE_SECONDS
     ]
 

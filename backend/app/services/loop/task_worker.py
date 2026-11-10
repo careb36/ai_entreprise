@@ -16,7 +16,6 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from config import settings
 from database import engine
 from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
@@ -24,12 +23,10 @@ from models import (
     Agent,
     BacklogItem,
     Company,
-    OutboxEvent,
     Sprint,
 )
 from models.agent_run import TASK_WORKER_PRODUCER  # noqa: F401 - re-exported
 from nats_client import NATSClient
-from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS
 from sqlmodel import Session, select
 
 from services.contracts.manifest import parse_file_manifest
@@ -38,7 +35,7 @@ from services.evidence import (
     risk,
     standards,
 )
-from services.learning import procedures, retrospective, scrum_master
+from services.learning import procedures
 from services.loop import (
     console_host,
     replicas,
@@ -50,17 +47,10 @@ from services.loop.answers import gate_reason as _gate_reason
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import review_format_reminder as _review_format_reminder
-from services.loop.carry_over import (
-    carry_over_on_the_companys_own,
-    previous_attempt_context,
-)
-from services.loop.sprint_close import RECLOSED
-from services.loop.sprint_close import (
-    describe_follow_up_reason as _describe_follow_up_reason,
-)
-from services.loop.sprint_close import reclosed as _reclosed
+from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
     board_writes,
+    close,
     deliver,
     execute,
     messages,
@@ -73,6 +63,15 @@ from services.loop.worker import (
 from services.loop.worker.board_writes import (  # noqa: F401 - re-exported
     _append_item_comment,
     _update_item_status,
+)
+from services.loop.worker.close import (  # noqa: F401 - re-exported
+    AUTO_SELF_IMPROVEMENT_ENABLED,
+    _build_sprint_kickoff_story,
+    _build_sprint_retrospective,
+    _coerce_json_dict,
+    _complete_sprint_and_plan_follow_up,
+    _finalize_sprint_if_ready,
+    _format_retrospective_summary,
 )
 from services.loop.worker.deliver import (  # noqa: F401 - re-exported
     _build_review_payload,
@@ -104,6 +103,11 @@ from services.loop.worker.messages import (  # noqa: F401 - re-exported
     _post_message,
     _triage_blocked_task,
 )
+from services.loop.worker.procedures_round import (  # noqa: F401 - re-exported
+    _ask_scrum_master_for_procedures,
+    _evaluate_procedures,
+    _propose_procedures,
+)
 from services.loop.worker.prompt import (  # noqa: F401 - re-exported
     FILE_MANIFEST_INSTRUCTIONS,
     LESSON_FEEDBACK_CHARS,
@@ -125,11 +129,7 @@ from services.loop.worker.record import (  # noqa: F401 - re-exported
 )
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
-from services.planning.sprint_planner import (
-    build_self_improvement_objective,
-    plan_self_improvement_sprint,
-)
-from services.platform import hooks, locks
+from services.platform import locks
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
     ACTION_QA_REVIEW,
@@ -164,7 +164,6 @@ AUTOPILOT_MAX_REWORK_CYCLES = int(
 DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
     os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")
 )
-AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
 LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
 
 
@@ -184,19 +183,6 @@ def _mark_queued(item_id: int, now: datetime) -> None:
 
 def _clear_queue_marker(item_id: int) -> None:
     LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
-
-
-# ---------------------------------------------------------------------------
-# Sprint retrospective — written to memory after sprint completion
-# ---------------------------------------------------------------------------
-
-
-def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
-    """Sprint health metrics for the retrospective (``services/learning/retrospective``)."""
-    return retrospective.build(engine, sprint_id)
-
-
-_format_retrospective_summary = retrospective.summary
 
 
 def _validate_minimum_deliverable(
@@ -273,383 +259,6 @@ def _sync_manual_freeze_state(item_id: int) -> bool:
         return changed
 
 
-def _coerce_json_dict(value: Any) -> dict[str, Any]:
-    """Decode a JSON object stored either as dict or JSON string."""
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, dict):
-                return parsed
-        except Exception:  # noqa: BLE001 - Invalid stored structured data is treated as unavailable.
-            return {}
-    return {}
-
-
-def _build_sprint_kickoff_story(
-    sprint_name: str, sprint_id: int, backlog_items: list[dict[str, Any]]
-) -> str:
-    """Create the initial coordination story for a newly opened sprint."""
-    return "\n".join(
-        [
-            f"Sprint kickoff: {sprint_name}",
-            f"Sprint ID: {sprint_id}",
-            "Backlog:",
-            *[
-                f"- {item.get('title', '').strip()}: {item.get('description', '').strip()}"
-                for item in backlog_items
-            ],
-            "Goal: PO, Scrum Master and Developer must coordinate, surface blockers, and agree the first execution plan.",
-        ]
-    )
-
-
-def _complete_sprint_and_plan_follow_up(
-    completed_sprint_id: int,
-    retro_metrics: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Mark a sprint completed once every item is settled; optionally open a follow-up sprint.
-
-    A sprint ends like a real one: when nothing in it can still move on its
-    own. Tasks blocked until a person acts count as settled, so the sprint
-    closes around them, the retrospective records them and ``blocked_rate``
-    measures them. Holding the sprint open for a blocked task would leave the
-    company without a retrospective, and its procedures unmeasured, for good.
-    """
-    with Session(engine) as session:
-        sprint = session.get(Sprint, completed_sprint_id)
-        if not sprint or sprint.status != "active":
-            return {"completed": False, "auto_opened": False, "reason": "not_active"}
-
-        # The dependency holds are reconciled first (``dependencies.sprint_settled``).
-        if not dependencies.sprint_settled(session, completed_sprint_id):
-            session.commit()
-            return {"completed": False, "auto_opened": False, "reason": "not_all_done"}
-
-        if not replicas.mark_completed(session, sprint):
-            return {"completed": False, "auto_opened": False, "reason": "not_active"}
-
-        result = {
-            "completed": True,
-            "auto_opened": False,
-            # A second close, after a person reopened it: no second follow-up.
-            "reason": RECLOSED
-            if _reclosed(session, sprint.id)
-            else "completed_no_follow_up",
-            "sprint_id": sprint.id,
-            "sprint_name": sprint.sprint_name,
-            "company_id": sprint.company_id,
-        }
-
-        company = session.get(Company, sprint.company_id)
-        if result["reason"] == RECLOSED:
-            session.commit()
-            return result
-        if not company:
-            result["reason"] = "company_missing"
-            session.commit()
-            return result
-
-        if company.autonomy_level < 3:
-            result["reason"] = "autonomy_below_threshold"
-            session.commit()
-            return result
-
-        if not AUTO_SELF_IMPROVEMENT_ENABLED:
-            result["reason"] = "auto_self_improvement_disabled"
-            session.commit()
-            return result
-
-        active_sprint = session.exec(
-            select(Sprint).where(
-                Sprint.company_id == company.id,
-                Sprint.id != sprint.id,
-                Sprint.status.in_(sprint_control.OPEN_STATUSES),
-            )
-        ).first()
-        if active_sprint:
-            result["reason"] = "active_sprint_already_exists"
-            result["blocking_sprint_id"] = active_sprint.id
-            session.commit()
-            return result
-
-        # The agents carry their company, so a connection model routes with its key.
-        _, agent_dicts, discovery = spec_planning.planning_context_of(
-            session, company.id
-        )
-        detected_stack = _coerce_json_dict(
-            discovery.detected_stack if discovery else None
-        )
-        project_path = discovery.project_path if discovery else None
-
-        scope_size = (company.default_scope_size or "M").upper()
-        if scope_size not in {"S", "M", "L"}:
-            scope_size = "M"
-
-        objective = build_self_improvement_objective(
-            company_name=company.company_name,
-            detected_stack=detected_stack,
-            sprint_metrics=retro_metrics,
-        )
-        plan = plan_self_improvement_sprint(
-            company_name=company.company_name,
-            objective=objective,
-            scope_size=scope_size,
-            agents=agent_dicts,
-            detected_stack=detected_stack,
-            project_path=project_path,
-        )
-        tasks = plan.get("tasks") or []
-        if not tasks:
-            result["reason"] = "planner_returned_no_tasks"
-            session.commit()
-            return result
-
-        next_sprint = Sprint(
-            company_id=company.id,
-            sprint_name=plan.get(
-                "sprint_name", f"Sprint - Improve {company.company_name}"
-            ),
-            start_date=datetime.now(UTC).date().isoformat(),
-            scope_size=scope_size,
-            status="active",
-            goal=plan.get("goal") or objective,
-            specification_id=sprint.specification_id,
-        )
-        session.add(next_sprint)
-        session.flush()
-
-        backlog_payloads: list[dict[str, Any]] = []
-        for task in tasks:
-            backlog_item = BacklogItem(
-                sprint_id=next_sprint.id,
-                title=task.get("title", ""),
-                description=task.get("description", ""),
-                priority=task.get("priority", "medium"),
-                assignee=task.get("assignee", "PO"),
-            )
-            session.add(backlog_item)
-            session.flush()
-            backlog_payloads.append(task)
-
-            session.add(
-                OutboxEvent(
-                    aggregate_type="backlog_item",
-                    aggregate_id=str(backlog_item.id),
-                    event_type="nats_publish",
-                    payload={
-                        "subject": "task.assign",
-                        "message": {
-                            "backlog_item_id": backlog_item.id,
-                            "interaction_id": str(uuid4()),
-                            "agent": task.get("assignee", "PO"),
-                            "sprint_id": next_sprint.id,
-                        },
-                    },
-                )
-            )
-
-        # The tasks the agents gave up on get one more attempt, with what
-        # blocked them; a second failure stays for a person.
-        try:
-            # A savepoint: a failure halfway leaves no half-carried task behind
-            # and the session stays usable for the commit below.
-            with session.begin_nested():
-                carried = carry_over_on_the_companys_own(
-                    session,
-                    company.id,
-                    sprint.id,
-                    next_sprint,
-                    SCOPE_LIMITS.get(scope_size, SCOPE_HARD_MAX) - len(tasks),
-                )
-        except Exception as exc:  # noqa: BLE001 - A failed carry-over never stops the follow-up sprint.
-            logger.warning("Carry-over into sprint=%s failed: %s", next_sprint.id, exc)
-            carried = []
-        backlog_payloads.extend(
-            {"title": item.title, "description": item.description or ""}
-            for item in carried
-        )
-        result["carried_over"] = sprint_team.automatic_team(next_sprint, plan, carried)
-
-        session.add(
-            OutboxEvent(
-                aggregate_type="sprint",
-                aggregate_id=str(next_sprint.id),
-                event_type="nats_publish",
-                payload={
-                    "subject": "workspace.generate",
-                    "message": {
-                        "interaction_id": str(uuid4()),
-                        "company_id": company.id,
-                        "business_unit_id": None,
-                        "sprint_id": next_sprint.id,
-                        "story": _build_sprint_kickoff_story(
-                            next_sprint.sprint_name, next_sprint.id, backlog_payloads
-                        ),
-                        "constraints": "Start the sprint conversation, coordinate roles, and keep the GlassRoom updated.",
-                    },
-                },
-            )
-        )
-
-        session.commit()
-        result.update(
-            {
-                "auto_opened": True,
-                "reason": "auto_follow_up_opened",
-                "next_sprint_id": next_sprint.id,
-                "next_sprint_name": next_sprint.sprint_name,
-                "next_goal": next_sprint.goal,
-            }
-        )
-        return result
-
-
-async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> None:
-    """Close a sprint once all cards are done and optionally open the next autonomous self-improvement sprint."""
-    # Build retrospective metrics before closing so the planner can use them.
-    retro_metrics = await asyncio.to_thread(_build_sprint_retrospective, sprint_id)
-
-    result = await asyncio.to_thread(  # once across replicas (issue #328)
-        replicas.close_once,
-        engine,
-        sprint_id,
-        _complete_sprint_and_plan_follow_up,
-        retro_metrics,
-    )
-    if not result.get("completed"):
-        return
-    # What leaves the factory starts from the event: release integrates (issue #314).
-    hooks.emit(
-        hooks.SPRINT_CLOSED, nats_client=nats_client, engine=engine, sprint_id=sprint_id
-    )
-    if result.get("reason") == RECLOSED:
-        retro_metrics = None  # learned once, at the first close
-    if retro_metrics and retro_metrics.get("company_id") is not None:
-        await asyncio.to_thread(
-            messages._post_message,
-            company_id=retro_metrics["company_id"],
-            sprint_id=sprint_id,
-            item_id=None,
-            from_name=SCRUM_MASTER_ROLE,
-            from_role=SCRUM_MASTER_ROLE,
-            to_role=None,
-            kind="retrospective",
-            body=_format_retrospective_summary(retro_metrics),
-        )
-        # Measure procedures before proposing; learning never blocks closing.
-        try:
-            await asyncio.to_thread(
-                _evaluate_procedures, retro_metrics["company_id"], sprint_id
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Procedure evaluation failed for sprint=%s: %s", sprint_id, exc
-            )
-        try:
-            await asyncio.to_thread(
-                _propose_procedures,
-                retro_metrics["company_id"],
-                sprint_id,
-                retro_metrics,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Procedure proposal failed for sprint=%s: %s", sprint_id, exc
-            )
-
-    # Burn retrospective engram to memory so future sprints can learn from it.
-    if retro_metrics:
-        try:
-            from services.platform.engram_processor import (
-                RETROSPECTIVE_AGENT_PREFIX,
-                get_engram_processor,
-            )
-
-            processor = get_engram_processor()
-            processor.burn_engram(
-                company_id=retro_metrics.get("company_id"),
-                agent_id=f"{RETROSPECTIVE_AGENT_PREFIX}{sprint_id}",
-                role="ScrumMaster",
-                decision_summary=_format_retrospective_summary(retro_metrics),
-                metadata={
-                    "action_type": "sprint_retrospective",
-                    **retro_metrics,
-                },
-            )
-        except Exception as exc:  # noqa: BLE001 - Optional engram writes must not abort sprint completion.
-            logger.warning(
-                "Retrospective engram write failed for sprint=%s: %s", sprint_id, exc
-            )
-
-        await publish_glassroom(
-            nats_client,
-            sprint_id,
-            {
-                "type": "status",
-                "semantic_type": "sprint.retrospective",
-                "source": "task_worker",
-                "agent": "System",
-                "role": "System",
-                "task": "Sprint retrospective",
-                "message": (
-                    f"📊 Sprint retrospective: {retro_metrics.get('done_tasks', 0)}/{retro_metrics.get('total_tasks', 0)} tasks done "
-                    f"({retro_metrics.get('completion_rate', 0)}%), "
-                    f"{retro_metrics.get('rework_cycles', 0)} rework cycles, "
-                    f"{retro_metrics.get('blocked_tasks', 0)} blocked. "
-                    "Lessons stored in memory for future sprints."
-                ),
-                "retro": retro_metrics,
-            },
-        )
-
-    await publish_glassroom(
-        nats_client,
-        sprint_id,
-        {
-            "type": "status",
-            "agent": "System",
-            "role": "System",
-            "task": result.get("sprint_name", "Sprint"),
-            "message": f"🏁 Sprint completed: {result.get('sprint_name', 'Sprint')}",
-        },
-    )
-
-    await publish_glassroom(
-        nats_client,
-        sprint_id,
-        {
-            "type": "status",
-            "agent": "System",
-            "role": "System",
-            "task": result.get("sprint_name", "Sprint"),
-            "message": _describe_follow_up_reason(result),
-        },
-    )
-
-    logger.info(
-        "Sprint follow-up evaluation sprint_id=%s auto_opened=%s reason=%s next_sprint_id=%s",
-        sprint_id,
-        result.get("auto_opened"),
-        result.get("reason"),
-        result.get("next_sprint_id"),
-    )
-
-    if result.get("auto_opened") and result.get("next_sprint_id"):
-        await publish_glassroom(
-            nats_client,
-            result["next_sprint_id"],
-            {
-                "type": "status",
-                "agent": "System",
-                "role": "System",
-                "task": result.get("next_sprint_name", "Self-improvement sprint"),
-                "message": f"♻️ Autonomous self-improvement sprint opened: {result.get('next_sprint_name', 'Self-improvement sprint')}",
-            },
-        )
-
-
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
@@ -723,123 +332,6 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
             },
             "agent": agent_dict,
         }
-
-
-def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
-    """Keep or revert procedures with enough sprints since adoption, and tell the team."""
-    with Session(engine) as session:
-        decided = procedures.evaluate(session, company_id)
-        for procedure in decided:
-            session.add(
-                messages._message(
-                    company_id,
-                    sprint_id,
-                    None,
-                    SCRUM_MASTER_ROLE,
-                    SCRUM_MASTER_ROLE,
-                    None,
-                    "proposal",
-                    procedures.describe_outcome(procedure),
-                )
-            )
-        session.commit()
-
-
-def _ask_scrum_master_for_procedures(
-    company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
-) -> tuple[str, list[str]]:
-    """The ScrumMaster's answer, and the company's roles it may propose for."""
-    lessons = prompt._load_recent_lessons(company_id, 0)
-    with Session(engine) as session:
-        roles = sorted(
-            {
-                role
-                for role in session.exec(
-                    select(Agent.role).where(Agent.company_id == company_id)
-                ).all()
-                if role
-            }
-        )
-        current = procedures.procedures_prompt(
-            list(
-                session.exec(
-                    select(procedures.Procedure).where(
-                        procedures.Procedure.company_id == company_id,
-                        procedures.Procedure.status == "active",
-                    )
-                ).all()
-            )
-        )
-        history = procedures.history_prompt(session, company_id)
-        request = (
-            "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
-            "whether a written procedure for one of the roles would have prevented its "
-            "rework or blocked tasks.\n\n"
-            f"## What happened\n{_format_retrospective_summary(retro_metrics)}\n\n"
-            f"## Lessons from the last sprints\n{lessons or '(none)'}\n"
-            f"{current or chr(10) + '## Company Procedures' + chr(10) + '(none yet)'}"
-            f"{history}\n\n"
-            "A procedure is a short, concrete rule a role can follow on every task. Do not "
-            "repeat an existing one, nor one that was reverted or rejected, unless you "
-            "change what made it fail.\n\n" + procedures.proposal_format(roles)
-        )
-        model, system_prompt = scrum_master.profile(session, company_id)
-    # Outside the session, usual retries: a transient error must not lose proposals.
-    answer = scrum_master.ask_model(
-        model, system_prompt, request, company_id=company_id
-    )
-    return answer, roles
-
-
-def _propose_procedures(
-    company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
-) -> None:
-    """After a sprint with rework or blocked tasks, the ScrumMaster proposes procedures.
-
-    With ``autonomy_level`` 3 a proposal is adopted at once; otherwise it waits
-    for a Manager. Either way the board's numbers keep or revert it later.
-    """
-    if not (retro_metrics.get("rework_cycles") or retro_metrics.get("blocked_tasks")):
-        return  # nothing went wrong: nothing to learn
-    answer, roles = _ask_scrum_master_for_procedures(
-        company_id, sprint_id, retro_metrics
-    )
-    proposals = procedures.parse_proposals(answer, roles)
-    if not proposals:
-        return
-    with Session(engine) as session:
-        company = session.get(Company, company_id)
-        autonomous = bool(company and (company.autonomy_level or 0) >= 3)
-        created = procedures.propose(
-            session,
-            company_id,
-            proposals,
-            SCRUM_MASTER_ROLE,
-            source_sprint_id=sprint_id,
-            skip_failed=True,
-        )
-        for procedure in created:
-            if autonomous:
-                procedures.adopt(session, procedure, "autonomy")
-            state = (
-                "Adopted (autonomy level 3)"
-                if autonomous
-                else "Proposed, waiting for a Manager"
-            )
-            session.add(
-                messages._message(
-                    company_id,
-                    sprint_id,
-                    None,
-                    SCRUM_MASTER_ROLE,
-                    SCRUM_MASTER_ROLE,
-                    None if procedure.role == procedures.ALL_ROLES else procedure.role,
-                    "proposal",
-                    f'{state}: "{procedure.title}" (v{procedure.version})\n'
-                    f"{procedure.body}\nWhy: {procedure.rationale or '-'}",
-                )
-            )
-        session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -1830,7 +1322,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                         "Reviewed item=%s → blocked (high risk, awaiting a person)",
                         item.id,
                     )
-                    await _finalize_sprint_if_ready(nats_client, sprint.id)
+                    await close._finalize_sprint_if_ready(nats_client, sprint.id)
                 else:
                     await publish_glassroom(
                         nats_client,
@@ -1853,7 +1345,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     logger.info(
                         "Reviewed item=%s → done by %s", item.id, reviewer_dict["name"]
                     )
-                    await _finalize_sprint_if_ready(nats_client, sprint.id)
+                    await close._finalize_sprint_if_ready(nats_client, sprint.id)
 
             except Exception as e:  # noqa: BLE001 - Isolate review failures to the affected item.
                 logger.warning("Review failed for item=%s: %s", item.id, e)
@@ -2004,7 +1496,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
     # A sprint whose last open task just got blocked for a person closes now,
     # with its retrospective; approvals close theirs on the spot.
     for sprint_id in closing_candidates:
-        await _finalize_sprint_if_ready(nats_client, sprint_id)
+        await close._finalize_sprint_if_ready(nats_client, sprint_id)
 
     # Re-dispatch any items that just went back to todo
     await _dispatch_todo_items(nats_client)

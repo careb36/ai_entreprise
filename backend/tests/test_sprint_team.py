@@ -17,6 +17,7 @@ import pytest
 import worker_stages
 from models import Agent, BacklogItem, Company, Sprint
 from services import spec_planning, sprint_planner, sprint_team, task_worker
+from services.loop.worker import close as worker_close
 from sqlmodel import select
 from test_work_control import _member, auth_on  # noqa: F401 - fixture used by name.
 
@@ -354,13 +355,16 @@ def test_an_autonomy_3_follow_up_gets_an_automatic_team(sqlite_session, monkeypa
         "suggested_team": ["TechWriter"],
     }
     with (
-        patch("services.task_worker.AUTO_SELF_IMPROVEMENT_ENABLED", True),
-        patch("services.task_worker.plan_self_improvement_sprint", return_value=plan),
+        patch("services.loop.worker.close.AUTO_SELF_IMPROVEMENT_ENABLED", True),
         patch(
-            "services.task_worker.build_self_improvement_objective", return_value="x"
+            "services.loop.worker.close.plan_self_improvement_sprint", return_value=plan
+        ),
+        patch(
+            "services.loop.worker.close.build_self_improvement_objective",
+            return_value="x",
         ),
     ):
-        result = task_worker._complete_sprint_and_plan_follow_up(closing.id)
+        result = worker_close._complete_sprint_and_plan_follow_up(closing.id)
     assert result["auto_opened"] is True
     sqlite_session.expire_all()
     follow_up = sqlite_session.get(Sprint, result["next_sprint_id"])
