@@ -19,6 +19,7 @@ from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import console_assistants, task_worker
+from services.loop.worker import prompt
 from sqlmodel import Session, select
 
 from llm.model_factory import AgentRole, ModelFactory
@@ -251,10 +252,10 @@ class _Nats:
 
 def _task_assign_handler(monkeypatch):
     monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", False)
-    monkeypatch.setattr(task_worker, "_fetch_memory_context", lambda *args: "")
-    monkeypatch.setattr(task_worker, "_load_recent_lessons", lambda *args: "")
+    monkeypatch.setattr(prompt, "_fetch_memory_context", lambda *args: "")
+    monkeypatch.setattr(prompt, "_load_recent_lessons", lambda *args: "")
     monkeypatch.setattr(
-        task_worker, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
+        prompt, "_load_sprint_completed_tasks", lambda sprint_id, item_id: ""
     )
 
     async def _no_assistants(nats, item, agent, sprint, resolve_workspace_root):

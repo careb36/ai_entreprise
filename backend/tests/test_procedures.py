@@ -17,6 +17,7 @@ from models import (
     User,
 )
 from services import procedures, scrum_master, task_worker
+from services.loop.worker import prompt
 from sqlmodel import select
 from test_review_gate import _FakeNATS
 
@@ -443,7 +444,7 @@ def test_active_procedures_reach_the_role_prompt(db, monkeypatch):
         )
     db.commit()
 
-    context = task_worker._load_procedures_context(company.id, "Developer")
+    context = prompt._load_procedures_context(company.id, "Developer")
     assert "Dev rule" in context and "Team rule" in context and "QA rule" not in context
 
     prompts = _scrum_master_answers(monkeypatch, "Done.")

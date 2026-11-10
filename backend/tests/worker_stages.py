@@ -12,9 +12,9 @@ from __future__ import annotations
 from typing import Any
 
 from services.loop import task_worker
-from services.loop.worker import messages
+from services.loop.worker import board_writes, messages, prompt
 
-STAGES = (task_worker, messages)
+STAGES = (task_worker, messages, board_writes, prompt)
 
 
 def use_engine(monkeypatch: Any, engine: Any) -> None:

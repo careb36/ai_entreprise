@@ -12,7 +12,7 @@ import json
 import worker_stages
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services.loop.worker import board_writes
 from sqlmodel import Session, text
 
 
@@ -41,9 +41,9 @@ def test_worker_keeps_every_comment(sqlite_session, monkeypatch):
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     item_id = _item(sqlite_session)
 
-    task_worker._update_item_status(item_id, "in_progress", "brief", "Architect")
-    task_worker._update_item_status(item_id, "in_progress", "delivery", "System")
-    task_worker._update_item_status(item_id, "in_review", "the deliverable", "Dev")
+    board_writes._update_item_status(item_id, "in_progress", "brief", "Architect")
+    board_writes._update_item_status(item_id, "in_progress", "delivery", "System")
+    board_writes._update_item_status(item_id, "in_review", "the deliverable", "Dev")
 
     assert _texts(sqlite_session, item_id) == ["brief", "delivery", "the deliverable"]
 
@@ -74,6 +74,6 @@ def test_legacy_string_comments_are_read_as_a_list(sqlite_session, monkeypatch):
     )
     sqlite_session.commit()
 
-    task_worker._update_item_status(item_id, "in_review", "new", "Dev")
+    board_writes._update_item_status(item_id, "in_review", "new", "Dev")
 
     assert _texts(sqlite_session, item_id) == ["old", "new"]
