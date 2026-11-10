@@ -19,8 +19,7 @@ from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import agent_run_service, agent_worker
 from services.loop.worker.close import _complete_sprint_and_plan_follow_up
-
-import agents.graph as graph_module
+from services.producers import graph as graph_module
 
 
 class _FakeNATSClient:
