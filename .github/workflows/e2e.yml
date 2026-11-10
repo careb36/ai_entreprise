@@ -78,6 +78,13 @@ jobs:
           # A service container cannot be given arguments and the stock NATS
           # image starts without JetStream, which the backend needs for the
           # durable task queue the loop relies on.
+          #
+          # A re-run keeps the run id, so an attempt whose runner died before
+          # its cleanup step leaves these names taken ("Conflict. The
+          # container name ... is already in use"). Only this run's own
+          # containers carry them, so removing them first is safe.
+          docker rm -f "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
+            "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" >/dev/null 2>&1 || true
           docker run -d --name "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
             -p "127.0.0.1::5432" pgvector/pgvector:pg15
