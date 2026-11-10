@@ -2,7 +2,7 @@
 
 A company may keep its code only in a local repository: a task's or a
 sprint's branch is merged into a base branch on the daemon's machine
-(``vscode-daemon/local_merge.py``, ``services/local_merge.py``), never pushed.
+(``vscode-daemon/local_merge.py``, ``services/release/local_merge.py``), never pushed.
 These tests use repositories in ``tmp_path`` that have no remote at all.
 """
 
