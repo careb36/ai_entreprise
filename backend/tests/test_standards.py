@@ -13,6 +13,7 @@ import pytest
 import worker_stages
 from models.agent_run import AgentRun
 from services import standards, verification
+from services.loop.worker import record as worker_record
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "STANDARDS.md"
 
@@ -182,7 +183,6 @@ def test_the_verifier_records_the_check_and_a_secret_refutes_the_run(
     sqlite_session, monkeypatch, tmp_path
 ):
     from models import Company
-    from services import task_worker
 
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     company = Company(company_name="Std Corp")
@@ -216,7 +216,7 @@ def test_the_verifier_records_the_check_and_a_secret_refutes_the_run(
     assert result.verdict == "refuted"
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     sqlite_session.commit()
-    problem, observation = task_worker._delivery_gate(company.id, 1)
+    problem, observation = worker_record._delivery_gate(company.id, 1)
     assert problem == "standards violated" and "STD-SEC-1" in observation
 
 

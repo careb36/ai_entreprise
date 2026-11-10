@@ -19,6 +19,7 @@ from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import console_assistants, task_worker
+from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import prompt
 from sqlmodel import Session, select
 
@@ -308,7 +309,7 @@ def test_llm_failure_is_recorded_on_the_board(llm, db, monkeypatch, response, ex
 
 def test_served_model_is_recorded_on_the_agent_run(llm, db, tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
-    monkeypatch.setattr(task_worker, "_resolve_workspace_root", lambda cid: None)
+    monkeypatch.setattr(worker_deliver, "_resolve_workspace_root", lambda cid: None)
     llm.response = {
         "choices": [{"message": {"content": "A written analysis with no files."}}],
         "served_model": "qwen3.6-flash",
@@ -321,7 +322,7 @@ def test_served_model_is_recorded_on_the_agent_run(llm, db, tmp_path, monkeypatc
 
     deliverable = task_worker._execute_task(item_dict, ctx_agent, "Routing")
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             _Nats(), item_dict, ctx_agent, sprint_dict, deliverable
         )
     )

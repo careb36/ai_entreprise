@@ -16,7 +16,9 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import task_worker, workspace_daemon
+from services import workspace_daemon
+from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import record as worker_record
 from services.verification import check_tests_run
 from sqlmodel import select
 
@@ -43,21 +45,21 @@ def no_override(monkeypatch):
 def test_configured_command_wins(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "DELIVERY_TEST_COMMAND", " make test ")
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    assert task_worker._detect_test_command(str(tmp_path)) == "make test"
+    assert worker_deliver._detect_test_command(str(tmp_path)) == "make test"
 
 
 def test_npm_test_script_is_detected(no_override, tmp_path):
     (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"test": "vitest run"}})
     )
-    assert task_worker._detect_test_command(str(tmp_path)) == "npm test --silent"
+    assert worker_deliver._detect_test_command(str(tmp_path)) == "npm test --silent"
 
 
 def test_npm_placeholder_script_is_not_a_test_suite(no_override, tmp_path):
     (tmp_path / "package.json").write_text(
         json.dumps({"scripts": {"test": 'echo "Error: no test specified" && exit 1'}})
     )
-    assert task_worker._detect_test_command(str(tmp_path)) is None
+    assert worker_deliver._detect_test_command(str(tmp_path)) is None
 
 
 @pytest.mark.parametrize(
@@ -70,7 +72,7 @@ def test_npm_placeholder_script_is_not_a_test_suite(no_override, tmp_path):
 )
 def test_pytest_configuration_is_detected(no_override, tmp_path, name, content):
     (tmp_path / name).write_text(content)
-    assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
+    assert worker_deliver._detect_test_command(str(tmp_path)) == "python -m pytest -q"
 
 
 def test_install_command_detection(no_override, tmp_path):
@@ -120,10 +122,10 @@ def test_gradle_installs_by_compiling_the_tests(no_override, tmp_path, marker):
 
 def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
-    assert task_worker._detect_test_command(str(tmp_path)) is None
+    assert worker_deliver._detect_test_command(str(tmp_path)) is None
     (tmp_path / "tests" / "unit").mkdir(parents=True)
     (tmp_path / "tests" / "unit" / "test_x.py").write_text("def test_x(): pass\n")
-    assert task_worker._detect_test_command(str(tmp_path)) == "python -m pytest -q"
+    assert worker_deliver._detect_test_command(str(tmp_path)) == "python -m pytest -q"
 
 
 @pytest.mark.parametrize(
@@ -138,7 +140,7 @@ def test_tests_folder_is_detected_and_unrelated_toml_is_not(no_override, tmp_pat
 )
 def test_more_stacks_are_detected(no_override, tmp_path, marker, expected):
     (tmp_path / marker).write_text("")
-    assert task_worker._detect_test_command(str(tmp_path)) == expected
+    assert worker_deliver._detect_test_command(str(tmp_path)) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +269,7 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
     nats = _DaemonOverNATS(_load_daemon())
 
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats, item, agent, sprint, _answer("Hello, Ana!")
         )
     )
@@ -277,7 +279,7 @@ def test_passing_suite_verifies_the_agents_test_claim(project):
     assert checks["tests_run"]["outcome"] == "pass"
     assert checks["claimed_tests_evidenced"]["outcome"] == "pass"
     assert verification.verdict == "verified"
-    assert task_worker._delivery_gate(sprint["company_id"], item["id"]) is None
+    assert worker_record._delivery_gate(sprint["company_id"], item["id"]) is None
 
 
 def test_failing_suite_refutes_and_sends_the_task_back(project):
@@ -285,7 +287,9 @@ def test_failing_suite_refutes_and_sends_the_task_back(project):
     nats = _DaemonOverNATS(_load_daemon())
 
     asyncio.run(
-        task_worker._deliver_artifacts(nats, item, agent, sprint, _answer("Hi, Ana!"))
+        worker_deliver._deliver_artifacts(
+            nats, item, agent, sprint, _answer("Hi, Ana!")
+        )
     )
 
     verification, checks = _verification(session, sprint["company_id"], item["id"])
@@ -293,7 +297,9 @@ def test_failing_suite_refutes_and_sends_the_task_back(project):
     assert "exited 1" in checks["tests_run"]["observation"]
     assert checks["claimed_tests_evidenced"]["outcome"] == "refuted"
     assert verification.verdict == "refuted"
-    problem, observation = task_worker._delivery_gate(sprint["company_id"], item["id"])
+    problem, observation = worker_record._delivery_gate(
+        sprint["company_id"], item["id"]
+    )
     assert problem == "tests failed"
     assert "exited 1" in observation
 
@@ -304,7 +310,9 @@ def test_disabled_by_default(project, monkeypatch):
     nats = _DaemonOverNATS(_load_daemon())
 
     asyncio.run(
-        task_worker._deliver_artifacts(nats, item, agent, sprint, _answer("Hi, Ana!"))
+        worker_deliver._deliver_artifacts(
+            nats, item, agent, sprint, _answer("Hi, Ana!")
+        )
     )
 
     _verification_row, checks = _verification(session, sprint["company_id"], item["id"])

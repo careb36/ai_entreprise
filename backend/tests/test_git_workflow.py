@@ -22,7 +22,8 @@ from models import Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
 from models.company import ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import git_workflow, task_worker
+from services import git_workflow
+from services.loop.worker import deliver as worker_deliver
 from sqlmodel import Session, select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -323,7 +324,7 @@ def test_a_task_delivered_with_the_workflow_lands_on_its_branch_and_is_verified(
     nats = _DaemonOverNATS()
 
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats,
             {"id": item.id, "title": item.title, "description": ""},
             {"role": "Developer", "name": "Dev", "model": "m", "served_model": "m"},

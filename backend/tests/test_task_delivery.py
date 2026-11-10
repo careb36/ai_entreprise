@@ -18,6 +18,7 @@ from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
+from services.loop.worker import deliver as worker_deliver
 from services.verification import check_files_written
 from sqlmodel import Session, select
 
@@ -160,14 +161,14 @@ def test_discovered_project_wins_over_the_env_workspace(db, monkeypatch, tmp_pat
     db.commit()
     monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
 
-    assert task_worker._resolve_workspace_root(company.id) == str(tmp_path)
+    assert worker_deliver._resolve_workspace_root(company.id) == str(tmp_path)
 
 
 def test_env_workspace_is_the_fallback(db, monkeypatch):
     company = _company(db, "No discovery Corp")
     monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
 
-    assert task_worker._resolve_workspace_root(company.id) == "/workspace"
+    assert worker_deliver._resolve_workspace_root(company.id) == "/workspace"
 
 
 # ---------------------------------------------------------------------------
@@ -382,7 +383,7 @@ def test_end_to_end_files_land_and_delivery_is_verified(db, tmp_path, monkeypatc
     nats = _DaemonOverNATS(_load_daemon())
 
     review = asyncio.run(
-        task_worker._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
+        worker_deliver._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
     )
 
     login = project / "src" / "auth" / "login.py"
@@ -417,7 +418,7 @@ def test_end_to_end_daemon_down_is_unverifiable_not_lost(db, tmp_path, monkeypat
     nats = _DaemonOverNATS(_load_daemon(), fail=True)
 
     review = asyncio.run(
-        task_worker._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
+        worker_deliver._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
     )
 
     assert not (project / "src").exists()
@@ -434,7 +435,7 @@ def test_answer_without_files_is_still_recorded(db, tmp_path, monkeypatch):
     nats = _DaemonOverNATS(_load_daemon())
 
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats, item, agent, sprint, "A written analysis with no files."
         )
     )
@@ -451,7 +452,7 @@ def test_unreported_served_model_is_left_empty_not_defaulted(db, tmp_path, monke
     agent = {**agent, "served_model": None}
 
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             _DaemonOverNATS(_load_daemon()), item, agent, sprint, "Analysis only."
         )
     )
@@ -475,7 +476,7 @@ def test_new_company_records_its_project_so_agents_write_there(
     db.commit()
 
     company_id = result["company_id"]
-    assert task_worker._resolve_workspace_root(company_id) == str(tmp_path)
+    assert worker_deliver._resolve_workspace_root(company_id) == str(tmp_path)
     discovery = db.exec(
         select(ProjectDiscovery).where(ProjectDiscovery.company_id == company_id)
     ).one()
@@ -489,4 +490,4 @@ def test_company_without_a_project_uses_the_fallback_root(db, monkeypatch):
     result = CompanyService(db).init_company(company_name="No project Corp", agents=[])
     db.commit()
 
-    assert task_worker._resolve_workspace_root(result["company_id"]) == "/workspace"
+    assert worker_deliver._resolve_workspace_root(result["company_id"]) == "/workspace"

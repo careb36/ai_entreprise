@@ -25,37 +25,24 @@ from models import (
     BacklogItem,
     Company,
     OutboxEvent,
-    ProjectDiscovery,
     Sprint,
 )
-from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
+from models.agent_run import TASK_WORKER_PRODUCER  # noqa: F401 - re-exported
 from nats_client import NATSClient
-from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
-from sqlmodel import Session, select, text
+from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS
+from sqlmodel import Session, select
 
-from services.contracts.manifest import (
-    ALLOWED_ARTIFACT_EXTENSIONS,
-    MANIFEST_BLOCK,
-    expected_hashes,
-    parse_file_manifest,
-)
-from services.contracts.manifest import (
-    sanitize_relative_path as _sanitize_relative_path,
-)
+from services.contracts.manifest import parse_file_manifest
 from services.evidence import (
-    acceptance,
-    agent_run_service,
     delivery_gate,
     risk,
     standards,
 )
-from services.evidence.verification import evaluate_workspace_writes, verify_agent_run
 from services.learning import procedures, retrospective, scrum_master
 from services.learning.architect import track_record as architect_track_record
 from services.learning.architect import track_record_context as architect_record_context
 from services.loop import (
     console_host,
-    delivery_checks,
     edit_plan,
     replicas,
     review_digest,
@@ -76,13 +63,28 @@ from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
-from services.loop.worker import board_writes, messages, prompt
+from services.loop.worker import board_writes, deliver, messages, prompt, record
 
 # Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
 # patches the stage module (``services.loop.worker.<stage>``), which owns them.
 from services.loop.worker.board_writes import (  # noqa: F401 - re-exported
     _append_item_comment,
     _update_item_status,
+)
+from services.loop.worker.deliver import (  # noqa: F401 - re-exported
+    _build_review_payload,
+    _deliver_artifacts,
+    _delivery_comment,
+    _detect_project_test_command,
+    _detect_test_command,
+    _extract_artifact_targets,
+    _normalize_artifact_content,
+    _on_delivery_result,
+    _plan_queued_delivery,
+    _publish_queued_delivery,
+    _queued_delivery_evidence,
+    _resolve_workspace_root,
+    _run_delivery_tests,
 )
 from services.loop.worker.messages import (  # noqa: F401 - re-exported
     MESSAGE_BODY_LIMIT,
@@ -102,6 +104,14 @@ from services.loop.worker.prompt import (  # noqa: F401 - re-exported
     _load_recent_lessons,
     _load_sprint_completed_tasks,
 )
+from services.loop.worker.record import (  # noqa: F401 - re-exported
+    _delivery_gate,
+    _delivery_risk,
+    _latest_task_verification,
+    _record_task_run,
+    _reverify_run,
+    _summarize_deliverable,
+)
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
 from services.planning.sprint_planner import (
@@ -117,7 +127,6 @@ from services.platform.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     KPI_ROLE_ARCHITECT,
     RESULT_NEEDS_WORK,
-    VERDICT_REFUTED,
     build_architect_consult_prompt,
     classify_review_result,
     format_architect_consult_comment,
@@ -134,9 +143,7 @@ from services.tasks.board import (
     SCRUM_MASTER_ROLE,
 )
 from services.tools import developer_tools, mcp_tools
-from services.tools.workspace_edits import delivered, observe_tools, with_tool_edits
-from services.workspace import git_workflow, workspace_daemon
-from services.workspace.workspace_daemon import detect_test_command
+from services.tools.workspace_edits import delivered
 
 logger = setup_logger("fabrique-task-worker")
 
@@ -521,86 +528,6 @@ def _sanitize_deliverable_text(deliverable: str) -> str:
         text = f"{text}\n```"
 
     return text
-
-
-def _resolve_workspace_root(company_id: int) -> str | None:
-    """
-    Return where this company's artifacts should be written.
-
-    The company's discovered project wins; ``AGENT_WORKSPACE_ROOT`` is only a
-    fallback for companies without one (e.g. self-improvement sprints that
-    work on this repository).
-    """
-    with Session(engine) as session:
-        discovery = session.exec(
-            select(ProjectDiscovery)
-            .where(ProjectDiscovery.company_id == company_id)
-            .order_by(text("created_at DESC"))
-        ).first()
-        if discovery and discovery.project_path:
-            return discovery.project_path
-
-    return os.getenv("AGENT_WORKSPACE_ROOT") or None
-
-
-def _normalize_artifact_content(path: str, deliverable: str) -> str:
-    """Trim wrapper text so persisted files contain only final artifact content."""
-    text_content = (deliverable or "").strip().replace("\r\n", "\n")
-
-    fenced = re.search(
-        r"```(?:[a-zA-Z0-9_+-]+)?\s*(.*?)```", text_content, flags=re.DOTALL
-    )
-    if fenced and len(fenced.group(1).strip()) > 40:
-        text_content = fenced.group(1).strip()
-
-    if path.lower().endswith(".md"):
-        text_content = re.sub(r"(?m)^\*\*\*\s*$", "", text_content).strip()
-        heading = re.search(r"(?m)^#\s+", text_content)
-        if heading and heading.start() > 0:
-            text_content = text_content[heading.start() :].strip()
-
-    return text_content
-
-
-def _extract_artifact_targets(
-    item: dict[str, Any], deliverable: str
-) -> list[dict[str, str]]:
-    """Infer concrete file targets from task metadata and generated content."""
-    title_desc = f"{item.get('title', '')} {item.get('description', '')}"
-    candidates = re.findall(r"([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)", title_desc)
-
-    artifacts: list[dict[str, str]] = []
-    for c in candidates:
-        rel = _sanitize_relative_path(c)
-        if not rel:
-            continue
-        _, ext = os.path.splitext(rel)
-        if ext.lower() not in ALLOWED_ARTIFACT_EXTENSIONS:
-            continue
-        artifacts.append(
-            {"path": rel, "content": _normalize_artifact_content(rel, deliverable)}
-        )
-
-    # Remove duplicates while preserving order.
-    dedup: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for a in artifacts:
-        if a["path"] in seen:
-            continue
-        seen.add(a["path"])
-        dedup.append(a)
-
-    return dedup
-
-
-def _build_review_payload(
-    deliverable: str, artifact_targets: list[dict[str, str]]
-) -> str:
-    """What QA reviews: a digest of every file when files were written
-    (``review_digest``), else the deliverable text."""
-    if not artifact_targets:
-        return (deliverable or "").strip()
-    return review_digest.build(artifact_targets, _summarize_deliverable(deliverable))
 
 
 def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
@@ -1214,388 +1141,6 @@ DELIVERY_RESULTS_CONSUMER = "delivery-results"
 TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
 
 
-# The gate before QA, the risk tier and the latest verification: services/delivery_gate.
-def _delivery_gate(company_id: int, item_id: int) -> tuple[str, str] | None:
-    return delivery_gate.gate(engine, company_id, item_id)
-
-
-def _delivery_risk(company_id: int, item_id: int) -> dict[str, Any] | None:
-    return delivery_gate.risk(engine, company_id, item_id)
-
-
-def _latest_task_verification(company_id: int, item_id: int) -> Verification | None:
-    return delivery_gate.latest_verification(engine, company_id, item_id)
-
-
-def _summarize_deliverable(deliverable: str, limit: int = 500) -> str:
-    """The agent's prose outside the file blocks: its own account of the work."""
-    prose = MANIFEST_BLOCK.sub("", deliverable or "").strip()
-    return prose[:limit]
-
-
-def _record_task_run(
-    item: dict[str, Any],
-    agent: dict[str, Any],
-    sprint: dict[str, Any],
-    deliverable: str,
-    targets: list[dict[str, str]],
-    evidence: dict[str, Any] | None,
-) -> tuple[int, str] | None:
-    """
-    Ingest the deliverable as an ``AgentRun`` and verify it deterministically.
-
-    The claims are what the agent produced (declared paths, its summary); the
-    evidence is what the daemon observed on disk.  Returns ``(run_id, verdict)``
-    or ``None`` when ingestion fails — recording never breaks the task flow.
-    """
-    payload = AgentRunCreate(
-        company_id=sprint["company_id"],
-        external_ref=f"task-{item['id']}",
-        producer=TASK_WORKER_PRODUCER,
-        # Only the model the proxy reported as having answered: an observation.
-        # When it reported none the field stays empty rather than defaulting
-        # to the model that was requested (POSITIONING rule 7).
-        model=agent.get("served_model") or None,
-        agent_role=agent.get("role"),
-        subject={
-            "sprint_id": sprint["id"],
-            "backlog_item_id": item["id"],
-            "title": item.get("title"),
-        },
-        claims={
-            "files": [target["path"] for target in targets],
-            "summary": _summarize_deliverable(deliverable),
-        },
-        artifact=deliverable or "",
-        finished_at=datetime.now(UTC),
-    )
-    # Tool calls and edited files: observations beside the daemon's, not claims.
-    evidence = observe_tools(evidence, agent)
-    try:
-        with Session(engine) as session:
-            run, _created = agent_run_service.ingest_agent_run(session, payload)
-            session.commit()
-            verification = verify_agent_run(session, run, evidence)
-            return run.id, verification.verdict
-    except Exception as e:  # noqa: BLE001 - Evidence recording must not block delivery.
-        logger.warning("AgentRun recording failed for item=%s: %s", item.get("id"), e)
-        return None
-
-
-def _delivery_comment(
-    targets: list[dict[str, str]],
-    evidence: dict[str, Any] | None,
-    recorded: tuple[int, str] | None,
-) -> str:
-    run_note = f" — evidence run #{recorded[0]} ({recorded[1]})" if recorded else ""
-    run_note += git_workflow.skipped_note(evidence)
-    outcome, observation = evaluate_workspace_writes(
-        [target["path"] for target in targets], evidence
-    )
-    if outcome == "pass":
-        return f"Delivered to {(evidence or {}).get('workspace_root')}: {observation}{run_note}"
-    if outcome == VERDICT_REFUTED:
-        return f"Delivery refuted: {observation}{run_note}"
-    if (evidence or {}).get("delivery_queued"):
-        return f"Delivery queued: {observation}{run_note}"
-    return f"Delivery unconfirmed: {observation}{run_note}"
-
-
-# The project's test command is detected in services/workspace_daemon.
-_detect_test_command = detect_test_command
-_detect_project_test_command = workspace_daemon.detect_project_test_command
-_run_delivery_tests = delivery_checks.run_delivery_tests
-
-
-def _plan_queued_delivery(
-    item: dict[str, Any],
-    sprint: dict[str, Any],
-    workspace_root: str,
-    targets: list[dict[str, str]],
-    evidence: dict[str, Any],
-) -> dict[str, Any]:
-    """The ``workspace.deliver`` job that keeps the files for an offline daemon.
-
-    Marks *evidence* as waiting for it, so the delivery gate holds the task; the
-    job is published only once that record exists, for a daemon reporting at once.
-    """
-    job_id = str(uuid4())
-    evidence["delivery_queued"] = {"job_id": job_id}
-    evidence["reason"] = (
-        f"{evidence.get('reason') or 'the workspace daemon did not reply'}; "
-        "delivery queued until the daemon connects"
-    )
-    return {
-        "job_id": job_id,
-        "workspace_root": workspace_root,
-        "files": targets,
-        "interaction_id": f"task-{item['id']}",
-        "company_id": sprint["company_id"],
-        "sprint_id": sprint["id"],
-        "item_id": item["id"],
-    }
-
-
-async def _publish_queued_delivery(
-    nats_client: NATSClient, job: dict[str, Any], evidence: dict[str, Any]
-) -> bool:
-    """
-    Store *job* on ``workspace.deliver``; the daemon writes it when it connects
-    and reports on ``workspace.delivered`` (``_on_delivery_result``).
-
-    When it cannot be stored, *evidence* stops claiming the task waits for it.
-    """
-    try:
-        await nats_client.publish(
-            "workspace.deliver", job, msg_id=f"deliver-{job['job_id']}"
-        )
-        return True
-    except Exception as e:  # noqa: BLE001 - Unqueued, the delivery stays unconfirmed.
-        logger.warning("Could not queue delivery for item=%s: %s", job["item_id"], e)
-        evidence.pop("delivery_queued", None)
-        evidence["reason"] = evidence["reason"].replace(
-            "delivery queued until the daemon connects",
-            f"queueing the delivery failed ({type(e).__name__})",
-        )
-        return False
-
-
-def _queued_delivery_evidence(
-    company_id: int, item_id: int, job_id: str
-) -> tuple[int, dict[str, Any], list[str]] | None:
-    """The run whose latest verification is waiting for *job_id*, if any."""
-    with Session(engine) as session:
-        run = session.exec(
-            select(AgentRun)
-            .where(
-                AgentRun.company_id == company_id,
-                AgentRun.external_ref == f"task-{item_id}",
-                AgentRun.producer == TASK_WORKER_PRODUCER,
-            )
-            .order_by(AgentRun.version.desc())
-        ).first()
-        if run is None:
-            return None
-        verification = session.exec(
-            select(Verification)
-            .where(Verification.agent_run_id == run.id)
-            .order_by(Verification.id.desc())
-        ).first()
-        evidence = dict((verification.evidence or {}) if verification else {})
-        if (evidence.get("delivery_queued") or {}).get("job_id") != job_id:
-            return None
-        files = [p for p in (run.claims or {}).get("files") or [] if isinstance(p, str)]
-        return run.id, evidence, files
-
-
-def _reverify_run(run_id: int, evidence: dict[str, Any]) -> tuple[int, str] | None:
-    try:
-        with Session(engine) as session:
-            run = session.get(AgentRun, run_id)
-            verification = verify_agent_run(session, run, evidence)
-            return run.id, verification.verdict
-    except Exception as e:  # noqa: BLE001 - Evidence recording must not stop the consumer.
-        logger.warning("Re-verification failed for run=%s: %s", run_id, e)
-        return None
-
-
-async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> None:
-    """
-    Record what the daemon wrote for a delivery that had been queued.
-
-    The expected hashes come from the backend's own record of what it sent;
-    the result supplies only the daemon's per-file observation.  A result for
-    a job the task no longer waits for (a newer delivery superseded it) is
-    ignored.
-    """
-    job_id = data.get("job_id")
-    company_id, item_id, sprint_id = (
-        data.get("company_id"),
-        data.get("item_id"),
-        data.get("sprint_id"),
-    )
-    if not job_id or company_id is None or item_id is None:
-        logger.warning("Ignoring malformed workspace.delivered message: %s", data)
-        return
-    pending = await asyncio.to_thread(
-        _queued_delivery_evidence, company_id, item_id, job_id
-    )
-    if pending is None:
-        logger.info("No task waits for delivery job=%s; ignoring", job_id)
-        return
-    run_id, evidence, files = pending
-    evidence.pop("delivery_queued", None)
-    evidence.pop("reason", None)
-    writes = data.get("files")
-    evidence["workspace_writes"] = writes if isinstance(writes, list) else None
-    if evidence["workspace_writes"] is None:
-        evidence["reason"] = data.get("error") or (
-            "the workspace daemon sent no per-file results"
-        )
-    git_workflow.record_reply(evidence, data)
-    evidence["delivered_after_queue"] = True
-
-    written, _ = evaluate_workspace_writes(files, evidence)
-    if settings.DELIVERY_TESTS_ENABLED and written == "pass":
-        evidence["acceptance"] = await asyncio.to_thread(
-            acceptance.evidence_for, engine, item_id
-        )
-        await delivery_checks.guard_test_files(
-            nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
-        )
-        await _run_delivery_tests(nats_client, {"id": sprint_id}, evidence, engine)
-
-    recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
-    comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
-    await asyncio.to_thread(
-        board_writes._append_item_comment,
-        item_id,
-        f"Queued delivery: {comment}",
-        "System",
-        "verified",
-        run_id=recorded[0] if recorded else None,
-    )
-    if sprint_id is not None:
-        await publish_glassroom(
-            nats_client,
-            sprint_id,
-            {
-                "type": "status",
-                "semantic_type": "task.artifact_delivery",
-                "source": "task_worker",
-                "agent": "System",
-                "role": "System",
-                "task_id": item_id,
-                "phase": "artifact_delivery",
-                "agent_run_id": recorded[0] if recorded else None,
-                "verdict": recorded[1] if recorded else None,
-                "message": f"🧱 Queued delivery: {comment}",
-            },
-        )
-
-
-async def _deliver_artifacts(
-    nats_client: NATSClient,
-    item: dict[str, Any],
-    agent: dict[str, Any],
-    sprint: dict[str, Any],
-    deliverable: str,
-) -> str:
-    """
-    Write the agent's files into the company's project and record the outcome.
-
-    Files come from the agent's ``path=`` manifest, or — when it declared none —
-    from file names in the task text.  The daemon is asked with a NATS request
-    and reports, per file, the sha256 of the bytes it read back from disk; the
-    worker compares that with the sha256 of the content it sent.  Returns the
-    payload for QA review.
-    """
-    targets = with_tool_edits(parse_file_manifest(deliverable), agent.get("tool_edits"))
-    if not targets:
-        targets = await asyncio.to_thread(_extract_artifact_targets, item, deliverable)
-    review_payload = _build_review_payload(deliverable, targets)
-
-    evidence: dict[str, Any] | None = None
-    queued_job: dict[str, Any] | None = None
-    if targets:
-        workspace_root = await asyncio.to_thread(
-            _resolve_workspace_root, sprint["company_id"]
-        )
-        git_spec = await asyncio.to_thread(
-            git_workflow.delivery_spec, engine, sprint, item
-        )
-        evidence = {
-            "workspace_root": workspace_root,
-            "expected": expected_hashes(targets),
-            "workspace_writes": None,
-        }
-        if not workspace_root:
-            evidence["reason"] = "workspace path not configured"
-        else:
-            try:
-                reply = await nats_client.request(
-                    "workspace.generate",
-                    {
-                        "workspace_root": workspace_root,
-                        "files": targets,
-                        "interaction_id": f"task-{item['id']}",
-                        "sprint_id": sprint["id"],
-                        **({"git": git_spec} if git_spec else {}),
-                    },
-                    timeout=git_workflow.delivery_timeout(git_spec),
-                )
-                writes = reply.get("files") if isinstance(reply, dict) else None
-                evidence["workspace_writes"] = (
-                    writes if isinstance(writes, list) else None
-                )
-                if evidence["workspace_writes"] is None:
-                    evidence["reason"] = "the workspace daemon sent no per-file results"
-                git_workflow.record_reply(evidence, reply)
-            except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
-                evidence["reason"] = (
-                    f"the workspace daemon did not reply ({type(e).__name__})"
-                )
-                logger.warning(
-                    "Workspace write request failed for item=%s: %s", item["id"], e
-                )
-                if nats_client.jetstream_enabled:
-                    queued_job = _plan_queued_delivery(
-                        item, sprint, workspace_root, targets, evidence
-                    ) | ({"git": git_spec} if git_spec else {})
-
-        written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
-        if settings.DELIVERY_TESTS_ENABLED and written == "pass":
-            evidence["acceptance"] = await asyncio.to_thread(
-                acceptance.evidence_for, engine, item["id"]
-            )
-            await delivery_checks.guard_test_files(
-                nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
-            )
-            await _run_delivery_tests(nats_client, sprint, evidence, engine)
-
-    recorded = await asyncio.to_thread(
-        _record_task_run, item, agent, sprint, deliverable, targets, evidence
-    )
-    queue_failed = queued_job is not None and not await _publish_queued_delivery(
-        nats_client, queued_job, evidence
-    )
-    if queue_failed and recorded:
-        # The run was recorded as waiting for a job that does not exist.
-        recorded = await asyncio.to_thread(_reverify_run, recorded[0], evidence)
-
-    if targets:
-        comment = _delivery_comment(targets, evidence, recorded)
-        await asyncio.to_thread(
-            board_writes._update_item_status,
-            item["id"],
-            "in_progress",
-            comment_text=comment,
-            comment_author="System",
-            kind="verified",
-            run_id=recorded[0] if recorded else None,
-        )
-        await publish_glassroom(
-            nats_client,
-            sprint["id"],
-            {
-                "type": "status",
-                "semantic_type": "task.artifact_delivery",
-                "source": "task_worker",
-                "agent": "System",
-                "role": "System",
-                "task_id": item["id"],
-                "task_status": "in_progress",
-                "phase": "artifact_delivery",
-                "task": item["title"],
-                "agent_run_id": recorded[0] if recorded else None,
-                "verdict": recorded[1] if recorded else None,
-                "message": f"🧱 {comment}",
-            },
-        )
-
-    return review_payload
-
-
 async def _send_back_from_quality_gate(
     nats_client: NATSClient,
     item: dict[str, Any],
@@ -1799,10 +1344,10 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     prompt._load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
                 spec_planning.task_requirements_context(
-                    nats_client, engine, item["id"], _resolve_workspace_root
+                    nats_client, engine, item["id"], deliver._resolve_workspace_root
                 ),
                 console_assistants.collect_advice(
-                    nats_client, item, agent, sprint, _resolve_workspace_root
+                    nats_client, item, agent, sprint, deliver._resolve_workspace_root
                 ),
             )
             external_advice = assistant_context.get("combined", "")
@@ -2014,7 +1559,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
-            review_payload = await _deliver_artifacts(
+            review_payload = await deliver._deliver_artifacts(
                 nats_client, item, agent, sprint, deliverable
             )
 
@@ -2147,7 +1692,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     # when it starts.  The handler records its own failures on the board, so a
     # message is acknowledged once the handler returns.
     developer_tools.bind(
-        nats_client, asyncio.get_running_loop(), _resolve_workspace_root
+        nats_client, asyncio.get_running_loop(), deliver._resolve_workspace_root
     )
 
     async def _on_task_assign_held(msg, data=None):
@@ -2165,7 +1710,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
     logger.info("Task Worker consuming task.assign")
 
     async def _on_delivered(msg, data):
-        await _on_delivery_result(nats_client, data)
+        await deliver._on_delivery_result(nats_client, data)
 
     # Without JetStream nothing is ever queued, so there are no results either.
     if nats_client.jetstream_enabled:
@@ -2235,16 +1780,16 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 "system_prompt": reviewer.system_prompt if reviewer else None,
             }
 
-            record = task_projection.record_of(session, item, histories)
-            if record.frozen():
+            task_record = task_projection.record_of(session, item, histories)
+            if task_record.frozen():
                 task_events.record(session, item, "blocked", "system", status="blocked")
                 session.commit()
                 logger.info("Skipping QA review for manually frozen item=%s", item.id)
                 continue
 
-            deliverable = record.deliverable()
+            deliverable = task_record.deliverable()
             # Prevent infinite review loops when QA repeatedly fails.
-            qa_review_failures = record.review_failures()
+            qa_review_failures = task_record.review_failures()
             if qa_review_failures >= MAX_QA_REVIEW_FAILURES:
                 task_events.record(
                     session,
@@ -2310,13 +1855,17 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
 
             # Evidence before opinion: a delivery the daemon refuted or never
             # confirmed goes back for rework without asking the QA model.
-            gate = await asyncio.to_thread(_delivery_gate, sprint.company_id, item.id)
+            gate = await asyncio.to_thread(
+                record._delivery_gate, sprint.company_id, item.id
+            )
             if gate is not None and gate[0] == DELIVERY_QUEUED:
                 # Files are written when the daemon connects; review then.
                 continue
             if gate is not None:
                 problem, observation = gate
-                previous_gate_reworks = record.rework_requests_by(DELIVERY_GATE_AUTHOR)
+                previous_gate_reworks = task_record.rework_requests_by(
+                    DELIVERY_GATE_AUTHOR
+                )
                 rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
                 instruction = (
                     "Fix the code so the project's checks pass and deliver every "
@@ -2446,7 +1995,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     None
                     if needs_work
                     else await asyncio.to_thread(
-                        _delivery_risk, sprint.company_id, item.id
+                        record._delivery_risk, sprint.company_id, item.id
                     )
                 )
                 if risk_check is None and not needs_work:
@@ -2467,7 +2016,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     risk_hold = True
                     risk_check = {"reasons": [person_reason]}
 
-                previous_reworks = record.rework_requests_by(reviewer_dict["name"])
+                previous_reworks = task_record.rework_requests_by(reviewer_dict["name"])
                 autopilot_rework_allowed = (
                     needs_work
                     and AUTOPILOT_QA_REWORK_ENABLED

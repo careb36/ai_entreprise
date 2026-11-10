@@ -27,6 +27,8 @@ from models.sprint import BacklogItem, Sprint
 from nats.js.errors import BadRequestError
 from nats_client import NATSClient
 from services import task_worker
+from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import record as worker_record
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -322,7 +324,7 @@ def test_delivery_to_an_offline_daemon_is_queued_and_the_task_waits(
     item, agent, sprint = _task(db, project)
     nats = _OfflineDaemonNATS()
 
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
 
     [(_subject, job, msg_id)] = [
         p for p in nats.published if p[0] == "workspace.deliver"
@@ -351,7 +353,7 @@ def test_delivery_to_an_offline_daemon_is_queued_and_the_task_waits(
         return "APPROVED: ok"
 
     monkeypatch.setattr(task_worker, "_call_llm_for_review", _review)
-    assert task_worker._delivery_gate(sprint["company_id"], item["id"])[0] == (
+    assert worker_record._delivery_gate(sprint["company_id"], item["id"])[0] == (
         task_worker.DELIVERY_QUEUED
     )
     asyncio.run(task_worker._review_cycle(nats))
@@ -365,7 +367,7 @@ def test_daemon_report_for_a_queued_delivery_verifies_the_run(db, tmp_path):
     project.mkdir()
     item, agent, sprint = _task(db, project)
     nats = _OfflineDaemonNATS()
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
     job = next(p[1] for p in nats.published if p[0] == "workspace.deliver")
 
     # The daemon connects later and writes the queued files.
@@ -373,7 +375,7 @@ def test_daemon_report_for_a_queued_delivery_verifies_the_run(db, tmp_path):
     assert acks == ["ack"]
     assert (project / "src" / "greet.py").read_text().startswith("def greet(name):")
 
-    asyncio.run(task_worker._on_delivery_result(nats, result))
+    asyncio.run(worker_deliver._on_delivery_result(nats, result))
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     checks = {c["name"]: c for c in verification.checks}
@@ -381,7 +383,7 @@ def test_daemon_report_for_a_queued_delivery_verifies_the_run(db, tmp_path):
     assert checks["files_written"]["outcome"] == "pass"
     assert "delivery_queued" not in verification.evidence
     assert verification.evidence["delivered_after_queue"] is True
-    assert task_worker._delivery_gate(sprint["company_id"], item["id"]) is None
+    assert worker_record._delivery_gate(sprint["company_id"], item["id"]) is None
     assert _comments(db, item["id"])[-1].startswith(
         f"Queued delivery: Delivered to {project}"
     )
@@ -392,7 +394,7 @@ def test_report_cannot_supply_its_own_expected_hashes(db, tmp_path):
     project.mkdir()
     item, agent, sprint = _task(db, project)
     nats = _OfflineDaemonNATS()
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
     job = next(p[1] for p in nats.published if p[0] == "workspace.deliver")
     forged = {
         **job,
@@ -400,7 +402,7 @@ def test_report_cannot_supply_its_own_expected_hashes(db, tmp_path):
         "expected": {"src/greet.py": "f" * 64},
     }
 
-    asyncio.run(task_worker._on_delivery_result(nats, forged))
+    asyncio.run(worker_deliver._on_delivery_result(nats, forged))
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     assert verification.verdict == "refuted"
@@ -412,12 +414,12 @@ def test_report_for_a_superseded_job_is_ignored(db, tmp_path):
     project.mkdir()
     item, agent, sprint = _task(db, project)
     nats = _OfflineDaemonNATS()
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
     job = next(p[1] for p in nats.published if p[0] == "workspace.deliver")
     before = _latest_verification(db, sprint["company_id"], item["id"]).id
 
     stale = {**job, "job_id": "another-job", "files": []}
-    asyncio.run(task_worker._on_delivery_result(nats, stale))
+    asyncio.run(worker_deliver._on_delivery_result(nats, stale))
 
     assert _latest_verification(db, sprint["company_id"], item["id"]).id == before
 
@@ -441,7 +443,7 @@ class _DaemonConnectsDuringPublishNATS(_OfflineDaemonNATS):
                 "sprint_id": payload["sprint_id"],
                 "item_id": payload["item_id"],
             }
-            await task_worker._on_delivery_result(self, result)
+            await worker_deliver._on_delivery_result(self, result)
 
 
 def test_report_arriving_while_the_job_is_published_is_not_lost(db, tmp_path):
@@ -450,11 +452,11 @@ def test_report_arriving_while_the_job_is_published_is_not_lost(db, tmp_path):
     item, agent, sprint = _task(db, project)
     nats = _DaemonConnectsDuringPublishNATS(_load_daemon())
 
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     assert verification.verdict == "verified"
-    assert task_worker._delivery_gate(sprint["company_id"], item["id"]) is None
+    assert worker_record._delivery_gate(sprint["company_id"], item["id"]) is None
 
 
 class _QueueDownNATS(_OfflineDaemonNATS):
@@ -470,13 +472,13 @@ def test_delivery_that_cannot_be_queued_does_not_leave_the_task_waiting(db, tmp_
     item, agent, sprint = _task(db, project)
 
     asyncio.run(
-        task_worker._deliver_artifacts(_QueueDownNATS(), item, agent, sprint, ANSWER)
+        worker_deliver._deliver_artifacts(_QueueDownNATS(), item, agent, sprint, ANSWER)
     )
 
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     assert "delivery_queued" not in verification.evidence
     assert "queueing the delivery failed" in verification.evidence["reason"]
-    gate = task_worker._delivery_gate(sprint["company_id"], item["id"])
+    gate = worker_record._delivery_gate(sprint["company_id"], item["id"])
     assert gate[0] == "delivery unconfirmed"
     assert _comments(db, item["id"])[-1].startswith("Delivery unconfirmed:")
 
@@ -488,12 +490,12 @@ def test_without_jetstream_an_offline_daemon_still_means_unconfirmed(db, tmp_pat
     nats = _OfflineDaemonNATS()
     nats.jetstream_enabled = False
 
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, ANSWER))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, ANSWER))
 
     assert not [p for p in nats.published if p[0] == "workspace.deliver"]
     verification = _latest_verification(db, sprint["company_id"], item["id"])
     assert "delivery_queued" not in verification.evidence
-    gate = task_worker._delivery_gate(sprint["company_id"], item["id"])
+    gate = worker_record._delivery_gate(sprint["company_id"], item["id"])
     assert gate[0] == "delivery unconfirmed"
 
 

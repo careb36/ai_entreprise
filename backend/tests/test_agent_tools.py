@@ -32,6 +32,7 @@ from services import (
     task_worker,
     workspace_edits,
 )
+from services.loop.worker import deliver as worker_deliver
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -631,7 +632,7 @@ def test_the_worker_delivers_the_tool_edits_and_the_daemon_sees_a_modified_file(
         "tool_edits": box.edited_files,
     }
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             _DaemonOverNATS(daemon),
             {"id": item.id, "title": item.title},
             agent,

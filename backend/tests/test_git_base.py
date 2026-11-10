@@ -24,6 +24,7 @@ from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.integration import SprintIntegration
 from services import git_setup, git_workflow, integration_publish, task_worker
+from services.loop.worker import deliver as worker_deliver
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -348,7 +349,7 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
 
     nats = _Timed()
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats,
             {"id": item.id, "title": item.title, "description": ""},
             {"role": "Developer", "name": "Dev", "model": "m", "served_model": "m"},

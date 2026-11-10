@@ -41,6 +41,7 @@ from services import (
     console_producer,
     task_worker,
 )
+from services.loop.worker import deliver as worker_deliver
 from sqlmodel import Session, select
 
 _DAEMON_DIR = Path(__file__).resolve().parents[2] / "vscode-daemon"
@@ -412,7 +413,9 @@ def test_a_console_producer_delivers_what_the_daemon_observed_and_it_is_verified
     assert execute["sandbox"]["network"] is True
     assert execute["workspace_root"].endswith(f"fabrique__task-{item['id']}")
 
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, deliverable))
+    asyncio.run(
+        worker_deliver._deliver_artifacts(nats, item, agent, sprint, deliverable)
+    )
     generate = nats.requests[-1][1]
     assert generate["files"][0]["source"] == "console_producer"
     [(run, verification)] = _runs(world["engine"], item["id"])
@@ -470,7 +473,7 @@ def test_the_host_sandbox_or_no_network_leaves_the_task_to_the_model_and_says_wh
 
     # The model's delivery that follows carries why on its evidence.
     answer = "Fixed.\n\n```python path=calc.py\ndef add(a, b):\n    return a + b\n```\n"
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, answer))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, answer))
     [(_, verification)] = _runs(world["engine"], item["id"])
     skipped = verification.evidence["console_producer_skipped"]
     assert skipped["via"] == "console:claude" and said in skipped["reason"]
@@ -508,7 +511,9 @@ def test_the_clis_word_that_tests_pass_is_held_to_a_test_run(world, cli_path):
     nats = _DaemonOverNATS()
     item, agent, sprint = world["item"], world["agent"], world["sprint"]
     deliverable = asyncio.run(console_host.produce(nats, item, agent, sprint))
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, deliverable))
+    asyncio.run(
+        worker_deliver._deliver_artifacts(nats, item, agent, sprint, deliverable)
+    )
     [(_, verification)] = _runs(world["engine"], item["id"])
     # No test run was observed: the claim is not taken.
     assert _check(verification, "claimed_tests_evidenced")["outcome"] == "unverifiable"
@@ -528,7 +533,7 @@ def test_the_base_the_branch_started_from_is_kept_on_the_console_run(
     if delivers:
         deliverable = asyncio.run(console_host.produce(nats, item, agent, sprint))
         asyncio.run(
-            task_worker._deliver_artifacts(nats, item, agent, sprint, deliverable)
+            worker_deliver._deliver_artifacts(nats, item, agent, sprint, deliverable)
         )
     else:
         with pytest.raises(console_producer.ConsoleProducerError):
@@ -583,7 +588,7 @@ def test_a_missing_binary_hands_the_task_to_the_model_while_it_cools_down(
     assert console_assistants.cooldown_until(company.id, "gemini") is None
     # The model's delivery carries the attempt on its evidence.
     answer = "Fixed.\n\n```python path=calc.py\ndef add(a, b):\n    return a + b\n```\n"
-    asyncio.run(task_worker._deliver_artifacts(nats, item, agent, sprint, answer))
+    asyncio.run(worker_deliver._deliver_artifacts(nats, item, agent, sprint, answer))
     [(_, verification)] = _runs(world["engine"], item["id"])
     on_evidence = verification.evidence["console_producer_skipped"]
     assert on_evidence["attempt"]["cooldown"] == "missing"

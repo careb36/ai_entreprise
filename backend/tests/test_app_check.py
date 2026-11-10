@@ -30,8 +30,8 @@ from services import (
     delivery_checks,
     delivery_gate,
     stack_profiles,
-    task_worker,
 )
+from services.loop.worker import deliver as worker_deliver
 from services.workspace import dependency_install, project_profile
 from sqlmodel import select
 from test_delivery_tests import _load_daemon
@@ -828,7 +828,9 @@ def test_a_delivery_installs_runs_and_probes_the_application(project):
     session, root, item, agent, sprint = project
     daemon = _Daemon()
     asyncio.run(
-        task_worker._deliver_artifacts(daemon, item, agent, sprint, _answer(_GOOD_APP))
+        worker_deliver._deliver_artifacts(
+            daemon, item, agent, sprint, _answer(_GOOD_APP)
+        )
     )
 
     verification, checks = _checks(session, sprint["company_id"], item["id"])
@@ -851,7 +853,7 @@ def test_a_delivery_installs_runs_and_probes_the_application(project):
 def test_a_delivery_whose_application_fails_to_start_is_sent_back(project):
     session, _root, item, agent, sprint = project
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             _Daemon(), item, agent, sprint, _answer(_BROKEN_APP)
         )
     )
@@ -879,7 +881,9 @@ def test_the_application_is_not_started_when_the_tests_failed(project, monkeypat
     )
     daemon = _Daemon()
     asyncio.run(
-        task_worker._deliver_artifacts(daemon, item, agent, sprint, _answer(_GOOD_APP))
+        worker_deliver._deliver_artifacts(
+            daemon, item, agent, sprint, _answer(_GOOD_APP)
+        )
     )
     verification, checks = _checks(session, sprint["company_id"], item["id"])
     assert "workspace.app.check" not in daemon.subjects()
@@ -892,7 +896,9 @@ def test_the_application_check_is_opt_in(project, monkeypatch):
     monkeypatch.setattr(settings, "DELIVERY_APP_CHECK_ENABLED", False)
     daemon = _Daemon()
     asyncio.run(
-        task_worker._deliver_artifacts(daemon, item, agent, sprint, _answer(_GOOD_APP))
+        worker_deliver._deliver_artifacts(
+            daemon, item, agent, sprint, _answer(_GOOD_APP)
+        )
     )
     verification, checks = _checks(session, sprint["company_id"], item["id"])
     assert "workspace.app.check" not in daemon.subjects()
@@ -909,7 +915,9 @@ def test_a_failed_install_sends_the_task_back(project, monkeypatch):
     )
     daemon = _Daemon()
     asyncio.run(
-        task_worker._deliver_artifacts(daemon, item, agent, sprint, _answer(_GOOD_APP))
+        worker_deliver._deliver_artifacts(
+            daemon, item, agent, sprint, _answer(_GOOD_APP)
+        )
     )
     _verification, checks = _checks(session, sprint["company_id"], item["id"])
     assert checks["dependencies_installed"]["outcome"] == "refuted"
@@ -927,7 +935,7 @@ def test_a_company_can_turn_its_tests_off_in_its_profile(project):
     session.add(company)
     session.commit()
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             _Daemon(), item, agent, sprint, _answer(_GOOD_APP)
         )
     )

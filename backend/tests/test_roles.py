@@ -21,8 +21,8 @@ from services import (
     research_tools,
     roles,
     standards,
-    task_worker,
 )
+from services.loop.worker import deliver as worker_deliver
 from services.orchestration_metrics import canonical_kpi_role, should_consult_architect
 from test_task_delivery import (  # noqa: F401 - the db fixture is used by name.
     TWO_FILE_ANSWER,
@@ -146,7 +146,7 @@ def test_a_coding_agent_delivers_files_verified_exactly_like_the_developer(
     nats = _DaemonOverNATS(_load_daemon())
 
     asyncio.run(
-        task_worker._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
+        worker_deliver._deliver_artifacts(nats, item, agent, sprint, TWO_FILE_ANSWER)
     )
 
     assert (project / "src" / "auth" / "login.py").read_text().startswith("def login(")

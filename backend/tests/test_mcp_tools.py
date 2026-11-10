@@ -23,6 +23,7 @@ from models.company import Company
 from models.mcp import McpServer
 from services import mcp_config, mcp_tools, risk
 from services import task_worker as tw
+from services.loop.worker import record as worker_record
 from services.verification import check_risk_tier, check_tools_used
 
 SECRET = "s3cret-token-value"
@@ -368,7 +369,7 @@ def test_the_worker_records_the_calls_as_evidence_beside_the_claims(
     sqlite_session.add(company)
     sqlite_session.commit()
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
-    recorded = tw._record_task_run(
+    recorded = worker_record._record_task_run(
         {"id": 7, "title": "Login"},
         agent,
         {"id": 1, "company_id": company.id},
@@ -377,7 +378,7 @@ def test_the_worker_records_the_calls_as_evidence_beside_the_claims(
         None,
     )
     assert recorded is not None
-    verification = tw._latest_task_verification(company.id, 7)
+    verification = worker_record._latest_task_verification(company.id, 7)
     names = [c["name"] for c in verification.checks]
     assert "tools_used" in names
     used = next(c for c in verification.checks if c["name"] == "tools_used")

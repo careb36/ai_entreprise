@@ -22,7 +22,9 @@ from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
 from models.specification import Specification
-from services import acceptance, criteria_tests, spec_check, spec_planning, task_worker
+from services import acceptance, criteria_tests, spec_check, spec_planning
+from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import record as worker_record
 from sqlmodel import select
 from test_specifications import GOOD
 
@@ -289,7 +291,7 @@ def factory(monkeypatch, sqlite_session, tmp_path):
 
 def _deliver(nats, item, sprint, files):
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats,
             {"id": item.id, "title": item.title},
             {"role": item.assignee or "Developer", "served_model": "m"},
@@ -336,7 +338,7 @@ def test_failing_tests_first_then_the_implementation_that_verifies_the_criteria(
     }
     assert "acceptance_tests_untouched" not in checks
     assert verification.verdict == "verified"
-    assert task_worker._delivery_gate(sprint.company_id, tests_task.id) is None
+    assert worker_record._delivery_gate(sprint.company_id, tests_task.id) is None
     tests_task.status = "done"
     session.add(tests_task)
     session.commit()
@@ -375,7 +377,7 @@ def test_failing_tests_first_then_the_implementation_that_verifies_the_criteria(
     )  # its own criteria are never excused
     assert verification.verdict == "refuted"
     assert (
-        task_worker._delivery_gate(sprint.company_id, board_task.id)[0]
+        worker_record._delivery_gate(sprint.company_id, board_task.id)[0]
         == "tests failed"
     )
     assert spec_planning.coverage(session, spec)["verified"] == 0
@@ -395,7 +397,7 @@ def test_failing_tests_first_then_the_implementation_that_verifies_the_criteria(
     }
     assert checks["acceptance_tests_untouched"]["outcome"] == "pass"
     assert verification.verdict == "verified"
-    assert task_worker._delivery_gate(sprint.company_id, board_task.id) is None
+    assert worker_record._delivery_gate(sprint.company_id, board_task.id) is None
     cov = spec_planning.coverage(session, spec)
     assert cov["verified"] == 2
     assert [(c["id"], c["verified"], c["last_result"]) for c in cov["criteria"]] == [
@@ -472,7 +474,9 @@ def test_an_implementation_that_edits_an_acceptance_test_is_refuted_and_the_test
     }
     assert verification.evidence["acceptance"]["tampered"] == ["tests/test_req_1.py"]
     assert verification.verdict == "refuted"
-    problem, observation = task_worker._delivery_gate(sprint.company_id, board_task.id)
+    problem, observation = worker_record._delivery_gate(
+        sprint.company_id, board_task.id
+    )
     assert problem == "acceptance test edited" and "tests/test_req_1.py" in observation
 
     # A file changed behind the loop's back (not in a delivery) is seen the same way.
@@ -511,7 +515,7 @@ def test_an_acceptance_test_delivered_as_edits_is_never_restored_from_the_edit_t
     _deliver(nats, tests_task, sprint, {"tests/test_req_1.py": ACCEPTANCE_TESTS})
     edited = ACCEPTANCE_TESTS.replace('== ["a", "b"]', '== ["a", "b"]  # REQ-1.1')
     asyncio.run(
-        task_worker._deliver_artifacts(
+        worker_deliver._deliver_artifacts(
             nats,
             {"id": tests_task.id, "title": tests_task.title},
             {"role": tests_task.assignee or "QA", "served_model": "m"},
@@ -606,7 +610,7 @@ def test_a_test_task_whose_tests_do_not_run_is_refuted(factory):
     )  # nothing excused a collection error
     assert verification.verdict == "refuted"
     assert (
-        task_worker._delivery_gate(sprint.company_id, tests_task.id)[0]
+        worker_record._delivery_gate(sprint.company_id, tests_task.id)[0]
         == "tests failed"
     )
 
