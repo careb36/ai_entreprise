@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import workspace_read  # the daemon's module, on sys.path via conftest
 from config import settings
-from services import developer_tools, mcp_tools, tool_history
+from services.tools import developer_tools, mcp_tools, tool_history
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 

@@ -14,7 +14,8 @@ import pytest
 import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
-from services import spec_author, spec_check, sprint_control
+from services import sprint_control
+from services.planning import spec_author, spec_check
 from services.tasks import dependencies
 from sqlmodel import select
 from test_specifications import GOOD

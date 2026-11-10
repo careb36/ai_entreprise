@@ -64,7 +64,7 @@ def _company(session, name, member=None, role="Owner"):
 def discovery(sqlite_session, tmp_path, monkeypatch):
     ProjectDiscovery.__table__.create(sqlite_session.get_bind(), checkfirst=True)
     monkeypatch.setattr(
-        "services.discovery_service._ai_suggest_team", lambda *a, **k: None
+        "services.planning.discovery_service._ai_suggest_team", lambda *a, **k: None
     )
     folder = tmp_path / "chosen"
     folder.mkdir()

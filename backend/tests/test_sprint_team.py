@@ -16,8 +16,9 @@ from unittest.mock import patch
 import pytest
 import worker_stages
 from models import Agent, BacklogItem, Company, Sprint
-from services import spec_planning, sprint_planner, sprint_team, task_worker
+from services import task_worker
 from services.loop.worker import close as worker_close
+from services.planning import spec_planning, sprint_planner, sprint_team
 from sqlmodel import select
 from test_work_control import _member, auth_on  # noqa: F401 - fixture used by name.
 

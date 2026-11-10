@@ -56,17 +56,8 @@
         "platform"
       ],
       "modules": [
-        "acceptance",
-        "agent_run_service",
-        "app_check",
-        "browser_smoke",
-        "context_read",
-        "criteria_tests",
-        "delivery_gate",
         "governance",
         "review_changes",
-        "risk",
-        "secops_checks",
         "standards",
         "verification"
       ]
@@ -80,9 +71,6 @@
       ],
       "modules": [
         "git_workflow",
-        "sandbox",
-        "sandbox_manager",
-        "stack_profiles",
         "workspace_daemon",
         "workspace_snapshot"
       ]
@@ -97,19 +85,9 @@
         "workspace"
       ],
       "modules": [
-        "developer_tool_replies",
         "developer_tool_schemas",
-        "developer_tools",
-        "edit_lint",
-        "mcp_client",
-        "mcp_config",
-        "mcp_tools",
-        "repo_map",
         "research_registries",
-        "research_schemas",
-        "research_tools",
-        "tool_history",
-        "workspace_edits"
+        "research_schemas"
       ]
     },
     "learning": {
@@ -122,7 +100,6 @@
         "models"
       ],
       "modules": [
-        "architect",
         "procedures",
         "retrospective",
         "scrum_master"
@@ -143,15 +120,10 @@
       "modules": [
         "arch_author",
         "arch_check",
-        "discovery_service",
         "document_approval",
         "spec_author",
         "spec_check",
-        "spec_diff",
-        "spec_impact",
-        "spec_planning",
-        "sprint_planner",
-        "sprint_team"
+        "spec_planning"
       ]
     },
     "producers": {
@@ -166,14 +138,7 @@
         "workspace",
         "tools"
       ],
-      "modules": [
-        "agent_worker",
-        "console_assistants",
-        "console_capabilities",
-        "console_clis",
-        "console_producer",
-        "github_adapter"
-      ]
+      "modules": []
     },
     "loop": {
       "path": "backend/app/services/loop/",

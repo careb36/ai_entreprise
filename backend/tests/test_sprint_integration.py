@@ -1275,7 +1275,7 @@ def test_the_acceptance_coverage_is_read_once_per_specification(
     sqlite_session, monkeypatch
 ):
     from models.specification import Specification
-    from services import spec_planning
+    from services.planning import spec_planning
 
     company = _company(sqlite_session)
     spec = Specification(company_id=company.id, title="Auth", status="approved")

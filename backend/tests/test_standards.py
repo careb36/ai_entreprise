@@ -12,7 +12,8 @@ from pathlib import Path
 import pytest
 import worker_stages
 from models.agent_run import AgentRun
-from services import standards, verification
+from services import verification
+from services.evidence import standards
 from services.loop.worker import record as worker_record
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "STANDARDS.md"

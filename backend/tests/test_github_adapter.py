@@ -11,8 +11,8 @@ from models.agent_run import AgentRun
 from models.audit import AuditLog
 from models.company import Company
 from models.github import GitHubRepoBinding
-from services import github_adapter
-from services.github_adapter import (
+from services.producers import github_adapter
+from services.producers.github_adapter import (
     infer_producer,
     pr_to_agent_run_payload,
     verify_webhook_signature,

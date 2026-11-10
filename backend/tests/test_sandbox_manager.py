@@ -11,7 +11,7 @@ from services.contracts.sandbox_schemas import (
     SandboxExecutionRequest,
     SandboxExecutionResponse,
 )
-from services.sandbox_manager import EphemeralSandboxManager
+from services.workspace.sandbox_manager import EphemeralSandboxManager
 
 
 def _fake_module(name: str, **attributes) -> types.ModuleType:

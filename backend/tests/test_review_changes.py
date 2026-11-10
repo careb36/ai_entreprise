@@ -18,7 +18,7 @@ import pytest
 from config import settings
 from models import Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
-from services.review_changes import parse_unified_diff
+from services.evidence.review_changes import parse_unified_diff
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 

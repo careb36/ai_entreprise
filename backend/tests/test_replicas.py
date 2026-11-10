@@ -26,7 +26,8 @@ import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import replicas, scrum_master
+from services import replicas
+from services.learning import scrum_master
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import messages as worker_messages

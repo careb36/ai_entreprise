@@ -167,9 +167,8 @@ def test_scrum_master_and_authoring_clients_carry_the_company(monkeypatch):
     """A ``conn:`` model needs the company on the client: the ScrumMaster's
     questions and the PO's and Architect's drafts pass it on."""
     import llm_proxy_client
-    from services import scrum_master
-
-    from app.services import spec_author
+    from services.learning import scrum_master
+    from services.planning import spec_author
 
     # Through its shim, ``app.services.scrum_master`` is now the one module
     # conftest stubs, so the real client is put back for this test.

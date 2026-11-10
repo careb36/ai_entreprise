@@ -18,7 +18,7 @@ from services import integration
 from services.git_publish import PublishRefused
 from services.integration_publish import publish_spec, record_publication
 from services.local_merge import integration_merge_spec, record_integration_merge
-from services.workspace_daemon import (
+from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
     DaemonUnavailable,

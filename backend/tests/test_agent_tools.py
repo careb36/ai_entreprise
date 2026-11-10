@@ -24,15 +24,15 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import (
+from services.evidence import risk
+from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import quality_gate
+from services.tools import (
     developer_tool_replies,
     developer_tools,
     mcp_tools,
-    risk,
     workspace_edits,
 )
-from services.loop.worker import deliver as worker_deliver
-from services.loop.worker import quality_gate
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -830,7 +830,7 @@ def test_a_secret_written_through_the_edit_tool_refutes_the_delivery(sqlite_sess
 def test_qa_tests_written_with_the_edit_tool_can_be_restored(
     sqlite_session, monkeypatch
 ):
-    from services import acceptance
+    from services.evidence import acceptance
 
     company = Company(company_name="Restore Co")
     sqlite_session.add(company)

@@ -54,8 +54,8 @@ def test_mark_sprint_needs_split_sets_status(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.agent_worker.engine", sqlite_engine):
-        from services.agent_worker import _mark_sprint_needs_split
+    with patch("services.producers.agent_worker.engine", sqlite_engine):
+        from services.producers.agent_worker import _mark_sprint_needs_split
 
         _mark_sprint_needs_split(sprint_id)
 
@@ -75,8 +75,8 @@ def test_mark_sprint_needs_split_ignores_already_split(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.agent_worker.engine", sqlite_engine):
-        from services.agent_worker import _mark_sprint_needs_split
+    with patch("services.producers.agent_worker.engine", sqlite_engine):
+        from services.producers.agent_worker import _mark_sprint_needs_split
 
         _mark_sprint_needs_split(sprint_id)
 
@@ -94,8 +94,8 @@ def test_mark_sprint_needs_split_ignores_completed_sprint(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.agent_worker.engine", sqlite_engine):
-        from services.agent_worker import _mark_sprint_needs_split
+    with patch("services.producers.agent_worker.engine", sqlite_engine):
+        from services.producers.agent_worker import _mark_sprint_needs_split
 
         _mark_sprint_needs_split(sprint_id)
 
@@ -110,8 +110,8 @@ def test_mark_sprint_needs_split_unknown_id_is_noop(sqlite_session):
 
     from unittest.mock import patch
 
-    with patch("services.agent_worker.engine", sqlite_engine):
-        from services.agent_worker import _mark_sprint_needs_split
+    with patch("services.producers.agent_worker.engine", sqlite_engine):
+        from services.producers.agent_worker import _mark_sprint_needs_split
 
         # Should not raise
         _mark_sprint_needs_split(99999)

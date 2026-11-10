@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from models.agent_run import AgentRun, Verification
 from models.audit import AuditLog
-from services import git_workflow
+from services.workspace import git_workflow
 from sqlmodel import select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))

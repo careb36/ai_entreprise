@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 from models.company import Company, ProjectDiscovery
-from services import workspace_daemon
 from services.loop.worker import deliver as worker_deliver
+from services.workspace import workspace_daemon
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -370,7 +370,7 @@ def test_discovery_scans_the_daemon_snapshot_and_records_the_host_path(
 ):
     ProjectDiscovery.__table__.create(sqlite_session.get_bind(), checkfirst=True)
     monkeypatch.setattr(
-        "services.discovery_service._ai_suggest_team", lambda *a, **k: None
+        "services.planning.discovery_service._ai_suggest_team", lambda *a, **k: None
     )
     project = _git_repo(tmp_path / "shop", "git@gitlab.com:team/shop.git")
     (project / "web").mkdir()

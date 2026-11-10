@@ -20,8 +20,10 @@ import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import procedures, risk, task_worker
+from services import task_worker
 from services.carry_over import carry_over_on_the_companys_own
+from services.evidence import risk
+from services.learning import procedures
 from services.loop.worker import qa_review
 from services.loop.worker import review as worker_review
 from services.tasks.board import (

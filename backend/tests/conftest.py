@@ -131,7 +131,7 @@ def no_scrum_master_proxy(monkeypatch):
     A test that blocks a task gets the deterministic default (no decision)
     unless it patches ``scrum_master.ask`` or ``scrum_master.LLMProxyClient``.
     """
-    from services import scrum_master
+    from services.learning import scrum_master
 
     class _NoProxy:
         def __init__(self, base_url=None):

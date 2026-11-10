@@ -10,7 +10,7 @@ import secrets
 import pytest
 from models import BacklogItem, Company, Sprint
 from models.specification import Specification
-from services import spec_author, spec_check, spec_planning
+from services.planning import spec_author, spec_check, spec_planning
 from test_git_workflow import _member, enforcement  # noqa: F401
 
 

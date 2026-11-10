@@ -19,7 +19,8 @@ from uuid import uuid4
 import pytest
 import worker_stages
 from models import AgentRun, BacklogItem, Company, Sprint, Verification
-from services import carry_over, procedures, scrum_master, sprint_control, task_worker
+from services import carry_over, sprint_control, task_worker
+from services.learning import procedures, scrum_master
 from services.loop.worker import qa_review
 from services.loop.worker import review as worker_review
 from services.tasks import board, dependencies, task_events, task_projection

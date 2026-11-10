@@ -18,10 +18,11 @@ from models.agent_message import AgentMessage
 from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import console_assistants, task_worker
+from services import task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import prompt, qa_review
+from services.producers import console_assistants
 from sqlmodel import Session, select
 
 from llm.model_factory import AgentRole, ModelFactory

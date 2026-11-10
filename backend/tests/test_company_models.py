@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import pytest
 from models import Agent, Company, ProviderConnection
-from services import scrum_master, spec_author
+from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
 from services.models import company_models, model_routing
+from services.planning import spec_author
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
 from test_specifications import _company
@@ -147,7 +148,7 @@ def test_the_deciding_roles_run_the_companys_choice(sqlite_session):
     )
     assert scrum_master.profile(sqlite_session, company.id)[0] == "sm-model"
     assert spec_author.po_profile(sqlite_session, company.id)[0] == "company-default"
-    from services import arch_author
+    from services.planning import arch_author
 
     assert arch_author.architect_profile(sqlite_session, company.id)[0] == (
         "company-default"
@@ -256,7 +257,7 @@ def test_an_agent_runs_only_a_connection_of_its_company(sqlite_session, test_cli
 
 def test_the_planners_call_the_proxy_with_the_pos_company(sqlite_session):
     """An agent's own model may be a connection; its company routes it."""
-    from services import spec_planning, sprint_planner
+    from services.planning import spec_planning, sprint_planner
 
     company = _company(sqlite_session)
     sqlite_session.add(

@@ -8,15 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from services import (
-    answers,
-    reviewer_agent,
-    scrum_master,
-    sprint_planner,
-    support_agent,
-)
+from services import answers, reviewer_agent, support_agent
 from services import task_worker as tw
+from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
+from services.planning import sprint_planner
 
 
 def test_a_cut_off_answer_is_named_instead_of_asked_for_again_in_full():

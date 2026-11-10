@@ -8,7 +8,8 @@ import database
 import pytest
 from models.agent_run import AgentRun
 from models.company import Company
-from services import agent_run_service, agent_worker
+from services.evidence import agent_run_service
+from services.producers import agent_worker
 from sqlmodel import Session, select
 
 import agents.graph as graph_module

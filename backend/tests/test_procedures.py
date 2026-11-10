@@ -16,7 +16,8 @@ from models import (
     Sprint,
     User,
 )
-from services import procedures, scrum_master, task_worker
+from services import task_worker
+from services.learning import procedures, scrum_master
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import procedures_round, prompt, qa_review
