@@ -260,7 +260,7 @@ github_adapter.pr_to_agent_run_payload(pr) -> AgentRunCreate
 ```
 async process_backlog_tasks(nats) consumes task.assign
 sprint_control.pause / stop / dispatch_todo(session, sprint)
-emits sprint.closed {sprint_id, company_id, first_close: bool} through the outbox when a sprint closes (replaces the call to integration_jobs.schedule_after_close)
+emits sprint.closed {nats_client, engine, sprint_id} in-process (platform.hooks.emit) when a sprint closes, its first close or one after a reopening, where it called integration_jobs.schedule_after_close; moving the event to the outbox, durable and with company_id and first_close, is a later, deliberate change
 ```
 
 ### IF-15: Release actions
@@ -268,7 +268,7 @@ emits sprint.closed {sprint_id, company_id, first_close: bool} through the outbo
 - Kind: function; provided by MOD-12 (release); used by MOD-14
 
 ```
-integration_jobs.schedule_after_close(sprint_id) on sprint.closed
+integration_jobs.on_sprint_closed, registered by integration_jobs.install() at startup, calls schedule_after_close(nats_client, engine, sprint_id) on sprint.closed
 git_publish.publish_spec / record_publication
 local_merge.run_merge_spec / record_run_merge
 delivery_undo.undo_spec / record_undo
