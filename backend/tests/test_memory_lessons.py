@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 import worker_stages
 from models import BacklogItem, Company, Sprint
-from services import task_worker
+from services.loop.worker import execute as worker_execute
 from services.loop.worker import prompt
 
 from memory import engram_processor
@@ -149,8 +149,8 @@ def test_lessons_reach_the_developer_prompt(monkeypatch):
             prompts.append(messages[-1]["content"])
             return {"choices": [{"message": {"content": "Done."}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
-    task_worker._execute_task(
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
+    worker_execute._execute_task(
         {"id": 1, "title": "Do it"},
         {"role": "Developer"},
         "Sprint 1",

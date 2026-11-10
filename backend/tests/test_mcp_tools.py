@@ -22,7 +22,7 @@ from models.agent_run import AgentRun
 from models.company import Company
 from models.mcp import McpServer
 from services import mcp_config, mcp_tools, risk
-from services import task_worker as tw
+from services.loop.worker import execute as worker_execute
 from services.loop.worker import record as worker_record
 from services.verification import check_risk_tier, check_tools_used
 
@@ -353,9 +353,9 @@ def test_the_worker_records_the_calls_as_evidence_beside_the_claims(
             _answer("```python path=src/login.py\nprint('hi')\n```\nDone."),
         ]
     )
-    monkeypatch.setattr(tw, "LLMProxyClient", lambda base_url=None: model)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", lambda base_url=None: model)
     agent = {"role": "Developer", "model": "m"}
-    content = tw._execute_task(
+    content = worker_execute._execute_task(
         {"id": 7, "title": "Login", "description": "x"}, agent, "S1"
     )
     assert "Done." in content

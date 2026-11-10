@@ -10,7 +10,8 @@ import pytest
 import worker_stages
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import architect, task_worker
+from services import architect
+from services.loop.worker import execute as worker_execute
 from services.orchestration_metrics import (
     ARCHITECT_COMMENT_AUTHOR,
     format_architect_consult_comment,
@@ -94,7 +95,7 @@ def test_the_record_counts_completed_sprints_and_rework_from_the_brief_on(
 @pytest.fixture()
 def prompts(monkeypatch, sqlite_session):
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
-    monkeypatch.setattr(task_worker, "record_agent_turn", lambda **kw: None)
+    monkeypatch.setattr(worker_execute, "record_agent_turn", lambda **kw: None)
     sent = []
 
     class _Client:
@@ -105,7 +106,7 @@ def prompts(monkeypatch, sqlite_session):
             sent.append(messages[-1]["content"])
             return {"choices": [{"message": {"content": "Use a service layer."}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     return sent
 
 
@@ -114,7 +115,7 @@ def test_the_architect_is_told_how_its_earlier_briefs_went(prompts, sqlite_sessi
     _sprint(sqlite_session, company, "completed", [("done", [BRIEF]), ("done", [])])
     sprint = _sprint(sqlite_session, company, "active", [])
 
-    advice = task_worker._consult_architect(
+    advice = worker_execute._consult_architect(
         {"id": 1, "title": "Add parser", "description": "A function."},
         {"role": "Developer"},
         {"id": sprint.id, "company_id": company.id, "name": "S"},
@@ -129,7 +130,7 @@ def test_no_record_before_any_brief(prompts, sqlite_session):
     company = _company(sqlite_session)
     sprint = _sprint(sqlite_session, company, "active", [])
 
-    task_worker._consult_architect(
+    worker_execute._consult_architect(
         {"id": 1, "title": "Add parser"},
         {"role": "Developer"},
         {"id": sprint.id, "company_id": company.id, "name": "S"},
@@ -147,9 +148,9 @@ def test_a_failed_record_leaves_it_out_and_the_brief_still_comes(
     def _broken(session, company_id):
         raise RuntimeError("statement timeout")
 
-    monkeypatch.setattr(task_worker, "architect_track_record", _broken)
+    monkeypatch.setattr(worker_execute, "architect_track_record", _broken)
 
-    advice = task_worker._consult_architect(
+    advice = worker_execute._consult_architect(
         {"id": 1, "title": "Add parser"},
         {"role": "Developer"},
         {"id": sprint.id, "company_id": company.id, "name": "S"},

@@ -9,8 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 from services import review_digest
-from services import task_worker as tw
 from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import execute as worker_execute
 
 
 def _file(path: str, lines: int) -> dict[str, str]:
@@ -82,7 +82,7 @@ def test_the_developer_prompt_runs_from_stable_to_variable(monkeypatch):
             seen["prompt"] = messages[-1]["content"]
             return {"choices": [{"message": {"content": "ok"}}]}
 
-    monkeypatch.setattr(tw, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     item = {
         "id": 1,
         "title": "Login",
@@ -92,7 +92,7 @@ def test_the_developer_prompt_runs_from_stable_to_variable(monkeypatch):
             {"author": "QA", "text": "NEEDS WORK: add a test"},
         ],
     }
-    tw._execute_task(
+    worker_execute._execute_task(
         item,
         {"role": "Developer", "model": "m"},
         "S1",

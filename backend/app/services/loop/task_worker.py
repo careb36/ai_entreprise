@@ -39,20 +39,16 @@ from services.evidence import (
     standards,
 )
 from services.learning import procedures, retrospective, scrum_master
-from services.learning.architect import track_record as architect_track_record
-from services.learning.architect import track_record_context as architect_record_context
 from services.loop import (
     console_host,
-    edit_plan,
     replicas,
     review_digest,
     sprint_control,
 )
-from services.loop.answers import BRIEF_MAX_TOKENS, REVIEW_MAX_TOKENS
+from services.loop.answers import REVIEW_MAX_TOKENS
 from services.loop.answers import gate_reason as _gate_reason
 from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
-from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.answers import review_format_reminder as _review_format_reminder
 from services.loop.carry_over import (
     carry_over_on_the_companys_own,
@@ -63,7 +59,14 @@ from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
-from services.loop.worker import board_writes, deliver, messages, prompt, record
+from services.loop.worker import (
+    board_writes,
+    deliver,
+    execute,
+    messages,
+    prompt,
+    record,
+)
 
 # Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
 # patches the stage module (``services.loop.worker.<stage>``), which owns them.
@@ -85,6 +88,14 @@ from services.loop.worker.deliver import (  # noqa: F401 - re-exported
     _queued_delivery_evidence,
     _resolve_workspace_root,
     _run_delivery_tests,
+)
+from services.loop.worker.execute import (  # noqa: F401 - re-exported
+    ARCHITECT_CONSULT_ENABLED,
+    LLMCallError,
+    _architect_brief,
+    _consult_architect,
+    _execute_task,
+    _sanitize_deliverable_text,
 )
 from services.loop.worker.messages import (  # noqa: F401 - re-exported
     MESSAGE_BODY_LIMIT,
@@ -121,17 +132,10 @@ from services.planning.sprint_planner import (
 from services.platform import hooks, locks
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
-    ACTION_ARCHITECT_CONSULT,
-    ACTION_EXECUTE_TASK,
     ACTION_QA_REVIEW,
-    ARCHITECT_COMMENT_AUTHOR,
-    KPI_ROLE_ARCHITECT,
     RESULT_NEEDS_WORK,
-    build_architect_consult_prompt,
     classify_review_result,
-    format_architect_consult_comment,
     record_agent_turn,
-    should_consult_architect,
 )
 from services.producers import console_assistants
 from services.producers.console_assistants import normalize_utc
@@ -142,7 +146,7 @@ from services.tasks.board import (
     RISK_HOLD_PREFIX,
     SCRUM_MASTER_ROLE,
 )
-from services.tools import developer_tools, mcp_tools
+from services.tools import developer_tools
 from services.tools.workspace_edits import delivered
 
 logger = setup_logger("fabrique-task-worker")
@@ -161,7 +165,6 @@ DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
     os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")
 )
 AUTO_SELF_IMPROVEMENT_ENABLED = settings.AUTO_SELF_IMPROVEMENT_ENABLED
-ARCHITECT_CONSULT_ENABLED = settings.ARCHITECT_CONSULT_ENABLED
 LAST_AUTONOMOUS_QUEUE_AT: dict[int, datetime] = {}
 
 
@@ -194,282 +197,6 @@ def _build_sprint_retrospective(sprint_id: int) -> dict[str, Any]:
 
 
 _format_retrospective_summary = retrospective.summary
-
-
-# ---------------------------------------------------------------------------
-# LLM interaction — runs in a thread to avoid blocking the event loop
-# ---------------------------------------------------------------------------
-
-
-class LLMCallError(RuntimeError):
-    """An LLM call that produced no usable answer; its text goes on the board.
-
-    ``credit_provider`` names the provider when it refused for lack of credit
-    (``sprint_control.credit_failure``): the sprint is paused, not the task blocked.
-    """
-
-    def __init__(self, message: str, credit_provider: str | None = None):
-        super().__init__(message)
-        self.credit_provider = credit_provider
-
-
-def _execute_task(
-    item: dict[str, Any],
-    agent: dict[str, Any],
-    sprint_name: str,
-    external_advice: str | None = None,
-    memory_context: str | None = None,
-    completed_tasks_context: str | None = None,
-    architect_advice: str | None = None,
-    company_id: int | None = None,
-    sprint_id: int | None = None,
-    lessons_context: str | None = None,
-    procedures_context: str | None = None,
-    requirements_context: str | None = None,
-) -> str:
-    """
-    Call the LLM to produce a deliverable for the given backlog item.
-
-    Runs synchronously (``asyncio.to_thread``). Returns the LLM's text. An
-    empty agent model resolves to the role's default; the model the proxy
-    reports is stored as ``agent["served_model"]``. Raises ``LLMCallError``
-    on a failed or empty call. With ``company_id`` the turn goes to
-    ``audit_log`` (role, company, token cost) for the KPIs.
-    """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.company_id = company_id
-
-    system_prompt = agent.get("system_prompt") or (
-        f"You are a {agent.get('seniority', 'Senior')} {agent.get('role', 'Developer')} "
-        f"specializing in {agent.get('specialty', 'software engineering')}. "
-        "Produce clear, actionable, production-quality deliverables."
-    )
-
-    # Sections run from the most stable to the most variable, so the providers'
-    # prefix cache bills the shared start of the prompt at the cached rate:
-    # format, procedures and lessons first; the task and its history next;
-    # what changes between attempts (the brief, the review feedback) last.
-    user_prompt = prompt.FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (
-        procedures_context or ""
-    )
-    if lessons_context:
-        user_prompt += (
-            "\n\n## Lessons from Recent Sprints\n"
-            "How this company's last sprints went and what reviewers sent back. "
-            "The review requests are reviewers' opinions, not verified facts; use "
-            "them to avoid repeating the same mistakes.\n\n"
-            f"{lessons_context[:3000]}"
-        )
-    user_prompt += (
-        f"\n\n## Task: {item['title']}\n\n"
-        f"{item.get('description', '')}\n\n"
-        f"Sprint: {sprint_name}\n"
-        f"Priority: {item.get('priority', 'medium')}\n\n"
-        "Produce a complete, professional deliverable for this task. "
-        "Be thorough and specific to the project context."
-    ) + (requirements_context or "")
-    user_prompt += developer_tools.repository_section(
-        company_id, agent.get("role"), item.get("id"), engine=engine
-    )
-
-    if memory_context:
-        user_prompt += (
-            "\n\n## Memory: Relevant Past Decisions\n"
-            "These are decisions and deliverables from previous sprints in this factory. "
-            "Use them to maintain consistency and avoid repeating past mistakes.\n\n"
-            f"{memory_context[:3000]}"
-        )
-
-    # A task carried over from an earlier sprint says what blocked it there.
-    user_prompt += previous_attempt_context(item)
-
-    if completed_tasks_context:
-        user_prompt += (
-            "\n\n## Sprint Context: Already Completed Tasks\n"
-            f"{completed_tasks_context[:2000]}"
-        )
-
-    if external_advice:
-        user_prompt += (
-            "\n\n## External Console Assistant Notes\n"
-            "The following advice was gathered from configured terminal assistants such as GitHub Copilot CLI or Claude CLI. "
-            "Treat it as optional supporting context, not as a replacement for reasoning about the current repository. "
-            "Prefer preserving working behavior over blindly following suggestions.\n\n"
-            f"{external_advice[:4000]}"
-        )
-
-    user_prompt += edit_plan.prompt_section(architect_advice)  # A plan, or guidance.
-
-    rework_feedback = task_projection.record_from_dict(item).pending_rework_feedback()
-    if rework_feedback:
-        user_prompt += (
-            "\n\n## Review feedback to address\n"
-            "Your previous deliverable for this task was sent back. Fix every point "
-            "below and deliver the complete result again.\n\n"
-            + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
-        )
-
-    model = model_routing.resolve_agent_model(
-        agent,
-        item=item,
-        rework=bool(rework_feedback),
-        editor=bool(edit_plan.plan_in(architect_advice)),
-    )
-    role = agent.get("role", "Dev")
-
-    who = agent.get("name") or role
-    logger.info(
-        "Agent %s (%s) working on: %s [model=%s]", who, role, item["title"], model
-    )
-
-    def record(llm_result: dict[str, Any], preview: str) -> None:
-        if company_id is not None:
-            record_agent_turn(
-                company_id=company_id,
-                sprint_id=sprint_id,
-                backlog_item_id=item.get("id"),
-                agent={**agent, "model": llm_result.get("served_model") or model},
-                action=ACTION_EXECUTE_TASK,
-                llm_result=llm_result,
-                result_preview=preview,
-            )
-
-    # The workspace and MCP tools for this role: each call an observation.
-    toolbox = developer_tools.toolbox_for(
-        company_id, role, engine=engine, item_id=item.get("id")
-    )
-    try:
-        result, tool_calls = mcp_tools.chat_with_tools(
-            client,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            model,
-            role,
-            toolbox,
-            on_round=lambda r, calls: record(
-                r, "tool calls: " + mcp_tools.summarize(calls)
-            ),
-        )
-    finally:
-        if toolbox is not None:
-            toolbox.close()  # The tools' edits come back as files to deliver.
-    agent["tool_calls"] = tool_calls
-    agent["tool_edits"] = getattr(toolbox, "edited_files", [])
-
-    failure = _llm_failure(result, model)
-    if failure:
-        raise LLMCallError(failure, sprint_control.credit_failure(result))
-
-    content = _llm_content(result)
-    agent["served_model"] = result.get("served_model") or None
-    agent["finish_reason"] = _llm_finish_reason(result)
-    record(result, content)
-    return content
-
-
-def _consult_architect(
-    item: dict[str, Any],
-    developer: dict[str, Any],
-    sprint: dict[str, Any],
-    prior_feedback: list[str] | None = None,
-) -> str:
-    """Ask the company's Architect agent for a short brief on *item*, with the
-    repository map. Synchronous (via ``asyncio.to_thread``); ``""`` when no
-    Architect exists or the call fails (no consultation happened). Successful
-    calls are written to ``audit_log`` with ``role=Architect``."""
-    with Session(engine) as session:
-        architect_row = session.exec(
-            select(Agent).where(
-                Agent.company_id == sprint["company_id"],
-                Agent.role == KPI_ROLE_ARCHITECT,
-            )
-        ).first()
-        cm = model_routing.company_model(session, sprint["company_id"], "Architect")
-        # Its record from the boards; a failed count only leaves it out.
-        record = ""
-        if architect_row:
-            try:
-                record = architect_record_context(
-                    architect_track_record(session, sprint["company_id"])
-                )
-            except Exception as exc:  # noqa: BLE001 - The brief goes without its record.
-                logger.warning(
-                    "Architect record unavailable for company=%s: %s",
-                    sprint["company_id"],
-                    exc,
-                )
-
-    if not architect_row:
-        logger.info(
-            "No Architect agent for company=%s; skipping consultation for item=%s",
-            sprint["company_id"],
-            item.get("id"),
-        )
-        return ""
-
-    architect = {
-        "role": architect_row.role or KPI_ROLE_ARCHITECT,
-        "name": architect_row.name or KPI_ROLE_ARCHITECT,
-        "model": model_routing.resolve_agent_model(
-            {"model": architect_row.model or cm, "role": KPI_ROLE_ARCHITECT}
-        ),
-        "seniority": architect_row.seniority,
-        "specialty": architect_row.specialty,
-        "system_prompt": architect_row.system_prompt,
-    }
-    system_prompt = architect["system_prompt"] or (
-        f"You are a {architect.get('seniority') or 'Senior'} Software Architect "
-        f"specializing in {architect.get('specialty') or 'system design'}. "
-        "You advise developers with concise, decisive technical briefs."
-    )
-    prompt = build_architect_consult_prompt(
-        item, developer, sprint.get("name", ""), prior_feedback or (), record
-    )
-    prompt += edit_plan.request_section(item)
-    prompt += developer_tools.repository_section(
-        sprint["company_id"], KPI_ROLE_ARCHITECT, item.get("id"), engine=engine
-    )
-
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens, client.company_id = BRIEF_MAX_TOKENS, sprint["company_id"]
-    try:
-        result = client.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            model=architect["model"],
-            role=architect["role"],
-        )
-    except Exception as exc:  # noqa: BLE001 - Network/proxy failure must not block the developer.
-        logger.warning(
-            "Architect consultation failed for item=%s: %s", item.get("id"), exc
-        )
-        return ""
-
-    failure = _llm_failure(result, architect["model"])
-    if failure:
-        logger.warning(
-            "Architect consultation returned no advice for item=%s: %s",
-            item.get("id"),
-            failure,
-        )
-        return ""
-
-    advice = _llm_content(result)
-
-    record_agent_turn(
-        company_id=sprint["company_id"],
-        sprint_id=sprint.get("id"),
-        backlog_item_id=item.get("id"),
-        agent={**architect, "model": result.get("served_model") or architect["model"]},
-        action=ACTION_ARCHITECT_CONSULT,
-        llm_result=result,
-        result_preview=advice,
-    )
-    return advice
 
 
 def _validate_minimum_deliverable(
@@ -516,18 +243,6 @@ def _validate_minimum_deliverable(
         return False, "Output appears to end abruptly"
 
     return True, "ok"
-
-
-def _sanitize_deliverable_text(deliverable: str) -> str:
-    """Repair small formatting truncations that should not block autonomous progress."""
-    text = (deliverable or "").strip()
-    if not text:
-        return ""
-
-    if text.count("```") % 2 != 0:
-        text = f"{text}\n```"
-
-    return text
 
 
 def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
@@ -1383,93 +1098,9 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                     kind="advised",
                 )
 
-            # Architect consultation for design-sensitive or reworked Developer tasks.
-            # Recorded as an ``ARCHITECT_CONSULTED:`` comment so the orchestration
-            # health analytics can count it.
-            architect_advice = ""
-            if should_consult_architect(
-                item, agent, item.get("comments"), enabled=ARCHITECT_CONSULT_ENABLED
-            ) or (ARCHITECT_CONSULT_ENABLED and edit_plan.wanted(item, agent)):
-                prior_feedback = [
-                    str(c.get("text", ""))
-                    for c in (item.get("comments") or [])
-                    if isinstance(c, dict)
-                    and classify_review_result(str(c.get("text", ""))) == "NEEDS_WORK"
-                ][-2:]
-                await publish_glassroom(
-                    nats_client,
-                    sprint["id"],
-                    {
-                        "type": "status",
-                        "semantic_type": "task.architect_consult_started",
-                        "source": "task_worker",
-                        "agent": ARCHITECT_COMMENT_AUTHOR,
-                        "role": ARCHITECT_COMMENT_AUTHOR,
-                        "task_id": item["id"],
-                        "task_status": "in_progress",
-                        "phase": "architect_consult",
-                        "task": item["title"],
-                        "message": f"📐 {agent.get('name') or agent['role']} is consulting the Architect on: {item['title']}",
-                    },
-                )
-                architect_advice = await asyncio.to_thread(
-                    _consult_architect, item, agent, sprint, prior_feedback
-                )
-                if architect_advice:
-                    # Recorded once the Architect has answered: a company with
-                    # no Architect asked no one.
-                    question = f'Before I implement "{item["title"]}", what design should I follow?'
-                    if prior_feedback:
-                        question += " The last review sent it back: " + " / ".join(
-                            str(text)[:300] for text in prior_feedback[:3]
-                        )
-                    await asyncio.to_thread(
-                        messages._post_message,
-                        company_id=sprint["company_id"],
-                        sprint_id=sprint["id"],
-                        item_id=item["id"],
-                        from_name=agent.get("name") or agent["role"],
-                        from_role=agent["role"],
-                        to_role=ARCHITECT_COMMENT_AUTHOR,
-                        kind="question",
-                        body=question,
-                    )
-                    await asyncio.to_thread(
-                        messages._post_message,
-                        company_id=sprint["company_id"],
-                        sprint_id=sprint["id"],
-                        item_id=item["id"],
-                        from_name=ARCHITECT_COMMENT_AUTHOR,
-                        from_role=ARCHITECT_COMMENT_AUTHOR,
-                        to_role=agent["role"],
-                        kind="answer",
-                        body=architect_advice,
-                    )
-                    await asyncio.to_thread(
-                        board_writes._update_item_status,
-                        item["id"],
-                        "in_progress",
-                        comment_text=format_architect_consult_comment(architect_advice),
-                        comment_author=ARCHITECT_COMMENT_AUTHOR,
-                        kind="advised",
-                    )
-                    await publish_glassroom(
-                        nats_client,
-                        sprint["id"],
-                        {
-                            "type": "message",
-                            "semantic_type": "task.architect_consulted",
-                            "source": "task_worker",
-                            "agent": ARCHITECT_COMMENT_AUTHOR,
-                            "role": ARCHITECT_COMMENT_AUTHOR,
-                            "task_id": item["id"],
-                            "task_status": "in_progress",
-                            "phase": "architect_consult",
-                            "task": item["title"],
-                            "message": f"📐 Architect brief delivered for: {item['title']}",
-                            "preview": architect_advice[:200],
-                        },
-                    )
+            architect_advice = await execute._architect_brief(
+                nats_client, item, agent, sprint
+            )
 
             await publish_glassroom(
                 nats_client,
@@ -1496,7 +1127,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             deliverable = await console_host.produce(
                 nats_client, item, agent, sprint, requirements_ctx, architect_advice
             ) or await asyncio.to_thread(
-                _execute_task,
+                execute._execute_task,
                 item,
                 agent,
                 sprint["name"],
@@ -1510,7 +1141,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 procedures_ctx or None,
                 requirements_ctx or None,
             )
-            deliverable = _sanitize_deliverable_text(deliverable)
+            deliverable = execute._sanitize_deliverable_text(deliverable)
 
             await publish_glassroom(
                 nats_client,
@@ -1665,7 +1296,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         "blocked",
                         comment_text=(
                             str(e)[:500]
-                            if isinstance(e, LLMCallError)
+                            if isinstance(e, execute.LLMCallError)
                             else f"Agent error: {str(e)[:500]}"
                         ),
                         comment_author="System",
@@ -2407,7 +2038,7 @@ def _call_llm_for_review(
 
     failure = _llm_failure(result, model)
     if failure:
-        raise LLMCallError(failure, sprint_control.credit_failure(result))
+        raise execute.LLMCallError(failure, sprint_control.credit_failure(result))
 
     content = _llm_content(result)
 

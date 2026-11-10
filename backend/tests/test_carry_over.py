@@ -18,6 +18,7 @@ import worker_stages
 from models import AgentMessage, BacklogItem, Company, OutboxEvent, Sprint
 from models.agent_run import AgentRun, Verification
 from services import carry_over, task_worker
+from services.loop.worker import execute as worker_execute
 from sqlmodel import select
 
 TRIAGE = "Pre-review quality gate failed after 2 rework(s) — blocked for manual triage: too short"
@@ -145,8 +146,8 @@ def test_the_previous_attempt_reaches_the_agents_prompt(
             prompts.append(messages[-1]["content"])
             return {"choices": [{"message": {"content": "ok"}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
-    task_worker._execute_task(
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
+    worker_execute._execute_task(
         {"id": clone.id, "title": clone.title, "comments": clone.comments},
         {"role": "QA"},
         "Sprint 1",

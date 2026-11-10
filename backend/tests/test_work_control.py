@@ -20,6 +20,7 @@ from models.sprint import BacklogItem, OutboxEvent, Sprint
 from services import company_service, sprint_control
 from services import task_worker as tw
 from services.board import RISK_HOLD_PREFIX, awaits_risk_acceptance
+from services.loop.worker import execute as worker_execute
 from sqlmodel import Session, select
 from test_risk_tier import _approve, _item_in_review
 
@@ -358,9 +359,9 @@ def test_the_execute_call_names_the_provider_without_credit(monkeypatch):
                 },
             }
 
-    monkeypatch.setattr(tw, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     with pytest.raises(tw.LLMCallError) as raised:
-        tw._execute_task(
+        worker_execute._execute_task(
             {"id": 1, "title": "T"},
             {"role": "Developer", "model": "deepseek-flash"},
             "S",
