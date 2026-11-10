@@ -411,12 +411,12 @@ def check_model_factory() -> None:
             _sys.path.insert(0, c)
 
     try:
-        mf = importlib.import_module("llm.model_factory")
+        mf = importlib.import_module("services.models.model_factory")
     except ImportError:
         try:
-            mf = importlib.import_module("app.llm.model_factory")
+            mf = importlib.import_module("app.services.models.model_factory")
         except ImportError:
-            print(warn("  llm.model_factory not importable — skipping"))
+            print(warn("  services.models.model_factory not importable — skipping"))
             return
 
     # get_model backward-compat
