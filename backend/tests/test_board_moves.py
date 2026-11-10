@@ -311,7 +311,7 @@ def test_a_duplicate_assignment_from_the_review_cycle_is_claimed_once(test_clien
 def test_a_reopened_sprint_closes_again_without_a_second_follow_up(
     test_client, db, monkeypatch
 ):
-    from memory import engram_processor
+    from services.platform import engram_processor
 
     def _no_graph():
         raise RuntimeError("no Neo4j in tests")

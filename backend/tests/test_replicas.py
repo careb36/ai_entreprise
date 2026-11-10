@@ -46,7 +46,7 @@ def engine(tmp_path, monkeypatch):
     )
     SQLModel.metadata.create_all(engine)
     worker_stages.use_engine(monkeypatch, engine)
-    from memory import engram_processor
+    from services.platform import engram_processor
 
     def _no_graph():
         raise RuntimeError("no Neo4j in tests")

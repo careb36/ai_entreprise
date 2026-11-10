@@ -250,7 +250,7 @@ def test_rejects_unknown_kinds_and_other_companies(test_client, member):
 
 
 def test_a_finished_sprint_posts_its_retrospective_to_the_team(db, monkeypatch):
-    from memory import engram_processor
+    from services.platform import engram_processor
 
     def _no_graph():
         raise RuntimeError("no Neo4j in tests")

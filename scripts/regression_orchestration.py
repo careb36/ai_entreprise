@@ -412,9 +412,12 @@ def check_model_factory() -> None:
 
     try:
         mf = importlib.import_module("services.models.model_factory")
-    except ImportError as exc:
-        print(warn(f"  services.models.model_factory not importable ({exc}) — skipping"))
-        return
+    except ImportError:
+        try:
+            mf = importlib.import_module("app.services.models.model_factory")
+        except ImportError:
+            print(warn("  services.models.model_factory not importable — skipping"))
+            return
 
     # The role default every caller reads (ModelFactory.model_for_role).
     t0 = time.monotonic()

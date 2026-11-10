@@ -6,10 +6,11 @@ from types import SimpleNamespace
 import pytest
 import worker_stages
 from models import BacklogItem, Company, Sprint
+from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import prompt
-
-from memory import engram_processor
+from services.models import model_factory
+from services.platform import engram_processor
 
 
 @pytest.fixture()
@@ -195,3 +196,54 @@ def test_graph_search_shows_retrospectives_to_every_role():
         captured["params"]["retrospective_prefix"]
         == engram_processor.RETROSPECTIVE_AGENT_PREFIX
     )
+
+
+def test_an_engram_is_analysed_by_the_model_its_caller_hands_in(monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    prompts = []
+
+    class _Model:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return SimpleNamespace(content="patterns: none")
+
+    processor = engram_processor.DeepSeekEngramProcessor()
+    monkeypatch.setattr(processor, "_store_in_vector_db", lambda *args: None)
+
+    analysed = processor.burn_engram(
+        "agent", "ScrumMaster", "Use Postgres", llm=_Model()
+    )
+    kept = processor.burn_engram("agent", "ScrumMaster", "Use Postgres")
+
+    assert analysed["summary"] == "Use Postgres\n\n[AI Analysis]: patterns: none"
+    assert "Decision: Use Postgres" in prompts[0]
+    # Without a model the decision is kept as written, and nothing is asked.
+    assert kept["summary"] == "Use Postgres"
+    assert len(prompts) == 1
+
+
+def test_the_retrospective_engram_gets_the_engram_processors_model(monkeypatch):
+    burned = {}
+    roles = []
+    model = object()
+
+    class _Processor:
+        def burn_engram(self, **kwargs):
+            burned.update(kwargs)
+            return {"engram_id": "engram-1"}
+
+    def _llm_for_role(role):
+        roles.append(role)
+        return model
+
+    monkeypatch.setattr(engram_processor, "get_engram_processor", lambda: _Processor())
+    monkeypatch.setattr(model_factory, "get_llm_for_role", _llm_for_role)
+
+    worker_close._burn_retrospective_engram(5, {"company_id": 7, "sprint_id": 5})
+
+    assert roles == ["EngramProcessor"]
+    assert burned["llm"] is model
+    assert burned["company_id"] == 7
+    assert burned["agent_id"] == f"{engram_processor.RETROSPECTIVE_AGENT_PREFIX}5"

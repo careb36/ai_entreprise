@@ -9,9 +9,8 @@ import pytest
 from models.agent_run import AgentRun
 from models.company import Company
 from services import agent_run_service, agent_worker
+from services.producers import graph as graph_module
 from sqlmodel import Session, select
-
-import agents.graph as graph_module
 
 
 def test_graph_is_disabled_by_default_and_documented(monkeypatch):
