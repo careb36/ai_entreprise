@@ -118,6 +118,8 @@ vscode-extension/dist/
 dist-electron/
 dist-electron-main/
 release/
+# ...but not the backend's release context (services/release/, ADR 0016 step 12)
+!backend/app/services/release/
 *.dmg
 *.exe
 *.AppImage
