@@ -1,4 +1,4 @@
-"""The client's brief by mail (issue #331, services/brief_mail.py)."""
+"""The client's brief by mail (issue #331, services/management/brief_mail.py)."""
 
 from __future__ import annotations
 

@@ -13,7 +13,7 @@ to the limit and counted in full; ``services/integration.py``). An archived
 sprint's tasks and integrations are left out (``services/loop/sprint_archive.py``).
 
 With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
-``suggestion`` (a claim, ``services/manager_agent.py``), and
+``suggestion`` (a claim, ``services/management/manager_agent.py``), and
 ``agent_decisions`` lists what it decided alone under the company's policy,
 each with its rule, for the client to override in one click.
 The agents do the rest on their own, so this is the whole of a person's

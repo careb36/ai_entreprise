@@ -250,11 +250,11 @@ class Settings(BaseSettings):
     # Architect and runs on the policy's cheapest band model.
     ARCHITECT_EDITOR_MODE: bool = False
     ARCHITECT_EDITOR_MIN_DIFFICULTY: int = 4
-    # The Manager agent (services/manager_agent.py): suggests each inbox
+    # The Manager agent (services/management/manager_agent.py): suggests each inbox
     # decision and takes alone only what the company's policy allows.
     MANAGER_AGENT_ENABLED: bool = False
     MANAGER_AGENT_INTERVAL_SECONDS: float = 60.0
-    # The client's brief by mail (services/brief_mail.py): nothing is sent
+    # The client's brief by mail (services/management/brief_mail.py): nothing is sent
     # unless SMTP_HOST is set.
     MANAGER_BRIEF_INTERVAL_HOURS: float = 24.0
     MANAGER_BRIEF_CHECK_SECONDS: float = 300.0
