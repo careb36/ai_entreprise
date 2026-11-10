@@ -17,6 +17,7 @@ bench/
     fake/plan.json       the fake producer's plan (CI only, see below)
     fake/files/...       the files the fake producer delivers
   scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference
+  verifier/              the Verifier benchmark (see below and verifier/README.md)
 ```
 
 - `scripts/bench/run.sh` drives each specification through the factory on
@@ -31,6 +32,23 @@ bench/
   1 beyond a threshold.
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
   self-hosted runner, with the fake.
+
+## The Verifier benchmark
+
+`bench/verifier/` (moved from `backend/eval/verificador/` by ADR 0015) is a
+measurement of its own, apart from the reference specifications: deliveries
+whose claims the evidence contradicts or cannot support, fed to the backend's
+real `services/evidence/verification.verify_agent_run`, which must believe
+none of them and still verify the honest controls. It needs no stack, only
+the backend's interpreter:
+
+```bash
+cd backend && PYTHONPATH=.:app:../bench poetry run python -m verifier.run
+```
+
+`backend/tests/test_verificador_benchmark.py` runs it in the backend suite
+(`conftest.py` appends `bench/` to `sys.path`), and `backend-tests.yml` runs
+on a change under `bench/verifier/`. `verifier/README.md` lists the cases.
 
 ## What a run measures, per specification
 

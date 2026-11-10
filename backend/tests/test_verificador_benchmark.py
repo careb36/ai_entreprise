@@ -1,13 +1,13 @@
 """The verifier benchmark, as a gate.
 
-``backend/eval/verificador/`` measures the product's central claim: of the
-deliveries whose claims the evidence contradicts or cannot support, how many
-does the verifier refuse to believe. Run by hand it prints a table; here it runs
-in the suite, so a regression in ``services/verification.py`` fails CI instead of
-quietly changing the number.
+``bench/verifier/`` measures the product's central claim: of the deliveries
+whose claims the evidence contradicts or cannot support, how many does the
+verifier refuse to believe. Run by hand it prints a table; here it runs in the
+suite, so a regression in ``services/evidence/verification.py`` fails CI instead
+of quietly changing the number. ``conftest.py`` puts ``bench/`` on ``sys.path``.
 """
 
-from eval.verificador.run import main
+from verifier.run import main
 
 
 def test_the_verifier_believes_no_delivery_its_evidence_contradicts(capsys):

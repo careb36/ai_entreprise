@@ -1,16 +1,16 @@
 """Run the verifier against deliveries that lie, and print what it caught.
 
-    cd backend && PYTHONPATH=.:app python -m eval.verificador.run
+    cd backend && PYTHONPATH=.:app:../bench python -m verifier.run
 
 The number this prints is the product's central claim, measured instead of
 asserted: of N deliveries whose claims the evidence contradicts or cannot
 support, the verifier believed none of them — and it still believed the honest
 delivery it was given as a control.
 
-Every case goes through ``services.verification.verify_agent_run`` against an
-in-memory SQLite session, so the audit write and the stored ``Verification`` are
-exercised too. No model is called and no network is used, so the run is
-deterministic and takes a second.
+Every case goes through ``services.evidence.verification.verify_agent_run``
+against an in-memory SQLite session, so the audit write and the stored
+``Verification`` are exercised too. No model is called and no network is used,
+so the run is deterministic and takes a second.
 """
 
 from __future__ import annotations
@@ -22,16 +22,16 @@ import tempfile
 # The verifier writes one audit row per run; give it a scratch directory before
 # any service reads the setting, so the benchmark runs from a bare checkout.
 if not os.environ.get("AUDIT_LOG_PATH"):
-    os.environ["AUDIT_LOG_PATH"] = tempfile.mkdtemp(prefix="verificador-audit-")
+    os.environ["AUDIT_LOG_PATH"] = tempfile.mkdtemp(prefix="verifier-audit-")
 
 from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.audit import AuditLog
 from models.company import Agent, BusinessUnit, Company, CompanyMember, User
-from services.verification import verify_agent_run
+from services.evidence.verification import verify_agent_run
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from eval.verificador.cases import CASES, Case
+from verifier.cases import CASES, Case
 
 _TABLES = [
     Company.__table__,

@@ -33,7 +33,6 @@ backend/app/          FastAPI: main.py wires routers, routers/ HTTP, services/ l
 backend/agents/       optional LangGraph producer
 backend/llm/          role to model map (ModelFactory.ROLE_MODEL_MAP)
 backend/memory/       pgvector RAG, Neo4j Engram nodes
-backend/eval/         the verifier benchmark
 backend/tests/        pytest, 57 modules
 backend/janitor/      daily cleanup container
 llm-proxy/            Flask gateway, its own Poetry project
@@ -41,6 +40,7 @@ frontend/src/         React 18 + Vite + TypeScript
 frontend/electron/    desktop build
 vscode-daemon/        host-side NATS consumer
 scripts/e2e/          end-to-end run against real Postgres and NATS
+bench/verifier/       the verifier benchmark (run by backend/tests)
 db/init-db/           schema bootstrap for a fresh volume
 deployment/k8s/       manifests
 ```

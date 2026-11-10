@@ -22,6 +22,10 @@ import pytest
 # its directory on ``sys.path`` the way ``python daemon.py`` does at runtime.
 # Without this, the daemon cannot import its sibling ``nats_scope``.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
+# The Verifier benchmark lives in ``bench/verifier`` (ADR 0015), outside the
+# backend, and runs the backend's own code; its test imports ``verifier.run``.
+# Appended, not prepended: nothing under ``bench/`` may shadow a backend module.
+sys.path.append(str(Path(__file__).resolve().parents[2] / "bench"))
 
 from config import settings
 
