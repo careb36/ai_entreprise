@@ -18,10 +18,9 @@ from config import settings
 from models.company import Company, CompanyMember, User
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from services import company_service, sprint_control
-from services import task_worker as tw
 from services.board import RISK_HOLD_PREFIX, awaits_risk_acceptance
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import qa_review
+from services.loop.worker import intake, qa_review, task_run
 from services.loop.worker import review as worker_review
 from sqlmodel import Session, select
 from test_risk_tier import _approve, _item_in_review
@@ -227,7 +226,7 @@ def test_a_halted_sprint_s_task_is_not_loaded_reviewed_or_dispatched(
     item = db.exec(
         select(BacklogItem).where(BacklogItem.sprint_id == sprint.id)
     ).first()
-    assert tw._load_task_context(item.id) is None
+    assert task_run._load_task_context(item.id) is None
 
     published = []
 
@@ -238,7 +237,7 @@ def test_a_halted_sprint_s_task_is_not_loaded_reviewed_or_dispatched(
             if subject == "task.assign":
                 published.append(payload.get("backlog_item_id"))
 
-    asyncio.run(tw._dispatch_todo_items(_Nats()))
+    asyncio.run(intake._dispatch_todo_items(_Nats()))
     # The shared test database holds other sprints' todo items; none of ours.
     ours = {
         i.id
@@ -348,6 +347,35 @@ def test_no_credit_pauses_the_sprint_and_the_task_waits_as_todo(db):
     assert sprint_control.pause_for_credit(db, sprint.id, "gemini") is False
 
 
+def test_a_task_the_worker_runs_without_credit_goes_back_to_todo(db, monkeypatch):
+    class _NoCredit(Exception):
+        credit_provider = "deepseek"
+
+    async def _run(nats_client, backlog_item_id, ctx):
+        raise _NoCredit("402 Insufficient Balance")
+
+    class _Nats:
+        async def publish(self, subject, payload, msg_id=None):
+            pass
+
+    monkeypatch.setattr(task_run, "_run_claimed_task", _run)
+    sprint = _sprint(db)
+    item = db.exec(
+        select(BacklogItem).where(BacklogItem.sprint_id == sprint.id)
+    ).first()
+
+    asyncio.run(
+        intake._on_task_assign(
+            _Nats(), None, {"backlog_item_id": item.id, "sprint_id": sprint.id}
+        )
+    )
+    db.expire_all()
+    assert db.get(Sprint, sprint.id).status == "paused"
+    item = db.get(BacklogItem, item.id)
+    assert item.status == "todo"
+    assert item.comments[-1]["text"].startswith("Paused: No credit at deepseek")
+
+
 def test_the_execute_call_names_the_provider_without_credit(monkeypatch):
     class _Client:
         def __init__(self, base_url=None):
@@ -364,7 +392,7 @@ def test_the_execute_call_names_the_provider_without_credit(monkeypatch):
             }
 
     monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
-    with pytest.raises(tw.LLMCallError) as raised:
+    with pytest.raises(worker_execute.LLMCallError) as raised:
         worker_execute._execute_task(
             {"id": 1, "title": "T"},
             {"role": "Developer", "model": "deepseek-flash"},

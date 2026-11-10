@@ -20,9 +20,9 @@ import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
-from services import board, scrum_master, task_worker
+from services import board, scrum_master
 from services.loop.worker import close as worker_close
-from services.loop.worker import qa_review
+from services.loop.worker import intake, qa_review
 from services.loop.worker import review as worker_review
 from sqlmodel import select
 from test_llm_routing import _task_assign_handler
@@ -405,7 +405,7 @@ def test_a_person_can_send_a_gate_blocked_task_back_to_work(db):
     )
     nats = _FakeNATS()
 
-    asyncio.run(task_worker._dispatch_todo_items(nats))
+    asyncio.run(intake._dispatch_todo_items(nats))
 
     db.expire_all()
     assert db.get(BacklogItem, item.id).status == "todo"
