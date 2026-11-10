@@ -387,7 +387,7 @@ async def get_git_workflow(
 
     With ``check``, also ``base_status``: whether the folder is a repository
     and how its base branch stands against its remote, as the daemon observed
-    it now (``services/git_setup.py``), or ``state: unknown`` with the reason.
+    it now (``services/release/git_setup.py``), or ``state: unknown`` with the reason.
     """
     require_company_role(session, user, company_id, "Viewer")
     company = session.get(Company, company_id)

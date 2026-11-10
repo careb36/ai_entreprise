@@ -86,7 +86,7 @@ def record_reply(evidence: dict[str, Any], reply: Any) -> None:
 
     With a branch, the tests run where the files are: the task's worktree.
     Without one, the daemon's snapshot that undoes the delivery
-    (``services/delivery_undo.py``), or why it kept none, is kept too, and
+    (``services/release/delivery_undo.py``), or why it kept none, is kept too, and
     ``git_workflow_skipped`` when the workflow was on but the daemon found
     the folder is not a repository and delivered without a branch.
     """

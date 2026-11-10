@@ -9,7 +9,7 @@ remote and an offline remote keep the local base, and the publication of an
 integration behind ``origin``'s base is refused. A folder that is not a
 repository is delivered without the Git workflow, and the company's
 workflow follows what the daemon observed in its folder
-(``services/git_setup.py``). Real git in ``tmp_path``: a bare remote, a
+(``services/release/git_setup.py``). Real git in ``tmp_path``: a bare remote, a
 clone whose local base is behind it, a plain folder and an unreachable URL.
 """
 

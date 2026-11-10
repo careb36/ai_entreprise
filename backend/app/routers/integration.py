@@ -3,10 +3,10 @@
 ``GET /v1/sprints/{id}/integration`` (Viewer) is the plan (which branches,
 in which order) beside the latest integration and the earlier ones.
 ``POST /v1/sprints/{id}/integrate`` (Manager) integrates now; the task worker
-does it on its own when a sprint closes (``services/integration.py``).
+does it on its own when a sprint closes (``services/release/integration.py``).
 ``POST /v1/sprints/{id}/integration/publish`` (Manager) pushes the
 integration branch and opens one pull or merge request for the sprint
-(``services/integration_publish.py``).
+(``services/release/integration_publish.py``).
 """
 
 from auth_policy import current_user_if_required, require_company_role
