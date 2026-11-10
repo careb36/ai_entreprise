@@ -10,7 +10,7 @@ deployment's ``DELIVERY_*`` settings, then the company's own
 most specific last. An empty string in an override turns that step off.
 
 A profile is configuration, never evidence: what ran, and how it ended, is
-the daemon's report (``services/delivery_checks.py``), judged by
+the daemon's report (``services/loop/delivery_checks.py``), judged by
 ``services/evidence/app_check.py``.
 """
 

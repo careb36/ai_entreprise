@@ -1,5 +1,5 @@
 """
-Sprint update, delete/archive and unarchive (``services/sprint_archive.py``).
+Sprint update, delete/archive and unarchive (``services/loop/sprint_archive.py``).
 
 Endpoints:
 - ``PATCH  /v1/sprints/{id}``           — edit ``sprint_name``, ``goal`` or

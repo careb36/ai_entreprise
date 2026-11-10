@@ -244,7 +244,7 @@ class Settings(BaseSettings):
     # pgvector alone.
     NEO4J_ENABLED: bool = True
     AGENT_MODEL_POLICY: str = ""
-    # Architect and editor mode (services/edit_plan.py, from Aider): off, the
+    # Architect and editor mode (services/loop/edit_plan.py, from Aider): off, the
     # Architect's brief stays free text. On, a Developer task at or above
     # ARCHITECT_EDITOR_MIN_DIFFICULTY gets a numbered edit plan from the
     # Architect and runs on the policy's cheapest band model.

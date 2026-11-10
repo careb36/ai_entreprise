@@ -1,6 +1,6 @@
 """The Verifier's checks of the dependency install and the application run.
 
-The loop asks the daemon (``services/delivery_checks.py``, with
+The loop asks the daemon (``services/loop/delivery_checks.py``, with
 ``workspace/dependency_install.py``) and keeps its replies on the evidence:
 
 - ``evidence["dependency_install"]``: the profile's install command, run when

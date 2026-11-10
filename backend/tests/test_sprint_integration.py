@@ -22,7 +22,16 @@ from config import settings
 from history_check import check_events
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import integration, integration_jobs, locks, task_events
+from services import (
+    integration,
+    integration_jobs,
+    locks,
+    replicas,
+    sprint_close,
+    task_events,
+    task_worker,
+)
+from services.platform import hooks
 from sqlmodel import Session, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vscode-daemon"))
@@ -499,6 +508,90 @@ def test_a_closed_sprint_is_integrated_on_its_own_when_the_workflow_is_on(
         "tests_passed",
     )
     assert row.requested_by == "task_worker"
+
+
+@pytest.mark.parametrize("reason", ["sprint_completed", sprint_close.RECLOSED])
+def test_the_loop_closing_a_sprint_emits_sprint_closed_and_release_integrates_it(
+    sqlite_session, published_repo, suite, monkeypatch, reason
+):
+    """The loop never calls release: it emits ``sprint.closed`` at the close,
+    a first one or one after a reopening, and release's handler starts the
+    integration in the background, only with the Git workflow on."""
+    root, _, _ = published_repo
+    _, sprint, *_ = _two_done_tasks(sqlite_session, root)
+    _, off = _sprint(sqlite_session, root, on=False)
+    engine = sqlite_session.get_bind()
+    nats = _Daemon()
+    emitted = []
+
+    def _record(**payload):
+        emitted.append(payload)
+
+    monkeypatch.setattr(task_worker, "engine", engine)
+    monkeypatch.setattr(task_worker, "_build_sprint_retrospective", lambda _id: None)
+    monkeypatch.setattr(
+        replicas,
+        "close_once",
+        lambda _engine, _sprint_id, _close, _retro: {
+            "completed": True,
+            "reason": reason,
+        },
+    )
+    assert integration_jobs.on_sprint_closed in hooks.handlers(hooks.SPRINT_CLOSED)
+    hooks.on(hooks.SPRINT_CLOSED, _record)
+
+    async def close_both():
+        await task_worker._finalize_sprint_if_ready(nats, off.id)
+        await task_worker._finalize_sprint_if_ready(nats, sprint.id)
+        await asyncio.gather(*list(integration_jobs._RUNNING))
+
+    try:
+        asyncio.run(close_both())
+    finally:
+        hooks.off(hooks.SPRINT_CLOSED, _record)
+
+    assert emitted == [
+        {"nats_client": nats, "engine": engine, "sprint_id": off.id},
+        {"nats_client": nats, "engine": engine, "sprint_id": sprint.id},
+    ]
+    with Session(engine) as session:
+        rows = session.exec(select(SprintIntegration)).all()
+    [row] = [r for r in rows if r.sprint_id in (sprint.id, off.id)]
+    assert (row.sprint_id, row.trigger, row.status) == (
+        sprint.id,
+        "sprint_closed",
+        "tests_passed",
+    )
+
+
+def test_a_sprint_closed_handler_that_fails_never_stops_the_others(monkeypatch):
+    calls, scheduled = [], []
+
+    def _fails(**payload):
+        raise RuntimeError("down")
+
+    def _records(**payload):
+        calls.append(payload)
+
+    monkeypatch.setattr(hooks, "_HANDLERS", {})
+    hooks.on(hooks.SPRINT_CLOSED, _fails)
+    hooks.on(hooks.SPRINT_CLOSED, _records)
+    hooks.on(hooks.SPRINT_CLOSED, _records)  # registered once
+    integration_jobs.install()
+    integration_jobs.install()
+    assert hooks.handlers(hooks.SPRINT_CLOSED) == [
+        _fails,
+        _records,
+        integration_jobs.on_sprint_closed,
+    ]
+    monkeypatch.setattr(
+        integration_jobs, "schedule_after_close", lambda *a: scheduled.append(a)
+    )
+
+    hooks.emit(hooks.SPRINT_CLOSED, nats_client="n", engine="e", sprint_id=7)
+
+    assert calls == [{"nats_client": "n", "engine": "e", "sprint_id": 7}]
+    assert scheduled == [("n", "e", 7)]
 
 
 def test_the_status_reads_the_observations():

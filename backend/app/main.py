@@ -50,12 +50,14 @@ from routers import (
     workspace_router,
 )
 from security import get_cors_origins, setup_security
-from services import webhooks
+from services import integration_jobs, webhooks
 from services.healthcheck import aggregate
 
 settings = Settings()
 # A delivery for the company's webhook joins every change it reports.
 webhooks.install()
+# A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
+integration_jobs.install()
 
 
 @asynccontextmanager

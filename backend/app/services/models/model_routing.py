@@ -134,7 +134,7 @@ def resolve_agent_model(
     """The agent's model, else the company's, else routed by difficulty.
 
     *editor*: the task carries an Architect's edit plan to apply
-    (``services/edit_plan.py``), so the policy's cheapest band model runs it.
+    (``services/loop/edit_plan.py``), so the policy's cheapest band model runs it.
     A model a person chose is never re-routed.
     """
     from services.models.model_factory import default_model_for_role

@@ -6,7 +6,7 @@ daemon's snapshot shows it (``workspace.inspect``), then the deployment's and
 the company's overrides (``Company.stack_profile``). Configuration, never
 evidence. ``Context`` reads the company and the profile at most once per
 delivery; the dependency install (``dependency_install``), the delivery's
-checks (``services/delivery_checks.py``), QA's browser checks and the lint
+checks (``services/loop/delivery_checks.py``), QA's browser checks and the lint
 after an edit read it.
 """
 

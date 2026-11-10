@@ -1,10 +1,10 @@
 {
   "backend/agents/graph.py": 720,
   "backend/app/routers/enterprise.py": 666,
-  "backend/app/services/producers/console_assistants.py": 617,
+  "backend/app/services/loop/task_worker.py": 3215,
   "backend/app/services/planning/discovery_service.py": 767,
   "backend/app/services/planning/sprint_planner.py": 792,
-  "backend/app/services/task_worker.py": 3225,
+  "backend/app/services/producers/console_assistants.py": 617,
   "frontend/src/components/GlassRoom.tsx": 1494,
   "frontend/src/pages/AgentSettings.tsx": 1188,
   "frontend/src/pages/CompanyNew.tsx": 1239,

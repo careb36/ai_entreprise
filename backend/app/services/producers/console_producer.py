@@ -70,7 +70,7 @@ class ConsoleHost(Protocol):
     """What the loop that calls a console producer lends it (ADR 0012).
 
     A producer never imports the loop: the task worker passes this host in
-    (``services/console_host.py``), and the producer reads the worker's
+    (``services/loop/console_host.py``), and the producer reads the worker's
     database, prompt sections, project and procedures through it, and records
     its run and its note on the board through it, in the order it always did.
     """
