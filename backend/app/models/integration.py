@@ -1,7 +1,7 @@
 """A sprint's task branches joined into one branch, and what that showed.
 
 ``SprintIntegration`` is one attempt at integrating a closed sprint (issue
-#314, ``services/integration.py``): the workspace daemon merged the done
+#314, ``services/release/integration.py``): the workspace daemon merged the done
 tasks' branches into ``fabrique/sprint-<id>`` in dependency order and the
 project's test command ran on the result. Every field below the request is
 an observation: what git and the daemon answered, never what an agent said.

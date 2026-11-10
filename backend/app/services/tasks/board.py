@@ -69,7 +69,7 @@ RISK_HOLD_PREFIX = (
     "High-risk delivery approved by QA, waiting for a person to accept it"
 )
 # The System's note on a task's part in its sprint's integration
-# (services/integration_events.py): what happened to its branch, never a
+# (services/release/integration_events.py): what happened to its branch, never a
 # verdict on the task.
 INTEGRATION_PREFIX = "Integration #"
 

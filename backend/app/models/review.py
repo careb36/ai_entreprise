@@ -53,7 +53,7 @@ class ReviewComment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
     resolved_at: datetime | None = None
     # Written on the platform the run was published to (``github`` or
-    # ``gitlab``) and brought here by ``services/review_sync.py``: its id
+    # ``gitlab``) and brought here by ``services/release/review_sync.py``: its id
     # there, its page, and, for a submitted review, its state there.
     source: str | None = None
     external_id: str | None = Field(default=None, index=True)

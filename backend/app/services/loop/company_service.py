@@ -69,7 +69,7 @@ class CompanyService:
         is ``planned`` and waits for ``POST /v1/sprints/{id}/start``.
 
         ``git_workflow`` is what the caller observed in the folder
-        (``services/git_setup.py``): off unless it is a repository.
+        (``services/release/git_setup.py``): off unless it is a repository.
 
         This involves multiple tables and a non-critical Neo4j seed operation.
         Returns a summary of the created entities.
