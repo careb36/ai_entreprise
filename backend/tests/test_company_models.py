@@ -1,4 +1,4 @@
-"""A company's models (``services/models/company_models.py``, ``routers/model_settings.py``;
+"""A company's models (``services/company_models.py``, ``routers/model_settings.py``;
 issue #356, step 4): an agent's own model wins, then the company's model for
 its role, then the company's default, then the deployment's ``AGENT_MODEL``
 settings; the Reviewer follows QA's choice unless it has its own; a Manager
@@ -11,15 +11,15 @@ from __future__ import annotations
 
 import pytest
 from models import Agent, Company, ProviderConnection
+from services import model_routing
 from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
-from services.models import company_models, model_routing
+from services.models import company_models
+from services.models.model_factory import AgentRole
 from services.planning import spec_author
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
 from test_specifications import _company
-
-from llm.model_factory import AgentRole
 
 
 @pytest.fixture(autouse=True)
@@ -257,7 +257,8 @@ def test_an_agent_runs_only_a_connection_of_its_company(sqlite_session, test_cli
 
 def test_the_planners_call_the_proxy_with_the_pos_company(sqlite_session):
     """An agent's own model may be a connection; its company routes it."""
-    from services.planning import spec_planning, sprint_planner
+    from services import sprint_planner
+    from services.planning import spec_planning
 
     company = _company(sqlite_session)
     sqlite_session.add(

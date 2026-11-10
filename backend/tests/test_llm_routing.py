@@ -1,8 +1,9 @@
 """
 How the task worker picks a model and reports LLM failures (#102).
 
-An agent with no model uses its role's default from ``llm.model_factory``
-(the same map the LangGraph producer uses) at every call site; a failed or
+An agent with no model uses its role's default from
+``services.models.model_factory`` (the same map the LangGraph producer uses)
+at every call site; a failed or
 empty LLM call reaches the board as ``LLM call failed: <provider> <status>
 <message>``; and the model the proxy says answered is what the AgentRun
 records.  The proxy client is replaced by an in-process fake.
@@ -18,13 +19,12 @@ from models.agent_message import AgentMessage
 from models.agent_run import AgentRun
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
+from services import console_assistants
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import intake, prompt, qa_review, task_run
-from services.producers import console_assistants
+from services.models.model_factory import AgentRole, ModelFactory
 from sqlmodel import Session, select
-
-from llm.model_factory import AgentRole, ModelFactory
 
 
 def _role_default(role: AgentRole) -> str:

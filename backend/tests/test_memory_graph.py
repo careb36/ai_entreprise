@@ -15,10 +15,9 @@ import lifecycle
 import pytest
 from config import Settings, settings
 from memory_client import GraphNotRecorded, MemoryClient
+from services import healthcheck, memory_graph
 from services.loop.company_service import CompanyService
-from services.platform import healthcheck, memory_graph
-
-from memory.engram_processor import DeepSeekEngramProcessor
+from services.platform.engram_processor import DeepSeekEngramProcessor
 
 
 @pytest.fixture
@@ -43,7 +42,7 @@ def test_lineage_says_not_recorded_without_the_graph(
 ):
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
     driver = MagicMock(side_effect=AssertionError("the graph must not be asked"))
-    monkeypatch.setattr("services.platform.memory_graph.get_neo4j_driver", driver)
+    monkeypatch.setattr("services.memory_graph.get_neo4j_driver", driver)
 
     response = test_client.get(
         "/v1/enterprise/lineage", params={"file_path": "src/main.py"}
@@ -65,7 +64,7 @@ def test_lineage_kept_but_failing_is_still_an_error(test_client, graph_on, monke
     def broken():
         raise RuntimeError("bolt refused")
 
-    monkeypatch.setattr("services.platform.memory_graph.get_neo4j_driver", broken)
+    monkeypatch.setattr("services.memory_graph.get_neo4j_driver", broken)
 
     response = test_client.get(
         "/v1/enterprise/lineage", params={"file_path": "src/main.py"}
@@ -77,9 +76,7 @@ def test_lineage_kept_but_failing_is_still_an_error(test_client, graph_on, monke
 def test_lineage_with_the_graph_says_recorded(graph_on, monkeypatch):
     driver = MagicMock()
     driver.session.return_value.__enter__.return_value.run.return_value = []
-    monkeypatch.setattr(
-        "services.platform.memory_graph.get_neo4j_driver", lambda: driver
-    )
+    monkeypatch.setattr("services.memory_graph.get_neo4j_driver", lambda: driver)
 
     body = memory_graph.lineage("a.py", 7, [7], scoped=True)
 
@@ -234,7 +231,7 @@ def test_rag_context_comes_from_pgvector_alone_without_the_graph(graph_off):
     processor = DeepSeekEngramProcessor()
     processor._driver = MagicMock(side_effect=AssertionError("no graph"))
     with (
-        patch("memory.engram_processor.MemoryClient") as client_cls,
+        patch("services.platform.engram_processor.MemoryClient") as client_cls,
         patch.object(processor, "_query_graph_rag") as graph_rag,
     ):
         client_cls.return_value.search_similar.return_value = [

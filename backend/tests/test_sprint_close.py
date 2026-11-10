@@ -43,7 +43,7 @@ def db(monkeypatch, sqlite_session):
     monkeypatch.setattr(
         worker_close, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
     )
-    from memory import engram_processor
+    from services.platform import engram_processor
 
     def _no_graph():
         raise RuntimeError("no Neo4j in tests")

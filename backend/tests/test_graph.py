@@ -42,8 +42,9 @@ def test_resolve_model_name_known_role():
 
 
 def test_resolve_model_name_unknown_role_falls_back_to_developer():
+    from services.models.model_factory import AgentRole, ModelFactory
+
     from agents.graph import _resolve_model_name
-    from llm.model_factory import AgentRole, ModelFactory
 
     expected = ModelFactory.ROLE_MODEL_MAP[AgentRole.DEVELOPER].model_name
     assert _resolve_model_name("UnknownRole") == expected

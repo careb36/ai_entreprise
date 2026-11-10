@@ -238,8 +238,6 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/agents:/app/agents
-      - ./backend/llm:/app/llm
-      - ./backend/memory:/app/memory
       - ./backend/telemetry.py:/app/telemetry.py
       - factory-logs:/app/.factory
       # The CA that signed the broker's certificate, read when NATS_TLS=true.
