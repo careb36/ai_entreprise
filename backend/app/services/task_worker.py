@@ -38,7 +38,7 @@ from services import (
     acceptance,
     agent_run_service,
     console_assistants,
-    console_producer,
+    console_host,
     delivery_checks,
     delivery_gate,
     dependencies,
@@ -2203,7 +2203,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             )
 
             # 3. The company's console producer for the role, else the LLM (in a thread).
-            deliverable = await console_producer.produce(
+            deliverable = await console_host.produce(
                 nats_client, item, agent, sprint, requirements_ctx, architect_advice
             ) or await asyncio.to_thread(
                 _execute_task,

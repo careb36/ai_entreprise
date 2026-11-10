@@ -444,7 +444,7 @@ def verify_agent_run(
         )
         if consulted:
             checks.append(consulted)
-    # A console producer's run (``services/console_producer.py``): who ran,
+    # A console producer's run (``services/producers/console_producer.py``): who ran,
     # how it ended and what the daemon saw it change (``evidence/console_run.py``).
     console_check = check_console_run(evidence)
     if console_check:
