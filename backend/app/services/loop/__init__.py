@@ -1,7 +1,7 @@
 """The loop context: driving a sprint's tasks (ADR 0012, 0016).
 
 The task worker (dispatch, prompt, execution, delivery, recording, review and
-closing, ``task_worker``) with the pieces it is made of: reading a model's
+closing, ``task_worker``, being split by stage into ``worker/``, ADR 0014) with the pieces it is made of: reading a model's
 answer (``answers``), the checks after a delivery (``delivery_checks``), what
 QA is shown (``review_digest``), the Architect's edit plan (``edit_plan``) and
 the console producer's host (``console_host``); the moves a person makes on

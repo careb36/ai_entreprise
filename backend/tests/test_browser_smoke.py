@@ -18,6 +18,7 @@ import sys
 
 import app_run  # the daemon's module, on sys.path via conftest
 import pytest
+import worker_stages
 from config import settings
 from models.sprint import BacklogItem, Sprint
 from services import (
@@ -582,9 +583,7 @@ def test_the_smoke_command_downloads_nothing():
 
 @pytest.fixture()
 def review_db(monkeypatch, sqlite_session):
-    from services import task_worker
-
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 

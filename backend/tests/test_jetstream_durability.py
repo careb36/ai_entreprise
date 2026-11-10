@@ -20,6 +20,7 @@ from uuid import uuid4
 
 import nats_client as nats_client_module
 import pytest
+import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
@@ -229,7 +230,7 @@ class _OfflineDaemonNATS:
 @pytest.fixture()
 def db(monkeypatch, sqlite_session, tmp_path):
     ProjectDiscovery.__table__.create(sqlite_session.get_bind(), checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     return sqlite_session
 

@@ -22,10 +22,12 @@ import threading
 import time
 
 import pytest
+import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import locks, replicas, scrum_master, task_events, task_worker
+from services.loop.worker import messages as worker_messages
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
 from test_review_gate import _FakeNATS
@@ -39,7 +41,7 @@ def engine(tmp_path, monkeypatch):
         connect_args={"check_same_thread": False, "timeout": 30},
     )
     SQLModel.metadata.create_all(engine)
-    monkeypatch.setattr(task_worker, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
     from memory import engram_processor
 
     def _no_graph():
@@ -448,7 +450,7 @@ def test_two_workers_triage_one_escalation_once(engine, monkeypatch):
     monkeypatch.setattr(scrum_master, "ask_triage", slow_answer)
 
     def triage():
-        task_worker._triage_blocked_task(
+        worker_messages._triage_blocked_task(
             company_id, sprint_id, item_id, TRIAGE, escalation_id
         )
 
@@ -468,7 +470,7 @@ def test_a_new_escalation_of_the_same_task_gets_its_own_triage(engine, monkeypat
 
     for _ in range(2):
         escalation_id = _escalation(engine, company_id, sprint_id, item_id)
-        task_worker._triage_blocked_task(
+        worker_messages._triage_blocked_task(
             company_id, sprint_id, item_id, TRIAGE, escalation_id
         )
 
@@ -504,7 +506,7 @@ needs_postgres = pytest.mark.skipif(not PG_URL, reason="REPLICAS_POSTGRES_URL un
 @pytest.fixture()
 def pg(monkeypatch):
     engine = create_engine(PG_URL, pool_size=5, max_overflow=5)
-    monkeypatch.setattr(task_worker, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
     yield engine
     engine.dispose()
 

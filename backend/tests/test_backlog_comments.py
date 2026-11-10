@@ -9,6 +9,7 @@ deliverable, which QA then reported as missing.
 
 import json
 
+import worker_stages
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
@@ -37,7 +38,7 @@ def _texts(session: Session, item_id: int) -> list[str]:
 
 
 def test_worker_keeps_every_comment(sqlite_session, monkeypatch):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     item_id = _item(sqlite_session)
 
     task_worker._update_item_status(item_id, "in_progress", "brief", "Architect")
@@ -63,7 +64,7 @@ def test_in_place_append_on_a_loaded_item_is_persisted(sqlite_session):
 
 
 def test_legacy_string_comments_are_read_as_a_list(sqlite_session, monkeypatch):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     item_id = _item(sqlite_session)
     legacy = json.dumps(json.dumps([{"author": "Dev", "text": "old"}]))
     sqlite_session.exec(

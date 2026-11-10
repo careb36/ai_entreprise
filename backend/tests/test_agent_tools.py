@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import worker_stages
 import workspace_edit  # the daemon's modules, on sys.path via conftest
 import workspace_read
 from config import settings
@@ -594,7 +595,7 @@ def test_the_worker_delivers_the_tool_edits_and_the_daemon_sees_a_modified_file(
 ):
     bind = sqlite_session.get_bind()
     ProjectDiscovery.__table__.create(bind, checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", bind)
+    worker_stages.use_engine(monkeypatch, bind)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     monkeypatch.setattr(settings, "DELIVERY_TESTS_ENABLED", False)
     company = Company(company_name=f"Deliver Co {tmp_path.name}")

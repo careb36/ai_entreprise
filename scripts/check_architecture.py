@@ -6,7 +6,9 @@ The backend's dependency rule between contexts, checked from the imports.
 contexts. Each context names the contexts it may import (``depends_on``,
 which must not run in a circle) and the flat modules it holds (``modules``);
 a module already moved into ``services/<context>/`` belongs to that context
-by its folder (the folder's ``__init__`` too). While a context migrates
+by its folder (the folder's ``__init__`` too), and so does a module in a
+package inside it (``services/loop/worker/messages.py`` is ``loop``'s, keyed
+``loop.worker.messages``; one stem still names one module). While a context migrates
 (ADR 0016), the flat ``services/<module>.py`` it left behind is a re-export
 shim of ``services/<context>/<module>.py``: it stays listed in ``modules``
 under that same context, so its importers are held to the rule as if they
@@ -211,18 +213,20 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
     for key in modules:
         if "." in key or key in contexts:
             continue
-        homes = [c for c in contexts if f"{c}.{key}" in modules]
+        # The packaged module of the same stem, at any depth (``loop.worker.x``).
+        homes = sorted(stems.get(key, []))
         if homes and not _is_shim(modules[key]):
             problems.append(
-                f"{key}: a module of its own beside {homes[0]}.{key}; edges are "
+                f"{key}: a module of its own beside {homes[0]}; edges are "
                 "named by the module's stem, so leave a shim there "
                 "(sys.modules[__name__] = the owner) or rename one of them"
             )
         if homes:
-            shims[key] = homes[0]
-            if owner.get(key) not in (None, homes[0]):
+            home = homes[0].split(".")[0]
+            shims[key] = home
+            if owner.get(key) not in (None, home):
                 problems.append(
-                    f"{key}: a shim of {homes[0]}.{key}, but listed in {owner[key]}"
+                    f"{key}: a shim of {homes[0]}, but listed in {owner[key]}"
                 )
 
     by_name = {_name(key): key for key in modules if "." in key}

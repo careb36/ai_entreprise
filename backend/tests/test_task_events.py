@@ -17,6 +17,7 @@ import auth_tokens
 import history_check
 import migrations
 import pytest
+import worker_stages
 from auth_tokens import create_access_token
 from config import settings
 from models import (
@@ -58,7 +59,7 @@ class _FakeNATS:
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     # The ScrumMaster's triage answers nothing usable: no decision recorded.
     monkeypatch.setattr(scrum_master, "ask_triage", lambda *a, **k: "")
     yield sqlite_session

@@ -17,6 +17,7 @@ import asyncio
 from uuid import uuid4
 
 import pytest
+import worker_stages
 from models import AgentRun, BacklogItem, Company, Sprint, Verification
 from services import (
     board,
@@ -51,7 +52,7 @@ class _FakeNATS:
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setattr(scrum_master, "ask_triage", lambda *a, **k: "")
     yield sqlite_session
     sqlite_session.rollback()

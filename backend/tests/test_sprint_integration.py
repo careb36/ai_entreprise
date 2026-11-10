@@ -39,6 +39,7 @@ import git_workspace
 import sprint_integration
 import test_git_publish
 import test_git_workflow
+import worker_stages
 from test_git_workflow import _company, _member, daemon, enforcement, git  # noqa: F401
 
 # The fixtures of the Git workflow's tests: a repository, and one with a remote.
@@ -527,7 +528,7 @@ def test_the_loop_closing_a_sprint_emits_sprint_closed_and_release_integrates_it
     def _record(**payload):
         emitted.append(payload)
 
-    monkeypatch.setattr(task_worker, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
     monkeypatch.setattr(task_worker, "_build_sprint_retrospective", lambda _id: None)
     monkeypatch.setattr(
         replicas,

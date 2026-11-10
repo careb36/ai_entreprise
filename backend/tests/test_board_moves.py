@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 import history_check
 import pytest
+import worker_stages
 from models import (
     AgentMessage,
     AuditLog,
@@ -48,7 +49,7 @@ NEEDS_WORK = {"author": "Quality gate", "text": "NEEDS WORK: too short"}
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 

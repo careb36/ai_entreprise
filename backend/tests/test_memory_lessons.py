@@ -4,6 +4,7 @@ import secrets
 from types import SimpleNamespace
 
 import pytest
+import worker_stages
 from models import BacklogItem, Company, Sprint
 from services import task_worker
 
@@ -12,7 +13,7 @@ from memory import engram_processor
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 

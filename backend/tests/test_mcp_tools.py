@@ -15,6 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
+import worker_stages
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 from models.agent_run import AgentRun
@@ -366,7 +367,7 @@ def test_the_worker_records_the_calls_as_evidence_beside_the_claims(
     company = Company(company_name="Evidence Co")
     sqlite_session.add(company)
     sqlite_session.commit()
-    monkeypatch.setattr(tw, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     recorded = tw._record_task_run(
         {"id": 7, "title": "Login"},
         agent,

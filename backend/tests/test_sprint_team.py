@@ -14,6 +14,7 @@ import secrets
 from unittest.mock import patch
 
 import pytest
+import worker_stages
 from models import Agent, BacklogItem, Company, Sprint
 from services import spec_planning, sprint_planner, sprint_team, task_worker
 from sqlmodel import select
@@ -310,7 +311,7 @@ def test_the_assignee_cannot_be_moved_outside_the_team(sqlite_session, test_clie
 
 
 def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypatch):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
     sprint = Sprint(
         company_id=company.id, sprint_name="S", status="active", team=["TechWriter"]
@@ -339,7 +340,7 @@ def test_the_worker_never_runs_a_task_outside_the_team(sqlite_session, monkeypat
 
 
 def test_an_autonomy_3_follow_up_gets_an_automatic_team(sqlite_session, monkeypatch):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session, autonomy=3)
     closing = Sprint(company_id=company.id, sprint_name="S1", status="active")
     sqlite_session.add(closing)
@@ -483,7 +484,7 @@ def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_ove
 ):
     from services import carry_over
 
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
     item = _blocked_task(sqlite_session, company, status=status)
     docs = Sprint(

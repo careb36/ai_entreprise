@@ -17,6 +17,7 @@ from pathlib import Path
 
 import history_check
 import pytest
+import worker_stages
 from config import settings
 from models import BacklogItem, Company, ProjectDiscovery, Sprint
 from models.agent_run import AgentRun, Verification
@@ -234,7 +235,7 @@ def factory(monkeypatch, sqlite_session, tmp_path):
     bind = sqlite_session.get_bind()
     for table in (ProjectDiscovery.__table__, Specification.__table__):
         table.create(bind, checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", bind)
+    worker_stages.use_engine(monkeypatch, bind)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     monkeypatch.setattr(settings, "DELIVERY_TESTS_ENABLED", True)
     monkeypatch.setattr(

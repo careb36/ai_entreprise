@@ -14,6 +14,7 @@ services/scrum_master.py: the ScrumMaster answers an escalation.
 import secrets
 
 import pytest
+import worker_stages
 from models import Agent, AgentMessage, BacklogItem, Company, Sprint
 from services import carry_over, scrum_master
 from services.board import CARRIED_FROM_PREFIX
@@ -741,7 +742,7 @@ def test_a_decision_is_judged_by_the_escalation_it_names(
 def test_the_worker_names_the_escalation_in_the_decision(
     sqlite_session, company, monkeypatch
 ):
-    from services import task_worker
+    from services.loop.worker import messages as worker_messages
 
     company_row, sprint = company
     item = _blocked(sqlite_session, sprint, title="Named by the worker")
@@ -758,10 +759,10 @@ def test_the_worker_names_the_escalation_in_the_decision(
     sqlite_session.add(escalation)
     sqlite_session.commit()
     sqlite_session.refresh(escalation)
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setattr(scrum_master, "ask_triage", lambda *a, **k: RETRY_ANSWER)
 
-    task_worker._triage_blocked_task(
+    worker_messages._triage_blocked_task(
         company_row.id, sprint.id, item.id, TRIAGE, escalation.id
     )
 

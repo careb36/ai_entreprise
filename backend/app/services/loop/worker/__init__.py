@@ -1,0 +1,8 @@
+"""The task worker's stages (ADR 0014), part of the loop context.
+
+``services/loop/task_worker.py`` is split by loop stage, one module per pull
+request, each owning its functions and the tests' patch targets: ``messages``
+(agent messages and the ScrumMaster's triage), then ``intake``, ``prompt``,
+``execute``, ``deliver``, ``record``, ``review`` and ``close``.
+``task_worker`` keeps re-exporting the names until nothing imports them.
+"""

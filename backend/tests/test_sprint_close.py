@@ -16,6 +16,7 @@ import json
 import secrets
 
 import pytest
+import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
@@ -34,7 +35,7 @@ TRIAGE = (
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setattr(
         task_worker, "AUTO_SELF_IMPROVEMENT_ENABLED", False, raising=False
     )

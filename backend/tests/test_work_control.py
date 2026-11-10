@@ -13,6 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
 import auth_tokens
+import worker_stages
 from config import settings
 from models.company import Company, CompanyMember, User
 from models.sprint import BacklogItem, OutboxEvent, Sprint
@@ -25,7 +26,7 @@ from test_risk_tier import _approve, _item_in_review
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(tw, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 

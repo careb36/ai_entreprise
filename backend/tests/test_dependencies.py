@@ -11,6 +11,7 @@ import secrets
 
 import history_check
 import pytest
+import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
 from services import dependencies, spec_author, spec_check, sprint_control
@@ -382,7 +383,7 @@ def test_a_sprint_reconciles_its_holds_before_it_counts_as_settled(
 ):
     from services import task_worker
 
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
     sprint = _sprint(sqlite_session, company)
     gate = [

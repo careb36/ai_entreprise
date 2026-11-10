@@ -20,6 +20,7 @@ import textwrap
 import app_run  # the daemon's module, on sys.path via conftest
 import pytest
 import shell_exec
+import worker_stages
 from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
@@ -751,7 +752,7 @@ def test_container_mode_runs_the_application_isolated_and_probes_it_inside(
 def project(monkeypatch, sqlite_session, tmp_path):
     bind = sqlite_session.get_bind()
     ProjectDiscovery.__table__.create(bind, checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", bind)
+    worker_stages.use_engine(monkeypatch, bind)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     monkeypatch.setattr(settings, "DELIVERY_TESTS_ENABLED", True)
     monkeypatch.setattr(settings, "DELIVERY_APP_CHECK_ENABLED", True)

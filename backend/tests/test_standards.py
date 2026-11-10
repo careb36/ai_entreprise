@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 import pytest
+import worker_stages
 from models.agent_run import AgentRun
 from services import standards, verification
 
@@ -213,7 +214,7 @@ def test_the_verifier_records_the_check_and_a_secret_refutes_the_run(
     by_name = {c["name"]: c for c in result.checks}
     assert by_name["standards"]["outcome"] == "refuted"
     assert result.verdict == "refuted"
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     sqlite_session.commit()
     problem, observation = task_worker._delivery_gate(company.id, 1)
     assert problem == "standards violated" and "STD-SEC-1" in observation
