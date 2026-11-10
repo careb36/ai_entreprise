@@ -1,4 +1,4 @@
-from llm.model_factory import AgentRole, ModelFactory, create_completion
+from services.models.model_factory import AgentRole, ModelFactory, create_completion
 
 
 def test_role_model_map_uses_deepseek_and_qwen_models():
@@ -33,7 +33,7 @@ def test_create_completion_passes_bu_header(monkeypatch):
             return _Response()
 
     monkeypatch.setattr(
-        "llm.model_factory.get_llm_for_role", lambda _role: _DummyModel()
+        "services.models.model_factory.get_llm_for_role", lambda _role: _DummyModel()
     )
 
     result = create_completion(role="Developer", prompt="hello", bu_id=7)
@@ -84,7 +84,7 @@ def _clear_model_env(monkeypatch):
 
 
 def test_agent_model_puts_the_whole_team_on_one_model(monkeypatch):
-    from llm.model_factory import default_model_for_role
+    from services.models.model_factory import default_model_for_role
 
     _clear_model_env(monkeypatch)
     monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
@@ -96,7 +96,7 @@ def test_agent_model_puts_the_whole_team_on_one_model(monkeypatch):
 
 
 def test_a_role_variable_beats_nemotron_and_agent_model(monkeypatch):
-    from llm.model_factory import default_model_for_role
+    from services.models.model_factory import default_model_for_role
 
     _clear_model_env(monkeypatch)
     monkeypatch.setenv("AGENT_MODEL", "deepseek-v4-pro")
@@ -111,7 +111,7 @@ def test_a_role_variable_beats_nemotron_and_agent_model(monkeypatch):
 
 
 def test_without_agent_model_the_defaults_stay(monkeypatch):
-    from llm.model_factory import default_model_for_role
+    from services.models.model_factory import default_model_for_role
 
     _clear_model_env(monkeypatch)
     assert default_model_for_role("ScrumMaster") == "qwen3.7-plus"

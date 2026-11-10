@@ -14,7 +14,7 @@ from llm_proxy_client import LLMProxyClient
 from opentelemetry.trace import StatusCode
 from typing_extensions import TypedDict
 
-from services.models.model_factory import default_model_for_role
+from services.models.model_factory import default_model_for_role, get_llm_for_role
 from services.platform.engram_processor import get_engram_processor
 from services.producers.openproject_tools import create_work_package
 from telemetry import configure_telemetry, get_tracer
@@ -406,8 +406,7 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
     sprint_id = state.get("sprint_id")
 
     try:
-        processor = get_engram_processor()
-        result = processor.burn_engram(
+        result = get_engram_processor().burn_engram(
             company_id=state.get("company_id"),
             agent_id=f"orchestrator_{state['interaction_id']}",
             role="PO",
@@ -418,6 +417,7 @@ async def burn_node(state: AgentState) -> dict[str, Any]:
                 "needs_split": False,
                 "kickoff_failed": bool(last_error),
             },
+            llm=get_llm_for_role("EngramProcessor"),
         )
         engram_id = result.get("engram_id")
     except Exception as exc:  # noqa: BLE001 - A lost engram never fails the kickoff.

@@ -25,9 +25,6 @@ RUN poetry config virtualenvs.create false \
 # Copy only the application source trees needed at runtime.
 # Avoids copying .git, node_modules, frontend/, docs/, tests/, etc.
 COPY app/     /app/app/
-COPY llm/     /app/llm/
-COPY agents/  /app/agents/
-COPY memory/  /app/memory/
 COPY telemetry.py /app/telemetry.py
 COPY alembic.ini /app/alembic.ini
 COPY alembic/  /app/alembic/

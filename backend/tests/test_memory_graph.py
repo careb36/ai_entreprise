@@ -17,8 +17,7 @@ from config import Settings, settings
 from memory_client import GraphNotRecorded, MemoryClient
 from services import healthcheck, memory_graph
 from services.company_service import CompanyService
-
-from memory.engram_processor import DeepSeekEngramProcessor
+from services.platform.engram_processor import DeepSeekEngramProcessor
 
 
 @pytest.fixture
@@ -232,7 +231,7 @@ def test_rag_context_comes_from_pgvector_alone_without_the_graph(graph_off):
     processor = DeepSeekEngramProcessor()
     processor._driver = MagicMock(side_effect=AssertionError("no graph"))
     with (
-        patch("memory.engram_processor.MemoryClient") as client_cls,
+        patch("services.platform.engram_processor.MemoryClient") as client_cls,
         patch.object(processor, "_query_graph_rag") as graph_rag,
     ):
         client_cls.return_value.search_similar.return_value = [
