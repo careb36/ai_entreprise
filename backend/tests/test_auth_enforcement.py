@@ -19,7 +19,7 @@ from models import (
 )
 from models.agent_run import AgentRun
 from models.github import GitHubRepoBinding
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from sqlmodel import select
 from test_github_adapter import _webhook
 
@@ -167,7 +167,7 @@ def test_only_owner_can_invite(test_client, sqlite_session, identity, role, expe
 @pytest.fixture
 def company_services(monkeypatch):
     monkeypatch.setattr(
-        "services.company_service.plan_foundation_sprint",
+        "services.loop.company_service.plan_foundation_sprint",
         lambda **kwargs: {"goal": "Test", "tasks": []},
     )
     monkeypatch.setattr(CompanyService, "_seed_neo4j", lambda *args: None)
@@ -202,7 +202,9 @@ def test_owner_bootstrap_rolls_back_with_company(
     def fail_plan(**kwargs):
         raise RuntimeError("Planning failed")
 
-    monkeypatch.setattr("services.company_service.plan_foundation_sprint", fail_plan)
+    monkeypatch.setattr(
+        "services.loop.company_service.plan_foundation_sprint", fail_plan
+    )
     response = test_client.post(
         "/v1/init_company", json={"company_name": "Rollback"}, headers=identity[2]
     )

@@ -15,7 +15,7 @@ import lifecycle
 import pytest
 from config import Settings, settings
 from memory_client import GraphNotRecorded, MemoryClient
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from services.platform import healthcheck, memory_graph
 
 from memory.engram_processor import DeepSeekEngramProcessor
@@ -250,7 +250,7 @@ def test_rag_context_comes_from_pgvector_alone_without_the_graph(graph_off):
 
 def test_company_seed_skips_the_graph_when_off(graph_off, monkeypatch):
     called = MagicMock()
-    monkeypatch.setattr("services.company_service.get_neo4j_driver", called)
+    monkeypatch.setattr("services.loop.company_service.get_neo4j_driver", called)
     CompanyService.__new__(CompanyService)._seed_neo4j(1, "Acme")
     called.assert_not_called()
 

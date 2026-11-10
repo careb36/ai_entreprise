@@ -14,7 +14,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import User
 from pydantic import BaseModel
-from services import webhooks
+from services.integrations import webhooks
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Enterprise"])

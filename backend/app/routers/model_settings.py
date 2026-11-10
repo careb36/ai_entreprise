@@ -15,7 +15,7 @@ Endpoints:
 
 An agent's own model still wins (the Agents page); without one, the company's
 model for its role, then the company's default, then the deployment's
-``AGENT_MODEL`` settings (``services/company_models.py``).
+``AGENT_MODEL`` settings (``services/models/company_models.py``).
 """
 
 import logging

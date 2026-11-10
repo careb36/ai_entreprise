@@ -232,7 +232,7 @@ graph TD
 
 ### Data flow for a sprint
 
-Tasks are executed by the **task worker** (`backend/app/services/task_worker.py`). The LangGraph graph is an optional kickoff conversation, off by default.
+Tasks are executed by the **task worker** (`backend/app/services/loop/task_worker.py`). The LangGraph graph is an optional kickoff conversation, off by default.
 
 ```mermaid
 sequenceDiagram

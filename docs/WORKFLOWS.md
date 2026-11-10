@@ -212,7 +212,7 @@ repository; the others are relative to this repository.
 
 ### 2.1 The loop as a fixed workflow
 
-The task worker (`backend/app/services/task_worker.py`) runs this sequence
+The task worker (`backend/app/services/loop/task_worker.py`) runs this sequence
 for every task. Steps 1–8 of "Data Flow for a Sprint" in `CLAUDE.md` describe
 it in full.
 
@@ -224,7 +224,7 @@ it in full.
 | Text gate | `_validate_minimum_deliverable`, then `_send_back_from_quality_gate` | deterministic check on the claim's form |
 | Deliver | `_deliver_artifacts`: `workspace.generate` on the daemon (or a queued job) | observation: sha256 read back, diff, snapshot or commit |
 | Install, tests, application | daemon `workspace.execute` and `workspace.app.check` | observations: exit status, per-test lines, sandbox |
-| Verify | `_record_task_run`, which writes an `AgentRun` and its `Verification` (`services/verification.py`) | verdict and checks, including `risk_tier` |
+| Verify | `_record_task_run`, which writes an `AgentRun` and its `Verification` (`services/evidence/verification.py`) | verdict and checks, including `risk_tier` |
 | Delivery gate | `delivery_gate.gate`: refuted, unconfirmed, failed tests, a failed or edited criterion, standards, secops | decides send-back or block, without a model |
 | Review | QA in `_review_cycle_body`; only `APPROVED:` passes | claim; acts only after the gate |
 | Holds | high-risk tier (`risk.is_high`), autonomy level 1 (`sprint_control.HUMAN_LED_REASON`), a browser check that was not observed (`person_acceptance_reason`) | decides `risk_hold`, which waits for a person |
@@ -250,7 +250,7 @@ The retry limits are constants:
 | `Gate` (a CI precondition) | Dependency holds (`Blocked: waits for task …`), `DELIVERY_QUEUED` (a daemon offline), the delivery gate | — |
 | Run persisted and resumed | Postgres plus the JetStream `task.assign` durable consumer, the outbox, `replicas.task_lock` (an advisory lock as a lease), `recover_stale` each review cycle, the daemon's delivery journal | — |
 | Approval recorded | A `TaskEvent` (`approved_by_person`, `decided`, a chained event with its actor), `RunReview`, `AgentRunApproval`, `ManagerDecision`, audit rows | — (stronger than Flow's) |
-| Column binding | Fixed columns = `BacklogItem.status` (`todo`, `in_progress`, `in_review`, `done`, `blocked`). Moving a card to To do starts the task (`services/board_moves.py`) | A workflow chosen per column or per kind |
+| Column binding | Fixed columns = `BacklogItem.status` (`todo`, `in_progress`, `in_review`, `done`, `blocked`). Moving a card to To do starts the task (`services/loop/board_moves.py`) | A workflow chosen per column or per kind |
 | Container per step | One execution environment per company: the daemon and `Company.delivery_sandbox` (host, container or bwrap), the stack profile, the command policy | — (deliberately not per step; see §8) |
 | Definition versioning, pinned on the run | Procedures and specifications are versioned; the loop is not | A workflow version pinned on each task's run |
 
@@ -378,7 +378,7 @@ step type may run in parallel only when its declared effect allows it:
 
 ### 3.4 Retries with limits
 
-- **Defaults equal today's values** (`backend/app/services/task_worker.py`):
+- **Defaults equal today's values** (`backend/app/services/loop/task_worker.py`):
   - rework: **2** per counter, which is `AUTOPILOT_MAX_REWORK_CYCLES`, read
     from the environment variable of that name and defaulting to
     `MAX_QA_REWORK_CYCLES = 2`;
@@ -492,7 +492,7 @@ server-computed sha256 when it starts, as Flow does with
 ### 3.6 Measuring versions, proposals and reverts
 
 Workflow versions are measured the way procedures are
-(`services/procedures.py`), by the board's numbers and never by a model:
+(`services/learning/procedures.py`), by the board's numbers and never by a model:
 
 - **Baseline.** On activation, the numbers of the company's last two
   completed sprints (`BASELINE_SPRINTS = 2`) are recorded on the version.
@@ -982,7 +982,7 @@ The owner answered the open questions on 2026-11-09. Where she asked for
 5. **Retry budgets.** Defaults equal today's values: rework **2**
    (`AUTOPILOT_MAX_REWORK_CYCLES`, defaulting to `MAX_QA_REWORK_CYCLES = 2`)
    and unusable reviews **3** (`MAX_QA_REVIEW_FAILURES`), in
-   `backend/app/services/task_worker.py`. The hard ceiling is **5**, fixed
+   `backend/app/services/loop/task_worker.py`. The hard ceiling is **5**, fixed
    in code. A company may lower a budget, or raise it up to the ceiling.
    (§3.4, I7.)
 6. **New versions apply to tasks started after activation.** A task in

@@ -340,7 +340,7 @@ async def write_document(
     """Send ``docs/ARCHITECTURE.md`` to the repository through the daemon.
 
     Returns the daemon's report of the file; raises ``DaemonUnavailable`` or
-    ``DaemonError`` (``services.workspace_daemon``) otherwise, and
+    ``DaemonError`` (``services.workspace.workspace_daemon``) otherwise, and
     ``ArchAuthorError`` when the company has no project folder.
     """
     from services.workspace.workspace_daemon import DaemonError, daemon_request

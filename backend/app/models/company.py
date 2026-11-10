@@ -33,7 +33,7 @@ class Company(SQLModel, table=True):
     # (the PO suggests, a Manager confirms) or "automatic" (the PO's suggestion).
     team_selection: str | None = "suggested"
     # Each task's deliveries as commits on its own branch, in a worktree, never
-    # in the person's checkout (services/git_workflow.py); the branch starts
+    # in the person's checkout (services/workspace/git_workflow.py); the branch starts
     # from git_base_branch, or from what the repository has checked out.
     git_workflow: bool = True
     git_base_branch: str | None = None
@@ -57,7 +57,7 @@ class Company(SQLModel, table=True):
         default=None, sa_column=Column(JSON)
     )
     # The models the company's agents run when their own is empty
-    # (services/company_models.py): one per role ({"QA": "..."}), then one
+    # (services/models/company_models.py): one per role ({"QA": "..."}), then one
     # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.
     default_model: str | None = None
     role_models: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))

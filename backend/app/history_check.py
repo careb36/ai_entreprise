@@ -36,8 +36,8 @@ beside the thread and never instead of it:
   ``status_differs_from_events`` (the status the latest transition left is
   not the task's).
 
-It deliberately imports none of the production readers (``services/board.py``,
-``services/loop/carry_over.py``, ``services/scrum_master.py``) and restates the
+It deliberately imports none of the production readers (``services/tasks/board.py``,
+``services/loop/carry_over.py``, ``services/learning/scrum_master.py``) and restates the
 markers it looks for, so a bug shared with them cannot hide here. It runs in
 the tests (``tests/test_history_check.py``) and at the end of
 ``scripts/e2e/run.sh`` against the run's database::

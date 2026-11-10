@@ -20,7 +20,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
 from pydantic import BaseModel, ConfigDict
-from services import board_moves
+from services.loop import board_moves
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])

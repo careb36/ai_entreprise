@@ -114,7 +114,7 @@
       "name": "Verdicts",
       "kind": "schema",
       "module": "contracts",
-      "contract": "VERDICT_VERIFIED = \"verified\"; VERDICT_REFUTED = \"refuted\"; VERDICT_UNVERIFIABLE = \"unverifiable\"\nGate authors: QUALITY_GATE_AUTHOR = \"Quality gate\", DELIVERY_GATE_AUTHOR = \"Verifier\"\n(today in services/orchestration_metrics.py and services/board.py; re-exported there after the move)",
+      "contract": "VERDICT_VERIFIED = \"verified\"; VERDICT_REFUTED = \"refuted\"; VERDICT_UNVERIFIABLE = \"unverifiable\"\nGate authors: QUALITY_GATE_AUTHOR = \"Quality gate\", DELIVERY_GATE_AUTHOR = \"Verifier\"\n(today in services/platform/orchestration_metrics.py and services/tasks/board.py; re-exported there after the move)",
       "consumers": ["evidence", "tasks", "loop", "tools", "management"]
     },
     {

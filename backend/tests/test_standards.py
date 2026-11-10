@@ -1,4 +1,4 @@
-"""The factory's quality standards (``services.standards``): a fixed catalogue
+"""The factory's quality standards (``services.evidence.standards``): a fixed catalogue
 by discipline that binds every role's prompt, with the ones the loop checks
 without a model: a secret in a delivered file refutes it, code without a
 test, a TODO left behind and an unpinned dependency are findings; a
@@ -12,8 +12,7 @@ from pathlib import Path
 import pytest
 import worker_stages
 from models.agent_run import AgentRun
-from services import verification
-from services.evidence import standards
+from services.evidence import standards, verification
 from services.loop.worker import record as worker_record
 
 DOC = Path(__file__).resolve().parents[2] / "docs" / "STANDARDS.md"

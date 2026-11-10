@@ -450,7 +450,7 @@ def verify_agent_run(
     if console_check:
         checks.append(console_check)
     # The factory's standards over the files the deliverable declares
-    # (``services.standards``): a secret refutes, the rest is for the reviewer.
+    # (``services.evidence.standards``): a secret refutes, the rest is for the reviewer.
     # The edit tool's files too: what the delivery wrote for them (an observation).
     standards_check = standards.check_delivery(
         run.artifact_text, context_read.edited_texts(evidence)

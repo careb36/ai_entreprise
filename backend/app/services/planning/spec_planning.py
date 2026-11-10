@@ -429,7 +429,7 @@ def requirements_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     """The requirements and architecture sections for *item* of *sprint*.
 
     Empty without a specification; the architecture part only once one is
-    approved for it (``services.arch_author``).
+    approved for it (``services.planning.arch_author``).
     """
     from services.planning import arch_author
 

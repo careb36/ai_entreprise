@@ -22,9 +22,10 @@ from config import settings
 from history_check import check_events
 from models import AgentRun, BacklogItem, ProjectDiscovery, Sprint, Verification
 from models.integration import SprintIntegration
-from services import integration, integration_jobs, replicas, sprint_close, task_worker
+from services.loop import replicas, sprint_close, task_worker
 from services.loop.worker import close as worker_close
 from services.platform import hooks, locks
+from services.release import integration, integration_jobs
 from services.tasks import task_events
 from sqlmodel import Session, select
 

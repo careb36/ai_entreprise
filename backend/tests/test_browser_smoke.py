@@ -21,8 +21,8 @@ import pytest
 import worker_stages
 from config import settings
 from models.sprint import BacklogItem, Sprint
-from services import delivery_checks
 from services.evidence import app_check, browser_smoke, criteria_tests
+from services.loop import delivery_checks
 from services.workspace import project_profile, stack_profiles
 from test_specifications import _company
 

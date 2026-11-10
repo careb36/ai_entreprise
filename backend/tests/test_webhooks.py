@@ -26,7 +26,7 @@ from models import (
     Sprint,
     Verification,
 )
-from services import webhooks
+from services.integrations import webhooks
 from sqlmodel import select
 from test_git_workflow import _member, enforcement  # noqa: F401
 

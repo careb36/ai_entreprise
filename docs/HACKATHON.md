@@ -93,7 +93,7 @@ frontend, proxy, e2e, security and file-size jobs) on a self-hosted runner.
 
 ## What the judges should look at
 
-- **The evidence layer, not the agents.** `backend/app/services/verification.py`
+- **The evidence layer, not the agents.** `backend/app/services/evidence/verification.py`
   is where claims and observations are kept apart and `unverifiable` is a first-class
   verdict.
 - **The audit chain.** `POST /v1/audit` signs entries; `GET /v1/audit/chain`

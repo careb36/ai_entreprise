@@ -1,4 +1,4 @@
-"""A company's models (``services/company_models.py``, ``routers/model_settings.py``;
+"""A company's models (``services/models/company_models.py``, ``routers/model_settings.py``;
 issue #356, step 4): an agent's own model wins, then the company's model for
 its role, then the company's default, then the deployment's ``AGENT_MODEL``
 settings; the Reviewer follows QA's choice unless it has its own; a Manager
@@ -198,7 +198,7 @@ def test_the_architect_consultation_runs_the_companys_model(llm, db, monkeypatch
 def test_the_reviewer_agent_asks_with_the_companys_reviewer_model(
     sqlite_session, monkeypatch
 ):
-    from services import reviewer_agent
+    from services.management import reviewer_agent
     from test_reviewer_agent import APPROVE, _pending_only, _run
     from test_reviewer_agent import _company as reviewer_company
 

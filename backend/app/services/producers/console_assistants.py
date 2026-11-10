@@ -613,5 +613,5 @@ async def collect_advice(
     return {"combined": "\n\n".join(notes), "sources": sources}
 
 
-# The board note's builder lives beside its readers (services.board).
+# The board note's builder lives beside its readers (services.tasks.board).
 usage_comment = board.usage_comment

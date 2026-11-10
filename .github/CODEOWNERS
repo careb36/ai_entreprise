@@ -20,8 +20,8 @@
 
 # Los ficheros de política y de secretos: un cambio aquí reescribe qué se
 # considera evidencia y qué claves entran.
-/backend/app/services/verification.py  @careb36
-/backend/app/services/board.py         @careb36
+/backend/app/services/evidence/verification.py  @careb36
+/backend/app/services/tasks/board.py         @careb36
 /backend/app/routers/auth.py           @careb36
 /backend/app/config.py                     @careb36
 /.env.example                          @careb36

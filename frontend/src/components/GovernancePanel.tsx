@@ -11,7 +11,7 @@ import { ManagerPolicyPanel } from './ManagerPolicyPanel'
 import { ClientRequestBox } from './ClientRequestBox'
 
 // The note written on the task when a person sends it back to work. Not
-// translated: the backend recognises it (services/board.py SEND_BACK_MARKER)
+// translated: the backend recognises it (services/tasks/board.py SEND_BACK_MARKER)
 // and restarts the rework budgets after it.
 const SEND_BACK_COMMENT = 'Sent back to work by a person.'
 // The note written when a person accepts an approved high-risk delivery.

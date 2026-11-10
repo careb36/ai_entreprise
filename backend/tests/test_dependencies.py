@@ -15,7 +15,7 @@ import pytest
 import worker_stages
 from models import BacklogItem, Company, OutboxEvent, Sprint
 from models.specification import Specification
-from services import sprint_control
+from services.loop import sprint_control
 from services.loop.worker import intake, task_run
 from services.planning import spec_author, spec_check
 from services.tasks import dependencies
@@ -488,7 +488,7 @@ def test_a_closed_sprint_is_left_alone(sqlite_session):
 def test_a_carried_task_keeps_a_dependency_carried_with_it_and_drops_the_rest(
     sqlite_session,
 ):
-    from services.carry_over import carry_over
+    from services.loop.carry_over import carry_over
 
     company = _company(sqlite_session)
     old = _sprint(sqlite_session, company, status="completed")

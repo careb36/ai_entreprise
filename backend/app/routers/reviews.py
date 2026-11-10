@@ -17,11 +17,15 @@ from models import User
 from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication, RunReview
 from schemas import ReviewCommentCreate, RunReviewCreate
-from services.delivery_undo import UndoRefused, record_undo, undo_spec
-from services.git_publish import PublishRefused, publish_spec, record_publication
-from services.local_merge import record_run_merge, run_merge_spec
-from services.review_sync import SyncRefused, import_comments, sync_spec
-from services.run_review import ReviewRefused, check_comment_target, submit_review
+from services.loop.run_review import ReviewRefused, check_comment_target, submit_review
+from services.release.delivery_undo import UndoRefused, record_undo, undo_spec
+from services.release.git_publish import (
+    PublishRefused,
+    publish_spec,
+    record_publication,
+)
+from services.release.local_merge import record_run_merge, run_merge_spec
+from services.release.review_sync import SyncRefused, import_comments, sync_spec
 from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,

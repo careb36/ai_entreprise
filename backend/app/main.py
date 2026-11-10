@@ -50,8 +50,9 @@ from routers import (
     workspace_router,
 )
 from security import get_cors_origins, setup_security
-from services import integration_jobs, webhooks
+from services.integrations import webhooks
 from services.platform.healthcheck import aggregate
+from services.release import integration_jobs
 
 settings = Settings()
 # A delivery for the company's webhook joins every change it reports.

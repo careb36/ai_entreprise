@@ -770,7 +770,7 @@ def test_the_minimum_deliverable_gate_counts_the_edited_files():
 
 
 def test_a_secret_written_through_the_edit_tool_refutes_the_delivery(sqlite_session):
-    from services.verification import verify_agent_run
+    from services.evidence.verification import verify_agent_run
 
     run = AgentRun(
         company_id=1,

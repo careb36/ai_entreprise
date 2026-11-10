@@ -34,7 +34,7 @@ from models import AssistantRuntimeState, Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
 from models.company import ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import console_host, task_worker
+from services.loop import console_host, task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import quality_gate
 from services.producers import console_assistants, console_clis, console_producer

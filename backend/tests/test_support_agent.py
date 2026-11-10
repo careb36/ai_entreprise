@@ -5,7 +5,7 @@ import secrets
 import pytest
 from config import settings
 from models import BugReport
-from services import support_agent
+from services.management import support_agent
 
 TRIAGE = """SEVERITY: high
 CATEGORY: bug

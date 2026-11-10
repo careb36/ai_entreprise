@@ -1,9 +1,9 @@
-"""Integration planning for a sprint's task branches (services.integration)."""
+"""Integration planning for a sprint's task branches (services.release.integration)."""
 
 import secrets
 
 from models import BacklogItem, Company, Sprint
-from services import integration
+from services.release import integration
 
 
 def _company(session):

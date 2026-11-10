@@ -10,7 +10,7 @@ Endpoints (``/v1/specifications``):
 - ``POST   /{id}/approve``            — approve; refused while the check blocks (Manager).
 - ``POST   /{id}/revise``             — a new draft version of an approved one (Manager).
 
-The ids of requirements and criteria come from ``services.spec_check``,
+The ids of requirements and criteria come from ``services.planning.spec_check``,
 never from a request or a model; the check decides what can be approved.
 """
 

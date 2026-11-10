@@ -24,7 +24,7 @@ from database import get_session
 from fastapi import APIRouter, Body, Depends, HTTPException
 from models import Sprint, User
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from services import sprint_archive
+from services.loop import sprint_archive
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])

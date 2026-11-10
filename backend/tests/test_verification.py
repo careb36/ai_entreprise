@@ -2,7 +2,7 @@ import pytest
 from models.agent_run import AgentRun, Verification
 from models.audit import AuditLog
 from models.company import Company
-from services.verification import (
+from services.evidence.verification import (
     check_tests_run,
     extract_claimed_paths,
     extract_test_claims,

@@ -2,7 +2,7 @@
 numbered and checked deterministically, drafted by the Architect from an
 approved specification, approved by a person, in every task's prompt and
 written to the repository with the sha256 the daemon reports
-(``services.arch_check``, ``arch_author``, ``routers/architectures.py``).
+(``services.planning.arch_check``, ``arch_author``, ``routers/architectures.py``).
 """
 
 import asyncio

@@ -11,7 +11,7 @@ from config import settings
 from models import AuditLog, BacklogItem, Sprint
 from models.company import Company, CompanyMember, User
 from models.manager import ManagerPolicy
-from services import brief_mail
+from services.management import brief_mail
 from sqlmodel import Session, SQLModel, create_engine, select
 
 NOW = datetime(2026, 11, 8, 12, 0, 0)

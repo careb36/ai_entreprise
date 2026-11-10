@@ -8,7 +8,7 @@ decision does depends on who produced the run:
   (QA, the Verifier), so a person's decision acts only where the loop waits
   for one: ``request_changes`` sends a task blocked for a person back to
   work, with the review and its comments as the ``NEEDS WORK:`` feedback the
-  Developer's next prompt carries (``services.board.pending_rework_feedback``);
+  Developer's next prompt carries (``services.tasks.board.pending_rework_feedback``);
   ``approve`` accepts a delivery QA approved that waits for a person (the
   high-risk hold, or every approval at autonomy level 1);
 - any other producer's run gets the approval record people already write

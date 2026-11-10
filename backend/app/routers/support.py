@@ -35,7 +35,7 @@ from fastapi.responses import FileResponse
 from logging_config import logger
 from models import BugReport, User
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
-from services.support_agent import CATEGORIES, SEVERITIES, track_record
+from services.management.support_agent import CATEGORIES, SEVERITIES, track_record
 from sqlmodel import Session, func, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])

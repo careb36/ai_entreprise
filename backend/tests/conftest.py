@@ -92,7 +92,7 @@ def release_listens_to_sprint_closed():
     """A closed sprint's integration starts from ``sprint.closed``, as in the
     backend, where ``main.py`` installs the handler; a test that closes a
     sprint without the app gets it too."""
-    from services import integration_jobs
+    from services.release import integration_jobs
 
     integration_jobs.install()
 

@@ -9,7 +9,7 @@ Endpoints:
 - ``POST /v1/procedures/{id}/retire``     — retire an active procedure (Manager).
 
 Adopting records the board's numbers before the procedure; the task worker
-keeps or reverts it from the numbers after (``services.procedures``).
+keeps or reverts it from the numbers after (``services.learning.procedures``).
 """
 
 from auth_policy import current_user_if_required, require_company_role

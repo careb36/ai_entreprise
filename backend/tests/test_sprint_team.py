@@ -487,7 +487,7 @@ def _blocked_task(session, company, assignee="BackendDeveloper", status="blocked
 def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_over(
     sqlite_session, test_client, monkeypatch, status
 ):
-    from services import carry_over
+    from services.loop import carry_over
 
     worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = _company(sqlite_session)
@@ -530,7 +530,7 @@ def test_a_task_off_the_target_sprints_team_is_not_moved_and_keeps_its_carry_ove
 def test_start_sprint_refuses_a_carried_task_off_its_team_before_marking_it(
     sqlite_session, test_client
 ):
-    from services import carry_over
+    from services.loop import carry_over
 
     company = _company(sqlite_session)
     item = _blocked_task(sqlite_session, company)

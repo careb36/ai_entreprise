@@ -170,7 +170,7 @@ def test_scrum_master_and_authoring_clients_carry_the_company(monkeypatch):
     from services.learning import scrum_master
     from services.planning import spec_author
 
-    # Through its shim, ``app.services.scrum_master`` is now the one module
+    # Through its shim, ``app.services.learning.scrum_master`` is now the one module
     # conftest stubs, so the real client is put back for this test.
     monkeypatch.setattr(scrum_master, "LLMProxyClient", llm_proxy_client.LLMProxyClient)
     seen = []

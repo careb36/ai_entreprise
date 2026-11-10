@@ -1,6 +1,6 @@
 """Add archived_at, archived_by and archive_reason to sprints: a halted
 sprint with recorded work is archived by its Owner instead of deleted
-(``services/sprint_archive.py``). All nullable: every existing sprint stays
+(``services/loop/sprint_archive.py``). All nullable: every existing sprint stays
 listed.
 
 Revision ID: 0017

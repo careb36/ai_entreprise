@@ -20,7 +20,12 @@ from database import get_session
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from models import Company, User
 from models.manager import ManagerDecision
-from services import manager_actions, manager_brief, manager_policy, manager_record
+from services.management import (
+    manager_actions,
+    manager_brief,
+    manager_policy,
+    manager_record,
+)
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, select
 

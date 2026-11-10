@@ -2,7 +2,7 @@ import type { BacklogItem } from '../services/api'
 
 /**
  * What a task's comments say about its carry-over lineage, written by the
- * backend (`services/carry_over.py`) in a fixed form:
+ * backend (`services/loop/carry_over.py`) in a fixed form:
  *   "Carried over from task 7 ("Sprint 0"), which was blocked: …"
  *   "Carried over to sprint 3 ("Sprint 1") as task 9 by ana."
  */

@@ -3,7 +3,7 @@ The board's questions answered from a task's events (issue #324).
 
 ``services/task_events.record`` writes every routed transition as an event
 and renders it as the board comment. Here the same questions
-``services/board.py`` answers from the thread (what is pending, why the task
+``services/tasks/board.py`` answers from the thread (what is pending, why the task
 is blocked, whether it waits for a person) are answered from the events, by
 their kind, actor, verdict and flags, never by reading comment text.
 

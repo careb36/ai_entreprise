@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from services import review_digest
+from services.loop import review_digest
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
 

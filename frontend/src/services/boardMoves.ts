@@ -1,6 +1,6 @@
 /**
  * What a person's move on the board does (`routers/board_moves.py`,
- * `services/board_moves.py`).
+ * `services/loop/board_moves.py`).
  *
  * Moving a card to To do (`PATCH /v1/backlog/{id}`) starts it: the answer says
  * whether it was queued, whether its sprint was reopened, and why not when a

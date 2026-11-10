@@ -269,7 +269,7 @@ def count_architect_consults(comments: Any) -> int:
 # Who signs the text checks a deliverable passes before anyone reviews it, and
 # who signs the delivery evidence check; neither ever writes a deliverable.
 # Defined here, beside the counters that must leave them out, and re-exported
-# by ``services.board``.
+# by ``services.tasks.board``.
 QUALITY_GATE_AUTHOR = "Quality gate"
 DELIVERY_GATE_AUTHOR = "Verifier"
 GATE_AUTHORS_LOWER = frozenset(

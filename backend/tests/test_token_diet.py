@@ -8,10 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from services import answers, reviewer_agent, support_agent
 from services.learning import scrum_master
+from services.loop import answers
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import qa_review, task_run
+from services.management import reviewer_agent, support_agent
 from services.planning import sprint_planner
 
 

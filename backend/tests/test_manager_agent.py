@@ -17,16 +17,16 @@ from models import AgentRun, AgentRunApproval, AuditLog, BacklogItem, Procedure,
 from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.company import BusinessUnit, Company, CompanyMember, User
 from models.manager import ManagerDecision, ManagerPolicy
-from services import (
+from services.loop import run_review
+from services.loop.sprint_control import HUMAN_LED_REASON
+from services.management import (
     manager_actions,
     manager_agent,
     manager_policy,
     manager_record,
-    run_review,
 )
-from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.management.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 from services.platform import locks
-from services.sprint_control import HUMAN_LED_REASON
 from services.tasks import task_events
 from services.tasks.board import (
     RISK_HOLD_PREFIX,

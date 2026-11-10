@@ -1,6 +1,6 @@
 """The specification: numbered requirements with testable criteria, checked
 deterministically, drafted by the PO from a brief, approved by a person, and
-covered by the tasks of the sprints planned from it (``services.spec_check``,
+covered by the tasks of the sprints planned from it (``services.planning.spec_check``,
 ``spec_author``, ``spec_planning``, ``routers/specifications.py``).
 """
 
@@ -829,7 +829,7 @@ def test_the_prompts_carry_the_requirements_a_task_covers_and_nothing_more(
 
 
 def test_a_carried_task_keeps_what_it_covers(sqlite_session, test_client):
-    from services.carry_over import carry_over
+    from services.loop.carry_over import carry_over
 
     company = _company(sqlite_session)
     spec = _approved(sqlite_session, company)

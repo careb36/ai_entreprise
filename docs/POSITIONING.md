@@ -99,7 +99,7 @@ violate by accident and expensive to restore once violated.
 | Neo4j Engram nodes | Immutable per-decision lineage with timestamps. Genuinely valuable and poorly served in regulated industries. |
 | LLM proxy token budgets | A single chokepoint for control and metering. |
 | Multi-tenant `company_id` scoping and RBAC | Expensive to retrofit later. |
-| `services/orchestration_metrics.py` | Already a measurement contract; generalises from "our agents" to "any agent". |
+| `services/platform/orchestration_metrics.py` | Already a measurement contract; generalises from "our agents" to "any agent". |
 
 ## What this demotes
 

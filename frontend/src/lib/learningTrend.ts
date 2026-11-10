@@ -2,7 +2,7 @@
  * The numbers that say whether the company is learning, per closed sprint.
  *
  * Rework requests per task and the share of blocked tasks are what keeps or
- * reverts a procedure (backend `services/procedures.py`); shown sprint by
+ * reverts a procedure (backend `services/learning/procedures.py`); shown sprint by
  * sprint, oldest to newest, they are the trend a person reads without opening
  * anything. Only completed sprints with at least one task count: an active
  * sprint's numbers are still moving and an empty one measures nothing.

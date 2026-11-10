@@ -65,7 +65,7 @@ these invariants constrain most changes.
    (`evidence["workspace_writes"]`) are separate inputs. `unverifiable` is a
    verdict of its own, not a soft pass.
 2. **No model decides whether a claim holds.**
-   `backend/app/services/verification.py` is deterministic. A model may produce
+   `backend/app/services/evidence/verification.py` is deterministic. A model may produce
    the work; it never grades it.
 3. **A hash or a signature is never taken from the party being recorded.** The
    backend computes the digest of the bytes it sends; the daemon computes the
@@ -118,7 +118,7 @@ flowchart LR
 ```
 
 The outbox row and the sprint task are written in the same transaction, so the
-event exists if and only if the task does. `services/outbox_service.py` drains
+event exists if and only if the task does. `services/integrations/outbox_service.py` drains
 it to JetStream.
 
 The LangGraph graph (`backend/agents/graph.py`) is an optional kickoff producer,
@@ -152,10 +152,10 @@ The claim the project makes is verified in code, not asserted in a slide.
 
 | Piece | File |
 |---|---|
-| Deterministic checks | `backend/app/services/verification.py` |
+| Deterministic checks | `backend/app/services/evidence/verification.py` |
 | Risk classification | `backend/app/services/risk.py` |
-| Review loop | `backend/app/services/reviewer_agent.py` |
-| Board state machine | `backend/app/services/board.py` |
+| Review loop | `backend/app/services/management/reviewer_agent.py` |
+| Board state machine | `backend/app/services/tasks/board.py` |
 | Benchmark of the verifier itself | `bench/verifier/` |
 
 ## Related documents

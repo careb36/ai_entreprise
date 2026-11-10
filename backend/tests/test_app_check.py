@@ -25,8 +25,8 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import delivery_checks
 from services.evidence import app_check, delivery_gate
+from services.loop import delivery_checks
 from services.loop.worker import deliver as worker_deliver
 from services.workspace import dependency_install, project_profile, stack_profiles
 from sqlmodel import select
@@ -1144,7 +1144,7 @@ def test_the_integration_runs_the_tests_alone(sqlite_session, tmp_path, monkeypa
     monkeypatch.setattr(
         settings, "DELIVERY_TEST_COMMAND", f"{PY} -c \"print('1 passed')\""
     )
-    from services import integration
+    from services.release import integration
 
     daemon = _Daemon()
     test_run = asyncio.run(

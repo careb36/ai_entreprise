@@ -24,7 +24,7 @@ from models import (
     Sprint,
     User,
 )
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from sqlmodel import select
 
 

@@ -30,9 +30,9 @@ from schemas import (
     BacklogItemUpdate,
     SprintStartRequest,
 )
-from services import board_moves, sprint_archive
-from services.carry_over import CarryOverError, carry_over
 from services.evidence import acceptance
+from services.loop import board_moves, sprint_archive
+from services.loop.carry_over import CarryOverError, carry_over
 from services.models import run_cost
 from services.planning import spec_check, spec_planning, sprint_team
 from services.tasks import dependencies, task_events

@@ -22,17 +22,17 @@ from models import (
 from models.agent_run import TASK_WORKER_PRODUCER, Verification
 from models.integration import SprintIntegration
 from models.review import RunPublication
-from services import (
-    carry_over,
+from services.learning import scrum_master
+from services.loop import carry_over
+from services.loop.carry_over import CARRY_MARK_PREFIX, carry_mark
+from services.management import (
     manager_actions,
     manager_observe,
     manager_policy,
     manager_record,
     manager_rules,
 )
-from services.carry_over import CARRY_MARK_PREFIX, carry_mark
-from services.learning import scrum_master
-from services.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
+from services.management.manager_actions import ACCEPTED_PREFIX, MANAGER_AGENT_NAME
 from services.planning import arch_check, spec_check
 from services.tasks.board import RISK_HOLD_PREFIX, SEND_BACK_MARKER, is_send_back
 from sqlmodel import select

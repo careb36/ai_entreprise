@@ -1,6 +1,6 @@
-"""Manager policy rules (services.manager_policy)."""
+"""Manager policy rules (services.management.manager_policy)."""
 
-from services.manager_policy import Policy, _rule_holds
+from services.management.manager_policy import Policy, _rule_holds
 
 
 def test_accept_delivery_holds():
@@ -31,7 +31,7 @@ def test_accept_delivery_fails_on_unverified():
 
 
 def test_new_rules_present_in_catalogue():
-    from services.manager_policy import RULE_DECISIONS, RULES
+    from services.management.manager_policy import RULE_DECISIONS, RULES
 
     for name in (
         "merge_local",

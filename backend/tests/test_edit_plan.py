@@ -14,7 +14,7 @@ import json
 import pytest
 from config import settings
 from models.company import Agent
-from services import edit_plan
+from services.loop import edit_plan
 from services.loop.worker import execute as worker_execute
 from services.models import model_routing
 from test_llm_routing import _board, _task_assign_handler, db  # noqa: F401

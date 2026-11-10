@@ -14,10 +14,13 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Sprint, User
 from models.integration import SprintIntegration
-from services import integration
-from services.git_publish import PublishRefused
-from services.integration_publish import publish_spec, record_publication
-from services.local_merge import integration_merge_spec, record_integration_merge
+from services.release import integration
+from services.release.git_publish import PublishRefused
+from services.release.integration_publish import publish_spec, record_publication
+from services.release.local_merge import (
+    integration_merge_spec,
+    record_integration_merge,
+)
 from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,

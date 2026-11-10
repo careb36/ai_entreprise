@@ -1,5 +1,5 @@
 """
-services/board.py: how a task's comment thread is read.
+services/tasks/board.py: how a task's comment thread is read.
 
 - A carry-over note quotes another task's verdict and never counts as this
   task's: a clone keeps its retry.

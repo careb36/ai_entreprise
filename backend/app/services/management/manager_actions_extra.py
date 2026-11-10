@@ -40,14 +40,6 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision
 from sqlmodel import Session
 
-from services.delivery_undo import UndoRefused, record_undo, undo_spec
-from services.git_publish import PublishRefused, publish_spec, record_publication
-from services.local_merge import (
-    integration_merge_spec,
-    record_integration_merge,
-    record_run_merge,
-    run_merge_spec,
-)
 from services.loop import sprint_control
 from services.loop.carry_over import (
     CARRY_MARK_PREFIX,
@@ -57,6 +49,18 @@ from services.loop.carry_over import (
 )
 from services.management import manager_observe
 from services.planning import document_approval
+from services.release.delivery_undo import UndoRefused, record_undo, undo_spec
+from services.release.git_publish import (
+    PublishRefused,
+    publish_spec,
+    record_publication,
+)
+from services.release.local_merge import (
+    integration_merge_spec,
+    record_integration_merge,
+    record_run_merge,
+    run_merge_spec,
+)
 from services.tasks import task_events, task_projection
 from services.tasks.board import BRIEF_PREFIX, SEND_BACK_MARKER
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable

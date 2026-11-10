@@ -12,7 +12,7 @@ Endpoints (``/v1/architectures``):
 - ``POST   /{id}/revise``             — a new draft version of an approved one (Manager).
 - ``POST   /{id}/write``              — write it into the repository through the daemon (Manager).
 
-The ids of modules, interfaces and decisions come from ``services.arch_check``,
+The ids of modules, interfaces and decisions come from ``services.planning.arch_check``,
 never from a request or a model; the check decides what can be approved.
 """
 

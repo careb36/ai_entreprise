@@ -1,6 +1,6 @@
 /**
  * A sprint's integration plan (`GET /v1/sprints/{id}/integration`, Viewer,
- * `services/integration.py`): the integration branch, the task branches in
+ * `services/release/integration.py`): the integration branch, the task branches in
  * the order they merge, and the dependencies that point outside the sprint.
  */
 import { api } from './api'

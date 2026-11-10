@@ -12,10 +12,9 @@ import hashlib
 
 import file_edits
 import pytest
-from services import verification
 from services.contracts import edit_blocks
-from services.evidence import standards
-from services.task_worker import parse_file_manifest
+from services.evidence import standards, verification
+from services.loop.task_worker import parse_file_manifest
 from services.tools import research_tools
 from test_task_delivery import _load_daemon
 

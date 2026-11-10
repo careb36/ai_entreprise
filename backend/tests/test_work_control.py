@@ -17,7 +17,7 @@ import worker_stages
 from config import settings
 from models.company import Company, CompanyMember, User
 from models.sprint import BacklogItem, OutboxEvent, Sprint
-from services import company_service, sprint_control
+from services.loop import company_service, sprint_control
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import intake, qa_review, task_run
 from services.loop.worker import review as worker_review

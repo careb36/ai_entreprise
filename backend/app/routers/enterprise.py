@@ -36,10 +36,10 @@ from schemas import (
     OrchestrationHealthSummary,
     OrchestrationHealthWeek,
 )
-from services import git_setup
-from services.company_service import CompanyService
+from services.loop.company_service import CompanyService
 from services.planning.discovery_service import DiscoveryService
 from services.platform import memory_graph
+from services.release import git_setup
 from services.workspace.workspace_daemon import (
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,

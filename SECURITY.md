@@ -294,7 +294,7 @@ What this means today, and what it does not:
   Docker), so a workspace command runs with the privileges of the developer who
   started it. An agent that emits `curl … | sh` gets a shell on that machine.
 - The commands the pipeline runs on its own are **not** model output:
-  `_detect_test_command` in `backend/app/services/task_worker.py:1901` derives
+  `_detect_test_command` in `backend/app/services/loop/task_worker.py:1901` derives
   the test command from repository markers (`package.json`, `pytest.ini`,
   `pyproject.toml`, a `tests/` folder) or from `DELIVERY_TEST_COMMAND`. No LLM
   picks it, so prompt injection cannot reach that string.

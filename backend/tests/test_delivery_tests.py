@@ -16,9 +16,9 @@ from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
+from services.evidence.verification import check_tests_run
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import record as worker_record
-from services.verification import check_tests_run
 from services.workspace import workspace_daemon
 from sqlmodel import select
 

@@ -17,10 +17,10 @@ import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
-from services import task_worker
+from services.evidence.verification import check_files_written
+from services.loop import task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
-from services.verification import check_files_written
 from sqlmodel import Session, select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -465,7 +465,7 @@ def test_unreported_served_model_is_left_empty_not_defaulted(db, tmp_path, monke
 def test_new_company_records_its_project_so_agents_write_there(
     db, monkeypatch, tmp_path
 ):
-    from services.company_service import CompanyService
+    from services.loop.company_service import CompanyService
 
     monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
     result = CompanyService(db).init_company(
@@ -485,7 +485,7 @@ def test_new_company_records_its_project_so_agents_write_there(
 
 
 def test_company_without_a_project_uses_the_fallback_root(db, monkeypatch):
-    from services.company_service import CompanyService
+    from services.loop.company_service import CompanyService
 
     monkeypatch.setenv("AGENT_WORKSPACE_ROOT", "/workspace")
     result = CompanyService(db).init_company(company_name="No project Corp", agents=[])
