@@ -19,6 +19,7 @@ from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
 from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import execute as worker_execute
 from services.verification import check_files_written
 from sqlmodel import Session, select
 
@@ -125,9 +126,9 @@ def test_prompt_asks_for_the_file_manifest(monkeypatch):
             captured["prompt"] = messages[1]["content"]
             return {"choices": [{"message": {"content": "done"}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
 
-    task_worker._execute_task(
+    worker_execute._execute_task(
         {"id": 1, "title": "Implement login"}, {"role": "Developer"}, "Sprint 1"
     )
 

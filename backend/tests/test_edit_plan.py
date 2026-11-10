@@ -14,7 +14,8 @@ import json
 import pytest
 from config import settings
 from models.company import Agent
-from services import edit_plan, model_routing, task_worker
+from services import edit_plan, model_routing
+from services.loop.worker import execute as worker_execute
 from test_llm_routing import _board, _task_assign_handler, db  # noqa: F401
 
 PLAN = """Here is the plan.
@@ -124,13 +125,13 @@ def test_the_worker_asks_for_a_plan_and_applies_it(db, monkeypatch, answer, plan
             text = answer if role == "Architect" else "A written analysis. " * 40
             return {"choices": [{"message": {"content": text}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     company, sprint, item = _board(db, role="Developer", agent_model="")
     item.covers = HARD["covers"]
     db.add(Agent(company_id=company.id, name="Ada", role="Architect", model="arch"))
     db.commit()
     nats = _task_assign_handler(monkeypatch)
-    monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", True)
+    monkeypatch.setattr(worker_execute, "ARCHITECT_CONSULT_ENABLED", True)
 
     asyncio.run(
         nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})

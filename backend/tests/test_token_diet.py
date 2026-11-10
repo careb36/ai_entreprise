@@ -16,6 +16,7 @@ from services import (
     support_agent,
 )
 from services import task_worker as tw
+from services.loop.worker import execute as worker_execute
 
 
 def test_a_cut_off_answer_is_named_instead_of_asked_for_again_in_full():
@@ -55,10 +56,13 @@ def test_the_short_answers_are_capped_and_the_deliverable_is_not():
     assert 0 < support_agent.ANSWER_MAX_TOKENS <= 1024
     assert 0 < reviewer_agent.ANSWER_MAX_TOKENS <= 1024
     assert 0 < sprint_planner.PLAN_MAX_TOKENS <= 8192
-    source = Path(tw.__file__).read_text(encoding="utf-8")
+    source = Path(worker_execute.__file__).read_text(encoding="utf-8")
     execute = source[
-        source.index("def _execute_task(") : source.index("def _consult_architect(")
+        source.index("def _developer_system_prompt(") : source.index(
+            "def _consult_architect("
+        )
     ]
+    assert "def _execute_task(" in execute
     assert "max_tokens" not in execute
 
 
@@ -68,7 +72,7 @@ def test_every_wait_follows_the_proxy_s_budget():
 
     assert scrum_master.TIMEOUT_SECONDS == DEFAULT_TIMEOUT_SECONDS
     assert scrum_master.TRIAGE_TIMEOUT_SECONDS == DEFAULT_TIMEOUT_SECONDS
-    for module in (sprint_planner, support_agent, reviewer_agent, tw):
+    for module in (sprint_planner, support_agent, reviewer_agent, tw, worker_execute):
         assert "client.timeout = " not in Path(module.__file__).read_text(
             encoding="utf-8"
         ), module.__name__

@@ -18,7 +18,7 @@ import workspace_read
 from config import settings
 from services import developer_tools
 from services import repo_map as prompt_map
-from services import task_worker as tw
+from services.loop.worker import execute as worker_execute
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
 
@@ -302,12 +302,12 @@ def test_the_architects_brief_carries_the_map(project, monkeypatch, sqlite_sessi
             prompts.append(messages[1]["content"])
             return {"choices": [{"message": {"content": "Use Store."}}]}
 
-    monkeypatch.setattr(tw, "LLMProxyClient", _Client)
-    monkeypatch.setattr(tw, "record_agent_turn", lambda **kw: None)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "record_agent_turn", lambda **kw: None)
     developer_tools.bind(object(), object(), lambda company_id: str(project))
     monkeypatch.setattr(developer_tools, "_request_from_thread", _Requester(daemon))
     try:
-        advice = tw._consult_architect(
+        advice = worker_execute._consult_architect(
             {"id": item.id, "title": item.title},
             {"role": "Developer"},
             {"id": sprint.id, "company_id": company.id, "name": "S"},

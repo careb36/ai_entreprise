@@ -20,6 +20,7 @@ from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import console_assistants, task_worker
 from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import execute as worker_execute
 from services.loop.worker import prompt
 from sqlmodel import Session, select
 
@@ -53,7 +54,8 @@ def llm(monkeypatch):
             state.calls.append({"model": model, "role": role})
             return state.response
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)  # The QA review.
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     return state
 
 
@@ -104,13 +106,13 @@ def test_task_with_no_agent_model_uses_the_role_default(llm, role, configured):
     if configured is not None:
         agent["model"] = configured
 
-    task_worker._execute_task({"id": 1, "title": "Do it"}, agent, "Sprint 1")
+    worker_execute._execute_task({"id": 1, "title": "Do it"}, agent, "Sprint 1")
 
     assert llm.calls[0]["model"] == _role_default(role)
 
 
 def test_stored_role_names_map_to_their_agent_role(llm):
-    task_worker._execute_task(
+    worker_execute._execute_task(
         {"id": 1, "title": "Do it"}, {"role": "BackendDev", "model": ""}, "Sprint 1"
     )
 
@@ -118,7 +120,7 @@ def test_stored_role_names_map_to_their_agent_role(llm):
 
 
 def test_configured_model_is_kept(llm):
-    task_worker._execute_task(
+    worker_execute._execute_task(
         {"id": 1, "title": "Do it"}, {"role": "QA", "model": "qwen3.6-flash"}, "S"
     )
 
@@ -136,7 +138,7 @@ def test_architect_consult_with_no_model_uses_the_architect_default(
 ):
     recorded = []
     monkeypatch.setattr(
-        task_worker, "record_agent_turn", lambda **kw: recorded.append(kw)
+        worker_execute, "record_agent_turn", lambda **kw: recorded.append(kw)
     )
     llm.response = {
         "choices": [{"message": {"content": "Use a service layer."}}],
@@ -144,7 +146,7 @@ def test_architect_consult_with_no_model_uses_the_architect_default(
     }
     company, sprint, item = _board(db, role="Architect", agent_model="")
 
-    advice = task_worker._consult_architect(
+    advice = worker_execute._consult_architect(
         {"id": item.id, "title": item.title},
         {"role": "Developer"},
         {"id": sprint.id, "company_id": company.id, "name": "Routing"},
@@ -190,7 +192,9 @@ def test_upstream_error_names_provider_status_and_message(llm):
     with pytest.raises(
         RuntimeError, match=r"^LLM call failed: deepseek 500 internal failure$"
     ):
-        task_worker._execute_task({"id": 1, "title": "x"}, {"role": "Developer"}, "S")
+        worker_execute._execute_task(
+            {"id": 1, "title": "x"}, {"role": "Developer"}, "S"
+        )
 
 
 def test_unknown_model_error_says_what_is_available(llm):
@@ -210,7 +214,7 @@ def test_unknown_model_error_says_what_is_available(llm):
         RuntimeError,
         match=r"^LLM call failed: llm-proxy 400 unknown model 'kimi-k2.6'; available: deepseek-v4-pro$",
     ):
-        task_worker._execute_task(
+        worker_execute._execute_task(
             {"id": 1, "title": "x"}, {"role": "Developer", "model": "kimi-k2.6"}, "S"
         )
 
@@ -226,7 +230,7 @@ def test_empty_content_without_error_is_a_failure(llm):
         RuntimeError,
         match=r"^LLM call failed: qwen 200 empty response from qwen3.7-plus$",
     ):
-        task_worker._execute_task({"id": 1, "title": "x"}, {"role": "PO"}, "S")
+        worker_execute._execute_task({"id": 1, "title": "x"}, {"role": "PO"}, "S")
 
 
 class _StopAfterSubscribe(Exception):
@@ -252,7 +256,7 @@ class _Nats:
 
 
 def _task_assign_handler(monkeypatch):
-    monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", False)
+    monkeypatch.setattr(worker_execute, "ARCHITECT_CONSULT_ENABLED", False)
     monkeypatch.setattr(prompt, "_fetch_memory_context", lambda *args: "")
     monkeypatch.setattr(prompt, "_load_recent_lessons", lambda *args: "")
     monkeypatch.setattr(
@@ -320,7 +324,7 @@ def test_served_model_is_recorded_on_the_agent_run(llm, db, tmp_path, monkeypatc
     item_dict = {"id": item.id, "title": item.title, "description": item.description}
     sprint_dict = {"id": sprint.id, "company_id": company.id, "name": "Routing"}
 
-    deliverable = task_worker._execute_task(item_dict, ctx_agent, "Routing")
+    deliverable = worker_execute._execute_task(item_dict, ctx_agent, "Routing")
     asyncio.run(
         worker_deliver._deliver_artifacts(
             _Nats(), item_dict, ctx_agent, sprint_dict, deliverable
@@ -347,8 +351,10 @@ def test_task_execution_records_the_conversation(llm, db, monkeypatch):
     db.add(Agent(company_id=company.id, name="Ada", role="Architect", model=""))
     db.commit()
     nats = _task_assign_handler(monkeypatch)
-    monkeypatch.setattr(task_worker, "ARCHITECT_CONSULT_ENABLED", True)
-    monkeypatch.setattr(task_worker, "should_consult_architect", lambda *a, **k: True)
+    monkeypatch.setattr(worker_execute, "ARCHITECT_CONSULT_ENABLED", True)
+    monkeypatch.setattr(
+        worker_execute, "should_consult_architect", lambda *a, **k: True
+    )
 
     asyncio.run(
         nats.handler(None, {"backlog_item_id": item.id, "sprint_id": sprint.id})

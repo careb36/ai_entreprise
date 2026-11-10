@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 from models import Agent, Company, ProviderConnection
 from services import company_models, model_routing, scrum_master, spec_author
+from services.loop.worker import execute as worker_execute
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_llm_routing import _board, db, llm  # noqa: F401
 from test_specifications import _company
@@ -180,13 +181,11 @@ def test_the_agents_own_model_wins_in_the_worker(db):  # noqa: F811
 
 
 def test_the_architect_consultation_runs_the_companys_model(llm, db, monkeypatch):  # noqa: F811
-    from services import task_worker
-
-    monkeypatch.setattr(task_worker, "record_agent_turn", lambda **kw: None)
+    monkeypatch.setattr(worker_execute, "record_agent_turn", lambda **kw: None)
     llm.response = {"choices": [{"message": {"content": "Use a service layer."}}]}
     company, sprint, item = _board(db, role="Architect", agent_model="")
     _choose(db, db.get(Company, company.id), None, {"Architect": "arch-model"})
-    task_worker._consult_architect(
+    worker_execute._consult_architect(
         {"id": item.id, "title": item.title},
         {"role": "Developer"},
         {"id": sprint.id, "company_id": company.id, "name": "Routing"},

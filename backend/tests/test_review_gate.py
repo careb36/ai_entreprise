@@ -16,6 +16,7 @@ from models.agent_run import AgentRun, Verification
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import task_worker
+from services.loop.worker import execute as worker_execute
 from sqlmodel import Session
 
 DELIVERABLE = "# Artifact: src/a.py\n\nprint('a')\n" + "word " * 120
@@ -225,7 +226,7 @@ def test_rework_prompt_carries_the_review_feedback(monkeypatch):
             captured["prompt"] = messages[1]["content"]
             return {"choices": [{"message": {"content": "done"}}]}
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     item = {
         "id": 1,
         "title": "Write a",
@@ -239,7 +240,7 @@ def test_rework_prompt_carries_the_review_feedback(monkeypatch):
         ],
     }
 
-    task_worker._execute_task(item, {"role": "Developer"}, "Sprint 1")
+    worker_execute._execute_task(item, {"role": "Developer"}, "Sprint 1")
 
     assert "## Review feedback to address" in captured["prompt"]
     assert "QA: NEEDS WORK: add input validation" in captured["prompt"]

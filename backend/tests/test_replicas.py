@@ -27,6 +27,7 @@ from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
 from services import locks, replicas, scrum_master, task_events, task_worker
+from services.loop.worker import execute as worker_execute
 from services.loop.worker import messages as worker_messages
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
@@ -188,7 +189,7 @@ def test_two_workers_given_one_task_run_it_once(engine, monkeypatch):
         time.sleep(0.3)
         raise RuntimeError("stop here")
 
-    monkeypatch.setattr(task_worker, "_execute_task", slow_execute)
+    monkeypatch.setattr(worker_execute, "_execute_task", slow_execute)
     first = _task_assign_handler(monkeypatch).handler
     second = _task_assign_handler(monkeypatch).handler
     message = {"backlog_item_id": item_id, "sprint_id": sprint_id}
@@ -265,7 +266,7 @@ def test_a_surviving_worker_recovers_the_task_of_one_that_died(engine, monkeypat
         # Not an Exception: nothing marks the task blocked, as when the process is killed.
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(task_worker, "_execute_task", dies)
+    monkeypatch.setattr(worker_execute, "_execute_task", dies)
     dead = _task_assign_handler(monkeypatch).handler
     message = {"backlog_item_id": item_id, "sprint_id": sprint_id}
     with pytest.raises(asyncio.CancelledError):
@@ -277,7 +278,7 @@ def test_a_surviving_worker_recovers_the_task_of_one_that_died(engine, monkeypat
         executed.append("survivor")
         raise RuntimeError("stop here")
 
-    monkeypatch.setattr(task_worker, "_execute_task", runs)
+    monkeypatch.setattr(worker_execute, "_execute_task", runs)
     survivor = _task_assign_handler(monkeypatch).handler
     # The redelivered assignment finds the task in progress and is skipped.
     asyncio.run(survivor(None, dict(message)))

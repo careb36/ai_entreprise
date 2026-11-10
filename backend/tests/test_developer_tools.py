@@ -23,7 +23,7 @@ from config import settings
 from models.agent_run import AgentRun
 from models.company import Company
 from services import context_read, developer_tools, mcp_config, mcp_tools, risk
-from services import task_worker as tw
+from services.loop.worker import execute as worker_execute
 from services.verification import check_risk_tier, verify_agent_run
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -677,10 +677,10 @@ def test_the_worker_offers_the_tools_reads_through_the_daemon_and_keeps_the_read
             ),
         ]
     )
-    monkeypatch.setattr(tw, "LLMProxyClient", lambda base_url=None: model)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", lambda base_url=None: model)
     agent = {"role": "Developer", "model": "m"}
     try:
-        content = tw._execute_task(
+        content = worker_execute._execute_task(
             {"id": 7, "title": "Greet", "description": "x"}, agent, "S1", company_id=1
         )
     finally:

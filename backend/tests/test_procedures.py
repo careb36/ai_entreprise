@@ -17,6 +17,7 @@ from models import (
     User,
 )
 from services import procedures, scrum_master, task_worker
+from services.loop.worker import execute as worker_execute
 from services.loop.worker import prompt
 from sqlmodel import select
 from test_review_gate import _FakeNATS
@@ -252,9 +253,11 @@ def _scrum_master_answers(monkeypatch, answer):
             return {"choices": [{"message": {"content": answer}}]}
 
     # The ScrumMaster speaks through scrum_master.ask; the other roles through
-    # the task worker's client. Both answer the same here.
+    # the task worker's clients (its execute stage and its QA review). They all
+    # answer the same here.
     monkeypatch.setattr(scrum_master, "LLMProxyClient", _Client)
     monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     return calls
 
 
@@ -448,7 +451,7 @@ def test_active_procedures_reach_the_role_prompt(db, monkeypatch):
     assert "Dev rule" in context and "Team rule" in context and "QA rule" not in context
 
     prompts = _scrum_master_answers(monkeypatch, "Done.")
-    task_worker._execute_task(
+    worker_execute._execute_task(
         {"id": 1, "title": "Do it"},
         {"role": "Developer"},
         "S",
