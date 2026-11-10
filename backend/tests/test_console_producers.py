@@ -42,6 +42,7 @@ from services import (
     task_worker,
 )
 from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import quality_gate
 from sqlmodel import Session, select
 
 _DAEMON_DIR = Path(__file__).resolve().parents[2] / "vscode-daemon"
@@ -394,7 +395,7 @@ def test_a_console_producer_delivers_what_the_daemon_observed_and_it_is_verified
     assert task_worker.parse_file_manifest(deliverable) == []
     assert [e["path"] for e in agent["tool_edits"]] == ["calc.py"]
     assert agent["served_model"] is None
-    ok, _ = task_worker._validate_minimum_deliverable(
+    ok, _ = quality_gate._validate_minimum_deliverable(
         item, deliverable, agent["tool_edits"]
     )
     assert ok

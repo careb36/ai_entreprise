@@ -19,7 +19,7 @@ from models import (
 from services import procedures, scrum_master, task_worker
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import procedures_round, prompt
+from services.loop.worker import procedures_round, prompt, qa_review
 from sqlmodel import select
 from test_review_gate import _FakeNATS
 
@@ -257,7 +257,7 @@ def _scrum_master_answers(monkeypatch, answer):
     # the task worker's clients (its execute stage and its QA review). They all
     # answer the same here.
     monkeypatch.setattr(scrum_master, "LLMProxyClient", _Client)
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)
+    monkeypatch.setattr(qa_review, "LLMProxyClient", _Client)
     monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     return calls
 

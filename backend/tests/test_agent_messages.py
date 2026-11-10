@@ -8,9 +8,9 @@ import pytest
 import worker_stages
 from config import settings
 from models import AgentMessage, BacklogItem, Company, CompanyMember, Sprint, User
-from services import task_worker
 from services.loop.worker import close as worker_close
 from services.loop.worker import messages as worker_messages
+from services.loop.worker import qa_review
 from sqlmodel import select
 from test_review_gate import _FakeNATS, _item_in_review, _run_cycle
 
@@ -56,7 +56,7 @@ def test_qa_rework_is_a_request_and_the_last_one_escalates(db, monkeypatch):
         item.comments
         + [
             {"author": "QA", "text": "NEEDS WORK: earlier", "created_at": ""}
-            for _ in range(task_worker.AUTOPILOT_MAX_REWORK_CYCLES)
+            for _ in range(qa_review.AUTOPILOT_MAX_REWORK_CYCLES)
         ]
         + [{"author": "Dev", "text": "another deliverable " * 30, "created_at": ""}]
     )

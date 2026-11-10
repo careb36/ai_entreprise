@@ -8,54 +8,39 @@ comment, and publish to Glassroom.
 """
 
 import asyncio
-import functools
 import json
 import os
-import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from database import engine
-from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from models import (
     Agent,
     BacklogItem,
-    Company,
     Sprint,
 )
 from models.agent_run import TASK_WORKER_PRODUCER  # noqa: F401 - re-exported
 from nats_client import NATSClient
 from sqlmodel import Session, select
 
-from services.contracts.manifest import parse_file_manifest
-from services.evidence import (
-    delivery_gate,
-    risk,
-    standards,
-)
-from services.learning import procedures
+from services.contracts.manifest import parse_file_manifest  # noqa: F401 - re-exported
+from services.evidence import delivery_gate
 from services.loop import (
     console_host,
     replicas,
-    review_digest,
     sprint_control,
 )
-from services.loop.answers import REVIEW_MAX_TOKENS
 from services.loop.answers import gate_reason as _gate_reason
-from services.loop.answers import llm_content as _llm_content
-from services.loop.answers import llm_failure as _llm_failure
-from services.loop.answers import review_format_reminder as _review_format_reminder
-from services.loop.carry_over import previous_attempt_context
 from services.loop.worker import (
     board_writes,
-    close,
     deliver,
     execute,
     messages,
     prompt,
-    record,
+    quality_gate,
+    review,
 )
 
 # Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
@@ -119,6 +104,18 @@ from services.loop.worker.prompt import (  # noqa: F401 - re-exported
     _load_recent_lessons,
     _load_sprint_completed_tasks,
 )
+from services.loop.worker.qa_review import (  # noqa: F401 - re-exported
+    AUTOPILOT_MAX_REWORK_CYCLES,
+    AUTOPILOT_QA_REWORK_ENABLED,
+    MAX_QA_REWORK_CYCLES,
+    _call_llm_for_review,
+)
+from services.loop.worker.quality_gate import (  # noqa: F401 - re-exported
+    MIN_DELIVERABLE_WORDS,
+    MIN_DOC_DELIVERABLE_WORDS,
+    _send_back_from_quality_gate,
+    _validate_minimum_deliverable,
+)
 from services.loop.worker.record import (  # noqa: F401 - re-exported
     _delivery_gate,
     _delivery_risk,
@@ -127,40 +124,21 @@ from services.loop.worker.record import (  # noqa: F401 - re-exported
     _reverify_run,
     _summarize_deliverable,
 )
+from services.loop.worker.review import (  # noqa: F401 - re-exported
+    MAX_QA_REVIEW_FAILURES,
+    _review_cycle,
+    _review_cycle_body,
+)
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
-from services.platform import locks
 from services.platform.glassroom import publish_glassroom
-from services.platform.orchestration_metrics import (
-    ACTION_QA_REVIEW,
-    RESULT_NEEDS_WORK,
-    classify_review_result,
-    record_agent_turn,
-)
 from services.producers import console_assistants
 from services.producers.console_assistants import normalize_utc
 from services.tasks import dependencies, task_events, task_projection
-from services.tasks.board import (
-    DELIVERY_GATE_AUTHOR,
-    QUALITY_GATE_AUTHOR,
-    RISK_HOLD_PREFIX,
-    SCRUM_MASTER_ROLE,
-)
 from services.tools import developer_tools
-from services.tools.workspace_edits import delivered
 
 logger = setup_logger("fabrique-task-worker")
 
-MAX_QA_REVIEW_FAILURES = 3
-MAX_QA_REWORK_CYCLES = 2
-MIN_DELIVERABLE_WORDS = 80
-MIN_DOC_DELIVERABLE_WORDS = 180
-AUTOPILOT_QA_REWORK_ENABLED = os.getenv(
-    "AUTOPILOT_QA_REWORK_ENABLED", "true"
-).lower() in {"1", "true", "yes", "on"}
-AUTOPILOT_MAX_REWORK_CYCLES = int(
-    os.getenv("AUTOPILOT_MAX_REWORK_CYCLES", str(MAX_QA_REWORK_CYCLES))
-)
 DISPATCH_REQUEUE_COOLDOWN_SECONDS = int(
     os.getenv("DISPATCH_REQUEUE_COOLDOWN_SECONDS", "90")
 )
@@ -183,52 +161,6 @@ def _mark_queued(item_id: int, now: datetime) -> None:
 
 def _clear_queue_marker(item_id: int) -> None:
     LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
-
-
-def _validate_minimum_deliverable(
-    item: dict[str, Any], deliverable: str, tool_edits: Any = None
-) -> tuple[bool, str]:
-    """Light checks before QA review; edit-tool files make the prose a summary."""
-    text = (deliverable or "").strip()
-    if delivered(tool_edits) and text.count("```") % 2 == 0:
-        return True, "ok"
-    if not text:
-        return False, "Empty output from agent"
-
-    word_count = len(re.findall(r"\b\w+\b", text))
-    title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
-    doc_like = any(
-        kw in title_desc
-        for kw in (
-            "document",
-            "documentation",
-            "readme",
-            "architecture",
-            "api",
-            "strategy",
-            "process",
-            "pipeline",
-            "standards",
-        )
-    )
-
-    min_words = MIN_DOC_DELIVERABLE_WORDS if doc_like else MIN_DELIVERABLE_WORDS
-    if word_count < min_words:
-        return False, f"Too short ({word_count} words, minimum {min_words})"
-
-    heading_count = len(re.findall(r"(?m)^#{1,6}\s+", text))
-    if doc_like and heading_count < 2:
-        return False, "Documentation-like deliverable missing structured sections"
-
-    code_fence_count = text.count("```")
-    if code_fence_count % 2 != 0:
-        return False, "Unbalanced code fences (likely truncated output)"
-
-    tail = text[-180:].strip()
-    if tail.endswith((":", ",", ";", " and", " or", " the", " to", " with")):
-        return False, "Output appears to end abruptly"
-
-    return True, "ok"
 
 
 def _load_item_runtime_state(item_id: int) -> dict[str, Any] | None:
@@ -346,94 +278,6 @@ DELIVERY_RESULTS_CONSUMER = "delivery-results"
 # consumer keeps the message claimed while the handler runs, so this only
 # bounds how long a crashed worker holds an assignment.
 TASK_ASSIGN_ACK_WAIT_SECONDS = 600.0
-
-
-async def _send_back_from_quality_gate(
-    nats_client: NATSClient,
-    item: dict[str, Any],
-    agent: dict[str, Any],
-    sprint: dict[str, Any],
-    deliverable: str,
-    reason: str,
-) -> None:
-    """Ask for another attempt when the text checks reject a deliverable; block after the limit.
-
-    The checks look at the text's form (length, sections, fences): a
-    deterministic opinion, not evidence. It may send work back with the
-    reason, like a reviewer, but holding a task for good on it would leave the
-    sprint open forever. After ``AUTOPILOT_MAX_REWORK_CYCLES`` attempts the
-    task is blocked for a person and escalated to the ScrumMaster.
-    """
-    previous_reworks = task_projection.record_from_dict(item).rework_requests_by(
-        QUALITY_GATE_AUTHOR
-    )
-    rework = previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
-    text = (
-        f"NEEDS WORK: {reason}. Deliver the complete result again, with every "
-        "file in full as a path= block."
-        if rework
-        else f"Pre-review quality gate failed after {previous_reworks} rework(s) "
-        f"— blocked for manual triage: {reason}"
-    )
-    message_id = await asyncio.to_thread(
-        messages._post_message,
-        company_id=sprint["company_id"],
-        sprint_id=sprint["id"],
-        item_id=item["id"],
-        from_name=QUALITY_GATE_AUTHOR,
-        from_role=QUALITY_GATE_AUTHOR,
-        to_role=agent["role"] if rework else SCRUM_MASTER_ROLE,
-        kind="request" if rework else "escalation",
-        body=text,
-    )
-    if not rework:
-        # Answer the escalation before the task counts as blocked: the review
-        # cycle may close the sprint (and, at autonomy 3, carry the task over)
-        # as soon as it is, and that must see the ScrumMaster's decision.
-        await asyncio.to_thread(
-            messages._triage_blocked_task,
-            sprint["company_id"],
-            sprint["id"],
-            item["id"],
-            text,
-            message_id,
-        )
-    await asyncio.to_thread(
-        board_writes._update_item_status,
-        item["id"],
-        "todo" if rework else "blocked",
-        comment_text=text,
-        comment_author=QUALITY_GATE_AUTHOR,
-        kind="reviewed" if rework else "blocked",
-    )
-    await publish_glassroom(
-        nats_client,
-        sprint["id"],
-        {
-            "type": "status" if rework else "error",
-            "semantic_type": "task.rework_scheduled" if rework else "task.blocked",
-            "source": "task_worker",
-            "agent": QUALITY_GATE_AUTHOR,
-            "role": "System",
-            "task_id": item["id"],
-            "task_status": "todo" if rework else "blocked",
-            "phase": "quality_gate",
-            "task": item["title"],
-            "message": (
-                f"↩️ Sent back for rework: {item['title']} ({reason})."
-                if rework
-                else f"❌ Pre-review gate blocked deliverable for: {item['title']} ({reason})."
-            ),
-            "preview": deliverable[:200] if deliverable else "",
-        },
-    )
-    logger.warning(
-        "Pre-review gate %s item=%s by %s: %s",
-        "sent back" if rework else "blocked",
-        item["id"],
-        agent.get("name") or agent["role"],
-        reason,
-    )
 
 
 async def process_backlog_tasks(nats_client: NATSClient) -> None:
@@ -672,12 +516,12 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 )
                 return
 
-            is_valid, validation_reason = _validate_minimum_deliverable(
+            is_valid, validation_reason = quality_gate._validate_minimum_deliverable(
                 item, deliverable, agent.get("tool_edits")
             )
             if not is_valid:
                 reason = _gate_reason(validation_reason, agent.get("finish_reason"))
-                await _send_back_from_quality_gate(
+                await quality_gate._send_back_from_quality_gate(
                     nats_client, item, agent, sprint, deliverable, reason
                 )
                 return
@@ -841,711 +685,16 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             "workspace.delivered", DELIVERY_RESULTS_CONSUMER, _on_delivered
         )
 
-    await _review_cycle(nats_client)
+    await review._review_cycle(nats_client)
 
     # Periodic review loop — processes items stuck in in_review or blocked.
     await asyncio.sleep(10)  # Let initial tasks start first
     while True:
         try:
-            await _review_cycle(nats_client)
+            await review._review_cycle(nats_client)
         except Exception as e:  # noqa: BLE001 - Keep the review polling loop alive across cycle failures.
             logger.error("Review cycle error: %s", e)
         await asyncio.sleep(30)  # Run every 30s
-
-
-async def _review_cycle(nats_client: NATSClient) -> None:
-    """One replica at a time runs the review cycle; the others skip the round (issue #328)."""
-    with locks.held(engine, locks.REVIEW_CYCLE) as mine:
-        if mine:  # a dead replica's tasks first, so the dispatch below queues them
-            await replicas.recover_stale(engine, nats_client)
-            await _review_cycle_body(nats_client)
-
-
-async def _review_cycle_body(nats_client: NATSClient) -> None:
-    """
-    Periodic cycle that advances the sprint board:
-    - ``in_review`` items get reviewed by QA and moved to ``done``.
-    - ``blocked`` items get retried once (moved back to ``todo`` for re-dispatch).
-    """
-    # Items blocked by QA in this same cycle must not be auto-retried below.
-    quality_gate_blocked_ids: set[int] = set()
-
-    with Session(engine) as session:
-        # --- Review: in_review → done ---
-        in_review = session.exec(
-            select(BacklogItem).where(BacklogItem.status == "in_review")
-        ).all()
-        # Every decision below reads the task's events (one query for all).
-        histories = task_projection.histories_for(session, list(in_review))
-
-        for item in in_review:
-            sprint = session.get(Sprint, item.sprint_id)
-            if not sprint or sprint_control.is_halted(sprint.status):
-                continue
-
-            # Find QA agent for this company (fallback to any reviewer)
-            reviewer = session.exec(
-                select(Agent).where(
-                    Agent.company_id == sprint.company_id,
-                    Agent.role == "QA",
-                )
-            ).first()
-            qa_model = getattr(reviewer, "model", None) or model_routing.company_model(
-                session, sprint.company_id, "QA"
-            )
-            reviewer_dict = {
-                "role": reviewer.role if reviewer else "QA",
-                "name": reviewer.name if reviewer else "QA",
-                "model": model_routing.resolve_agent_model(
-                    {"model": qa_model, "role": "QA"}
-                ),
-                "seniority": reviewer.seniority if reviewer else "Senior",
-                "system_prompt": reviewer.system_prompt if reviewer else None,
-            }
-
-            task_record = task_projection.record_of(session, item, histories)
-            if task_record.frozen():
-                task_events.record(session, item, "blocked", "system", status="blocked")
-                session.commit()
-                logger.info("Skipping QA review for manually frozen item=%s", item.id)
-                continue
-
-            deliverable = task_record.deliverable()
-            # Prevent infinite review loops when QA repeatedly fails.
-            qa_review_failures = task_record.review_failures()
-            if qa_review_failures >= MAX_QA_REVIEW_FAILURES:
-                task_events.record(
-                    session,
-                    item,
-                    "blocked",
-                    "system",
-                    status="blocked",
-                    payload={"reason": "review retries exhausted"},
-                )
-                session.commit()
-
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "error",
-                        "semantic_type": "task.blocked",
-                        "source": "task_worker",
-                        "agent": reviewer_dict["name"],
-                        "role": reviewer_dict["role"],
-                        "task_id": item.id,
-                        "task_status": "blocked",
-                        "phase": "qa_review",
-                        "task": f"Reviewing: {item.title}",
-                        "message": f"❌ {reviewer_dict['name']} review failed {MAX_QA_REVIEW_FAILURES} times for: {item.title}. Marked as blocked.",
-                    },
-                )
-
-                logger.warning(
-                    "Review retries exhausted for item=%s; marked blocked", item.id
-                )
-                continue
-
-            if not deliverable:
-                task_events.record(
-                    session,
-                    item,
-                    "blocked",
-                    "system",
-                    status="blocked",
-                    text="QA review aborted: no deliverable found in task comments.",
-                )
-                session.commit()
-
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "error",
-                        "semantic_type": "task.blocked",
-                        "source": "task_worker",
-                        "agent": reviewer_dict["name"],
-                        "role": reviewer_dict["role"],
-                        "task_id": item.id,
-                        "task_status": "blocked",
-                        "phase": "qa_review",
-                        "task": f"Reviewing: {item.title}",
-                        "message": f"❌ {reviewer_dict['name']} cannot review {item.title}: missing deliverable. Marked as blocked.",
-                    },
-                )
-
-                continue
-
-            # Evidence before opinion: a delivery the daemon refuted or never
-            # confirmed goes back for rework without asking the QA model.
-            gate = await asyncio.to_thread(
-                record._delivery_gate, sprint.company_id, item.id
-            )
-            if gate is not None and gate[0] == DELIVERY_QUEUED:
-                # Files are written when the daemon connects; review then.
-                continue
-            if gate is not None:
-                problem, observation = gate
-                previous_gate_reworks = task_record.rework_requests_by(
-                    DELIVERY_GATE_AUTHOR
-                )
-                rework = previous_gate_reworks < AUTOPILOT_MAX_REWORK_CYCLES
-                instruction = (
-                    "Fix the code so the project's checks pass and deliver every "
-                    "changed file in full as a path= block."
-                    if problem in delivery_gate.CODE_PROBLEMS
-                    else "Re-run the task and give every file in full as a path= block."
-                )
-                gate_event = task_events.record(
-                    session,
-                    item,
-                    "reviewed" if rework else "blocked",
-                    "gate",
-                    author=DELIVERY_GATE_AUTHOR,
-                    status="todo" if rework else "blocked",
-                    text=(
-                        f"NEEDS WORK: {problem} — {observation}. {instruction}"
-                        if rework
-                        else f"{problem.capitalize()} after {previous_gate_reworks} "
-                        f"rework(s) — blocked for manual triage: {observation}"
-                    ),
-                )
-                gate_text = gate_event.payload["text"]
-                gate_message = messages._message(
-                    sprint.company_id,
-                    sprint.id,
-                    item.id,
-                    DELIVERY_GATE_AUTHOR,
-                    DELIVERY_GATE_AUTHOR,
-                    (item.assignee or "Developer") if rework else SCRUM_MASTER_ROLE,
-                    "request" if rework else "escalation",
-                    gate_text,
-                )
-                session.add(gate_message)
-                session.commit()
-                if not rework:
-                    quality_gate_blocked_ids.add(item.id)
-                    await asyncio.to_thread(
-                        messages._triage_blocked_task,
-                        sprint.company_id,
-                        sprint.id,
-                        item.id,
-                        gate_text,
-                        gate_message.id,
-                    )
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "status" if rework else "error",
-                        "semantic_type": "task.rework_scheduled"
-                        if rework
-                        else "task.blocked",
-                        "source": "task_worker",
-                        "agent": DELIVERY_GATE_AUTHOR,
-                        "role": "System",
-                        "task_id": item.id,
-                        "task_status": item.status,
-                        "phase": "delivery_gate",
-                        "task": f"Reviewed: {item.title}",
-                        "message": f"🧱 {problem.capitalize()} for {item.title}: {observation}",
-                    },
-                )
-                continue
-
-            # Build review prompt
-            review_prompt = (
-                f"You are reviewing the following deliverable for the task: '{item.title}'.\n"
-                f"Description: {item.description or 'N/A'}\n\n"
-                f"--- DELIVERABLE ---\n{deliverable[: review_digest.DIGEST_CHARS]}\n--- END ---"
-                + (review_digest.NOTE if review_digest.is_digest(deliverable) else "")
-                + "\n\nProvide a brief review (2-3 sentences). If acceptable, start with 'APPROVED:'. "
-                "If not, start with 'NEEDS WORK:' and explain what's missing."
-                + _review_format_reminder(qa_review_failures)
-                # A second attempt is judged against what blocked the first and
-                # the ScrumMaster's brief for it, the same context the agent had.
-                + previous_attempt_context(item)
-                + spec_planning.requirements_for(session, sprint, item)
-                + standards.prompt_section(reviewer_dict["role"])
-            ) + procedures.procedures_prompt(
-                procedures.active_procedures(
-                    session, sprint.company_id, reviewer_dict["role"]
-                )
-            )
-
-            try:
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "agent_start",
-                        "semantic_type": "task.review_started",
-                        "source": "task_worker",
-                        "agent": reviewer_dict["name"],
-                        "role": reviewer_dict["role"],
-                        "task_id": item.id,
-                        "task_status": "in_review",
-                        "phase": "qa_review",
-                        "task": f"Reviewing: {item.title}",
-                        "message": f"🔍 {reviewer_dict['name']} is reviewing: {item.title}",
-                    },
-                )
-
-                review_result = await asyncio.to_thread(
-                    functools.partial(
-                        _call_llm_for_review,
-                        reviewer_dict,
-                        review_prompt,
-                        company_id=sprint.company_id,
-                        sprint_id=sprint.id,
-                        backlog_item_id=item.id,
-                    )
-                )
-
-                normalized_review = (review_result or "").strip()
-                verdict = classify_review_result(normalized_review)
-                if verdict is None:
-                    # Only an explicit APPROVED: closes a task; anything else
-                    # is a failed review, retried and then blocked below.
-                    raise ValueError(
-                        "reviewer answered without APPROVED:/NEEDS WORK: — "
-                        f"{normalized_review[:120]!r}"
-                    )
-                needs_work = verdict == RESULT_NEEDS_WORK
-                # Approved, but a high-risk delivery waits for a person at
-                # every autonomy level (services/risk.py).
-                risk_check = (
-                    None
-                    if needs_work
-                    else await asyncio.to_thread(
-                        record._delivery_risk, sprint.company_id, item.id
-                    )
-                )
-                if risk_check is None and not needs_work:
-                    # No recorded check (the run was not recorded): unknown is
-                    # not low, so the paths the deliverable declares decide; a
-                    # claim, which can only raise the tier.
-                    risk_check = risk.classify(
-                        [f["path"] for f in parse_file_manifest(deliverable)]
-                    )
-                risk_hold = risk_check is not None and risk.is_high(
-                    risk_check.get("tier")
-                )
-                company = session.get(Company, sprint.company_id)
-                person_reason = sprint_control.person_acceptance_reason(
-                    company.autonomy_level, engine, sprint.company_id, item.id
-                )
-                if not needs_work and not risk_hold and person_reason:
-                    risk_hold = True
-                    risk_check = {"reasons": [person_reason]}
-
-                previous_reworks = task_record.rework_requests_by(reviewer_dict["name"])
-                autopilot_rework_allowed = (
-                    needs_work
-                    and AUTOPILOT_QA_REWORK_ENABLED
-                    and previous_reworks < AUTOPILOT_MAX_REWORK_CYCLES
-                )
-                if needs_work:
-                    review_status = "todo" if autopilot_rework_allowed else "blocked"
-                else:
-                    review_status = "blocked" if risk_hold else "done"
-                # The verdict, then what it leads to: each an event and its comment.
-                task_events.record(
-                    session,
-                    item,
-                    "reviewed",
-                    reviewer_dict["role"],
-                    author=reviewer_dict["name"],
-                    status=review_status,
-                    text=normalized_review[:2000],
-                    payload={"verdict": "needs_work" if needs_work else "approved"},
-                )
-                if needs_work and autopilot_rework_allowed:
-                    task_events.record(
-                        session,
-                        item,
-                        "sent_back",
-                        "system",
-                        text=f"Autopilot rework scheduled after QA feedback ({previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}).",
-                    )
-                elif needs_work:
-                    task_events.record(
-                        session,
-                        item,
-                        "blocked",
-                        "system",
-                        text="QA quality gate failed — task blocked pending manual triage.",
-                    )
-                    quality_gate_blocked_ids.add(item.id)
-
-                risk_note = None
-                if risk_hold:
-                    risk_reasons = "; ".join(risk_check.get("reasons") or [])
-                    risk_note = (
-                        f"{RISK_HOLD_PREFIX} ({risk_reasons or 'high tier'}). "
-                        "Mark it done to accept it, or send it back to work."
-                    )
-                    task_events.record(
-                        session, item, "risk_hold", "system", text=risk_note
-                    )
-
-                session.add(item)
-                session.add(
-                    messages._message(
-                        sprint.company_id,
-                        sprint.id,
-                        item.id,
-                        reviewer_dict["name"],
-                        reviewer_dict["role"],
-                        item.assignee or "Developer",
-                        "request" if needs_work else "decision",
-                        normalized_review[:2000],
-                    )
-                )
-                if risk_note is not None:
-                    # To a person, not the ScrumMaster: its triage decides
-                    # retries, and this delivery was approved.
-                    session.add(
-                        messages._message(
-                            sprint.company_id,
-                            sprint.id,
-                            item.id,
-                            DELIVERY_GATE_AUTHOR,
-                            DELIVERY_GATE_AUTHOR,
-                            "Manager",
-                            "escalation",
-                            risk_note,
-                        )
-                    )
-                escalation = None
-                if needs_work and not autopilot_rework_allowed:
-                    escalation = messages._message(
-                        sprint.company_id,
-                        sprint.id,
-                        item.id,
-                        reviewer_dict["name"],
-                        reviewer_dict["role"],
-                        SCRUM_MASTER_ROLE,
-                        "escalation",
-                        f'"{item.title}" is blocked: still not accepted after '
-                        f"{previous_reworks} rework(s). Last review: {normalized_review[:500]}",
-                    )
-                    session.add(escalation)
-                session.commit()
-                if escalation is not None:
-                    await asyncio.to_thread(
-                        messages._triage_blocked_task,
-                        sprint.company_id,
-                        sprint.id,
-                        item.id,
-                        f"Still not accepted after {previous_reworks} rework(s). "
-                        f"Last review: {normalized_review[:500]}",
-                        escalation.id,
-                    )
-
-                if needs_work:
-                    if autopilot_rework_allowed:
-                        await publish_glassroom(
-                            nats_client,
-                            sprint.id,
-                            {
-                                "type": "status",
-                                "semantic_type": "task.rework_scheduled",
-                                "source": "task_worker",
-                                "agent": "System",
-                                "role": "System",
-                                "task_id": item.id,
-                                "task_status": "todo",
-                                "phase": "rework",
-                                "rework_count": previous_reworks + 1,
-                                "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
-                                "task": f"Reviewed: {item.title}",
-                                "message": f"🔁 Autopilot accepted QA feedback for: {item.title}. Rework attempt {previous_reworks + 1}/{AUTOPILOT_MAX_REWORK_CYCLES}.",
-                                "preview": normalized_review[:200],
-                            },
-                        )
-                        logger.info(
-                            "Reviewed item=%s → todo (autopilot rework) by %s [reworks=%s/%s]",
-                            item.id,
-                            reviewer_dict["name"],
-                            previous_reworks + 1,
-                            AUTOPILOT_MAX_REWORK_CYCLES,
-                        )
-                    else:
-                        await publish_glassroom(
-                            nats_client,
-                            sprint.id,
-                            {
-                                "type": "error",
-                                "semantic_type": "task.blocked",
-                                "source": "task_worker",
-                                "agent": reviewer_dict["name"],
-                                "role": reviewer_dict["role"],
-                                "task_id": item.id,
-                                "task_status": "blocked",
-                                "phase": "qa_gate",
-                                "rework_count": previous_reworks + 1,
-                                "rework_limit": AUTOPILOT_MAX_REWORK_CYCLES,
-                                "task": f"Reviewed: {item.title}",
-                                "message": f"❌ {reviewer_dict['name']} requested rework for: {item.title}. Blocked for manual triage.",
-                                "preview": normalized_review[:200],
-                            },
-                        )
-                        logger.info(
-                            "Reviewed item=%s → blocked (needs work gate) by %s [reworks=%s/%s]",
-                            item.id,
-                            reviewer_dict["name"],
-                            previous_reworks + 1,
-                            AUTOPILOT_MAX_REWORK_CYCLES,
-                        )
-                elif risk_hold:
-                    await publish_glassroom(
-                        nats_client,
-                        sprint.id,
-                        {
-                            "type": "status",
-                            "semantic_type": "task.awaiting_person",
-                            "source": "task_worker",
-                            "agent": DELIVERY_GATE_AUTHOR,
-                            "role": "System",
-                            "task_id": item.id,
-                            "task_status": "blocked",
-                            "phase": "risk_hold",
-                            "risk_tier": risk_check.get("tier"),
-                            "task": f"Reviewed: {item.title}",
-                            "message": f"🛡️ {reviewer_dict['name']} approved {item.title}; "
-                            "high-risk delivery, waiting for a person to accept it.",
-                            "preview": "; ".join(risk_check.get("reasons") or [])[:200],
-                        },
-                    )
-                    logger.info(
-                        "Reviewed item=%s → blocked (high risk, awaiting a person)",
-                        item.id,
-                    )
-                    await close._finalize_sprint_if_ready(nats_client, sprint.id)
-                else:
-                    await publish_glassroom(
-                        nats_client,
-                        sprint.id,
-                        {
-                            "type": "agent_complete",
-                            "semantic_type": "task.approved",
-                            "source": "task_worker",
-                            "agent": reviewer_dict["name"],
-                            "role": reviewer_dict["role"],
-                            "task_id": item.id,
-                            "task_status": "done",
-                            "phase": "qa_approved",
-                            "task": f"Reviewed: {item.title}",
-                            "message": f"✅ {reviewer_dict['name']} approved: {item.title} → done",
-                            "preview": normalized_review[:200],
-                        },
-                    )
-
-                    logger.info(
-                        "Reviewed item=%s → done by %s", item.id, reviewer_dict["name"]
-                    )
-                    await close._finalize_sprint_if_ready(nats_client, sprint.id)
-
-            except Exception as e:  # noqa: BLE001 - Isolate review failures to the affected item.
-                logger.warning("Review failed for item=%s: %s", item.id, e)
-                credit = getattr(e, "credit_provider", None)
-                if credit and sprint_control.pause_for_credit(
-                    session, sprint.id, credit
-                ):
-                    session.commit()
-                    await sprint_control.publish_credit_pause(
-                        nats_client, sprint.id, credit
-                    )
-                if credit:
-                    continue
-
-                task_events.record(
-                    session,
-                    item,
-                    "review_failed",
-                    "system",
-                    text=f"QA review failed — will retry automatically. Reason: {str(e)[:300]}",
-                )
-                session.commit()
-
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "error",
-                        "semantic_type": "task.review_error",
-                        "source": "task_worker",
-                        "agent": reviewer_dict["name"],
-                        "role": reviewer_dict["role"],
-                        "task_id": item.id,
-                        "task_status": item.status,
-                        "phase": "qa_review",
-                        "task": f"Reviewing: {item.title}",
-                        "message": f"❌ {reviewer_dict['name']} review failed for: {item.title}. Will retry.",
-                    },
-                )
-
-        # --- Retry: blocked → todo (one retry only) ---
-        blocked = session.exec(
-            select(BacklogItem).where(BacklogItem.status == "blocked")
-        ).all()
-        # Sprints holding an item that stays blocked until a person acts may
-        # have nothing left to move; they are checked for closing below.
-        settled_sprint_ids: set[int] = set()
-        histories = task_projection.histories_for(session, list(blocked))
-
-        for item in blocked:
-            item_sprint = session.get(Sprint, item.sprint_id)
-            if item_sprint is not None and sprint_control.is_halted(item_sprint.status):
-                continue
-            if item.id in quality_gate_blocked_ids:
-                settled_sprint_ids.add(item.sprint_id)
-                continue
-
-            next_step = task_projection.record_of(session, item, histories).next_step()
-            if next_step is None:
-                settled_sprint_ids.add(item.sprint_id)
-                continue
-            if next_step == "frozen":
-                continue
-
-            if next_step == "review":
-                task_events.record(
-                    session,
-                    item,
-                    "recovered",
-                    "system",
-                    status="in_review",
-                    text="Autonomous recovery detected a blocked task with an existing deliverable and no explicit block reason. Returning it to QA review.",
-                )
-
-                sprint = session.get(Sprint, item.sprint_id)
-                if sprint:
-                    await publish_glassroom(
-                        nats_client,
-                        sprint.id,
-                        {
-                            "type": "status",
-                            "semantic_type": "task.recovered",
-                            "source": "task_worker",
-                            "agent": "System",
-                            "role": "System",
-                            "task_id": item.id,
-                            "task_status": "in_review",
-                            "phase": "blocked_recovery",
-                            "task": item.title,
-                            "message": f"♻️ Recovered blocked task with existing deliverable: {item.title} moved back to QA review.",
-                        },
-                    )
-
-                logger.info(
-                    "Recovered blocked item=%s back to in_review because a deliverable already exists",
-                    item.id,
-                )
-                continue
-
-            task_events.record(
-                session,
-                item,
-                "retried",
-                "system",
-                status="todo",
-                text="Automatic retry — re-queuing blocked task.",
-            )
-
-            sprint = session.get(Sprint, item.sprint_id)
-            if sprint:
-                await publish_glassroom(
-                    nats_client,
-                    sprint.id,
-                    {
-                        "type": "status",
-                        "semantic_type": "task.retry_queued",
-                        "source": "task_worker",
-                        "agent": "System",
-                        "role": "System",
-                        "task_id": item.id,
-                        "task_status": "todo",
-                        "phase": "retry",
-                        "task": item.title,
-                        "message": f"🔄 Retrying blocked task: {item.title}",
-                    },
-                )
-
-            logger.info("Retrying blocked item=%s", item.id)
-
-        session.commit()
-
-        # Only a sprint with nothing left to move is worth the retrospective.
-        closing_candidates = [
-            sprint_id
-            for sprint_id in (
-                session.exec(
-                    select(Sprint.id).where(
-                        Sprint.id.in_(settled_sprint_ids), Sprint.status == "active"
-                    )
-                ).all()
-                if settled_sprint_ids
-                else []
-            )
-            if dependencies.sprint_settled(session, sprint_id)
-        ]
-        session.commit()
-
-    # A sprint whose last open task just got blocked for a person closes now,
-    # with its retrospective; approvals close theirs on the spot.
-    for sprint_id in closing_candidates:
-        await close._finalize_sprint_if_ready(nats_client, sprint_id)
-
-    # Re-dispatch any items that just went back to todo
-    await _dispatch_todo_items(nats_client)
-
-
-def _call_llm_for_review(
-    agent: dict[str, Any],
-    prompt: str,
-    *,
-    company_id: int | None = None,
-    sprint_id: int | None = None,
-    backlog_item_id: int | None = None,
-) -> str:
-    """Synchronous LLM call for code review (runs in thread).
-
-    When ``company_id`` is provided the review is written to ``audit_log`` with
-    ``role=QA`` and ``result_type`` (APPROVED / NEEDS_WORK) so the QA rate KPI
-    reads from the audit trail instead of its comment-scan fallback.
-    """
-    client = LLMProxyClient(os.getenv("LLM_PROXY_URL", "http://llm-proxy:5100"))
-    client.max_tokens, client.company_id = REVIEW_MAX_TOKENS, company_id
-    messages = [{"role": "user", "content": prompt}]
-    if agent.get("system_prompt"):
-        messages.insert(0, {"role": "system", "content": agent["system_prompt"]})
-    model = model_routing.resolve_agent_model(agent, default_role="QA")
-    result = client.chat(
-        model=model,
-        messages=messages,
-        role=agent.get("role", "QA"),
-    )
-
-    failure = _llm_failure(result, model)
-    if failure:
-        raise execute.LLMCallError(failure, sprint_control.credit_failure(result))
-
-    content = _llm_content(result)
-
-    if company_id is not None:
-        record_agent_turn(
-            company_id=company_id,
-            sprint_id=sprint_id,
-            backlog_item_id=backlog_item_id,
-            agent={**agent, "model": result.get("served_model") or model},
-            action=ACTION_QA_REVIEW,
-            llm_result=result,
-            result_type=classify_review_result(content),
-            result_preview=content,
-        )
-    return content
 
 
 async def _dispatch_todo_items(nats_client: NATSClient) -> None:

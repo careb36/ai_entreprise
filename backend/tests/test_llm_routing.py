@@ -21,7 +21,7 @@ from models.sprint import BacklogItem, Sprint
 from services import console_assistants, task_worker
 from services.loop.worker import deliver as worker_deliver
 from services.loop.worker import execute as worker_execute
-from services.loop.worker import prompt
+from services.loop.worker import prompt, qa_review
 from sqlmodel import Session, select
 
 from llm.model_factory import AgentRole, ModelFactory
@@ -54,7 +54,7 @@ def llm(monkeypatch):
             state.calls.append({"model": model, "role": role})
             return state.response
 
-    monkeypatch.setattr(task_worker, "LLMProxyClient", _Client)  # The QA review.
+    monkeypatch.setattr(qa_review, "LLMProxyClient", _Client)  # The QA review.
     monkeypatch.setattr(worker_execute, "LLMProxyClient", _Client)
     return state
 
@@ -128,7 +128,7 @@ def test_configured_model_is_kept(llm):
 
 
 def test_qa_review_with_no_model_uses_the_qa_default(llm):
-    task_worker._call_llm_for_review({"role": "QA", "model": ""}, "Review this")
+    qa_review._call_llm_for_review({"role": "QA", "model": ""}, "Review this")
 
     assert llm.calls[0]["model"] == _role_default(AgentRole.QA)
 

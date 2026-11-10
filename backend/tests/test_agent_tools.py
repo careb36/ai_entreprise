@@ -29,10 +29,10 @@ from services import (
     developer_tools,
     mcp_tools,
     risk,
-    task_worker,
     workspace_edits,
 )
 from services.loop.worker import deliver as worker_deliver
+from services.loop.worker import quality_gate
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -756,16 +756,16 @@ def test_a_window_cut_by_the_budget_names_the_lines_shown_and_where_to_go_on(
 def test_the_minimum_deliverable_gate_counts_the_edited_files():
     item = {"title": "Bump the version", "description": "x"}
     edited = [{"path": "src/a.py", "content": "V = 2\n", "changed": True}]
-    assert task_worker._validate_minimum_deliverable(item, "Done.", edited) == (
+    assert quality_gate._validate_minimum_deliverable(item, "Done.", edited) == (
         True,
         "ok",
     )
-    assert task_worker._validate_minimum_deliverable(item, "", edited) == (True, "ok")
-    assert task_worker._validate_minimum_deliverable(item, "Done.")[0] is False
+    assert quality_gate._validate_minimum_deliverable(item, "", edited) == (True, "ok")
+    assert quality_gate._validate_minimum_deliverable(item, "Done.")[0] is False
     # An edit left alone (a conflict) is no delivery.
     conflict = [{"path": "src/a.py", "error": "changed", "changed": False}]
     assert (
-        task_worker._validate_minimum_deliverable(item, "Done.", conflict)[0] is False
+        quality_gate._validate_minimum_deliverable(item, "Done.", conflict)[0] is False
     )
 
 

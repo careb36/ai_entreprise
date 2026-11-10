@@ -29,6 +29,8 @@ from services.board import (
     item_is_settled,
 )
 from services.carry_over import carry_over_on_the_companys_own
+from services.loop.worker import qa_review
+from services.loop.worker import review as worker_review
 from services.verification import check_risk_tier
 from sqlmodel import Session, select
 
@@ -194,8 +196,8 @@ def _approve(monkeypatch, session: Session, item: BacklogItem) -> BacklogItem:
     def _review(agent, prompt, **kwargs):
         return "APPROVED: complete" if title in prompt else None
 
-    monkeypatch.setattr(task_worker, "_call_llm_for_review", _review)
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    monkeypatch.setattr(qa_review, "_call_llm_for_review", _review)
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
     session.expire_all()
     return session.get(BacklogItem, item.id)
 

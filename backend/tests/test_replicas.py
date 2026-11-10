@@ -26,11 +26,12 @@ import worker_stages
 from models.agent_message import AgentMessage
 from models.company import Company
 from models.sprint import BacklogItem, Sprint
-from services import locks, replicas, scrum_master, task_events, task_worker
+from services import locks, replicas, scrum_master, task_events
 from services.loop.worker import close as worker_close
 from services.loop.worker import execute as worker_execute
 from services.loop.worker import messages as worker_messages
 from services.loop.worker import procedures_round
+from services.loop.worker import review as worker_review
 from sqlmodel import Session, SQLModel, create_engine, select
 from test_llm_routing import _task_assign_handler
 from test_review_gate import _FakeNATS
@@ -287,7 +288,7 @@ def test_a_surviving_worker_recovers_the_task_of_one_that_died(engine, monkeypat
     assert executed == ["dead"]
 
     nats = _FakeNATS()
-    asyncio.run(task_worker._review_cycle(nats))
+    asyncio.run(worker_review._review_cycle(nats))
 
     item = _items(engine, sprint_id)[0]
     assert item.status == "todo"
@@ -309,7 +310,7 @@ def test_a_review_cycle_leaves_the_task_a_live_worker_holds(engine):
     item_id = _items(engine, sprint_id)[0].id
     nats = _FakeNATS()
     with replicas.task_lock(engine, item_id):
-        asyncio.run(task_worker._review_cycle(nats))
+        asyncio.run(worker_review._review_cycle(nats))
     assert _items(engine, sprint_id)[0].status == "in_progress"
     assert not [p for subject, p in nats.published if subject == "task.assign"]
 
@@ -489,10 +490,10 @@ def test_one_review_cycle_at_a_time(engine, monkeypatch):
     async def body(nats):
         ran.append(nats)
 
-    monkeypatch.setattr(task_worker, "_review_cycle_body", body)
+    monkeypatch.setattr(worker_review, "_review_cycle_body", body)
     with locks.held(engine, locks.REVIEW_CYCLE):
-        asyncio.run(task_worker._review_cycle("other replica"))
-    asyncio.run(task_worker._review_cycle("this replica"))
+        asyncio.run(worker_review._review_cycle("other replica"))
+    asyncio.run(worker_review._review_cycle("this replica"))
     assert ran == ["this replica"]
 
 

@@ -41,7 +41,8 @@ from services import (
     task_projection,
     task_worker,
 )
-from services.loop.worker import board_writes
+from services.loop.worker import board_writes, qa_review
+from services.loop.worker import review as worker_review
 from sqlalchemy import text
 from sqlmodel import Session, create_engine, select
 
@@ -276,11 +277,11 @@ def _review(monkeypatch, session, item_id, reply):
             raise RuntimeError("model down")
         return reply
 
-    monkeypatch.setattr(task_worker, "_call_llm_for_review", _answer)
-    asyncio.run(task_worker._review_cycle(_FakeNATS()))
+    monkeypatch.setattr(qa_review, "_call_llm_for_review", _answer)
+    asyncio.run(worker_review._review_cycle(_FakeNATS()))
 
 
-GATE_LIMIT = task_worker.AUTOPILOT_MAX_REWORK_CYCLES
+GATE_LIMIT = qa_review.AUTOPILOT_MAX_REWORK_CYCLES
 _GATE_REWORK = ("reviewed", "gate", "Verifier", "NEEDS WORK: delivery refuted — x")
 _QA_REWORK = ("reviewed", "QA", "QA", "NEEDS WORK: add tests")
 
