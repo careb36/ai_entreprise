@@ -2,11 +2,13 @@
 
 A producer may not import the loop, so the loop lends a console producer what
 it owns: ``TaskWorkerHost`` is ``producers.console_producer.ConsoleHost``
-over the task worker (its engine, ``_load_procedures_context``,
-``_resolve_workspace_root``, ``_record_task_run`` and ``_update_item_status``,
-each read from the worker when used, so a patch of ``task_worker.X`` still
-reaches the run) and the loop's prompt sections (``carry_over``'s previous
-attempt, ``edit_plan``'s plan). ``produce`` is the call the worker makes.
+over the task worker (its engine, ``_resolve_workspace_root`` and
+``_record_task_run``, each read from the worker when used, so a patch of
+``task_worker.X`` still reaches the run; ``_load_procedures_context`` and
+``_update_item_status`` from the worker's stages that own them, ``prompt`` and
+``board_writes``, read as module attributes, so a patch of the stage reaches
+it) and the loop's prompt sections (``carry_over``'s previous attempt,
+``edit_plan``'s plan). ``produce`` is the call the worker makes.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.loop import carry_over, edit_plan
+from services.loop.worker import board_writes, prompt
 from services.producers import console_producer
 
 
@@ -31,7 +34,7 @@ class TaskWorkerHost:
         return _worker().engine
 
     def load_procedures_context(self, company_id: int, role: str | None) -> str:
-        return _worker()._load_procedures_context(company_id, role)
+        return prompt._load_procedures_context(company_id, role)
 
     def resolve_workspace_root(self, company_id: int) -> str | None:
         return _worker()._resolve_workspace_root(company_id)
@@ -46,7 +49,7 @@ class TaskWorkerHost:
         return _worker()._record_task_run(item, agent, sprint, text, files, evidence)
 
     def update_item_status(self, item_id: int, status: str, **kwargs: Any) -> Any:
-        return _worker()._update_item_status(item_id, status, **kwargs)
+        return board_writes._update_item_status(item_id, status, **kwargs)
 
 
 HOST = TaskWorkerHost()

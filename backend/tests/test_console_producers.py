@@ -28,6 +28,7 @@ from pathlib import Path
 
 import auth_tokens
 import pytest
+import worker_stages
 from config import settings
 from models import AssistantRuntimeState, Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
@@ -323,8 +324,8 @@ def world(sqlite_session, repo, monkeypatch, tmp_path):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     engine = sqlite_session.get_bind()
     AssistantRuntimeState.__table__.create(engine, checkfirst=True)
-    for module in (task_worker, console_assistants):
-        monkeypatch.setattr(module, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
+    monkeypatch.setattr(console_assistants, "engine", engine)
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX", "host")
     monkeypatch.setattr(settings, "DELIVERY_SANDBOX_NETWORK", True)
     company = Company(

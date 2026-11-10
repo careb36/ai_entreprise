@@ -7,6 +7,7 @@ import pytest
 import worker_stages
 from models import BacklogItem, Company, Sprint
 from services import task_worker
+from services.loop.worker import prompt
 
 from memory import engram_processor
 
@@ -62,13 +63,12 @@ def test_memory_search_is_scoped_to_the_company(monkeypatch):
     item = {"title": "Add login", "description": "JWT"}
 
     assert (
-        task_worker._fetch_memory_context(item, {"role": "Developer"}, 7)
-        == "past decisions"
+        prompt._fetch_memory_context(item, {"role": "Developer"}, 7) == "past decisions"
     )
     assert calls == [{"story": "Add login JWT", "role": "Developer", "company_id": 7}]
 
     # No company: no search at all, rather than one across every tenant.
-    assert task_worker._fetch_memory_context(item, {"role": "Developer"}, None) == ""
+    assert prompt._fetch_memory_context(item, {"role": "Developer"}, None) == ""
     assert len(calls) == 1
 
 
@@ -108,7 +108,7 @@ def test_lessons_come_from_the_companys_latest_completed_sprints(db):
     other = _sprint(db, _company(db, "Other"))
     _item(db, other, "Elsewhere", [_comment("QA", "NEEDS WORK: another tenant", 9)])
 
-    lessons = task_worker._load_recent_lessons(company.id, current.id)
+    lessons = prompt._load_recent_lessons(company.id, current.id)
 
     assert f"Sprint {last.id} retrospective" in lessons
     assert f"Sprint {previous.id} retrospective" in lessons
@@ -134,8 +134,8 @@ def test_lessons_come_from_the_companys_latest_completed_sprints(db):
 def test_no_lessons_without_company_or_history(db):
     company = _company(db)
     current = _sprint(db, company, status="active")
-    assert task_worker._load_recent_lessons(company.id, current.id) == ""
-    assert task_worker._load_recent_lessons(None, current.id) == ""
+    assert prompt._load_recent_lessons(company.id, current.id) == ""
+    assert prompt._load_recent_lessons(None, current.id) == ""
 
 
 def test_lessons_reach_the_developer_prompt(monkeypatch):

@@ -33,7 +33,6 @@ from nats_client import NATSClient
 from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS, AgentRunCreate
 from sqlmodel import Session, select, text
 
-from services.contracts import edit_blocks
 from services.contracts.manifest import (
     ALLOWED_ARTIFACT_EXTENSIONS,
     MANIFEST_BLOCK,
@@ -77,16 +76,31 @@ from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
-from services.loop.worker import messages
+from services.loop.worker import board_writes, messages, prompt
 
 # Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
-# patches the stage module, ``services.loop.worker.messages``, which owns them.
+# patches the stage module (``services.loop.worker.<stage>``), which owns them.
+from services.loop.worker.board_writes import (  # noqa: F401 - re-exported
+    _append_item_comment,
+    _update_item_status,
+)
 from services.loop.worker.messages import (  # noqa: F401 - re-exported
     MESSAGE_BODY_LIMIT,
     _handoff_body,
     _message,
     _post_message,
     _triage_blocked_task,
+)
+from services.loop.worker.prompt import (  # noqa: F401 - re-exported
+    FILE_MANIFEST_INSTRUCTIONS,
+    LESSON_FEEDBACK_CHARS,
+    LESSON_FEEDBACK_LIMIT,
+    LESSON_SPRINTS,
+    _fetch_memory_context,
+    _is_lesson,
+    _load_procedures_context,
+    _load_recent_lessons,
+    _load_sprint_completed_tasks,
 )
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
@@ -118,7 +132,6 @@ from services.tasks.board import (
     QUALITY_GATE_AUTHOR,
     RISK_HOLD_PREFIX,
     SCRUM_MASTER_ROLE,
-    completed_tasks_context,
 )
 from services.tools import developer_tools, mcp_tools
 from services.tools.workspace_edits import delivered, observe_tools, with_tool_edits
@@ -161,138 +174,6 @@ def _mark_queued(item_id: int, now: datetime) -> None:
 
 def _clear_queue_marker(item_id: int) -> None:
     LAST_AUTONOMOUS_QUEUE_AT.pop(item_id, None)
-
-
-FILE_MANIFEST_INSTRUCTIONS = (
-    "\n\n## Output format for files\n"
-    "When your deliverable creates or changes files, write each file in full as its own "
-    "fenced code block whose opening line carries the path relative to the project root, "
-    "for example:\n\n"
-    "```python path=src/example/module.py\n<entire file content>\n```\n\n"
-    "Use one block per file, give the complete content (not a diff or an excerpt), and "
-    "keep explanations outside the blocks. Files are written to the project exactly as "
-    "given."
-) + edit_blocks.INSTRUCTIONS
-
-
-# ---------------------------------------------------------------------------
-# Memory augmentation helpers — fail silently, never block task execution
-# ---------------------------------------------------------------------------
-
-
-def _fetch_memory_context(
-    item: dict[str, Any], agent: dict[str, Any], company_id: int | None
-) -> str:
-    """Query engram RAG for this company's past decisions relevant to the task.
-
-    Without a company there is nothing to scope the search to, so nothing is
-    returned rather than another tenant's decisions.
-    """
-    if company_id is None:
-        return ""
-    task_text = f"{item.get('title', '')} {item.get('description', '')}".strip()
-    role = agent.get("role") or None
-    try:
-        from services.platform.engram_processor import get_engram_processor
-
-        processor = get_engram_processor()
-        return processor.query_relevant_engrams(
-            task_text, limit=3, role_filter=role, company_id=company_id
-        )
-    except Exception as exc:  # noqa: BLE001 - Optional memory context must not block task execution.
-        logger.debug("Memory context fetch failed for item=%s: %s", item.get("id"), exc)
-        return ""
-
-
-LESSON_SPRINTS = 2
-LESSON_FEEDBACK_LIMIT = 6
-LESSON_FEEDBACK_CHARS = 300
-
-
-def _is_lesson(comment: dict[str, Any]) -> bool:
-    """Review feedback worth carrying to later tasks.
-
-    Reviewers' ``NEEDS WORK:`` requests, and the verifier's failed test runs.
-    The verifier's other requests (a delivery the daemon did not confirm) are
-    about infrastructure, not about how the work was done.
-    """
-    text = str(comment.get("text", "")).strip()
-    if not text.upper().startswith("NEEDS WORK:"):
-        return False
-    if comment.get("author") == DELIVERY_GATE_AUTHOR:
-        return text[len("NEEDS WORK:") :].strip().lower().startswith("tests failed")
-    return True
-
-
-def _load_recent_lessons(company_id: int | None, current_sprint_id: int) -> str:
-    """What this company's latest completed sprints taught, read from the board.
-
-    The retrospective counts and the review feedback come from Postgres, so
-    the lessons reach the agents with or without the knowledge graph. Review
-    feedback is what reviewers said, not a verified fact; the prompt says so.
-    """
-    if company_id is None:
-        return ""
-    try:
-        with Session(engine) as session:
-            sprint_ids = session.exec(
-                select(Sprint.id)
-                .where(
-                    Sprint.company_id == company_id,
-                    Sprint.status == "completed",
-                    Sprint.id != current_sprint_id,
-                )
-                .order_by(Sprint.id.desc())
-                .limit(LESSON_SPRINTS)
-            ).all()
-            if not sprint_ids:
-                return ""
-            items = session.exec(
-                select(BacklogItem).where(BacklogItem.sprint_id.in_(sprint_ids))
-            ).all()
-            feedback: list[tuple[str, str]] = []
-            for item in items:
-                comments = item.comments or []
-                if isinstance(comments, str):
-                    try:
-                        comments = json.loads(comments)
-                    except Exception:  # noqa: BLE001 - Malformed legacy comments carry no lessons.
-                        comments = []
-                for comment in comments:
-                    if isinstance(comment, dict) and _is_lesson(comment):
-                        text = str(comment.get("text", "")).strip()
-                        author = comment.get("author") or "Reviewer"
-                        line = f"{item.title[:60]} ({author}): {text[:LESSON_FEEDBACK_CHARS]}"
-                        feedback.append((str(comment.get("created_at") or ""), line))
-    except Exception as exc:  # noqa: BLE001 - Lessons are best-effort context.
-        logger.debug("Lessons fetch failed for company=%s: %s", company_id, exc)
-        return ""
-
-    sections = [
-        _format_retrospective_summary(metrics)
-        for metrics in (_build_sprint_retrospective(sid) for sid in sprint_ids)
-        if metrics
-    ]
-    seen: set[str] = set()
-    requests: list[str] = []
-    for _created_at, line in sorted(feedback, reverse=True):
-        if line not in seen:
-            seen.add(line)
-            requests.append(f"- {line}")
-        if len(requests) >= LESSON_FEEDBACK_LIMIT:
-            break
-    if requests:
-        sections.append(
-            "Work sent back for rework (most recent first):\n" + "\n".join(requests)
-        )
-    return "\n\n".join(sections)
-
-
-def _load_sprint_completed_tasks(
-    sprint_id: int, exclude_item_id: int, limit: int = 5
-) -> str:
-    """A brief summary of done tasks in the same sprint, for cross-task context."""
-    return completed_tasks_context(engine, sprint_id, exclude_item_id, limit)
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +242,9 @@ def _execute_task(
     # prefix cache bills the shared start of the prompt at the cached rate:
     # format, procedures and lessons first; the task and its history next;
     # what changes between attempts (the brief, the review feedback) last.
-    user_prompt = FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (procedures_context or "")
+    user_prompt = prompt.FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (
+        procedures_context or ""
+    )
     if lessons_context:
         user_prompt += (
             "\n\n## Lessons from Recent Sprints\n"
@@ -1200,41 +1083,6 @@ def _load_task_context(backlog_item_id: int) -> dict[str, Any] | None:
         }
 
 
-def _append_item_comment(
-    item_id: int, text: str, author: str, kind: str = "note", **fields: Any
-) -> None:
-    """Record an event on a backlog item, rendered as a comment, without changing its status."""
-    task_events.record_by_id(engine, item_id, kind, text=text, author=author, **fields)
-
-
-def _update_item_status(
-    item_id: int,
-    status: str,
-    comment_text: str | None = None,
-    comment_author: str | None = None,
-    kind: str | None = None,
-    **fields: Any,
-):
-    """Record a transition of a backlog item: its event, its status and the comment rendering it."""
-    text = comment_text if comment_text and comment_author else None
-    task_events.record_by_id(
-        engine,
-        item_id,
-        kind or ("note" if text else "moved"),
-        status=status,
-        text=text,
-        author=comment_author if text else None,
-        **fields,
-    )
-
-
-def _load_procedures_context(company_id: int | None, role: str | None) -> str:
-    """The factory's standards for *role*, then the company's active procedures, as prompt sections."""
-    return standards.prompt_section(role) + procedures.prompt_context(
-        engine, company_id, role
-    )
-
-
 def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
     """Keep or revert procedures with enough sprints since adoption, and tell the team."""
     with Session(engine) as session:
@@ -1259,7 +1107,7 @@ def _ask_scrum_master_for_procedures(
     company_id: int, sprint_id: int, retro_metrics: dict[str, Any]
 ) -> tuple[str, list[str]]:
     """The ScrumMaster's answer, and the company's roles it may propose for."""
-    lessons = _load_recent_lessons(company_id, 0)
+    lessons = prompt._load_recent_lessons(company_id, 0)
     with Session(engine) as session:
         roles = sorted(
             {
@@ -1281,7 +1129,7 @@ def _ask_scrum_master_for_procedures(
             )
         )
         history = procedures.history_prompt(session, company_id)
-        prompt = (
+        request = (
             "You are the ScrumMaster. A sprint just finished. Read how it went and decide "
             "whether a written procedure for one of the roles would have prevented its "
             "rework or blocked tasks.\n\n"
@@ -1295,7 +1143,9 @@ def _ask_scrum_master_for_procedures(
         )
         model, system_prompt = scrum_master.profile(session, company_id)
     # Outside the session, usual retries: a transient error must not lose proposals.
-    answer = scrum_master.ask_model(model, system_prompt, prompt, company_id=company_id)
+    answer = scrum_master.ask_model(
+        model, system_prompt, request, company_id=company_id
+    )
     return answer, roles
 
 
@@ -1598,7 +1448,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
     recorded = await asyncio.to_thread(_reverify_run, run_id, evidence)
     comment = _delivery_comment([{"path": p} for p in files], evidence, recorded)
     await asyncio.to_thread(
-        _append_item_comment,
+        board_writes._append_item_comment,
         item_id,
         f"Queued delivery: {comment}",
         "System",
@@ -1716,7 +1566,7 @@ async def _deliver_artifacts(
     if targets:
         comment = _delivery_comment(targets, evidence, recorded)
         await asyncio.to_thread(
-            _update_item_status,
+            board_writes._update_item_status,
             item["id"],
             "in_progress",
             comment_text=comment,
@@ -1797,7 +1647,7 @@ async def _send_back_from_quality_gate(
             message_id,
         )
     await asyncio.to_thread(
-        _update_item_status,
+        board_writes._update_item_status,
         item["id"],
         "todo" if rework else "blocked",
         comment_text=text,
@@ -1935,16 +1785,18 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 assistant_context,
             ) = await asyncio.gather(
                 asyncio.to_thread(
-                    _fetch_memory_context, item, agent, sprint["company_id"]
+                    prompt._fetch_memory_context, item, agent, sprint["company_id"]
                 ),
                 asyncio.to_thread(
-                    _load_recent_lessons, sprint["company_id"], sprint["id"]
+                    prompt._load_recent_lessons, sprint["company_id"], sprint["id"]
                 ),
                 asyncio.to_thread(
-                    _load_procedures_context, sprint["company_id"], agent.get("role")
+                    prompt._load_procedures_context,
+                    sprint["company_id"],
+                    agent.get("role"),
                 ),
                 asyncio.to_thread(
-                    _load_sprint_completed_tasks, sprint["id"], item["id"]
+                    prompt._load_sprint_completed_tasks, sprint["id"], item["id"]
                 ),
                 spec_planning.task_requirements_context(
                     nats_client, engine, item["id"], _resolve_workspace_root
@@ -1978,7 +1830,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
 
             if assistant_usage_comment:
                 await asyncio.to_thread(
-                    _update_item_status,
+                    board_writes._update_item_status,
                     item["id"],
                     "in_progress",
                     comment_text=assistant_usage_comment,
@@ -2049,7 +1901,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         body=architect_advice,
                     )
                     await asyncio.to_thread(
-                        _update_item_status,
+                        board_writes._update_item_status,
                         item["id"],
                         "in_progress",
                         comment_text=format_architect_consult_comment(architect_advice),
@@ -2172,7 +2024,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             if not review_text:
                 review_text = "(no deliverable text produced)"
             await asyncio.to_thread(
-                _update_item_status,
+                board_writes._update_item_status,
                 item["id"],
                 "in_review",
                 comment_text=review_text,
@@ -2263,7 +2115,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
             if data.get("backlog_item_id"):
                 try:
                     await asyncio.to_thread(
-                        _update_item_status,
+                        board_writes._update_item_status,
                         data["backlog_item_id"],
                         "blocked",
                         comment_text=(

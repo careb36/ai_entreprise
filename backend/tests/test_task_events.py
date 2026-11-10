@@ -41,6 +41,7 @@ from services import (
     task_projection,
     task_worker,
 )
+from services.loop.worker import board_writes
 from sqlalchemy import text
 from sqlmodel import Session, create_engine, select
 
@@ -340,8 +341,8 @@ def test_each_review_transition_records_its_events_and_the_projection_agrees(
 
 def test_the_worker_helpers_record_the_kind_they_are_given(db):
     item = _item(db, _sprint(db, _company(db)))
-    task_worker._update_item_status(item.id, "in_progress", kind="claimed")
-    task_worker._update_item_status(
+    board_writes._update_item_status(item.id, "in_progress", kind="claimed")
+    board_writes._update_item_status(
         item.id,
         "in_review",
         "deliverable",
@@ -349,7 +350,7 @@ def test_the_worker_helpers_record_the_kind_they_are_given(db):
         kind="delivered",
         actor="Developer",
     )
-    task_worker._update_item_status(
+    board_writes._update_item_status(
         item.id, "blocked", "Agent error: boom", "System", kind="blocked"
     )
     assert _kinds(db, item.id) == ["claimed", "delivered", "blocked"]
