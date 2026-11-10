@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import worker_stages
 from config import settings
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
@@ -214,7 +215,7 @@ class _DaemonOverNATS:
 def project(monkeypatch, sqlite_session, tmp_path):
     bind = sqlite_session.get_bind()
     ProjectDiscovery.__table__.create(bind, checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", bind)
+    worker_stages.use_engine(monkeypatch, bind)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     monkeypatch.setattr(settings, "DELIVERY_TESTS_ENABLED", True)
     monkeypatch.setattr(

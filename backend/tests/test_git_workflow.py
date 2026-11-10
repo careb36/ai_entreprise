@@ -16,6 +16,7 @@ from pathlib import Path
 
 import auth_tokens
 import pytest
+import worker_stages
 from config import settings
 from models import Company, CompanyMember, User
 from models.agent_run import AgentRun, Verification
@@ -305,7 +306,7 @@ def test_a_task_delivered_with_the_workflow_lands_on_its_branch_and_is_verified(
 ):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     engine = sqlite_session.get_bind()
-    monkeypatch.setattr(task_worker, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
     company = _company(sqlite_session)
     sqlite_session.add(ProjectDiscovery(company_id=company.id, project_path=str(repo)))
     sprint = Sprint(company_id=company.id, sprint_name="Auth", status="active")

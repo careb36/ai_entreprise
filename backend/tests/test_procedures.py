@@ -5,6 +5,7 @@ import secrets
 
 import auth_tokens
 import pytest
+import worker_stages
 from config import settings
 from models import (
     AgentMessage,
@@ -22,7 +23,7 @@ from test_review_gate import _FakeNATS
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 

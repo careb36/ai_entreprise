@@ -22,7 +22,6 @@ from llm_proxy_client import LLMProxyClient
 from logging_config import setup_logger
 from models import (
     Agent,
-    AgentMessage,
     BacklogItem,
     Company,
     OutboxEvent,
@@ -78,6 +77,17 @@ from services.loop.sprint_close import (
     describe_follow_up_reason as _describe_follow_up_reason,
 )
 from services.loop.sprint_close import reclosed as _reclosed
+from services.loop.worker import messages
+
+# Re-exported for importers of ``services.task_worker`` (ADR 0014); a test
+# patches the stage module, ``services.loop.worker.messages``, which owns them.
+from services.loop.worker.messages import (  # noqa: F401 - re-exported
+    MESSAGE_BODY_LIMIT,
+    _handoff_body,
+    _message,
+    _post_message,
+    _triage_blocked_task,
+)
 from services.models import model_routing
 from services.planning import spec_planning, sprint_team
 from services.planning.sprint_planner import (
@@ -993,7 +1003,7 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
         retro_metrics = None  # learned once, at the first close
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await asyncio.to_thread(
-            _post_message,
+            messages._post_message,
             company_id=retro_metrics["company_id"],
             sprint_id=sprint_id,
             item_id=None,
@@ -1218,113 +1228,6 @@ def _update_item_status(
     )
 
 
-# ---------------------------------------------------------------------------
-# The conversation between roles: messages are claims; the evidence decides.
-# ---------------------------------------------------------------------------
-
-MESSAGE_BODY_LIMIT = 4000
-
-
-def _message(
-    company_id: int,
-    sprint_id: int | None,
-    item_id: int | None,
-    from_name: str,
-    from_role: str,
-    to_role: str | None,
-    kind: str,
-    body: str,
-) -> AgentMessage:
-    return AgentMessage(
-        company_id=company_id,
-        sprint_id=sprint_id,
-        backlog_item_id=item_id,
-        from_name=from_name,
-        from_role=from_role,
-        to_role=to_role,
-        kind=kind,
-        body=body[:MESSAGE_BODY_LIMIT],
-    )
-
-
-def _post_message(**fields: Any) -> int | None:
-    """Record a message in its own transaction; never stops the task.
-
-    Returns the message's id, or ``None`` when it was not recorded.
-    """
-    try:
-        with Session(engine) as session:
-            message = _message(**fields)
-            session.add(message)
-            session.commit()
-            return message.id
-    except Exception as exc:  # noqa: BLE001 - The conversation record is best-effort.
-        logger.warning("Agent message not recorded (%s): %s", fields.get("kind"), exc)
-        return None
-
-
-def _triage_blocked_task(
-    company_id: int,
-    sprint_id: int,
-    item_id: int,
-    reason: str,
-    escalation_id: int | None = None,
-) -> None:
-    """The ScrumMaster answers an escalation; a failed answer changes nothing.
-
-    The prompt is read and the decision written in two short sessions, so no
-    database connection waits while the model answers. The decision names the
-    escalation it answers (*escalation_id*), so a late answer is never read
-    against a newer escalation. On Postgres the escalation's advisory lock
-    keeps one idle connection while the model answers.
-    """
-    try:
-        # Once per escalation, even with several replicas (issue #328).
-        with replicas.triage_slot(engine, item_id, escalation_id) as mine:
-            if not mine:
-                return
-            with Session(engine) as session:
-                item = session.get(BacklogItem, item_id)
-                if item is None:
-                    return
-                task_events.escalated(session, item, escalation_id, reason)
-                session.commit()
-                assignee = item.assignee
-                prompt, model, system_prompt = scrum_master.prepare_triage(
-                    session, company_id, item, reason
-                )
-            decision = scrum_master.decide(
-                scrum_master.ask_triage(model, system_prompt, prompt, company_id),
-                item_id,
-            )
-            if decision is None:
-                return
-            with Session(engine) as session:
-                scrum_master.record_decision(
-                    session,
-                    company_id,
-                    sprint_id,
-                    item_id,
-                    assignee,
-                    decision,
-                    answers=escalation_id,
-                )
-                session.commit()
-    except Exception as exc:  # noqa: BLE001 - The triage is advice; the task stays blocked for a person either way.
-        logger.warning("ScrumMaster triage not recorded for item=%s: %s", item_id, exc)
-
-
-def _handoff_body(title: str, deliverable: str) -> str:
-    """What the developer hands to review: the files it declared, by path."""
-    paths = [entry["path"] for entry in parse_file_manifest(deliverable or "")]
-    if not paths:
-        return f'Delivered "{title}" for review (no files declared).'
-    listed = ", ".join(paths[:10]) + (
-        f" and {len(paths) - 10} more" if len(paths) > 10 else ""
-    )
-    return f'Delivered "{title}" for review: {len(paths)} file(s) declared — {listed}.'
-
-
 def _load_procedures_context(company_id: int | None, role: str | None) -> str:
     """The factory's standards for *role*, then the company's active procedures, as prompt sections."""
     return standards.prompt_section(role) + procedures.prompt_context(
@@ -1338,7 +1241,7 @@ def _evaluate_procedures(company_id: int, sprint_id: int) -> None:
         decided = procedures.evaluate(session, company_id)
         for procedure in decided:
             session.add(
-                _message(
+                messages._message(
                     company_id,
                     sprint_id,
                     None,
@@ -1432,7 +1335,7 @@ def _propose_procedures(
                 else "Proposed, waiting for a Manager"
             )
             session.add(
-                _message(
+                messages._message(
                     company_id,
                     sprint_id,
                     None,
@@ -1871,7 +1774,7 @@ async def _send_back_from_quality_gate(
         f"— blocked for manual triage: {reason}"
     )
     message_id = await asyncio.to_thread(
-        _post_message,
+        messages._post_message,
         company_id=sprint["company_id"],
         sprint_id=sprint["id"],
         item_id=item["id"],
@@ -1886,7 +1789,7 @@ async def _send_back_from_quality_gate(
         # cycle may close the sprint (and, at autonomy 3, carry the task over)
         # as soon as it is, and that must see the ScrumMaster's decision.
         await asyncio.to_thread(
-            _triage_blocked_task,
+            messages._triage_blocked_task,
             sprint["company_id"],
             sprint["id"],
             item["id"],
@@ -2124,7 +2027,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                             str(text)[:300] for text in prior_feedback[:3]
                         )
                     await asyncio.to_thread(
-                        _post_message,
+                        messages._post_message,
                         company_id=sprint["company_id"],
                         sprint_id=sprint["id"],
                         item_id=item["id"],
@@ -2135,7 +2038,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                         body=question,
                     )
                     await asyncio.to_thread(
-                        _post_message,
+                        messages._post_message,
                         company_id=sprint["company_id"],
                         sprint_id=sprint["id"],
                         item_id=item["id"],
@@ -2278,7 +2181,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 actor=agent["role"],
             )
             await asyncio.to_thread(
-                _post_message,
+                messages._post_message,
                 company_id=sprint["company_id"],
                 sprint_id=sprint["id"],
                 item_id=item["id"],
@@ -2286,7 +2189,7 @@ async def process_backlog_tasks(nats_client: NATSClient) -> None:
                 from_role=agent["role"],
                 to_role="QA",
                 kind="handoff",
-                body=_handoff_body(item["title"], deliverable),
+                body=messages._handoff_body(item["title"], deliverable),
             )
 
             await publish_glassroom(
@@ -2584,7 +2487,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     ),
                 )
                 gate_text = gate_event.payload["text"]
-                gate_message = _message(
+                gate_message = messages._message(
                     sprint.company_id,
                     sprint.id,
                     item.id,
@@ -2599,7 +2502,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 if not rework:
                     quality_gate_blocked_ids.add(item.id)
                     await asyncio.to_thread(
-                        _triage_blocked_task,
+                        messages._triage_blocked_task,
                         sprint.company_id,
                         sprint.id,
                         item.id,
@@ -2764,7 +2667,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
 
                 session.add(item)
                 session.add(
-                    _message(
+                    messages._message(
                         sprint.company_id,
                         sprint.id,
                         item.id,
@@ -2779,7 +2682,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     # To a person, not the ScrumMaster: its triage decides
                     # retries, and this delivery was approved.
                     session.add(
-                        _message(
+                        messages._message(
                             sprint.company_id,
                             sprint.id,
                             item.id,
@@ -2792,7 +2695,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                     )
                 escalation = None
                 if needs_work and not autopilot_rework_allowed:
-                    escalation = _message(
+                    escalation = messages._message(
                         sprint.company_id,
                         sprint.id,
                         item.id,
@@ -2807,7 +2710,7 @@ async def _review_cycle_body(nats_client: NATSClient) -> None:
                 session.commit()
                 if escalation is not None:
                     await asyncio.to_thread(
-                        _triage_blocked_task,
+                        messages._triage_blocked_task,
                         sprint.company_id,
                         sprint.id,
                         item.id,

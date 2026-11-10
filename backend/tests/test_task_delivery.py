@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+import worker_stages
 from models.agent_run import AgentRun, Verification
 from models.company import Company, ProjectDiscovery
 from models.sprint import BacklogItem, Sprint
@@ -141,7 +142,7 @@ def test_prompt_asks_for_the_file_manifest(monkeypatch):
 def db(monkeypatch, sqlite_session):
     bind = sqlite_session.get_bind()
     ProjectDiscovery.__table__.create(bind, checkfirst=True)
-    monkeypatch.setattr(task_worker, "engine", bind)
+    worker_stages.use_engine(monkeypatch, bind)
     return sqlite_session
 
 

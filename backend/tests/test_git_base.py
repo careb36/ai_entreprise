@@ -31,6 +31,7 @@ import git_base
 import git_workspace
 import sprint_integration
 import test_git_workflow
+import worker_stages
 from test_git_workflow import (
     ANSWER,
     SPEC,
@@ -322,7 +323,7 @@ def test_the_task_worker_records_the_skipped_workflow_and_says_so_on_the_board(
 ):
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path / "audit"))
     engine = sqlite_session.get_bind()
-    monkeypatch.setattr(task_worker, "engine", engine)
+    worker_stages.use_engine(monkeypatch, engine)
     plain = tmp_path / "plain"
     plain.mkdir()
     company = _company(sqlite_session)  # the workflow on, the folder not a repository

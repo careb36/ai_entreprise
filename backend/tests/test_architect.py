@@ -7,6 +7,7 @@ again.
 from uuid import uuid4
 
 import pytest
+import worker_stages
 from models.company import Agent, Company
 from models.sprint import BacklogItem, Sprint
 from services import architect, task_worker
@@ -92,7 +93,7 @@ def test_the_record_counts_completed_sprints_and_rework_from_the_brief_on(
 
 @pytest.fixture()
 def prompts(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     monkeypatch.setattr(task_worker, "record_agent_turn", lambda **kw: None)
     sent = []
 

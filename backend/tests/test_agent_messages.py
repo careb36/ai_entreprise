@@ -5,16 +5,18 @@ import secrets
 
 import auth_tokens
 import pytest
+import worker_stages
 from config import settings
 from models import AgentMessage, BacklogItem, Company, CompanyMember, Sprint, User
 from services import task_worker
+from services.loop.worker import messages as worker_messages
 from sqlmodel import select
 from test_review_gate import _FakeNATS, _item_in_review, _run_cycle
 
 
 @pytest.fixture()
 def db(monkeypatch, sqlite_session):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     return sqlite_session
 
 
@@ -81,7 +83,7 @@ def test_the_verifier_requests_rework_from_the_assignee(db, monkeypatch):
 
 
 def test_handoff_lists_the_declared_files():
-    body = task_worker._handoff_body(
+    body = worker_messages._handoff_body(
         "Login form",
         "```python path=src/login.py\nx\n```\n```python path=tests/test_login.py\ny\n```",
     )
@@ -90,7 +92,7 @@ def test_handoff_lists_the_declared_files():
         == 'Delivered "Login form" for review: 2 file(s) declared — src/login.py, tests/test_login.py.'
     )
     assert (
-        task_worker._handoff_body("Notes", "just text")
+        worker_messages._handoff_body("Notes", "just text")
         == 'Delivered "Notes" for review (no files declared).'
     )
 
@@ -103,8 +105,8 @@ def test_a_failed_write_never_stops_the_task(monkeypatch):
         def __exit__(self, *exc):
             return False
 
-    monkeypatch.setattr(task_worker, "Session", lambda engine: _Broken())
-    task_worker._post_message(
+    monkeypatch.setattr(worker_messages, "Session", lambda engine: _Broken())
+    worker_messages._post_message(
         company_id=1,
         sprint_id=None,
         item_id=None,
@@ -141,7 +143,7 @@ def member(sqlite_session, monkeypatch):
     sqlite_session.add(item)
     sqlite_session.commit()
     for message in (
-        task_worker._message(
+        worker_messages._message(
             company.id,
             sprint.id,
             item.id,
@@ -151,7 +153,7 @@ def member(sqlite_session, monkeypatch):
             "handoff",
             "Delivered",
         ),
-        task_worker._message(
+        worker_messages._message(
             company.id,
             sprint.id,
             item.id,
@@ -161,7 +163,7 @@ def member(sqlite_session, monkeypatch):
             "request",
             "NEEDS WORK: x",
         ),
-        task_worker._message(
+        worker_messages._message(
             company.id,
             sprint.id,
             None,
@@ -171,7 +173,7 @@ def member(sqlite_session, monkeypatch):
             "retrospective",
             "Sprint done",
         ),
-        task_worker._message(
+        worker_messages._message(
             other.id, None, None, "QA", "QA", None, "decision", "elsewhere"
         ),
     ):

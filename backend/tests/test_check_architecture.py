@@ -206,6 +206,63 @@ def test_one_stem_never_names_two_modules(tmp_path):
     )
 
 
+def test_a_package_inside_a_context_folder_belongs_to_it(tmp_path):
+    # ADR 0014: the task worker's stages live in services/loop/worker/.
+    files = {
+        "shapes.py": "",
+        "verify.py": "from services.shapes import VERIFIED\n",
+        "loop/__init__.py": "",
+        "loop/runner.py": "from services.loop.worker import talk\n",
+        "loop/worker/__init__.py": "",
+        "loop/worker/talk.py": "from services import verify\nfrom . import intake\n",
+        "loop/worker/intake.py": "from services.shapes import X\n",
+    }
+    contexts = json.loads(json.dumps(BASE))
+    contexts["loop"]["modules"] = []
+    services = _tree(tmp_path, files)
+    result = check_architecture.analyse(_data(**contexts), services)
+    assert result["problems"] == []
+    assert result["owner"]["loop.worker"] == "loop"
+    assert result["owner"]["loop.worker.talk"] == "loop"
+    assert ("loop.runner", "loop.worker.talk") in result["edges"]
+    assert ("loop.worker.talk", "verify") in result["edges"]
+    assert ("loop.worker.talk", "loop.worker.intake") in result["edges"]
+
+    # Held to the rule like any module of the context, named by its stem.
+    files["loop/worker/talk.py"] = "from services import later\n"
+    files["later.py"] = ""
+    contexts["release"] = {"depends_on": ["loop"], "modules": ["later"]}
+    problems = check_architecture.analyse(
+        _data(**contexts), _tree(tmp_path / "rule", files)
+    )["problems"]
+    assert any(
+        p.startswith("talk -> later: loop may not import release") for p in problems
+    )
+
+    # One stem names one module at any depth: a flat module beside a nested
+    # one must be its shim, and two nested ones of one stem are refused.
+    files = {**files, "talk.py": "X = 1\n", "loop/talk.py": ""}
+    contexts["loop"]["modules"] = ["talk"]
+    problems = check_architecture.analyse(
+        _data(**contexts), _tree(tmp_path / "stems", files)
+    )["problems"]
+    assert any("talk: names loop.talk and loop.worker.talk" in p for p in problems)
+    assert any("talk: a module of its own beside loop.talk" in p for p in problems)
+    del files["loop/talk.py"]
+    problems = check_architecture.analyse(
+        _data(**contexts), _tree(tmp_path / "nested", files)
+    )["problems"]
+    assert any(
+        "talk: a module of its own beside loop.worker.talk" in p for p in problems
+    )
+    files["talk.py"] = SHIM.format(ctx="loop.worker", mod="talk")
+    result = check_architecture.analyse(
+        _data(**contexts), _tree(tmp_path / "shim", files)
+    )
+    assert [p for p in result["problems"] if p.startswith("talk:")] == []
+    assert result["shims"]["talk"] == "loop"
+
+
 def test_a_shim_belongs_to_its_owners_context(tmp_path):
     files = {
         **FILES,

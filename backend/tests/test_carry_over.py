@@ -14,6 +14,7 @@ import secrets
 from unittest.mock import patch
 
 import pytest
+import worker_stages
 from models import AgentMessage, BacklogItem, Company, OutboxEvent, Sprint
 from models.agent_run import AgentRun, Verification
 from services import carry_over, task_worker
@@ -24,7 +25,7 @@ TRIAGE = "Pre-review quality gate failed after 2 rework(s) — blocked for manua
 
 @pytest.fixture()
 def company(sqlite_session, monkeypatch):
-    monkeypatch.setattr(task_worker, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = Company(company_name=f"Carry {secrets.token_hex(3)}", autonomy_level=2)
     sqlite_session.add(company)
     sqlite_session.commit()

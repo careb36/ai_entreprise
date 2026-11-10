@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 import repo_map as daemon_map  # the daemon's module, on sys.path via conftest
+import worker_stages
 import workspace_read
 from config import settings
 from services import developer_tools
@@ -271,7 +272,7 @@ def test_the_architects_brief_carries_the_map(project, monkeypatch, sqlite_sessi
     from models.sprint import BacklogItem, Sprint
 
     daemon = _load_daemon()
-    monkeypatch.setattr(tw, "engine", sqlite_session.get_bind())
+    worker_stages.use_engine(monkeypatch, sqlite_session.get_bind())
     company = Company(company_name="Map Co", autonomy_level=2)
     sqlite_session.add(company)
     sqlite_session.commit()
