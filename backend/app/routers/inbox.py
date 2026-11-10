@@ -9,7 +9,7 @@ the agent runs of other producers nobody has approved or rejected (the
 company's own task worker and kickoff runs are decided by the review loop),
 and the sprints whose integration stopped at a merge conflict or a failing
 suite, missed a task's branch or could not start (``integrations``, listed up
-to the limit and counted in full; ``services/integration.py``). An archived
+to the limit and counted in full; ``services/release/integration.py``). An archived
 sprint's tasks and integrations are left out (``services/loop/sprint_archive.py``).
 
 With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
