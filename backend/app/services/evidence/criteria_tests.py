@@ -6,7 +6,7 @@ for ``REQ-1.2``. What comes out is an observation, from the daemon's output,
 never from the agent. The Verifier's checks live here too:
 ``criteria_tests`` (what the run said of the task's criteria) and
 ``acceptance_tests_untouched`` (an implementation task left the test files
-alone). ``services.acceptance`` plans the test-writing tasks and reads the
+alone). ``services.evidence.acceptance`` plans the test-writing tasks and reads the
 database; this module reads only text and evidence dicts.
 """
 

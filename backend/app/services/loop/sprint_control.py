@@ -149,7 +149,7 @@ async def publish_credit_pause(nats_client: Any, sprint_id: int, provider: str) 
 def dispatch_todo(session: Session, sprint: Sprint) -> int:
     """Queue every ready ``todo`` item of *sprint* on ``task.assign``; the count.
 
-    One that waits for other tasks (``services.dependencies``) is queued by
+    One that waits for other tasks (``services.tasks.dependencies``) is queued by
     the worker once they are done.
     """
     from services.tasks import dependencies

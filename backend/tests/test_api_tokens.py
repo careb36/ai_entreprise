@@ -1,4 +1,4 @@
-"""API tokens for external callers (services.api_tokens)."""
+"""API tokens for external callers (services.platform.api_tokens)."""
 
 import secrets
 

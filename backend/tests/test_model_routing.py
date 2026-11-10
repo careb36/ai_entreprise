@@ -1,4 +1,4 @@
-"""Model routing by task difficulty (services.model_routing)."""
+"""Model routing by task difficulty (services.models.model_routing)."""
 
 from services.models import model_routing
 

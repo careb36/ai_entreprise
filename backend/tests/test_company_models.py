@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import pytest
 from models import Agent, Company, ProviderConnection
-from services import model_routing
 from services.learning import scrum_master
 from services.loop.worker import execute as worker_execute
-from services.models import company_models
+from services.models import company_models, model_routing
 from services.models.model_factory import AgentRole
 from services.planning import spec_author
 from test_git_workflow import _member, enforcement  # noqa: F401
@@ -257,8 +256,7 @@ def test_an_agent_runs_only_a_connection_of_its_company(sqlite_session, test_cli
 
 def test_the_planners_call_the_proxy_with_the_pos_company(sqlite_session):
     """An agent's own model may be a connection; its company routes it."""
-    from services import sprint_planner
-    from services.planning import spec_planning
+    from services.planning import spec_planning, sprint_planner
 
     company = _company(sqlite_session)
     sqlite_session.add(

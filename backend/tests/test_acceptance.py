@@ -1,4 +1,4 @@
-"""An acceptance test per criterion (``services.acceptance``): the plan puts
+"""An acceptance test per criterion (``services.evidence.acceptance``): the plan puts
 QA's test-writing tasks first and the implementation tasks after them; the
 runner's per-test lines are read back into criterion ids; through the real
 daemon, QA's failing tests are expected before their implementation, the

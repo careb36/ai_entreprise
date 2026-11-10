@@ -97,10 +97,10 @@ class BacklogItem(SQLModel, table=True):
     # the sprint was planned from one; ``services.planning.spec_planning`` reads them.
     covers: Any | None = Field(default=None, sa_column=Column(JSON))
     # Ids of tasks in the same sprint that must be done first
-    # (``services.dependencies``); the worker waits for them.
+    # (``services.tasks.dependencies``); the worker waits for them.
     depends_on: Any | None = Field(default=None, sa_column=Column(JSON))
     # ``acceptance_tests`` for the QA task that writes the acceptance tests of a
-    # requirement before its implementation (``services.acceptance``); else None.
+    # requirement before its implementation (``services.evidence.acceptance``); else None.
     kind: str | None = None
     created_at: datetime | None = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = Field(default_factory=datetime.utcnow)

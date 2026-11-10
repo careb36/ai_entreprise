@@ -1,4 +1,4 @@
-"""Task lifecycle events (services.events)."""
+"""Task lifecycle events (services.tasks.events)."""
 
 import secrets
 

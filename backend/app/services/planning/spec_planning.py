@@ -462,7 +462,7 @@ async def task_requirements_context(
     nats_client: Any, engine: Engine, item_id: int, resolve_root: Any
 ) -> str:
     """``requirements_context``, plus the browser checks QA writes in a
-    project that serves pages (``services.browser_smoke``)."""
+    project that serves pages (``services.evidence.browser_smoke``)."""
     from services.evidence import browser_smoke
     from services.workspace import project_profile
 
@@ -478,7 +478,7 @@ def coverage(session: Session, spec: Specification) -> dict[str, Any]:
     A criterion is ``done`` when one of its tasks got done; otherwise its
     latest task decides (a retry carried into a later sprint supersedes the
     blocked attempt): ``blocked``, or ``planned``; with no task, ``uncovered``.
-    The test-writing tasks (``services.acceptance``) are listed apart as
+    The test-writing tasks (``services.evidence.acceptance``) are listed apart as
     ``tests`` and decide nothing here; ``verified`` is whether the
     criterion's acceptance test passed in an observed run of an
     implementation task, with that run's ``last_result`` and ``test`` name.

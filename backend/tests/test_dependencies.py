@@ -1,4 +1,4 @@
-"""Dependencies between the tasks of a sprint (``services.dependencies``):
+"""Dependencies between the tasks of a sprint (``services.tasks.dependencies``):
 the plan names them, ``start_sprint`` keeps and checks them, the worker
 queues a task only once what it depends on is done, a task waiting on one
 a person must act on is blocked with the reason and released when that
