@@ -1,7 +1,8 @@
 # AGENTS.md
 
-Read this first. `CLAUDE.md` has the long-form architecture notes (partly
-historical — see "Docs"); `docs/POSITIONING.md` carries the project
+Read this first. `CLAUDE.md` is the index of the long-form architecture notes,
+one document per context under `docs/contexts/` (partly historical — see
+"Docs"); `docs/POSITIONING.md` carries the project
 direction and the design rules that constrain new work.
 
 ## What this repository is
@@ -220,5 +221,6 @@ run. The user guides describe what the dashboard does and, in a section of its
 own, what the product does not do; keep that section honest. If one of them
 drifts again, fix it in the same pull request that made it drift.
 
-`CLAUDE.md` is long and partly historical: it is a narrative of decisions, not a
-map of the code. When it disagrees with `backend/app/`, the code wins.
+`CLAUDE.md` is a short index; the documents it links (`docs/contexts/`,
+`docs/CONFIGURATION.md`, `docs/TESTING.md`, `docs/SPRINT_LOOP.md`) are long and
+partly historical: a narrative of decisions, not a map of the code. When it disagrees with `backend/app/`, the code wins.

@@ -213,7 +213,7 @@ repository; the others are relative to this repository.
 ### 2.1 The loop as a fixed workflow
 
 The task worker (`backend/app/services/loop/task_worker.py`) runs this sequence
-for every task. Steps 1–8 of "Data Flow for a Sprint" in `CLAUDE.md` describe
+for every task. Steps 1–8 of "Data Flow for a Sprint" in `docs/SPRINT_LOOP.md` describe
 it in full.
 
 | Phase | Where | Evidence kind |

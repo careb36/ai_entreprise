@@ -12,7 +12,7 @@ Factory leaves local or cloud execution of its Droids to the operator.
 1. Copy `.env.example` to `.env` and set at least `POSTGRES_PASSWORD`,
    `JWT_SECRET_KEY`, `FERNET_SECRET_KEY`, `AUDIT_SIGNING_KEY` and the model
    keys (`GEMINI_API_KEY`, `DEEPSEEK_API_KEY`), or plan a provider connection
-   per company. `CLAUDE.md` lists every variable.
+   per company. `docs/CONFIGURATION.md` lists every variable.
 2. `docker compose up -d` starts Postgres, NATS (JetStream), the LLM proxy,
    the backend, the frontend, the janitor and Neo4j. Neo4j is optional and
    on by default: the backend does not wait for it and connects once it
@@ -60,7 +60,7 @@ then build and start it.
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
 | Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
 
-`CLAUDE.md` (Required Environment Variables) has the command that generates
+`docs/CONFIGURATION.md` (Required Environment Variables) has the command that generates
 each key.
 
 ## Read `/health` and `/metrics`

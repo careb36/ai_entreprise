@@ -1,0 +1,57 @@
+# The platform context
+
+Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAUDE.md). Read this document before changing code in `backend/app/services/platform/`.
+
+- **Folder:** `backend/app/services/platform/`
+- **Responsibility:** The infrastructure every context may use: the audit writes (AgentService), the advisory locks across replicas, idempotency claims, the Glassroom publisher, the KPI turn records, token usage, API tokens, run secrets, the health check, the knowledge graph reader and, after the migration, the engram processor from backend/memory. It knows nothing of tasks, runs or companies' decisions.
+- **May import:** [contracts](contracts.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
+- **Modules:** `agent_service`, `api_tokens`, `engram_processor`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `locks`, `memory_graph`, `orchestration_metrics`, `run_secrets`, `token_usage`.
+
+## Components
+
+### The FastAPI app and its routers
+
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `sprint_planning` (included by `sprint`), `sprint_crud`, `board_moves`, `agents`, `agent_runs`, `costs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`, `providers`, `model_settings`, `webhooks`, `console_producers`).
+
+### The schema's version (Alembic)
+
+**`backend/app/migrations.py`** / **`backend/alembic/`** — The schema's version. Alembic owns it: `alembic.ini` and `alembic/env.py` (the models are the target metadata; the URL is the backend's `POSTGRES_*`, or `ALEMBIC_DATABASE_URL`), `alembic/versions/0001_baseline.py` (the baseline: creates each table the models define and the database lacks, adds each column a table lacks, and repeats the old startup's `ALTER TABLE` fixes, indexes and backfills on Postgres, so an empty database, one from `db/init-db/init.sql` and one patched by an older backend all converge). `database.prepare_database` (startup) runs `require_schema_at_head`: a database behind head stops the start with both versions in the error; `DB_AUTO_UPGRADE=true` runs `upgrade_to_head` first. `schema_differences` is what `alembic check` reports (`include_object` leaves `vector_memory` and init.sql's other tables out). The container's `CMD` runs `alembic upgrade head` before uvicorn; the e2e runs `upgrade head` then `check` on Postgres; `backend-tests.yml` runs both on a SQLite file. How to write a migration: `CONTRIBUTING.md` §5.
+
+### The NATS client
+
+**`backend/app/nats_client.py`** — `enable_jetstream()` declares the work-queue streams in `DURABLE_STREAMS` (`task.assign`, `workspace.deliver`, `workspace.delivered`); `publish()` stores durable subjects with a `Nats-Msg-Id`, `consume()` is a durable pull consumer with explicit acks. Without JetStream both fall back to core NATS with a warning. `connect()` takes its credentials and TLS from `nats_auth.connect_options` (`app/nats_auth.py`) and keeps `nats_auth.describe` (method and TLS, no secret); `/health` reports `nats` as `{state, connected, jetstream, authenticated, tls}` (and `jetstream` at the top level, as before).
+
+### The janitor and backups
+
+**`backend/janitor/main.py`** — Background maintenance container (runs daily, `JANITOR_INTERVAL_SECONDS`). Applies the retention settings (`janitor/retention.py`, plain SQL over psycopg2, tested on `sqlite3`) in transactions (each batch of superseded run versions locked `FOR UPDATE`, its guards checked again, and deleted with its verifications or rolled back whole), and rebuilds pgvector indices with `REINDEX CONCURRENTLY`, the one step in autocommit. `scripts/backup.sh` backs Postgres up under `umask 077` (`pg_dump -Fc`, checked, with a checksum; Neo4j through APOC only when enabled, decoded into plain Cypher; the outputs are in `.gitignore`) and restores it (`restore FILE --yes`: into a new database in one transaction, then swapped in by rename, the previous one kept as `<db>_pre_restore_<time>`); CI backs up and restores the e2e database.
+
+### Locks and replicas
+
+**`backend/app/services/platform/locks.py`** / **`replicas.py`** — Several backend replicas may run the workers against one database (issue #328, `docs/OPERATIONS.md`). `locks.held(engine, name, ident)` is a Postgres session-level advisory lock taken with `pg_try_advisory_lock` on a connection held for the work (never waits; a replica that does not get it skips; a dead replica's lock goes with its connection), a process-local table on SQLite. `replicas.claim_todo` claims a task with a conditional `UPDATE … WHERE status = 'todo'` (only the replica whose update matched runs it; the claim is the task's `claimed` event, written in the same transaction), the worker holds `task_lock` while it works on a task (the lock is its lease) and `recover_inflight` returns to `todo` only the `in_progress` tasks nobody holds (a `recovered` event, or `blocked` for a frozen task, through `task_events.record`); `recover_stale` runs it at the start of every review cycle, so a surviving replica dispatches a crashed one's task again within a cycle; `close_once` closes a sprint under its company's lock and `mark_completed` with a conditional update from `active` (one close, retrospective, procedure measurement, proposal round and follow-up), and `triage_slot` triages an escalation once (the `escalated` event is recorded inside it, once). The review cycle (`worker/review._review_cycle`, re-exported by `task_worker`) and the Support and Reviewer agents' cycles run under their own locks.
+
+### Memory architecture
+
+### Memory Architecture
+
+- **pgvector (Postgres)** — RAG short-term semantic memory. Used for code snippet retrieval and context injection. API: `GET /v1/memory/search`, `POST /v1/memory/store`. It needs only Postgres with `vector_memory` (`db/init-db/init.sql`); without that table the memory routes answer 503 with the reason and `/v1/capabilities` says `memory: false`.
+- **Neo4j** (optional, `NEO4J_ENABLED`, on by default) — Temporal knowledge graph. Immutable "Engram" nodes record every agent decision with timestamps. Used for file lineage and the graph half of the RAG context. Queried via APOC plugin. Off, nothing is written to it and its readers answer "not recorded" (`services/platform/memory_graph.py`); `MemoryClient(neo4j_driver=None)` works on pgvector alone and raises `GraphNotRecorded` on a graph read. Memory is prompt context, never evidence.
+
+### Auth and multi-tenancy
+
+### Auth & Multi-tenancy
+
+- Company-scoped: all data (agents, sprints, memory, budgets) is namespaced by `company_id`
+- RBAC covers both human roles (manager, developer) and AI agent roles (PO, Architect, etc.)
+- Passwords hashed with bcrypt directly (`backend/app/passwords.py`); the schema rejects a password over bcrypt's 72-byte limit, and login re-hashes a stored hash whose cost is below the current one. `POST /v1/auth/login` issues an HS256 JWT (`JWT_SECRET_KEY`); `auth_deps.get_current_user` resolves it. Authentication enforcement is on by default; set `AUTH_REQUIRED=false` only for a local demo without a login. Configure `JWT_SECRET_KEY`, then register and log in through the frontend. Protected routes require a JWT and company roles follow Owner > Manager > Viewer. A company's agents (`/v1/agents`) and its token usage are read by its Viewers; only its Managers create, change or delete an agent, since its prompt, model and budget decide what it does (the agents page is read-only for a Viewer). Likewise only a Manager records the folder a company's agents write to (`POST /v1/discover_team` with a `company_id`; the New company wizard calls it without one), and `/v1/generate` bills only a business unit of the company itself; a sprint's token total counts only its own company's audit rows. Company initialization creates the caller's Owner membership; invitations require Owner, and inviting an existing member is a 409.
+- Always public: `/health`, registration/login, the HMAC-signed GitHub webhook, support bug reporting/chat, `/v1/models`, `/v1/capabilities` (feature flags only, no company data), and the retired `/v1/approve_task` (410). Glassroom SSE cannot take an Authorization header (EventSource sends none): with `AUTH_REQUIRED` it takes a five-minute `ticket` for one sprint from `POST /v1/sprints/{id}/stream_ticket` (Viewer), and checks the holder's membership again when it is used; the frontend asks for a new one on every connection. `/v1/auth/me` always requires a JWT. Audit writes and memory stores resolve company ownership from authorized membership and existing interactions, never payload metadata; callers with multiple memberships should select a `company_id` query parameter. Audit verification, memory search, and lineage use column-backed Viewer scoping. Legacy NULL-company evidence is flagged and included only without a company filter (authenticated when `AUTH_REQUIRED=true`). Startup backfills historical company metadata into the audit/vector columns and Neo4j properties. Help-desk tickets are not company data: support admins (`SUPPORT_ADMIN_EMAILS`) see and update all of them and download the logs; other authenticated users see only their own (matched by account email, 403 for another reporter, 404 for another's ticket). With `AUTH_REQUIRED=false` and no token, the desk stays open as in a local demo. When `SUPPORT_AGENT_ENABLED`, the Support agent triages open tickets first (`suggested_severity`, `suggested_category`, `agent_reply`, `triaged_by`), and a support admin decides.
+
+## Described elsewhere
+
+- `token_usage`: the cost paragraph in [models](models.md).
+- `glassroom` (`publish_glassroom`): the console assistants paragraph in [producers](producers.md).
+- `hooks` (`sprint.closed`): the integration paragraph in [release](release.md) and step 11 of [the migration record](../architecture/MIGRATION.md).
+- `api_tokens`, `memory_graph` (`NEO4J_ENABLED`), the audit chain and the bus's credentials: [configuration](../CONFIGURATION.md).
+- `engram_processor`: step 10 of [the sprint loop](../SPRINT_LOOP.md) and steps 2 and 4 of [the migration record](../architecture/MIGRATION.md).
+- `replicas` is a module of the [loop](loop.md) context; it is described here, with the locks it uses.
+- The settings of the janitor's retention and of the database upgrade: [configuration](../CONFIGURATION.md).
+- How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-2).
