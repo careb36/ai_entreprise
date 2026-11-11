@@ -1,6 +1,6 @@
 # Copilot Instructions
 
-La Fabrique orchestrates AI agents (PO, Architect, Developer, QA, …) over a user's VS Code workspace. **Direction (see `docs/POSITIONING.md`, issue #38):** agents are interchangeable producers; the product is the layer that verifies their work and records evidence. Read that document before planning new work. `CLAUDE.md` has further detail.
+La Fabrique orchestrates AI agents (PO, Architect, Developer, QA, …) over a user's VS Code workspace. **Direction (see `docs/POSITIONING.md`, issue #38):** agents are interchangeable producers; the product is the layer that verifies their work and records evidence. Read that document before planning new work. `CLAUDE.md` is the index of further detail: one document per backend context under `docs/contexts/`, the settings in `docs/CONFIGURATION.md` and the tests in `docs/TESTING.md`.
 
 ## Build, test, lint
 
