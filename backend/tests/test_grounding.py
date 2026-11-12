@@ -241,6 +241,35 @@ def test_python_relative_import_resolves_and_refutes():
     assert [entry.specifier for entry in missing.unresolved] == ["nope"]
 
 
+def test_an_unresolved_import_from_a_test_file_is_a_finding_not_a_refutation():
+    index = imports.ProjectIndex(["src/existing.py"], True)
+    declared = {"pypi": set(), "npm": set(), "crates": set(), "go": set()}
+    audit = imports.audit(
+        [imports.ImportRef("tests/test_new.py", "src.new", "python")],
+        index,
+        declared,
+    )
+    assert not audit.unresolved
+    assert [entry.specifier for entry in audit.test_first] == ["src.new"]
+    # The same import from source code still refutes.
+    code = imports.audit(
+        [imports.ImportRef("src/existing.py", "src.new", "python")], index, declared
+    )
+    assert [entry.specifier for entry in code.unresolved] == ["src.new"]
+
+
+def test_a_spec_file_alias_that_names_no_module_is_a_finding():
+    index = imports.ProjectIndex(["src/App.tsx"], True)
+    declared = {"pypi": set(), "npm": set(), "crates": set(), "go": set()}
+    audit = imports.audit(
+        [imports.ImportRef("e2e/greeting.spec.ts", "@/Greeting", "es")],
+        index,
+        declared,
+    )
+    assert not audit.unresolved
+    assert [entry.specifier for entry in audit.test_first] == ["@/Greeting"]
+
+
 def test_es_relative_import_tries_extensions_and_index():
     index = imports.ProjectIndex(
         ["src/App.tsx", "src/lib/x.tsx", "src/components/index.ts"], True
@@ -476,6 +505,37 @@ def test_a_project_import_that_names_no_reported_file_refutes():
     )
     assert check["outcome"] == "refuted"
     assert check["missing_imports"][0]["specifier"] == "nope"
+
+
+def test_a_test_first_import_that_names_no_module_yet_passes_as_a_finding():
+    # QA's acceptance test is written before the Developer's module; ``src/``
+    # already exists from an earlier task, so ``src.add_greeting`` looks like a
+    # project import that names no file. It must not refute (issue #444 in the
+    # e2e's test-first sprint).
+    evidence = {
+        "project_files": {
+            "files": ["src/add_parser.py", "docs/ARCHITECTURE.md"],
+            "truncated": False,
+        }
+    }
+    check = grounding.check_grounded(
+        evidence,
+        _files(
+            (
+                "tests/test_req_1.py",
+                (
+                    "from src.add_greeting import add_greeting\n\n\n"
+                    "def test_req_1_1_holds():\n    assert add_greeting()\n"
+                ),
+            )
+        ),
+    )
+    assert check["outcome"] == "pass"
+    assert check["missing_imports"] == []
+    assert [entry["specifier"] for entry in check["test_first_imports"]] == [
+        "src.add_greeting"
+    ]
+    assert "name no module yet" in check["observation"]
 
 
 def test_a_cut_project_listing_keeps_a_missing_import_a_finding():

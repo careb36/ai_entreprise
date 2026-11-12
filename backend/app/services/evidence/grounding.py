@@ -17,7 +17,10 @@ the delivery: the gate sends it back with the name. A dependency nobody
 looked up, an exact version no registry answer addressed, and a third-party
 import no delivered whole manifest declares are findings the reviewer reads,
 not refutations. When the daemon's project listing was cut, an import that is
-not found stays a finding too — the file may exist past the cut.
+not found stays a finding too — the file may exist past the cut. So does an
+unresolved import from a test file: QA writes its acceptance tests before the
+module they name, and a test that names no file yet is the contract the next
+task must meet (``criteria_tests.is_test_file``), not an invented import.
 
 The map-based symbol check (a call whose argument count contradicts the
 signature the repository map knows) stays a finding in the issue's design;
@@ -244,10 +247,16 @@ def check_grounded(
         parts.append(f"{len(undeclared)} third-party import(s) undeclared")
     if audit.skipped:
         parts.append(audit.skipped)
-    elif audit.unchecked:
-        parts.append(
-            f"{len(audit.unchecked)} import(s) not found in a cut project listing"
-        )
+    else:
+        if audit.test_first:
+            parts.append(
+                f"{len(audit.test_first)} test import(s) name no module yet: "
+                + _names(audit.test_first)
+            )
+        if audit.unchecked:
+            parts.append(
+                f"{len(audit.unchecked)} import(s) not found in a cut project listing"
+            )
 
     return {
         "name": CHECK_NAME,
@@ -283,6 +292,15 @@ def check_grounded(
         ],
         "unchecked_dependencies": unchecked_dependencies[:20],
         "unchecked_imports": len(audit.unchecked),
+        "test_first_imports": [
+            {
+                "path": entry.path,
+                "specifier": entry.specifier,
+                "kind": entry.kind,
+                "line": entry.line,
+            }
+            for entry in audit.test_first[:20]
+        ],
         "imports_resolved": audit.resolved,
         "project_files_complete": index.complete,
         "imports_skipped": audit.skipped,

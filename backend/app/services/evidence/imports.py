@@ -6,8 +6,11 @@ own modules — a relative one, an absolute one whose first component is a
 module of the project, an ``@/`` alias, a Go import under the delivered
 module path, a Rust ``mod`` — must name a file or folder the daemon reported;
 one that names nothing refutes the delivery. A third-party import that no
-manifest declares is a finding: the package may exist, but the project does
-not depend on it on purpose.
+manifest declares is a finding: the package may
+exist, but the project does not depend on it on purpose. An unresolved import
+from a *test* file is a finding too (``test_first``): QA writes its acceptance
+tests before the module they name, so a test that names no file yet is the
+contract the next task must meet, not an invented import.
 
 The index is what the daemon reported: its project listing
 (``workspace.generate``'s ``project_files``), the files it wrote, the files
@@ -29,6 +32,7 @@ from typing import Any
 
 from services.contracts.tool_calls import WORKSPACE_SERVER
 from services.evidence import manifests
+from services.evidence.criteria_tests import is_test_file
 
 PYTHON = "python"
 PYTHON_RELATIVE = "python-relative"
@@ -134,6 +138,7 @@ class ImportAudit:
     unresolved: list[ImportRef] = field(default_factory=list)
     undeclared: list[ImportRef] = field(default_factory=list)
     unchecked: list[ImportRef] = field(default_factory=list)
+    test_first: list[ImportRef] = field(default_factory=list)
     resolved: int = 0
     skipped: str | None = None
 
@@ -437,22 +442,37 @@ def audit(
     *,
     go_module: str | None = None,
 ) -> ImportAudit:
-    """Resolve every import; only a complete listing may turn one into a refutation."""
+    """Resolve every import; only a complete listing may turn one into a refutation.
+
+    An import of the project's own modules that names no reported file comes
+    back in three ways: ``unresolved`` (a refutation) from code, ``unchecked``
+    when the listing was cut (the file may exist past the cut), and
+    ``test_first`` when the importing file is a test — QA's acceptance tests
+    are written before the module they name, and a test that names a module no
+    task delivers is the failing test, not an invented import.
+    """
     result = ImportAudit()
     if not index.files:
         result.skipped = (
             "the daemon reported no project files; imports were not resolved"
         )
         return result
+
+    def missing(entry: ImportRef) -> None:
+        if not index.complete:
+            result.unchecked.append(entry)
+        elif is_test_file(entry.path):
+            result.test_first.append(entry)
+        else:
+            result.unresolved.append(entry)
+
     for entry in imports:
         if entry.kind == PYTHON:
             if index.is_internal_python(entry.specifier):
                 if index.resolves_python(entry.specifier):
                     result.resolved += 1
-                elif index.complete:
-                    result.unresolved.append(entry)
                 else:
-                    result.unchecked.append(entry)
+                    missing(entry)
                 continue
             if _third_party_python(
                 entry.specifier, declared.get(manifests.PYPI, set())
@@ -462,27 +482,23 @@ def audit(
         if entry.kind == PYTHON_RELATIVE:
             if index.resolves_python_relative(entry.path, entry.level, entry.specifier):
                 result.resolved += 1
-            elif index.complete:
-                result.unresolved.append(entry)
             else:
-                result.unchecked.append(entry)
+                missing(entry)
             continue
         if entry.kind == ES:
             if entry.specifier.startswith("."):
                 if index.resolves_es(entry.path, entry.specifier):
                     result.resolved += 1
-                elif index.complete:
-                    result.unresolved.append(entry)
                 else:
-                    result.unchecked.append(entry)
+                    missing(entry)
                 continue
             if _node_builtin(entry.specifier):
                 continue
             alias = index.resolves_alias(entry.specifier)
             if alias is True:
                 result.resolved += 1
-            elif alias is False and index.complete:
-                result.unresolved.append(entry)
+            elif alias is False:
+                missing(entry)
             elif not _npm_declared(entry.specifier, declared.get(manifests.NPM, set())):
                 result.undeclared.append(entry)
             continue
@@ -494,20 +510,15 @@ def audit(
             if "." not in first:
                 continue  # standard library: `fmt`, `net/http`
             if go_module and entry.specifier.startswith(go_module + "/"):
-                if index.complete:
-                    result.unresolved.append(entry)
-                else:
-                    result.unchecked.append(entry)
+                missing(entry)
             elif entry.specifier not in declared.get(manifests.GO, set()):
                 result.undeclared.append(entry)
             continue
         if entry.kind == RUST_MOD:
             if index.resolves_rust_mod(entry.path, entry.specifier):
                 result.resolved += 1
-            elif index.complete:
-                result.unresolved.append(entry)
             else:
-                result.unchecked.append(entry)
+                missing(entry)
     return result
 
 
