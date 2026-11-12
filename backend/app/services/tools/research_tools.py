@@ -425,6 +425,69 @@ class ResearchToolbox:
     def close(self) -> None:
         pass
 
+    def lookup_package(
+        self, name: str, ecosystem: str, version: str | None = None
+    ) -> dict[str, Any]:
+        """One package's registry answer, recorded like a tool call (the Verifier's).
+
+        ``exists`` is ``False`` only when the registry said 404, ``None`` when
+        it could not be asked; ``requested_exists`` answers an exact version
+        where the registry lists versions (never for the Go proxy, which
+        answered ``@latest``). ``server`` is ``registry``, not the research
+        server: the backend made this call, not the run.
+        """
+        extra: dict[str, Any] = {}
+        started = time.monotonic()
+        record: dict[str, Any] | None = None
+        reason: str | None = None
+        try:
+            record = package_record(self._get, name, ecosystem, extra, version)
+        except ResearchError as exc:
+            reason = str(exc)[:300]
+        except Exception as exc:  # noqa: BLE001 - The failure is the answer we record.
+            reason = f"{type(exc).__name__}: {exc}"[:300]
+        status = extra.get("status")
+        observation = self._observation(
+            "package",
+            {"name": name, "ecosystem": ecosystem, "version": version},
+            0,
+            record is None,
+            int((time.monotonic() - started) * 1000),
+            "",
+        )
+        observation.update(
+            {
+                "server": "registry",
+                "by": "verifier",
+                "package": name,
+                "ecosystem": ecosystem,
+                "version": version,
+                "exists": True if record else (False if status == 404 else None),
+                "requested_exists": (record.get("has_requested") if record else None),
+                "versions": record.get("versions") if record else [],
+                "latest": record.get("latest") if record else None,
+                "versions_complete": bool(record.get("versions_complete"))
+                if record
+                else False,
+            }
+        )
+        for key in (
+            "url",
+            "host",
+            "allowed",
+            "fetched_at",
+            "status",
+            "sha256",
+            "bytes",
+        ):
+            if key in extra:
+                observation[key] = extra[key]
+        if record and record.get("requested_yanked"):
+            observation["requested_yanked"] = True
+        if reason:
+            observation["reason"] = reason
+        return observation
+
 
 def freshness_section(stack_versions: dict[str, str] | None = None) -> str:
     """The "## Sources" prompt section for a research role: the cut-off, the

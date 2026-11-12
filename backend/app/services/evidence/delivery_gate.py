@@ -31,6 +31,7 @@ _GATE_PROBLEMS = {
     criteria_tests.CHECK_UNTOUCHED: "acceptance test edited",
     standards.CHECK_NAME: "standards violated",
     "secops": "security scan failed",
+    "grounded": "invented dependency or import",
     app_check.CHECK_INSTALL: "dependency install failed",
     app_check.CHECK_APP: "application failed to start",
     app_check.CHECK_E2E: "end-to-end tests failed",
@@ -43,6 +44,7 @@ CODE_PROBLEMS = frozenset(
         "dependency install failed",
         "application failed to start",
         "end-to-end tests failed",
+        "invented dependency or import",
     }
 )
 

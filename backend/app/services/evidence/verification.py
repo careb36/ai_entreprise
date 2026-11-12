@@ -16,6 +16,7 @@ from services.evidence import (
     app_check,
     context_read,
     criteria_tests,
+    grounding,
     risk,
     secops_checks,
     sources,
@@ -405,6 +406,7 @@ def verify_agent_run(
     # "nothing to check" — a caller that posts evidence without the daemon's
     # per-file results must not get a verified run out of the omission.
     claimed_files = (run.claims or {}).get("files") or []
+    delivered = _declared_files(run.artifact_text) + context_read.edited_texts(evidence)
     if claimed_files or (evidence and "workspace_writes" in evidence):
         checks.append(check_files_written(run, evidence))
     if evidence and "test_run" in evidence:
@@ -438,12 +440,16 @@ def verify_agent_run(
             checks.append(context)
         # The sources the run consulted (``evidence/sources.py``) and
         # the dependencies it named without a registry lookup; a record.
-        consulted = sources.check_sources(
-            evidence,
-            _declared_files(run.artifact_text) + context_read.edited_texts(evidence),
-        )
+        consulted = sources.check_sources(evidence, delivered)
         if consulted:
             checks.append(consulted)
+    # Do the packages, versions and imports the delivery names exist?
+    # (``services/evidence/grounding.py``): a package no registry has, a
+    # version that does not exist or an import that names no observed file
+    # refutes; the rest are findings.
+    grounded_check = grounding.check_grounded(evidence, delivered)
+    if grounded_check:
+        checks.append(grounded_check)
     # A console producer's run (``services/producers/console_producer.py``): who ran,
     # how it ended and what the daemon saw it change (``evidence/console_run.py``).
     console_check = check_console_run(evidence)

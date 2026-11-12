@@ -88,6 +88,12 @@ def test_a_delivery_is_a_commit_on_the_task_branch_and_the_checkout_is_untouched
     assert worktree.parent == (repo / ".git" / "fabrique-worktrees").resolve()
     assert reply["workspace_root"] == str(worktree)
     assert (worktree / "src" / "login.py").read_text().startswith("def login")
+    # The Verifier resolves imports against the worktree, where this delivery
+    # wrote, not the person's checkout.
+    assert reply["project_files"] == {
+        "files": ["README.md", "src/login.py"],
+        "truncated": False,
+    }
     # The person's checkout: no new file, nothing staged, still on main.
     assert not (repo / "src").exists()
     assert git(repo, "status", "--porcelain") == ""

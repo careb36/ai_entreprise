@@ -160,6 +160,12 @@ class Settings(BaseSettings):
     MODELS_CATALOG_REFRESH_HOURS: float = 24.0
     RESEARCH_TOOLS_ENABLED: bool = True
     RESEARCH_ROLES: str = "Architect,PO,SecOps,TechWriter,Designer"
+    # The Verifier's ``grounded`` check (services/evidence/grounding.py):
+    # look each new dependency up at its registry after delivery, through the
+    # research registries, and record the answer on the evidence. A package
+    # no registry has refutes the delivery.
+    GROUNDING_LOOKUPS_ENABLED: bool = True
+    GROUNDING_MAX_LOOKUPS: int = 20
     RESEARCH_ALLOWED_HOSTS: str = ""
     RESEARCH_TOOL_ROUNDS: int = 6
     RESEARCH_TIMEOUT_SECONDS: float = 20.0

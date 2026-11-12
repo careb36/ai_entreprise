@@ -354,3 +354,10 @@ Copy `.env.example` to `.env` and fill in:
   source is evidence. `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
   `RESEARCH_CRATES_URL`, `RESEARCH_GO_URL` and `RESEARCH_OSV_URL` may point
   at a mirror (the e2e points PyPI at its fake).
+- `GROUNDING_LOOKUPS_ENABLED` (true), `GROUNDING_MAX_LOOKUPS` (20) — the
+  Verifier's `grounded` check (`services/evidence/grounding.py`): when a
+  delivery writes a manifest, the backend asks each registry for its
+  dependencies through `services/tools/registry_lookup.py` and records the
+  answers on the evidence as `registry_lookups`; verification then reads them
+  and never reaches the network. Off, or over the bound, a dependency without
+  an answer is a finding, never a refutation.

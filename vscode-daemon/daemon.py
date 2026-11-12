@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Optional
 
 import app_run
 import delivery_journal
+from delivery import deliver as _deliver
 import file_diff
 import file_edits
 import file_hash
@@ -153,14 +154,8 @@ def write_files(workspace_path: str, files: list) -> Dict[str, Any]:
 
 
 def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else (also for a folder that is not a repository, ``git_workflow_skipped``) with a snapshot to undo it."""
-    try:
-        if git and not git_base.not_a_repository(workspace_path):
-            return git_workspace.deliver(workspace_path, git, files, write_files)
-        return {**delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path), **({"git_workflow_skipped": "not a repository"} if git else {})}
-    except (OSError, git_workspace.GitError) as e:
-        logger.error("Writing files under %s failed: %s", workspace_path, e)
-        return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}
+    """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else (also for a folder that is not a repository, ``git_workflow_skipped``) with a snapshot to undo it, and the project's paths for the Verifier."""
+    return _deliver(workspace_path, files, git, write_files, _resolve_target_path)
 
 
 def _delivery_summary(response: Dict[str, Any]) -> str:
