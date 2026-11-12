@@ -103,6 +103,10 @@ def no_research_tools(monkeypatch):
     a test that wants them turns ``RESEARCH_TOOLS_ENABLED`` on and fakes the
     HTTP client, as ``test_research_tools.py`` does."""
     monkeypatch.setattr(settings, "RESEARCH_TOOLS_ENABLED", False)
+    # The delivery-time registry lookups (``services/tools/registry_lookup.py``,
+    # the Verifier's ``grounded`` check) use the same network; a test that
+    # wants them turns this on and fakes the HTTP client.
+    monkeypatch.setattr(settings, "GROUNDING_LOOKUPS_ENABLED", False)
 
 
 @pytest.fixture(autouse=True)

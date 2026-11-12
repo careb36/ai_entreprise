@@ -21,15 +21,34 @@ class ResearchError(RuntimeError):
     """A call that could not be served; the message is what the model sees."""
 
 
+def _release_key(version: str) -> tuple[Any, str]:
+    """A PyPI version's comparable core: ``1.2`` and ``1.2.0`` are equal."""
+    import re
+
+    text = version.strip().lower()
+    text = text.removeprefix("v")
+    text = text.split("+", 1)[0]
+    match = re.match(r"^(\d+(?:\.\d+)*)(.*)$", text)
+    if not match:
+        return text, ""
+    numbers = tuple(int(part) for part in match.group(1).split("."))
+    while len(numbers) > 1 and numbers[-1] == 0:
+        numbers = numbers[:-1]
+    return numbers, match.group(2)
+
+
 def package_record(
     get: Callable[..., tuple[int, dict[str, str], bytes]],
     name: str,
     ecosystem: str,
     extra: dict[str, Any],
+    version: str | None = None,
 ) -> dict[str, Any]:
     """A package's record at its registry, by *get* (an allowed GET with the
     record kept on *extra*): the latest version, when it was released, the
-    last versions, the summary. Raises ``ResearchError`` when there is none."""
+    last versions, the summary. With *version*, whether the registry has that
+    exact version (``has_requested``) and whether every file of it is yanked.
+    Raises ``ResearchError`` when there is none."""
     if ecosystem == "pypi":
         url = f"{settings.RESEARCH_PYPI_URL.rstrip('/')}/{name}/json"
         status, _h, data = get(url, extra)
@@ -55,7 +74,7 @@ def package_record(
             if files
         ]
         dated.sort(key=lambda item: item[1], reverse=True)
-        return {
+        record = {
             "name": info.get("name") or name,
             "ecosystem": ecosystem,
             "latest": latest,
@@ -69,6 +88,22 @@ def package_record(
                 any(f.get("yanked") for f in releases.get(latest) or [])
             ),
         }
+        if version is not None:
+            matched = next(
+                (key for key in releases if _release_key(key) == _release_key(version)),
+                None,
+            )
+            files = releases.get(matched) or [] if matched else []
+            record.update(
+                {
+                    "requested": version,
+                    "has_requested": bool(matched),
+                    "requested_yanked": bool(files)
+                    and all(f.get("yanked") for f in files),
+                    "versions_complete": True,
+                }
+            )
+        return record
     if ecosystem == "npm":
         url = f"{settings.RESEARCH_NPM_URL.rstrip('/')}/{name}"
         status, _h, data = get(url, extra)
@@ -84,7 +119,7 @@ def package_record(
             if k not in ("created", "modified")
         }
         ordered = sorted(times.items(), key=lambda item: item[1], reverse=True)
-        return {
+        record = {
             "name": doc.get("name") or name,
             "ecosystem": ecosystem,
             "latest": latest,
@@ -96,6 +131,16 @@ def package_record(
                 ((doc.get("versions") or {}).get(latest) or {}).get("deprecated")
             ),
         }
+        if version is not None:
+            published = doc.get("versions") or {}
+            record.update(
+                {
+                    "requested": version,
+                    "has_requested": version in published,
+                    "versions_complete": True,
+                }
+            )
+        return record
     if ecosystem == "crates":
         url = f"{settings.RESEARCH_CRATES_URL.rstrip('/')}/{name}"
         status, _h, data = get(url, extra)
@@ -105,7 +150,7 @@ def package_record(
             raise ResearchError(f"crates.io answered {status}.")
         doc = json.loads(data.decode("utf-8", errors="replace"))
         crate, versions = doc.get("crate") or {}, doc.get("versions") or []
-        return {
+        record = {
             "name": crate.get("name") or name,
             "ecosystem": ecosystem,
             "latest": crate.get("max_stable_version") or crate.get("max_version"),
@@ -122,6 +167,17 @@ def package_record(
             "summary": (crate.get("description") or "")[:300],
             "homepage": crate.get("homepage") or crate.get("repository"),
         }
+        if version is not None:
+            record.update(
+                {
+                    "requested": version,
+                    "has_requested": any(
+                        str(v.get("num")) == version for v in versions
+                    ),
+                    "versions_complete": True,
+                }
+            )
+        return record
     url = f"{settings.RESEARCH_GO_URL.rstrip('/')}/{name}/@latest"
     status, _h, data = get(url, extra)
     if status == 404 or status == 410:
@@ -129,13 +185,22 @@ def package_record(
     if status >= 400:
         raise ResearchError(f"The Go proxy answered {status}.")
     doc = json.loads(data.decode("utf-8", errors="replace"))
-    return {
+    record = {
         "name": name,
         "ecosystem": ecosystem,
         "latest": doc.get("Version"),
         "released": doc.get("Time"),
         "versions": [doc.get("Version")],
     }
+    if version is not None:
+        record.update(
+            {
+                "requested": version,
+                "has_requested": None,  # the proxy answered @latest, not the version
+                "versions_complete": False,
+            }
+        )
+    return record
 
 
 def advisory_rows(found: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:

@@ -38,6 +38,7 @@ from services.loop import delivery_checks, review_digest
 from services.loop.worker import board_writes, record
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
+from services.tools import registry_lookup
 from services.tools.workspace_edits import with_tool_edits
 from services.workspace import git_workflow, workspace_daemon
 from services.workspace.workspace_daemon import detect_test_command
@@ -152,6 +153,20 @@ _detect_project_test_command = workspace_daemon.detect_project_test_command
 _run_delivery_tests = delivery_checks.run_delivery_tests
 
 
+async def _observe_dependencies(
+    evidence: dict[str, Any], targets: list[dict[str, str]]
+) -> None:
+    """Record the registry's answer per new dependency (the ``grounded`` check's).
+
+    A registry that cannot be reached never blocks the delivery: the rows say
+    ``exists: null`` and the check treats the dependency as unchecked.
+    """
+    try:
+        await asyncio.to_thread(registry_lookup.observe, evidence, targets)
+    except Exception as e:  # noqa: BLE001 - The delivery is not the lookup's hostage.
+        logger.warning("Registry lookups failed for a delivery: %s", e)
+
+
 def _plan_queued_delivery(
     item: dict[str, Any],
     sprint: dict[str, Any],
@@ -262,6 +277,8 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
     evidence.pop("reason", None)
     writes = data.get("files")
     evidence["workspace_writes"] = writes if isinstance(writes, list) else None
+    if isinstance(data.get("project_files"), (dict, list)):
+        evidence["project_files"] = data["project_files"]
     if evidence["workspace_writes"] is None:
         evidence["reason"] = data.get("error") or (
             "the workspace daemon sent no per-file results"
@@ -362,6 +379,10 @@ async def _deliver_artifacts(
                 evidence["workspace_writes"] = (
                     writes if isinstance(writes, list) else None
                 )
+                if isinstance(reply, dict) and isinstance(
+                    reply.get("project_files"), (dict, list)
+                ):
+                    evidence["project_files"] = reply["project_files"]
                 if evidence["workspace_writes"] is None:
                     evidence["reason"] = "the workspace daemon sent no per-file results"
                 git_workflow.record_reply(evidence, reply)
@@ -387,6 +408,7 @@ async def _deliver_artifacts(
             )
             await _run_delivery_tests(nats_client, sprint, evidence, engine)
 
+    await _observe_dependencies(evidence, targets)
     recorded = await asyncio.to_thread(
         record._record_task_run, item, agent, sprint, deliverable, targets, evidence
     )

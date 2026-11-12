@@ -148,6 +148,37 @@ def list_tree(workspace_path: str, path: Any, depth: Any, resolve) -> Dict[str, 
     return {"path": start.relative_to(root).as_posix() if start != root else ".", "entries": entries, "truncated": truncated}
 
 
+PROJECT_INDEX_MAX = 5000
+
+
+def project_files(workspace_path: str) -> Dict[str, Any]:
+    """Every regular file of the project, as posix paths from the root.
+
+    The same folders a listing skips (``SKIP_DIRS``, hidden folders) are
+    skipped; symlinks are not followed. At most ``PROJECT_INDEX_MAX`` paths,
+    and ``truncated`` says when there were more. Sent beside the daemon's
+    per-file delivery results so the Verifier can resolve the imports of a
+    delivery against the project's files (``services/evidence/grounding.py``);
+    the paths are an observation, never a claim.
+    """
+    root = _root(workspace_path)
+    files: List[str] = []
+    truncated = False
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
+        )
+        current = Path(dirpath)
+        for name in sorted(n for n in filenames if not n.startswith(".")):
+            if len(files) >= PROJECT_INDEX_MAX:
+                truncated = True
+                break
+            files.append((current / name).relative_to(root).as_posix())
+        if truncated:
+            break
+    return {"files": files, "truncated": truncated}
+
+
 def _hash_and_head(target: Path) -> tuple:
     """The sha256 of the whole file, streamed, and its first ``READ_SCAN_BYTES``."""
     digest = hashlib.sha256()

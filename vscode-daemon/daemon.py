@@ -156,8 +156,18 @@ def deliver_files(workspace_path: str, files: list, git: Optional[Dict[str, Any]
     """``write_files`` in the reply shape the backend reads: a commit on the task's branch when *git* names it, else (also for a folder that is not a repository, ``git_workflow_skipped``) with a snapshot to undo it."""
     try:
         if git and not git_base.not_a_repository(workspace_path):
-            return git_workspace.deliver(workspace_path, git, files, write_files)
-        return {**delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path), **({"git_workflow_skipped": "not a repository"} if git else {})}
+            response = git_workspace.deliver(workspace_path, git, files, write_files)
+        else:
+            response = {**delivery_snapshot.deliver(workspace_path, files, write_files, _resolve_target_path), **({"git_workflow_skipped": "not a repository"} if git else {})}
+        try:
+            # The paths the Verifier resolves a delivery's imports against;
+            # a listing failure never blocks the delivery. A Git delivery wrote
+            # into its worktree, not the person's checkout.
+            listing_root = response.get("workspace_root") or workspace_path
+            response["project_files"] = workspace_read.project_files(listing_root)
+        except (workspace_read.ReadError, OSError):
+            pass
+        return response
     except (OSError, git_workspace.GitError) as e:
         logger.error("Writing files under %s failed: %s", workspace_path, e)
         return {"ok": False, "workspace_root": workspace_path, "files": [], "error": str(e)}

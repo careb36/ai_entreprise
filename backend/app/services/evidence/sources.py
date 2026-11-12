@@ -104,6 +104,12 @@ def check_sources(
         if s.get("tool") in (RESEARCH_PACKAGE, RESEARCH_ADVISORIES)
         and not s.get("is_error")
     }
+    # The backend's own lookups (``services.tools.registry_lookup``, the
+    # ``grounded`` check) count as answered too: the dependency was checked,
+    # by the Verifier rather than by the run.
+    for row in (evidence or {}).get("registry_lookups") or []:
+        if isinstance(row, dict) and row.get("package"):
+            looked_up.add((row.get("ecosystem"), str(row["package"]).lower()))
     unchecked = sorted(
         f"{eco}:{name}"
         for eco, names in named.items()
