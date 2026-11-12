@@ -10,5 +10,5 @@
   "frontend/src/services/api.ts": 1093,
   "llm-proxy/app.py": 658,
   "scripts/verify_infra.py": 722,
-  "vscode-daemon/daemon.py": 653
+  "vscode-daemon/daemon.py": 648
 }
