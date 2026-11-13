@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/tools/`
 - **Responsibility:** What a model may call during a task: the bounded tool loop, MCP servers and their configuration, the Developer's workspace tools and their replies, the checked edits and the lint after an edit, the repository map, the research tools and the compressed history. Each call is recorded as an observation; the tools never decide a verdict.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [evidence](evidence.md), [workspace](workspace.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_registries`, `research_schemas`, `research_tools`, `tool_history`, `workspace_edits`.
+- **Modules:** `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_tools`, `registry_lookup`, `repo_map`, `research_registries`, `research_schemas`, `research_tools`, `signature_lookup`, `tool_history`, `workspace_edits`.
 
 ## Components
 
@@ -20,6 +20,8 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ### The delivery-time registry answers
 
 **`backend/app/services/tools/registry_lookup.py`** — The registry answers the Verifier's `grounded` check reads (`services/evidence/grounding.py`). When a delivery writes a manifest, `observe` takes each dependency it named that no answer covers yet, asks its registry through `ResearchToolbox.lookup_package` (`research_registries.package_record` with the exact version) and appends the observation to the evidence's `registry_lookups`: package, ecosystem, version, `exists` (`false` only on a 404, `null` when it could not be asked), `requested_exists` (never claimed for the Go proxy, which answered `@latest`), `versions_complete`, latest, and the fetch's URL, status and sha256. It is bounded by `GROUNDING_MAX_LOOKUPS` and off with `GROUNDING_LOOKUPS_ENABLED`; a package the run already looked up through `research__package` is not asked again. `sources.check_sources` counts these rows as answered.
+
+**`backend/app/services/tools/signature_lookup.py`** — The signatures the `grounded` check compares calls with (`services/evidence/signatures.py`). After a delivery is written, `observe` reads the delivered Python files' calls (`signatures.wanted`: the names imported from project files the delivery did not write whole, within the daemon's bounds, `capped` when cut) and asks `workspace.signatures` in the folder the files went to (the task's worktree with the Git workflow), within `TIMEOUT_SECONDS` (10). The reply goes on the evidence as `signatures` (`asked`, `files` with each file's sha256), or `observed: false` with the reason: the delivery was not written, no daemon answers the subject (an older daemon), a timeout or a refusal. It never fails or holds the delivery, and re-verification reads the record without asking again.
 
 ### The Developer's workspace tools
 

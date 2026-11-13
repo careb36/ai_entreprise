@@ -38,7 +38,7 @@ from services.loop import delivery_checks, review_digest
 from services.loop.worker import board_writes, record
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
-from services.tools import registry_lookup
+from services.tools import registry_lookup, signature_lookup
 from services.tools.workspace_edits import with_tool_edits
 from services.workspace import git_workflow, workspace_daemon
 from services.workspace.workspace_daemon import detect_test_command
@@ -165,6 +165,17 @@ async def _observe_dependencies(
         await asyncio.to_thread(registry_lookup.observe, evidence, targets)
     except Exception as e:  # noqa: BLE001 - The delivery is not the lookup's hostage.
         logger.warning("Registry lookups failed for a delivery: %s", e)
+
+
+async def _observe_signatures(
+    nats_client: NATSClient, evidence: dict[str, Any] | None, targets: list
+) -> None:
+    """Record the daemon's signatures for the project names the delivered
+    Python calls (the ``grounded`` check's symbol findings); never blocks."""
+    try:
+        await signature_lookup.observe(nats_client, evidence, targets)
+    except Exception as e:  # noqa: BLE001 - The delivery is not the lookup's hostage.
+        logger.warning("Signature lookups failed for a delivery: %s", e)
 
 
 def _plan_queued_delivery(
@@ -409,6 +420,7 @@ async def _deliver_artifacts(
             await _run_delivery_tests(nats_client, sprint, evidence, engine)
 
     await _observe_dependencies(evidence, targets)
+    await _observe_signatures(nats_client, evidence, targets)
     recorded = await asyncio.to_thread(
         record._record_task_run, item, agent, sprint, deliverable, targets, evidence
     )
