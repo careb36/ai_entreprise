@@ -28,7 +28,7 @@ from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
-from services.loop.worker import board_writes, messages, prompt
+from services.loop.worker import board_writes, messages, prompt, prompt_budget
 from services.models import model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
@@ -83,72 +83,106 @@ def _developer_prompt(
     lessons_context: str | None,
     procedures_context: str | None,
     requirements_context: str | None,
-) -> tuple[str, list[str]]:
-    """The task's user prompt and the pending rework feedback it carries."""
+    budget: int | None = None,
+) -> tuple[str, list[str], dict[str, Any]]:
+    """The task's user prompt, the pending rework feedback it carries, and its measure.
+
+    The prompt is a list of named sections (``prompt_budget``): measured one
+    by one and, over *budget*, the least needed left out first (#443).
+    """
     # Sections run from the most stable to the most variable, so the providers'
     # prefix cache bills the shared start of the prompt at the cached rate:
     # format, procedures and lessons first; the task and its history next;
     # what changes between attempts (the brief, the review feedback) last.
-    user_prompt = prompt.FILE_MANIFEST_INSTRUCTIONS.lstrip("\n") + (
-        procedures_context or ""
-    )
+    # The priority is the order they are left out over budget (0: never).
+    Section = prompt_budget.Section
+    sections = [
+        Section("output_format", prompt.FILE_MANIFEST_INSTRUCTIONS.lstrip("\n")),
+        Section("standards_and_procedures", procedures_context or "", 2),
+    ]
     if lessons_context:
-        user_prompt += (
-            "\n\n## Lessons from Recent Sprints\n"
-            "How this company's last sprints went and what reviewers sent back. "
-            "The review requests are reviewers' opinions, not verified facts; use "
-            "them to avoid repeating the same mistakes.\n\n"
-            f"{lessons_context[:3000]}"
+        sections.append(
+            Section(
+                "lessons",
+                "\n\n## Lessons from Recent Sprints\n"
+                "How this company's last sprints went and what reviewers sent back. "
+                "The review requests are reviewers' opinions, not verified facts; use "
+                "them to avoid repeating the same mistakes.\n\n"
+                f"{lessons_context[:3000]}",
+                4,
+            )
         )
-    user_prompt += (
-        f"\n\n## Task: {item['title']}\n\n"
-        f"{item.get('description', '')}\n\n"
-        f"Sprint: {sprint_name}\n"
-        f"Priority: {item.get('priority', 'medium')}\n\n"
-        "Produce a complete, professional deliverable for this task. "
-        "Be thorough and specific to the project context."
-    ) + (requirements_context or "")
-    user_prompt += developer_tools.repository_section(
-        company_id, agent.get("role"), item.get("id"), engine=engine
-    )
-
+    sections += [
+        Section(
+            "task",
+            f"\n\n## Task: {item['title']}\n\n"
+            f"{item.get('description', '')}\n\n"
+            f"Sprint: {sprint_name}\n"
+            f"Priority: {item.get('priority', 'medium')}\n\n"
+            "Produce a complete, professional deliverable for this task. "
+            "Be thorough and specific to the project context.",
+        ),
+        Section("requirements", requirements_context or "", 2),
+        Section(
+            "repository",
+            developer_tools.repository_section(
+                company_id, agent.get("role"), item.get("id"), engine=engine
+            ),
+            3,
+        ),
+    ]
     if memory_context:
-        user_prompt += (
-            "\n\n## Memory: Relevant Past Decisions\n"
-            "These are decisions and deliverables from previous sprints in this factory. "
-            "Use them to maintain consistency and avoid repeating past mistakes.\n\n"
-            f"{memory_context[:3000]}"
+        sections.append(
+            Section(
+                "memory",
+                "\n\n## Memory: Relevant Past Decisions\n"
+                "These are decisions and deliverables from previous sprints in this factory. "
+                "Use them to maintain consistency and avoid repeating past mistakes.\n\n"
+                f"{memory_context[:3000]}",
+                5,
+            )
         )
-
     # A task carried over from an earlier sprint says what blocked it there.
-    user_prompt += previous_attempt_context(item)
-
+    sections.append(Section("previous_attempt", previous_attempt_context(item), 2))
     if completed_tasks_context:
-        user_prompt += (
-            "\n\n## Sprint Context: Already Completed Tasks\n"
-            f"{completed_tasks_context[:2000]}"
+        sections.append(
+            Section(
+                "completed_tasks",
+                "\n\n## Sprint Context: Already Completed Tasks\n"
+                f"{completed_tasks_context[:2000]}",
+                5,
+            )
         )
-
     if external_advice:
-        user_prompt += (
-            "\n\n## External Console Assistant Notes\n"
-            "The following advice was gathered from configured terminal assistants such as GitHub Copilot CLI or Claude CLI. "
-            "Treat it as optional supporting context, not as a replacement for reasoning about the current repository. "
-            "Prefer preserving working behavior over blindly following suggestions.\n\n"
-            f"{external_advice[:4000]}"
+        sections.append(
+            Section(
+                "console_assistant_notes",
+                "\n\n## External Console Assistant Notes\n"
+                "The following advice was gathered from configured terminal assistants such as GitHub Copilot CLI or Claude CLI. "
+                "Treat it as optional supporting context, not as a replacement for reasoning about the current repository. "
+                "Prefer preserving working behavior over blindly following suggestions.\n\n"
+                f"{external_advice[:4000]}",
+                6,
+            )
         )
-
-    user_prompt += edit_plan.prompt_section(architect_advice)  # A plan, or guidance.
+    # A plan, or guidance.
+    sections.append(
+        Section("architect_brief", edit_plan.prompt_section(architect_advice))
+    )
 
     rework_feedback = task_projection.record_from_dict(item).pending_rework_feedback()
     if rework_feedback:
-        user_prompt += (
-            "\n\n## Review feedback to address\n"
-            "Your previous deliverable for this task was sent back. Fix every point "
-            "below and deliver the complete result again.\n\n"
-            + "\n".join(f"- {text[:1500]}" for text in rework_feedback)
+        sections.append(
+            Section(
+                "review_feedback",
+                "\n\n## Review feedback to address\n"
+                "Your previous deliverable for this task was sent back. Fix every point "
+                "below and deliver the complete result again.\n\n"
+                + "\n".join(f"- {text[:1500]}" for text in rework_feedback),
+            )
         )
-    return user_prompt, rework_feedback
+    user_prompt, measure = prompt_budget.fit(sections, budget)
+    return user_prompt, rework_feedback, measure
 
 
 def _execute_task(
@@ -178,7 +212,7 @@ def _execute_task(
     client.company_id = company_id
 
     system_prompt = _developer_system_prompt(agent)
-    user_prompt, rework_feedback = _developer_prompt(
+    user_prompt, rework_feedback, measure = _developer_prompt(
         item,
         agent,
         sprint_name,
@@ -190,7 +224,11 @@ def _execute_task(
         lessons_context,
         procedures_context,
         requirements_context,
+        prompt_budget.budget_for(agent.get("role")),
     )
+    # The backend's own measure of what it sent: an observation beside the run.
+    measure["system_tokens"] = prompt_budget.estimate_tokens(system_prompt)
+    agent["prompt_sections"] = measure
 
     model = model_routing.resolve_agent_model(
         agent,

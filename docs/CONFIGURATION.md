@@ -342,6 +342,16 @@ Copy `.env.example` to `.env` and fill in:
 - `TOOL_HISTORY_KEEP_ROUNDS` (3) — the tool loop (`services/tools/tool_history.py`):
   results older than the last that many rounds go to the model as one line
   each; the evidence keeps them whole. `0` keeps every result whole.
+- `PROMPT_BUDGET_<ROLE>`, `PROMPT_BUDGET` — optional, unset by default (#443).
+  The Developer's task prompt in estimated tokens (characters / 4) for that
+  role (upper-cased, other characters as `_`: `PROMPT_BUDGET_BACKENDDEVELOPER`),
+  else for every role (`services/loop/worker/prompt_budget.py`). Over it,
+  whole sections are left out from the least needed (console assistant notes,
+  then memory and the sprint's completed tasks, lessons, the repository, the
+  requirements, standards and previous attempt); the format, the task, the
+  Architect's brief and review feedback never are, and the prompt names what
+  was left out. Unset or `0`: nothing is cut. Either way each section's weight
+  is recorded on the run's evidence as `prompt_sections`.
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
   resolves to public addresses, checked when it is saved and before every post;
