@@ -439,6 +439,24 @@ def _candidates(root: Path) -> Tuple[List[Tuple[str, Path]], bool]:
     return files, False
 
 
+def read_source(path: Path, limit: int = MAP_MAX_FILE_BYTES) -> Optional[bytes]:
+    """The bytes of *path* when it is a regular file of at most *limit* bytes; else ``None``."""
+    try:
+        info = path.lstat()
+        # A FIFO, a socket or a device would block or never end.
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            return None
+        # Non-blocking, so a file swapped for a FIFO since cannot hang the open.
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+        with os.fdopen(fd, "rb") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                return None
+            raw = handle.read(limit + 1)
+    except OSError:
+        return None
+    return raw if len(raw) <= limit else None
+
+
 def _load_cache(root: Path) -> Tuple[Path, Dict[str, Any]]:
     key = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:32]
     path = _state_dir() / f"{key}.json"
@@ -481,20 +499,8 @@ def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
     total = 0
     partial = files_capped
     for relative, path in files:
-        try:
-            info = path.lstat()
-            # A FIFO, a socket or a device would block or never end.
-            if not stat.S_ISREG(info.st_mode) or info.st_size > MAP_MAX_FILE_BYTES:
-                continue
-            # Non-blocking, so a file swapped for a FIFO since cannot hang the open.
-            fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
-            with os.fdopen(fd, "rb") as handle:
-                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-                    continue
-                raw = handle.read(MAP_MAX_FILE_BYTES + 1)
-            if len(raw) > MAP_MAX_FILE_BYTES:
-                continue
-        except OSError:
+        raw = read_source(path)
+        if raw is None:
             continue
         total += len(raw)
         if total > MAP_MAX_TOTAL_BYTES:

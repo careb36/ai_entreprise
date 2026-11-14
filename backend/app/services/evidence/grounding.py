@@ -22,9 +22,12 @@ unresolved import from a test file: QA writes its acceptance tests before the
 module they name, and a test that names no file yet is the contract the next
 task must meet (``criteria_tests.is_test_file``), not an invented import.
 
-The map-based symbol check (a call whose argument count contradicts the
-signature the repository map knows) stays a finding in the issue's design;
-the registry and import checks are the ones that gate. ``docs/POSITIONING.md``
+The symbol check (``services.evidence.signatures``) compares each call a
+delivered Python file makes to a project function or class with its
+signature, as the daemon reported it at delivery time (``signatures`` on the
+evidence) or as the delivered text defines it. A mismatch is a finding,
+never a refutation: the registry and import checks are the ones that gate.
+``docs/POSITIONING.md``
 keeps the rule: what this check reads is an observation; what the model says
 about it is a claim.
 """
@@ -37,6 +40,7 @@ from services.contracts.tool_calls import RESEARCH_PACKAGE, RESEARCH_SERVER
 from services.contracts.verdicts import VERDICT_REFUTED
 from services.evidence import imports as import_graph
 from services.evidence import manifests
+from services.evidence import signatures as symbol_check
 
 CHECK_NAME = "grounded"
 
@@ -187,7 +191,8 @@ def check_grounded(
     files = [file for file in files or [] if isinstance(file, dict)]
     dependencies = manifests.dependencies_in(files)
     found_imports = import_graph.imports_in(files)
-    if not dependencies and not found_imports:
+    symbols = symbol_check.audit(evidence, files)
+    if not dependencies and not found_imports and not symbols["mismatches"]:
         return None
 
     answers = _answers(evidence)
@@ -245,6 +250,19 @@ def check_grounded(
             parts.append(f"{audit.resolved} project import(s) resolve")
     if undeclared:
         parts.append(f"{len(undeclared)} third-party import(s) undeclared")
+    if symbols["mismatches"]:
+        parts.append(
+            f"{len(symbols['mismatches'])} call(s) contradict a signature: "
+            + ", ".join(
+                f"{m['path']}:{m['line']} {m['callee']} ({m['problem']})"
+                for m in symbols["mismatches"][:4]
+            )
+        )
+    if symbols["unobserved"]:
+        parts.append(
+            f"{symbols['unobserved']} call(s) to project code not compared: "
+            f"signatures not observed ({symbols['reason'] or 'no daemon reply recorded'})"
+        )
     if audit.skipped:
         parts.append(audit.skipped)
     else:
@@ -305,4 +323,8 @@ def check_grounded(
         "project_files_complete": index.complete,
         "imports_skipped": audit.skipped,
         "registry_answers": sum(len(rows) for rows in answers.values()),
+        # Calls against signatures: findings, never the verdict.
+        "signatures_observed": symbols["observed"],
+        "signature_calls_checked": symbols["checked"],
+        "signature_mismatches": symbols["mismatches"][: symbol_check.MISMATCH_LIMIT],
     }
