@@ -248,7 +248,11 @@ class _DaemonNATS:
         self.subjects.append(subject)
         try:
             if subject == "workspace.status":
-                return {"host": self.daemon.host_info(), "jetstream": True}
+                return {
+                    "host": self.daemon.host_info(),
+                    "jetstream": True,
+                    "sandbox_cache": self.daemon.sandbox_cache.status(),
+                }
             if subject == "workspace.browse":
                 return self.daemon.browse(payload.get("path"))
             if subject == "workspace.inspect":
@@ -306,11 +310,14 @@ def test_status_reports_the_daemon_machine(test_client, daemon):
     assert connected.json()["connected"] is True
     assert connected.json()["host"]["home"] == str(Path.home())
     assert connected.json()["state"] == "connected"
+    # The daemon's dependency cache: allowed, and the projects quarantined.
+    assert set(connected.json()["sandbox_cache"]) == {"enabled", "quarantined"}
     assert absent.json() == {
         "connected": False,
         "state": "absent",
         "reason": "no daemon is listening",
         "host": None,
+        "sandbox_cache": None,
         "jetstream": False,
     }
 

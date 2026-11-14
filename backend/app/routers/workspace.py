@@ -55,6 +55,8 @@ async def workspace_status(
         "state": presence["state"],
         "reason": presence["reason"],
         "host": (status or {}).get("host"),
+        # The daemon's dependency cache: allowed, and the projects quarantined.
+        "sandbox_cache": (status or {}).get("sandbox_cache"),
         "jetstream": bool(getattr(request.app.state, "jetstream", False)),
     }
 

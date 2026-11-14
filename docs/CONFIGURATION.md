@@ -179,7 +179,25 @@ Copy `.env.example` to `.env` and fill in:
   applied (`test_run.sandbox`) and the Verifier records it as the `sandbox`
   check (`services/workspace/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
-  for everything (`vscode-daemon/sandbox.py`).
+  for everything (`vscode-daemon/sandbox.py`). In container mode the report
+  names the image that ran (`image_identity`: the content ID and registry
+  digest from `image inspect`, observed by the daemon before the run, and the
+  container started from that ID; after the run for an image the run pulled;
+  host and bwrap give the reason there is none; `vscode-daemon/sandbox_image.py`).
+  `DELIVERY_SANDBOX_CACHE` (default `false`) adds a **dependency cache** in
+  container mode (`vscode-daemon/sandbox_cache.py`): a volume per project,
+  `fabrique-cache-<key>` labelled `dev.fabrique.sandbox-cache=<key>`, mounted
+  at `/fabrique-cache` with `PIP_CACHE_DIR`, `npm_config_cache`,
+  `YARN_CACHE_FOLDER`, `GOMODCACHE`, `GOCACHE`, `CARGO_HOME` and
+  `XDG_CACHE_HOME` pointing into it; kept after a run, removed after a failed
+  install, and after three failed installs in a row the project's cache is
+  quarantined (not mounted, the reason in each report and in
+  `GET /v1/workspace/status`) until `POST /v1/companies/{id}/sandbox/cache/reset`
+  (Manager, audited). Only a volume with both the daemon's name and label is
+  mounted or removed. Daemon side, `FABRIQUE_SANDBOX_CACHE=off` refuses the
+  cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
+  `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
+  quarantine.
   The daemon also applies a **command policy** before `workspace.execute`
   runs anything (`vscode-daemon/command_policy.py`, issue #357): the
   request's `command_policy` (`{"mode": "allow"|"deny", "allow": [...],

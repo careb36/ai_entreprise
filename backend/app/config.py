@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     DELIVERY_SANDBOX_CPUS: float = 2.0
     DELIVERY_SANDBOX_MEMORY_MB: int = 2048
     DELIVERY_SANDBOX_PIDS: int = 512
+    # Container mode: a named, labelled volume per project for the package
+    # managers' caches (vscode-daemon/sandbox_cache.py), kept after a run,
+    # removed after a failed install, quarantined after three in a row.
+    DELIVERY_SANDBOX_CACHE: bool = False
     # Stack profiles (services/stack_profiles.py): the commands detected per
     # stack, overridden here for the deployment and per company
     # (Company.stack_profile). Empty means detect.

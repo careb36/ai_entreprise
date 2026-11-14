@@ -27,6 +27,13 @@ Modes:
 The person running the daemon can refuse the host for everything the
 backend sends: ``FABRIQUE_SANDBOX_REQUIRED=container`` (or ``bwrap``) makes a
 ``host`` request run in that mode instead, and says so in the report.
+
+In container mode the report also says which image ran (``image_identity``,
+``sandbox_image.py``: its content ID and registry digest, observed by the
+daemon, the container run from that ID) and, with ``cache`` in the request,
+the project's dependency cache volume and its lifecycle (``cache``,
+``sandbox_cache.py``). A request's ``purpose`` (``test``, ``install`` or
+``check``) says what the command is for: a failed install resets the cache.
 """
 
 from __future__ import annotations
@@ -38,6 +45,9 @@ import subprocess
 import threading
 import uuid
 from typing import Any
+
+import sandbox_cache
+import sandbox_image
 
 logger = logging.getLogger("fabrique-daemon.sandbox")
 
@@ -62,6 +72,8 @@ MAX_OUTPUT_BYTES = 1024 * 1024
 # failed (no daemon, no image, a bad flag): the command never started.
 RUNTIME_FAILURE_EXIT = 125
 _BWRAP_RO = ("/usr", "/bin", "/lib", "/lib64", "/lib32", "/etc", "/opt", "/sbin")
+# What a request may say a command is for; anything else reads as ``test``.
+PURPOSES = ("test", "install", "check")
 
 
 class SandboxUnavailable(RuntimeError):
@@ -90,6 +102,7 @@ def normalize(request: Any) -> dict[str, Any]:
     env_names = sorted(
         {str(n).strip() for n in names if isinstance(n, str) and str(n).strip().replace("_", "").isalnum()}
     ) if isinstance(names, list) else []
+    purpose = str(raw.get("purpose") or "test").strip().lower()
     return {
         "mode": mode,
         "forced_by_daemon": forced,
@@ -99,6 +112,8 @@ def normalize(request: Any) -> dict[str, Any]:
         "memory_mb": int(_number(raw.get("memory_mb"), DEFAULT_MEMORY_MB, 64, 262144)),
         "pids_limit": int(_number(raw.get("pids_limit"), DEFAULT_PIDS, 16, 65536)),
         "env": env_names,
+        "purpose": purpose if purpose in PURPOSES else "test",
+        "cache": raw.get("cache") is True,
     }
 
 
@@ -124,8 +139,11 @@ def container_runtime() -> str:
     )
 
 
-def container_command(runtime: str, box: dict[str, Any], command: str, cwd: str, name: str) -> list[str]:
-    """The ``docker run`` (or ``podman run``) for one sandboxed command."""
+def container_command(
+    runtime: str, box: dict[str, Any], command: str, cwd: str, name: str, extra: list[str] | None = None
+) -> list[str]:
+    """The ``docker run`` (or ``podman run``) for one sandboxed command;
+    *extra* (the cache volume's mount and variables) goes before the image."""
     args = [
         runtime, "run", "--rm", "--name", name,
         "--network", "bridge" if box["network"] else "none",
@@ -148,7 +166,7 @@ def container_command(runtime: str, box: dict[str, Any], command: str, cwd: str,
             args += ["--user", f"{os.getuid()}:{os.getgid()}"]
     for key, value in sandbox_env(box["env"]).items():
         args += ["-e", f"{key}={value}"]
-    return [*args, box["image"], "/bin/sh", "-c", command]
+    return [*args, *(extra or []), box["image"], "/bin/sh", "-c", command]
 
 
 def bwrap_command(box: dict[str, Any], command: str, cwd: str) -> list[str]:
@@ -175,8 +193,14 @@ def bwrap_command(box: dict[str, Any], command: str, cwd: str) -> list[str]:
 def report(box: dict[str, Any], runtime: str | None = None) -> dict[str, Any]:
     """What was applied, for the evidence."""
     out: dict[str, Any] = {"mode": box["mode"], "forced_by_daemon": box["forced_by_daemon"]}
+    if box.get("cache"):
+        # A run that mounts it (``run_sandboxed``) replaces this with what it did.
+        out["cache"] = {"state": "not_used", "mounted": False, "reason": (
+            "the dependency cache is mounted only in container mode" if box["mode"] != "container"
+            else "this run does not mount the dependency cache")}
     if box["mode"] == "host":
-        out.update({"isolated": False, "network": "host", "env": "inherited"})
+        out.update({"isolated": False, "network": "host", "env": "inherited",
+                    "image_identity": sandbox_image.no_image("host mode runs no image: the daemon's own machine ran it")})
         return out
     out.update({
         "isolated": True,
@@ -195,7 +219,8 @@ def report(box: dict[str, Any], runtime: str | None = None) -> dict[str, Any]:
             "no_new_privileges": True,
         })
     else:
-        out.update({"cpus": None, "memory_mb": None, "limits": "bubblewrap applies no CPU or memory limit"})
+        out.update({"cpus": None, "memory_mb": None, "limits": "bubblewrap applies no CPU or memory limit",
+                    "image_identity": sandbox_image.no_image("bwrap runs no image: the host's system directories, read-only")})
     return out
 
 
@@ -300,17 +325,25 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
         raise ValueError("host mode is run by the caller")
     runtime = container_runtime() if box["mode"] == "container" else None
     name = f"fabrique-run-{uuid.uuid4().hex[:12]}"
-    argv = (
-        container_command(runtime, box, command, cwd, name)
-        if runtime
-        else bwrap_command(box, command, cwd)
-    )
+    cache: dict[str, Any] | None = None
+    if runtime:
+        # Run from the image's content ID, observed now (``sandbox_image``).
+        run_box, identity = sandbox_image.pinned(runtime, box)
+        if box["cache"]:
+            cache = sandbox_cache.prepare(runtime, run_box["image"], cwd)
+        argv = container_command(runtime, run_box, command, cwd, name, (cache or {}).get("args"))
+    else:
+        argv = bwrap_command(box, command, cwd)
     applied = report(box, runtime)
     logger.info("Sandboxed (%s): %s in %s", box["mode"], command, cwd)
     run = run_bounded(argv, timeout)
+    if runtime:
+        applied["image_identity"] = sandbox_image.observed_after(runtime, box["image"], identity)
     if run["timed_out"]:
         if runtime:
             subprocess.run([runtime, "kill", name], capture_output=True, check=False)
+        if cache is not None:
+            applied["cache"] = sandbox_cache.finish(runtime, cache, box["purpose"], False, cwd)
         return {
             "success": False,
             "stdout": run["stdout"],
@@ -326,6 +359,8 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
             f"{os.path.basename(runtime)} could not start the container: "
             f"{run['stderr'].strip()[-500:] or 'no message'}"
         )
+    if cache is not None:
+        applied["cache"] = sandbox_cache.finish(runtime, cache, box["purpose"], run["exit_code"] == 0, cwd)
     return {
         "success": run["exit_code"] == 0,
         "stdout": run["stdout"],

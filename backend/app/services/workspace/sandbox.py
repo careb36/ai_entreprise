@@ -49,6 +49,9 @@ def request_for(company: Any) -> dict[str, Any]:
         "memory_mb": settings.DELIVERY_SANDBOX_MEMORY_MB,
         "pids_limit": settings.DELIVERY_SANDBOX_PIDS,
         "env": [str(n) for n in names if isinstance(n, str) and n.strip()],
+        # Container mode: the project's dependency cache volume (the daemon's
+        # ``sandbox_cache.py``); its report comes back as ``sandbox.cache``.
+        "cache": bool(settings.DELIVERY_SANDBOX_CACHE),
     }
 
 
@@ -95,6 +98,80 @@ def request_for_sprint(
                 f"the sprint's company could not be read ({type(e).__name__})"
             ) from e
     return request_for_company_id(company_id, engine)
+
+
+CACHE_RESET_ACTION = "sandbox_cache_reset"
+# The daemon's volume inspect and removal, each bounded at 60 s there.
+CACHE_RESET_TIMEOUT_SECONDS = 150.0
+
+
+class CacheResetRefused(RuntimeError):
+    """The reset could not be asked for; ``status`` is the HTTP status."""
+
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def project_path(session: Any, company_id: int) -> str | None:
+    """The company's project folder as recorded at discovery, latest first."""
+    from models.company import ProjectDiscovery
+    from sqlmodel import select
+
+    discovery = session.exec(
+        select(ProjectDiscovery)
+        .where(ProjectDiscovery.company_id == company_id)
+        .order_by(ProjectDiscovery.created_at.desc(), ProjectDiscovery.id.desc())
+    ).first()
+    return discovery.project_path if discovery and discovery.project_path else None
+
+
+async def reset_cache(
+    nats_client: Any, session: Any, company_id: int, actor: str
+) -> dict[str, Any]:
+    """A person's reset of the project's dependency cache volume, through the
+    daemon (``workspace.sandbox.reset``): the daemon removes only its own
+    volume (name and label) and, once it is gone, clears the failed installs
+    and the quarantine. Its answer is audited and returned as it came."""
+    from services.platform.agent_service import AgentService
+    from services.workspace.workspace_daemon import DaemonError, daemon_request
+
+    path = project_path(session, company_id)
+    if not path:
+        raise CacheResetRefused(409, "The company has no project folder")
+    try:
+        reply = await daemon_request(
+            nats_client,
+            "workspace.sandbox.reset",
+            {"workspace_root": path},
+            CACHE_RESET_TIMEOUT_SECONDS,
+        )
+    except DaemonError as e:
+        raise CacheResetRefused(e.status, e.message) from e
+    volume = reply.get("volume_reset")
+    if not isinstance(volume, dict):
+        raise CacheResetRefused(502, "The workspace daemon sent an unreadable answer")
+    result = {
+        "volume": reply.get("volume"),
+        "volume_reset": volume,
+        "quarantine_cleared": bool(reply.get("quarantine_cleared")),
+        "quarantined": reply.get("quarantined"),
+        "failed_installs_before": reply.get("failed_installs_before"),
+    }
+    audit = AgentService().audit_interaction(
+        session=session,
+        company_id=company_id,
+        interaction_id=f"company:{company_id}:sandbox-cache",
+        agent_id=f"human:{actor}",
+        action=CACHE_RESET_ACTION,
+        details={"company_id": str(company_id), "path": path},
+        result=result,
+        decision_signature=None,
+        cost_tokens=0,
+    )
+    session.commit()
+    return {"company_id": company_id, "path": path, **result, "audit_log_id": audit.id}
 
 
 def valid_env_name(name: str) -> bool:

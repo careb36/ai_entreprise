@@ -28,7 +28,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ## Described elsewhere
 
 - `verification`, `acceptance`, `criteria_tests`, `risk` and `delivery_gate` at work: steps 4 to 6 of [the sprint loop](../SPRINT_LOOP.md).
-- `app_check`, `browser_smoke` and the `sandbox` check: [configuration](../CONFIGURATION.md) (`DELIVERY_TESTS_ENABLED`, stack profiles and the application check).
+- `app_check`, `browser_smoke` and the `sandbox` check: [configuration](../CONFIGURATION.md) (`DELIVERY_TESTS_ENABLED`, stack profiles and the application check). The `sandbox` check and `dependencies_installed` name the image that ran (`image_identity`: the content ID and registry digest the daemon observed, `services/contracts/sandbox_report.py`; an identity that is not a `sha256:` content ID is recorded as none, with the reason) and, for an install, what the dependency cache did (kept, reset after the failure, quarantined): [workspace](workspace.md) and [`docs/design/EXECUTION_ENVIRONMENT.md`](../design/EXECUTION_ENVIRONMENT.md).
 - `context_read` and `sources`: the Developer's workspace tools and the research tools in [tools](tools.md).
 - `console_run`: the console producers paragraph in [producers](producers.md).
 - The Verifier benchmark (`bench/verifier/`): [testing](../TESTING.md).
