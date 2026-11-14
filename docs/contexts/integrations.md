@@ -5,7 +5,8 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/integrations/`
 - **Responsibility:** Telling the outside world: the company's notification webhook and the outbox processor that posts it. It listens to changes of the task record and the evidence; nothing below it imports it.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [evidence](evidence.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `outbox_service`, `webhooks`.
+- **Modules:** `outbox_service`, `webhook_client`, `webhooks`.
+- **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `webhook_client` (the signed POST, raising `WebhookPostError`; `webhooks.deliver` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
 

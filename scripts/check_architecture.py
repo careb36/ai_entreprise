@@ -24,14 +24,23 @@ The check fails when:
   is not a context, or a shim is listed in another context than its owner's;
 - the contexts' ``depends_on`` names an unknown context or runs in a circle;
 - a module imports a module of another context its own context may not
-  import, and that edge is not in the ``allowlist``.
+  import, and that edge is not in the ``allowlist``;
+- a module imports an HTTP library (``httpx``, ``httpx2``, ``requests``,
+  ``aiohttp``, ``urllib3``, ``urllib.request``) and is not listed in
+  ``http_adapters`` (keyed like the modules: ``tools.mcp_client``), or that
+  list names a module that does not exist. HTTP lives only in named adapter
+  modules that return data and raise named errors, and the domain modules
+  call them (after AixleHQ/flow's "no HTTP in domain services" rule,
+  Apache-2.0, design only).
 
 The allowlist holds the edges that broke the rule when it was adopted
 (``"acceptance -> task_worker"``), named by the modules' stems whichever
 folder holds them, so an edge keeps its name when its module moves into a
 context folder. It may only shrink: an edge listed there
 that no longer exists is reported, and ``--update`` drops it; ``--update``
-never adds an edge. Exit status 0 when the code keeps to the rule, 1
+never adds an edge. The HTTP adapters likewise: a listed module that no
+longer imports an HTTP library is reported and ``--update`` drops it; a new
+adapter is added by hand, in a reviewed change. Exit status 0 when the code keeps to the rule, 1
 otherwise. Run from anywhere: paths are resolved from the repository root.
 Standard library only.
 """
@@ -125,6 +134,38 @@ def imports_of(key: str, path: Path, modules: dict[str, Path]) -> set[str]:
                 elif prefix:
                     add(prefix)
     return targets
+
+
+# The libraries that speak HTTP; a module importing one is an HTTP adapter.
+HTTP_LIBRARIES = ("httpx", "httpx2", "requests", "aiohttp", "urllib3", "urllib.request")
+
+
+def _http_library(dotted: str) -> str | None:
+    for library in HTTP_LIBRARIES:
+        if dotted == library or dotted.startswith(library + "."):
+            return library
+    return None
+
+
+def http_imports_of(path: Path) -> set[str]:
+    """The HTTP libraries *path* imports, anywhere in it (a function's body too)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            names = [node.module]
+            names += [f"{node.module}.{alias.name}" for alias in node.names]
+        else:
+            continue
+        found.update(lib for name in names if (lib := _http_library(name)))
+    return found
+
+
+def http_adapters(data: dict) -> list[str]:
+    """The modules allowed to import an HTTP library (``http_adapters``)."""
+    return list((data.get("http_adapters") or {}).get("modules", []))
 
 
 def _name(key: str) -> str:
@@ -249,7 +290,27 @@ def analyse(data: dict, services: Path = SERVICES) -> dict:
             f"{edge}: {src} may not import {dst} "
             f"(allowed: {', '.join(sorted(allowed[src] - {src})) or 'nothing'})"
         )
+    # HTTP only in the named adapters.
+    adapters = http_adapters(data)
+    http: dict[str, list[str]] = {}
+    for key, path in modules.items():
+        if libraries := http_imports_of(path):
+            http[key] = sorted(libraries)
+    for key in adapters:
+        if key not in modules:
+            problems.append(f"{key}: listed in http_adapters, but no such module")
+    http_new = sorted(key for key in http if key not in adapters)
+    http_stale = sorted(key for key in adapters if key in modules and key not in http)
+    for key in http_new:
+        problems.append(
+            f"{key}: imports {', '.join(http[key])}; HTTP belongs in an adapter "
+            f"module listed in http_adapters ({DATA.name}), which returns data "
+            "and raises named errors, and this module calls it"
+        )
     return {
+        "http": http,
+        "http_new": http_new,
+        "http_stale": http_stale,
         "modules": modules,
         "owner": owner,
         "shims": shims,
@@ -272,14 +333,29 @@ def main(argv: list[str], data_path: Path = DATA, services: Path = SERVICES) -> 
             data["allowlist"] = [
                 e for e in data.get("allowlist", []) if e not in set(result["stale"])
             ]
+            if result["http_stale"]:
+                data["http_adapters"]["modules"] = [
+                    m for m in http_adapters(data) if m not in set(result["http_stale"])
+                ]
             data_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-            print(f"Allowlist written: {len(data['allowlist'])} edge(s).")
-    elif result["stale"]:
-        print(
-            "The allowlist can shrink (these edges are gone): "
-            + ", ".join(result["stale"])
-            + ". Run scripts/check_architecture.py --update and commit it."
-        )
+            print(
+                f"Allowlist written: {len(data['allowlist'])} edge(s), "
+                f"{len(http_adapters(data))} HTTP adapter(s)."
+            )
+    else:
+        if result["stale"]:
+            print(
+                "The allowlist can shrink (these edges are gone): "
+                + ", ".join(result["stale"])
+                + ". Run scripts/check_architecture.py --update and commit it."
+            )
+        if result["http_stale"]:
+            print(
+                "The HTTP adapters can shrink (these no longer import an HTTP "
+                "library): "
+                + ", ".join(result["http_stale"])
+                + ". Run scripts/check_architecture.py --update and commit it."
+            )
     for problem in result["problems"]:
         print(problem, file=sys.stderr)
     if not result["problems"]:
@@ -287,7 +363,8 @@ def main(argv: list[str], data_path: Path = DATA, services: Path = SERVICES) -> 
             f"{len(result['modules']) - len(result['shims'])} modules "
             f"(and {len(result['shims'])} shim(s)) in {len(data['contexts'])} contexts, "
             f"{len(result['edges'])} imports, {len(result['violations'])} allowlisted "
-            "edge(s) against the rule."
+            f"edge(s) against the rule, HTTP in {len(result['http'])} listed "
+            "adapter(s) only."
         )
     return 1 if result["problems"] else 0
 

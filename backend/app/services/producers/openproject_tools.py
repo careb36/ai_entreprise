@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import uuid4
 
-import httpx
 from config import settings
+
+from services.producers import openproject_client
 
 logger = logging.getLogger("fabrique-openproject-tools")
 
@@ -90,15 +91,9 @@ async def create_work_package(
         body["versionId"] = sprint_id
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{settings.OPENPROJECT_URL}/api/v3/work_packages",
-                headers=headers,
-                json=body,
-            )
-            response.raise_for_status()
-
-        data = response.json()
+        data = await openproject_client.post_work_package(
+            settings.OPENPROJECT_URL, headers, body
+        )
         work_package_id = data.get("id")
         return {
             "ok": True,
@@ -108,7 +103,7 @@ async def create_work_package(
             "interaction_id": interaction_id,
             "subject": subject,
         }
-    except httpx.ConnectError:
+    except openproject_client.OpenProjectUnreachable:
         logger.warning(
             "OpenProject unreachable for subject=%s; using local simulation", subject
         )
@@ -119,7 +114,7 @@ async def create_work_package(
             "OpenProject unreachable, I will simulate the backlog locally.",
         )
         return _simulated_ticket(subject, interaction_id)
-    except httpx.RequestError as exc:
+    except openproject_client.OpenProjectRequestError as exc:
         logger.warning("OpenProject request failed for subject=%s: %s", subject, exc)
         await _emit_chat(
             publish_event,
@@ -128,7 +123,7 @@ async def create_work_package(
             "OpenProject unreachable, I will simulate the backlog locally.",
         )
         return _simulated_ticket(subject, interaction_id)
-    except httpx.HTTPStatusError as exc:
+    except openproject_client.OpenProjectStatusError as exc:
         logger.warning(
             "OpenProject returned HTTP error for subject=%s: %s", subject, exc
         )

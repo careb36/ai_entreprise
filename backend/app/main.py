@@ -28,6 +28,8 @@ from routers import (
     board_moves_router,
     console_producers_router,
     costs_router,
+    enterprise_agents_router,
+    enterprise_analytics_router,
     enterprise_router,
     events_router,
     github_router,
@@ -112,6 +114,8 @@ setup_metrics(app)
 app.include_router(auth_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
+app.include_router(enterprise_analytics_router)
+app.include_router(enterprise_agents_router)
 app.include_router(events_router)
 app.include_router(sprint_router)
 app.include_router(sprint_control_router)

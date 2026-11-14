@@ -43,6 +43,7 @@ from services.evidence.sources import (  # noqa: F401 - re-exported
     sources_of,
 )
 from services.tools import mcp_tools
+from services.tools.research_http import default_http
 from services.tools.research_registries import (
     ECOSYSTEMS,
     OSV_ECOSYSTEMS,
@@ -185,37 +186,6 @@ def html_to_text(html: str) -> str:
     return _BLANKS.sub(
         "\n\n", "\n".join(line.strip() for line in text.splitlines())
     ).strip()
-
-
-def default_http(
-    method: str, url: str, body: Any = None, timeout: float = 20.0
-) -> tuple[int, dict[str, str], bytes]:
-    """One HTTP request with no credentials, no redirects followed, the body capped."""
-    import requests
-
-    response = requests.request(
-        method,
-        url,
-        json=body,
-        timeout=timeout,
-        allow_redirects=False,
-        stream=True,
-        headers={
-            "User-Agent": "la-fabrique-research/1.0",
-            "Accept": "text/html, application/json, text/plain;q=0.9, */*;q=0.1",
-        },
-    )
-    data = b""
-    for chunk in response.iter_content(65536):
-        data += chunk
-        if len(data) >= settings.RESEARCH_FETCH_MAX_BYTES:
-            break
-    response.close()
-    return (
-        response.status_code,
-        {k.lower(): v for k, v in response.headers.items()},
-        data,
-    )
 
 
 class ResearchToolbox:
