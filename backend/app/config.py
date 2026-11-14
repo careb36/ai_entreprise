@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     # (``services/repo_map.py``): at most this many characters of ranked
     # definitions beside the tree; 0 leaves them out.
     REPO_MAP_MAX_CHARS: int = 3000
+    # The related code in the Developer's prompt (``services/tools/code_graph.py``):
+    # the files around the task's modules and earlier writes, from the
+    # daemon's parse, and the recent runs that wrote them; 0 leaves it out.
+    CODE_GRAPH_MAX_CHARS: int = 2500
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True

@@ -335,40 +335,53 @@ def _is_test(path: str) -> bool:
     )
 
 
-def rank_definitions(
+def reference_edges(
     parsed: Dict[str, Dict[str, Any]], deadline: Optional[float] = None
-) -> Tuple[List[Dict[str, Any]], bool]:
-    """Every definition with its ``rank`` and ``refs`` (how many other files
-    name it), best first; ties by path and line. A definition in a test file,
-    or a private one, keeps a tenth of its rank: the map is for the code
-    under change and what it may call. A name defined in more than
-    ``MAP_MAX_DEFINERS`` files gives no edges. Past *deadline* (a
-    ``time.monotonic()`` value) the edges stop growing and PageRank stops
-    iterating; the second value says so."""
+) -> Tuple[List[Tuple[str, str, int, List[str]]], Dict[str, List[str]], bool]:
+    """The edge rule the map and the code graph (``code_graph``) share: a file
+    that uses a name other files define points at them. ``(source, name,
+    count, targets)`` per name, sources and names sorted; the files defining
+    each name; whether *deadline* stopped the walk. A name defined in more
+    than ``MAP_MAX_DEFINERS`` files gives no edges."""
     defines: Dict[str, List[str]] = {}
     for path in sorted(parsed):
         for name, *_rest in parsed[path]["defs"]:
             defines.setdefault(name, [])
             if path not in defines[name]:
                 defines[name].append(path)
-    edges: Dict[str, Dict[str, float]] = {}
-    by_name: Dict[Tuple[str, str], Dict[str, float]] = {}
-    late = False
+    found: List[Tuple[str, str, int, List[str]]] = []
     for source in sorted(parsed):
         if deadline is not None and time.monotonic() > deadline:
-            late = True
-            break
+            return found, defines, True
         for name, count in sorted(parsed[source]["refs"].items()):
             definers = defines.get(name, ())
             if len(definers) > MAP_MAX_DEFINERS:
                 continue
             targets = [t for t in definers if t != source]
-            for target in targets:
-                weight = _name_weight(name, len(defines[name])) * math.sqrt(count) / len(targets)
-                edges.setdefault(source, {})
-                edges[source][target] = edges[source].get(target, 0.0) + weight
-                by_name.setdefault((target, name), {})
-                by_name[(target, name)][source] = by_name[(target, name)].get(source, 0.0) + weight
+            if targets:
+                found.append((source, name, count, targets))
+    return found, defines, False
+
+
+def rank_definitions(
+    parsed: Dict[str, Dict[str, Any]], deadline: Optional[float] = None
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Every definition with its ``rank`` and ``refs`` (how many other files
+    name it), best first; ties by path and line. A definition in a test file,
+    or a private one, keeps a tenth of its rank: the map is for the code
+    under change and what it may call. The edges are ``reference_edges``.
+    Past *deadline* (a ``time.monotonic()`` value) the edges stop growing and
+    PageRank stops iterating; the second value says so."""
+    found, defines, late = reference_edges(parsed, deadline)
+    edges: Dict[str, Dict[str, float]] = {}
+    by_name: Dict[Tuple[str, str], Dict[str, float]] = {}
+    for source, name, count, targets in found:
+        for target in targets:
+            weight = _name_weight(name, len(defines[name])) * math.sqrt(count) / len(targets)
+            edges.setdefault(source, {})
+            edges[source][target] = edges[source].get(target, 0.0) + weight
+            by_name.setdefault((target, name), {})
+            by_name[(target, name)][source] = by_name[(target, name)].get(source, 0.0) + weight
     ranks, cut = _pagerank(sorted(parsed), edges, deadline)
     late = late or cut
     totals = {source: sum(out.values()) for source, out in edges.items()}
@@ -483,6 +496,42 @@ def _save_cache(path: Path, data: Dict[str, Any]) -> None:
         pass  # The cache saves work; without it the map is computed again.
 
 
+def read_sources(files: List[Tuple[str, Path]]) -> Tuple[List[Tuple[str, str, bytes]], bool]:
+    """``(relative, sha256, bytes)`` of each readable, non-binary file, within
+    ``MAP_MAX_TOTAL_BYTES``; the second value says the total cut the list."""
+    contents: List[Tuple[str, str, bytes]] = []
+    total = 0
+    for relative, path in files:
+        raw = read_source(path)
+        if raw is None:
+            continue
+        total += len(raw)
+        if total > MAP_MAX_TOTAL_BYTES:
+            return contents, True
+        if b"\0" not in raw[:8192]:
+            contents.append((relative, hashlib.sha256(raw).hexdigest(), raw))
+    return contents, False
+
+
+def parse_sources(
+    contents: List[Tuple[str, str, bytes]], cache: Dict[str, Any], deadline: float
+) -> Tuple[Dict[str, Dict[str, Any]], bool]:
+    """Each file's parse, from the cache by ``suffix:sha256`` or parsed now and
+    cached; past *deadline* nothing more is parsed and the second value says so."""
+    parses: Dict[str, Any] = cache.setdefault("parses", {})
+    parsed: Dict[str, Dict[str, Any]] = {}
+    for relative, digest, raw in contents:
+        key = f"{Path(relative).suffix.lower()}:{digest}"
+        entry = parses.get(key)
+        if entry is None:
+            if time.monotonic() > deadline:
+                return parsed, True
+            entry = parse_file(relative, raw.decode("utf-8", errors="replace"))
+            parses[key] = entry
+        parsed[relative] = entry
+    return parsed, False
+
+
 def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
     """The repository map of the project in *workspace_path*, cut at
     *max_chars* (default ``MAP_DEFAULT_CHARS``, at most ``MAP_MAX_CHARS``)."""
@@ -494,39 +543,17 @@ def build_map(workspace_path: str, max_chars: Any = None) -> Dict[str, Any]:
     started = time.monotonic()
     files, files_capped = _candidates(root)
     cache_path, cache = _load_cache(root)
-    parses: Dict[str, Any] = cache.setdefault("parses", {})
-    contents: List[Tuple[str, str, Optional[bytes]]] = []
-    total = 0
-    partial = files_capped
-    for relative, path in files:
-        raw = read_source(path)
-        if raw is None:
-            continue
-        total += len(raw)
-        if total > MAP_MAX_TOTAL_BYTES:
-            partial = True
-            break
-        if b"\0" in raw[:8192]:
-            continue
-        contents.append((relative, hashlib.sha256(raw).hexdigest(), raw))
+    contents, too_large = read_sources(files)
+    partial = files_capped or too_large
     fingerprint = hashlib.sha256(
         json.dumps([MAP_VERSION, budget, [(r, d) for r, d, _ in contents]]).encode("utf-8")
     ).hexdigest()
     cached = (cache.get("maps") or {}).get(fingerprint)
     if isinstance(cached, dict) and not partial:
         return {**cached, "cached": True}
-    parsed: Dict[str, Dict[str, Any]] = {}
-    for relative, digest, raw in contents:
-        entry = parses.get(f"{Path(relative).suffix.lower()}:{digest}")
-        if entry is None:
-            if time.monotonic() - started > MAP_DEADLINE_SECONDS:
-                partial = True
-                break
-            entry = parse_file(relative, raw.decode("utf-8", errors="replace"))
-            parses[f"{Path(relative).suffix.lower()}:{digest}"] = entry
-        parsed[relative] = entry
-    ranked, late = rank_definitions(parsed, started + MAP_DEADLINE_SECONDS)
-    partial = partial or late
+    parsed, late = parse_sources(contents, cache, started + MAP_DEADLINE_SECONDS)
+    ranked, cut = rank_definitions(parsed, started + MAP_DEADLINE_SECONDS)
+    partial = partial or late or cut
     text, shown = render(ranked, budget)
     result = {
         "map": text,

@@ -28,7 +28,7 @@ from services.loop.answers import llm_content as _llm_content
 from services.loop.answers import llm_failure as _llm_failure
 from services.loop.answers import llm_finish_reason as _llm_finish_reason
 from services.loop.carry_over import previous_attempt_context
-from services.loop.worker import board_writes, messages, prompt, prompt_budget
+from services.loop.worker import board_writes, messages, prompt, prompt_budget, related
 from services.models import model_routing
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import (
@@ -128,6 +128,12 @@ def _developer_prompt(
             developer_tools.repository_section(
                 company_id, agent.get("role"), item.get("id"), engine=engine
             ),
+            3,
+        ),
+        # The files around the task's modules and earlier writes (#438); empty without seeds.
+        Section(
+            "related_code",
+            related.related_code_section(item, agent, company_id, engine=engine),
             3,
         ),
     ]

@@ -13,6 +13,7 @@ quickstart; the files below go deeper, each with a single job.
 | [`API.md`](API.md) | Every HTTP route, generated and verified against the running app. |
 | [`contexts/`](contexts/) | One document per backend context: what it owns, what it may import, and how its modules work. Indexed by [`../CLAUDE.md`](../CLAUDE.md). |
 | [`SPRINT_LOOP.md`](SPRINT_LOOP.md) | Data flow for a sprint: the task worker's steps from the start of a sprint to its close. |
+| [`design/CODE_GRAPH.md`](design/CODE_GRAPH.md) | The code knowledge graph (issue #438): what the first slice computes on demand, the later slices and what was studied. |
 
 ## Operating
 
