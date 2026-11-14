@@ -24,7 +24,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
 - ``write --out-dir DIR [--policy LABEL] ENTRY...`` joins the entries into
   one scorecard labelled with the routing policy it ran under,
   checks it against the schema (``validate``) and writes
-  ``<stamp>.json`` and ``<stamp>.md``.
+  ``<stamp>.json`` and ``<stamp>.md``. ``--budget N [--cut] [--skipped NAME]``
+  add the run-level block (``run``, ``budget.py``): whether the token budget
+  cut the run, and the specifications it skipped.
 
 The pure functions (``criterion_of_test``, ``criteria_from_junit``,
 ``summarize_spec``, ``build_scorecard``, ``validate``, ``render_markdown``)
@@ -51,6 +53,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import budget
 import prompt_weight
 from readers import prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
@@ -338,8 +341,10 @@ def build_scorecard(
     commit: str,
     llm: str,
     policy: str = "default",
+    run: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """The run's scorecard: every spec's entry and the totals over them."""
+    """The run's scorecard: every spec's entry and the totals over them, and
+    the run-level block (``run``) when given."""
     criteria_passed = sum(s["criteria"]["passed"] for s in specs)
     criteria_total = sum(s["criteria"]["total"] for s in specs)
     tasks = sum(s["tasks"]["total"] for s in specs)
@@ -368,6 +373,7 @@ def build_scorecard(
             "tokens_reported": sum(s["tokens"]["reported"] for s in specs),
             "prompt": prompt_weight.merge([s.get("prompt") for s in specs]),
         },
+        **({"run": run} if run is not None else {}),
     }
 
 
@@ -388,6 +394,7 @@ def render_markdown(card: dict[str, Any]) -> str:
         f"Factory commit `{card['commit']}`, models from `{card['llm']}`, routing policy `{card.get('policy', 'default')}`, schema v{card['schema_version']}.",
         "Criteria are graded by the acceptance tests a person wrote for each specification;",
         "tokens count only the turns whose usage the provider reported.",
+        *budget.render_lines(card),
         "",
         "| Spec | Status | Criteria | First attempt | Rework / task | Blocked | Wall-clock | Tokens |",
         "|---|---|---|---|---|---|---|---|",
@@ -398,6 +405,7 @@ def render_markdown(card: dict[str, Any]) -> str:
             f"| {s['tasks']['done_first_attempt']}/{s['tasks']['total']} | {s['rework_per_task']:.2f} "
             f"| {_pct(s['blocked_share'])} | {s['wall_clock_seconds']:.0f} s | {s['tokens']['reported']} |"
         )
+    lines += budget.skipped_rows(card)
     lines.append(
         f"| **Total** | {t['specs_completed']}/{t['specs']} completed | {t['criteria_passed']}/{t['criteria_total']} "
         f"| {t['done_first_attempt']}/{t['tasks']} | {t['rework_per_task']:.2f} | {_pct(t['blocked_share'])} "
@@ -545,6 +553,9 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--llm", default="fake")
     w.add_argument("--policy", default="default", help="the routing policy's label")
     w.add_argument("--stamp", default=time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
+    w.add_argument("--budget", default="", help="the run's token budget, if any")
+    w.add_argument("--cut", action="store_true", help="the budget cut the run")
+    w.add_argument("--skipped", action="append", default=[], help="a spec not run")
     w.add_argument("entries", nargs="+", type=Path)
     args = parser.parse_args(argv)
 
@@ -563,6 +574,12 @@ def main(argv: list[str] | None = None) -> int:
         commit=_commit(),
         llm=args.llm,
         policy=args.policy or "default",
+        run=budget.run_record(
+            entries,
+            budget=budget.parse_budget(args.budget),
+            cut=args.cut,
+            skipped=args.skipped,
+        ),
     )
     problems = validate(card)
     if problems:

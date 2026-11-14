@@ -120,6 +120,18 @@ credit, or change the role's model on the company's Models page, then call
 `POST /v1/sprints/{id}/resume`. The company gets no follow-up sprint of its
 own while one is paused.
 
+**The nightly real-model bench spends too much.** The job `bench-real` in
+`.github/workflows/bench.yml` runs only while the repository variable
+`BENCH_REAL_MODELS` is `true`. To stop it, set the variable to anything else
+(or delete it), or disable the Bench workflow in the repository's Actions
+tab; a run already going can be cancelled there. Each run also stops itself
+past `BENCH_TOKEN_BUDGET` reported tokens (a repository variable; 300000 when
+unset): the running sprint is stopped, the remaining specifications are
+skipped and the card says `budget_exceeded`. The budget counts only the
+turns whose usage the provider reported, so the provider's own spending
+limit is still the last guard (`bench/README.md`, "The nightly real-model
+run").
+
 ## Backups
 
 `scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`

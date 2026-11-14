@@ -24,6 +24,13 @@ A regression, in the totals or in any specification both cards hold:
   per task grew by more than that (relative, 0.2 = +20%), in the totals or a
   specification, when both cards measured prompts (schema v3).
 
+A run the token budget cut (``run.status: budget_exceeded``, ``budget.py``)
+on either side is not judged in the totals, which cover fewer
+specifications, nor in the specification the budget stopped: the diff says
+the run was cut, shows its budget and tokens, lists the specifications it
+skipped (never graded, never a drop) and judges only the specifications
+both cards ran in full. A card without ``run`` is a complete run.
+
 Wall-clock is shown, never judged: it depends on the machine. Two runs made
 under different routing policies (``scorecard.py write --policy``, each run
 with its own ``AGENT_MODEL_POLICY``) are compared the same way, and the diff
@@ -45,7 +52,8 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import prompt_weight  # the sibling modules, by path
+import budget  # the sibling modules, by path
+import prompt_weight
 from schema import validate
 
 DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5, "prompt_tokens": None}
@@ -114,20 +122,17 @@ def _judge_prompt(
     return [f"{where}: estimated prompt tokens per task grew from {mean}"]
 
 
-def compare(
-    previous: dict[str, Any],
-    current: dict[str, Any],
-    limits: dict[str, float] | None = None,
-) -> dict[str, Any]:
-    """The regressions of *current* against *previous* and the rows of the diff."""
-    limits = {**DEFAULTS, **(limits or {})}
-    regressions = _judge(
+def _judge_totals(
+    previous: dict[str, Any], current: dict[str, Any], limits: dict[str, Any]
+) -> list[str]:
+    """The regressions in the totals of two complete runs."""
+    found = _judge(
         "total",
         _numbers(previous["totals"], is_spec=False),
         _numbers(current["totals"], is_spec=False),
         limits,
     )
-    regressions += _judge_prompt(
+    found += _judge_prompt(
         "total",
         previous["totals"].get("prompt"),
         current["totals"].get("prompt"),
@@ -140,9 +145,22 @@ def compare(
         and after_tokens
         and (after_tokens - before_tokens) / before_tokens > limits["tokens"] + 1e-9
     ):
-        regressions.append(
+        found.append(
             f"total: reported tokens grew from {before_tokens} to {after_tokens}"
         )
+    return found
+
+
+def compare(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+    limits: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """The regressions of *current* against *previous* and the rows of the diff."""
+    limits = {**DEFAULTS, **(limits or {})}
+    cut = budget.is_cut(previous) or budget.is_cut(current)
+    # A cut run covers fewer specifications: its totals are shown, not judged.
+    regressions = [] if cut else _judge_totals(previous, current, limits)
     rows = [
         (
             "total",
@@ -151,12 +169,16 @@ def compare(
         )
     ]
     before_specs = {s["name"]: s for s in previous["specs"]}
+    unjudged = []
     for spec in current["specs"]:
         old = before_specs.get(spec["name"])
         if old is None:
             continue
         b, a = _numbers(old, is_spec=True), _numbers(spec, is_spec=True)
         rows.append((spec["name"], b, a))
+        if budget.BUDGET_EXCEEDED in (old["status"], spec["status"]):
+            unjudged.append(spec["name"])  # stopped by the budget: not run in full
+            continue
         regressions += _judge(spec["name"], b, a, limits)
         regressions += _judge_prompt(
             spec["name"], old.get("prompt"), spec.get("prompt"), limits["prompt_tokens"]
@@ -165,14 +187,47 @@ def compare(
             regressions.append(
                 f"{spec['name']}: completed before, {spec['status']} now"
             )
+    skipped = set(budget.skipped_names(current))
     return {
         "regressions": regressions,
         "rows": rows,
+        "cut": cut,
+        "unjudged_specs": unjudged,
+        "skipped_specs": sorted(skipped),
         "new_specs": sorted({s["name"] for s in current["specs"]} - set(before_specs)),
         "dropped_specs": sorted(
-            set(before_specs) - {s["name"] for s in current["specs"]}
+            set(before_specs) - {s["name"] for s in current["specs"]} - skipped
         ),
     }
+
+
+def render_cut(
+    previous: dict[str, Any], current: dict[str, Any], result: dict[str, Any]
+) -> list[str]:
+    """What the diff says when the token budget cut either run."""
+    if not result.get("cut"):
+        return []
+    lines = []
+    for side, card in (("This run", current), ("The previous run", previous)):
+        if budget.is_cut(card):
+            run = card["run"]
+            lines.append(
+                f"{side} was cut: token budget {run['budget']} exceeded, "
+                f"{run['tokens_spent']} reported tokens spent, "
+                f"{run['turns_unreported']} turn(s) without reported usage (not budgeted)."
+            )
+    lines.append(
+        "The totals are shown, not judged; only the specifications both runs ran in full are."
+    )
+    if result["unjudged_specs"]:
+        lines.append(
+            f"Stopped by the budget, not judged: {', '.join(result['unjudged_specs'])}"
+        )
+    if result["skipped_specs"]:
+        lines.append(
+            f"Skipped for the budget (not run, not graded): {', '.join(result['skipped_specs'])}"
+        )
+    return [*lines, ""]
 
 
 def by_difficulty(card: dict[str, Any]) -> dict[int, dict[str, Any]]:
@@ -257,6 +312,7 @@ def render(
             f"routing policy `{previous.get('policy', 'default')}` → `{current.get('policy', 'default')}`."
         ),
         "",
+        *render_cut(previous, current, result),
         "| Where | Criteria | First attempt | Blocked | Rework / task | Tokens | Wall-clock |",
         "|---|---|---|---|---|---|---|",
     ]
