@@ -30,23 +30,24 @@ MIN_DOC_DELIVERABLE_WORDS = 180
 
 # Words that make a task read as documentation, matched as whole words: as
 # substrings "api" caught "notesapi" or "rapid", "process" "processor" (#508).
+# "api" is not one of them: an API in a task is code far more often than prose.
 DOC_KEYWORDS = re.compile(
-    r"\b(?:document|documentation|readme|architecture|api|strategy|process|"
+    r"\b(?:document|documentation|readme|architecture|strategy|process|"
     r"pipeline|standards)\b"
 )
-# Files a documentation deliverable writes. A delivery of other files is code,
-# whatever the task's wording says.
+# Files a documentation deliverable writes.
 DOC_SUFFIXES = (".md", ".mdx", ".rst", ".txt", ".adoc")
 
 
 def _reads_as_documentation(item: dict[str, Any], text: str) -> bool:
     """Whether the deliverable is held to the documentation rules (more words,
-    two headings). What it delivers decides first: file blocks that are all
-    documents are documentation, any other file makes it code. With no file
-    blocks, the task's title and description decide, by whole words (#508)."""
+    two headings): a delivery whose files are all documents, or a task whose
+    title or description names documentation by whole words (#508). A task
+    that asks for a document stays one whatever files it delivers, so code
+    in place of the document is still sent back."""
     paths = [entry["path"] for entry in parse_file_manifest(text)]
-    if paths:
-        return all(path.lower().endswith(DOC_SUFFIXES) for path in paths)
+    if paths and all(path.lower().endswith(DOC_SUFFIXES) for path in paths):
+        return True
     title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
     return bool(DOC_KEYWORDS.search(title_desc))
 

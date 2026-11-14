@@ -21,19 +21,25 @@ def test_a_code_task_named_with_api_inside_a_word_is_not_documentation():
         assert _reads_as_documentation({"title": title}, PROSE) is False
 
 
-def test_keywords_still_count_as_whole_words_without_file_blocks():
+def test_keywords_still_count_as_whole_words():
     assert _reads_as_documentation({"title": "Write the README"}, PROSE) is True
     assert _reads_as_documentation({"title": "Document the API"}, PROSE) is True
     assert _reads_as_documentation({"title": "Add a processor"}, PROSE) is False
 
 
-def test_what_is_delivered_decides_before_the_wording():
-    api_task = {"title": "Build the REST API", "description": "The data pipeline."}
+def test_an_api_task_delivering_code_is_code():
+    api_task = {"title": "Build the REST API", "description": "JSON over HTTP."}
     assert _reads_as_documentation(api_task, _code()) is False
+
+
+def test_a_delivery_of_documents_is_documentation_whatever_the_wording():
     doc = f"```markdown path=docs/API.md\n# API\n```\n\n{PROSE}"
     assert _reads_as_documentation({"title": "Store"}, doc) is True
-    mixed = _code() + "\n```markdown path=README.md\n# Notes\n```\n"
-    assert _reads_as_documentation({"title": "Write the README"}, mixed) is False
+
+
+def test_a_document_task_delivering_code_is_still_held_to_the_document_rules():
+    task = {"title": "Create testing strategy document"}
+    assert _reads_as_documentation(task, _code("src/strategy.py")) is True
 
 
 def test_a_headless_code_delivery_for_an_api_task_passes_the_gate():
