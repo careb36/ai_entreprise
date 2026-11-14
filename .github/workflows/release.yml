@@ -1,0 +1,75 @@
+# Adapted from AixleHQ/flow (https://github.com/AixleHQ/flow, commit f9efa22),
+# .github/workflows/release.yml, Copyright 2026 Dualboot Partners, LLC, licensed
+# under the Apache License 2.0. See NOTICE. Changed here: releases are tagged
+# from main (trunk-based, no develop), the notes come from
+# scripts/release_notes.py (a Python port of Flow's bin/changelog), and the job
+# runs on this repository's self-hosted runner.
+name: Release
+
+# A pushed vX.Y.Z tag becomes a GitHub Release whose notes are CHANGELOG.md's
+# section for that version; images.yml publishes the images from the same tag
+# event. How a release is cut: docs/OPERATIONS.md, Releasing.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish Release
+    # Hosted runners are blocked by the account's spending limit (e2e.yml), so
+    # this runs on the self-hosted runner like every other workflow.
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # A tag off main would publish a release of something main never had.
+      - name: Check The Tag
+        run: |
+          set -euo pipefail
+          if ! [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::${GITHUB_REF_NAME} is not a vX.Y.Z or vX.Y.Z-pre release tag."
+            exit 1
+          fi
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} is not on main; releases are tagged from main."
+            exit 1
+          fi
+
+      # The runner's python3, standard library only. A pre-release has no
+      # section of its own (cutting one would empty [Unreleased] before the
+      # release it previews), so the script reads [Unreleased] for it.
+      - name: Write Release Notes
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          image_root="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            python3 -I scripts/release_notes.py notes "$GITHUB_REF_NAME"
+            echo
+            echo "### Images"
+            echo
+            echo "Published as \`${image_root}/<name>:${version}\` (linux/amd64): \`backend\`, \`janitor\`, \`frontend\`, \`llm-proxy\`, \`vscode-daemon\`."
+          } > "$RUNNER_TEMP/notes.md"
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          flags=(--repo "$GITHUB_REPOSITORY" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md")
+          if [[ "$TAG" == *-* ]]; then flags+=(--prerelease); else flags+=(--latest); fi
+          # Appends the merged PRs since the previous tag; a first release has
+          # nothing to compare with, and would list the whole history.
+          if git describe --tags --abbrev=0 --match 'v*' "${TAG}^" >/dev/null 2>&1; then
+            flags+=(--generate-notes)
+          fi
+          gh release create "$TAG" "${flags[@]}"
