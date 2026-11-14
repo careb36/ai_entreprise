@@ -336,6 +336,13 @@ Copy `.env.example` to `.env` and fill in:
   Architect's prompts beside the tree; `0` leaves them out.
   `FABRIQUE_MAP_STATE` (daemon side, default `~/.fabrique-daemon/maps`) is
   where the daemon caches the map per file set.
+- `CODE_GRAPH_MAX_CHARS` (2500) — the `## Related code` section of the
+  Developer's prompt (`services/tools/code_graph.py`, daemon
+  `vscode-daemon/code_graph.py`, issue #438): the files the task's approved
+  architecture modules and earlier writes lead to, what they use and what
+  uses them (the daemon's `workspace.related`, from the repository map's
+  parse cache), and the recent runs that wrote them, cut at that many
+  characters; `0` leaves the section out and asks the daemon nothing.
 - `EDIT_LINT_ENABLED` (true), `EDIT_LINT_TIMEOUT_SECONDS` (60) — after a
   `workspace__edit`, the stack profile's lint command on that file
   (`services/tools/edit_lint.py`), its errors in the same turn as the edit's result.
