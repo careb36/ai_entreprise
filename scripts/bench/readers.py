@@ -1,7 +1,8 @@
 """The bench's readers of the run's Postgres (``scorecard.py collect``).
 
 - ``reported_tokens``: the audit log's KPI turns, the tokens of those whose
-  usage the provider reported, the model served per role, each task's turns.
+  usage the provider reported, the model served per role, each task's turns;
+  of one company, or of the whole run for the token budget.
 - ``prompt_sections``: each task's latest task-worker run's prompt measure
   (``prompt_sections`` in the stored verification evidence, issue #443).
 
@@ -12,13 +13,15 @@ from typing import Any
 
 
 def reported_tokens(
-    dsn: dict[str, str], company_id: int
+    dsn: dict[str, str], company_id: int | None
 ) -> tuple[
     dict[str, int], dict[str, list[str]], dict[int, list[tuple[str | None, int]]]
 ]:
     """The company's KPI turns in the audit log: tokens of the reported ones,
     how many were and were not reported, the model served per role, and each
-    task's turns (``(usage status, cost)``) for the split by difficulty."""
+    task's turns (``(usage status, cost)``) for the split by difficulty.
+    With *company_id* None, every company's: the whole run, for the token
+    budget (``budget.py``), since the bench's database is the run's alone."""
     import psycopg2  # the backend's environment has it
 
     tokens = {"reported": 0, "turns_reported": 0, "turns_unreported": 0}
@@ -27,8 +30,9 @@ def reported_tokens(
     with psycopg2.connect(**dsn) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT details->>'agent_role', details->>'model', details->>'tokens', cost_tokens, "
-            "interaction_id FROM audit_log WHERE company_id = %s AND details->>'tokens' IS NOT NULL",
-            (company_id,),
+            "interaction_id FROM audit_log WHERE (%s IS NULL OR company_id = %s) "
+            "AND details->>'tokens' IS NOT NULL",
+            (company_id, company_id),
         )
         for role, model, status, cost, interaction in cur.fetchall():
             if status == "reported":

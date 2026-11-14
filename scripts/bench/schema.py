@@ -11,15 +11,28 @@ weight of the prompts the backend sent (``prompt``, ``prompt_weight.py``):
 estimated tokens per section, the prompts with sections cut and with related
 code, and the runs without a measure counted apart. Version 1 and 2 cards are
 still read, without it.
+
+Also in version 3, optional and additive (issue #316, the token budget): the
+run-level block ``run`` (``budget.py``: ``status`` ``complete`` or
+``budget_exceeded``, the ``budget``, the reported tokens spent, the turns with
+and without reported usage, and the specifications ``skipped`` for the budget,
+which have no entry and are never graded), and the spec status
+``budget_exceeded`` for the sprint the budget stopped. A card without ``run``
+(every card before it) reads as a complete run.
 """
 
 import math
+import sys
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import budget  # the sibling module, by path
 
 SCHEMA_VERSION = 3
 READABLE_VERSIONS = (1, 2, 3)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
-SPEC_STATUSES = ("completed", "timeout", "error")
+SPEC_STATUSES = ("completed", "timeout", "error", budget.BUDGET_EXCEEDED)
 
 _SPEC_FIELDS = {
     "name": str,
@@ -251,4 +264,11 @@ def validate(card: Any) -> list[str]:
         )
         if version == 3:
             problems.extend(_prompt_problems("totals", totals.get("prompt")))
+    problems.extend(budget.run_problems(card, _count))
+    if not budget.is_cut(card) and any(
+        isinstance(s, dict) and s.get("status") == budget.BUDGET_EXCEEDED for s in specs
+    ):
+        problems.append(
+            "a spec stopped for the budget needs run.status budget_exceeded"
+        )
     return problems

@@ -15,8 +15,9 @@
 #   2. the specification posted as data (POST /v1/specifications, the
 #      spec.json) and approved, which the check must allow;
 #   3. the PO plans the sprint from it (QA's acceptance-test tasks first),
-#      the sprint starts and runs until it closes or BENCH_TIMEOUT passes,
-#      when it is stopped (POST /v1/sprints/{id}/stop) before the grade;
+#      the sprint starts and runs until it closes, BENCH_TIMEOUT passes or
+#      the run passes BENCH_TOKEN_BUDGET, when it is stopped
+#      (POST /v1/sprints/{id}/stop) before the grade (scripts/bench/budget.py);
 #   4. the acceptance tests in <spec>/acceptance/, written by a person and
 #      never shown to the agents, run on the produced folder; each criterion
 #      passes or fails from their result (scripts/bench/scorecard.py grade);
@@ -50,6 +51,14 @@
 #   BENCH_PYTHON [python]            the backend's interpreter (poetry env)
 #   BENCH_WORKDIR [mktemp]           logs and the produced projects
 #   BENCH_TIMEOUT [600]              seconds to wait for each sprint to close
+#   BENCH_TOKEN_BUDGET [empty]       the run's budget in reported tokens, summed
+#                                    over every spec (scripts/bench/budget.py).
+#                                    Past it, the running sprint is stopped, the
+#                                    remaining specs are skipped (listed on the
+#                                    card as skipped: budget, never graded) and
+#                                    the card says budget_exceeded. Turns whose
+#                                    usage was not reported cannot be counted;
+#                                    the card counts them apart. Empty: no budget.
 #   BENCH_LLM_URL [empty]            a real LLM proxy (llm-proxy/) instead of
 #                                    the fake; it spends tokens, so CI sets it
 #                                    only behind a flag. Empty: the fake.
@@ -64,7 +73,7 @@
 # BENCH_WORKDIR stands in for it.
 #
 # With the fake, every criterion must pass (the circuit check) and the exit
-# status says so. With a real proxy the run exits 0 once the scorecard is
+# status says so, unless the token budget cut the run (exit 0, not judged). With a real proxy the run exits 0 once the scorecard is
 # written, whatever the models scored: compare.py judges the numbers.
 set -u
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
@@ -102,6 +111,8 @@ PY=${BENCH_PYTHON:-${E2E_PYTHON:-python}}
 TIMEOUT=${BENCH_TIMEOUT:-600}
 POLICY_LABEL=${BENCH_POLICY:-${AGENT_MODEL_POLICY:-default}}
 LLM_URL=${BENCH_LLM_URL:-}
+BUDGET=${BENCH_TOKEN_BUDGET:-}
+case "$BUDGET" in ''|*[!0-9]*|0) [ -z "$BUDGET" ] || { echo "BENCH_TOKEN_BUDGET must be a positive integer of tokens, or empty"; exit 2; } ;; esac
 WORK=${BENCH_WORKDIR:-$(mktemp -d -t fabrique-bench-XXXXXX)}
 mkdir -p "$WORK/projects" "$WORK/audit" "$WORK/entries"
 rm -f "$WORK"/entries/*.json
@@ -180,7 +191,6 @@ try:
 except ValueError:
     d = {}
 print($1)"; }
-sprint_status() { api "$API/v1/sprints?company_id=$1" | json "next((s['status'] for s in d if s['id'] == $2), '') if isinstance(d, list) else ''"; }
 
 run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
   local dir=$1 name status=error error="" cid=0 spec_id=0 sid=0 wall started
@@ -219,16 +229,17 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
     [ "$sid" != 0 ] || error="start_sprint failed: ${new:0:300}"
   fi
   if [ -z "$error" ]; then
-    status=timeout
-    while (( SECONDS - started < TIMEOUT )); do
-      if [ "$(sprint_status "$cid" "$sid")" = completed ]; then status=completed; break; fi
-      sleep 3
-    done
-    if [ "$status" != completed ]; then
-      # Stop it, so nothing the agents still do lands between the grade and the numbers.
-      error="the sprint did not close within ${TIMEOUT}s; stopped: $(api -X POST "$API/v1/sprints/$sid/stop" | json "d.get('status') or d.get('detail', '')")"
-    fi
+    # Until it closes, BENCH_TIMEOUT passes or the run passes its token budget;
+    # in the last two it is stopped, so nothing the agents still do lands
+    # between the grade and the numbers.
+    local outcome
+    outcome=$("$PY" "$REPO/scripts/bench/budget.py" wait --api "$API" --company "$cid" --sprint "$sid" \
+      --timeout "$(( TIMEOUT - (SECONDS - started) ))" --budget "$BUDGET" \
+      --pg "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB" | tail -1)
+    status=$(echo "$outcome" | json "d.get('status') or 'error'")
+    error=$(echo "$outcome" | json "d.get('error') or ('the wait for the sprint failed' if not d else '')")
   fi
+  SPEC_STATUS=$status
   wall=$((SECONDS - started))
   echo "   sprint: $status in ${wall}s${error:+ ($error)}"
   "$PY" "$REPO/scripts/bench/scorecard.py" grade --spec "$dir" --project "$project" --python "$PY" --out "$WORK/$name.grade.json" \
@@ -240,17 +251,43 @@ run_spec() {  # run_spec <spec dir>: writes $WORK/entries/<name>.json
     || fail "the numbers of $name could not be collected"
 }
 
-for dir in "${SPECS[@]}"; do run_spec "$dir"; done
+CUT=""
+SKIPPED=()
+for dir in "${SPECS[@]}"; do
+  if [ -z "$CUT" ] && [ -n "$BUDGET" ]; then
+    # A budget passed while the previous sprint closed cuts the run here.
+    spent=$("$PY" "$REPO/scripts/bench/budget.py" check --budget "$BUDGET" \
+      --pg "$PG_HOST" "$PG_PORT" "$PG_USER" "$PG_PASSWORD" "$PG_DB")
+    case $? in
+      0) ;;
+      3) CUT=1; echo "token budget $BUDGET exceeded ($spent): the remaining specifications are skipped" ;;
+      *) fail "the token budget could not be read" ;;
+    esac
+  fi
+  if [ -n "$CUT" ]; then
+    SKIPPED+=("$(basename "$dir")"); echo "== $(basename "$dir"): skipped (budget)"; continue
+  fi
+  run_spec "$dir"
+  if [ "$SPEC_STATUS" = budget_exceeded ]; then
+    CUT=1; echo "token budget $BUDGET exceeded: the remaining specifications are skipped"
+  fi
+done
+RAN=$(( ${#SPECS[@]} - ${#SKIPPED[@]} ))
+SKIP_FLAGS=()
+for name in ${SKIPPED[@]+"${SKIPPED[@]}"}; do SKIP_FLAGS+=(--skipped "$name"); done
 ENTRIES=("$WORK"/entries/*.json)
-[ -f "${ENTRIES[0]}" ] && [ ${#ENTRIES[@]} -eq ${#SPECS[@]} ] \
-  || fail "${#SPECS[@]} specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
+[ -f "${ENTRIES[0]}" ] && [ ${#ENTRIES[@]} -eq "$RAN" ] \
+  || fail "$RAN specification(s) run, but $( [ -f "${ENTRIES[0]}" ] && echo ${#ENTRIES[@]} || echo 0) entr(y/ies) written"
 
-CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" "${ENTRIES[@]}") \
+CARD=$(cd "$REPO" && "$PY" scripts/bench/scorecard.py write --out-dir "$OUT_DIR" --llm "$LLM_LABEL" --policy "$POLICY_LABEL" \
+  --budget "$BUDGET" ${CUT:+--cut} ${SKIP_FLAGS[@]+"${SKIP_FLAGS[@]}"} "${ENTRIES[@]}") \
   || fail "the scorecard could not be written"
 echo "scorecard: $CARD"
 cat "${CARD%.json}.md"
 echo "backend errors (Neo4j aside): $(grep '"level": "ERROR"' "$WORK/backend.log" | grep -vc Neo4j)"
-if [ "$LLM_LABEL" = fake ]; then
+if [ -n "$CUT" ]; then
+  echo "BENCH CUT (token budget $BUDGET exceeded; ${#SKIPPED[@]} specification(s) skipped, the run not judged)"
+elif [ "$LLM_LABEL" = fake ]; then
   # The fake gets every spec right: anything less is a broken circuit.
   if "$PY" -c 'import json, sys; t = json.load(open(sys.argv[1]))["totals"]; sys.exit(not (t["specs_completed"] == t["specs"] and t["criteria_passed"] == t["criteria_total"] > 0))' "$CARD"; then
     echo "BENCH PASSED (fake LLM: every spec completed, every criterion passed)"

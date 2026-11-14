@@ -16,7 +16,8 @@ bench/
     acceptance/test_*.py the acceptance tests a person wrote; they grade the result
     fake/plan.json       the fake producer's plan (CI only, see below)
     fake/files/...       the files the fake producer delivers
-  scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference
+  scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference (fake)
+  scorecards/real/<stamp>.json, .md     the real-model references
   verifier/              the Verifier benchmark (see below and verifier/README.md)
 ```
 
@@ -30,11 +31,15 @@ bench/
 - `scripts/bench/prompt_weight.py` weighs the prompts the backend sent, per
   section; `scripts/bench/readers.py` reads the run's Postgres (the audit
   log's turns, each run's stored evidence).
+- `scripts/bench/budget.py` waits for each sprint within `BENCH_TIMEOUT` and
+  the run's token budget (`BENCH_TOKEN_BUDGET`), and writes the card's
+  run-level block.
 - `scripts/bench/schema.py` is the scorecard's schema.
 - `scripts/bench/compare.py` diffs a scorecard with the previous one and exits
   1 beyond a threshold.
 - `.github/workflows/bench.yml` runs it on demand and nightly on the
-  self-hosted runner, with the fake.
+  self-hosted runner, with the fake, and on real models behind a kill switch
+  (see "The nightly real-model run").
 
 ## The Verifier benchmark
 
@@ -62,7 +67,7 @@ on a change under `bench/verifier/`. `verifier/README.md` lists the cases.
 | Tasks done at the first attempt | Done, with no rework request on the board (a quality gate's, the Verifier's or QA's `NEEDS WORK:`, read by `services/tasks/board.py`), no person's send-back and at most one delivery (`AgentRun`) recorded. The comments decide: a delivery the gate sent back before it was ingested, or one recognised as a repeat, adds no run but leaves its request. |
 | Rework requests per task, blocked share | The board: `board.rework_request_count` per task, as the sprint list counts them. |
 | Wall-clock | From `start_sprint` to the sprint's close, measured by the runner. A sprint still open at `BENCH_TIMEOUT` is stopped first (`POST /v1/sprints/{id}/stop`), and graded as it stands (`timeout`). |
-| Status | `completed`, `timeout`, or `error` when a step failed or a number could not be read: a missing observation is never a green zero. |
+| Status | `completed`, `timeout`, `budget_exceeded` (the run passed its token budget while this sprint ran, and it was stopped), or `error` when a step failed or a number could not be read: a missing observation is never a green zero. |
 | Tokens | The audit log's task-worker turns whose usage the provider reported (`tokens: reported`); turns without a reported count are counted apart, never estimated. |
 | Models | The model served per role, from the same turns. |
 | By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/models/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/models/routing_record.py` makes the split, the same one the Sprints page shows. |
@@ -115,7 +120,7 @@ models that delivered, before → after. That table is shown, never judged: a
 policy is meant to move work between models, and whether it pays is read
 from first attempts and tokens per band. With the fake models every policy
 gets the same answers, so only a real proxy (`BENCH_LLM_URL`) tells two
-policies apart; the real-model run is not wired into CI yet. Schema v2 and
+policies apart; the nightly real-model run uses the default policy. Schema v2 and
 v3 cards carry the split; a v1 card (the references kept before it) is
 still read and compared, without a table by difficulty.
 
@@ -140,6 +145,62 @@ into `bench/scorecards/` in a pull request. A run that adds specifications
 moves the totals (more tasks, more tokens), so it is kept as the reference
 in the pull request that adds them: `20261114T201804Z` is the first v3 card,
 the five specifications with the fake.
+
+## The nightly real-model run
+
+`.github/workflows/bench.yml` has a second job, `bench-real`, apart from the
+fake one: the same bench on real models, nightly (with the fake job) and on
+demand (Run workflow, `models: real`; `fake`, the default, runs only the fake
+job). It spends tokens, so it is off until the owner turns it on.
+
+**Turning it on.** Set the repository variable `BENCH_REAL_MODELS` to `true`
+(Settings, Secrets and variables, Actions, Variables). Unset, or any other
+value, means off: the job is skipped and nothing is spent. Then give the job
+the provider keys as repository secrets, under the names the LLM proxy reads
+(`llm-proxy/app.py`, `docker-compose.yml`): `GEMINI_API_KEY` and
+`DEEPSEEK_API_KEY` are required, `QWEN_API_KEY` and `NEBIUS_API_KEY` are
+passed when set. A required secret that is missing fails the job with its
+name, before anything starts. The job builds the proxy from `llm-proxy/`
+(its Dockerfile, as `docker compose` does), passes the keys to the container
+from the step's environment and waits for its `/health`. To use a proxy that
+already runs on the runner instead, set the repository variable
+`BENCH_LLM_URL` to its address: when set, it is preferred and no key is
+needed by the job.
+
+**The budget.** The run stops at a budget of reported tokens, summed over
+every specification: the repository variable `BENCH_TOKEN_BUDGET`, 300000
+when unset (`run.sh` takes it as `BENCH_TOKEN_BUDGET`; empty there means no
+budget). While each sprint runs, `scripts/bench/budget.py` reads what the
+whole run has spent so far from the audit log, with the same reader as the
+scorecard (only turns whose usage the provider reported). When the total
+passes the budget, the running sprint is stopped (`POST
+/v1/sprints/{id}/stop`, as at `BENCH_TIMEOUT`) and graded as it stands
+with the status `budget_exceeded`, the remaining specifications are skipped,
+and the card is written with a run-level block (`run`): the status
+`budget_exceeded`, the budget, the tokens spent, and the specifications that
+did not run, listed as `skipped: budget`, never graded as zero. A turn whose
+usage the provider did not report has no count, so it cannot be budgeted:
+the card counts those turns apart and says so. The budget caps what the
+provider reported, not what it billed: keep a spending limit at the provider
+too. `BENCH_TIMEOUT` (a repository variable, 1200 seconds when unset) bounds
+each sprint, and the job's `timeout-minutes` (120) the whole run. Stopping
+it altogether is in `docs/OPERATIONS.md` (the kill switch).
+
+**The cards.** The real-model card is compared with the newest card in
+`bench/scorecards/real/`, never with the fake ones in `bench/scorecards/`.
+With none there yet, the job writes its card, says there is no reference and
+passes. A card that the budget cut is not judged in its totals, which cover
+fewer specifications: `compare.py` says the run was cut, shows its numbers,
+lists what it skipped and judges only the specifications both cards ran in
+full. On a nightly regression the job opens an issue titled "Bench
+regression (real models) <date>" with the diff. The card and the logs are
+kept as the artifact `bench-real`.
+
+**Keeping a reference.** A card becomes the reference only when a person
+commits it: download the `bench-real` artifact of a run worth keeping (a
+complete run, not one the budget cut) and copy its `<stamp>.json` and
+`<stamp>.md` into `bench/scorecards/real/` in a pull request. Nothing in the
+workflow commits a card.
 
 ## The reference specifications
 
