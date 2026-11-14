@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional
 
 import command_policy
 import sandbox
+import sandbox_image
 import shell_exec
 import win_job
 
@@ -251,10 +252,13 @@ def _remove(runtime: str, name: str) -> bool:
 def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
     runtime = sandbox.container_runtime()
     name = f"fabrique-app-{uuid.uuid4().hex[:12]}"
-    argv = sandbox.container_command(runtime, box, req["start"], req["cwd"], name)
+    # From the image's content ID, observed now; reported below (``sandbox_image``).
+    run_box, identity = sandbox_image.pinned(runtime, box)
+    argv = sandbox.container_command(runtime, run_box, req["start"], req["cwd"], name)
     argv.remove("--rm")  # Kept until its log is read; removed below.
     argv[2:2] = ["-d", "-e", f"PORT={req['port']}", "-e", f"APP_URL={req['app_url']}"]
     out: Dict[str, Any] = {"sandbox": sandbox.report(box, runtime)}
+    out["sandbox"]["image_identity"] = identity
     # From the launch on, the container is removed by name whatever happens:
     # a launch that timed out may still have created it, and a log that cannot
     # be read must not leave it running with the worktree mounted.
@@ -269,6 +273,7 @@ def _run_container(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
                             f"{started.stderr.strip()[-500:] or 'no message'}")
             return out
         out["started"] = True
+        out["sandbox"]["image_identity"] = sandbox_image.observed_after(runtime, box["image"], identity)
         try:
             _watch_container(runtime, name, req, out)
         except subprocess.SubprocessError as exc:

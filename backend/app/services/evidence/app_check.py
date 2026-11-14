@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from services.contracts import sandbox_report
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
 from services.evidence.browser_smoke import CHECK_E2E, check_e2e
 
@@ -62,12 +63,22 @@ def check_install(evidence: dict[str, Any]) -> dict[str, Any] | None:
         observation = (
             f"{target} not run{after}: {record.get('reason') or 'no exit status'}"
         )
-    return {
+    check = {
         "name": CHECK_INSTALL,
         "outcome": outcome,
         "observation": observation,
         "manifests": record.get("manifests") or [],
     }
+    applied = record.get("sandbox")
+    if isinstance(applied, dict) and applied.get("mode") == "container":
+        # Which image ran and what the dependency cache did, as the daemon saw.
+        check["image_identity"] = sandbox_report.image_identity(applied)
+        check["observation"] += f"; {sandbox_report.image_text(applied)}"
+        cache = sandbox_report.cache_text(applied.get("cache"))
+        if cache:
+            check["cache"] = applied["cache"]
+            check["observation"] += f"; {cache}"
+    return check
 
 
 def _log_tail(app: dict[str, Any]) -> str:

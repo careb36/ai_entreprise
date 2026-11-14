@@ -16,7 +16,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.list / read / search / find / map, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, repo_map.py, workspace_edit.py); workspace.signatures: named Python definitions' signatures for the Verifier (signatures.py); workspace.related: the files around a task's seeds (code_graph.py); workspace.console.prepare / collect: a console producer's worktree, then what it changed (console_run.py)
 - workspace.git.publish / merge / base_status: push a branch and open its request (gh, glab), merge it locally (local_merge.py), or the base against its remote (git_base.py)
 - workspace.git.reviews:  the comments people left on that request (platform_reviews.py)
-- workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py)
+- workspace.app.check:    start the application in the sandbox, probe it, stop it (app_run.py); workspace.sandbox.reset: reset a project's dependency cache volume (sandbox_cache.py)
 - workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
 - workspace.deliver:      (JetStream) files queued while offline; result on workspace.delivered
 
@@ -50,7 +50,7 @@ import nats_connect
 import nats_scope
 import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
-import code_graph, console_run, delivery_snapshot, repo_map, signatures, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
+import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
 from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
 _build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
@@ -514,7 +514,7 @@ async def handle_inspect(nc, msg):
 
 async def handle_status(nc, msg, jetstream=False):
     jetstream = jetstream() if callable(jetstream) else jetstream
-    await _reply(nc, msg, {"host": host_info(), "version": DAEMON_VERSION, "jetstream": bool(jetstream)})
+    await _reply(nc, msg, {"host": host_info(), "version": DAEMON_VERSION, "jetstream": bool(jetstream), "sandbox_cache": await asyncio.to_thread(sandbox_cache.status)})
 
 
 # ---------------------------------------------------------------------------
@@ -624,7 +624,7 @@ async def main():
         ("workspace.inspect", bound(handle_inspect)),
         ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
         ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
-        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS)),
         *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.base_status", git_base.handle_status))),
         ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
         ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),

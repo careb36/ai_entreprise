@@ -143,7 +143,13 @@ async def install_if_needed(ctx: Context) -> None:
         return
     # The install's own setting, both ways: a registry may be needed, and a
     # lifecycle script must not reach the network when it is turned off.
-    box = {**box, "network": bool(settings.DELIVERY_INSTALL_NETWORK)}
+    # ``purpose``: the daemon resets the project's dependency cache after a
+    # failed install and quarantines it after three in a row (``sandbox_cache``).
+    box = {
+        **box,
+        "network": bool(settings.DELIVERY_INSTALL_NETWORK),
+        "purpose": "install",
+    }
     timeout = float(settings.DELIVERY_INSTALL_TIMEOUT_SECONDS)
     try:
         reply = await ctx.nats.request(

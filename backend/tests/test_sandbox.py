@@ -24,17 +24,26 @@ from services.workspace import sandbox, workspace_daemon
 from test_git_workflow import _member, enforcement  # noqa: F401
 from test_specifications import _company
 
+FAKE_IMAGE_ID = "a" * 64
+FAKE_DIGEST = "b" * 64
+
 
 @pytest.fixture
 def fake_runtime(tmp_path, monkeypatch):
     """A ``docker`` on the PATH that records its arguments and runs the
     command it was given on the host, in the mounted folder (no real
-    container, the same argument shape)."""
+    container, the same argument shape). ``image inspect`` answers with
+    ``FAKE_IMAGE_ID`` and a registry digest, unlogged."""
     log = tmp_path / "docker.log"
     script = tmp_path / "bin" / "docker"
     script.parent.mkdir()
     script.write_text(
         "#!/bin/sh\n"
+        'if [ "$1" = "image" ]; then\n'
+        f'  echo \'[{{"Id": "sha256:{FAKE_IMAGE_ID}", '
+        f'"RepoDigests": ["python@sha256:{FAKE_DIGEST}"]}}]\'\n'
+        "  exit 0\n"
+        "fi\n"
         f'printf "%s\\n" "$@" > {log}\n'
         'if [ "$1" = "kill" ]; then exit 0; fi\n'
         # The workdir is the -v source; the command is everything after "-c".
@@ -100,7 +109,15 @@ def test_container_mode_runs_isolated_and_reports_what_it_applied(
         "pids_limit": 512,
         "capabilities": "all dropped",
         "no_new_privileges": True,
+        # The daemon's observation, and the container run from that ID.
+        "image_identity": {
+            "id": f"sha256:{FAKE_IMAGE_ID}",
+            "digest": f"python@sha256:{FAKE_DIGEST}",
+            "observed_by": "daemon",
+            "observed": "before_run",
+        },
     }
+    assert args[args.index("/bin/sh") - 1] == f"sha256:{FAKE_IMAGE_ID}"
 
 
 def test_a_mode_that_cannot_run_is_an_error_never_a_quiet_host_run(
@@ -140,6 +157,11 @@ def test_host_mode_says_it_is_unisolated_and_the_daemon_can_refuse_it(
         "isolated": False,
         "network": "host",
         "env": "inherited",
+        "image_identity": {
+            "id": None,
+            "digest": None,
+            "reason": "host mode runs no image: the daemon's own machine ran it",
+        },
     }
     # The person running the daemon refuses the host for everything.
     monkeypatch.setenv("FABRIQUE_SANDBOX_REQUIRED", "container")
@@ -226,10 +248,13 @@ def test_the_evidence_keeps_the_daemons_report_and_the_verifier_records_it():
         and check["outcome"] == "pass"
         and check["isolated"] is True
     )
+    # An older daemon reported no image identity: said so, never a success.
     assert check["observation"] == (
-        "ran in container; docker image python:3.12-slim; network off; 2 CPUs; "
+        "ran in container; docker image python:3.12-slim (image identity "
+        "unknown: the daemon reported no image identity); network off; 2 CPUs; "
         "2048 MB; 512 processes; capabilities all dropped; no environment passed"
     )
+    assert check["image_identity"]["id"] is None
     host = sandbox.check_sandbox(
         {
             "test_run": {

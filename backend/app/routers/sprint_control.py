@@ -11,6 +11,8 @@ Endpoints (Manager):
 - ``GET/PUT /v1/companies/{id}/autonomy`` — read (Viewer) or change the autonomy level.
 - ``GET/PUT /v1/companies/{id}/stack_profile`` — read (Viewer) or replace the
   company's overrides of the detected stack profile (``services/stack_profiles.py``).
+- ``POST /v1/companies/{id}/sandbox/cache/reset`` — reset the project's
+  dependency cache volume and lift its quarantine (Manager).
 
 The states and what they allow are in ``services/loop/sprint_control.py``.
 """
@@ -271,6 +273,7 @@ def _sandbox_payload(company: Company) -> dict:
             k: request[k]
             for k in ("image", "network", "cpus", "memory_mb", "pids_limit")
         },
+        "cache": request["cache"],
     }
 
 
@@ -316,6 +319,34 @@ async def set_sandbox(
     session.add(company)
     session.commit()
     return _sandbox_payload(company)
+
+
+@router.post("/companies/{company_id}/sandbox/cache/reset")
+async def reset_sandbox_cache(
+    company_id: int,
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Reset the project's dependency cache volume on the daemon's machine and
+    lift its quarantine (Manager); the daemon's answer, audited."""
+    from services.workspace.workspace_daemon import (
+        DAEMON_UNAVAILABLE_DETAIL,
+        DaemonUnavailable,
+    )
+
+    require_company_role(session, user, company_id, "Manager")
+    if session.get(Company, company_id) is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    actor = (user.full_name or user.email) if user is not None else "A person"
+    try:
+        return await sandbox.reset_cache(
+            getattr(request.app.state, "nats_client", None), session, company_id, actor
+        )
+    except DaemonUnavailable as e:
+        raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL) from e
+    except sandbox.CacheResetRefused as e:
+        raise HTTPException(status_code=e.status, detail=e.message) from e
 
 
 class StackProfileRequest(BaseModel):
