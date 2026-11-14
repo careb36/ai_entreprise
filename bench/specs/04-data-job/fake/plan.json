@@ -1,0 +1,28 @@
+{
+  "sprint_name": "Sales summary job 1",
+  "goal": "Sum sales per region, then run the job from the command line",
+  "tasks": [
+    {
+      "title": "Sum sales rows per region",
+      "description": "salesjob.summary.summarize(text) with exact decimal totals and the bad rows listed by line, with its unit test.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-1.1", "REQ-1.2", "REQ-1.3"],
+      "depends_on": [],
+      "files": ["salesjob/__init__.py", "salesjob/summary.py", "tests/test_summary.py"]
+    },
+    {
+      "title": "Sales job command line",
+      "description": "python -m salesjob <input.csv> [--format json|csv], bad rows on stderr, exit codes 0, 1 and 2, with its test.",
+      "priority": "medium",
+      "assignee": "Developer",
+      "covers": ["REQ-2.1", "REQ-2.2", "REQ-2.3", "REQ-2.4"],
+      "depends_on": ["Sum sales rows per region"],
+      "files": ["salesjob/__main__.py", "tests/test_main.py"]
+    }
+  ],
+  "acceptance": {
+    "REQ-1": "tests/test_req_1.py",
+    "REQ-2": "tests/test_req_2.py"
+  }
+}

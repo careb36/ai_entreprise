@@ -3,7 +3,7 @@ import sys
 
 
 def _wordcount(*args):
-    return subprocess.run([sys.executable, "-m", "wordcount", *args], capture_output=True, text=True)
+    return subprocess.run([sys.executable, "-m", "wordcount", *args], capture_output=True, text=True, check=False)
 
 
 def test_req_2_1_prints_the_counts(tmp_path):

@@ -1,0 +1,68 @@
+{
+  "title": "Settings file checker",
+  "summary": "A library that parses an INI-style settings file and checks it against a schema, reporting every problem with where it is.",
+  "requirements": [
+    {
+      "title": "Parse a settings file",
+      "description": "confcheck.parse(text: str) -> dict reads sections written [name] and lines key = value under them (split at the first =; a value may be empty or hold =), and returns {section: {key: value}} with the values as strings; an empty text gives {}. Blank lines and lines starting with # or ; are ignored, and spaces around section names, keys and values are trimmed. A line it cannot read raises confcheck.ConfigError, a subclass of ValueError, whose attribute line is the line number (from 1) and whose message names it.",
+      "criteria": [
+        {
+          "given": "the text \"[server]\\nport = 8080\\nhost = example.org\\n\\n[log]\\nlevel=debug\\n\"",
+          "when": "parse is called with it",
+          "then": "it returns {\"server\": {\"port\": \"8080\", \"host\": \"example.org\"}, \"log\": {\"level\": \"debug\"}}"
+        },
+        {
+          "given": "a text with blank lines, comments starting with # or ;, and spaces around names, keys and values",
+          "when": "parse is called with it",
+          "then": "the comments and blank lines are left out and every name, key and value is trimmed"
+        },
+        {
+          "given": "a text whose line 3 is neither a section, a comment nor key = value (such as \"port 8080\"), or a text with a key before any section",
+          "when": "parse is called with it",
+          "then": "it raises ConfigError whose line is the number of the offending line, and whose message holds that number"
+        },
+        {
+          "given": "a text that repeats a key within a section, or repeats a section",
+          "when": "parse is called with it",
+          "then": "it raises ConfigError whose line is that of the repetition"
+        }
+      ]
+    },
+    {
+      "title": "Check settings against a schema",
+      "description": "confcheck.schema.check(config: dict, schema: dict) -> tuple[dict, list[str]] takes parse's result and a schema {section: {key: type}} with the types \"str\", \"int\" and \"bool\", and returns the converted values and every problem found, each written \"<section>.<key>: <problem>\". Every key of the schema is required. bool reads true, false, yes, no, on, off, 1 and 0 in any case.",
+      "criteria": [
+        {
+          "given": "a parsed config {\"server\": {\"port\": \"8080\", \"host\": \"example.org\", \"debug\": \"Yes\"}} and the schema {\"server\": {\"port\": \"int\", \"host\": \"str\", \"debug\": \"bool\"}}",
+          "when": "check is called with them",
+          "then": "it returns the values {\"server\": {\"port\": 8080, \"host\": \"example.org\", \"debug\": true}} and no problem"
+        },
+        {
+          "given": "a value that does not read as its type, such as port \"eighty\" for an int or debug \"maybe\" for a bool",
+          "when": "check is called",
+          "then": "it reports \"server.port: expected int\" or \"server.debug: expected bool\" and leaves that key out of the values"
+        },
+        {
+          "given": "a config missing a key the schema names, holding a key the schema does not name, and holding a section the schema does not name",
+          "when": "check is called",
+          "then": "it reports all of them in one call: \"<section>.<key>: missing\" for the missing key, \"<section>.<key>: unknown\" for the extra key and \"<section>: unknown section\" for the extra section"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "a file of 10000 lines is parsed and checked in under 1 second"
+    },
+    {
+      "attribute": "reliability",
+      "target": "0 problems are dropped: check reports every problem in one call instead of stopping at the first"
+    }
+  ],
+  "constraints": [
+    "Python 3.11 or later, standard library only; configparser is not used.",
+    "The package is confcheck/ at the project root: confcheck/__init__.py defines parse and ConfigError, confcheck/schema.py defines check.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}

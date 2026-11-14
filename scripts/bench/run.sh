@@ -23,8 +23,10 @@
 #   5. the numbers: criteria passed / total, tasks done at the first attempt
 #      (done with no rework request, no send-back on the board and at most one
 #      delivery), rework requests per task, blocked share,
-#      wall-clock from the sprint's start to its close, and tokens from the
-#      audit log's turns whose usage the provider reported.
+#      wall-clock from the sprint's start to its close, tokens from the
+#      audit log's turns whose usage the provider reported, and the weight of
+#      the prompts the backend sent (estimated tokens per section, from each
+#      task's latest run's stored evidence).
 #
 # The scorecard lands in DIR (default bench/scorecards) as <stamp>.json and
 # <stamp>.md; scripts/bench/compare.py diffs it with the previous one.
