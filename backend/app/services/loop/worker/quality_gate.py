@@ -16,6 +16,7 @@ from typing import Any
 from logging_config import setup_logger
 from nats_client import NATSClient
 
+from services.contracts.manifest import parse_file_manifest
 from services.loop.worker import board_writes, messages, qa_review
 from services.platform.glassroom import publish_glassroom
 from services.tasks import task_projection
@@ -26,6 +27,28 @@ logger = setup_logger("fabrique-task-worker")
 
 MIN_DELIVERABLE_WORDS = 80
 MIN_DOC_DELIVERABLE_WORDS = 180
+
+# Words that make a task read as documentation, matched as whole words: as
+# substrings "api" caught "notesapi" or "rapid", "process" "processor" (#508).
+DOC_KEYWORDS = re.compile(
+    r"\b(?:document|documentation|readme|architecture|api|strategy|process|"
+    r"pipeline|standards)\b"
+)
+# Files a documentation deliverable writes. A delivery of other files is code,
+# whatever the task's wording says.
+DOC_SUFFIXES = (".md", ".mdx", ".rst", ".txt", ".adoc")
+
+
+def _reads_as_documentation(item: dict[str, Any], text: str) -> bool:
+    """Whether the deliverable is held to the documentation rules (more words,
+    two headings). What it delivers decides first: file blocks that are all
+    documents are documentation, any other file makes it code. With no file
+    blocks, the task's title and description decide, by whole words (#508)."""
+    paths = [entry["path"] for entry in parse_file_manifest(text)]
+    if paths:
+        return all(path.lower().endswith(DOC_SUFFIXES) for path in paths)
+    title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
+    return bool(DOC_KEYWORDS.search(title_desc))
 
 
 def _validate_minimum_deliverable(
@@ -39,22 +62,7 @@ def _validate_minimum_deliverable(
         return False, "Empty output from agent"
 
     word_count = len(re.findall(r"\b\w+\b", text))
-    title_desc = f"{item.get('title', '')} {item.get('description', '')}".lower()
-    doc_like = any(
-        kw in title_desc
-        for kw in (
-            "document",
-            "documentation",
-            "readme",
-            "architecture",
-            "api",
-            "strategy",
-            "process",
-            "pipeline",
-            "standards",
-        )
-    )
-
+    doc_like = _reads_as_documentation(item, text)
     min_words = MIN_DOC_DELIVERABLE_WORDS if doc_like else MIN_DELIVERABLE_WORDS
     if word_count < min_words:
         return False, f"Too short ({word_count} words, minimum {min_words})"
