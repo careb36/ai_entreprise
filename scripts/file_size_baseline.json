@@ -1,8 +1,4 @@
 {
-  "frontend/src/components/GlassRoom.tsx": 1494,
-  "frontend/src/pages/AgentSettings.tsx": 1188,
-  "frontend/src/pages/CompanyNew.tsx": 1239,
-  "frontend/src/services/api.ts": 1093,
   "llm-proxy/app.py": 658,
   "scripts/verify_infra.py": 722,
   "vscode-daemon/daemon.py": 648
