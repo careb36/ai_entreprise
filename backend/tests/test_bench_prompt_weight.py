@@ -224,8 +224,10 @@ def test_older_cards_are_still_read(version):
 
 
 def test_the_committed_v1_reference_compares_with_a_v3_card(tmp_path, capsys):
-    reference = max((BENCH / "scorecards").glob("*.json"))
+    # The first reference kept, from before the split and the weight.
+    reference = min((BENCH / "scorecards").glob("*.json"))
     old = json.loads(reference.read_text(encoding="utf-8"))
+    assert old["schema_version"] == 1
     new = _card(
         *[_entry(s["name"], prompt_weight.weigh(MEASURES)) for s in old["specs"]],
         stamp="29990101T000000Z",

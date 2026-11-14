@@ -136,7 +136,10 @@ the totals and per spec, and only when both cards measured prompts. Version
 1 and 2 cards are still read and compared, without the weight.
 
 To keep a run as the new reference, copy its `<stamp>.json` and `<stamp>.md`
-into `bench/scorecards/` in a pull request.
+into `bench/scorecards/` in a pull request. A run that adds specifications
+moves the totals (more tasks, more tokens), so it is kept as the reference
+in the pull request that adds them: `20261114T201804Z` is the first v3 card,
+the five specifications with the fake.
 
 ## The reference specifications
 
