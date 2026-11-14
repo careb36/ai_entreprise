@@ -50,6 +50,64 @@ To roll back: stop everything, run `scripts/backup.sh restore <file> --yes`
 (it replaces the whole database, below), check out the previous release,
 then build and start it.
 
+## Releasing
+
+A release is a `vX.Y.Z` tag on `main`, following
+[Semantic Versioning](https://semver.org/) (issue #512). A tag is the only
+thing that publishes: a merge to `main` publishes nothing. The process is
+taken from AixleHQ/flow's `docs/operations/releasing.md` (Apache-2.0, see
+`NOTICE`), on `main` instead of a `develop` branch.
+
+1. **Changelog pull request.** On a branch cut from `main`, run
+   `python3 scripts/release_notes.py release X.Y.Z`: it moves everything
+   under `[Unreleased]` in `CHANGELOG.md` into a dated `## [X.Y.Z] -
+   YYYY-MM-DD` section. Update the link references at the end of the file by
+   hand, read the section as a user would (it is the release announcement),
+   and open the pull request as `chore(release): X.Y.Z`.
+2. **Merge it** once its head is green.
+3. **Tag the merge commit on `main`** and push the tag, as a person:
+
+   ```bash
+   git fetch origin main
+   git tag -a vX.Y.Z -m "vX.Y.Z" origin/main
+   git push origin vX.Y.Z
+   ```
+
+   A tag created with a workflow's `GITHUB_TOKEN` starts no other workflow,
+   so nothing would be published.
+4. **Check both runs** (`Release`, `Publish Images`) and the GitHub Release.
+
+`python3 scripts/release_notes.py notes vX.Y.Z` prints the notes exactly as
+the release will show them.
+
+**Pre-releases** (`vX.Y.Z-rc.N`) are for trying a release on a staging
+deployment first. Tag them straight from `main`, without a changelog pull
+request: they get no section of their own, and their GitHub Release, marked
+pre-release, shows `[Unreleased]` as of the tagged commit. They never move
+`latest`.
+
+What pushing the tag runs:
+
+- **`release.yml`** checks that the tag is `vX.Y.Z` or `vX.Y.Z-pre` and that
+  its commit is on `main`, then creates the GitHub Release (`gh release
+  create`): the notes are the `[X.Y.Z]` section of `CHANGELOG.md` (or
+  `[Unreleased]` for a pre-release), the list of images, and the pull
+  requests merged since the previous tag. A tag off `main`, a missing or
+  empty section fails the run with the reason.
+- **`images.yml`** makes the same checks and publishes the five images
+  `docker-build.yml` builds (`backend`, `janitor`, `frontend`, `llm-proxy`,
+  `vscode-daemon`) to `ghcr.io/<owner>/<repo>/<service>:X.Y.Z`, plus
+  `:latest` for a stable release. They are built for `linux/amd64` only, on
+  the self-hosted runner with plain `docker build`; multi-arch images need
+  buildx and QEMU on the runner. A new package on GHCR is private until its
+  visibility is changed in the package's settings.
+
+Every pull request adds its line under `[Unreleased]` in the same pull
+request (`CONTRIBUTING.md`), so cutting a release is a move, not a search
+through the history. Migrations do not roll back: a release that ran a
+migration the previous code cannot read cannot be rolled back past without
+the backup (Upgrade, above).
+
 ## Rotate keys
 
 | Key | Where | What rotating does | How |

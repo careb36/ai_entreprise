@@ -1,0 +1,16 @@
+La Fabrique
+Copyright 2026 The La Fabrique authors
+
+This product is licensed under the Apache License, Version 2.0 (see the
+LICENSE file).
+
+Third-party portions
+--------------------
+
+Portions of .github/workflows/release.yml and scripts/release_notes.py are
+adapted from AixleHQ/flow (https://github.com/AixleHQ/flow), Copyright 2026
+Dualboot Partners, LLC, licensed under the Apache License 2.0.
+
+Portions of .github/workflows/images.yml are adapted from AixleHQ/flow
+(https://github.com/AixleHQ/flow), Copyright 2026 Dualboot Partners, LLC,
+licensed under the Apache License 2.0.

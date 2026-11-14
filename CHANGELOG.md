@@ -9,10 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The backend in fourteen contexts with a checked dependency rule.** `backend/app/services` is divided into contexts, each a folder with one responsibility and a document; `scripts/check_architecture.py` holds the imports to `docs/architecture/contexts.json` in CI, the task worker is split into stages and the flat shims are retired (#469; #470 to #500, #502).
 * **Versioned schema migrations.** Alembic owns the schema (`backend/alembic/`): the baseline migration creates what the models define and converges a database an older backend or `db/init-db/init.sql` created (the `ALTER TABLE` statements the startup used to apply by hand live there now, readable and reversible). The backend refuses to start on a database behind head, naming both versions; the container's entrypoint runs `alembic upgrade head` before the app, the e2e does too and then `alembic check` on Postgres, and CI checks on a SQLite file that the models and the migrations agree. `DB_AUTO_UPGRADE=true` runs the migrations at startup for a local database. How to write one: `CONTRIBUTING.md` §5.
 
 ### Added
 
+* **Versioned releases.** A pushed `vX.Y.Z` tag on `main` becomes a GitHub Release whose notes are this file's section for that version (a pre-release `vX.Y.Z-rc.N` shows `[Unreleased]`), and the five images are published to GHCR from the same tag; how to cut one is in `docs/OPERATIONS.md`, Releasing (#512).
+* **The Verifier's grounded check.** A delivery that names a package no registry has, an exact version that does not exist or a project import that names no file is refuted; a call to a project function with arguments its signature does not take is a finding (#444; #503, #504).
+* **A prompt budget.** Each section of the Developer's prompt is measured on the run's evidence, and `PROMPT_BUDGET` (or `PROMPT_BUDGET_<ROLE>`) drops whole sections, least needed first, from a prompt over it (#443; #505).
+* **Related code in the Developer's prompt.** The daemon's parse of the repository answers which files the task's starting files use and are used by, and the prompt shows them with the recent runs that touched them (#438; #506).
+* **Bench v3.** The scorecard records each prompt's weight (schema v3), the bench gains three reference specifications, and the first v3 scorecard (five specifications) is kept as the reference (#316; #507).
 * **A sprint is delivered as one integrated branch.** With the Git workflow on, a sprint that closes is integrated on its own (a Manager can also ask, `POST /v1/sprints/{id}/integrate`): the workspace daemon starts `fabrique/sprint-<id>` from the company's base in a worktree and merges the done tasks' branches in dependency order with real git (`workspace.git.integrate`); the first merge git cannot make is aborted and reported with its conflicted files and hunks. The project's test command runs on the integrated worktree like a delivery's tests, in the company's sandbox. The result is kept and audited as an observation (`tests_passed`, `tests_failed`, `untested`, `conflict`); a conflict or a failing suite waits in the inbox. The suite runs in a worktree detached at the integrated commit, so a later integration never changes what was tested; a done task whose branch is missing makes the integration `incomplete`; an integration no daemon could take when the sprint closed is kept `pending` and retried (`INTEGRATION_RETRY_SECONDS`), one the daemon refused is an `error`; all three wait in the inbox. A Manager publishes the branch as one pull or merge request for the sprint, whose description carries every task's evidence with the producers' claims apart (`POST /v1/sprints/{id}/integration/publish`); `GET /v1/sprints/{id}/integration` shows the plan and the integrations. The description is built from each task's run and verification as recorded at integration, and a diff a producer only sent is listed as its claim. Migrations `0011` and `0012` (`vscode-daemon/sprint_integration.py`, `services/integration.py`, `services/integration_publish.py`).
 * **Sandboxed execution: agent-written code runs isolated, and the evidence says where.** `DELIVERY_SANDBOX` (and a company's own, `GET`/`PUT /v1/companies/{id}/sandbox`) picks where the delivery test run and the Developer's test runs execute: `host` (as before), `container` (an ephemeral Docker or Podman container per run with the worktree mounted, network off, CPU/memory/process limits, every capability dropped, no privilege escalation) or `bwrap` (bubblewrap namespaces). A sandboxed run sees only the environment variables the company lists by name, with values from the daemon's machine. The daemon reports what it applied, never falls back to the host on its own, and can refuse the host for everything (`FABRIQUE_SANDBOX_REQUIRED`). The Verifier records the report as the `sandbox` check: a host run is a finding, never a refutation. Migration `0002` adds the company's fields; `0003` creates the baseline's indexes a table `init.sql` made was missing. The e2e runs in both modes in CI (`vscode-daemon/sandbox.py`, `services/sandbox.py`).
 
@@ -45,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **The quality gate matched documentation keywords inside words.** It now matches them as whole words, trusts the files a delivery wrote, and "api" is no documentation keyword; a task that asks for a document stays one (#508; #509).
 * **Orchestration health KPIs were structurally zero.** `GET /v1/analytics/orchestration_health` filtered `audit_log` on `details.role` / `details.company_id` and counted `ARCHITECT_CONSULTED:` comments, but the task pipeline never wrote either. The worker now records every Developer execution and QA review to `audit_log` (canonical role, company scope, `result_type`, proxy-reported token cost) via the new `services/orchestration_metrics.py` module, so *Avg Developer Tokens* and the QA *NEEDS WORK* rate read real data.
 
 ---
@@ -53,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 There is no tagged release yet: the project has not been versioned since the
 original scaffold, and `main` is the web product. The changes above are the
-accumulated work between the initial scaffold and the current head.
+accumulated work between the initial scaffold and the current head. Releases
+are `vX.Y.Z` tags on `main`; how one is cut is in
+[docs/OPERATIONS.md](docs/OPERATIONS.md#releasing). Every pull request adds
+its line under `[Unreleased]`.
 
-[unreleased]: https://github.com/careb36/la-fabrique/commits/main
+[unreleased]: https://github.com/careb36/le-fabrique/commits/main

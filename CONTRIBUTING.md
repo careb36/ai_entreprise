@@ -78,6 +78,9 @@ was retired on 2026-10-29 along with the release pull request it existed for.
 `archive/develop-2026-05-02` keeps the `develop` of May 2026, whose useful work
 `main` had already rewritten. `main` carries none of `vr/`.
 
+Each pull request adds its line under `[Unreleased]` in `CHANGELOG.md`;
+releases are `vX.Y.Z` tags on `main` (`docs/OPERATIONS.md`, Releasing).
+
 ---
 
 ## 5. Schema migrations
