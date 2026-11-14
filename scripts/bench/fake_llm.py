@@ -99,7 +99,13 @@ def answer(prompt: str) -> str:
     files = DELIVERIES.get(task.group(1).strip()) if task else None
     if files:
         blocks = "\n\n".join(_fence(path, content) for path, content in files)
-        return f"Delivered {task.group(1).strip()}.\n\n{blocks}\n\n{PADDING}\n"
+        # Headed sections: the quality gate wants two headings when the task
+        # reads as documentation, which it decides by keywords such as "api"
+        # (services/loop/worker/quality_gate.py), so an API task needs them.
+        return (
+            f"## Delivered\n\n{task.group(1).strip()}.\n\n## Files\n\n{blocks}"
+            f"\n\n## Notes\n\n{PADDING}\n"
+        )
     return "Nothing to add: the sprint went as planned."
 
 

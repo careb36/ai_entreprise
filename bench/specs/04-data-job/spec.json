@@ -1,0 +1,69 @@
+{
+  "title": "Sales summary job",
+  "summary": "A batch job that reads a CSV file of sales and writes the total per region as JSON or CSV, reporting the rows it could not use.",
+  "requirements": [
+    {
+      "title": "Sum sales per region",
+      "description": "salesjob.summary.summarize(text: str) -> dict reads CSV text whose header names the columns region, product and amount (in any order), and returns {\"regions\": {<region>: {\"count\": int, \"total\": str}}, \"total\": str, \"rows\": int, \"bad\": [{\"line\": int, \"reason\": str}]}. Amounts are decimal numbers summed exactly and written with two decimals; rows counts the rows used; the header is line 1.",
+      "criteria": [
+        {
+          "given": "the CSV text \"region,product,amount\\nnorth,tea,2.50\\nnorth,coffee,3\\nsouth,tea,1.25\\n\"",
+          "when": "summarize is called with it",
+          "then": "it returns regions {\"north\": {\"count\": 2, \"total\": \"5.50\"}, \"south\": {\"count\": 1, \"total\": \"1.25\"}}, total \"6.75\", rows 3 and bad []"
+        },
+        {
+          "given": "a CSV text with a row whose amount is not a number, a row whose amount is negative, a row with an empty region and a row with a missing field, among good rows",
+          "when": "summarize is called with it",
+          "then": "each of those rows is left out of the totals and listed under bad with its line number and a reason, and the good rows are summed"
+        },
+        {
+          "given": "a CSV text whose header has no amount column, or an empty text",
+          "when": "summarize is called with it",
+          "then": "it raises ValueError"
+        }
+      ]
+    },
+    {
+      "title": "Run the sales job from the command line",
+      "description": "python -m salesjob <input.csv> [--format json|csv] reads the file (UTF-8) and prints the summary on stdout: JSON by default, {\"regions\": ..., \"total\": ..., \"rows\": ..., \"bad_rows\": <count>}; with --format csv, the header region,count,total and one line per region sorted by name. Each bad row is reported on stderr as one line starting with \"line <n>:\". Exit status: 0 when every row was used, 2 when some rows were bad, 1 when the input cannot be read or has no amount column.",
+      "criteria": [
+        {
+          "given": "a file of good rows only",
+          "when": "python -m salesjob is run with its path",
+          "then": "it prints the JSON summary with bad_rows 0 on stdout, nothing on stderr, and exits with status 0"
+        },
+        {
+          "given": "a file with two bad rows among good ones",
+          "when": "python -m salesjob is run with its path",
+          "then": "it prints the JSON summary of the good rows with bad_rows 2 on stdout, one line per bad row starting with \"line <n>:\" on stderr, and exits with status 2"
+        },
+        {
+          "given": "a path where no file exists, or a file whose header has no amount column",
+          "when": "python -m salesjob is run with it",
+          "then": "it prints nothing on stdout, names the path on stderr (and, for the header, the missing amount column) and exits with status 1"
+        },
+        {
+          "given": "a file of good rows",
+          "when": "python -m salesjob is run with its path and --format csv",
+          "then": "it prints the lines \"region,count,total\", then one line per region sorted by name such as \"north,2,5.50\", and exits with status 0"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "a file of 100000 rows is summarized in under 2 seconds"
+    },
+    {
+      "attribute": "reliability",
+      "target": "0 bad rows are dropped silently: every row left out is reported with its line number"
+    }
+  ],
+  "constraints": [
+    "Python 3.11 or later, standard library only (csv, decimal, json, argparse).",
+    "The package is salesjob/ at the project root: salesjob/summary.py defines summarize, salesjob/__main__.py the command line.",
+    "Amounts are summed with decimal.Decimal, never with float.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}

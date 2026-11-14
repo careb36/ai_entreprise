@@ -1,0 +1,28 @@
+{
+  "sprint_name": "Settings file checker 1",
+  "goal": "Parse a settings file, then check it against a schema",
+  "tasks": [
+    {
+      "title": "Parse settings sections and keys",
+      "description": "confcheck.parse(text) and confcheck.ConfigError with the offending line, with its unit test.",
+      "priority": "high",
+      "assignee": "Developer",
+      "covers": ["REQ-1.1", "REQ-1.2", "REQ-1.3", "REQ-1.4"],
+      "depends_on": [],
+      "files": ["confcheck/__init__.py", "tests/test_parse.py"]
+    },
+    {
+      "title": "Check settings against a typed schema",
+      "description": "confcheck.schema.check(config, schema): values converted to str, int or bool, every problem reported, with its unit test.",
+      "priority": "medium",
+      "assignee": "Developer",
+      "covers": ["REQ-2.1", "REQ-2.2", "REQ-2.3"],
+      "depends_on": ["Parse settings sections and keys"],
+      "files": ["confcheck/schema.py", "tests/test_schema.py"]
+    }
+  ],
+  "acceptance": {
+    "REQ-1": "tests/test_req_1.py",
+    "REQ-2": "tests/test_req_2.py"
+  }
+}

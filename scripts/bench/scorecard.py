@@ -18,7 +18,9 @@ Subcommands, used by ``scripts/bench/run.sh``:
   difficulty and the model of their last delivery (``routing``, read by the
   backend's ``services/models/routing_record.py``, the same split the Sprints page
   shows), so two runs under different ``AGENT_MODEL_POLICY`` values compare
-  band by band.
+  band by band. It also reads each task's latest run's prompt measure
+  (``prompt_sections``, the backend's estimate per section of what it sent)
+  and weighs them per spec (``prompt``, ``prompt_weight.py``; schema v3).
 - ``write --out-dir DIR [--policy LABEL] ENTRY...`` joins the entries into
   one scorecard labelled with the routing policy it ran under,
   checks it against the schema (``validate``) and writes
@@ -49,9 +51,20 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import prompt_weight
+from readers import prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
 
-__all__ = ["FAIL", "MISSING", "PASS", "SCHEMA_VERSION", "SPEC_STATUSES", "validate"]
+__all__ = [
+    "FAIL",
+    "MISSING",
+    "PASS",
+    "SCHEMA_VERSION",
+    "SPEC_STATUSES",
+    "prompt_sections",
+    "reported_tokens",
+    "validate",
+]
 _TEST_NAME = re.compile(r"^test_req_(\d+)_(\d+)(?:_|\[|$)")
 
 
@@ -263,6 +276,7 @@ def summarize_spec(
     models: dict[str, list[str]],
     error: str | None = None,
     routing: list[dict[str, Any]] | None = None,
+    prompt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One spec's entry from what was observed.
 
@@ -313,6 +327,7 @@ def summarize_spec(
         },
         "models": {role: sorted(set(m)) for role, m in sorted(models.items())},
         "routing": list(routing or []),
+        "prompt": prompt or prompt_weight.empty(),
     }
 
 
@@ -351,6 +366,7 @@ def build_scorecard(
             "blocked_share": _ratio(blocked, tasks),
             "wall_clock_seconds": round(sum(s["wall_clock_seconds"] for s in specs), 1),
             "tokens_reported": sum(s["tokens"]["reported"] for s in specs),
+            "prompt": prompt_weight.merge([s.get("prompt") for s in specs]),
         },
     }
 
@@ -411,6 +427,7 @@ def render_markdown(card: dict[str, Any]) -> str:
             f"{r['tokens']['reported']} tokens"
             for r in s.get("routing") or []
         ]
+    lines += prompt_weight.render_lines(card)
     return "\n".join(lines) + "\n"
 
 
@@ -422,39 +439,6 @@ def render_markdown(card: dict[str, Any]) -> str:
 def _get(api: str, path: str) -> Any:
     with urllib.request.urlopen(f"{api}{path}", timeout=30) as response:
         return json.loads(response.read())
-
-
-def reported_tokens(
-    dsn: dict[str, str], company_id: int
-) -> tuple[
-    dict[str, int], dict[str, list[str]], dict[int, list[tuple[str | None, int]]]
-]:
-    """The company's KPI turns in the audit log: tokens of the reported ones,
-    how many were and were not reported, the model served per role, and each
-    task's turns (``(usage status, cost)``) for the split by difficulty."""
-    import psycopg2  # the backend's environment has it
-
-    tokens = {"reported": 0, "turns_reported": 0, "turns_unreported": 0}
-    models: dict[str, list[str]] = {}
-    per_task: dict[int, list[tuple[str | None, int]]] = {}
-    with psycopg2.connect(**dsn) as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT details->>'agent_role', details->>'model', details->>'tokens', cost_tokens, "
-            "interaction_id FROM audit_log WHERE company_id = %s AND details->>'tokens' IS NOT NULL",
-            (company_id,),
-        )
-        for role, model, status, cost, interaction in cur.fetchall():
-            if status == "reported":
-                tokens["reported"] += int(cost or 0)
-                tokens["turns_reported"] += 1
-            else:
-                tokens["turns_unreported"] += 1
-            if role and model:
-                models.setdefault(role, []).append(model)
-            prefix, _, number = (interaction or "").partition("-")
-            if prefix == "task" and number.isdigit():
-                per_task.setdefault(int(number), []).append((status, int(cost or 0)))
-    return tokens, models, per_task
 
 
 def _policy_from_env() -> dict[str, Any]:
@@ -476,6 +460,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     tokens: dict[str, int] = {}
     models: dict[str, list[str]] = {}
     routing: list[dict[str, Any]] = []
+    prompt: dict[str, Any] | None = None
     try:
         if args.sprint:
             board = _get(args.api, f"/v1/sprints/{args.sprint}/board")
@@ -500,6 +485,10 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
                 )
             )
             tokens, models, turns = reported_tokens(dsn, args.company)
+            measures = prompt_sections(dsn, args.company)
+            prompt = prompt_weight.weigh(
+                [measures[i["id"]] for i in items if i["id"] in measures]
+            )
         routing = routing_rows(items, last_model, runs, turns, _policy_from_env())
     except Exception as exc:  # noqa: BLE001 - a failed collection is recorded, not hidden.
         # An observation that could not be made is never a green zero.
@@ -517,6 +506,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
         models=models,
         error=error,
         routing=routing,
+        prompt=prompt,
     )
 
 

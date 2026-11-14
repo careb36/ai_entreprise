@@ -27,6 +27,9 @@ bench/
 - `scripts/bench/scorecard.py` grades a produced project (`grade`), collects
   a sprint's numbers (`collect`) and writes the scorecard (`write`).
 - `scripts/bench/broker.py` refuses a broker the bench must not share.
+- `scripts/bench/prompt_weight.py` weighs the prompts the backend sent, per
+  section; `scripts/bench/readers.py` reads the run's Postgres (the audit
+  log's turns, each run's stored evidence).
 - `scripts/bench/schema.py` is the scorecard's schema.
 - `scripts/bench/compare.py` diffs a scorecard with the previous one and exits
   1 beyond a threshold.
@@ -64,6 +67,7 @@ on a change under `bench/verifier/`. `verifier/README.md` lists the cases.
 | Models | The model served per role, from the same turns. |
 | By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/models/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/models/routing_record.py` makes the split, the same one the Sprints page shows. |
 | Policy | The routing policy's label on the card (`policy`): `BENCH_POLICY`, else the `AGENT_MODEL_POLICY` the run passed to the backend, else `default`. |
+| Prompt weight (`prompt`) | Each task's latest task-worker run's `prompt_sections`, read from its stored verification evidence (#443, `services/loop/worker/prompt_budget.py`): the backend's own measure of the Developer prompt it sent. Per spec and in total: the prompts measured, the estimated tokens in all and per task (the system prompt apart), per section the tokens sent and their share, the prompts with a section cut and which sections, and the prompts that carried `related_code` (#438). Estimated tokens are characters / 4, never the provider's count (`tokens` above). A run with no measure (a backend from before #443) is counted apart (`prompt_sections_missing`), never as a prompt of zero tokens. |
 
 ## Running it
 
@@ -111,12 +115,47 @@ models that delivered, before → after. That table is shown, never judged: a
 policy is meant to move work between models, and whether it pays is read
 from first attempts and tokens per band. With the fake models every policy
 gets the same answers, so only a real proxy (`BENCH_LLM_URL`) tells two
-policies apart; the real-model run is not wired into CI yet. Schema v2 cards
-carry the split; a v1 card (the references kept before it) is still read and
-compared, without a table by difficulty.
+policies apart; the real-model run is not wired into CI yet. Schema v2 and
+v3 cards carry the split; a v1 card (the references kept before it) is
+still read and compared, without a table by difficulty.
+
+## Reading the prompt weight
+
+Schema v3 cards add the weight of the prompts the backend sent. The card's
+Markdown has a "Prompt weight" section: one line per spec and for the total
+(prompts measured, estimated tokens per task, the system prompt apart, the
+prompts with sections cut and which, the prompts with related code, the runs
+without a measure), then the sections by weight with their share. A section
+the budget cut was not sent: it is counted under the cut ones, not in the
+weight. `compare.py` adds a table of the sections' estimated tokens and share,
+before → after, with the mean per task, the cut prompts and the related-code
+prompts. Like the table by difficulty it is shown, never judged: a change to
+the prompt is meant to move its weight. Only `--prompt-tokens` (off by
+default; relative, 0.2 = +20%) judges the mean estimated tokens per task, in
+the totals and per spec, and only when both cards measured prompts. Version
+1 and 2 cards are still read and compared, without the weight.
 
 To keep a run as the new reference, copy its `<stamp>.json` and `<stamp>.md`
-into `bench/scorecards/` in a pull request.
+into `bench/scorecards/` in a pull request. A run that adds specifications
+moves the totals (more tasks, more tokens), so it is kept as the reference
+in the pull request that adds them: `20261114T201804Z` is the first v3 card,
+the five specifications with the fake.
+
+## The reference specifications
+
+| Specification | Shape | Criteria |
+|---|---|---|
+| `01-cli-wordcount` | A command-line tool (`python -m wordcount`) over a library function | 4 |
+| `02-lib-roman` | A pure library with a round-trip property | 5 |
+| `03-http-api` | A JSON HTTP API in memory, a WSGI callable (`notesapi.app.make_app`); the tests call it with a constructed environ, no socket | 7 |
+| `04-data-job` | A CSV batch job (`python -m salesjob input.csv`): sums per region in exact decimals, JSON or CSV out, bad rows reported on stderr by line, exit codes 0, 1 and 2 | 7 |
+| `05-lib-config` | A parser with validation errors (`confcheck`): an INI-style file read with the offending line named, then checked against a typed schema, every problem reported in one call | 7 |
+
+Every project is standard library only: the grade needs no network and no
+package. A specification against an existing repository (the produced
+project starting from a checkout rather than a folder holding a README) is
+next: `run.sh` starts every company in an empty folder today, so that needs
+runner support before such a specification can be added.
 
 ## Adding a reference specification
 
@@ -140,6 +179,12 @@ into `bench/scorecards/` in a pull request.
    each delivers, and `acceptance`: per requirement, the test file QA's
    test-writing task delivers, `tests/test_req_<n>.py`), and each of those
    files under `fake/files/`. Task titles and requirement titles must be
-   unique across the bench. The fake's tests are QA's, not the grading ones.
+   unique across the bench. The fake's tests are QA's, not the grading ones:
+   QA's files import inside each test, since they land before the code, and
+   a task's own unit tests import only what that task or an earlier one
+   delivers.
 4. Run `scripts/bench/run.sh bench/specs/<nn>-<name>` and the backend suite
-   (`tests/test_bench_scorecard.py` checks the new specification too).
+   (`tests/test_bench_scorecard.py` and `tests/test_bench_prompt_weight.py`
+   check the new specification too: the spec check, a test per criterion,
+   the fake's plan and files, unique titles, and that the fake's files pass
+   every criterion while an empty project passes none).

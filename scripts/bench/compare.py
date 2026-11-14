@@ -2,7 +2,8 @@
 """Compare a bench scorecard with the previous one; fail beyond a threshold.
 
     python3 scripts/bench/compare.py bench/scorecards/<stamp>.json \\
-        [--previous FILE] [--dir bench/scorecards] [--rate 0.05] [--rework 0.25] [--tokens 0.5]
+        [--previous FILE] [--dir bench/scorecards] [--rate 0.05] [--rework 0.25] [--tokens 0.5] \\
+        [--prompt-tokens 0.2]
 
 Without ``--previous`` the previous scorecard is the newest one in ``--dir``
 whose stamp sorts before the current one's (the stamps are UTC
@@ -18,7 +19,10 @@ A regression, in the totals or in any specification both cards hold:
 - rework requests per task rose by more than ``--rework`` (absolute);
 - reported tokens grew by more than ``--tokens`` (relative, 0.5 = +50%),
   totals only, and only when both cards reported some;
-- a specification that completed before did not complete now.
+- a specification that completed before did not complete now;
+- with ``--prompt-tokens`` (off by default), the mean estimated prompt tokens
+  per task grew by more than that (relative, 0.2 = +20%), in the totals or a
+  specification, when both cards measured prompts (schema v3).
 
 Wall-clock is shown, never judged: it depends on the machine. Two runs made
 under different routing policies (``scorecard.py write --policy``, each run
@@ -27,7 +31,9 @@ adds a table by difficulty: per band, the tasks, the share done at the first
 attempt, rework per task, the blocked share, the reported tokens and the
 models that delivered, summed over the specifications. The table by
 difficulty is shown, never judged: a policy is meant to move work between
-models. A card from before the split (schema v1) shows none. Prints the diff
+models. A card from before the split (schema v1) shows none. A table of the
+prompts' weight per section (estimated tokens, schema v3) is shown the same
+way, never judged; only ``--prompt-tokens`` judges the mean. Prints the diff
 as Markdown (the job summary and the issue body) and exits 1 on a
 regression, 2 when a card does not match the schema, 0 otherwise.
 """
@@ -39,9 +45,10 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from schema import validate  # the sibling module, by path
+import prompt_weight  # the sibling modules, by path
+from schema import validate
 
-DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5}
+DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5, "prompt_tokens": None}
 # (field, label, direction): +1 when higher is better, -1 when lower is.
 _JUDGED = (
     ("criteria_rate", "criteria passed", +1, "rate"),
@@ -88,6 +95,25 @@ def _judge(
     return found
 
 
+def _judge_prompt(
+    where: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    limit: float | None,
+) -> list[str]:
+    """The mean estimated prompt tokens per task, judged only with a limit and
+    only when both sides measured prompts."""
+    if limit is None or not before or not after:
+        return []
+    if not (before["prompts"] and after["prompts"] and before["tokens_mean"]):
+        return []
+    growth = (after["tokens_mean"] - before["tokens_mean"]) / before["tokens_mean"]
+    if growth <= limit + 1e-9:
+        return []
+    mean = f"{before['tokens_mean']:.0f} to {after['tokens_mean']:.0f}"
+    return [f"{where}: estimated prompt tokens per task grew from {mean}"]
+
+
 def compare(
     previous: dict[str, Any],
     current: dict[str, Any],
@@ -100,6 +126,12 @@ def compare(
         _numbers(previous["totals"], is_spec=False),
         _numbers(current["totals"], is_spec=False),
         limits,
+    )
+    regressions += _judge_prompt(
+        "total",
+        previous["totals"].get("prompt"),
+        current["totals"].get("prompt"),
+        limits["prompt_tokens"],
     )
     before_tokens = previous["totals"]["tokens_reported"]
     after_tokens = current["totals"]["tokens_reported"]
@@ -126,6 +158,9 @@ def compare(
         b, a = _numbers(old, is_spec=True), _numbers(spec, is_spec=True)
         rows.append((spec["name"], b, a))
         regressions += _judge(spec["name"], b, a, limits)
+        regressions += _judge_prompt(
+            spec["name"], old.get("prompt"), spec.get("prompt"), limits["prompt_tokens"]
+        )
         if old["status"] == "completed" and spec["status"] != "completed":
             regressions.append(
                 f"{spec['name']}: completed before, {spec['status']} now"
@@ -235,6 +270,7 @@ def render(
             f"| {b['wall_clock_seconds']:.0f} s → {a['wall_clock_seconds']:.0f} s |"
         )
     lines += render_bands(previous, current)
+    lines += prompt_weight.render_table(previous, current)
     if result["new_specs"]:
         lines += [
             "",
@@ -281,6 +317,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rate", type=float, default=DEFAULTS["rate"])
     parser.add_argument("--rework", type=float, default=DEFAULTS["rework"])
     parser.add_argument("--tokens", type=float, default=DEFAULTS["tokens"])
+    parser.add_argument(
+        "--prompt-tokens",
+        type=float,
+        default=DEFAULTS["prompt_tokens"],
+        help="judge the mean estimated prompt tokens per task (relative); off by default",
+    )
     args = parser.parse_args(argv)
     current = _load(args.current)
     if current is None:
@@ -297,7 +339,12 @@ def main(argv: list[str] | None = None) -> int:
     result = compare(
         previous,
         current,
-        {"rate": args.rate, "rework": args.rework, "tokens": args.tokens},
+        {
+            "rate": args.rate,
+            "rework": args.rework,
+            "tokens": args.tokens,
+            "prompt_tokens": args.prompt_tokens,
+        },
     )
     print(render(previous, current, result), end="")
     return 1 if result["regressions"] else 0

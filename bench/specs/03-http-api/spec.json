@@ -1,0 +1,75 @@
+{
+  "title": "Notes HTTP API",
+  "summary": "A tiny JSON HTTP API that keeps notes in memory, served as a WSGI application from the standard library.",
+  "requirements": [
+    {
+      "title": "Create and read notes over HTTP",
+      "description": "notesapi.app.make_app() returns a new WSGI application with an empty store of its own. POST /notes with a JSON object {\"text\": ...} creates a note with the next integer id, from 1; GET /notes/<id> reads one note and GET /notes lists every note in the order they were created. Every answer with a body is JSON, with the header Content-Type: application/json.",
+      "criteria": [
+        {
+          "given": "a new application",
+          "when": "POST /notes is sent with the JSON body {\"text\": \"buy milk\"}",
+          "then": "it answers status 201, Content-Type application/json and the body {\"id\": 1, \"text\": \"buy milk\"}"
+        },
+        {
+          "given": "an application where the note \"buy milk\" was created",
+          "when": "GET /notes/1 is sent",
+          "then": "it answers status 200 and the body {\"id\": 1, \"text\": \"buy milk\"}"
+        },
+        {
+          "given": "an application where the notes \"a\" and then \"b\" were created",
+          "when": "GET /notes is sent",
+          "then": "it answers status 200 and the body [{\"id\": 1, \"text\": \"a\"}, {\"id\": 2, \"text\": \"b\"}]"
+        }
+      ]
+    },
+    {
+      "title": "Delete a note over HTTP",
+      "description": "DELETE /notes/<id> removes the note; its id is never given to another note.",
+      "criteria": [
+        {
+          "given": "an application where the note with id 1 exists",
+          "when": "DELETE /notes/1 is sent",
+          "then": "it answers status 204 with an empty body, and a GET /notes/1 sent afterwards answers status 404"
+        }
+      ]
+    },
+    {
+      "title": "Refuse bad requests with a JSON error",
+      "description": "A request the API cannot serve is answered with a 4xx status and a JSON object holding an \"error\" key with a message, and changes nothing in the store.",
+      "criteria": [
+        {
+          "given": "a body that is not JSON, or a JSON body without a non-empty string \"text\"",
+          "when": "POST /notes is sent with it",
+          "then": "it answers status 400 with a JSON object holding \"error\", and GET /notes still answers []"
+        },
+        {
+          "given": "an application with no note of id 99",
+          "when": "GET /notes/99 or DELETE /notes/99 is sent",
+          "then": "it answers status 404 with a JSON object holding \"error\""
+        },
+        {
+          "given": "a path the API does not serve, such as /other, or a method /notes does not allow, such as PUT",
+          "when": "the request is sent",
+          "then": "the unknown path answers status 404 and the method answers status 405, each with a JSON object holding \"error\""
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "100 POST requests followed by 100 GET requests through the WSGI callable take under 1 second"
+    },
+    {
+      "attribute": "security",
+      "target": "a request body over 65536 bytes is refused with status 413 before it is parsed"
+    }
+  ],
+  "constraints": [
+    "Python 3.11 or later, standard library only (wsgiref and json); no web framework.",
+    "The package is notesapi/ at the project root: notesapi/store.py defines the in-memory NoteStore, notesapi/app.py defines make_app(store=None).",
+    "The application is a plain WSGI callable; tests call it directly with a constructed environ, without opening a socket.",
+    "Tests live in tests/ and run with pytest from the project root."
+  ]
+}

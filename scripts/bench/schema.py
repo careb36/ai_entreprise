@@ -5,13 +5,19 @@
 Version 2 (issue #319) adds the routing policy's label (``policy``) and, per
 spec, the tasks split by difficulty and model (``routing``). A version 1 card
 (the references kept before it) is still read, without either.
+
+Version 3 (issue #316, after #443) adds, per spec and in the totals, the
+weight of the prompts the backend sent (``prompt``, ``prompt_weight.py``):
+estimated tokens per section, the prompts with sections cut and with related
+code, and the runs without a measure counted apart. Version 1 and 2 cards are
+still read, without it.
 """
 
 import math
 from typing import Any
 
-SCHEMA_VERSION = 2
-READABLE_VERSIONS = (1, 2)
+SCHEMA_VERSION = 3
+READABLE_VERSIONS = (1, 2, 3)
 PASS, FAIL, MISSING = "pass", "fail", "missing"
 SPEC_STATUSES = ("completed", "timeout", "error")
 
@@ -106,6 +112,54 @@ def _routing_problems(where: str, rows: Any) -> list[str]:
     return problems
 
 
+_PROMPT_COUNTS = (
+    "prompts",
+    "prompt_sections_missing",
+    "tokens_estimated",
+    "system_tokens_estimated",
+    "cut_prompts",
+    "related_code_prompts",
+)
+
+
+def _prompt_problems(where: str, obj: Any) -> list[str]:
+    """What is wrong with a ``prompt`` object (``prompt_weight.weigh``)."""
+    if not isinstance(obj, dict):
+        return [f"{where}.prompt must be an object"]
+    problems = [
+        f"{where}.prompt.{k} must be a count"
+        for k in _PROMPT_COUNTS
+        if not _count(obj.get(k))
+    ]
+    if not _number(obj.get("tokens_mean")):
+        problems.append(f"{where}.prompt.tokens_mean must be a finite number")
+    sections = obj.get("sections")
+    if not isinstance(sections, dict):
+        problems.append(f"{where}.prompt.sections must be an object")
+    else:
+        for name, row in sections.items():
+            if not (
+                isinstance(row, dict)
+                and _count(row.get("tokens"))
+                and _count(row.get("prompts"))
+                and _number(row.get("share"))
+                and 0 <= row["share"] <= 1
+            ):
+                problems.append(
+                    f"{where}.prompt.sections.{name} needs counts tokens, prompts and a share from 0 to 1"
+                )
+    cut = obj.get("cut")
+    if not isinstance(cut, dict) or not all(_count(v) for v in cut.values()):
+        problems.append(f"{where}.prompt.cut must map section names to counts")
+    if all(
+        _count(obj.get(k)) for k in ("prompts", "cut_prompts", "related_code_prompts")
+    ) and (max(obj["cut_prompts"], obj["related_code_prompts"]) > obj["prompts"]):
+        problems.append(
+            f"{where}.prompt: cut_prompts and related_code_prompts exceed prompts"
+        )
+    return problems
+
+
 def validate(card: Any) -> list[str]:
     """What is wrong with *card* against the schema; empty when it is sound."""
     if not isinstance(card, dict):
@@ -116,7 +170,7 @@ def validate(card: Any) -> list[str]:
         problems.append(f"schema_version is {version!r}, expected {SCHEMA_VERSION}")
     keys = (
         ("stamp", "commit", "llm", "policy")
-        if version == 2
+        if version in (2, 3)
         else ("stamp", "commit", "llm")
     )
     for key in keys:
@@ -179,8 +233,10 @@ def validate(card: Any) -> list[str]:
             problems.append(
                 f"{where}.tasks: done_first_attempt <= done <= total does not hold"
             )
-        if version == 2:
+        if version in (2, 3):
             problems.extend(_routing_problems(where, spec.get("routing")))
+        if version == 3:
+            problems.extend(_prompt_problems(where, spec.get("prompt")))
     totals = card.get("totals")
     if not isinstance(totals, dict):
         problems.append("totals must be an object")
@@ -193,4 +249,6 @@ def validate(card: Any) -> list[str]:
             for k in _TOTAL_FIELDS
             if k in totals and not _number(totals[k])
         )
+        if version == 3:
+            problems.extend(_prompt_problems("totals", totals.get("prompt")))
     return problems

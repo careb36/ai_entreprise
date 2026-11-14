@@ -40,8 +40,8 @@ def _spec(spec_dir: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_there_are_at_least_two_reference_specifications():
-    assert len(SPEC_DIRS) >= 2
+def test_there_are_at_least_five_reference_specifications():
+    assert len(SPEC_DIRS) >= 5
 
 
 @pytest.mark.parametrize("spec_dir", SPEC_DIRS, ids=lambda p: p.name)
@@ -296,7 +296,7 @@ def test_the_scorecard_totals_and_its_schema():
 @pytest.mark.parametrize(
     ("change", "problem"),
     [
-        (lambda c: c.update(schema_version=3), "schema_version"),
+        (lambda c: c.update(schema_version=4), "schema_version"),
         (lambda c: c.update(commit=""), "commit"),
         (lambda c: c["specs"][0].update(status="done"), "status"),
         (lambda c: c["specs"][0]["criteria"].update(passed=7), "criteria.passed"),
