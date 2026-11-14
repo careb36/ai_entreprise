@@ -83,6 +83,11 @@ def _record_task_run(
     )
     # Tool calls and edited files: observations beside the daemon's, not claims.
     evidence = observe_tools(evidence, agent)
+    # The weight of each prompt section the backend sent, and what the budget
+    # left out (prompt_budget, #443): the backend's observation, not a claim.
+    if agent.get("prompt_sections"):
+        evidence = evidence if isinstance(evidence, dict) else {}
+        evidence["prompt_sections"] = agent["prompt_sections"]
     try:
         with Session(engine) as session:
             run, _created = agent_run_service.ingest_agent_run(session, payload)
