@@ -2434,7 +2434,8 @@
       "price_ambiguous": "precio desconocido (el modelo figura con varios precios)",
       "model_unknown": "precio desconocido (modelo no registrado)"
     },
-    "reportedTokens": "{{tokens}} tokens informados"
+    "reportedTokens": "{{tokens}} tokens informados",
+    "weightTitle": "Peso del prompt por sección"
   },
   "gitSettings": {
     "title": "Flujo de trabajo con Git",
@@ -3264,5 +3265,34 @@
       "add": "Agregar un comentario en {{path}}, línea {{line}}"
     },
     "counts": "+{{additions}} −{{deletions}}"
+  },
+  "promptWeight": {
+    "none": "No hay medida del prompt registrada para estas corridas.",
+    "summary": "{{calls}} prompts · {{tokens}} tokens estimados, más {{system}} en el prompt de sistema",
+    "tokensShare": "{{tokens}} · {{pct}} %",
+    "cut_one": "recortada {{count}} vez",
+    "cut_other": "recortada {{count}} veces",
+    "cutHint": "Prompts en los que el presupuesto dejó afuera esta sección (PROMPT_BUDGET).",
+    "estimateHint": "Estimado por el backend a partir de lo que envió (caracteres / 4), no es el conteo del proveedor.",
+    "show": "Ver el peso del prompt",
+    "hide": "Ocultar el peso del prompt",
+    "loading": "Cargando el peso del prompt…",
+    "error": "No se pudo leer el peso del prompt.",
+    "section": {
+      "output_format": "Formato de salida",
+      "task": "Tarea",
+      "architect_brief": "Indicaciones del Architect",
+      "review_feedback": "Devolución de la revisión",
+      "previous_attempt": "Intento anterior",
+      "requirements": "Requisitos",
+      "standards_and_procedures": "Estándares y procedimientos",
+      "repository": "Repositorio",
+      "related_code": "Código relacionado",
+      "lessons": "Lecciones",
+      "memory": "Memoria",
+      "completed_tasks": "Tareas terminadas",
+      "console_assistant_notes": "Notas de consola",
+      "wiki": "Wiki"
+    }
   }
 }
