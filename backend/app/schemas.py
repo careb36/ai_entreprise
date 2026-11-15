@@ -115,6 +115,13 @@ class CompanyInitRequest(RequestModel):
     detected_stack: dict[str, Any] | None = None  # Stack analysis from discovery phase
     # Start Sprint 0 at once; ``False`` leaves it planned until someone starts it.
     start_now: bool = True
+    # Sprint 0 — Foundations: ``True`` plans it, ``False`` skips it, and
+    # ``None`` (default) leaves the decision to the workspace daemon's
+    # observation of project_path: a repository with code gets none
+    # (retrospective F8; services/loop/foundation_setup.py). Without an
+    # observation the sprint is planned, as before. A claim about the folder
+    # in this request decides nothing: only the daemon's answer does.
+    foundation_sprint: bool | None = None
     # The Git workflow: on only when the daemon observes a repository at
     # project_path (services/release/git_setup.py); ``False`` turns it off anyway.
     git_workflow: bool | None = None

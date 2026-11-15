@@ -220,7 +220,12 @@ refusal).
 7. **A person's review of a sprint's integration.**
    *Problem:* F7. *Proposal:* reviews and line comments on the integration as
    on a run, recorded and audited, whether or not it is published to a forge.
-8. **No foundation sprint for an existing repository.**
+8. **No foundation sprint for an existing repository.** — **Done**
+   (`services/loop/foundation_setup.py`): `init_company` asks the daemon to
+   inspect the folder and plans no foundation sprint when it observes a
+   repository with code, unless the request asks for one
+   (`foundation_sprint`); the response names the decision and its reason, and
+   an unobserved folder keeps the old behaviour.
    *Problem:* F8. *Proposal:* `init_company` on a folder the daemon observes to
    be a repository with code plans no foundation sprint unless asked.
 

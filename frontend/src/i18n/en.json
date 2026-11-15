@@ -254,6 +254,15 @@
     "infrastructure": "Infrastructure",
     "filesScanned_one": "{{count}} file scanned",
     "filesScanned_other": "{{count}} files scanned",
+    "foundationOutcome": {
+      "requested": "Sprint 0 — Foundations was planned, as the request asked.",
+      "declined": "No foundation sprint was planned: the request declined it.",
+      "repository_with_code": "No foundation sprint was planned: the workspace daemon observed an existing repository with code in the project folder.",
+      "folder_without_code": "Sprint 0 — Foundations was planned: the daemon observed no existing repository with code in the folder.",
+      "no_folder": "Sprint 0 — Foundations was planned: there is no project folder to observe.",
+      "daemon_unobserved": "Sprint 0 — Foundations was planned: the workspace daemon could not be reached, so the folder was not observed.",
+      "unknown": "The company was created without a foundation sprint."
+    },
     "aiSuggestion": "AI team suggestion",
     "rulesSuggestion": "Rule-based suggestion",
     "complexity": "{{level}} complexity",

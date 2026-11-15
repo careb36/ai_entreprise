@@ -141,12 +141,22 @@ export default function CompanyNew() {
     initCompanyMutation.mutate(payload, {
       onSuccess: (response: InitCompanyResponse) => {
         const companyId = response.company_id
-        const sprintId = response?.sprint_id ?? companyId
         setCompany(companyId, companyName.trim())
-        navigate(`/sprints/${sprintId}`)
+        // No foundation sprint was planned (the daemon observed an existing
+        // repository with code, or the request declined it): say why, then
+        // land on the sprint list instead of a sprint that does not exist.
+        const sprintId = response.sprint_id
+        const target = sprintId != null ? `/sprints/${sprintId}` : '/sprints'
+        if (sprintId == null) {
+          const outcome = response.foundation_sprint
+          alert(t(`companyNew.foundationOutcome.${outcome?.reason ?? ''}`, {
+            defaultValue: outcome?.detail ?? t('companyNew.foundationOutcome.unknown'),
+          }))
+        }
+        navigate(target)
         setTimeout(() => {
-          if (!window.location.pathname.startsWith(`/sprints/${sprintId}`)) {
-            window.location.href = `/sprints/${sprintId}`
+          if (!window.location.pathname.startsWith(target)) {
+            window.location.href = target
           }
         }, 1000)
         useAuthStore.getState().loadMe().catch(() => {})
