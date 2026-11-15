@@ -27,6 +27,12 @@ record follows the company's request.
 
 The install asks for its whole output too (``run_logs.py``): the record's
 ``full_log`` is what the backend read back and hashed.
+
+In a repository with folders of their own (``stack_roots``), a manifest in a
+folder is that folder's install's: ``cd <folder> && <install>``, kept in
+``evidence["command_runs"]`` (``kind: "install"``) and judged by the
+``required_commands`` check; the root's install keeps the manifests in no
+folder, as before.
 """
 
 from __future__ import annotations
@@ -37,7 +43,8 @@ from typing import Any
 
 from config import settings
 
-from services.workspace import run_logs, sandbox, stack_profiles
+from services.workspace import run_logs, sandbox, stack_profiles, stack_roots
+from services.workspace.folder_commands import execute
 from services.workspace.project_profile import Context
 
 logger = logging.getLogger(__name__)
@@ -137,6 +144,15 @@ async def install_if_needed(ctx: Context) -> None:
     changed = changed_manifests(evidence, ctx.company().get("installs"), mode)
     if not changed:
         return
+    folders = await ctx.folders()
+    if folders:
+        # A folder's manifests are its own install's (``stack_roots``).
+        own = [m for m in changed if stack_roots.folder_of(m["path"], folders)]
+        if own:
+            await _install_folders(ctx, folders, own, box, unavailable, mode)
+            changed = [m for m in changed if m not in own]
+            if not changed:
+                return
     profile = await ctx.profile()
     command = profile.get("install")
     covered = [m for m in changed if stack_profiles.installed_by(profile, m["path"])]
@@ -218,3 +234,69 @@ async def install_if_needed(ctx: Context) -> None:
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.
                 logger.warning("Could not record the install: %s", e)
+
+
+async def _install_folders(
+    ctx: Context,
+    folders: list[dict[str, Any]],
+    changed: list[dict[str, Any]],
+    box: dict[str, Any] | None,
+    unavailable: str | None,
+    mode: str,
+) -> None:
+    """Each folder's install for the manifests the delivery changed in it."""
+    evidence = ctx.evidence
+    if box is not None:
+        box = {
+            **box,
+            "network": bool(settings.DELIVERY_INSTALL_NETWORK),
+            "purpose": "install",
+        }
+    timeout = float(settings.DELIVERY_INSTALL_TIMEOUT_SECONDS)
+    for folder in folders:
+        name = folder["folder"]
+        mine = [m for m in changed if stack_roots.folder_of(m["path"], folders) == name]
+        if not mine:
+            continue
+        command = folder.get("install")
+        covered = [m for m in mine if stack_roots.installed_by(folder, m["path"])]
+        base = {"kind": "install", "folder": name, "required": True}
+        if not command or not covered:
+            paths = ", ".join(m["path"] for m in mine)
+            reason = (
+                f"`{command}` in {name}/ does not install {paths}"
+                if command
+                else f"no install command for {name}/"
+            )
+            evidence.setdefault("command_runs", []).append(
+                {**base, "command": command, "exit_code": None, "manifests": mine}
+                | {"reason": reason}
+            )
+            continue
+        record, _output = await execute(
+            ctx,
+            "install",
+            name,
+            command,
+            box,
+            unavailable,
+            timeout=timeout + REPLY_MARGIN_SECONDS,
+            timeout_seconds=timeout,
+        )
+        record["manifests"] = covered
+        record["source"] = (folder.get("source") or {}).get("install")
+        if box is not None:
+            record["sandbox_mode"] = mode
+        evidence.setdefault("command_runs", []).append(record)
+        company_id = ctx.company().get("id")
+        if record["exit_code"] == 0 and not record["timed_out"] and company_id:
+            try:
+                await asyncio.to_thread(
+                    _record_installed,
+                    ctx.engine,
+                    company_id,
+                    install_key(evidence["workspace_root"], mode),
+                    covered,
+                )
+            except Exception as e:  # noqa: BLE001 - The next delivery installs again.
+                logger.warning("Could not record the install in %s/: %s", name, e)

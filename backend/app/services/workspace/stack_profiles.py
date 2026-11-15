@@ -26,6 +26,8 @@ from config import settings
 # The fields a profile carries, and the ones a company may override.
 COMMAND_FIELDS = ("install", "test", "lint", "start", "e2e")
 FIELDS = ("stack", *COMMAND_FIELDS, "port", "probe_path", "web")
+# The keys of a stored profile beyond the root's own fields (``stack_roots``).
+EXTENSION_KEYS = ("folders", "every_delivery")
 
 # Detected in this order: the first stack whose marker files exist wins.
 # ``manifests`` are the files whose change calls for an install (exact names
@@ -466,6 +468,10 @@ def resolve(detected: dict[str, Any] | None, company_overrides: Any) -> dict[str
     """The profile to use: detected, then the deployment's settings, then the
     company's; an empty command means the step is off. ``source`` names where
     each field came from, so the evidence can say whose command ran."""
+    if isinstance(company_overrides, dict):  # The root's fields only.
+        company_overrides = {
+            k: v for k, v in company_overrides.items() if k not in EXTENSION_KEYS
+        }
     try:
         own = validate_overrides(company_overrides)
     except (TypeError, ValueError):

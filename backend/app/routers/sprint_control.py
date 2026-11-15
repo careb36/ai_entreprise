@@ -10,7 +10,8 @@ Endpoints (Manager):
 - ``POST /v1/sprints/{id}/stop``     — stop for good; no follow-up sprint opens.
 - ``GET/PUT /v1/companies/{id}/autonomy`` — read (Viewer) or change the autonomy level.
 - ``GET/PUT /v1/companies/{id}/stack_profile`` — read (Viewer) or replace the
-  company's overrides of the detected stack profile (``services/stack_profiles.py``).
+  company's overrides of the detected stack profile (``services/stack_profiles.py``),
+  per folder too, and its every-delivery commands (``services/workspace/stack_roots.py``).
 - ``POST /v1/companies/{id}/sandbox/cache/reset`` — reset the project's
   dependency cache volume and lift its quarantine (Manager).
 
@@ -30,7 +31,7 @@ from schemas import RequestModel
 from services.loop import sprint_control
 from services.release import git_setup
 from services.tools import research_tools
-from services.workspace import sandbox, stack_profiles
+from services.workspace import sandbox, stack_profiles, stack_roots
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
@@ -353,6 +354,8 @@ async def reset_sandbox_cache(
 class StackProfileRequest(RequestModel):
     # install, test, lint, start, e2e (an empty string turns the step off),
     # port, probe_path and stack; a field left out keeps the detected value.
+    # ``folders`` ({folder: {stack, install, test}}) and ``every_delivery``
+    # (commands run on every delivery) as ``stack_roots`` checks them.
     profile: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -368,6 +371,12 @@ def _stack_profile_payload(company: Company) -> dict:
             for p in stack_profiles.PROFILES
         ],
         "installed_manifests": dict(company.dependency_installs or {}),
+        # The folders the company names and its every-delivery commands
+        # (``stack_roots``); detected folders join them at delivery time.
+        "folders_without_detection": stack_roots.resolve_folders(
+            None, {}, company.stack_profile
+        ),
+        "every_delivery": stack_roots.every_delivery(company.stack_profile),
     }
 
 
@@ -399,8 +408,8 @@ async def set_stack_profile(
     if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
     try:
-        overrides = stack_profiles.validate_overrides(req.profile)
-    except ValueError as e:
+        overrides = stack_roots.validate_overrides(req.profile)
+    except (TypeError, ValueError) as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     company.stack_profile = overrides or None
     session.add(company)

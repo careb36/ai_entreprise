@@ -42,7 +42,7 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | Step | What it does |
 |---|---|
 | `checkout` | Copies the files git tracks (or would track) in this repository to `--checkout` and commits them there as `main` of a fresh repository. Never the live checkout and never a `git worktree` of it: the Git workflow makes a branch per task, and a worktree shares the live repository's branches. |
-| `company` | `POST /v1/init_company` "La Fabrique" with the snapshot as its project, the Git workflow on `main`, the roles of the loop (PO, Architect, Developer, QA, ScrumMaster, TechWriter); the stack profile names the delivery test command (`--test-command`) and turns install, lint, start and e2e off; the sandbox is `--sandbox` (`container` by default). |
+| `company` | `POST /v1/init_company` "La Fabrique" with the snapshot as its project, the Git workflow on `main`, the roles of the loop (PO, Architect, Developer, QA, ScrumMaster, TechWriter); the stack profile (`--profile`, `folders` by default) names La Fabrique's suites per folder as CI runs them (`backend/` pytest through Poetry, `frontend/` tsc, lint and vitest, `llm-proxy/` pytest, `vscode-daemon/` the backend's suite, where its tests live), each with its install, and three commands every delivery runs (`scripts/check_architecture.py`, `check_frontend_architecture.py`, `check_file_sizes.py`); a delivery runs the suites of the folders the daemon saw it write in, every one for a file outside them (self-hosting retrospective, F5). `--profile sprint-tests` (the e2e's, whose sandbox has none of these toolchains) names one root command instead (`--test-command`). Either way the root's install, lint, start and e2e are off; the sandbox is `--sandbox` (`container` by default). |
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
 | `issue` | Posts and approves the #535 specification, posts and approves the revised architecture, asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`). |
@@ -74,7 +74,9 @@ Out of scope for the e2e; this is how an owner runs it.
    Developer, QA and the TechWriter (Settings, Models) and set a budget.
    Turn the sandbox on for the deployment (`DELIVERY_SANDBOX=container` and
    `DELIVERY_SANDBOX_IMAGE`, `docs/CONFIGURATION.md`) and build the image with
-   Python and pytest.
+   what the folders' suites call: Python 3 with Poetry, Node with npm, and
+   git (the file-size check lists tracked files). A command whose runtime is
+   missing leaves the delivery unverifiable, never verified.
 3. Create an API token and run the setup:
 
    ```bash
