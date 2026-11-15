@@ -222,7 +222,9 @@ it, and the client's own acceptance of the high-risk one counts as agreeing
 with the suggestion.
 Then a web project (issue #315; the run enables `DELIVERY_APP_CHECK_ENABLED`):
 a second company, whose Manager marks its folder as serving pages started
-on `E2E_WEB_PORT` (`"web": true`), gets the same
+on `E2E_WEB_PORT` (`"web": true`; a free port picked at run time, as the
+backend's and the fake model's are, since the runners share one machine and a
+port another run holds is refused by the daemon), gets the same
 specification; QA's test-writing tasks are asked for browser checks (the
 first company's never were) and write one Playwright smoke test per
 criterion, the greeting's application is started and answers on its port,
