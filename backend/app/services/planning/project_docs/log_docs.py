@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
-from services.planning.project_docs import texts
+from services.planning.project_docs import specs, texts
 from services.planning.project_docs.control_docs import (
     cell,
     date,
@@ -75,9 +75,9 @@ TRACE_INPUTS = ("specification", "sprints", "verifications", "integrations")
 def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Requirement, then task, then verified delivery, then integration commit."""
     lang, tr = tr_of(snapshot)
-    spec = snapshot.get("specification")
+    listed = specs.documented(snapshot)
     src, missing = Sources(lang), []
-    if not spec:
+    if not listed:
         body = [missing_line(lang, tr("no_spec"))]
         return build(
             "traceability",
@@ -89,6 +89,26 @@ def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
             [tr("section.all")],
         )
     verified, merged = latest_verification(snapshot), integrated_at(snapshot)
+    if len(listed) == 1:
+        body = _trace_of(snapshot, listed[0], src, missing, verified, merged)
+    else:
+        body = specs.intro(snapshot, src)
+        for spec in listed:
+            body += [specs.heading(spec, src.cite(spec_ref(spec, lang)), lang), ""]
+            body += [*_trace_of(snapshot, spec, src, missing, verified, merged), ""]
+    inputs = specs.inputs(snapshot, TRACE_INPUTS)
+    return build("traceability", PMBOK, body, src, snapshot, inputs, missing)
+
+
+def _trace_of(
+    snapshot: dict,
+    spec: dict,
+    src: Sources,
+    missing: list,
+    verified: dict,
+    merged: dict,
+) -> list[str]:
+    lang, tr = src.lang, texts.translator(src.lang)
     body = [
         tr(
             "trace.intro",
@@ -103,7 +123,7 @@ def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
     for req in spec.get("requirements") or []:
         req_id = str(req.get("id"))
         rmark = src.cite(requirement_ref(spec, req, lang))
-        tasks = covering(snapshot, req_id)
+        tasks = covering(snapshot, req_id, spec)
         if not tasks:
             body.append(
                 f"| {md_id(req_id)} | - | {tr('dash_none')} | - | - | - | {rmark} |"
@@ -144,7 +164,7 @@ def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
     if not spec.get("requirements"):
         body.append(missing_line(lang, tr("no_requirement")))
         missing.append(tr("section.requirements"))
-    return build("traceability", PMBOK, body, src, snapshot, TRACE_INPUTS, missing)
+    return body
 
 
 ISSUE_INPUTS = ("sprints", "events", "verifications")

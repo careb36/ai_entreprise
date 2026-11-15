@@ -28,7 +28,7 @@ from collections.abc import Callable
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import texts, wstg_status
+from services.planning.project_docs import specs, texts, wstg_status
 from services.planning.project_docs.layout import DOMAINS, PMBOK, build, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_inline
@@ -146,16 +146,23 @@ def requirements_stability(snapshot: dict, src: Sources, tr: Tr) -> Result:
 
 
 def requirements_covered(snapshot: dict, src: Sources, tr: Tr) -> Result:
-    spec = snapshot.get("specification")
-    if not spec or not spec.get("requirements"):
+    """Requirements with a task, over every approved specification when there
+    are several (each requirement against its own specification's sprints)."""
+    listed = [s for s in specs.documented(snapshot) if s.get("requirements")]
+    if not listed:
         return NOT_COMPUTABLE, tr("check.no_requirements"), ""
-    reqs = spec["requirements"]
-    covered = sum(1 for r in reqs if covering(snapshot, str(r.get("id"))))
-    observed = tr("check.covered_obs", part=covered, whole=len(reqs))
+    whole = sum(len(s["requirements"]) for s in listed)
+    covered = sum(
+        1
+        for s in listed
+        for r in s["requirements"]
+        if covering(snapshot, str(r.get("id")), s)
+    )
+    observed = tr("check.covered_obs", part=covered, whole=whole)
     return (
-        (MET if covered == len(reqs) else NOT_MET),
+        (MET if covered == whole else NOT_MET),
         observed,
-        src.cite(spec_ref(spec, src.lang)),
+        " ".join(src.cite(spec_ref(s, src.lang)) for s in listed),
     )
 
 
@@ -334,5 +341,12 @@ def document(snapshot: dict[str, Any]) -> dict[str, Any]:
     missing = [r["outcome"] for r in results if r["result"] == NOT_COMPUTABLE]
     persons = [r["outcome"] for r in results if r["result"] == PERSON]
     return build(
-        "checks", PMBOK, body, src, snapshot, CHECK_INPUTS, missing, persons=persons
+        "checks",
+        PMBOK,
+        body,
+        src,
+        snapshot,
+        specs.inputs(snapshot, CHECK_INPUTS),
+        missing,
+        persons=persons,
     )

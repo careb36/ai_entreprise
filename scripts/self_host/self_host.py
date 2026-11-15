@@ -24,8 +24,10 @@ Steps (``--steps``, comma-separated; ``all`` by default):
   API and compared with ``docs/ARCHITECTURE.md`` and ``docs/adr/`` in the
   snapshot, then written into it by the daemon and compared with git.
 - ``issue``: issue #535 as a specification (``fixtures/``), approved; the
-  Architect's revision of the architecture for it, approved; the PO's plan,
-  acceptance tests first; the sprint started on the plan.
+  Architect's revision for it as the next version of La Fabrique's one
+  architecture (the covers of #469's specification kept by the product, the
+  fixture adding #535's), approved; the PO's plan, acceptance tests first;
+  the sprint started on the plan.
 - ``wait``: until that sprint completes (``--timeout``).
 - ``review``: the tasks waiting for a person, the task branches and the
   sprint's integration (its branches merged and the suite run, the one
@@ -277,8 +279,10 @@ def _approved_spec(api: Api, cid: int, record: dict) -> dict:
 
 
 def _approved_architecture(api: Api, spec_id: int, record: dict) -> dict:
+    """The version of the company's architecture with the record's title, found
+    again whatever its status (a later version supersedes it), else posted."""
     rows = api.get(f"/v1/architectures?specification_id={spec_id}")["architectures"]
-    arch = next((a for a in rows if a["title"] == record["title"] and a["status"] != "superseded"), None)
+    arch = next((a for a in rows if a["title"] == record["title"]), None)
     if arch is None:
         body = {k: record[k] for k in ("title", "overview", "modules", "interfaces", "decisions", "conventions") if k in record}
         arch = api.post("/v1/architectures", {"specification_id": spec_id, **body})
@@ -303,7 +307,9 @@ def step_records(api, args, state, report):
         for a in adrs
         if not (checkout / a["path"]).is_file() or (checkout / a["path"]).read_text(encoding="utf-8") != a["markdown"]
     ]
-    written = api.post(f"/v1/architectures/{arch['id']}/write")
+    # Only the current version is written; run again after the #535 version
+    # superseded it, the file the first run wrote is the one checked.
+    written = api.post(f"/v1/architectures/{arch['id']}/write") if arch["status"] == "approved" else arch
     dirty = _git(checkout, "status", "--porcelain", "--", "docs/ARCHITECTURE.md").strip()
     report["records"] = {
         "specification_id": spec["id"],
@@ -323,7 +329,9 @@ def step_records(api, args, state, report):
 
 
 def revised_architecture(base: dict, change: dict) -> dict:
-    """``architecture.json`` revised by a fixture: new title, covers, appended interfaces and decisions."""
+    """The draft version *base* revised by a fixture: new title, the new
+    specification's covers, appended interfaces and decisions. A module keeps
+    what *base* holds for the earlier specifications (``earlier_covers``)."""
     covers = change.get("covers") or {}
     return {
         "title": change["title"],
@@ -337,15 +345,36 @@ def revised_architecture(base: dict, change: dict) -> dict:
     }
 
 
+def _revised_version(api: Api, cid: int, spec_id: int, change: dict) -> dict:
+    """The next version of the company's architecture for *spec_id*: opened by
+    the company's revision route, the fixture's change written into it, approved.
+    Found again by title on a later run; an open draft is taken up."""
+    view = api.get(f"/v1/companies/{cid}/architecture")
+    found = next((v for v in view["versions"] if v["title"] == change["title"]), None)
+    if found is not None:
+        arch = api.get(f"/v1/architectures/{found['id']}")
+    else:
+        try:
+            draft = api.post(f"/v1/companies/{cid}/architecture/revisions", {"specification_id": spec_id})
+        except ApiError as exc:
+            if exc.status != 409 or not (view.get("draft") or {}).get("id"):
+                raise
+            draft = api.get(f"/v1/architectures/{view['draft']['id']}")
+        arch = api.put(f"/v1/architectures/{draft['id']}", revised_architecture(draft, change))
+    if arch["status"] == "draft":
+        arch = api.post(f"/v1/architectures/{arch['id']}/approve")
+    return arch
+
+
 def step_issue(api, args, state, report):
     cid = state["company_id"]
     spec_record = _load(HERE / "fixtures/issue-535-specification.json")
     change = _load(HERE / "fixtures/issue-535-architecture.json")
     spec = _approved_spec(api, cid, spec_record)
-    arch = _approved_architecture(
-        api, spec["id"], revised_architecture(_load(REPO / "docs/architecture/architecture.json"), change)
-    )
+    arch = _revised_version(api, cid, spec["id"], change)
     state["issue_specification_id"], state["issue_architecture_id"] = spec["id"], arch["id"]
+    view = api.get(f"/v1/companies/{cid}/architecture")
+    earlier = str(state.get("specification_id"))
     out = {
         "specification_id": spec["id"],
         "criteria": [c["id"] for r in spec["requirements"] for c in r["criteria"]],
@@ -353,6 +382,13 @@ def step_issue(api, args, state, report):
         "architecture_id": arch["id"],
         "architecture_findings": [(f["severity"], f["where"], f["code"]) for f in arch["check"]["findings"]],
         "new_decision": arch["decisions"][-1]["id"],
+        # One architecture record for both specifications (follow-up 3).
+        "architecture_version": arch["version"],
+        "specification_ids": arch["specification_ids"],
+        "versions": [(v["version"], v["status"]) for v in view["versions"]],
+        "current_id": (view.get("current") or {}).get("id"),
+        "earlier_covers_kept": sum(1 for m in arch["modules"] if (m.get("earlier_covers") or {}).get(earlier)),
+        "planned_against": api.get(f"/v1/specifications/{spec['id']}").get("architecture_id"),
     }
     if not state.get("sprint_id"):
         plan = api.post(
@@ -486,6 +522,8 @@ def _pack_summary(pack: dict) -> dict:
         "diagrams": len(pack["diagrams"]),
         "lint_blocking": sum(1 for f in pack["lint"]["findings"] if f["severity"] == "blocking"),
         "lint_warnings": sum(1 for f in pack["lint"]["findings"] if f["severity"] == "warning"),
+        # The documents with a section per approved specification (F3: #469's and #535's).
+        "per_specification": [d["key"] for d in pack["documents"] if "specifications" in (d.get("inputs") or [])],
     }
 
 

@@ -25,6 +25,7 @@ MAX_QUESTIONS = 20
 TEXT_LIMIT = 1500
 TITLE_LIMIT = 200
 INTERFACE_KINDS = ("http", "function", "event", "cli", "schema", "other")
+MAX_SPECIFICATIONS = 50
 
 
 def _text(value: Any, limit: int = TEXT_LIMIT) -> str:
@@ -60,6 +61,30 @@ def _decision_record(d: dict[str, Any]) -> dict[str, str]:
     return out
 
 
+def _requirement_ref(value: str) -> str:
+    head = value.upper().split(".")[0]
+    return head if head.startswith("REQ-") else value
+
+
+def earlier_covers(value: Any) -> dict[str, list[str]]:
+    """A module's covers of earlier specifications, ``{"<spec id>": [REQ ids]}``.
+
+    Keys are specification ids written as digits; a criterion id is mapped to
+    its requirement; an empty list is dropped. Anything else is left out.
+    """
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for key, refs in list(value.items())[:MAX_SPECIFICATIONS]:
+        key = _text(key, 12)
+        if not key.isdigit():
+            continue
+        reqs = list(dict.fromkeys(_requirement_ref(r) for r in _refs(refs)))
+        if reqs:
+            out[str(int(key))] = reqs
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+
+
 def normalize(arch: dict[str, Any]) -> dict[str, Any]:
     """The architecture's content with ids assigned in order and texts trimmed.
 
@@ -67,7 +92,8 @@ def normalize(arch: dict[str, Any]) -> dict[str, Any]:
     interface's ``module_id``) are mapped from the draft's own ids or module
     names onto the assigned ids; one that matches nothing is kept as written,
     for ``check`` to report. ``covers`` keeps the requirement ids as written
-    (``REQ-3``; a criterion id is mapped to its requirement).
+    (``REQ-3``; a criterion id is mapped to its requirement), and
+    ``earlier_covers`` those of earlier specifications (``earlier_covers``).
     """
     raw_modules = [
         m for m in _items(arch.get("modules"), MAX_MODULES) if isinstance(m, dict)
@@ -82,9 +108,7 @@ def normalize(arch: dict[str, Any]) -> dict[str, Any]:
     def module_ref(value: str) -> str:
         return assigned.get(value.casefold(), value)
 
-    def requirement_ref(value: str) -> str:
-        head = value.upper().split(".")[0]
-        return head if head.startswith("REQ-") else value
+    requirement_ref = _requirement_ref
 
     modules = [
         {
@@ -97,6 +121,11 @@ def normalize(arch: dict[str, Any]) -> dict[str, Any]:
             ),
             "covers": list(
                 dict.fromkeys(requirement_ref(r) for r in _refs(m.get("covers")))
+            ),
+            **(
+                {"earlier_covers": earlier}
+                if (earlier := earlier_covers(m.get("earlier_covers")))
+                else {}
             ),
         }
         for number, m in enumerate(raw_modules, 1)
@@ -186,11 +215,53 @@ def find_cycle(modules: list[dict[str, Any]]) -> list[str] | None:
     return None
 
 
-def check(arch: dict[str, Any], requirement_ids: list[str]) -> dict[str, Any]:
+def _check_earlier(
+    modules: list[dict[str, Any]], earlier: dict[str, dict[str, Any]]
+) -> list[dict[str, str]]:
+    """The covers of earlier specifications: *earlier* maps each specification
+    the version covers to its ``status`` and ``requirement_ids``. A requirement
+    the specification does not have (or a specification the company does not
+    have) blocks; one of an approved specification no module covers warns."""
+    findings = [
+        _finding(
+            "blocking",
+            m["id"],
+            "unknown_requirement",
+            f'It covers "{req}", which is not in specification {key}.',
+        )
+        for m in modules
+        for key, reqs in (m.get("earlier_covers") or {}).items()
+        for req in reqs
+        if req not in set((earlier.get(key) or {}).get("requirement_ids") or [])
+    ]
+    for key, spec in earlier.items():
+        covered = {
+            r for m in modules for r in (m.get("earlier_covers") or {}).get(key, [])
+        }
+        findings += [
+            _finding(
+                "warning",
+                f"{key}:{req}",
+                "uncovered_requirement",
+                f"No module covers this requirement of specification {key}.",
+            )
+            for req in spec.get("requirement_ids") or []
+            if spec.get("status") == "approved" and req not in covered
+        ]
+    return findings
+
+
+def check(
+    arch: dict[str, Any],
+    requirement_ids: list[str],
+    earlier: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """What keeps a normalized architecture from approval, and what to look at.
 
     *requirement_ids* are the specification's (``REQ-1``…): a module may
-    cover only those, and one no module covers is a warning.
+    cover only those, and one no module covers is a warning. *earlier* are the
+    other specifications the version covers (``_check_earlier``): the check
+    reads every one of them, not only the version's own.
     """
     findings: list[dict[str, str]] = []
     modules = arch.get("modules") or []
@@ -259,6 +330,8 @@ def check(arch: dict[str, Any], requirement_ids: list[str]) -> dict[str, Any]:
                         f'It covers "{req}", which is not in the specification.',
                     )
                 )
+    if earlier is not None:
+        findings += _check_earlier(modules, earlier)
     if cycle := find_cycle(modules):
         findings.append(
             _finding(
@@ -440,9 +513,16 @@ def as_prompt(arch: dict[str, Any], requirement_ids: set[str] | None = None) -> 
     return "\n".join(lines).strip()
 
 
-def as_markdown(arch: dict[str, Any], spec_title: str, version: int) -> str:
-    """The architecture as ``docs/ARCHITECTURE.md``: what the repository keeps."""
+def as_markdown(
+    arch: dict[str, Any],
+    spec_title: str,
+    version: int,
+    earlier_titles: dict[str, str] | None = None,
+) -> str:
+    """The architecture as ``docs/ARCHITECTURE.md``: what the repository keeps;
+    *earlier_titles* names the earlier specifications it also covers, by id."""
     names = {m["id"]: m["name"] for m in arch.get("modules") or []}
+    titles = earlier_titles or {}
     lines = [
         f"# {arch.get('title') or 'Architecture'}",
         "",
@@ -452,6 +532,13 @@ def as_markdown(arch: dict[str, Any], spec_title: str, version: int) -> str:
         ),
         "",
     ]
+    if titles:
+        lines += [
+            "It also covers the earlier specifications "
+            + ", ".join(f"*{t}* ({key})" for key, t in titles.items())
+            + ".",
+            "",
+        ]
     if arch.get("overview"):
         lines += ["## Overview", "", arch["overview"], ""]
     lines += ["## Modules", ""]
@@ -468,6 +555,10 @@ def as_markdown(arch: dict[str, Any], spec_title: str, version: int) -> str:
             )
         if m.get("covers"):
             lines.append("- Covers: " + ", ".join(m["covers"]))
+        for key, reqs in (m.get("earlier_covers") or {}).items():
+            lines.append(
+                f"- Covers in *{titles.get(key, key)}* ({key}): " + ", ".join(reqs)
+            )
         lines.append("")
     if arch.get("interfaces"):
         lines += ["## Interfaces", ""]

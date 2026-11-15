@@ -5,7 +5,8 @@
 # workflow, the delivery tests and the sandbox on; imports La Fabrique's own
 # specification and architecture and checks that the stored record renders
 # docs/ARCHITECTURE.md and docs/adr/ unchanged; turns issue #535 into a
-# specification, revises the architecture for it, plans a sprint with the
+# specification, revises the architecture for it as the next version of La
+# Fabrique's one architecture (#469's covers kept), plans a sprint with the
 # acceptance tests first and runs it with the fake model; a person reads the
 # sprint's integration and merges it locally; the documentation pack is
 # compiled in English and Spanish. Run twice: the second run makes nothing new.
@@ -35,6 +36,7 @@ check "and docs/adr/0012 to 0017, one per decision, as the repository has them" 
 check "the daemon wrote it into the snapshot, and git sees no change" test "$(report first "d['records']['written_path'], d['records']['written_unchanged_in_git']")" = "docs/ARCHITECTURE.md True"
 check "issue #535 is a specification with five criteria, approved without a blocking finding" test "$(report first "d['issue']['criteria'], [f for f in d['issue']['specification_findings'] if f[0] == 'blocking']")" = "['REQ-1.1', 'REQ-1.2', 'REQ-2.1', 'REQ-3.1', 'REQ-3.2'] []"
 check "the Architect's revision covers it with the contexts, and adds ADR-7" test "$(report first "d['issue']['architecture_findings'], d['issue']['new_decision']")" = "[] ADR-7"
+check "the revision is version 2 of La Fabrique's one architecture, covering both specifications with #469's covers kept, and #535's specification names it" test "$(report first "d['issue']['architecture_version'], d['issue']['specification_ids'] == [d['issue']['specification_id'], d['records']['specification_id']], d['issue']['versions'], d['issue']['earlier_covers_kept'], d['issue']['current_id'] == d['issue']['planned_against'] == d['issue']['architecture_id']")" = "2 True [[2, 'approved'], [1, 'superseded']] 15 True"
 check "the PO planned the acceptance tests first, one task per requirement, nothing uncovered" test "$(report first "[(t['kind'], t['assignee']) for t in d['issue']['plan']], d['issue']['uncovered']")" = "[('acceptance_tests', 'QA'), ('acceptance_tests', 'QA'), ('acceptance_tests', 'QA'), (None, 'Developer'), (None, 'Developer'), (None, 'Developer')] []"
 check "the sprint on La Fabrique closes" test "$(report first "d['wait']['status']")" = completed
 check "QA's three acceptance-test tasks are done" test "$(report first "sum(1 for b in d['wait']['board'] if b.startswith('Acceptance tests for REQ-') and b.endswith('=done'))")" = 3
@@ -52,6 +54,7 @@ check "a person's review of the integration is recorded before its merge (F7): a
 echo "     integration: $(report review "d['review']['integration'].get('status'), d['review']['base_log'][:2]")"
 self_host pack --steps pack
 check "the documentation pack compiles for La Fabrique in English and Spanish, every document written, nothing stale" test "$(report pack "[(p['language'], len(p['documents']) > 5, p['empty_documents'], p['lint_blocking']) for p in d['pack'].values()]")" = "[('en', True, [], 0), ('es', True, [], 0)]"
+check "and documents both of La Fabrique's approved specifications, #469's and #535's" test "$(report pack "[{'scope', 'wbs', 'traceability', 'schedule'} <= set(p['per_specification']) for p in d['pack'].values()]")" = "[True, True]"
 echo "     pack: $(report pack "{k: (len(p['documents']), p['missing_sections'], p['lint_warnings']) for k, p in d['pack'].items()}") (documents, sections without a record, warnings)"
 self_host again --steps company,records,issue
-check "run again, the harness finds what it made instead of making it twice" test "$(report again "d['company']['created'], d['records']['specification_id'] == $(report first "d['records']['specification_id']"), d['issue']['sprint_id'] == $(report first "d['issue']['sprint_id']")")" = "False True True"
+check "run again, the harness finds what it made instead of making it twice" test "$(report again "d['company']['created'], d['records']['specification_id'] == $(report first "d['records']['specification_id']"), d['records']['architecture_id'] == $(report first "d['records']['architecture_id']"), d['issue']['architecture_id'] == $(report first "d['issue']['architecture_id']"), d['issue']['versions'], d['issue']['sprint_id'] == $(report first "d['issue']['sprint_id']")")" = "False True True True [[2, 'approved'], [1, 'superseded']] True"

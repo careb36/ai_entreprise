@@ -31,6 +31,7 @@ from routers import (
     board_notes_router,
     chat_approvals_router,
     chat_interactions_router,
+    company_architecture_router,
     console_producers_router,
     costs_router,
     documentation_router,
@@ -169,6 +170,7 @@ app.include_router(reviews_router)
 app.include_router(run_secrets_router)
 app.include_router(specifications_router)
 app.include_router(architectures_router)
+app.include_router(company_architecture_router)
 app.include_router(documentation_router)
 app.include_router(security_tests_router)
 app.include_router(workspace_router)

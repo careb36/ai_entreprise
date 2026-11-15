@@ -1705,7 +1705,8 @@
       "title": "Módulos",
       "none": "Sin módulos.",
       "dependsOn": "Depende de",
-      "covers": "Cubre"
+      "covers": "Cubre",
+      "coversIn": "Cubre en {{title}}"
     },
     "interfaces": {
       "title": "Interfaces",
@@ -1782,6 +1783,20 @@
       "addConvention": "Agregar una convención",
       "removeConvention": "Quitar la convención {{n}}",
       "incomplete": "Cada módulo necesita un nombre y una ruta, cada interfaz un nombre y su módulo, cada decisión un título."
+    },
+    "history": {
+      "title": "Versiones de la arquitectura de la empresa",
+      "loading": "Cargando las versiones…",
+      "loadError": "No se pudieron cargar las versiones: {{message}}",
+      "empty": "Todavía no hay ninguna versión.",
+      "version": "v{{version}}",
+      "current": "Vigente",
+      "companyVersion": "Versión {{version}} de la arquitectura de la empresa",
+      "alsoCovers": "También cubre: {{titles}}",
+      "forSpecification": "redactada para {{title}}",
+      "covers_one": "cubre {{count}} especificación",
+      "covers_other": "cubre {{count}} especificaciones",
+      "approvedOn": "aprobada el {{date}}"
     }
   },
   "procedures": {

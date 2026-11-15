@@ -13,7 +13,7 @@ from typing import Any
 from models import Architecture, BacklogItem, Specification, Sprint
 from sqlmodel import Session, select
 
-from services.planning import spec_diff, spec_planning
+from services.planning import arch_versions, spec_diff, spec_planning
 
 
 def _covers(item: BacklogItem) -> list[str]:
@@ -82,16 +82,19 @@ def impact(session: Session, revision: Specification) -> dict[str, Any]:
             }
         )
 
-    # Architectures of the previous version: modules covering a changed req.
+    # Versions of the company's architecture that cover the previous version
+    # (drafted for it, or keeping its covers): modules covering a changed req.
     flagged_modules: list[dict[str, Any]] = []
     archs = session.exec(
-        select(Architecture).where(
-            Architecture.company_id == revision.company_id,
-            Architecture.specification_id == previous.id,
-        )
+        select(Architecture).where(Architecture.company_id == revision.company_id)
     ).all()
     for arch in archs:
-        for mod in arch.modules or []:
+        if not arch_versions.covers_specification(arch, previous.id):
+            continue
+        view = arch_versions.view_for(
+            {"modules": arch.modules or []}, arch.specification_id, previous.id
+        )
+        for mod in view["modules"]:
             mod_cov = {str(c) for c in (mod.get("covers") or [])}
             hit = sorted(mod_cov & reqs)
             if not hit:

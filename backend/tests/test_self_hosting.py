@@ -208,6 +208,67 @@ def test_la_fabriques_record_round_trips_through_the_api(sqlite_session, test_cl
         == 422
     )
 
+    # Issue #535's revision through the harness's own calls: the next version
+    # of La Fabrique's one architecture, #469's covers kept (follow-up 3).
+    api = _ClientApi(test_client)
+    issue = self_host._approved_spec(
+        api, company.id, _fixture("issue-535-specification.json")
+    )
+    change = _fixture("issue-535-architecture.json")
+    revised = self_host._revised_version(api, company.id, issue["id"], change)
+    assert (revised["status"], revised["version"]) == ("approved", 2)
+    assert revised["specification_ids"] == [issue["id"], spec["id"]]
+    assert revised["check"]["findings"] == []
+    kept = {
+        m["name"]: m["earlier_covers"][str(spec["id"])]
+        for m in revised["modules"]
+        if m.get("earlier_covers")
+    }
+    assert kept == {
+        m["name"]: m["covers"] for m in arch_record["modules"] if m["covers"]
+    }
+    assert {m["name"]: m["covers"] for m in revised["modules"] if m["covers"]} == (
+        change["covers"]
+    )
+    # Run again, the harness finds the version instead of opening another.
+    assert (
+        self_host._revised_version(api, company.id, issue["id"], change)["id"]
+        == (revised["id"])
+    )
+    view = test_client.get(f"/v1/companies/{company.id}/architecture").json()
+    assert [(v["version"], v["status"]) for v in view["versions"]] == [
+        (2, "approved"),
+        (1, "superseded"),
+    ]
+    # The superseded version still renders the repository's document.
+    again = self_host._approved_architecture(api, spec["id"], arch_record)
+    assert again["id"] == arch["id"]
+    assert test_client.get(f"/v1/architectures/{arch['id']}/document").text == (
+        (REPO / "docs/ARCHITECTURE.md").read_text(encoding="utf-8")
+    )
+
+
+class _ClientApi:
+    """The harness's ``Api`` over the in-process test client."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def call(self, method, path, body=None, raw=False):
+        response = self.client.request(method, path, json=body)
+        if response.status_code >= 400:
+            raise self_host.ApiError(method, path, response.status_code, response.text)
+        return response.text if raw else response.json()
+
+    def get(self, path, raw=False):
+        return self.call("GET", path, raw=raw)
+
+    def post(self, path, body=None):
+        return self.call("POST", path, body if body is not None else {})
+
+    def put(self, path, body):
+        return self.call("PUT", path, body)
+
 
 # --- the harness's fixtures ------------------------------------------------------
 

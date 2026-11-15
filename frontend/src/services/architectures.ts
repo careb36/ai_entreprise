@@ -5,6 +5,12 @@
  * deterministic check finds nothing blocking, and an approved one is written
  * to the repository as `docs/ARCHITECTURE.md` through the workspace daemon.
  * Viewers read; Managers write.
+ *
+ * The architecture is the company's (issue #329, F3): each row is a version,
+ * numbered per company, and a draft for a new specification is the next
+ * version of the same architecture, keeping each module's covers of the
+ * earlier specifications (`earlier_covers`). `/v1/companies/{id}/architecture`
+ * reads the current version and the history.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, fetchApi, fetchText } from './api'
@@ -25,6 +31,43 @@ export interface ArchModule {
   depends_on: string[]
   /** Requirement ids of the specification, like `REQ-2`. */
   covers: string[]
+  /** What it covers in the earlier specifications the architecture serves, by specification id. */
+  earlier_covers?: Record<string, string[]>
+}
+
+/** Per specification a version covers: each requirement with the modules covering it. */
+export interface ArchCoverage {
+  specification_id: number
+  title: string
+  status: string
+  version: number
+  requirements: { id: string; modules: string[] }[]
+  uncovered: string[]
+}
+
+/** One line of the history of the company's architecture. */
+export interface ArchitectureVersion {
+  id: number
+  version: number
+  status: ArchitectureStatus
+  title: string
+  specification_id: number
+  specification_title: string | null
+  specification_ids: number[]
+  supersedes_id: number | null
+  drafted_by: string | null
+  approved_by: string | null
+  approved_at: string | null
+  created_at: string | null
+}
+
+export interface CompanyArchitecture {
+  company_id: number
+  /** The newest approved version, with its check; `null` before one is approved. */
+  current: Architecture | null
+  draft: ArchitectureVersion | null
+  /** Newest first. */
+  versions: ArchitectureVersion[]
 }
 
 export interface ArchInterface {
@@ -58,6 +101,13 @@ export interface Architecture {
   status: ArchitectureStatus
   version: number
   supersedes_id: number | null
+  specification_title?: string
+  /** Every specification the version covers: its own first, then the earlier ones. */
+  specification_ids?: number[]
+  earlier_specifications?: { id: number; title: string; status: string }[]
+  /** Whether it is the company's current architecture. */
+  is_current?: boolean
+  coverage?: ArchCoverage[]
   modules: ArchModule[]
   interfaces: ArchInterface[]
   decisions: ArchDecision[]
@@ -144,10 +194,21 @@ export const architecturesApi = {
   /** Writes the document through the workspace daemon: sent once, and a 503 (no daemon) is not retried. */
   write: (id: number) =>
     fetchApi<Architecture>(`/v1/architectures/${id}/write`, { method: 'POST', body: '{}', once: true, timeoutMs: 120_000 }),
+  /** The company's current architecture and every version of it. */
+  ofCompany: (companyId: number) => api.get<CompanyArchitecture>(`/v1/companies/${companyId}/architecture`),
 }
 
 export const architecturesKey = (specificationId: number) => ['architectures', specificationId] as const
 export const architectureKey = (id: number) => ['architecture', id] as const
+export const companyArchitectureKey = (companyId: number) => ['company-architecture', companyId] as const
+
+export function useCompanyArchitecture(companyId: number | null) {
+  return useQuery({
+    queryKey: companyArchitectureKey(companyId ?? 0),
+    queryFn: () => architecturesApi.ofCompany(companyId!),
+    enabled: companyId !== null,
+  })
+}
 
 export function useArchitectures(specificationId: number | null) {
   return useQuery({
@@ -171,6 +232,7 @@ function useSettle() {
   return (architecture: Architecture) => {
     queryClient.setQueryData(architectureKey(architecture.id), architecture)
     queryClient.invalidateQueries({ queryKey: architecturesKey(architecture.specification_id) })
+    queryClient.invalidateQueries({ queryKey: companyArchitectureKey(architecture.company_id) })
   }
 }
 
