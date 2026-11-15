@@ -4,6 +4,7 @@ import { createHttp } from './api/client'
 import { agentEndpoints } from './api/agents'
 import { analyticsEndpoints } from './api/analytics'
 import { authEndpoints } from './api/auth'
+import { chatEndpoints } from './api/chat'
 import { boardNoteEndpoints } from './api/boardNotes'
 import { companyEndpoints } from './api/companies'
 import { evidenceEndpoints } from './api/evidence'
@@ -17,10 +18,12 @@ import { systemEndpoints } from './api/system'
 import { wikiEndpoints } from './api/wiki'
 import { workspaceEndpoints } from './api/workspace'
 
-export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setOnUnauthorized } from './api/client'
+export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setCsrfToken, setOnUnauthorized, setSessionHooks } from './api/client'
+export type { SessionHooks } from './api/client'
 export * from './api/agents'
 export * from './api/analytics'
 export * from './api/auth'
+export * from './api/chat'
 export * from './api/boardNotes'
 export * from './api/companies'
 export * from './api/evidence'
@@ -57,6 +60,7 @@ const endpoints = {
   ...githubEndpoints(http),
   ...ssoEndpoints(http),
   ...wikiEndpoints(http),
+  ...chatEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)

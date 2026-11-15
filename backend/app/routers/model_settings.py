@@ -5,7 +5,9 @@ Endpoints:
 - ``GET /v1/companies/{id}/model_settings`` — the company's default model, its
   model per role, and what each role runs with them (Viewer).
 - ``PUT /v1/companies/{id}/model_settings`` — replace them; an empty value
-  clears one (Manager).
+  clears one (Manager). ``model_policy``, the routing policy by task
+  difficulty (``services/models/routing_policy.py``), changes only when the
+  body names it (``null`` clears it).
 - ``GET /v1/companies/{id}/model_suggestions`` — the model the rule suggests
   for each role among the company's enabled connections (Viewer); never
   applied on its own (``services/model_suggestions.py``).
@@ -41,6 +43,8 @@ router = APIRouter(prefix="/v1", tags=["Providers"])
 class ModelSettings(BaseModel):
     default_model: str | None = None
     role_models: dict[str, Any] | None = None
+    # The routing policy by difficulty (issue #319); left out: kept as it is.
+    model_policy: dict[str, Any] | None = None
 
 
 def _company(session: Session, company_id: int) -> Company:
@@ -71,6 +75,8 @@ def put_model_settings(
     company = _company(session, company_id)
     try:
         company_models.apply(session, company, body.default_model, body.role_models)
+        if "model_policy" in body.model_fields_set:
+            company_models.apply_policy(session, company, body.model_policy)
     except company_models.InvalidModelSettings as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     session.add(company)

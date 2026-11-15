@@ -31,7 +31,6 @@ function renderRoutes(path: string) {
 
 function authenticate(memberships: { company_id: number; human_role: 'Owner' | 'Manager' | 'Viewer' }[]) {
   useAuthStore.setState({
-    token: 'valid-token',
     expiresAt: Date.now() + 60_000,
     user: { user_id: 1, email: 'user@example.com', full_name: 'User' },
     memberships,
@@ -117,7 +116,7 @@ describe('ProtectedRoute company access', () => {
 
     useAuthStore.getState().logout()
 
-    expect(useAuthStore.getState().token).toBeNull()
+    expect(useAuthStore.getState().expiresAt).toBeNull()
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAppStore.getState().companyId).toBeNull()
     expect(useAppStore.getState().companyName).toBeNull()

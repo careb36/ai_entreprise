@@ -13,13 +13,15 @@ const { mockApi, MockApiError } = vi.hoisted(() => {
   }
   return {
     MockApiError,
-    mockApi: { login: vi.fn(), me: vi.fn(), ssoExchange: vi.fn() },
+    mockApi: { login: vi.fn(), me: vi.fn(), ssoExchange: vi.fn(), logout: vi.fn().mockResolvedValue(undefined) },
   }
 })
 
 vi.mock('../services/api', () => ({
   api: mockApi,
   ApiError: MockApiError,
+  setCsrfToken: () => {},
+  setSessionHooks: () => {},
   ssoStartUrl: (key: string) => `http://backend.test/v1/auth/sso/${encodeURIComponent(key.trim())}/start`,
 }))
 
@@ -74,13 +76,13 @@ describe('sign in with SSO', () => {
   })
 
   it('trades the one-time code for a session and goes home', async () => {
-    mockApi.ssoExchange.mockResolvedValue({ access_token: 'sso-token', token_type: 'bearer', expires_in: 3600 })
+    mockApi.ssoExchange.mockResolvedValue({ token_type: 'cookie', expires_in: 900, session_expires_in: 604800, csrf_token: 'csrf-value' })
     mockApi.me.mockResolvedValue({ user_id: 3, email: 'ana@acme.test', full_name: 'Ana', memberships: [] })
     renderAt('/login/sso?code=one-time')
     expect(await screen.findByTestId('current-path')).toHaveTextContent('/')
     expect(mockApi.ssoExchange).toHaveBeenCalledTimes(1)
     expect(mockApi.ssoExchange).toHaveBeenCalledWith('one-time')
-    expect(useAuthStore.getState().token).toBe('sso-token')
+    expect(useAuthStore.getState().expiresAt).toBeGreaterThan(Date.now())
   })
 
   it('explains an error the callback sent back, and a code that no longer works', async () => {

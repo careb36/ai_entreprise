@@ -2,8 +2,8 @@
 their versions, the links derived from their bodies and a company's wiki
 settings, company-scoped. New tables only: nothing existing changes.
 
-Revision ID: 0024
-Revises: 0023
+Revision ID: 0028
+Revises: 0027
 Create Date: 2026-11-15 20:00:00 UTC
 """
 
@@ -14,8 +14,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0024"
-down_revision = "0023"
+revision = "0028"
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 

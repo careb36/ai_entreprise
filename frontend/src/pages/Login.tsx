@@ -10,7 +10,6 @@ export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const login = useAuthStore(state => state.login)
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -56,7 +55,7 @@ export default function Login() {
     window.location.assign(ssoStartUrl(ssoKey))
   }
 
-  if (token && expiresAt && expiresAt > Date.now() && !submitting) {
+  if (expiresAt && expiresAt > Date.now() && !submitting) {
     return <Navigate to={safeReturnPath(from)} replace />
   }
 

@@ -39,7 +39,6 @@ function stubApi(overrides: Record<string, (init: RequestInit) => Response> = {}
 
 function renderAs(supportAdmin: boolean) {
   useAuthStore.setState({
-    token: 'valid-token',
     expiresAt: Date.now() + 60_000,
     user: { user_id: 1, email: 'admin@acme.test', full_name: 'Admin', support_admin: supportAdmin },
     // Company roles do not matter: an Owner who is not a support admin is turned away.
@@ -162,7 +161,7 @@ describe('HelpDesk triage by the Support agent', () => {
       }),
     })
     useAuthStore.setState({
-      token: 'valid-token', expiresAt: Date.now() + 60_000,
+      expiresAt: Date.now() + 60_000,
       user: { user_id: 1, email: 'admin@acme.test', full_name: 'Admin', support_admin: true }, memberships: [],
     })
     render(<QueryClientProvider client={queryClient}><HelpDesk /></QueryClientProvider>)

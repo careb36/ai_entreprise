@@ -8,10 +8,11 @@ tokens the provider reported.
 
 Every number is an observation the loop recorded, never a model's account:
 
-- the difficulty is ``model_routing.estimate_difficulty`` of the task as it
-  was planned (its ``covers``, no rework): what was known before it ran and
-  what the worker routed its first attempt by. It is recomputed from the
-  stored plan, so nothing new is stored and no migration is needed;
+- the difficulty is the estimate the worker stored on the task before its
+  first attempt (the first ``estimated`` event, ``services/models/difficulty.py``),
+  with its band (``low``, ``medium``, ``high``) and the routing policy it ran
+  under; a task from before the event is recomputed from its plan
+  (``model_routing.estimate_difficulty`` of its ``covers``, no rework);
 - the model is the one the proxy reported serving the task's last delivery
   (the task worker's latest ``AgentRun``, as ``model_record`` reads it); a
   task with no delivery counts under no model;
@@ -20,9 +21,14 @@ Every number is an observation the loop recorded, never a model's account:
   deliveries, the same reading as the bench's scorecard;
 - tokens are the audit log's turns for the task: only the turns whose usage
   the provider reported (``tokens: reported``) add tokens; estimated or
-  unavailable counts are counted apart as turns, never added.
+  unavailable counts are counted apart as turns, never added;
+- the cost is ``run_cost``'s for the task's turns, in US cents; a task whose
+  cost is unknown (``run_cost`` says why) is counted apart, never as 0.
 
-The pure part (``task_fact``, ``aggregate``) is shared with the bench
+Beside the rows per difficulty and model, ``split`` sums the same numbers by
+difficulty band, by served model and by policy, so a policy is kept or
+reverted on numbers, the way procedures are. The pure part (``task_fact``,
+``aggregate``, ``split``) is shared with the bench
 (``scripts/bench/scorecard.py``); ``record`` reads the database.
 """
 
@@ -39,11 +45,13 @@ def _ratio(numerator: float, denominator: float) -> float:
     return round(numerator / denominator, 4) if denominator else 0.0
 
 
-def difficulty_of(item: Any) -> int:
-    """The task's difficulty as planned: its first attempt's routing input."""
-    from services.models import model_routing
+def difficulty_of(item: Any, stored: dict[str, Any] | None = None) -> int:
+    """The task's difficulty as planned: the stored estimate of its first
+    attempt (an ``estimated`` event's ``difficulty``), else recomputed."""
+    from services.models import difficulty, model_routing
 
-    return model_routing.estimate_difficulty(item, rework=False)
+    score = difficulty.stored_score(stored)
+    return score if score is not None else model_routing.estimate_difficulty(item)
 
 
 def turn_tokens(turns: list[tuple[str | None, int | None]]) -> dict[str, int]:
@@ -66,13 +74,22 @@ def task_fact(
     comments: Any,
     runs: int,
     tokens: dict[str, int] | None = None,
+    cents: float | None = None,
+    policy: str | None = None,
 ) -> dict[str, Any]:
     """One task's observed facts. Done at the first attempt: done, no rework
-    request, no person's send-back and at most one delivery."""
+    request, no person's send-back and at most one delivery. *cents*: its
+    cost, ``None`` when unknown; *policy*: the label of the routing policy its
+    first attempt ran under, ``None`` without one."""
+    from services.models.difficulty import band_of_score
+
     rework = rework_request_count(comments)
     sent_back = any(is_send_back(c) for c in comment_list(comments))
     return {
         "difficulty": int(difficulty),
+        "difficulty_band": band_of_score(int(difficulty)),
+        "policy": (policy or "").strip() or None,
+        "cents": cents,
         "model": (model or "").strip() or None,
         "done": status == "done",
         "blocked": status == "blocked",
@@ -85,45 +102,76 @@ def task_fact(
     }
 
 
+def _numbers(group: list[dict[str, Any]]) -> dict[str, Any]:
+    tasks = len(group)
+    done = sum(f["done"] for f in group)
+    blocked = sum(f["blocked"] for f in group)
+    first = sum(f["first_attempt"] for f in group)
+    rework = sum(f["rework"] for f in group)
+    priced = [f["cents"] for f in group if f.get("cents") is not None]
+    return {
+        "tasks": tasks,
+        "done": done,
+        "done_first_attempt": first,
+        "blocked": blocked,
+        "rework": rework,
+        "rework_per_task": _ratio(rework, tasks),
+        "blocked_share": _ratio(blocked, tasks),
+        "first_attempt_rate": _ratio(first, tasks),
+        "tokens": {
+            k: sum(f["tokens"].get(k, 0) for f in group)
+            for k in ("reported", "turns_reported", "turns_unreported")
+        },
+        "cost_cents": round(sum(priced), 6) if priced else None,
+        "cost_unknown": tasks - len(priced),
+    }
+
+
 def aggregate(
     facts: list[dict[str, Any]], policy: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
-    """Per (difficulty, model): tasks, done, first attempt, rework, blocked and
-    reported tokens, lowest difficulty first. ``band`` is the policy's band key
-    holding the difficulty, or None without a policy."""
+    """Per (difficulty, model): tasks, done, first attempt, rework, blocked,
+    reported tokens and cost, lowest difficulty first. ``band`` is the
+    policy's band key holding the difficulty, or None without a policy;
+    ``difficulty_band`` is the estimate's own (``low``, ``medium``, ``high``)."""
     from services.models import model_routing
+    from services.models.difficulty import band_of_score
 
     groups: dict[tuple[int, str], list[dict[str, Any]]] = {}
     for fact in facts:
         groups.setdefault((fact["difficulty"], fact["model"] or ""), []).append(fact)
-    rows = []
-    for (difficulty, model), group in sorted(groups.items()):
-        tasks = len(group)
-        done = sum(f["done"] for f in group)
-        blocked = sum(f["blocked"] for f in group)
-        first = sum(f["first_attempt"] for f in group)
-        rework = sum(f["rework"] for f in group)
-        tokens = {
-            k: sum(f["tokens"].get(k, 0) for f in group)
-            for k in ("reported", "turns_reported", "turns_unreported")
+    return [
+        {
+            "difficulty": difficulty,
+            "difficulty_band": band_of_score(difficulty),
+            "band": model_routing.band_of(difficulty, policy or {}),
+            "model": model or None,
+            **_numbers(group),
         }
-        rows.append(
-            {
-                "difficulty": difficulty,
-                "band": model_routing.band_of(difficulty, policy or {}),
-                "model": model or None,
-                "tasks": tasks,
-                "done": done,
-                "done_first_attempt": first,
-                "blocked": blocked,
-                "rework": rework,
-                "rework_per_task": _ratio(rework, tasks),
-                "blocked_share": _ratio(blocked, tasks),
-                "first_attempt_rate": _ratio(first, tasks),
-                "tokens": tokens,
-            }
-        )
-    return rows
+        for (difficulty, model), group in sorted(groups.items())
+    ]
+
+
+SPLITS = ("difficulty_band", "model", "policy")
+
+
+def split(facts: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+    """The same numbers summed by one of ``SPLITS``: per difficulty band (low
+    first), per served model or per policy label (sorted; ``None`` last)."""
+    from services.models.difficulty import BANDS
+
+    groups: dict[Any, list[dict[str, Any]]] = {}
+    for fact in facts:
+        groups.setdefault(fact.get(key), []).append(fact)
+
+    def order(value: Any) -> tuple[int, Any]:
+        if key == "difficulty_band" and value in BANDS:
+            return (BANDS.index(value), "")
+        return (1 if value is None else 0, str(value or ""))
+
+    return [
+        {key: value, **_numbers(groups[value])} for value in sorted(groups, key=order)
+    ]
 
 
 def _task_id(external_ref: str) -> int | None:
@@ -137,7 +185,7 @@ def record(session: Any, company_id: int) -> dict[str, Any]:
     from models.agent_run import TASK_WORKER_PRODUCER, AgentRun
     from sqlmodel import select
 
-    from services.models import model_routing
+    from services.models import routing_policy
 
     items = session.exec(
         select(BacklogItem)
@@ -173,22 +221,70 @@ def record(session: Any, company_id: int) -> dict[str, Any]:
                 turns.setdefault(task_id, []).append(
                     (details.get("tokens"), row.cost_tokens)
                 )
+    estimates = first_estimates(session, company_id, ids)
+    costs = task_cents(session, company_id, ids)
     facts = [
         task_fact(
-            difficulty=difficulty_of(item),
+            difficulty=difficulty_of(
+                item, estimates.get(item.id, {}).get("difficulty")
+            ),
             model=last_model.get(item.id),
             status=item.status,
             comments=item.comments,
             runs=runs.get(item.id, 0),
             tokens=turn_tokens(turns.get(item.id, [])),
+            cents=costs.get(item.id),
+            policy=(estimates.get(item.id, {}).get("routing") or {}).get("policy"),
         )
         for item in items
     ]
-    policy = model_routing.current_policy()
+    policy, source = routing_policy.effective(session, company_id)
     return {
         "rows": aggregate(facts, policy),
+        **{f"by_{key}": split(facts, key) for key in SPLITS},
         "tasks": len(facts),
         "policy": policy.get("bands")
         if isinstance(policy.get("bands"), dict)
         else None,
+        "policy_label": policy.get("label") if policy else None,
+        "policy_source": source,
     }
+
+
+def first_estimates(
+    session: Any, company_id: int, ids: set[int]
+) -> dict[int, dict[str, Any]]:
+    """Per task, the payload of its first ``estimated`` event: the difficulty
+    and routing of its first attempt."""
+    from models import TaskEvent
+    from sqlmodel import select
+
+    out: dict[int, dict[str, Any]] = {}
+    if not ids:
+        return out
+    for event in session.exec(
+        select(TaskEvent)
+        .where(
+            TaskEvent.company_id == company_id,
+            TaskEvent.task_id.in_(list(ids)),
+            TaskEvent.event_type == "estimated",
+        )
+        .order_by(TaskEvent.seq, TaskEvent.id)
+    ).all():
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        out.setdefault(event.task_id, payload)
+    return out
+
+
+def task_cents(session: Any, company_id: int, ids: set[int]) -> dict[int, float | None]:
+    """Per task, its cost in US cents (``run_cost``), ``None`` when unknown."""
+    from services.models import run_cost
+
+    turns: dict[int, list[dict[str, Any]]] = {i: [] for i in ids}
+    for row, turn in run_cost._priced(
+        session, company_id, [run_cost.task_ref(i) for i in ids]
+    ):
+        task_id = _task_id(row.interaction_id or "")
+        if task_id in turns:
+            turns[task_id].append(turn)
+    return {i: run_cost.summarize(t)["cost_cents"] for i, t in turns.items()}

@@ -61,6 +61,10 @@ class Company(SQLModel, table=True):
     # default; empty: the deployment's AGENT_MODEL settings. A Manager writes them.
     default_model: str | None = None
     role_models: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The routing policy by task difficulty ({"bands": {"low": ..., "high": ...}},
+    # services/models/routing_policy.py); empty: the deployment's
+    # AGENT_MODEL_POLICY, else the role defaults. A Manager writes it.
+    model_policy: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # The terminal coding agent that produces a role's tasks instead of the
     # LLM call ({"Developer": "claude"}, services/producers/console_producer.py); it
     # needs the Git workflow. Empty: every role is produced by its model.
@@ -71,6 +75,10 @@ class Company(SQLModel, table=True):
     # (the provider's key, e.g. ANTHROPIC_API_KEY), beside sandbox_env; never
     # the delivery tests, installs or application checks. A Manager writes it.
     console_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The language the project's documentation packs are written in
+    # (``services/planning/project_docs/texts.py``): "en" or "es". Set from the
+    # creator's interface language in "New company"; an Owner or Manager changes it.
+    doc_language: str | None = None
 
 
 class Agent(SQLModel, table=True):

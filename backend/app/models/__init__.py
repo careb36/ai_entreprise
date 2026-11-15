@@ -14,6 +14,13 @@ from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
 from .board_note import SprintBoardNote
+from .chat import (
+    ChatApprovalMessage,
+    ChatConnection,
+    ChatIdentity,
+    ChatInteraction,
+    ChatLinkCode,
+)
 from .company import (
     Agent,
     BusinessUnit,
@@ -23,6 +30,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .documentation import DocumentationPack
 from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .integration import SprintIntegration
@@ -33,6 +41,7 @@ from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
+from .session import RefreshToken, SessionFamily
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -52,9 +61,15 @@ __all__ = [
     "BacklogItem",
     "BugReport",
     "BusinessUnit",
+    "ChatApprovalMessage",
+    "ChatConnection",
+    "ChatIdentity",
+    "ChatInteraction",
+    "ChatLinkCode",
     "Company",
     "CompanyMember",
     "CompanyWebhook",
+    "DocumentationPack",
     "GitHubRepoBinding",
     "ManagerDecision",
     "ManagerPolicy",
@@ -64,10 +79,12 @@ __all__ = [
     "ProjectCredential",
     "ProjectDiscovery",
     "ProviderConnection",
+    "RefreshToken",
     "ReviewComment",
     "RunPublication",
     "RunReview",
     "RunSecret",
+    "SessionFamily",
     "Specification",
     "Sprint",
     "SprintBoardNote",

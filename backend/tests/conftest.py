@@ -38,6 +38,13 @@ from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
 from models.board_note import SprintBoardNote
+from models.chat import (
+    ChatApprovalMessage,
+    ChatConnection,
+    ChatIdentity,
+    ChatInteraction,
+    ChatLinkCode,
+)
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -53,6 +60,7 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.documentation import DocumentationPack
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.integration import SprintIntegration
@@ -62,6 +70,7 @@ from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
+from models.session import RefreshToken, SessionFamily
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -199,6 +208,14 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        DocumentationPack.__table__,
+        SessionFamily.__table__,
+        RefreshToken.__table__,
+        ChatConnection.__table__,
+        ChatIdentity.__table__,
+        ChatLinkCode.__table__,
+        ChatApprovalMessage.__table__,
+        ChatInteraction.__table__,
         SprintBoardNote.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,

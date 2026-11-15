@@ -194,6 +194,7 @@ class TestAuthenticationFlow:
             json={
                 "email": "auth-test@example.com",
                 "password": "securepass123",
+                "token_delivery": "bearer",
             },
         )
         assert login_response.status_code == 200

@@ -24,11 +24,13 @@ import NotFound from './pages/NotFound'
 import TaskDetails from './pages/TaskDetails'
 import CompanyMembers from './pages/CompanyMembers'
 import CompanySso from './pages/CompanySso'
+import ChatApprovals from './pages/ChatApprovals'
 import SsoComplete from './pages/SsoComplete'
 import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
+import Documentation from './pages/Documentation'
 import Wiki from './pages/Wiki'
 import Models from './pages/Models'
 import Specifications from './pages/Specifications'
@@ -210,7 +212,6 @@ function NavBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore(state => state.user)
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
@@ -219,7 +220,7 @@ function NavBar() {
   const supportAdmin = Boolean(user?.support_admin)
   const companyName = useAppStore(state => state.companyName)
   const companyId = useAppStore(state => state.companyId)
-  const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
+  const authenticated = Boolean(expiresAt && expiresAt > Date.now())
   const links = useNavLinks()
   // What the company needs a person for, shown on the Review link.
   const inbox = useInbox(authenticated ? companyId : null)
@@ -336,9 +337,11 @@ function NavBar() {
                   <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
+                  <Link role="menuitem" to="/company/chat" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.chatApprovals')}</Link>
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
                   {supportAdmin && <Link role="menuitem" to="/support" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.helpDesk', { defaultValue: 'Help desk' })}</Link>}
                   <button role="menuitem" type="button" className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-800" onClick={() => {
@@ -447,6 +450,7 @@ function AppContent() {
               <Route path="/company/quotas" element={<div className="page-container"><QuotaPanel /></div>} />
               <Route path="/company/members" element={<CompanyMembers />} />
               <Route path="/company/sso" element={<CompanySso />} />
+              <Route path="/company/chat" element={<ChatApprovals />} />
               <Route path="/company/procedures" element={<Procedures />} />
               <Route path="/company/wiki" element={<Wiki />} />
               <Route path="/company/models" element={<Models />} />
@@ -454,6 +458,7 @@ function AppContent() {
               <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
               <Route path="/company/specifications/:specId/architecture/new" element={<ArchitectureDetail />} />
               <Route path="/company/specifications/:specId/architectures/:id" element={<ArchitectureDetail />} />
+              <Route path="/company/documentation" element={<Documentation />} />
               <Route path="/company/github" element={<GitHubIntegration />} />
               <Route path="/support" element={<HelpDesk />} />
               <Route path="/agents" element={<AgentSettings />} />

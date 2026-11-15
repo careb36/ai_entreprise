@@ -330,6 +330,8 @@ def test_collect_weighs_each_tasks_latest_measure(tmp_path, monkeypatch):
             {},
         ),
     )
+    # No stored difficulty estimates (issue #319): the split recomputes them.
+    monkeypatch.setattr(scorecard, "difficulty_estimates", lambda dsn, company: {})
     # Task 13's latest run has no measure (an older backend); task 14 has no
     # run at all; task 99 belongs to another sprint of the company.
     monkeypatch.setattr(

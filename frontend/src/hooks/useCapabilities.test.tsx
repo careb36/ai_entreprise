@@ -22,14 +22,14 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe('capabilities', () => {
   it('requests the public endpoint without a bearer even when logged in', async () => {
-    useAuthStore.setState({ token: 'signed-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     const fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => capabilities })
     vi.stubGlobal('fetch', fetch)
 
     expect(await api.capabilities()).toEqual(capabilities)
     expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/v1/capabilities'), expect.objectContaining({ method: 'GET' }))
     expect(new Headers(fetch.mock.calls[0][1].headers).has('Authorization')).toBe(false)
-    expect(useAuthStore.getState().token).toBe('signed-token')
+    expect(useAuthStore.getState().expiresAt).not.toBeNull()
   })
 
   it('reuses capability data for five minutes and refetches once stale', async () => {

@@ -86,9 +86,24 @@ def setup_security(app):
 
 def get_cors_origins():
     """Get allowed CORS origins from settings."""
-    if settings.CORS_ORIGINS == "*":
-        return ["*"]
-    return [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+    origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    return ["*"] if "*" in origins else origins
+
+
+def cors_allows_credentials(origins: list[str]) -> bool:
+    """Credentials (the session cookies) only with explicit origins.
+
+    With ``*`` and credentials Starlette echoes whatever origin asks, so any
+    site could read authenticated answers; ``*`` therefore turns them off
+    (issue #524, docs/design/SESSIONS.md, S6).
+    """
+    if "*" in origins:
+        logger.warning(
+            "CORS_ORIGINS is '*': cross-origin requests carry no cookies, so a "
+            "browser on another origin cannot sign in. List the frontend's origins."
+        )
+        return False
+    return True
 
 
 def check_rate_limit(request: Request):

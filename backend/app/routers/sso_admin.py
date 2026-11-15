@@ -22,8 +22,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import SsoConnection, User
 from pydantic import BaseModel, Field
+from services.platform import sessions, sso_flow
 from services.platform import sso_connections as conns
-from services.platform import sso_flow
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, select
 
@@ -177,12 +177,25 @@ async def put_sso(
     changed = [f for f in AUDITED_FIELDS if before.get(f) != getattr(row, f)]
     if secret_changed:
         changed.append("client_secret")
+    # The requirement takes effect now: end the password-started sessions it
+    # would refuse today (issue #524; docs/design/SESSIONS.md, S5).
+    ended = 0
+    if (row.require_sso and row.enabled) and not (
+        before.get("require_sso") and before.get("enabled")
+    ):
+        ended = sessions.revoke_users(
+            session,
+            sso_flow.members_refused_password(session, company_id),
+            "sso_required",
+            method="password",
+        )
     _audit(
         session,
         company_id,
         actor,
         "sso_connection_created" if created else "sso_connection_updated",
         changed=changed,
+        sessions_ended=ended,
         **{f: getattr(row, f) for f in AUDITED_FIELDS},
     )
     session.refresh(row)

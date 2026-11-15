@@ -42,6 +42,26 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- Browser sessions (issue #524; `docs/design/SESSIONS.md`). Login and the SSO
+  exchange set HttpOnly cookies instead of returning a token:
+  - `ACCESS_TOKEN_EXPIRE_MINUTES` — default `15`. The access token's life, in
+    the `fabrique_session` cookie or, for a script that logs in with
+    `"token_delivery": "bearer"`, in the response body.
+  - `REFRESH_TOKEN_ABSOLUTE_DAYS` — default `7`. A session ends this long after
+    sign-in however often it is refreshed; the person signs in again.
+  - `REFRESH_REUSE_GRACE_SECONDS` — default `10`. A refresh token presented
+    again this soon after its rotation, while its successor is unused (two tabs
+    refreshing at once), is answered 409 without revoking; any other reuse
+    revokes the session's family.
+  - `REFRESH_RATE_LIMIT` — default `30/minute`, per client address, on
+    `POST /v1/auth/refresh` (slowapi, `RATE_LIMIT_STORAGE_URI`).
+  - `SESSION_COOKIE_SECURE` — default `true`. The cookies are `Secure`, so the
+    browser sends them over https only (browsers also treat
+    `http://localhost` as secure). Set `false` only to develop over plain
+    http on another host name; the backend warns at startup.
+  - `CORS_ORIGINS` must list the frontend's origins explicitly: with `*` the
+    backend allows no credentials, so a browser on another origin cannot sign
+    in (and warns at startup).
 - Single sign-on over OpenID Connect (issue #512; `docs/design/SSO.md`; setup in
   `docs/OPERATIONS.md`, Single sign-on). Each company's connection is stored in
   the database by its Owner, not in the environment; these settle the deployment:
@@ -64,6 +84,18 @@ Copy `.env.example` to `.env` and fill in:
     on the ID token's `exp` and `iat`).
   - The client secret is encrypted with `FERNET_SECRET_KEY`; without that key
     it is stored with a `plaintext:` prefix, as other credentials are.
+- Approvals in Slack and Teams (issue #512, phase 4; `docs/design/CHAT_APPROVALS.md`,
+  set up per company on the Chat approvals page; `docs/OPERATIONS.md`):
+  - `CHAT_APP_URL` — default `http://localhost:5173`. The frontend address the
+    chat messages link to (the run's evidence, the task).
+  - `CHAT_RATE_LIMIT` — default `120/minute`, per client address, on the
+    public inbound endpoints (`/v1/integrations/slack/…`, `/v1/integrations/teams/…`).
+  - `FERNET_SECRET_KEY` is required: a connection is refused without it, since
+    its bot token, webhook URL and signing secret are stored encrypted.
+  - Teams incoming webhook URLs must be https on a Microsoft webhook host
+    (`*.webhook.office.com`, `*.logic.azure.com`, `*.powerplatform.com`,
+    `*.powerautomate.com`) that resolves to public addresses
+    (`WEBHOOK_ALLOW_PRIVATE_HOSTS` relaxes only the address check).
 - API tokens (`/v1/auth/tokens`, `services/platform/api_tokens.py`, issue #327): a
   Manager creates one per company, accepted beside the JWT, with a `role`
   (`Viewer` by default, `Manager` at most, never above the creator's own) and
@@ -138,7 +170,9 @@ Copy `.env.example` to `.env` and fill in:
   hour. One replica sends at a time (`locks.MANAGER_BRIEF`).
 - `PUBLIC_API_URL` — optional. The address GitHub uses to reach the backend
   (public host or tunnel). `/v1/capabilities` reports it as `public_api_url` and
-  the GitHub page shows it as the webhook Payload URL.
+  the GitHub page shows it as the webhook Payload URL. It is also the base of
+  the Request URLs the Chat approvals page shows for Slack and Teams
+  (`http://localhost:8000` when unset).
 - `AUDIT_SIGNING_KEY` — optional. Signs audit rows with HMAC-SHA256, and keys
   each company's audit hash chain (`audit_chain.py`: every company row carries
   `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
@@ -472,6 +506,21 @@ Copy `.env.example` to `.env` and fill in:
   Architect's brief and review feedback never are, and the prompt names what
   was left out. Unset or `0`: nothing is cut. Either way each section's weight
   is recorded on the run's evidence as `prompt_sections`.
+- `AGENT_MODEL_POLICY` — optional, empty by default (issue #319). The
+  deployment's routing policy by task difficulty, JSON:
+  `{"bands": {"low": "<model>", "medium": "fast", "high": "<model>"}, "label": "cheap-easy"}`.
+  A band key is a difficulty band of `services/models/difficulty.py` (`low`
+  1-2, `medium` 3, `high` 4-5) or a range of scores (`"1-2"`, `"3-5"`); a
+  value is a model id, a company connection (`conn:<id>:<model>`) or a proxy
+  tier name (`fast`, `powerful`…), which runs on the role default since the
+  proxy serves no model by that name. `label` names the policy in the routing
+  record and the bench (else a fingerprint of the bands). A company's own
+  policy (`Company.model_policy`, the Models page, `PUT
+  /v1/companies/{id}/model_settings` with `model_policy`) replaces it for
+  that company. A policy that cannot be read is ignored with a warning (the
+  role defaults apply), a band that cannot be read is dropped with a warning;
+  an agent's, a role's or the company's chosen model is never re-routed.
+  Unset: every task runs on its role's model, as before.
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
   resolves to public addresses, checked when it is saved and before every post;

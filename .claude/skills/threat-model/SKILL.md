@@ -23,7 +23,7 @@ it is a claim: a person reviews it before it guides work.
    (`docs/contexts/*.md`, mapped through `docs/architecture/contexts.json`).
 3. `SECURITY.md` §2 and §8, `docs/threat_model.md` (the sandbox and NATS
    sections), `docs/POSITIONING.md` (design rules 1, 2, 5, 6, 7).
-4. [`reference.md`](reference.md): boundaries B1–B7 and the existing controls.
+4. [`reference.md`](reference.md): boundaries B1–B9 and the existing controls.
 
 ## Procedure
 
@@ -50,7 +50,7 @@ What an attacker would want or break. Typical ones here:
 
 A Mermaid or ASCII data flow diagram: each component, each flow labelled with
 its data and protocol (REST/SSE, NATS subject, HTTPS, git, docker), and each
-trust boundary crossed, named by its id from `reference.md` (B1–B7). A new
+trust boundary crossed, named by its id from `reference.md` (B1–B9). A new
 boundary gets a new id and a sentence on why it is one.
 
 ### 4. Find threats per boundary with STRIDE

@@ -57,7 +57,7 @@ function stubApi() {
 }
 
 function renderAs(role: 'Manager' | 'Viewer') {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
   return render(
     <QueryClientProvider client={queryClient}>
       <Wiki />

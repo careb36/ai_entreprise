@@ -28,7 +28,9 @@
     "specifications": "Specifications",
     "models": "Models",
     "sso": "Single sign-on",
-    "wiki": "Wiki"
+    "wiki": "Wiki",
+    "documentation": "Documentation",
+    "chatApprovals": "Chat approvals"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2083,7 +2085,25 @@
     },
     "statConnections": "Connections",
     "statModels": "Models",
-    "statValidated": "Validated"
+    "statValidated": "Validated",
+    "policy": {
+      "title": "Model by task difficulty",
+      "subtitle": "Before each attempt the task's difficulty is estimated from its plan (criteria, modules and files, dependencies, attempt and rework), never by a model. Name the model each band runs; an empty band keeps the role default. A model chosen for an agent, a role or the company is never re-routed.",
+      "sourceCompany": "This company's policy applies.",
+      "sourceDeployment": "No policy of the company's: the deployment's applies (shown as placeholders).",
+      "sourceNone": "No policy: every task runs on its role's model.",
+      "band": {
+        "low": "Low difficulty",
+        "medium": "Medium difficulty",
+        "high": "High difficulty"
+      },
+      "roleDefault": "Role default",
+      "label": "Policy name (shown in the records)",
+      "tiers": "A model id, a connection model (conn:<id>:<model>) or a proxy tier (fast, powerful…); a tier runs on the role default, and the run records why.",
+      "save": "Save the policy",
+      "clear": "Remove the policy",
+      "saved": "Policy saved."
+    }
   },
   "manager": {
     "suggestion": "Manager agent suggests: {{decision}}",
@@ -2181,7 +2201,36 @@
     "noDelivery": "no delivery",
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} done)",
     "unreported_one": "{{count}} turn without a reported token count, left out of the tokens.",
-    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens."
+    "unreported_other": "{{count}} turns without a reported token count, left out of the tokens.",
+    "split": {
+      "label": "Split the closed sprints by",
+      "by": {
+        "band": "By band",
+        "model": "By served model",
+        "policy": "By policy"
+      },
+      "caption": {
+        "band": "Tasks by difficulty band",
+        "model": "Tasks by served model",
+        "policy": "Tasks by routing policy"
+      },
+      "column": {
+        "band": "Band",
+        "model": "Served model",
+        "policy": "Policy"
+      },
+      "bandName": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "noPolicy": "no policy",
+      "done": "Done",
+      "cost": "Cost",
+      "costUnknown": "unknown",
+      "costUnpriced_one": "(+{{count}} task unpriced)",
+      "costUnpriced_other": "(+{{count}} tasks unpriced)"
+    }
   },
   "consoleProducers": {
     "title": "Console producers",
@@ -2345,6 +2394,134 @@
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
+    }
+  },
+  "documentation": {
+    "title": "Documentation",
+    "subtitle": "The project's management documents and architecture diagrams, compiled from what La Fabrique recorded. Every statement cites its source; prose a model wrote is marked as a claim.",
+    "compile": "Compile from the records",
+    "prose": "Ask the TechWriter for the charter's background (a claim)",
+    "compileError": "Could not compile the pack: {{message}}",
+    "loading": "Loading the documentation…",
+    "loadError": "Could not load the documentation: {{message}}",
+    "empty": "No pack has been compiled yet.",
+    "versions": "Version",
+    "versionOption": "Version {{version}} ({{status}})",
+    "version": "Version {{version}}",
+    "inputsHash": "Digest of the records this pack was compiled from",
+    "approve": "Approve",
+    "approveError": "Could not approve the pack: {{message}}",
+    "write": "Write to the repository",
+    "writeError": "Could not write the pack: {{message}}",
+    "written": "{{count}} files written to {{path}}; the daemon's sha256 for each is kept.",
+    "documents": "Documents",
+    "diagrams": "Diagrams",
+    "noDiagrams": "No diagram: the project has no architecture in La Fabrique.",
+    "emptyDiagram": "No element is recorded for this diagram.",
+    "showSource": "Show the Mermaid source",
+    "hideSource": "Hide the source",
+    "file": "File: {{file}}",
+    "sourcesCount_one": "{{count}} source cited",
+    "sourcesCount_other": "{{count}} sources cited",
+    "claimsCount_one": "{{count}} section written by a model",
+    "claimsCount_other": "{{count}} sections written by a model",
+    "status": {
+      "draft": "draft",
+      "approved": "approved",
+      "superseded": "superseded"
+    },
+    "severity": {
+      "blocking": "blocks approval",
+      "warning": "warning",
+      "info": "note"
+    },
+    "levels": {
+      "context": "context level",
+      "container": "container level",
+      "component": "component level"
+    },
+    "kinds": {
+      "person": "Person",
+      "system": "Software system",
+      "external": "External system",
+      "container": "Container",
+      "datastore": "Data store",
+      "component": "Component"
+    },
+    "lint": {
+      "title": "Drift and gaps",
+      "ok": "The pack matches the current records.",
+      "stale_one": "{{count}} finding blocks approval: the records changed since this pack was compiled.",
+      "stale_other": "{{count}} findings block approval: the records changed since this pack was compiled.",
+      "gaps_one": "{{count}} section has no record behind it; the document says so.",
+      "gaps_other": "{{count}} sections have no record behind them; the documents say so."
+    },
+    "personsCount_one": "{{count}} section for a person to complete",
+    "personsCount_other": "{{count}} sections for a person to complete",
+    "placement": "PMBOK Guide 8th ed.: {{domain}}, {{focus}}",
+    "language": "Documents in",
+    "languageError": "Could not change the language: {{message}}",
+    "languages": {
+      "en": "English",
+      "es": "Spanish"
+    },
+    "domains": {
+      "Governance": "Governance",
+      "Scope": "Scope",
+      "Schedule": "Schedule",
+      "Finance": "Finance",
+      "Stakeholders": "Stakeholders",
+      "Resources": "Resources",
+      "Risk": "Risk"
+    },
+    "focusAreas": {
+      "Initiating": "Initiating",
+      "Planning": "Planning",
+      "Executing": "Executing",
+      "Monitoring and Controlling": "Monitoring and Controlling",
+      "Closing": "Closing"
+    }
+  },
+  "chat": {
+    "title": "Chat approvals",
+    "subtitle": "Accept or send back held deliveries from Slack or Microsoft Teams.",
+    "linksTitle": "Your chat accounts",
+    "linksHelp": "Link your chat account so a decision you take in chat is recorded as yours, with your role here.",
+    "linkedAs": "Linked to {{user}} in {{workspace}}",
+    "link": "Link my {{provider}} account",
+    "unlink": "Unlink",
+    "notConnected": "Not connected by the company",
+    "codeIntro": "Your one-time code, valid for 10 minutes:",
+    "inboundUrl": "Request URL to give the platform:",
+    "secretSet": "Set — leave empty to keep it",
+    "secretUnset": "Not set",
+    "enabled": "Post approvals and accept decisions",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveError": "Could not save: {{message}}",
+    "test": "Test connection",
+    "testOk": "The platform answered: connected.",
+    "testFailed": "The platform did not answer as expected: {{detail}}",
+    "delete": "Remove",
+    "deleteConfirm": "Remove this connection? Messages already posted can no longer decide anything.",
+    "slack": {
+      "name": "Slack",
+      "title": "Slack",
+      "help": "A Slack app with a bot token (chat:write, commands) and its signing secret. Use the Request URL below for Interactivity and for the /fabrique slash command.",
+      "workspace": "Workspace (team) ID",
+      "channel": "Channel ID",
+      "postCredential": "Bot token",
+      "signingSecret": "Signing secret",
+      "codeHow": "In Slack, type: /fabrique link {{code}}"
+    },
+    "teams": {
+      "name": "Teams",
+      "title": "Microsoft Teams",
+      "help": "An incoming webhook (or Workflows) URL to post cards, and an outgoing webhook whose callback URL is the Request URL below; paste its security token as the signing secret.",
+      "workspace": "Tenant ID",
+      "postCredential": "Incoming webhook URL",
+      "signingSecret": "Outgoing webhook security token",
+      "codeHow": "In Teams, mention the La Fabrique webhook followed by: link {{code}}"
     }
   },
   "boardNotes": {
