@@ -10,7 +10,7 @@ OpenHands with OpenHands (design only, no code taken).
 | `self_host.py` | The harness: makes the "La Fabrique" company and drives it through the public API. Idempotent. |
 | `render_docs.py` | Renders `docs/ARCHITECTURE.md` and `docs/adr/0012`… from `docs/architecture/architecture.json`; `--write` writes them. |
 | `fixtures/issue-535-specification.json` | Issue #535 written as a specification, in the PO's shape (EARS-style criteria, after Kiro; design only). It specifies the issue and does not implement it. |
-| `fixtures/issue-535-architecture.json` | The Architect's revision of La Fabrique's architecture for that specification. |
+| `fixtures/issue-535-architecture.json` | The Architect's revision of La Fabrique's architecture for that specification: the covers of #535's requirements, the interfaces and the decision it adds. The product keeps #469's covers (`earlier_covers`). |
 
 The retrospective of the first run is
 [`docs/retrospectives/2026-11-self-hosting.md`](../../docs/retrospectives/2026-11-self-hosting.md).
@@ -44,14 +44,15 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `checkout` | Copies the files git tracks (or would track) in this repository to `--checkout` and commits them there as `main` of a fresh repository. Never the live checkout and never a `git worktree` of it: the Git workflow makes a branch per task, and a worktree shares the live repository's branches. |
 | `company` | `POST /v1/init_company` "La Fabrique" with the snapshot as its project, the Git workflow on `main`, the roles of the loop (PO, Architect, Developer, QA, ScrumMaster, TechWriter); the stack profile names the delivery test command (`--test-command`) and turns install, lint, start and e2e off; the sandbox is `--sandbox` (`container` by default). |
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
-| `issue` | Posts and approves the #535 specification, posts and approves the revised architecture, asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
+| `issue` | Posts and approves the #535 specification; opens the next version of La Fabrique's architecture for it (`POST /v1/companies/{id}/architecture/revisions`, which keeps each module's #469 covers), writes the fixture's change into it and approves it, so both specifications share one architecture record; asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`). |
 | `review` | Lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` merges the integration into `main` locally (refused while its suite fails). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
 
 The company id, the sprint id and the record ids are kept in
-`<checkout>.self_host.json` (`--state`); specifications and architectures are
-found again by title. Each run prints a JSON report (`--report` also writes
+`<checkout>.self_host.json` (`--state`); specifications and architecture
+versions are found again by title (a version superseded by the #535 one
+included, which `records` reads but no longer writes). Each run prints a JSON report (`--report` also writes
 it). With authentication on, set `FABRIQUE_API_TOKEN` to an API token of an
 Owner or Manager (Settings, API tokens); it is sent as a bearer token.
 

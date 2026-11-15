@@ -1,4 +1,4 @@
-"""The Architect drafts the architecture of an approved specification.
+"""The Architect drafts the company's architecture for an approved specification.
 
 From the specification, the project's detected stack and the files at its
 root, the Architect proposes the modules, the interfaces between them, the
@@ -8,7 +8,9 @@ numbers it and says what blocks its approval, a person answers, edits and
 approves. Once approved, ``context_for`` gives each task the modules its
 requirements map to, and ``write_document`` sends it to the repository
 through the workspace daemon, whose sha256 of the bytes on disk is what the
-backend keeps.
+backend keeps. The architecture is the company's (``arch_versions``): for a
+new specification the Architect revises the current version, and the
+earlier specifications' covers are kept.
 """
 
 from __future__ import annotations
@@ -24,7 +26,13 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select, text
 
 from services.evidence import standards
-from services.planning import arch_check, spec_author, spec_check, spec_planning
+from services.planning import (
+    arch_check,
+    arch_versions,
+    spec_author,
+    spec_check,
+    spec_planning,
+)
 from services.planning.sprint_planner import _build_stack_summary, _list_root_files
 from services.tools import research_tools
 
@@ -121,6 +129,14 @@ def draft_prompt(
         lines += ["## Files at the project's root", root_files, ""]
     if existing:
         answered = [q for q in existing.get("questions") or [] if q.get("answer")]
+        serves = sorted(
+            {
+                key
+                for m in existing.get("modules") or []
+                for key in m.get("earlier_covers") or {}
+            },
+            key=int,
+        )
         lines += [
             "## The current draft",
             (
@@ -128,9 +144,28 @@ def draft_prompt(
                 "ask again only what is still open."
             ),
             "",
+        ]
+        if serves:
+            lines += [
+                (
+                    "This is the company's architecture: its modules also serve the "
+                    f"earlier specifications {', '.join(serves)}. Keep the modules, "
+                    "interfaces and decisions they rely on, and add the covers of "
+                    "the specification above; their covers are kept for you."
+                ),
+                "",
+            ]
+        lines += [
             json.dumps(
                 {
-                    k: existing.get(k)
+                    k: (
+                        [
+                            {a: b for a, b in m.items() if a != "earlier_covers"}
+                            for m in existing.get(k) or []
+                        ]
+                        if k == "modules"
+                        else existing.get(k)
+                    )
                     for k in (
                         "title",
                         "overview",
@@ -182,9 +217,7 @@ def content_of(arch: Architecture) -> dict[str, Any]:
 
 
 def requirement_ids(spec: Specification) -> list[str]:
-    return [
-        r["id"] for r in spec.requirements or [] if isinstance(r, dict) and r.get("id")
-    ]
+    return arch_versions.requirement_ids(spec)
 
 
 def prepare(
@@ -280,15 +313,21 @@ def draft(
 
 
 def approved_for(session: Session, specification_id: int) -> Architecture | None:
-    """The approved architecture of a specification, if any."""
-    return session.exec(
-        select(Architecture)
-        .where(
-            Architecture.specification_id == specification_id,
-            Architecture.status == "approved",
-        )
-        .order_by(Architecture.version.desc())
-    ).first()
+    """The version of the company's architecture that holds for a specification
+    (``arch_versions.for_specification``), if any."""
+    spec = session.get(Specification, specification_id)
+    return arch_versions.for_specification(session, spec) if spec else None
+
+
+def content_for(session: Session, specification_id: int) -> dict[str, Any] | None:
+    """That version's content as the specification sees it: each module's
+    ``covers`` are its covers in that specification (``arch_versions.view_for``)."""
+    arch = approved_for(session, specification_id)
+    if arch is None:
+        return None
+    return arch_versions.view_for(
+        content_of(arch), arch.specification_id, specification_id
+    )
 
 
 def section(arch: dict[str, Any], covers: list[str]) -> str:
@@ -313,27 +352,30 @@ def context_for(session: Session, sprint: Sprint | None, item: Any) -> str:
     """The architecture section for *item* of *sprint*; empty without an approved one."""
     if sprint is None or sprint.specification_id is None:
         return ""
-    arch = approved_for(session, sprint.specification_id)
-    return section(content_of(arch), spec_planning.covers_of(item)) if arch else ""
+    content = content_for(session, sprint.specification_id)
+    return section(content, spec_planning.covers_of(item)) if content else ""
 
 
 def planning_context(session: Session, specification_id: int) -> str:
     """The approved architecture for the PO's planning prompt, or nothing."""
-    arch = approved_for(session, specification_id)
-    if arch is None:
+    content = content_for(session, specification_id)
+    if content is None:
         return ""
     return (
         "\n\n## Architecture (approved)\n"
         "Split the work along these modules: a task works in one module where "
-        "it can, and names it in its description.\n\n"
-        + arch_check.as_prompt(content_of(arch))
+        "it can, and names it in its description.\n\n" + arch_check.as_prompt(content)
     )
 
 
 def document(session: Session, arch: Architecture) -> str:
     spec = session.get(Specification, arch.specification_id)
+    earlier = arch_versions.earlier_specifications(session, arch)
     return arch_check.as_markdown(
-        content_of(arch), spec.title if spec else "", arch.version
+        content_of(arch),
+        spec.title if spec else "",
+        arch.version,
+        {key: str(e["title"]) for key, e in earlier.items()},
     )
 
 

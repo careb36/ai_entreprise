@@ -1,7 +1,13 @@
-"""Architectures router — how an approved specification is built.
+"""Architectures router — how the company's system is built, version by version.
+
+A row is a version of the company's architecture (``services/planning/arch_versions.py``):
+a draft for a specification the current version does not cover yet is the
+next version of the same architecture, with the earlier specifications'
+covers kept. ``routers/company_architecture.py`` reads the company's current
+architecture and its history.
 
 Endpoints (``/v1/architectures``):
-- ``GET    /?specification_id=``      — the architectures of a specification (Viewer).
+- ``GET    /?specification_id=``      — the versions that cover a specification (Viewer).
 - ``GET    /{id}``                    — one, with its check (Viewer).
 - ``GET    /{id}/document``           — it as ``docs/ARCHITECTURE.md`` (Viewer).
 - ``GET    /{id}/adrs``               — its decisions as ``docs/adr/`` files (Viewer).
@@ -10,7 +16,7 @@ Endpoints (``/v1/architectures``):
 - ``POST   /draft``                   — the Architect drafts, or revises (Manager).
 - ``POST   /{id}/questions/{index}``  — answer one of the Architect's questions (Manager).
 - ``POST   /{id}/approve``            — approve; refused while the check blocks (Manager).
-- ``POST   /{id}/revise``             — a new draft version of an approved one (Manager).
+- ``POST   /{id}/revise``             — the next draft version, optionally for another specification (Manager).
 - ``POST   /{id}/write``              — write it into the repository through the daemon (Manager).
 
 The ids of modules, interfaces and decisions come from ``services.planning.arch_check``,
@@ -28,7 +34,13 @@ from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import Field
 from schemas import RequestModel
-from services.planning import adr_docs, arch_author, arch_check, document_approval
+from services.planning import (
+    adr_docs,
+    arch_author,
+    arch_check,
+    arch_versions,
+    document_approval,
+)
 from services.tools import repo_map
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
@@ -61,6 +73,11 @@ class AnswerRequest(RequestModel):
     answer: str = Field(max_length=arch_check.TEXT_LIMIT)
 
 
+class ReviseRequest(RequestModel):
+    # The specification the next version is for; omitted, the same one.
+    specification_id: int | None = None
+
+
 def _actor(user: User | None) -> str:
     return user.email if user is not None else "local demo"
 
@@ -73,12 +90,25 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def serialize(arch: Architecture, spec: Specification) -> dict[str, Any]:
+def serialize(
+    session: Session, arch: Architecture, spec: Specification
+) -> dict[str, Any]:
     content = arch_author.content_of(arch)
+    earlier = arch_versions.earlier_specifications(session, arch)
+    current = arch_versions.current(session, arch.company_id)
     return {
         "id": arch.id,
         "company_id": arch.company_id,
         "specification_id": arch.specification_id,
+        "specification_title": spec.title,
+        # Every specification the version covers: its own, then the earlier ones.
+        "specification_ids": arch_versions.covered_ids(arch),
+        "earlier_specifications": [
+            {"id": int(key), "title": e["title"], "status": e["status"]}
+            for key, e in earlier.items()
+        ],
+        "is_current": current is not None and current.id == arch.id,
+        "coverage": arch_versions.coverage(content, spec, earlier),
         "title": arch.title,
         "overview": arch.overview,
         "status": arch.status,
@@ -98,7 +128,7 @@ def serialize(arch: Architecture, spec: Specification) -> dict[str, Any]:
         "written_at": _iso(arch.written_at),
         "created_at": _iso(arch.created_at),
         "updated_at": _iso(arch.updated_at),
-        "check": arch_check.check(content, arch_author.requirement_ids(spec)),
+        "check": arch_check.check(content, arch_author.requirement_ids(spec), earlier),
     }
 
 
@@ -131,7 +161,21 @@ def _load(
     return arch, spec
 
 
-def _apply(arch: Architecture, content: dict[str, Any], by: str) -> None:
+def _apply(
+    arch: Architecture,
+    content: dict[str, Any],
+    by: str,
+    base_modules: list[dict[str, Any]] | None = None,
+) -> None:
+    """Normalize *content* into *arch*; a module that names no earlier covers
+    keeps those of the base module of the same name (``arch_versions.carry``)."""
+    if base_modules:
+        content = {
+            **content,
+            "modules": arch_versions.carry(
+                base_modules, list(content.get("modules") or [])
+            ),
+        }
     normalized = arch_check.normalize(content)
     arch.title = normalized["title"]
     arch.overview = normalized["overview"]
@@ -156,7 +200,42 @@ def _saved(session: Session, arch: Architecture, spec: Specification) -> dict[st
     session.add(arch)
     session.commit()
     session.refresh(arch)
-    return serialize(arch, spec)
+    return serialize(session, arch, spec)
+
+
+def _new_version(
+    session: Session, spec: Specification, actor: str
+) -> tuple[Architecture, list[dict[str, Any]]]:
+    """A new draft for *spec*: the next version of the company's architecture,
+    starting from the current one (its covers rebased onto *spec*), or the
+    first version when the company has none. 409 while a revision is open."""
+    base = arch_versions.current(session, spec.company_id)
+    if base is None:
+        return Architecture(
+            company_id=spec.company_id,
+            specification_id=spec.id,
+            title="",
+            version=arch_versions.next_version(session, spec.company_id),
+        ), []
+    _no_open_revision(session, base)
+    revision = arch_versions.start_revision(session, base, spec, actor)
+    return revision, list(revision.modules or [])
+
+
+def _no_open_revision(session: Session, base: Architecture) -> None:
+    open_revision = session.exec(
+        select(Architecture).where(
+            Architecture.supersedes_id == base.id, Architecture.status == "draft"
+        )
+    ).first()
+    if open_revision is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A revision is already in draft.",
+                "architecture_id": open_revision.id,
+            },
+        )
 
 
 @router.get("")
@@ -165,14 +244,17 @@ async def list_architectures(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """The architectures of a specification, newest first."""
+    """The versions of the company's architecture that cover a specification
+    (drafted for it, or keeping its covers), newest first."""
     spec = _specification(session, user, specification_id, "Viewer")
-    rows = session.exec(
-        select(Architecture)
-        .where(Architecture.specification_id == spec.id)
-        .order_by(Architecture.id.desc())
-    ).all()
-    return {"architectures": [serialize(arch, spec) for arch in rows]}
+    out = []
+    for arch in arch_versions.versions(session, spec.company_id):
+        if arch_versions.covers_specification(arch, spec.id):
+            own = spec if arch.specification_id == spec.id else None
+            own = own or session.get(Specification, arch.specification_id)
+            if own is not None:
+                out.append(serialize(session, arch, own))
+    return {"architectures": out}
 
 
 @router.get("/{arch_id}")
@@ -182,7 +264,7 @@ async def get_architecture(
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     arch, spec = _load(session, user, arch_id, "Viewer")
-    return serialize(arch, spec)
+    return serialize(session, arch, spec)
 
 
 @router.get("/{arch_id}/document", response_class=PlainTextResponse)
@@ -229,12 +311,15 @@ async def create_architecture(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """A person writes a draft; it is numbered and checked like the Architect's."""
+    """A person writes a draft; it is numbered and checked like the Architect's.
+
+    With a current architecture, the draft is its next version: a module
+    keeps the earlier covers of the current module of the same name."""
     spec = _specification(session, user, req.specification_id, "Manager")
-    arch = Architecture(
-        company_id=spec.company_id, specification_id=spec.id, title=req.title
+    arch, base_modules = _new_version(session, spec, _actor(user))
+    _apply(
+        arch, req.model_dump(exclude={"specification_id"}), _actor(user), base_modules
     )
-    _apply(arch, req.model_dump(exclude={"specification_id"}), _actor(user))
     return _saved(session, arch, spec)
 
 
@@ -245,10 +330,16 @@ async def update_architecture(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Edit a draft. The questions keep their answers; the ids are reassigned."""
+    """Edit a draft. The questions keep their answers; the ids are reassigned;
+    a module that names no earlier covers keeps the ones it had."""
     arch, spec = _load(session, user, arch_id, "Manager")
     _only_draft(arch)
-    _apply(arch, {**req.model_dump(), "questions": arch.questions}, _actor(user))
+    _apply(
+        arch,
+        {**req.model_dump(), "questions": arch.questions},
+        _actor(user),
+        list(arch.modules or []),
+    )
     return _saved(session, arch, spec)
 
 
@@ -276,6 +367,14 @@ async def draft_architecture(
         if existing.specification_id != spec.id:
             raise HTTPException(status_code=404, detail="Architecture not found")
         _only_draft(existing)
+    elif (base := arch_versions.current(session, spec.company_id)) is not None:
+        # The company has an architecture: the Architect revises it for this
+        # specification, as its next version, instead of starting a copy.
+        _no_open_revision(session, base)
+        existing = arch_versions.start_revision(
+            session, base, spec, arch_author.ARCHITECT_ROLE, numbered=False
+        )
+    base_modules = list(existing.modules or []) if existing is not None else []
     # What the Architect is asked is read here, with the request's session;
     # only the call to the proxy runs in a thread (a session is not shared).
     request = arch_author.prepare(session, spec, existing)
@@ -291,7 +390,9 @@ async def draft_architecture(
     arch = existing or Architecture(
         company_id=spec.company_id, specification_id=spec.id, title=content["title"]
     )
-    _apply(arch, content, arch_author.ARCHITECT_ROLE)
+    if arch.id is None:
+        arch.version = arch_versions.next_version(session, spec.company_id)
+    _apply(arch, content, arch_author.ARCHITECT_ROLE, base_modules)
     arch.sources = content.get("sources") or []
     return _saved(session, arch, spec)
 
@@ -323,7 +424,7 @@ async def approve_architecture(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Approve a draft; the version it revises, and any other approved one of the specification, become superseded."""
+    """Approve a draft; every other approved version of the company's architecture becomes superseded."""
     arch, spec = _load(session, user, arch_id, "Manager")
     _only_draft(arch)
     try:
@@ -336,44 +437,35 @@ async def approve_architecture(
 @router.post("/{arch_id}/revise", status_code=201)
 async def revise_architecture(
     arch_id: int,
+    req: ReviseRequest | None = None,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """A new draft, version + 1, with the approved content to start from."""
+    """The next draft version of the company's architecture, from this approved one.
+
+    With ``specification_id``, the version is for that approved specification
+    of the company: its covers start from what the version had for it, and
+    the covers of every other specification are kept (``arch_versions.rebase``).
+    """
     arch, spec = _load(session, user, arch_id, "Manager")
     if arch.status != "approved":
         raise HTTPException(
             status_code=409,
             detail=f"Only an approved architecture is revised; this one is {arch.status}.",
         )
-    open_revision = session.exec(
-        select(Architecture).where(
-            Architecture.supersedes_id == arch.id, Architecture.status == "draft"
-        )
-    ).first()
-    if open_revision is not None:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "A revision is already in draft.",
-                "architecture_id": open_revision.id,
-            },
-        )
-    revision = Architecture(
-        company_id=arch.company_id,
-        specification_id=arch.specification_id,
-        title=arch.title,
-        overview=arch.overview,
-        version=arch.version + 1,
-        supersedes_id=arch.id,
-        modules=list(arch.modules or []),
-        interfaces=list(arch.interfaces or []),
-        decisions=list(arch.decisions or []),
-        conventions=list(arch.conventions or []),
-        questions=[],
-        drafted_by=_actor(user),
-    )
-    return _saved(session, revision, spec)
+    target = spec
+    if req is not None and req.specification_id is not None:
+        target = _specification(session, user, req.specification_id, "Manager")
+        if target.company_id != arch.company_id:
+            raise HTTPException(status_code=404, detail="Specification not found")
+        if target.status != "approved":
+            raise HTTPException(
+                status_code=409,
+                detail=f"The specification is {target.status}; a version is drafted for an approved one.",
+            )
+    _no_open_revision(session, arch)
+    revision = arch_versions.start_revision(session, arch, target, _actor(user))
+    return _saved(session, revision, target)
 
 
 @router.post("/{arch_id}/write")

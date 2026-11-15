@@ -286,6 +286,7 @@ def build_world(session) -> World:
         "spec_id": spec.id,
         "specification_id": spec.id,
         "arch_id": arch.id,
+        "version": arch.version,
         "server_id": server.id,
         "provider_id": provider.id,
         "user_id": bystander.id,

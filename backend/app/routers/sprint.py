@@ -34,7 +34,7 @@ from services.evidence import acceptance
 from services.loop import board_moves, sprint_archive
 from services.loop.carry_over import CarryOverError, carry_over
 from services.models import run_cost
-from services.planning import spec_check, spec_planning, sprint_team
+from services.planning import arch_author, spec_check, spec_planning, sprint_team
 from services.tasks import dependencies, sprint_board, task_events
 from services.tasks.board import (
     count_architect_advice,
@@ -117,6 +117,12 @@ async def start_sprint(
     if req.specification_id is not None:
         spec = _specification(session, req.company_id, req.specification_id)
         known = set(spec_check.criterion_ids(spec_planning.spec_content(spec)))
+        # The specification names the version of the company's architecture
+        # its sprint was planned against (issue #329, F3).
+        holds = arch_author.approved_for(session, spec.id)
+        if holds is not None and spec.architecture_id != holds.id:
+            spec.architecture_id = holds.id
+            session.add(spec)
 
     sprint = Sprint(
         company_id=req.company_id,

@@ -47,11 +47,9 @@ def seeds_for(session: Session, company_id: int, item_id: int) -> list[str]:
     seeds: list[str] = []
     sprint = session.get(Sprint, item.sprint_id)
     if sprint is not None and sprint.specification_id is not None:
-        arch = arch_author.approved_for(session, sprint.specification_id)
-        if arch is not None:
-            seeds += module_paths(
-                arch_author.content_of(arch), spec_planning.covers_of(item)
-            )
+        content = arch_author.content_for(session, sprint.specification_id)
+        if content is not None:
+            seeds += module_paths(content, spec_planning.covers_of(item))
     for path in touched.written_by_task(session, company_id, item_id):
         if path not in seeds:
             seeds.append(path)
