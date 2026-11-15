@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.execute",
+  "title": "workspace.execute",
+  "description": "Run a command in the project, in the sandbox the request names (daemon.py, shell_exec.py, sandbox.py). A command that could not run is an observation in the reply (`error`), not a refusal.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.execute",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "workspace_root": {
+          "type": "string"
+        },
+        "sandbox": {
+          "type": "object"
+        },
+        "command_policy": {
+          "type": "object"
+        },
+        "timeout_seconds": {
+          "type": "number"
+        },
+        "sprint_id": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "command"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "timeout_seconds": {
+          "type": "number"
+        },
+        "refused": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "sandbox": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "success"
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.capabilities",
+  "title": "workspace.capabilities",
+  "description": "The console assistant CLIs found on the PATH commands run with (daemon.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.capabilities",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "assistants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "assistants"
+      ]
+    }
+  }
+}

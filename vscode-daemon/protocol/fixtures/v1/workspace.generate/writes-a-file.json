@@ -1,0 +1,58 @@
+{
+  "description": "A delivery without a git spec: the file is written, read back with its sha256 and diff, with a snapshot that undoes it and the project's paths.",
+  "subject": "workspace.generate",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "files": [
+      {
+        "path": "src/greeting.py",
+        "content": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n"
+      }
+    ]
+  },
+  "reply": {
+    "ok": true,
+    "workspace_root": "$WORKSPACE",
+    "files": [
+      {
+        "path": "src/greeting.py",
+        "status": "written",
+        "absolute_path": "$WORKSPACE/src/greeting.py",
+        "bytes": 66,
+        "sha256": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2",
+        "change": "added",
+        "previous_sha256": null,
+        "additions": 3,
+        "deletions": 0,
+        "diff": "diff --git a/src/greeting.py b/src/greeting.py\nnew file mode 100644\n--- /dev/null\n+++ b/src/greeting.py\n@@ -0,0 +1,3 @@\n+def greet(name):\n+    \"\"\"Say hello.\"\"\"\n+    return f\"Hello, {name}\"\n",
+        "diff_omitted": null
+      }
+    ],
+    "snapshot": {
+      "id": "98f76934f911e50aa596e0970b33d410",
+      "files": [
+        {
+          "path": "src/greeting.py",
+          "existed": false,
+          "before_sha256": null,
+          "after_sha256": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2"
+        }
+      ]
+    },
+    "project_files": {
+      "files": [
+        "README.md",
+        "src/greeting.py"
+      ],
+      "truncated": false
+    }
+  },
+  "volatile": [
+    "/snapshot/id"
+  ]
+}

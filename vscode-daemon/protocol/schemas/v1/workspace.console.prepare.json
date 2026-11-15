@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.console.prepare",
+  "title": "workspace.console.prepare",
+  "description": "A console producer's task worktree, clean at its HEAD, and the guard taken before the run (console_run.py). A failure is `ok: false` with `error`.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.console.prepare",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "git": {
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "base": {
+              "type": "string"
+            },
+            "merge": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "worktree": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string"
+        },
+        "merged": {},
+        "guard": {
+          "type": "object"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok"
+      ]
+    }
+  }
+}

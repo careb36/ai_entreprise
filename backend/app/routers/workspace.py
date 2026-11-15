@@ -10,10 +10,12 @@ not need to see the user's disk.
 from auth_policy import current_user_if_required, require_authenticated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import User
+from services.workspace import daemon_liveness
 from services.workspace.workspace_daemon import (
     BROWSE_TIMEOUT_SECONDS,
     DAEMON_UNAVAILABLE_DETAIL,
     DaemonError,
+    DaemonIncompatible,
     DaemonUnavailable,
     daemon_presence,
     daemon_request,
@@ -29,6 +31,8 @@ def _nats(request: Request):
 
 
 def _raise_for(exc: Exception):
+    if isinstance(exc, DaemonIncompatible):
+        raise HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, DaemonUnavailable):
         raise HTTPException(status_code=503, detail=DAEMON_UNAVAILABLE_DETAIL)
     if isinstance(exc, DaemonError):
@@ -41,23 +45,51 @@ async def workspace_status(
     request: Request,
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Whether a workspace daemon is connected, absent or unknown, and on which machine.
+    """Whether a workspace daemon is connected, absent, unknown or incompatible, and where.
 
-    ``state`` is ``connected``, ``absent`` (nothing listens) or ``unknown``
-    (NATS unreachable, no answer in time, or an error reply), with ``reason``;
-    ``connected`` stays for older clients.
+    ``state`` is ``connected``, ``absent`` (nothing listens), ``unknown``
+    (NATS unreachable, no answer in time, or an error reply) or
+    ``incompatible`` (it answers with a protocol this backend does not
+    speak), with ``reason``; ``connected`` stays for older clients.
+    ``protocol`` compares the version the daemon reports with the range this
+    backend supports; ``heartbeat`` is when the backend last observed a
+    heartbeat, on its own clock; ``liveness`` is decided from the heartbeat,
+    or from this request when no heartbeat was ever observed (an older
+    daemon). What the daemon says about itself is under
+    ``reported_by_daemon`` (``host`` repeats it for older clients).
     """
     require_authenticated(user)
     presence = await daemon_presence(_nats(request))
-    status = presence["status"]
+    status = presence["status"] or {}
+    heartbeat = daemon_liveness.liveness()
+    protocol = presence.get("protocol")
+    if protocol is None and heartbeat["daemons"]:
+        # No answer to this request: what the last heartbeat reported.
+        protocol = daemon_liveness.compatibility(
+            heartbeat["daemons"][0]["reported_by_daemon"]
+        )
+    if heartbeat["state"] != "not_observed":
+        liveness = {"state": heartbeat["state"], "source": "heartbeat"}
+    else:
+        answered = {"connected": "online", "incompatible": "online"}
+        liveness = {
+            "state": answered.get(presence["state"])
+            or ("offline" if presence["state"] == "absent" else "unknown"),
+            "source": "request",
+        }
+    reported = ("host", "version", "daemon_id", "protocol_version", "protocol_min")
     return {
         "connected": presence["state"] == "connected",
         "state": presence["state"],
         "reason": presence["reason"],
-        "host": (status or {}).get("host"),
+        "host": status.get("host"),
         # The daemon's dependency cache: allowed, and the projects quarantined.
-        "sandbox_cache": (status or {}).get("sandbox_cache"),
+        "sandbox_cache": status.get("sandbox_cache"),
         "jetstream": bool(getattr(request.app.state, "jetstream", False)),
+        "protocol": protocol,
+        "heartbeat": heartbeat,
+        "liveness": liveness,
+        "reported_by_daemon": {k: status.get(k) for k in reported} if status else None,
     }
 
 

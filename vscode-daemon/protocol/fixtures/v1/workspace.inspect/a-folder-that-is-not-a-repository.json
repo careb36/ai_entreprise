@@ -1,0 +1,36 @@
+{
+  "description": "A folder on this machine that holds no repository.",
+  "subject": "workspace.inspect",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "path": "$WORKSPACE"
+  },
+  "reply": {
+    "host": {
+      "hostname": "devbox",
+      "platform": "linux",
+      "home": "/home/dev",
+      "sep": "/"
+    },
+    "path": "$WORKSPACE",
+    "name": "project",
+    "exists": true,
+    "is_dir": true,
+    "git": {
+      "is_repo": false,
+      "branch": null,
+      "remote_url": null,
+      "provider": null,
+      "web_url": null
+    }
+  },
+  "volatile": [
+    "/host"
+  ]
+}

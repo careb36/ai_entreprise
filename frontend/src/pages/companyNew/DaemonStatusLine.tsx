@@ -10,7 +10,7 @@ const platformName = (t: TFunction, platform: string) =>
 export function DaemonStatusLine({ host, connected, state, reason, isPending, error, fallbackPlatform }: {
   host: WorkspaceHost | null | undefined
   connected: boolean | undefined
-  state?: 'connected' | 'absent' | 'unknown'
+  state?: 'connected' | 'absent' | 'unknown' | 'incompatible'
   reason?: string | null
   isPending: boolean
   error: unknown
@@ -23,6 +23,15 @@ export function DaemonStatusLine({ host, connected, state, reason, isPending, er
       <p role="status" className="flex items-center gap-2 text-xs text-green-300">
         <span className="status-dot bg-green-500" aria-hidden="true" />
         {t('workspaceDaemon.connected', { hostname: host.hostname, platform: platformName(t, host.platform) })}
+      </p>
+    )
+  }
+  // Incompatible is not absent either: it runs, but speaks another protocol version.
+  if (state === 'incompatible') {
+    return (
+      <p role="status" className="flex items-center gap-2 text-xs text-amber-300">
+        <span className="status-dot bg-amber-500" aria-hidden="true" />
+        {t('workspaceDaemon.incompatible', { hostname: host?.hostname ?? '', reason: reason ?? '' })}
       </p>
     )
   }

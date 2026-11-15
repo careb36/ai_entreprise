@@ -1,0 +1,27 @@
+{
+  "description": "The files whose name matches a glob.",
+  "subject": "workspace.find",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "pattern": "*.py",
+    "path": null
+  },
+  "reply": {
+    "pattern": "*.py",
+    "path": ".",
+    "files": [
+      "src/greeting.py",
+      "src/main.py"
+    ],
+    "match_count": 2,
+    "truncated": false,
+    "walk_truncated": false
+  }
+}

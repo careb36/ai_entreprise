@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     DELIVERY_TEST_COMMAND: str = ""
     # The daemon itself stops a command after 120 s; wait slightly longer.
     DELIVERY_TEST_TIMEOUT_SECONDS: float = 130.0
+    # The daemon's heartbeat (workspace.heartbeat, every <=25 s): with none
+    # observed for this long, on the backend's clock, the daemon is ``stale``,
+    # then ``offline`` (services/workspace/daemon_liveness.py).
+    DAEMON_HEARTBEAT_STALE_SECONDS: float = 60.0
+    DAEMON_HEARTBEAT_OFFLINE_SECONDS: float = 90.0
     # Where agent-written code runs (the delivery test run and the
     # Developer's own test runs): ``host`` (the daemon's user, files and
     # network, as before), ``container`` (an ephemeral container per run:

@@ -163,6 +163,21 @@ Copy `.env.example` to `.env` and fill in:
   `NATS_BACKEND_TLS_CERT`/`_KEY` and `NATS_DAEMON_TLS_CERT`/`_KEY` name a
   client certificate's files there (compose turns them into those paths).
   `docs/OPERATIONS.md`, "Securing the bus", generates a self-signed CA.
+- `FABRIQUE_HEARTBEAT_SECONDS` — daemon side, optional, default `20`, bounded
+  to 1..25. How often the daemon publishes `workspace.heartbeat` with its id,
+  protocol version and a sequence number (`vscode-daemon/daemon_status.py`;
+  the protocol is [`vscode-daemon/protocol/PROTOCOL.md`](../vscode-daemon/protocol/PROTOCOL.md)).
+  The broker configuration `scripts/nats_config.py` writes allows the subject;
+  a deployment with an older hand-written configuration must allow the daemon
+  user to publish `workspace.heartbeat`, or the backend falls back to asking
+  `workspace.status`.
+- `DAEMON_HEARTBEAT_STALE_SECONDS` / `DAEMON_HEARTBEAT_OFFLINE_SECONDS` —
+  backend, optional, defaults `60` / `90`. With no heartbeat observed for that
+  long, on the backend's own clock, `GET /v1/workspace/status` reports the
+  daemon `stale`, then `offline` (`heartbeat` and `liveness`;
+  `services/workspace/daemon_liveness.py`). The offline window also bounds how
+  long a daemon that reported an incompatible protocol keeps deliveries
+  refused after it was last heard.
 - `PROJECTS_ROOT` — only for the optional Linux daemon container (`--profile
   docker-daemon`): the host folder holding your projects, mounted at the same path.
 - `DELIVERY_TESTS_ENABLED` — optional, default `false`. After an agent's files are

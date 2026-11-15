@@ -1,0 +1,12 @@
+{
+  "description": "A console assistant that is not on the PATH is not reported.",
+  "subject": "workspace.capabilities",
+  "request": {
+    "commands": [
+      "fabrique-no-such-assistant"
+    ]
+  },
+  "reply": {
+    "assistants": []
+  }
+}

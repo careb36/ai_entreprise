@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.read",
+  "title": "workspace.read",
+  "description": "A text file as it is on disk, numbered lines from start_line, with the whole file's sha256 (workspace_read.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.read",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "path": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "workspace_root",
+        "path"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer"
+        },
+        "binary": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "integer"
+        },
+        "lines_indexed_to_byte": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "first_line": {
+          "type": "integer"
+        },
+        "last_line": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "binary",
+        "text",
+        "lines",
+        "truncated"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}
