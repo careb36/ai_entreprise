@@ -47,6 +47,11 @@ class Specification(SQLModel, table=True):
     # The sources the drafting agent consulted (``services/research_tools.py``):
     # observations the backend made, never the agent's own account.
     sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # The version of the company's architecture this specification was planned
+    # against (``architectures.id``): set when the version drafted for it is
+    # approved and when a sprint is started from it. No foreign key, since an
+    # architecture names its specification too.
+    architecture_id: int | None = Field(default=None, index=True)
     drafted_by: str | None = None  # "PO", or a person's email
     approved_by: str | None = None
     approved_at: datetime | None = None

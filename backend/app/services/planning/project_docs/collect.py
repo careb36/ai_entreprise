@@ -5,7 +5,10 @@ drift check can hash exactly what each document read. It holds no personal
 data: who approved a document or wrote a draft is reduced to a role ("PO", "a
 person"), and people are counted by their company role, never named.
 
-Keys: ``project``, ``specification``, ``architecture``, ``stack``,
+Keys: ``project``, ``specification`` (the newest approved one),
+``specifications`` (every approved one, oldest first, with the ids of its
+versions: a pack documents them all, ``specs``), ``architecture`` (the
+company's current version; issue #329, F3), ``stack``,
 ``sprints`` (each with its ``tasks``), ``events`` (the task events the
 issue log, risk register and change log read), ``verifications`` (the
 Verifier's verdict and risk tier per delivery), ``history`` (every version of
@@ -43,6 +46,7 @@ from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
+from services.planning import arch_versions
 from services.planning.project_docs import texts
 from services.planning.project_docs.refs import digest
 from services.platform import wstg_catalogue
@@ -72,17 +76,24 @@ def current_specification(session: Session, company_id: int) -> Specification | 
     return next((s for s in rows if s.status == "approved"), rows[0] if rows else None)
 
 
-def current_architecture(
-    session: Session, spec: Specification | None
-) -> Architecture | None:
-    if spec is None:
-        return None
+def approved_specifications(session: Session, company_id: int) -> list[Specification]:
+    """Every approved specification of the company, oldest approval first."""
     rows = session.exec(
-        select(Architecture)
-        .where(Architecture.specification_id == spec.id)
-        .order_by(Architecture.id.desc())
+        select(Specification).where(
+            Specification.company_id == company_id,
+            Specification.status == "approved",
+        )
     ).all()
-    return next((a for a in rows if a.status == "approved"), rows[0] if rows else None)
+    return sorted(rows, key=lambda s: (s.approved_at is None, s.approved_at, s.id))
+
+
+def current_architecture(session: Session, company_id: int) -> Architecture | None:
+    """The company's current architecture, else its newest version."""
+    current = arch_versions.current(session, company_id)
+    if current is not None:
+        return current
+    rows = arch_versions.versions(session, company_id)
+    return rows[0] if rows else None
 
 
 def _specification(spec: Specification | None) -> dict[str, Any] | None:
@@ -103,6 +114,13 @@ def _specification(spec: Specification | None) -> dict[str, Any] | None:
     }
     out["sha256"] = digest(out)
     return out
+
+
+def _listed(session: Session, spec: Specification) -> dict[str, Any]:
+    """An approved specification of the list, with the ids of its versions (the
+    sprints planned from any of them are its sprints)."""
+    out = _specification(spec) or {}
+    return {**out, "lineage_ids": sorted(arch_versions.lineage(session, spec))}
 
 
 def _architecture(arch: Architecture | None) -> dict[str, Any] | None:
@@ -496,7 +514,10 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         # Not an input of any document's digest: the lint compares it apart.
         "language": texts.language(company.doc_language),
         "specification": _specification(spec),
-        "architecture": _architecture(current_architecture(session, spec)),
+        "specifications": [
+            _listed(session, s) for s in approved_specifications(session, company.id)
+        ][-LIMIT:],
+        "architecture": _architecture(current_architecture(session, company.id)),
         "stack": _stack(session, company.id),
         "sprints": _sprints(session, company.id),
         "events": _events(session, company.id),

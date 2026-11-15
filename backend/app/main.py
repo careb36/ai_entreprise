@@ -31,6 +31,7 @@ from routers import (
     board_notes_router,
     chat_approvals_router,
     chat_interactions_router,
+    company_architecture_router,
     console_producers_router,
     costs_router,
     documentation_router,
@@ -41,6 +42,7 @@ from routers import (
     github_router,
     inbox_router,
     intake_router,
+    integration_reviews_router,
     integration_router,
     manager_router,
     mcp_router,
@@ -155,6 +157,7 @@ app.include_router(github_router)
 app.include_router(inbox_router)
 app.include_router(intake_router)
 app.include_router(integration_router)
+app.include_router(integration_reviews_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
@@ -167,6 +170,7 @@ app.include_router(reviews_router)
 app.include_router(run_secrets_router)
 app.include_router(specifications_router)
 app.include_router(architectures_router)
+app.include_router(company_architecture_router)
 app.include_router(documentation_router)
 app.include_router(security_tests_router)
 app.include_router(workspace_router)

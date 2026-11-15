@@ -22,7 +22,7 @@ from typing import Any
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import ProjectDiscovery, Specification, User
+from models import Architecture, ProjectDiscovery, Specification, User
 from pydantic import Field
 from schemas import RequestModel
 from services.loop import sod_requesters
@@ -73,6 +73,13 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _architecture_version(session: Session | None, spec: Specification) -> int | None:
+    if session is None or spec.architecture_id is None:
+        return None
+    arch = session.get(Architecture, spec.architecture_id)
+    return arch.version if arch is not None else None
+
+
 def serialize(spec: Specification, session: Session | None = None) -> dict[str, Any]:
     """The specification with its check; with *session*, its coverage too."""
     content = spec_planning.spec_content(spec)
@@ -84,6 +91,9 @@ def serialize(spec: Specification, session: Session | None = None) -> dict[str, 
         "status": spec.status,
         "version": spec.version,
         "supersedes_id": spec.supersedes_id,
+        # The version of the company's architecture it was planned against.
+        "architecture_id": spec.architecture_id,
+        "architecture_version": _architecture_version(session, spec),
         "requirements": content["requirements"],
         "quality": content["quality"],
         "constraints": content["constraints"],

@@ -28,6 +28,7 @@ company's policy.
 | Approving a specification (`POST /v1/specifications/{id}/approve`) | `approve_specification` | the person in `drafted_by` (whoever last wrote or revised the draft; an agent's draft names nobody) | `routers/specifications.py` |
 | Merging a run into the base branch (`POST /v1/agent_runs/{id}/merge`) | `release` | the run's sprint's starter | `routers/reviews.py`, refused before the daemon is asked |
 | Merging a sprint's integration (`POST /v1/sprints/{id}/integration/merge`) | `release` | the sprint's starter | `routers/integration.py`, idem; the merge now records `merged_by_user_id` |
+| Approving a sprint's integration in a review (`POST /v1/sprints/{id}/integration/reviews`, `approve`) | `release` (subject `sprint_integration_review`) | the sprint's starter | `services/release/integration_review._segregate`, after the daemon's diff is read; a refusal writes only its `sod_refused` row |
 | Approving another producer's run (`reviews` `approve`, or `POST /v1/agent_runs/{id}/approve`) | `approve_run` | the starter of the sprint its subject names | `run_review._segregate`, `routers/agent_runs.py` |
 | Approving an architecture (`POST /v1/architectures/{id}/approve`) | `approve_architecture` | the person in `drafted_by` | `routers/architectures.py` |
 

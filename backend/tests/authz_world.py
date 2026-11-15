@@ -39,6 +39,8 @@ from models.architecture import Architecture
 from models.board_note import SprintBoardNote
 from models.documentation import DocumentationPack
 from models.intake import IntakeItem
+from models.integration import SprintIntegration
+from models.integration_review import IntegrationReviewComment
 from models.manager import ManagerDecision
 from models.mcp import McpServer
 from models.procedure import Procedure
@@ -185,6 +187,32 @@ def build_world(session) -> World:
             author_role="ScrumMaster",
         ),
     )
+    # The sprint's integration and a comment on it (the integration's reviews).
+    integrated = _add(
+        session,
+        SprintIntegration(
+            company_id=cid,
+            sprint_id=sprint.id,
+            trigger="manual",
+            requested_by="human:Authz",
+            status="untested",
+            branch=f"fabrique/sprint-{sprint.id}",
+            base="main",
+            repository="/authz/repository",
+            commit="0" * 40,
+        ),
+    )
+    integration_comment = _add(
+        session,
+        IntegrationReviewComment(
+            company_id=cid,
+            sprint_id=sprint.id,
+            integration_id=integrated.id,
+            body="Authz",
+            commit="0" * 40,
+            author_name="Authz",
+        ),
+    )
     procedure = _add(
         session,
         Procedure(
@@ -281,11 +309,14 @@ def build_world(session) -> World:
         "note_id": note.id,
         "procedure_id": procedure.id,
         "comment_id": comment.id,
+        "integration_id": integrated.id,
+        "integration_comment_id": integration_comment.id,
         "publication_id": publication.id,
         "secret_id": secret.id,
         "spec_id": spec.id,
         "specification_id": spec.id,
         "arch_id": arch.id,
+        "version": arch.version,
         "server_id": server.id,
         "provider_id": provider.id,
         "user_id": bystander.id,

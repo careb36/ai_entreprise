@@ -185,6 +185,15 @@
       "access": "public",
       "why": "What this deployment offers; no company data."
     },
+    "GET /v1/companies/{company_id}/architecture": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/architecture/versions": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/architecture/versions/{version}": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },
@@ -219,6 +228,9 @@
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/intake-record": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/integration_review": {
       "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/manager_policy": {
@@ -385,6 +397,12 @@
       "access": "Viewer"
     },
     "GET /v1/sprints/{sprint_id}/integration": {
+      "access": "Viewer"
+    },
+    "GET /v1/sprints/{sprint_id}/integration/diff": {
+      "access": "Viewer"
+    },
+    "GET /v1/sprints/{sprint_id}/integration/reviews": {
       "access": "Viewer"
     },
     "GET /v1/sprints/{sprint_id}/progress": {
@@ -585,6 +603,9 @@
     "POST /v1/board_notes/{note_id}/mark_wrong": {
       "access": "Manager"
     },
+    "POST /v1/companies/{company_id}/architecture/revisions": {
+      "access": "Manager"
+    },
     "POST /v1/companies/{company_id}/access-review": {
       "access": "Owner"
     },
@@ -759,11 +780,28 @@
     "POST /v1/sprints/{sprint_id}/integrate": {
       "access": "Manager"
     },
+    "POST /v1/sprints/{sprint_id}/integration/comments": {
+      "access": "Manager",
+      "body": {
+        "body": "Authz",
+        "side": "new"
+      }
+    },
+    "POST /v1/sprints/{sprint_id}/integration/comments/{integration_comment_id}/resolve": {
+      "access": "Manager"
+    },
     "POST /v1/sprints/{sprint_id}/integration/merge": {
       "access": "Manager"
     },
     "POST /v1/sprints/{sprint_id}/integration/publish": {
       "access": "Manager"
+    },
+    "POST /v1/sprints/{sprint_id}/integration/reviews": {
+      "access": "Manager",
+      "body": {
+        "event": "comment",
+        "body": "Authz"
+      }
     },
     "POST /v1/sprints/{sprint_id}/pause": {
       "access": "Manager"
@@ -835,6 +873,12 @@
     },
     "PUT /v1/companies/{company_id}/git": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/integration_review": {
+      "access": "Owner",
+      "body": {
+        "required": false
+      }
     },
     "PUT /v1/companies/{company_id}/manager_policy": {
       "access": "Manager"

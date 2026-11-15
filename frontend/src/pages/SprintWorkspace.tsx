@@ -240,7 +240,9 @@ export const SprintWorkspace: React.FC = () => {
               <SprintOverview sprintId={sprintId} />
               <SprintProgress sprintId={sprintId} live={board.sprint.status === 'active'}
                 specificationId={board.sprint.specification_id} />
-              <SprintIntegration sprintId={sprintId} />
+              <SprintIntegration sprintId={sprintId} companyId={board.sprint.company_id}
+                canReview={canManage && board.sprint.company_id === companyId}
+                canConfigure={role === 'Owner' && board.sprint.company_id === companyId} />
             </>
           )}
         </div>

@@ -1,4 +1,16 @@
-"""The architecture: how an approved specification is built, as data.
+"""The architecture: how a company's system is built, as data, versioned.
+
+A company has one architecture (issue #329, finding F3 of the self-hosting
+retrospective). Each row of this table is one version of it: ``version``
+counts the company's versions (1, 2, 3…), and approving one supersedes every
+other approved version of the company, so the company has one current
+architecture and its earlier versions stay readable. ``specification_id`` is
+the specification the version was drafted for; a module's ``covers`` names
+that specification's requirements, and its ``earlier_covers`` keeps the
+requirements it covers in the earlier specifications the architecture
+serves, by specification id (``{"12": ["REQ-1"]}``). A revision for a new
+specification is the next version of the same architecture, so the covers of
+earlier specifications are kept (``services/planning/arch_versions.py``).
 
 It names the modules (each with its responsibility, its place in the
 repository, what it depends on and which requirements it covers), the
@@ -37,7 +49,8 @@ class Architecture(SQLModel, table=True):
     status: str = "draft"
     version: int = 1
     supersedes_id: int | None = Field(default=None, foreign_key="architectures.id")
-    # [{id, name, responsibility, path, depends_on: [MOD ids], covers: [REQ ids]}]
+    # [{id, name, responsibility, path, depends_on: [MOD ids], covers: [REQ ids],
+    #   earlier_covers?: {"<specification id>": [REQ ids]}}]
     modules: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     # [{id, name, kind, module_id, contract, consumers: [MOD ids]}]
     interfaces: list[dict[str, Any]] = Field(
