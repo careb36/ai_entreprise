@@ -287,7 +287,7 @@ webhooks.install() registers a before_flush listener; events task_done, task_blo
 - Kind: schema; provided by MOD-15 (architecture rule)
 
 ```
-{"contexts": {name: {"path": str, "responsibility": str, "depends_on": [context], "modules": [flat module stem]}}, "allowlist": ["source -> target"]}
+{"contexts": {name: {"path": str, "responsibility": str, "depends_on": [context], "modules": [flat module stem]}}, "http_adapters": {"modules": ["<context>.<stem>"]}, "allowlist": ["source -> target"]}
 python3 scripts/check_architecture.py [--update] -> exit 0 | 1
 ```
 
@@ -323,6 +323,12 @@ python3 scripts/check_architecture.py [--update] -> exit 0 | 1
 **Decision.** Order: (1) contracts, removing the edges to task_worker; (2) platform with backend/memory; (3) tasks; (4) models with llm/model_factory; (5) evidence, removing its edges to workspace, tools, loop and producers; (6) workspace; (7) tools; (8) learning; (9) planning; (10) producers with agents/graph; (11) loop, splitting task_worker by stage and replacing its call to integration_jobs by the sprint.closed event; (12) release; (13) integrations; (14) management; (15) delete the dead trees and the shims nothing imports. Each pull request moves the files of one context with git mv, leaves services/<module>.py as a shim (from services.<context>.<module> import *, plus the private names tests patch), changes no behaviour, and runs scripts/check_architecture.py --update so the allowlist shrinks.
 **Consequences.** Every step is green on the backend tests, ruff 0.17.1, check_file_sizes.py and check_architecture.py, and can be reverted alone. The shims cost a few hundred one-line files for a while; the last step removes them. Nothing new may be added to the allowlist by any step.
 
+### ADR-6: HTTP only in named adapter modules
+
+**Context.** Service modules called HTTP libraries inline (the models.dev catalogue, a provider's model list, the notification webhook, the OpenProject tool, the research fetch, the pre-QA sandbox, the GitHub adapter, the health probes, the MCP client), so a domain decision and a transport exception lived in one function and nothing stopped the next one. Issue #511; the rule's idea is AixleHQ/flow's "no HTTP in domain services" design rule (Apache-2.0, design only).
+**Decision.** Under backend/app/services, only the modules listed in http_adapters (docs/architecture/contexts.json) may import an HTTP library (httpx, httpx2, requests, aiohttp, urllib3, urllib.request). An adapter sends the request and returns data, raising named errors rather than transport exceptions; the domain module calls it and decides. scripts/check_architecture.py fails on an HTTP import outside the list and reports a listed module that no longer imports one, which --update drops.
+**Consequences.** Five modules moved their HTTP into a new adapter beside them (integrations/webhook_client, models/provider_client, producers/openproject_client, tools/research_http, workspace/sandbox_http); four already were adapters or probes and are listed as they are (models/model_catalog, platform/healthcheck, producers/github_adapter, tools/mcp_client). The list may only shrink, unless a new adapter is reviewed in the pull request that adds it.
+
 ## Conventions
 
 - Every module of backend/app/services belongs to one context, listed in docs/architecture/contexts.json or placed in services/<context>/; a new module names its context in the same pull request.
@@ -332,3 +338,4 @@ python3 scripts/check_architecture.py [--update] -> exit 0 | 1
 - A move leaves a shim at the old path until its last importer changes; tests patch the module that defines a name, never a shim.
 - scripts/check_architecture.py --update may only remove allowlist entries; a pull request that needs a new entry changes the architecture first.
 - Claims and observations never share a field; the contracts' shapes keep them apart as the positioning requires.
+- HTTP only in the adapter modules listed in http_adapters (contexts.json): an adapter returns data and raises named errors, a domain module calls it; a new adapter is reviewed in the pull request that adds it.

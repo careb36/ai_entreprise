@@ -1,9 +1,6 @@
-import json
 import logging
 import os
 import time
-import urllib.error
-import urllib.request
 import uuid
 from typing import Any
 
@@ -11,6 +8,7 @@ from services.contracts.sandbox_schemas import (
     SandboxExecutionRequest,
     SandboxExecutionResponse,
 )
+from services.workspace import sandbox_http
 
 logger = logging.getLogger(__name__)
 
@@ -273,31 +271,22 @@ class EphemeralSandboxManager:
 
         # Check health endpoint
         try:
-            req = urllib.request.Request(f"{base_url}/health")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status == 200:
-                    health = json.loads(resp.read().decode("utf-8"))
+            health = sandbox_http.get_json(f"{base_url}/health", timeout=3)
         except Exception as e:  # noqa: BLE001 - A failed probe leaves the health unknown.
             logger.warning(f"Health check failed on {base_url}: {e!s}")
 
         # Post code to validate endpoint
         try:
-            payload = json.dumps(
-                {"code": request.code, "filename": request.filename}
-            ).encode("utf-8")
-            req = urllib.request.Request(
+            data = sandbox_http.post_json(
                 f"{base_url}/validate",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+                {"code": request.code, "filename": request.filename},
+                timeout=timeout,
             )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                if resp.status == 200:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    success = data.get("success", False)
-                    stdout = data.get("stdout", "")
-                    stderr = data.get("stderr", "")
-        except urllib.error.URLError as e:
+            if data is not None:
+                success = data.get("success", False)
+                stdout = data.get("stdout", "")
+                stderr = data.get("stderr", "")
+        except sandbox_http.SandboxUnreachable as e:
             stderr = f"Sandbox connection failed: {e!s}"
         except Exception as e:  # noqa: BLE001 - The failure is reported as the run's stderr.
             stderr = f"Sandbox validation error: {e!s}"

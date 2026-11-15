@@ -1,194 +1,47 @@
-"""Multi-agent LangGraph orchestration for sprint kickoff conversations."""
+"""Multi-agent LangGraph orchestration for sprint kickoff conversations.
+
+The state and the steps every node shares are in ``graph_agents``, the
+conversation nodes after the PO's in ``graph_nodes``; this module keeps the
+nodes that reach the OpenProject tool and the engram processor, the graph
+and its run, and re-exports the other names.
+"""
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Any
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import add_messages
-from llm_proxy_client import LLMProxyClient
-from opentelemetry.trace import StatusCode
-from typing_extensions import TypedDict
+from llm_proxy_client import LLMProxyClient  # noqa: F401 - re-exported; tests patch it here
 
-from services.models.model_factory import default_model_for_role, get_llm_for_role
+from services.models.model_factory import get_llm_for_role
 from services.platform.engram_processor import get_engram_processor
+from services.producers.graph_agents import (  # noqa: F401 - re-exported
+    AgentState,
+    PublishEvent,
+    _extract_backlog,
+    _invoke_agent,
+    _message_name,
+    _message_text,
+    _node_failed,
+    _publish,
+    _resolve_model_name,
+    _transcript,
+    tracer,
+)
+from services.producers.graph_nodes import (
+    architect_node,
+    developer_node,
+    po_wrap_node,
+    rejection_node,
+    scrum_master_node,
+)
 from services.producers.openproject_tools import create_work_package
-from telemetry import configure_telemetry, get_tracer
 
-configure_telemetry("agent-worker")
-tracer = get_tracer(__name__)
 logger = logging.getLogger("fabrique-agents")
-
-PublishEvent = Callable[[dict[str, Any]], Awaitable[None]]
-
-
-class AgentState(TypedDict):
-    interaction_id: str
-    company_id: int | None
-    business_unit_id: int | None
-    sprint_id: int | None
-    story: str
-    backlog_items: list[str]
-    messages: Annotated[list[AnyMessage], add_messages]
-    next_agent: str
-    openproject_ticket_id: str | None
-    engram_id: Any | None
-    last_error: str | None
-    needs_split: bool | None
-    created_at: str
-    publish_event: PublishEvent | None
-    po_feedback: str | None
-
-
-def _resolve_model_name(role: str) -> str:
-    """The role's model, through the same selector every other caller uses
-    (``AGENT_MODEL_<ROLE>``, ``NEMOTRON_ROLES``, ``AGENT_MODEL``, then the
-    map); an unknown role is treated as the Developer."""
-    return default_model_for_role(role)
-
-
-def _message_text(message: AnyMessage) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    return str(content)
-
-
-def _message_name(message: AnyMessage) -> str:
-    explicit_name = getattr(message, "name", None)
-    if explicit_name:
-        return str(explicit_name)
-    message_type = getattr(message, "type", "message")
-    if message_type == "human":
-        return "User"
-    if message_type == "system":
-        return "System"
-    return "Agent"
-
-
-def _transcript(messages: list[AnyMessage]) -> str:
-    lines: list[str] = []
-    for message in messages:
-        lines.append(f"{_message_name(message)}: {_message_text(message)}")
-    return "\n".join(lines[-12:])
-
-
-def _extract_backlog(story: str) -> list[str]:
-    items: list[str] = []
-    for raw_line in story.splitlines():
-        line = raw_line.strip()
-        if line.startswith(("- ", "* ")):
-            items.append(line[2:].strip())
-    return items
-
-
-async def _publish(state: AgentState, event: dict[str, Any]) -> None:
-    publish_event = state.get("publish_event")
-    sprint_id = state.get("sprint_id")
-    if not publish_event or sprint_id is None:
-        return
-    payload = dict(event)
-    payload.setdefault("event_id", str(uuid4()))
-    payload.setdefault("source", "langgraph")
-    payload.setdefault("semantic_version", 1)
-    payload.setdefault("timestamp", datetime.now(UTC).isoformat())
-    await publish_event(payload)
-
-
-async def _invoke_agent(
-    state: AgentState,
-    role: str,
-    task: str,
-    prompt: str,
-) -> str:
-    async def emit(kind: str, semantic: str, message: str) -> None:
-        await _publish(
-            state,
-            {
-                "type": kind,
-                "semantic_type": semantic,
-                "agent": role,
-                "role": role,
-                "task_status": "kickoff",
-                "phase": "kickoff",
-                "task": task,
-                "message": message,
-            },
-        )
-
-    await emit(
-        "agent_start", "kickoff.agent_started", f"{role} is thinking about: {task}"
-    )
-
-    client = LLMProxyClient()
-    result = await client.chat_async(
-        messages=[
-            {
-                "role": "system",
-                "content": f"You are {role} in a sprint orchestration. Keep answers concrete, operational, and aware of prior messages.",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        model=_resolve_model_name(role),
-        role=role,
-        bu_id=state.get("business_unit_id"),
-    )
-
-    if result.get("error"):
-        raise RuntimeError(str(result["error"]))
-
-    if result.get("quota_warning"):
-        await _publish(
-            state,
-            {
-                "type": "quota.warning",
-                "semantic_type": "quota.warning",
-                "agent": "System",
-                "role": "System",
-                "task_status": "kickoff",
-                "phase": "kickoff",
-                "task": task,
-                "message": f"⚠️ Token quota usage is above 80% (used={result.get('quota_used')}, limit={result.get('quota_limit')}). Consider resetting the quota or splitting the sprint.",
-                "quota_used": result.get("quota_used"),
-                "quota_limit": result.get("quota_limit"),
-            },
-        )
-
-    content = (
-        result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-    )
-
-    await emit("message", "kickoff.agent_message", content)
-    await emit("agent_complete", "kickoff.agent_completed", f"{role} finished: {task}")
-    return content
-
-
-async def _node_failed(
-    state: AgentState,
-    span: Any,
-    exc: Exception,
-    role: str,
-    task: str,
-    label: str | None = None,
-    kickoff: bool = False,
-) -> dict[str, Any]:
-    """Publish a node's failure, mark its span and route the graph to burn.
-
-    Only the PO's and the Architect's failures carry the kickoff fields."""
-    event: dict[str, Any] = {"type": "error"}
-    if kickoff:
-        event["semantic_type"] = "kickoff.agent_failed"
-    event |= {"agent": role, "role": role}
-    if kickoff:
-        event |= {"task_status": "kickoff", "phase": "kickoff"}
-    event |= {"task": task, "message": f"{label or role} failed: {exc}"}
-    await _publish(state, event)
-    span.set_status(StatusCode.ERROR, str(exc))
-    return {"last_error": str(exc), "next_agent": "burn"}
 
 
 async def kickoff_node(state: AgentState) -> dict[str, Any]:
@@ -287,119 +140,6 @@ async def po_node(state: AgentState) -> dict[str, Any]:
             )
 
 
-async def architect_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.architect") as span:
-        span.set_attribute("agent.role", "Architect")
-        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
-        span.set_attribute("company.id", str(state.get("company_id") or ""))
-        try:
-            backlog_items = state.get("backlog_items") or []
-            items_text = (
-                "\n".join(f"- {i}" for i in backlog_items)
-                if backlog_items
-                else "(see sprint brief)"
-            )
-            prompt = (
-                f"Sprint brief:\n{state['story']}\n\n"
-                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
-                f"Backlog items:\n{items_text}\n\n"
-                "As Architect, define the technical approach for this sprint: "
-                "key design decisions, data model or interface changes, integration points, "
-                "and architectural constraints or risks the team must respect. "
-                "Be concrete — one clear paragraph per concern. No verbose preamble."
-            )
-            content = await _invoke_agent(
-                state, "Architect", "Define technical approach", prompt
-            )
-            return {
-                "messages": [AIMessage(content=content, name="Architect")],
-                "next_agent": "ScrumMaster",
-                "last_error": None,
-            }
-        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
-            return await _node_failed(
-                state, span, exc, "Architect", "Define technical approach", kickoff=True
-            )
-
-
-async def scrum_master_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.scrum_master") as span:
-        span.set_attribute("agent.role", "ScrumMaster")
-        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
-        span.set_attribute("company.id", str(state.get("company_id") or ""))
-        try:
-            prompt = (
-                f"Sprint brief:\n{state['story']}\n\n"
-                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
-                f"OpenProject ticket: {state.get('openproject_ticket_id') or 'pending'}\n"
-                "As Scrum Master, coordinate sequencing, identify one blocker, and assign the first execution move to the Developer."
-            )
-            content = await _invoke_agent(
-                state, "ScrumMaster", "Coordinate sprint execution", prompt
-            )
-            return {
-                "messages": [AIMessage(content=content, name="ScrumMaster")],
-                "next_agent": "Developer",
-                "last_error": None,
-            }
-        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
-            return await _node_failed(
-                state,
-                span,
-                exc,
-                "ScrumMaster",
-                "Coordinate sprint execution",
-                "Scrum Master",
-            )
-
-
-async def developer_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.developer") as span:
-        span.set_attribute("agent.role", "Developer")
-        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
-        span.set_attribute("company.id", str(state.get("company_id") or ""))
-        try:
-            prompt = (
-                f"Sprint brief:\n{state['story']}\n\n"
-                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
-                "As Developer, pick up the first actionable item, state exactly what you will implement first, and mention any dependency or unblock request."
-            )
-            content = await _invoke_agent(
-                state, "Developer", "Pick up first sprint task", prompt
-            )
-            return {
-                "messages": [AIMessage(content=content, name="Developer")],
-                "next_agent": "PO_WRAP",
-                "last_error": None,
-            }
-        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
-            return await _node_failed(
-                state, span, exc, "Developer", "Pick up first sprint task"
-            )
-
-
-async def po_wrap_node(state: AgentState) -> dict[str, Any]:
-    with tracer.start_as_current_span("graph.po_wrap") as span:
-        span.set_attribute("agent.role", "PO")
-        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
-        span.set_attribute("company.id", str(state.get("company_id") or ""))
-        try:
-            prompt = (
-                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
-                "As PO, close the kickoff by summarizing priority, owner, and next immediate action in 3 compact bullets."
-            )
-            content = await _invoke_agent(state, "PO", "Close sprint kickoff", prompt)
-            return {
-                "messages": [AIMessage(content=content, name="PO")],
-                "next_agent": "burn",
-                "last_error": None,
-            }
-        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
-            return await _node_failed(
-                state, span, exc, "PO", "Close sprint kickoff", "PO wrap-up"
-            )
-
-
 async def burn_node(state: AgentState) -> dict[str, Any]:
     summary = _transcript(state["messages"])
     last_error = state.get("last_error")
@@ -467,73 +207,6 @@ def _route_entry(state: AgentState) -> str:
     if state.get("po_feedback"):
         return "rejection"
     return "kickoff"
-
-
-async def rejection_node(state: AgentState) -> dict[str, Any]:
-    """
-    Process PO rejection feedback and route to the appropriate agent for revision.
-
-    Reads ``state["po_feedback"]``, announces the rejection in the GlassRoom,
-    then delegates to the Developer (code changes) or Architect (design concerns)
-    based on a lightweight keyword heuristic on the feedback text.
-    """
-    with tracer.start_as_current_span("graph.rejection") as span:
-        feedback = state.get("po_feedback", "")
-        span.set_attribute("sprint.id", str(state.get("sprint_id") or ""))
-        span.set_attribute("company.id", str(state.get("company_id") or ""))
-        span.set_attribute("po_feedback.length", len(feedback))
-
-        await _publish(
-            state,
-            {
-                "type": "status",
-                "semantic_type": "hitl.rejection_received",
-                "agent": "System",
-                "role": "System",
-                "task_status": "rejected",
-                "phase": "rejection",
-                "task": "Process PO rejection feedback",
-                "message": f"🔄 PO rejected task. Re-routing with feedback: {feedback[:200]}",
-            },
-        )
-
-        # Route to Architect for design/scope concerns, Developer otherwise.
-        design_keywords = {
-            "architect",
-            "design",
-            "scope",
-            "interface",
-            "schema",
-            "model",
-            "api",
-        }
-        route_to = (
-            "architect"
-            if any(kw in feedback.lower() for kw in design_keywords)
-            else "developer"
-        )
-
-        try:
-            prompt = (
-                f"Sprint brief:\n{state['story']}\n\n"
-                f"Conversation so far:\n{_transcript(state['messages'])}\n\n"
-                f"⚠️ PO REJECTION FEEDBACK: {feedback}\n\n"
-                f"As {'Architect' if route_to == 'architect' else 'Developer'}, "
-                "address the PO's specific concerns point-by-point and propose a revised approach."
-            )
-            role = "Architect" if route_to == "architect" else "Developer"
-            content = await _invoke_agent(
-                state, role, "Address PO rejection feedback", prompt
-            )
-            return {
-                "messages": [AIMessage(content=content, name=role)],
-                "next_agent": "po_wrap",
-                "last_error": None,
-                "po_feedback": None,  # Clear feedback after processing
-            }
-        except Exception as exc:  # noqa: BLE001 - A failed node is a failed kickoff, never a crash.
-            span.set_status(StatusCode.ERROR, str(exc))
-            return {"last_error": str(exc), "next_agent": "burn"}
 
 
 def create_agent_graph():

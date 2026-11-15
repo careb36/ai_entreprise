@@ -20,11 +20,10 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from crypto import decrypt_value, encrypt_value
 from models.provider import ProviderConnection
 
-from services.models import model_catalog
+from services.models import model_catalog, provider_client
 
 OPENAI_COMPATIBLE = "openai-compatible"
 
@@ -134,14 +133,14 @@ def serialize(row: ProviderConnection) -> dict[str, Any]:
     }
 
 
-def validate(
-    row: ProviderConnection, transport: httpx.BaseTransport | None = None
-) -> dict[str, Any]:
+def validate(row: ProviderConnection, transport: Any = None) -> dict[str, Any]:
     """Ask the provider for its models with this connection's key.
 
     Lists models rather than sending a completion, so the check spends no
     tokens. Records the outcome on *row* (the caller commits) and returns
-    it with the model ids the provider listed."""
+    it with the model ids the provider listed. The request itself goes
+    through ``provider_client`` (*transport*: an httpx transport, for the
+    tests)."""
     try:
         key, headers = read_secrets(row)
     except Exception as exc:  # noqa: BLE001 - Reported, not raised.
@@ -152,22 +151,17 @@ def validate(
     if key:
         request_headers["Authorization"] = f"Bearer {key}"
     try:
-        with httpx.Client(
-            timeout=VALIDATION_TIMEOUT_SECONDS, transport=transport
-        ) as client:
-            response = client.get(f"{row.base_url}/models", headers=request_headers)
-    except httpx.HTTPError as exc:
-        return _record(
-            row, False, f"could not reach {row.base_url}: {type(exc).__name__}"
+        status_code, body = provider_client.list_models(
+            row.base_url, request_headers, VALIDATION_TIMEOUT_SECONDS, transport
         )
-    if response.status_code in (401, 403):
-        return _record(
-            row, False, f"the provider refused the key ({response.status_code})"
-        )
-    if response.status_code >= 400:
-        return _record(row, False, f"the provider answered {response.status_code}")
+    except provider_client.ProviderUnreachable as exc:
+        return _record(row, False, f"could not reach {row.base_url}: {exc}")
+    if status_code in (401, 403):
+        return _record(row, False, f"the provider refused the key ({status_code})")
+    if status_code >= 400:
+        return _record(row, False, f"the provider answered {status_code}")
     try:
-        data = response.json().get("data") or []
+        data = json.loads(body).get("data") or []
         models = sorted(
             {str(m["id"]) for m in data if isinstance(m, dict) and m.get("id")}
         )

@@ -5,8 +5,9 @@ with ``ast`` and holds them to ``docs/architecture/contexts.json``. These
 tests run it on the repository (it must pass with today's code thanks to its
 allowlist) and on small trees of their own: an unassigned module, a new
 edge against the rule, a cycle between contexts, a module moved into a
-context folder, a shim left at the flat path, and an allowlist that only
-shrinks. They also keep the
+context folder, a shim left at the flat path, an allowlist that only
+shrinks, and HTTP imported only by the listed adapter modules (a list that
+only shrinks too). They also keep the
 records under ``docs/architecture`` approvable by the product's own checks
 and ``docs/ARCHITECTURE.md`` equal to their rendering.
 """
@@ -87,6 +88,11 @@ def test_the_repository_keeps_to_the_rule():
     assert data["contexts"]["contracts"]["depends_on"] == []
     # The allowlist holds only edges that exist (it can only shrink).
     assert analysis["stale"] == []
+    # HTTP only in the listed adapters, and every listed adapter still does
+    # HTTP (the list can only shrink).
+    assert analysis["http_new"] == []
+    assert analysis["http_stale"] == []
+    assert sorted(analysis["http"]) == sorted(check_architecture.http_adapters(data))
 
 
 def test_a_tree_that_keeps_to_the_rule_passes(tmp_path):
@@ -298,6 +304,78 @@ def test_update_only_shrinks_the_allowlist(tmp_path):
 
     # A new edge against the rule: exit 1 and nothing written.
     (services / "verify.py").write_text("from services import worker\n")
+    before = data_file.read_text()
+    assert check_architecture.main(["--update"], data_file, services) == 1
+    assert data_file.read_text() == before
+
+
+def _with_adapters(adapters: list[str], **contexts: dict) -> dict:
+    return {**_data(**contexts), "http_adapters": {"modules": adapters}}
+
+
+def test_an_http_import_outside_the_adapters_fails(tmp_path):
+    files = {
+        **FILES,
+        "loop/__init__.py": "",
+        "loop/fetch.py": "def get():\n    import httpx\n",
+        "loop/legacy.py": "from urllib import request\n",
+        "loop/parse.py": "from urllib.parse import urlsplit\nimport urllib.error\n",
+        "loop/client.py": "import requests\nfrom urllib.request import urlopen\n",
+    }
+    services = _tree(tmp_path, files)
+    result = check_architecture.analyse(_with_adapters([], **BASE), services)
+    # Imported anywhere in the module, a function's body too; urllib.parse
+    # and urllib.error are not HTTP.
+    assert result["http"] == {
+        "loop.client": ["requests", "urllib.request"],
+        "loop.fetch": ["httpx"],
+        "loop.legacy": ["urllib.request"],
+    }
+    assert result["http_new"] == ["loop.client", "loop.fetch", "loop.legacy"]
+    assert any(
+        p.startswith("loop.fetch: imports httpx; HTTP belongs in an adapter")
+        for p in result["problems"]
+    )
+
+    listed = ["loop.client", "loop.fetch", "loop.legacy"]
+    allowed = check_architecture.analyse(_with_adapters(listed, **BASE), services)
+    assert allowed["problems"] == []
+    assert allowed["http_new"] == [] and allowed["http_stale"] == []
+
+    ghost = check_architecture.analyse(
+        _with_adapters([*listed, "loop.ghost"], **BASE), services
+    )
+    assert any(
+        "loop.ghost: listed in http_adapters, but no such module" in p
+        for p in ghost["problems"]
+    )
+
+
+def test_a_listed_adapter_without_http_is_reported_and_dropped(tmp_path, capsys):
+    files = {
+        **FILES,
+        "loop/__init__.py": "",
+        "loop/client.py": "import httpx\n",
+        "loop/former.py": "import json\n",
+    }
+    services = _tree(tmp_path, files)
+    data_file = tmp_path / "contexts.json"
+    data = _with_adapters(["loop.client", "loop.former"], **BASE)
+    data_file.write_text(json.dumps(data))
+    result = check_architecture.analyse(data, services)
+    assert result["problems"] == []
+    assert result["http_stale"] == ["loop.former"]
+
+    # Reported, so the list shrinks; --update drops it and never adds one.
+    assert check_architecture.main([], data_file, services) == 0
+    assert "The HTTP adapters can shrink" in capsys.readouterr().out
+    assert check_architecture.main(["--update"], data_file, services) == 0
+    assert json.loads(data_file.read_text())["http_adapters"]["modules"] == [
+        "loop.client"
+    ]
+
+    # A new HTTP import: exit 1 and nothing written.
+    (services / "loop" / "former.py").write_text("import aiohttp\n")
     before = data_file.read_text()
     assert check_architecture.main(["--update"], data_file, services) == 1
     assert data_file.read_text() == before
