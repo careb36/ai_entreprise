@@ -33,6 +33,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 **`backend/app/services/evidence/wstg_tests.py`** (#539) — After a delivery's test run, `record` reads the runner's per-test lines (`criteria_tests.test_lines`) for tests named after an OWASP WSTG test (`test_wstg_athz_02_…`) and keeps `pass` or `fail` per test on `evidence["test_run"]["wstg"]`; the Verifier's `wstg_tests` check turns them into items in the security probe's shape (`{id, name, status, observation}`, the versioned id from `services/platform/wstg_catalogue.py`). The check's outcome is always `pass`: a failing security test reports a weakness of the application, which `tests_run` already judges, not a fault of the delivery. Only the daemon's output is read, never a producer's claim. The project's WSTG checklist (planning, `project_docs/wstg_status.py`) reads these items and the security probe's.
 
+### Acceptance tests a task branch holds
+
+**`backend/app/services/evidence/acceptance.py`** (`evidence_for`, `branch_lineage`; #329 retrospective) — With the daemon's `git` answer for a delivery on the task's own branch, what the delivery is judged against is what that branch can hold: `test_files` and `test_hashes` come from the test tasks in the task's lineage (itself and its done dependencies, transitively, the branches `workspace.git_workflow.delivery_spec` merges), `excused` counts as done only the implementation tasks in that lineage, and the sprint's other test files go in `other_test_hashes` for the loop's guard to check on disk (`loop/delivery_checks.guard_test_files`). Without the Git workflow every acceptance test of the sprint is guarded, as before.
+
 ## Described elsewhere
 
 - `touched.verified_writes` (the writes of the latest verified task-worker runs, optionally of some tasks, with the daemon's sha256 and diff and when they were observed): what the project wiki compiles from and lints against, [the project wiki](../design/PROJECT_WIKI.md).

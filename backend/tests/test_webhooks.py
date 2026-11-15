@@ -17,6 +17,7 @@ import secrets
 import crypto
 import pytest
 from cryptography.fernet import Fernet
+from egress_fakes import FakeResolver
 from models import (
     AgentRun,
     BacklogItem,
@@ -27,6 +28,7 @@ from models import (
     Verification,
 )
 from services.integrations import webhooks
+from services.platform import egress
 from sqlmodel import select
 from test_git_workflow import _member, enforcement  # noqa: F401
 
@@ -37,9 +39,10 @@ SECRET = "a-webhook-secret-of-some-length"
 @pytest.fixture(autouse=True)
 def _setup(monkeypatch):
     monkeypatch.setattr(crypto, "_configured_key", lambda: KEY)
-    # Tests use example.com, which the sandbox may not resolve; the public
-    # check has its own tests below.
-    monkeypatch.setattr(webhooks, "_public_address", lambda host: True)
+    # Tests use example.com, which the sandbox may not resolve: a fake DNS
+    # answers a public address for it. The public check has its own tests
+    # below and in test_ssrf_vectors.py.
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
     webhooks.install()
 
 

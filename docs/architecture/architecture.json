@@ -1,5 +1,6 @@
 {
-  "$comment": "La Fabrique's backend architecture (issue #469), in the Architect's shape, for the specification in specification.json. Post it with POST /v1/architectures, adding the specification_id; the ids are assigned by arch_check.normalize. docs/ARCHITECTURE.md is rendered from it by arch_check.as_markdown.",
+  "$comment": "La Fabrique's backend architecture (issue #469), in the Architect's shape, for the specification in specification.json. Post it with POST /v1/architectures, adding the specification_id; the ids are assigned by arch_check.normalize. docs/ARCHITECTURE.md is rendered from it by arch_check.as_markdown, and docs/adr/0012 onwards (adr_first_number) by adr_docs.adr_documents, one file per decision; tests/test_self_hosting.py keeps both in step. scripts/self_host/ imports it as the La Fabrique company's approved architecture.",
+  "adr_first_number": 12,
   "title": "La Fabrique backend: contexts and their dependency rule",
   "overview": "The backend's services are divided into fourteen contexts, each with one responsibility and one folder under backend/app/services. They form layers: contracts (the shapes several contexts read) and platform (audit, locks, the event stream, memory) at the bottom; the task record, the models and the evidence above them; the workspace and the tools that reach the daemon; the planning, the learning and the producers; the task loop that drives them; the release (merge, publish, integrate, undo) and the integrations on top of the loop; and the management of the company, which may read everything. The evidence context, which holds the Verifier, imports only contracts and platform, so what judges a run never depends on the code that produced it or on the daemon that wrote it. The rule is data (docs/architecture/contexts.json) checked by scripts/check_architecture.py in CI; the 20 imports that break it today are an allowlist that only shrinks. No code moves in the change that adopts this: the migration moves one context per pull request, contracts first.",
   "modules": [
@@ -156,7 +157,7 @@
       "name": "Model choice",
       "kind": "function",
       "module": "models",
-      "contract": "company_models.resolve(session, company_id, role, configured) -> str\nmodel_routing.estimate_difficulty(...) -> int\nmodel_suggestions.suggest(...) -> one suggestion per role\nrouting_record / model_record over completed sprints",
+      "contract": "company_models.resolve(session, company_id, role, configured) -> str\nmodel_routing.estimate_difficulty(...) -> int\nmodel_suggestions.suggest(...) -> one suggestion per role\nrouting_record / model_record / calibration over completed sprints\neffort.record_sprint(session, sprint_id) -> int (at sprint close)",
       "consumers": ["learning", "planning", "producers", "loop", "management"]
     },
     {
@@ -233,36 +234,48 @@
   "decisions": [
     {
       "title": "Contexts depend on each other in one direction, and the evidence on contracts and platform only",
+      "date": "2026-11-09",
+      "slug": "dependency-rule",
       "context": "backend/app/services holds 118 flat modules with 335 import edges and a 26-module cycle in which the Verifier (verification, acceptance, standards), the loop (task_worker) and the daemon client (workspace_daemon) import each other. The positioning makes the evidence the product: what judges a run must not depend on what produced it.",
       "decision": "Fourteen contexts form a directed acyclic graph recorded in docs/architecture/contexts.json: contracts; platform; tasks, models, evidence; workspace; tools; learning; planning, producers; loop; release, integrations; management. A module may import its own context and the contexts its context names in depends_on, nothing else. evidence names contracts and platform only. Cycles inside one context are tolerated and listed (app_check, browser_smoke, delivery_gate, verification; arch_author and spec_planning; sprint_planner and sprint_team; manager_inbox and manager_inbox_extra); a cycle across contexts is not.",
       "consequences": "Twenty edges break the rule today and are allowlisted: evidence to workspace (5), evidence to loop (3), producers to loop (3), evidence to tools (3), workspace to evidence (2), workspace to tasks, loop to release, evidence to producers and tools to loop (1 each). Removing them breaks the 26-module cycle into the four intra-context ones. A new feature has to say which context it lives in before it is written."
     },
     {
       "title": "A contracts context holds the shapes the cycle is made of",
+      "date": "2026-11-09",
+      "slug": "contracts-context",
       "context": "Most of the 20 edges exist to reach a shape, not behaviour: standards, verification, acceptance and workspace_edits import task_worker lazily for parse_file_manifest and ALLOWED_ARTIFACT_EXTENSIONS; evidence imports the verdict names from orchestration_metrics; workspace_daemon imports criteria_tests and app_check to shape its reply; verification imports mcp_tools, research_tools and console_clis for the shape of their observations.",
       "decision": "Create backend/app/services/contracts/ with verdicts.py, manifest.py (parse_file_manifest, expected_hashes, ALLOWED_ARTIFACT_EXTENSIONS, moved out of task_worker.py), delivery_reply.py (the daemon reply and the tool-call observation as TypedDicts with their readers), task_record.py (the event shape and the TaskRecordView protocol), and move roles, edit_blocks, standards_catalogue and sandbox_schemas into it. contracts imports nothing else in services, performs no I/O and holds no decision.",
       "consequences": "The contracts step alone removes the 4 edges to task_worker from evidence and tools and lets the observation readers move to evidence. Old names stay importable through re-exports (task_worker.parse_file_manifest, orchestration_metrics.VERDICT_*) until their last importer is changed. contracts must stay small: a function that decides belongs to its context, not here."
     },
     {
       "title": "task_worker.py is split by loop stage inside the loop context",
+      "date": "2026-11-09",
+      "slug": "split-task-worker",
       "context": "task_worker.py has 3,299 lines (process_backlog_tasks alone about 500, _review_cycle_body about 640) and imports 37 services; the size baseline lets it only shrink. Tests patch many of its private names (task_worker._execute_task, _deliver_artifacts, ...).",
       "decision": "Split it into backend/app/services/loop/worker/: intake.py (consumer, claim, queue markers, dispatch_todo), prompt.py (task context, memory, lessons, procedures), execute.py (LLM call, Architect consultation, edit plan), deliver.py (artifacts to the daemon, queued deliveries, delivery results), record.py (AgentRun recording and re-verification), review.py (review cycle, QA call, quality gate), close.py (sprint finalization, follow-up, retrospective, procedures), messages.py (agent messages, triage). Each under 600 lines; the two long functions are cut into steps. task_worker.py stays as a shim re-exporting the public names.",
       "consequences": "One pull request per stage, each moving its functions and the test patch targets to the stage module that owns them, so a patch never lands on a re-export. The file-size baseline entry for task_worker.py drops with each stage and is removed when the shim is under 100 lines. The shim goes when nothing imports it."
     },
     {
       "title": "The parallel trees: merge what production imports, delete what only tests import",
+      "date": "2026-11-09",
+      "slug": "parallel-trees",
       "context": "Beside backend/app: backend/agents (7 files, 1,426 lines), backend/orchestration (1, 115), backend/llm (4, 939), backend/memory (1, 543), backend/eval (4, 383) and src/ (6, 368). Checked with grep on imports across backend, scripts and the workflows.",
       "decision": "orchestration: delete (router.py is never included by main.py; only tests/test_circuit_breaker.py imports it). llm: merge model_factory.py into models (imported by company_models, manager_agent, model_routing, reviewer_agent, support_agent, roles, agents/graph, memory); delete circuit_breaker, fallback and retry (only tests and the orchestration router). agents: merge graph.py and tools/openproject_tools.py into producers (agent_worker imports graph); delete po_agent, po/prompts, python_dev_agent, ast_pre_validator, qa_context_optimizer (only tests). memory: merge engram_processor.py into platform (task_worker and agents/graph import it). eval: move verificador to bench/verifier/ (a measurement, only its test imports it). src/: delete (nothing imports it).",
       "consequences": "About 1,400 lines and their tests leave the repository; the tests of deleted modules are deleted with them, the tests of merged ones follow their imports. agents/graph.py (720 lines) keeps its size baseline at its new path and may only shrink. The backend Dockerfile stops copying llm/, agents/ and memory/. ADR 0010 (the self-correction loop of src/ and agents/ast_pre_validator) and ADR 0011 (llm/fallback's FallbackRouter) describe code no production path runs; they are marked superseded by this decision in the step that deletes it, and the fallback that does run stays the LLM proxy's tiers."
     },
     {
       "title": "Migrate one context per pull request, bottom up, behind re-export shims and a ratchet",
+      "date": "2026-11-09",
+      "slug": "migration-order",
       "context": "The backend must keep working while 118 modules move; the e2e and the unit tests patch modules by their current path.",
       "decision": "Order: (1) contracts, removing the edges to task_worker; (2) platform with backend/memory; (3) tasks; (4) models with llm/model_factory; (5) evidence, removing its edges to workspace, tools, loop and producers; (6) workspace; (7) tools; (8) learning; (9) planning; (10) producers with agents/graph; (11) loop, splitting task_worker by stage and replacing its call to integration_jobs by the sprint.closed event; (12) release; (13) integrations; (14) management; (15) delete the dead trees and the shims nothing imports. Each pull request moves the files of one context with git mv, leaves services/<module>.py as a shim (from services.<context>.<module> import *, plus the private names tests patch), changes no behaviour, and runs scripts/check_architecture.py --update so the allowlist shrinks.",
       "consequences": "Every step is green on the backend tests, ruff 0.17.1, check_file_sizes.py and check_architecture.py, and can be reverted alone. The shims cost a few hundred one-line files for a while; the last step removes them. Nothing new may be added to the allowlist by any step."
     },
     {
       "title": "HTTP only in named adapter modules",
+      "date": "2026-11-14",
+      "slug": "http-adapters",
       "context": "Service modules called HTTP libraries inline (the models.dev catalogue, a provider's model list, the notification webhook, the OpenProject tool, the research fetch, the pre-QA sandbox, the GitHub adapter, the health probes, the MCP client), so a domain decision and a transport exception lived in one function and nothing stopped the next one. Issue #511; the rule's idea is AixleHQ/flow's \"no HTTP in domain services\" design rule (Apache-2.0, design only).",
       "decision": "Under backend/app/services, only the modules listed in http_adapters (docs/architecture/contexts.json) may import an HTTP library (httpx, httpx2, requests, aiohttp, urllib3, urllib.request). An adapter sends the request and returns data, raising named errors rather than transport exceptions; the domain module calls it and decides. scripts/check_architecture.py fails on an HTTP import outside the list and reports a listed module that no longer imports one, which --update drops.",
       "consequences": "Five modules moved their HTTP into a new adapter beside them (integrations/webhook_client, models/provider_client, producers/openproject_client, tools/research_http, workspace/sandbox_http); four already were adapters or probes and are listed as they are (models/model_catalog, platform/healthcheck, producers/github_adapter, tools/mcp_client). The list may only shrink, unless a new adapter is reviewed in the pull request that adds it."

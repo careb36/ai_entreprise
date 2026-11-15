@@ -1,0 +1,114 @@
+# Runner hygiene (#566): the docker state of the self-hosted runners is shared
+# by every repository on this machine and nothing bounded it. The e2e loop's
+# pgvector container each leaked an anonymous volume until the cleanup sites
+# learned `docker rm -fv`; the dangling images and the buildkit cache grow per
+# build, and a wedged runner's disk is how the pool stops dispatching. This job
+# keeps the disk bounded once a day.
+#
+# It is best-effort on purpose: a transient docker error is noise, not a red
+# scheduled run nobody reads. Every step reports to the job summary.
+#
+# It never prunes by name. The named volumes on this host (`la-fabrique_*`) are
+# a person's development data, and they show as `dangling` while that stack is
+# down; a blanket `docker volume prune` would delete a person's database. The
+# named images belong to the other repositories sharing this host; only
+# untagged (dangling) ones are ever removed, and never a running container's.
+
+name: Runner Hygiene
+
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: runner-hygiene
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 15
+    steps:
+      - name: Report the disk before
+        run: |
+          { echo '## Before'; df -h /; docker system df; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove this repository's stopped e2e and smoke containers
+        continue-on-error: true
+        run: |
+          # Only containers this repository's own workflows name, and only
+          # stopped ones: a running container is somebody's live job. With -v:
+          # each container's anonymous volume goes with it (#566).
+          docker ps -a --filter status=exited --format '{{.ID}} {{.Names}}' |
+            while read -r id name; do
+              case "$name" in
+                pg-e2e-* | nats-e2e-* | fabrique-*smoke*)
+                  docker rm -v "$id"
+                  ;;
+              esac
+            done
+
+      - name: Prune dangling images older than a week
+        continue-on-error: true
+        # Untagged only (`prune` without -a): the named images other
+        # repositories on this host run from are never listed here.
+        run: docker image prune -f --filter until=168h
+
+      - name: Keep the build cache bounded
+        continue-on-error: true
+        # The cache is shared by every build on this machine: a build in flight
+        # holds a lease on what it uses, and prune only takes what no lease
+        # covers, down to the storage floor.
+        run: docker builder prune -f --keep-storage 2GB
+
+      - name: Remove anonymous dangling volumes older than a week
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import json
+          import re
+          import subprocess
+
+          # Anonymous volumes only: a 64-hex name is one, it is unreachable by
+          # any later container (nothing can name it), and a run whose container
+          # was removed without -v leaves exactly these behind. Named volumes are
+          # never listed (#566).
+          listed = subprocess.run(
+              ["docker", "volume", "ls", "-q", "--filter", "dangling=true"],
+              capture_output=True,
+              text=True,
+              check=True,
+          ).stdout.split()
+          anonymous = [n for n in listed if re.fullmatch(r"[0-9a-f]{64}", n)]
+          limit = datetime.datetime.now(
+              datetime.timezone.utc
+          ) - datetime.timedelta(days=7)
+          gone = 0
+          for name in anonymous:
+              seen = subprocess.run(
+                  ["docker", "volume", "inspect", name,
+                   "--format", "{{json .CreatedAt}}"],
+                  capture_output=True,
+                  text=True,
+              )
+              try:
+                  created = json.loads(seen.stdout.strip())[:19]
+              except (ValueError, TypeError):
+                  continue
+              stamp = datetime.datetime.fromisoformat(created).replace(
+                  tzinfo=datetime.timezone.utc
+              )
+              if stamp < limit:
+                  subprocess.run(["docker", "volume", "rm", name], capture_output=True)
+                  gone += 1
+          print(f"removed {gone} anonymous volume(s) older than a week")
+          PY
+
+      - name: Report the disk after
+        run: |
+          { echo '## After'; df -h /; docker system df; } >> "$GITHUB_STEP_SUMMARY"

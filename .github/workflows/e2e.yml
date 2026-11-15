@@ -19,11 +19,12 @@ on:
       - '.github/workflows/e2e.yml'
 
 
-# Un único runner self-hosted atiende un job a la vez: al llegar un push nuevo
-# se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
+# The self-hosted runners are shared by every pull request and by main: a new
+# push cancels the runs of the commit it replaces, on main too (the newest
+# commit's run covers the ones merged before it), instead of queueing behind them.
 concurrency:
   group: e2e-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
@@ -82,8 +83,11 @@ jobs:
           # A re-run keeps the run id, so an attempt whose runner died before
           # its cleanup step leaves these names taken ("Conflict. The
           # container name ... is already in use"). Only this run's own
-          # containers carry them, so removing them first is safe.
-          docker rm -f "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
+          # containers carry them, so removing them first is safe. With -v: the
+          # pgvector image declares a VOLUME, so each of these containers owns an
+          # anonymous volume, and without it the volume of a dead attempt is left
+          # behind (#566).
+          docker rm -fv "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" >/dev/null 2>&1 || true
           docker run -d --name "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" \
             -e POSTGRES_USER=factory -e POSTGRES_PASSWORD=factorypw -e POSTGRES_DB=factory \
@@ -189,7 +193,9 @@ jobs:
       - name: Stop the containers
         if: always()
         run: |
-          docker rm -f "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" || true
+          # -v again: the anonymous volume of this run's pgvector container goes
+          # with it, so a completed run leaks nothing (#566).
+          docker rm -fv "pg-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" "nats-e2e-$GITHUB_RUN_ID-${{ matrix.sandbox }}" || true
 
       - name: Keep the logs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

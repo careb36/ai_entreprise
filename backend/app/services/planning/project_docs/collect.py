@@ -39,7 +39,7 @@ from models import (
     Verification,
     WstgReview,
 )
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
@@ -246,11 +246,24 @@ def _events(session: Session, company_id: int) -> list[dict[str, Any]]:
 
 def _verifications(session: Session, company_id: int) -> list[dict[str, Any]]:
     """The Verifier's readings of the company's deliveries, with the task each was
-    for (through its ``verified`` event), the verdict and the risk tier."""
+    for (through its ``verified`` event), the verdict and the risk tier.
+
+    The event names its verification (``verification_id``, written by the
+    task worker since the #329 retrospective); an older event that names only
+    its run speaks for that run's verifications."""
     rows = session.exec(
         select(Verification, AgentRun.artifact_digest, TaskEvent.task_id)
         .join(AgentRun, AgentRun.id == Verification.agent_run_id)
-        .join(TaskEvent, TaskEvent.verification_id == Verification.id)
+        .join(
+            TaskEvent,
+            or_(
+                TaskEvent.verification_id == Verification.id,
+                and_(
+                    TaskEvent.verification_id.is_(None),
+                    TaskEvent.run_id == Verification.agent_run_id,
+                ),
+            ),
+        )
         .where(
             Verification.company_id == company_id, TaskEvent.event_type == "verified"
         )
@@ -258,7 +271,11 @@ def _verifications(session: Session, company_id: int) -> list[dict[str, Any]]:
         .limit(LIMIT)
     ).all()
     out = []
+    seen: set[int] = set()
     for verification, artifact_digest, task_id in sorted(rows, key=lambda r: r[0].id):
+        if verification.id in seen:
+            continue
+        seen.add(verification.id)
         tier = next(
             (
                 c
