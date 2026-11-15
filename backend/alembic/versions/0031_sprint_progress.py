@@ -6,8 +6,8 @@ the audit row that seals it. A new table only: nothing existing changes.
 Numbered 0099 so it cannot collide with the migrations of parallel work; it
 is renumbered when merged.
 
-Revision ID: 0099
-Revises: 0027
+Revision ID: 0031
+Revises: 0030
 Create Date: 2026-11-15 18:00:00 UTC
 """
 
@@ -18,8 +18,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0027"
+revision = "0031"
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

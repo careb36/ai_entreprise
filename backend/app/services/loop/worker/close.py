@@ -25,7 +25,7 @@ from schemas import SCOPE_HARD_MAX, SCOPE_LIMITS
 from sqlmodel import Session, select
 
 from services.learning import retrospective
-from services.loop import replicas, sprint_control
+from services.loop import replicas, sprint_control, wiki_close
 from services.loop.carry_over import carry_over_on_the_companys_own
 from services.loop.sprint_close import RECLOSED
 from services.loop.sprint_close import (
@@ -468,6 +468,8 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
         retro_metrics = None  # learned once, at the first close
     if retro_metrics and retro_metrics.get("company_id") is not None:
         await _learn_from_close(sprint_id, retro_metrics)
+        # The project wiki: compiled from the sprint's evidence, linted (#445).
+        await wiki_close.after_close(nats_client, sprint_id, retro_metrics)
 
     if retro_metrics:
         _burn_retrospective_engram(sprint_id, retro_metrics)

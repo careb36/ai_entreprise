@@ -150,3 +150,64 @@ def written_by_task(session: Session, company_id: int, item_id: int) -> list[str
             if path not in paths:
                 paths.append(path)
     return paths[:MAX_TASK_FILES]
+
+
+def verified_writes(
+    session: Session, company_id: int | None, item_ids: Iterable[int] | None = None
+) -> list[dict[str, Any]]:
+    """The writes of the company's latest task-worker runs whose latest verdict
+    is ``verified``, as their latest daemon report observed them:
+    ``{run_id, verification_id, backlog_item_id, title, observed_at, path,
+    sha256, diff}``, newest run first. With *item_ids*, only those tasks' runs.
+
+    What the project wiki compiles from and lints against (issue #445): the
+    daemon's sha256 and diff, never the agent's account of its files."""
+    if company_id is None:
+        return []
+    refs = None if item_ids is None else {f"{_TASK_REF}{i}" for i in item_ids}
+    runs = [
+        run
+        for run in _latest_task_runs(session, company_id)
+        if refs is None or run.external_ref in refs
+    ]
+    ids = [run.id for run in runs]
+    if not ids:
+        return []
+    rows = session.exec(
+        select(Verification)
+        .where(Verification.agent_run_id.in_(ids))
+        .order_by(Verification.id.desc())
+    ).all()
+    verdicts: dict[int, str] = {}
+    reports: dict[int, Verification] = {}
+    for row in rows:
+        verdicts.setdefault(row.agent_run_id, row.verdict)
+        if isinstance((row.evidence or {}).get("workspace_writes"), list):
+            reports.setdefault(row.agent_run_id, row)
+    out: list[dict[str, Any]] = []
+    for run in runs:
+        report = reports.get(run.id)
+        if verdicts.get(run.id) != "verified" or report is None:
+            continue
+        subject = run.subject or {}
+        for write in (report.evidence or {}).get("workspace_writes") or []:
+            if not (
+                isinstance(write, dict)
+                and write.get("status") == "written"
+                and isinstance(write.get("path"), str)
+            ):
+                continue
+            diff = write.get("diff")
+            out.append(
+                {
+                    "run_id": run.id,
+                    "verification_id": report.id,
+                    "backlog_item_id": subject.get("backlog_item_id"),
+                    "title": subject.get("title"),
+                    "observed_at": report.observed_at,
+                    "path": write["path"],
+                    "sha256": str(write.get("sha256") or "").lower() or None,
+                    "diff": diff if isinstance(diff, str) else None,
+                }
+            )
+    return out

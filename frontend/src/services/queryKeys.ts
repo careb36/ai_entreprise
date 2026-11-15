@@ -31,6 +31,11 @@ export const QUERY_KEYS = {
   boardNotes: (sprintId: number) => ['sprint', sprintId, 'board-notes'] as const,
   sprintProgress: (sprintId: number) => ['sprint', sprintId, 'progress'] as const,
   specificationProgress: (specId: number) => ['specification', specId, 'progress'] as const,
+  allTaskRelations: () => ['task-relations'] as const,
+  taskRelations: (taskId: number) => ['task-relations', taskId] as const,
+  wiki: (companyId: number) => ['wiki', companyId] as const,
+  wikiPage: (companyId: number, slug: string) => ['wiki', companyId, 'page', slug] as const,
+  wikiVersions: (companyId: number, slug: string) => ['wiki', companyId, 'versions', slug] as const,
   messages: (companyId: number, filters: MessageFilters = {}) =>
     ['messages', companyId, filters.sprint_id ?? '', filters.backlog_item_id ?? '', filters.kind ?? '', filters.limit ?? ''] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,

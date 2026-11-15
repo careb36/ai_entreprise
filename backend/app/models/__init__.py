@@ -47,7 +47,10 @@ from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
+from .task_relation import TaskRelation
+from .team import Team, TeamMember
 from .webhook import CompanyWebhook
+from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
 __all__ = [
     "Agent",
@@ -94,6 +97,13 @@ __all__ = [
     "SsoFlowState",
     "SsoIdentity",
     "TaskEvent",
+    "TaskRelation",
+    "Team",
+    "TeamMember",
     "User",
     "Verification",
+    "WikiLink",
+    "WikiPage",
+    "WikiPageVersion",
+    "WikiSettings",
 ]

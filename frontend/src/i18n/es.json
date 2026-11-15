@@ -28,8 +28,11 @@
     "specifications": "Especificaciones",
     "models": "Modelos",
     "sso": "Inicio de sesión único",
-    "documentation": "Documentación",
-    "chatApprovals": "Aprobaciones por chat"
+    "chatApprovals": "Aprobaciones por chat",
+    "teams": "Equipos",
+    "usage": "Uso",
+    "wiki": "Wiki",
+    "documentation": "Documentación"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2523,6 +2526,41 @@
       "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
     }
   },
+  "taskRelations": {
+    "title": "Tareas relacionadas",
+    "claimsNote": "Vínculos con otras tareas, de este sprint o de otros. Una relación propuesta es una afirmación hasta que un Manager la confirma; solo un «bloqueada por» confirmado dentro de un mismo sprint retiene la tarea.",
+    "loading": "Cargando las tareas relacionadas…",
+    "error": "No se pudieron cargar las tareas relacionadas.",
+    "empty": "No hay tareas relacionadas.",
+    "listLabel": "Relaciones con otras tareas",
+    "names": {
+      "blocked_by": "Bloqueada por",
+      "blocking": "Bloquea a",
+      "duplicate": "Duplicada de",
+      "relates_to": "Relacionada con"
+    },
+    "states": {
+      "proposed": "Propuesta",
+      "confirmed": "Confirmada"
+    },
+    "task": "tarea n.º {{id}}",
+    "taskWithTitle": "tarea n.º {{id}}: {{title}}",
+    "inSprint": "en {{sprint}}",
+    "drivesDispatch": "Espera a que termine antes de empezar",
+    "proposedBy": "Propuesta por {{by}}",
+    "confirmedBy": "confirmada por {{by}}",
+    "theSystem": "el Sistema",
+    "aRule": "la regla {{rule}}",
+    "confirm": "Confirmar",
+    "reject": "Rechazar",
+    "remove": "Quitar",
+    "addTitle": "Relacionar con otra tarea",
+    "relationLabel": "Relación",
+    "otherLabel": "Tarea n.º",
+    "otherPlaceholder": "42",
+    "confirmNow": "Confirmar ahora",
+    "add": "Añadir relación"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -2600,5 +2638,154 @@
       "open": "Abierto",
       "uncovered": "Sin cubrir"
     }
+  },
+  "teams": {
+    "title": "Equipos",
+    "subtitle": "Agrupa a los miembros y concede un rol a todo el equipo en lugar de persona por persona.",
+    "ownerOnly": "Solo los propietarios gestionan los equipos. Tu rol aquí es {{role}}.",
+    "none": "Todavía no hay equipos.",
+    "newTeam": "Nuevo equipo",
+    "name": "Nombre",
+    "description": "Descripción",
+    "role": "Rol",
+    "roles": {
+      "Viewer": "Lector",
+      "Manager": "Gestor"
+    },
+    "roleHint": "El rol de un equipo se aplica a sus miembros en esta empresa. Cada miembro conserva el mayor entre su propio rol y los de sus equipos; un equipo nunca convierte a nadie en propietario.",
+    "create": "Crear equipo",
+    "delete": "Eliminar el equipo {{name}}",
+    "confirmDelete": "¿Eliminar el equipo {{name}}? Sus miembros conservan solo sus propios roles.",
+    "noMembers": "Este equipo no tiene miembros.",
+    "remove": "Quitar",
+    "addMember": "Añadir un miembro",
+    "pickMember": "Elige un miembro",
+    "add": "Añadir",
+    "memberRoles": "Miembros y sus roles",
+    "member": "Miembro",
+    "ownRole": "Rol propio",
+    "effectiveRole": "Rol efectivo",
+    "inTeams": "Equipos"
+  },
+  "usage": {
+    "title": "Uso",
+    "subtitle": "Quién usó qué: tareas, ejecuciones, veredictos, retrabajo, decisiones y los tokens y el coste que informó el proxy de modelos.",
+    "managerOnly": "Solo los gestores y los propietarios leen el informe de uso. Tu rol aquí es {{role}}.",
+    "filters": "Rango del informe",
+    "since": "Desde",
+    "until": "Hasta",
+    "period": "Periodo",
+    "periods": {
+      "day": "Día",
+      "week": "Semana (desde el lunes)",
+      "month": "Mes"
+    },
+    "utc": "Los días son UTC; ambas fechas se incluyen.",
+    "export": "Exportar CSV",
+    "groupBy": "Agrupar por",
+    "dimensions": {
+      "period": "Periodo",
+      "person": "Persona",
+      "team": "Equipo",
+      "role": "Rol del agente",
+      "producer": "Productor",
+      "model": "Modelo servido"
+    },
+    "columns": {
+      "tasks": "Tareas",
+      "rework": "Retrabajo",
+      "runs": "Ejecuciones",
+      "verified": "Verificadas / refutadas",
+      "verifiedShort": "Verificadas",
+      "refutedShort": "Refutadas",
+      "decisions": "Decisiones",
+      "tokens": "Tokens informados",
+      "estimated": "Tokens estimados",
+      "cost": "Coste"
+    },
+    "costUnknown": "desconocido",
+    "plusUnknown_one": "+ {{count}} turno de coste desconocido",
+    "plusUnknown_other": "+ {{count}} turnos de coste desconocido",
+    "unattributed": "Sin atribuir",
+    "noTeam": "Sin equipo",
+    "empty": "No hay nada registrado en este rango.",
+    "generated": "Generado {{at}} a partir de los registros.",
+    "costNote": "El coste cuenta solo los turnos que informó el proxy y que el catálogo tiene con precio; los demás se cuentan aparte, nunca como cero. Una persona en dos equipos cuenta en ambos."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "Lo que el proyecto sabe: páginas que los agentes compilan a partir de ejecuciones verificadas, retrospectivas y el tablero del sprint, cada afirmación con sus fuentes. Una página desactualizada queda fuera de los prompts hasta que se revise.",
+    "loading": "Cargando la wiki…",
+    "loadError": "No se pudo cargar la wiki: {{message}}",
+    "empty": "Todavía no hay páginas. Se compilan al cerrar un sprint, o las escribe un Manager.",
+    "pages": "Páginas de la wiki",
+    "kinds": {
+      "module": "Módulo",
+      "concept": "Concepto",
+      "glossary": "Glosario",
+      "decisions": "Decisiones"
+    },
+    "kindsPlural": {
+      "module": "Módulos",
+      "concept": "Conceptos",
+      "glossary": "Glosario",
+      "decisions": "Decisiones vigentes"
+    },
+    "status": {
+      "current": "Vigente",
+      "stale": "Desactualizada",
+      "proposed": "Propuesta"
+    },
+    "versionStatus": {
+      "current": "vigente",
+      "proposed": "propuesta",
+      "rejected": "rechazada",
+      "superseded": "reemplazada"
+    },
+    "verdict": {
+      "verified": "verificada",
+      "refuted": "refutada",
+      "unverifiable": "no verificable"
+    },
+    "lintRule": {
+      "file_missing": "Archivo ausente",
+      "file_changed": "Archivo cambiado",
+      "module_changed": "Módulo cambiado",
+      "contradiction": "Contradicción"
+    },
+    "lintTitle": "Desactualizada: fuera de los prompts hasta que se revise",
+    "claimNote": "Una página es una afirmación, no una evidencia. Junto a cada afirmación están las fuentes que sus citas encontraron en los registros.",
+    "sources": "Fuentes",
+    "unknownSource": "no encontrada",
+    "noSource": "sin fuente",
+    "personLocked": "Editada por una persona: la próxima compilación solo propone cambios.",
+    "modulePath": "Ruta del módulo: {{path}}",
+    "edit": "Editar",
+    "save": "Guardar",
+    "saveError": "No se pudo guardar: {{message}}",
+    "titleLabel": "Título",
+    "bodyLabel": "Contenido (Markdown)",
+    "syntaxHelp": "Cita las fuentes como [run:12], [task:7], [note:3], [retro:5], [file:ruta@sha256], [REQ-1.2] o [ADR-3]. Los hechos van en un bloque ```facts, un clave: valor por línea.",
+    "noBody": "Esta página todavía no tiene texto vigente.",
+    "proposalTitle": "Versión propuesta",
+    "proposalNote": "Versión {{number}}, propuesta por {{who}}. No está vigente hasta que un Manager la acepte.",
+    "uncitedLine": "La línea {{line}} no tiene fuente: {{excerpt}}",
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "rejectReason": "Motivo (opcional)",
+    "history": "Historial",
+    "byPerson": "por {{who}}",
+    "byAgent": "compilada por {{who}}",
+    "sprint": "sprint {{id}}",
+    "newPage": "Nueva página",
+    "slugLabel": "Identificador",
+    "kindLabel": "Tipo",
+    "create": "Crear",
+    "settings": "Ajustes de la wiki",
+    "writeToRepo": "Escribir también las páginas en docs/wiki/ del repositorio al cerrar un sprint",
+    "runLint": "Revisar las páginas ahora",
+    "lintDone_one": "{{count}} página marcada como desactualizada.",
+    "lintDone_other": "{{count}} páginas marcadas como desactualizadas.",
+    "version": "v{{number}}"
   }
 }

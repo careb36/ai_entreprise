@@ -12,6 +12,7 @@ import { ApiError, type BacklogItem } from '../services/api'
 import { parseRouteId } from '../lib/routeId'
 import { carryOverLineage } from '../lib/carryOver'
 import { TaskCostCard } from '../components/CostSummary'
+import { TaskRelations } from '../components/TaskRelations'
 import { TASK_WORKER_PRODUCER, taskExternalRef } from '../lib/taskEvidence'
 import { lineagePath } from './Lineage'
 
@@ -285,6 +286,7 @@ export default function TaskDetails() {
       </div>
 
       {companyId !== null && <TaskEvidence companyId={companyId} taskId={task.id} />}
+      {companyId !== null && <TaskRelations taskId={task.id} />}
       {companyId !== null && <TaskCostCard taskId={task.id} />}
 
       {companyId !== null && (

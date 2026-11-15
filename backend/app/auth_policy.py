@@ -5,9 +5,9 @@ from config import settings
 from database import get_session
 from fastapi import Depends, HTTPException, Request
 from models import CompanyMember, User
+from services.platform import teams
+from services.platform.teams import ROLE_RANK
 from sqlmodel import Session, select
-
-ROLE_RANK = {"Viewer": 1, "Manager": 2, "Owner": 3}
 
 
 async def current_user_if_required(
@@ -44,15 +44,12 @@ def require_company_role(
         if ROLE_RANK.get(token_role, 0) < ROLE_RANK[minimum]:
             raise HTTPException(status_code=403, detail=f"Requires {minimum} role")
         return
-    member = session.exec(
-        select(CompanyMember).where(
-            CompanyMember.user_id == user.id,
-            CompanyMember.company_id == company_id,
-        )
-    ).first()
-    if member is None:
+    # The effective role: the member's own role raised by their teams' roles
+    # (Viewer or Manager, never Owner); a team never makes anyone a member.
+    role = teams.member_role(session, company_id, user.id)
+    if role is None:
         raise HTTPException(status_code=403, detail="Not a member of this company")
-    if ROLE_RANK.get(member.human_role, 0) < ROLE_RANK[minimum]:
+    if ROLE_RANK.get(role, 0) < ROLE_RANK[minimum]:
         raise HTTPException(status_code=403, detail=f"Requires {minimum} role")
 
 
