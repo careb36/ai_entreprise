@@ -418,3 +418,38 @@ manifest of the pack), the COBIT governance matrix and the ITIL transition set
 (phase 5), and bench grading of packs against person-written expectations.
 The C4 code level from the daemon's code graph (`workspace.related`) fits
 phase 2 when a daemon is connected.
+
+## Later phases: audit-ready documents
+
+Auditors of IT general controls, and assessors where a project handles card
+data, ask for a different set from a PMO's. The Owner's structural summary of
+*Information Technology Control and Audit* (A. R. Otero, 5th ed., CRC Press,
+2019) and of a PCI DSS v4.0.1 guide (NHI Mgmt Group, 2026), written in our own
+words, names ten. None is built in phase 1; each fits the same extension
+points (a builder over the snapshot, its inputs for the drift digest, sources
+per row, person sections where a decision is a person's), and every one shows
+the result of verifying the audit chain (`GET /v1/audit/chain`) and the task
+event chains it draws on. The book's text is not stored or used for
+retrieval (its copyright page forbids it); PCI DSS requirement text belongs to
+PCI SSC and is not reproduced: requirements are cited by number only.
+
+| Document | Built from (records) | Sources in the summary |
+|---|---|---|
+| Control matrix | each in-scope general control and, for card data, PCI DSS Req 6, 7, 8, 10, 11, 12; its owner (role or person), the record that evidences it, whether it is checked automatically | IT audit control areas; PCI DSS 4.3 |
+| Change management evidence report | every change in a period from the chains, the count tied to sequence numbers; per change the requirement, risk tier, producer, the Verifier's verdict with log hash and file sha256, reviewer, the approving person and time, release, undo; exceptions apart (no approval, approver equal to requester, emergency, overridden failed check) | change control objectives; PCI DSS 6.5.1 |
+| Segregation-of-duties matrix with violations | agents and people against specify, produce, verify, review, approve, release; the rule that one identity holds no two adjacent steps; the violations found in the period | change control (independent deployer); PCI DSS 6.5.4 |
+| Access review | members, roles, last activity, grants and revocations, API tokens and service accounts, with the Owner's sign-off every six months (a person section) | access security controls; PCI DSS 7.2.4, 7.2.5, 8.6 |
+| Audit-trail extract with chain verification | a chain segment, the verification output, the signing key's identifier and an external anchor of the chain head once one exists; a table of the event types logged | log integrity; PCI DSS 10.2, 10.3, 10.5 |
+| Secure SDLC report mapped to PCI DSS Req 6 | per release: the phases and their artifacts (specification, ADRs, threat model, review, the Verifier's tests), dependency, secret and container scan results with triage, an SBOM, a test-data scan for card numbers, a CSP/SRI check for web front ends | SDLC controls; PCI DSS 6.2, 6.3.2, 6.4.3, 6.5.5, 6.5.6 |
+| Findings register | every hold, escalation or failed check as a finding: condition, criteria, cause, effect, recommendation, then management response, owner, target date, status and retest evidence (the response and dates are person sections) | the book's finding record and management letter, plus a cause field it lacks |
+| Risk assessment | a project risk register for risks beyond each delivery's tier, and a targeted risk analysis per frequency the project chooses (person sections, with the observed risks of this phase's register as input) | risk management area; PCI DSS 12.3.1 |
+| Scope and data-flow statement | systems, data flows, third parties and their attestations; for a project in PCI scope, a statement that La Fabrique itself (daemon, backend, CI, LLM proxy) is a connected system | PCI DSS 12.5.2, 12.8 |
+| Test evidence index and release sign-off | acceptance criteria to tests, to the Verifier's verdicts, to the person's approval: the traceability matrix of this phase, extended with test logs and the sign-off | SDLC testing; the book's testing checklist |
+
+What these documents need that the records do not yet hold (an external
+anchor for the chain, a four-eyes rule and its report, an access lifecycle,
+an emergency-change path, a backout plan and security-impact note per change,
+an SBOM per release, a findings lifecycle) is listed in the summary's
+recommendations and belongs to its own issues; the documents report the gap
+as "No source recorded" until then. A COBIT 2019 governance matrix follows
+in the same shape once its summary arrives.
