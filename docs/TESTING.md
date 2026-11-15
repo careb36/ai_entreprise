@@ -308,7 +308,8 @@ appends `bench/` to `sys.path`), and `backend-tests.yml` runs on a change under
 (backend app, daemon, proxy, scripts, the frontend's `src`, tests excluded)
 stays at or under 600 lines, and the files already over it, listed with
 their size in `scripts/file_size_baseline.json`, may shrink but never grow.
-When one shrinks, `--update` lowers its entry. CI runs it on every pull
+When one shrinks, `--update` lowers its entry. The baseline is empty today
+(`{}`): every source file is under the limit, so a file that crosses it fails. CI runs it on every pull
 request that touches source (`.github/workflows/file-sizes.yml`).
 
 The LLM proxy has its own suite under `llm-proxy/tests/` (model routing,

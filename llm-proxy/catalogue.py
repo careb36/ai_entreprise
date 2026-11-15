@@ -7,18 +7,19 @@ provider's fetched catalogue before a request is sent anywhere. A mistyped or
 retired id fails here instead of being forwarded to a provider that never
 served it.
 
-The catalogue sets themselves live in this module; ``app`` reaches them
-through the functions below so the tests that swap a set out still see the
-module-level name they patch.
+The catalogue sets themselves, and the hourly refresh that fills them, live in
+``app``: the tests swap a set or a refresh out on that module. This module
+holds what does not change at run time (the prefixes, the tier rules, the
+deprecated ids), fetches one provider's list (:func:`refresh`), and shapes the
+``/v1/models`` listing (:func:`listed_models`).
 """
 
 import logging
-import threading
 import time
 
 import requests
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("llm-proxy")
 
 # Tier classification rules applied in order — first match wins.
 # Tuple: (substring_tests, tier_name, description)
@@ -105,3 +106,85 @@ def fetch_model_ids(provider: str, key: str, base_url: str) -> set[str]:
         for m in resp.json().get("data", [])
         if m.get("id") and not any(k in m.get("id", "").lower() for k in skip)
     }
+
+
+def refresh(provider: str, key: str, base_url: str, current: set[str], last_refresh: float) -> tuple[set[str], float]:
+    """Fetch one provider's catalogue. A failure keeps the previous one."""
+    if not key:
+        return current, last_refresh
+    try:
+        ids = fetch_model_ids(provider, key, base_url)
+    except Exception as e:
+        logger.warning(f"{provider} model refresh failed: {e}")
+        return current, last_refresh
+    logger.info(f"{provider} models refreshed: {sorted(ids)}")
+    return ids, time.time()
+
+
+def listed_models(catalogue, keys: dict[str, str]) -> list[dict]:
+    """The ``/v1/models`` entries: every id the chat endpoint routes, with its tier.
+
+    *catalogue* maps a provider to its routable ids; *keys* holds each
+    provider's API key, and a provider other than Gemini is listed only when
+    its key is set.
+    """
+    models = []
+    for model_id in sorted(catalogue("gemini") - GEMINI_DEPRECATED):
+        tier, desc = classify_model(model_id)
+        models.append({"id": model_id, "provider": "gemini", "tier": tier, "description": desc})
+
+    # DeepSeek models are available only when the API key is configured.
+    if keys.get("deepseek"):
+        ds_ids = sorted(catalogue("deepseek"))
+        for mid in ds_ids:
+            tier = "fast" if "flash" in mid else "balanced"
+            models.append({"id": mid, "provider": "deepseek", "tier": tier,
+                           "description": f"DeepSeek {mid}"})
+
+    # Qwen models are available only when the API key is configured.
+    if keys.get("qwen"):
+        q_ids = sorted(catalogue("qwen"))
+        for mid in q_ids:
+            lower = mid.lower()
+            if "max" in lower:
+                tier = "strategic"
+            elif "flash" in lower:
+                tier = "balanced"
+            else:
+                tier = "balanced"
+            models.append({"id": mid, "provider": "qwen", "tier": tier,
+                           "description": f"Qwen {mid}"})
+
+    # Nebius hosts the NVIDIA open models (Nemotron); listed only with its key.
+    if keys.get("nebius"):
+        for mid in sorted(catalogue("nebius")):
+            lower = mid.lower()
+            if "nano" in lower:
+                tier = "fast"
+            elif "ultra" in lower or "253b" in lower or "340b" in lower:
+                tier = "strategic"
+            else:
+                tier = "balanced"
+            models.append({"id": mid, "provider": "nebius", "tier": tier,
+                           "description": f"NVIDIA/Nebius {mid}"})
+    return models
+
+
+def pick_orchestrator(models: list[dict]) -> str:
+    """
+    Choose the best model for short orchestration/meta tasks (fast, stable, not preview).
+    Preference: balanced > fast > strategic, never preview.
+    """
+    preferred_ids = [
+        "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
+        "gemini-2.5-flash", "gemini-2.5-pro",
+    ]
+    available_ids = {m["id"] for m in models if m["tier"] != "preview"}
+    for candidate in preferred_ids:
+        if candidate in available_ids:
+            return candidate
+    # Fall back to any non-preview balanced model
+    for m in models:
+        if m["tier"] in ("balanced", "fast") and m["tier"] != "preview":
+            return m["id"]
+    return models[0]["id"] if models else "gemini-flash-latest"

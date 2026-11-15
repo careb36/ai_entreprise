@@ -56,7 +56,7 @@ def company(sqlite_session):
 _DEFINITION = {
     "docs": {
         "url": "https://docs.example/mcp",
-        "headers": {"Authorization": "Bearer abc"},
+        "headers": {"Authorization": "Bearer placeholder-qz"},
     },
     "gh": {
         "command": "npx",
@@ -77,7 +77,7 @@ def test_a_manager_adds_servers_and_the_answer_never_carries_a_secret(
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert [s["name"] for s in body["servers"]] == ["docs", "gh"]
-    assert "abc" not in resp.text and "ghp_secret" not in resp.text
+    assert "placeholder-qz" not in resp.text and "ghp_secret" not in resp.text
     docs = body["servers"][0]
     assert docs["header_names"] == ["Authorization"] and docs["transport"] == "http"
     assert body["servers"][1]["env_keys"] == ["GITHUB_TOKEN"] and body["servers"][1][
@@ -256,7 +256,10 @@ def test_the_tools_endpoint_reports_what_the_server_advertises_or_why_not(
         ],
     }
     # The connection carried the decrypted header, and the answer did not.
-    assert seen["headers"] == {"Authorization": "Bearer abc"} and "abc" not in resp.text
+    assert (
+        seen["headers"] == {"Authorization": "Bearer placeholder-qz"}
+        and "placeholder-qz" not in resp.text
+    )
 
     async def failing(spec):
         raise mcp_client.McpConnectionError("ConnectError: refused")
