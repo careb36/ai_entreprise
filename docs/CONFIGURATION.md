@@ -296,13 +296,20 @@ Copy `.env.example` to `.env` and fill in:
 - `DELIVERY_BROWSER_IMAGE` — optional, default empty (the application check
   runs in `DELIVERY_SANDBOX_IMAGE`, as before). In container mode, the image the
   application check runs in when its e2e command drives a browser (QA's smoke
-  suite, or the e2e command of a profile that serves pages): one built from
-  `vscode-daemon/images/browser` (Node, Playwright 1.64.1 from its lockfile and
-  the Chrome Headless Shell it launches, each download checked by sha256 for
-  amd64 and arm64; `docker build vscode-daemon/images/browser`, and behind a
-  TLS-intercepting proxy `--secret id=extra_ca,src=<CA bundle>`). Pin it by
-  digest (`registry/name@sha256:…`); the run records the content ID and digest
-  it started from either way. Before a browser e2e command the daemon also
+  suite, or the e2e command of a profile that serves pages): the published one,
+  or one built locally from `vscode-daemon/images/browser` (Node, Playwright
+  1.64.1 from its lockfile and the Chrome Headless Shell it launches, each
+  download checked by sha256 for amd64 and arm64; `docker build
+  vscode-daemon/images/browser`, and behind a TLS-intercepting proxy
+  `--secret id=extra_ca,src=<CA bundle>`). Every `v*` tag publishes it
+  multi-arch (`linux/amd64`, `linux/arm64`) as
+  `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z` (#529; `images.yml`, built
+  with buildx under QEMU), signed by digest with keyless cosign and carrying
+  its CycloneDX SBOM as a signed attestation (`docs/OPERATIONS.md`,
+  Releasing): set `DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
+  with the digest the publish run's summary printed. Pin it by digest
+  (`registry/name@sha256:…`); the run records the content ID and digest it
+  started from either way. Before a browser e2e command the daemon also
   probes for a browser (`vscode-daemon/browser_probe.py`) and `e2e_run` says
   whether one was present.
 - `DELIVERY_FULL_LOGS` — optional, default `true`. The install, the test run
