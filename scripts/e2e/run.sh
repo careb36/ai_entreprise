@@ -12,7 +12,9 @@
 #      ScrumMaster's proposal is adopted (autonomy level 3).
 #      Every task is advised by a fake Copilot CLI (e2e-copilot) on the
 #      daemon's PATH; the advice reaches the agents' prompts and the sprint
-#      list counts the tasks as advised.
+#      list counts the tasks as advised. With E2E_SANDBOX=container the
+#      assistants go to the company's sandbox, whose network is off, so they
+#      are skipped with the reason and no task is advised (issue #525).
 #   2. The blocked task is listed in the inbox.
 #   3. An Architect joins the team (after the foundation sprint, so that one
 #      stays as planned). start_sprint with carry_over_ids gives the blocked
@@ -279,8 +281,16 @@ check "the sprint starts with two tasks" test "$(echo "$NEW" | json "len(d.get('
 check "Sprint 1 closes" wait_sprint "$S1"
 echo "     board: $(board "$S1")"
 check "the new task is done and the retried one blocked again" test "$(board "$S1")" = "Add parser=done Create testing strategy document=blocked"
-check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
-check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
+if [ "$SANDBOX" = "container" ]; then
+  # The assistants run in the company's sandbox (issue #525): network off, so
+  # they are not consulted, with the reason, and the tasks go on unadvised.
+  check "no console assistant ran outside the company's sandbox" test "$(advice_counts "$S1")" = "(0, 0, 2)"
+  check "the skip says why" grep -q "Console assistants not consulted for item=.*DELIVERY_SANDBOX_NETWORK" "$WORK/backend.log"
+  check "and no advice reached a prompt" test "$(grep -c "$ADVICE" "$PROMPTS")" = 0
+else
+  check "a console assistant advised both tasks, and one of them got done" test "$(advice_counts "$S1")" = "(2, 1, 0)"
+  check "its advice reached the new task's prompt" test "$(prompt_seen "## Task: Add parser.*External Console Assistant Notes.*$ADVICE")" = yes
+fi
 check "the factory's standards bind the Developer before the task, and QA's review" test "$(prompt_seen "## Quality standards.*STD-SEC-1 No secret in the repository, ever \[checked\].*## Task: Add parser")" = yes -a "$(prompt_seen "reviewing the following deliverable for the task: 'Add parser'.*## Quality standards.*STD-QA-2 Review against the criteria")" = yes
 check "the Architect briefed the new task after its rework, and it got done" test "$(brief_counts "$S1")" = "(1, 1, 0)"
 check "its brief reached the next attempt's prompt" test "$(prompt_seen "## Task: Add parser.*Reuse the existing module layout")" = yes

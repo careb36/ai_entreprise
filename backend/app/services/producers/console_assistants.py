@@ -12,6 +12,11 @@ and remembers, per company, when one is out of quota or missing on the host
 so the next tasks skip it until the cooldown ends (``AssistantRuntimeState``).
 Every decision is published to the Glassroom as ``assistant.telemetry``.
 
+Each consultation carries the company's sandbox with purpose ``assistant``
+(``assistant_sandbox``, issue #525), so it runs where the company's other
+commands run and under the daemon's floor; one that cannot run there is
+skipped with the reason (``skipped_sandbox``), never moved to the host.
+
 The labels, the prompt and the commands are in ``console_commands``; this
 module re-exports their names. What the tests replace here (the settings
 read at import, ``engine``, ``publish_event``) stays here.
@@ -31,7 +36,7 @@ from nats_client import NATSClient
 from sqlmodel import Session, select
 
 from services.platform.glassroom import publish_glassroom
-from services.producers import console_capabilities
+from services.producers import assistant_sandbox, console_capabilities
 from services.producers.console_commands import (  # noqa: F401 - re-exported
     CLAUDE_CLI_ALLOWED_TOOLS,
     CLAUDE_CLI_APPEND_SYSTEM_PROMPT,
@@ -48,6 +53,7 @@ from services.producers.console_commands import (  # noqa: F401 - re-exported
     wrap_command_with_fallback,
 )
 from services.tasks import board
+from services.workspace.sandbox import PolicyUnavailable
 
 logger = setup_logger("fabrique-console-assistants")
 
@@ -261,12 +267,16 @@ async def publish_event(
     *,
     decision: str,
     detail: str | None = None,
+    sandbox: dict[str, Any] | None = None,
 ) -> None:
-    """Publish a Glassroom status event explaining an assistant usage decision."""
+    """Publish a Glassroom status event explaining an assistant usage decision;
+    *sandbox* is the daemon's report of where the CLI ran, when it sent one."""
+    extra = {"assistant_sandbox": sandbox} if isinstance(sandbox, dict) else {}
     await publish_glassroom(
         nats_client,
         sprint_id,
         {
+            **extra,
             "type": "status",
             "semantic_type": "assistant.telemetry",
             "source": "task_worker",
@@ -329,6 +339,31 @@ async def collect_advice(
     if not workspace_root:
         return dict(NO_ADVICE)
 
+    # Where the CLIs run: the company's sandbox, purpose ``assistant``
+    # (``assistant_sandbox``; issue #525). Optional advice: skipped with the
+    # reason when it cannot run there, and the task goes on.
+    try:
+        box = await asyncio.to_thread(assistant_sandbox.request_for, sprint, engine)
+        why = assistant_sandbox.refusal(box)
+    except PolicyUnavailable as exc:
+        box, why = {}, f"an assistant needs a known sandbox: {exc}"
+    if why:
+        logger.info(
+            "Console assistants not consulted for item=%s: %s", item.get("id"), why
+        )
+        for label, _template, purpose in assistants:
+            await publish_event(
+                nats_client,
+                sprint["id"],
+                item,
+                label,
+                purpose,
+                f"{label} not consulted: {why}.",
+                decision="skipped_sandbox",
+                detail=why,
+            )
+        return dict(NO_ADVICE)
+
     prompt = build_prompt(item, agent, sprint["name"])
     notes: list[str] = []
     sources: list[dict[str, str]] = []
@@ -386,6 +421,7 @@ async def collect_advice(
                     "workspace_root": workspace_root,
                     "command": command,
                     "sprint_id": sprint["id"],
+                    "sandbox": box,
                 },
                 timeout=CONSOLE_ASSISTANT_TIMEOUT,
             )
@@ -405,6 +441,32 @@ async def collect_advice(
                 f"{label} request failed while gathering {purpose}.",
                 decision="failed",
                 detail=str(exc),
+            )
+            continue
+
+        applied = result.get("sandbox")
+        stopped = assistant_sandbox.stopped_by_sandbox(result)
+        if stopped:
+            # The sandbox, not the CLI, decided: cool down so the next tasks
+            # do not start a run that cannot work, and say why.
+            await asyncio.to_thread(
+                set_runtime_state,
+                sprint["company_id"],
+                assistant_key,
+                cooldown_until=datetime.now(UTC)
+                + timedelta(minutes=max(1, ASSISTANT_UNAVAILABLE_COOLDOWN_MINUTES)),
+                last_error=stopped,
+            )
+            await publish_event(
+                nats_client,
+                sprint["id"],
+                item,
+                label,
+                purpose,
+                f"{label} not consulted: {stopped}.",
+                decision="skipped_sandbox",
+                detail=stopped,
+                sandbox=applied,
             )
             continue
 
@@ -479,6 +541,7 @@ async def collect_advice(
                 f"{label} contributed {purpose} for: {item.get('title', 'task')}",
                 decision="used",
                 detail=output[:CONSOLE_ASSISTANT_EXCERPT_CHARS],
+                sandbox=applied,
             )
 
     return {"combined": "\n\n".join(notes), "sources": sources}

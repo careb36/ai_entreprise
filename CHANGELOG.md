@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+* **The daemon's sandbox floor reaches every command.** A `workspace.execute` without a `sandbox` is now read as a `host` request, so `FABRIQUE_SANDBOX_REQUIRED=container` (or `bwrap`) on the daemon's machine runs it in that mode (`forced_by_daemon`) or, when that mode cannot run, refuses it; never the host. Without the floor nothing changes, and the reply of a request that did not ask carries no `sandbox`. The console assistants send the company's sandbox with the new purpose `assistant` (the network as `DELIVERY_SANDBOX_NETWORK` sets it, the provider's key by name from `console_env`); one that cannot run there is skipped with the reason in the Glassroom (`skipped_sandbox`) and the task goes on. Protocol version 1, additive (#525).
+
 * **CI supply chain and scans that can fail.** Every third-party action in every workflow is pinned by commit sha with its version in a comment, and `backend/tests/test_workflow_pinning.py` fails on a tag (the SLSA generator, which only runs from a `vX.Y.Z` tag, is the one exception); `security-scan.yml` replaces `safety check || true` with `pip-audit` over the backend's and the llm-proxy's lockfiles and `npm audit --omit=dev --audit-level=high` over the frontend's, failing on a known vulnerability unless `.github/pip-audit-ignore.txt` lists it with a reason and a review date that has not passed; gitleaks over a pull request's commits and Semgrep on the findings it adds now run on every pull request, beside the weekly full scans. The OpenTelemetry packages move from 1.45.1 to 1.45.2 (0.66b1 to 0.66b2) in both lockfiles for CVE-2026-126360 in `opentelemetry-api` (#522).
 
 ### Changed

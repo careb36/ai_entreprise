@@ -216,7 +216,12 @@ Copy `.env.example` to `.env` and fill in:
   applied (`test_run.sandbox`) and the Verifier records it as the `sandbox`
   check (`services/workspace/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
-  for everything (`vscode-daemon/sandbox.py`). In container mode the report
+  for everything (`vscode-daemon/sandbox.py`), a request that names no sandbox
+  included (#525). The console assistants (`CONSOLE_ASSISTANTS_ENABLED`) run in
+  the company's sandbox too, with purpose `assistant`: in `container` or
+  `bwrap` they need `DELIVERY_SANDBOX_NETWORK` on (off by default; otherwise
+  they are skipped with the reason), the CLI in `DELIVERY_SANDBOX_IMAGE`, and
+  the provider's key listed by name in the company's `console_env`. In container mode the report
   names the image that ran (`image_identity`: the content ID and registry
   digest from `image inspect`, observed by the daemon before the run, and the
   container started from that ID; after the run for an image the run pulled;
