@@ -1,0 +1,32 @@
+{
+  "$comment": "The Architect's revision of La Fabrique's own architecture for the specification of issue #535, as a change to docs/architecture/architecture.json: scripts/self_host/self_host.py starts from that record, replaces every module's covers with the ones below (the old ones name the requirements of another specification), appends the interfaces and the decision, and posts the result for the #535 specification. A product architecture belongs to one specification, so a revision for a new specification cannot be a new version of the company's architecture; that is a finding of the self-hosting retrospective (docs/retrospectives/2026-11-self-hosting.md). With the fake model of the e2e run the Architect cannot write this revision, so the harness posts it as a person would.",
+  "title": "La Fabrique backend, revised for saved views of a sprint's tasks",
+  "covers": {
+    "contracts": ["REQ-1"],
+    "tasks": ["REQ-1", "REQ-2", "REQ-3"]
+  },
+  "interfaces": [
+    {
+      "name": "Task filter expression",
+      "kind": "schema",
+      "module": "contracts",
+      "contract": "Filter = {\"and\": [Condition | Filter, ...]}; Condition = {\"field\": str, \"op\": \"eq\" | \"ne\" | \"in\" | \"gte\" | \"lte\", \"value\": Any}\nFILTER_FIELDS = (\"status\", \"verdict\", \"risk_tier\", \"producer\", \"assignee_role\", \"rework_count\", \"waits_for_person\", \"covers\", \"sprint_id\")\nparse_filter(raw) -> Filter, raising FilterRefused(field) for a field outside FILTER_FIELDS",
+      "consumers": ["tasks", "management"]
+    },
+    {
+      "name": "Filtered tasks and saved views",
+      "kind": "http",
+      "module": "tasks",
+      "contract": "GET /v1/tasks?company_id=&filter=<json> -> {\"tasks\": [TaskRecord], \"count\": int}; 422 {\"field\": str} for a field outside the allowlist (Viewer)\nGET /v1/companies/{id}/views -> {\"views\": [SavedView]} (private views of others left out; Viewer)\nPOST /v1/companies/{id}/views, PUT /v1/views/{id} (author or Manager; 403 on a locked view for a Viewer)",
+      "consumers": ["management"]
+    }
+  ],
+  "decisions": [
+    {
+      "title": "Task filters are evaluated from the projections, over an allowlist",
+      "context": "Issue #535: the questions a Manager asks are about the evidence (verdict, risk tier, producer, rework), and the board, a kanban without filters, cannot answer them. A filter evaluated in the browser would disagree with the board as soon as a projection changes, and a filter on any column would expose fields no role may read.",
+      "decision": "A filter is a JSON tree of conditions under AND groups whose fields come from FILTER_FIELDS in contracts. The tasks context evaluates it from TaskRecord, the projection the board reads, and refuses any other field with a 422 that names it. Saved views are rows of their own (filters, group_by, order_by, layout, visible columns, access, locked); a person's display preferences are kept apart from the view.",
+      "consequences": "The board and a view give the same counts for the same filter, which a test checks. A new filterable field is a change to contracts and its readers in one pull request. Plane's IssueView is the design reference (AGPL-3.0-only: design only, no code taken)."
+    }
+  ]
+}

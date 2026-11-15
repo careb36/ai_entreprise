@@ -77,7 +77,13 @@ the LangGraph graph is only an optional kickoff conversation.
    acceptance test files on disk (`workspace.hash`) against what QA's delivery
    wrote; a file that differs or is missing is restored from QA's deliverable
    (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
-   criterion is judged against a weakened test. `services/evidence/criteria_tests.py`
+   criterion is judged against a weakened test. Under the Git workflow the
+   task's branch holds only its base and the done tasks it depends on: the
+   guarded files are its lineage's (`acceptance.branch_lineage`), a sibling
+   task's test file is guarded only when it is on the branch's disk, one that
+   is not is recorded in `acceptance.not_on_branch` and neither restored nor
+   run, and the sprint's integration runs the whole suite (#329
+   retrospective). `services/evidence/criteria_tests.py`
    holds the reading of the runner's output and the two checks. The same
    output is read for tests named after an OWASP WSTG test
    (`test_wstg_athz_02_…`, `services/evidence/wstg_tests.py`, issue #539):
@@ -170,7 +176,12 @@ the LangGraph graph is only an optional kickoff conversation.
    (`sprint_notes.record_from_delivery`), each a `board_note` event with its
    author; a person adds one or marks one wrong on the Board notes tab. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
    `kind`) feeds the sprint's Conversation tab and the task page.
-8. When a sprint closes, procedures are measured and proposed
+8. When a sprint closes, each task's observed effort is read from its own
+   records (tokens the proxy reported, claimed to done, rework, review
+   failures, files the daemon wrote) and stored as an `effort_observed` event,
+   the side the difficulty estimate is scored against
+   (`services/models/effort.py`, `services/models/calibration.py`, issue
+   #534; [models](contexts/models.md)). Then procedures are measured and proposed
    (`services/learning/procedures.py`):
    - Each active procedure with two completed sprints since its adoption is
      kept, or reverted if rework per task or the share of blocked tasks got

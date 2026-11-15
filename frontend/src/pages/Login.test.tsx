@@ -155,6 +155,19 @@ describe('login and registration', () => {
     expect(useAuthStore.getState().user).toBeNull()
   })
 
+  it('says to wait when sign-in is rate limited (429)', async () => {
+    mockApi.login.mockRejectedValue(new MockApiError(429, 'Too many sign-in attempts: try again later.'))
+    renderLogin()
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@example.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Too many attempts. Please wait a minute and try again.',
+    )
+  })
+
   it('shows the dedicated not-configured message for a 503', async () => {
     mockApi.login.mockRejectedValue(new MockApiError(503, 'Service is starting up'))
     renderLogin()
@@ -170,7 +183,7 @@ describe('login and registration', () => {
   })
 
   it('navigates to login after successful registration', async () => {
-    mockApi.register.mockResolvedValue({ user_id: 9, email: 'new@example.com' })
+    mockApi.register.mockResolvedValue({ status: 'accepted', detail: 'ok', email: 'new@example.com' })
     renderLogin('/register')
 
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Grace Hopper' } })
@@ -183,7 +196,7 @@ describe('login and registration', () => {
       full_name: 'Grace Hopper',
       password: 'password',
     }))
-    expect(await screen.findByText('Account created. You can now log in.')).toBeInTheDocument()
+    expect(await screen.findByText('If this email was not registered already, your account is ready. Log in to continue.')).toBeInTheDocument()
   })
 
   it('renders login labels in Spanish', async () => {

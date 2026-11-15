@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""The factory builds itself: a La Fabrique company whose project is La Fabrique (issue #329).
+
+Runs against any running stack, the e2e one (``scripts/e2e/run.sh``, with the
+fake model) or a real one (``scripts/self_host/README.md``), through the
+public API only. Every step is idempotent: run it again and it finds what it
+made (the company in the state file, the specifications and architectures by
+title) instead of making it twice.
+
+Steps (``--steps``, comma-separated; ``all`` by default):
+
+- ``checkout``: a snapshot of this repository (the files git tracks or would
+  track, as one commit of a fresh repository) at ``--checkout``. Never the
+  live checkout, and never a ``git worktree`` of it: the Git workflow writes a
+  branch per task, and a worktree shares the live repository's branches.
+- ``company``: the "La Fabrique" company with that snapshot as its project,
+  the Git workflow on (the daemon observes a repository), the delivery tests
+  on (the stack profile names the test command), the sandbox set to
+  ``--sandbox``, and the roles of the loop.
+- ``records``: ``docs/architecture/specification.json`` and
+  ``architecture.json`` posted and approved as the company's specification and
+  architecture; the architecture's document and ADRs read back through the
+  API and compared with ``docs/ARCHITECTURE.md`` and ``docs/adr/`` in the
+  snapshot, then written into it by the daemon and compared with git.
+- ``issue``: issue #535 as a specification (``fixtures/``), approved; the
+  Architect's revision of the architecture for it, approved; the PO's plan,
+  acceptance tests first; the sprint started on the plan.
+- ``wait``: until that sprint completes (``--timeout``).
+- ``review``: the tasks waiting for a person, the task branches and the
+  sprint's integration (its branches merged and the suite run, the one
+  request a person reviews); with ``--accept TEXT`` a person accepts the
+  held tasks with that comment, and with ``--merge`` merges the integration
+  into ``main`` locally (nothing is pushed: the snapshot has no remote).
+- ``pack``: the documentation pack (#530) compiled in English and in Spanish,
+  with what each could not say.
+
+It prints a JSON report (also written to ``--report``) that the e2e checks
+read and the retrospective cites. Taken from OpenHands, which develops
+OpenHands with OpenHands: run the product on its own repository through the
+same entry points a user has (design only, no code).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+COMPANY_NAME = "La Fabrique"
+ADR_FIRST_NUMBER_KEY = "adr_first_number"
+STEPS = ("checkout", "company", "records", "issue", "wait", "review", "pack")
+AGENTS = [
+    {"role": "PO", "name": "Po Fab"},
+    {"role": "Architect", "name": "Ari Fab"},
+    {"role": "Developer", "name": "Dev Fab"},
+    {"role": "QA", "name": "QA Fab"},
+    {"role": "ScrumMaster", "name": "Sam Fab"},
+    {"role": "TechWriter", "name": "Tess Fab"},
+]
+IDENTITY = ["-c", "user.name=La Fabrique self-hosting", "-c", "user.email=self-host@localhost"]
+
+
+class ApiError(RuntimeError):
+    def __init__(self, method: str, path: str, status: int, body: str):
+        super().__init__(f"{method} {path} -> {status}: {body[:500]}")
+        self.status = status
+
+
+class Api:
+    def __init__(self, base: str, token: str | None):
+        self.base = base.rstrip("/")
+        self.token = token
+
+    def call(self, method: str, path: str, body=None, raw: bool = False):
+        data = json.dumps(body).encode() if body is not None else None
+        request = urllib.request.Request(self.base + path, data=data, method=method)
+        request.add_header("Content-Type", "application/json")
+        if self.token:
+            request.add_header("Authorization", f"Bearer {self.token}")
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                text = response.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            raise ApiError(method, path, e.code, e.read().decode("utf-8", "replace")) from e
+        return text if raw else (json.loads(text) if text else None)
+
+    def get(self, path, raw=False):
+        return self.call("GET", path, raw=raw)
+
+    def post(self, path, body=None):
+        return self.call("POST", path, body if body is not None else {})
+
+    def put(self, path, body):
+        return self.call("PUT", path, body)
+
+    def patch(self, path, body):
+        return self.call("PATCH", path, body)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *IDENTITY, *args], cwd=cwd, check=True, capture_output=True, text=True
+    ).stdout
+
+
+def _load(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+# --------------------------------------------------------------------------- steps
+
+
+def step_checkout(args, state, report):
+    target = Path(args.checkout).resolve()
+    if target == REPO or REPO in target.parents:
+        raise SystemExit("the checkout must be outside this repository")
+    if (target / ".git").exists():
+        report["checkout"] = {"path": str(target), "created": False, "head": _git(target, "rev-parse", "HEAD").strip()}
+        return
+    files = _git(REPO, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
+    copied = 0
+    for name in filter(None, files):
+        source = REPO / name
+        if not source.is_file():
+            continue  # deleted in the working tree, or a submodule
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target / name)
+        copied += 1
+    _git(target, "init", "-q", "-b", "main")
+    _git(target, "add", "-A")
+    _git(target, "commit", "-q", "-m", "La Fabrique, as the self-hosting company's project")
+    report["checkout"] = {
+        "path": str(target),
+        "created": True,
+        "files": copied,
+        "head": _git(target, "rev-parse", "HEAD").strip(),
+        "source_head": _git(REPO, "rev-parse", "HEAD").strip(),
+    }
+
+
+def _company_exists(api: Api, company_id) -> bool:
+    if not company_id:
+        return False
+    try:
+        api.get(f"/v1/companies/{company_id}/git")
+        return True
+    except ApiError as e:
+        if e.status == 404:
+            return False
+        raise
+
+
+def step_company(api, args, state, report):
+    checkout = str(Path(args.checkout).resolve())
+    created = False
+    if not _company_exists(api, state.get("company_id")):
+        result = api.post(
+            "/v1/init_company",
+            {
+                "company_name": COMPANY_NAME,
+                "description": "La Fabrique, built by La Fabrique (issue #329).",
+                "project_path": checkout,
+                "autonomy_level": args.autonomy,
+                "start_now": False,
+                "git_workflow": True,
+                "git_base_branch": "main",
+                "doc_language": "en",
+                "agents": AGENTS,
+            },
+        )
+        state["company_id"] = result["company_id"]
+        state.pop("sprint_id", None)
+        created = True
+    cid = state["company_id"]
+    git = api.put(f"/v1/companies/{cid}/git", {"git_workflow": True, "git_base_branch": "main"})
+    profile = api.put(
+        f"/v1/companies/{cid}/stack_profile",
+        # The tests only: the repository's own suites need services this run
+        # does not give an agent, so the delivery tests are the ones the
+        # sprint writes under tests/ (an install, a lint, an application to
+        # start and a browser suite are off, each named off).
+        {"profile": {"test": args.test_command, "install": "", "lint": "", "start": "", "e2e": ""}},
+    )
+    sandbox = api.put(f"/v1/companies/{cid}/sandbox", {"mode": args.sandbox, "env": []})
+    report["company"] = {
+        "id": cid,
+        "created": created,
+        "git_workflow": git.get("git_workflow"),
+        "git_base_branch": git.get("git_base_branch"),
+        "test_command": profile["overrides"].get("test"),
+        "sandbox": sandbox.get("mode"),
+    }
+
+
+def _find_spec(api: Api, cid: int, title: str) -> dict | None:
+    rows = api.get(f"/v1/specifications?company_id={cid}")["specifications"]
+    return next((s for s in rows if s["title"] == title and s["status"] != "superseded"), None)
+
+
+def _approved_spec(api: Api, cid: int, record: dict) -> dict:
+    body = {k: record.get(k) for k in ("title", "summary", "requirements", "quality", "constraints")}
+    spec = _find_spec(api, cid, record["title"]) or api.post(
+        "/v1/specifications", {"company_id": cid, **{k: v for k, v in body.items() if v is not None}}
+    )
+    if spec["status"] == "draft":
+        spec = api.post(f"/v1/specifications/{spec['id']}/approve")
+    return spec
+
+
+def _approved_architecture(api: Api, spec_id: int, record: dict) -> dict:
+    rows = api.get(f"/v1/architectures?specification_id={spec_id}")["architectures"]
+    arch = next((a for a in rows if a["title"] == record["title"] and a["status"] != "superseded"), None)
+    if arch is None:
+        body = {k: record[k] for k in ("title", "overview", "modules", "interfaces", "decisions", "conventions") if k in record}
+        arch = api.post("/v1/architectures", {"specification_id": spec_id, **body})
+    if arch["status"] == "draft":
+        arch = api.post(f"/v1/architectures/{arch['id']}/approve")
+    return arch
+
+
+def step_records(api, args, state, report):
+    cid = state["company_id"]
+    checkout = Path(args.checkout).resolve()
+    spec_record = _load(REPO / "docs/architecture/specification.json")
+    arch_record = _load(REPO / "docs/architecture/architecture.json")
+    spec = _approved_spec(api, cid, spec_record)
+    arch = _approved_architecture(api, spec["id"], arch_record)
+    state["specification_id"], state["architecture_id"] = spec["id"], arch["id"]
+    document = api.get(f"/v1/architectures/{arch['id']}/document", raw=True)
+    first = int(arch_record.get(ADR_FIRST_NUMBER_KEY) or 1)
+    adrs = api.get(f"/v1/architectures/{arch['id']}/adrs?first_number={first}")["files"]
+    adr_diffs = [
+        a["path"]
+        for a in adrs
+        if not (checkout / a["path"]).is_file() or (checkout / a["path"]).read_text(encoding="utf-8") != a["markdown"]
+    ]
+    written = api.post(f"/v1/architectures/{arch['id']}/write")
+    dirty = _git(checkout, "status", "--porcelain", "--", "docs/ARCHITECTURE.md").strip()
+    report["records"] = {
+        "specification_id": spec["id"],
+        "specification_status": spec["status"],
+        "specification_blocking": spec["check"]["blocking"],
+        "architecture_id": arch["id"],
+        "architecture_status": arch["status"],
+        "architecture_blocking": arch["check"]["blocking"],
+        "modules": len(arch["modules"]),
+        "decisions": len(arch["decisions"]),
+        "document_matches": document == (checkout / "docs/ARCHITECTURE.md").read_text(encoding="utf-8"),
+        "adrs": [a["path"] for a in adrs],
+        "adr_differences": adr_diffs,
+        "written_path": written.get("written_path"),
+        "written_unchanged_in_git": dirty == "",
+    }
+
+
+def revised_architecture(base: dict, change: dict) -> dict:
+    """``architecture.json`` revised by a fixture: new title, covers, appended interfaces and decisions."""
+    covers = change.get("covers") or {}
+    return {
+        "title": change["title"],
+        "overview": base["overview"],
+        "modules": [{**m, "covers": list(covers.get(m["name"], []))} for m in base["modules"]],
+        "interfaces": list(base["interfaces"]) + list(change.get("interfaces") or []),
+        # The accepted decisions keep their dates; the new one is accepted
+        # when a person approves the revision.
+        "decisions": list(base["decisions"]) + list(change.get("decisions") or []),
+        "conventions": list(base["conventions"]),
+    }
+
+
+def step_issue(api, args, state, report):
+    cid = state["company_id"]
+    spec_record = _load(HERE / "fixtures/issue-535-specification.json")
+    change = _load(HERE / "fixtures/issue-535-architecture.json")
+    spec = _approved_spec(api, cid, spec_record)
+    arch = _approved_architecture(
+        api, spec["id"], revised_architecture(_load(REPO / "docs/architecture/architecture.json"), change)
+    )
+    state["issue_specification_id"], state["issue_architecture_id"] = spec["id"], arch["id"]
+    out = {
+        "specification_id": spec["id"],
+        "criteria": [c["id"] for r in spec["requirements"] for c in r["criteria"]],
+        "specification_findings": [(f["severity"], f["where"], f["code"]) for f in spec["check"]["findings"]],
+        "architecture_id": arch["id"],
+        "architecture_findings": [(f["severity"], f["where"], f["code"]) for f in arch["check"]["findings"]],
+        "new_decision": arch["decisions"][-1]["id"],
+    }
+    if not state.get("sprint_id"):
+        plan = api.post(
+            "/v1/plan_sprint", {"company_id": cid, "scope_size": args.scope, "specification_id": spec["id"]}
+        )
+        out["plan"] = [
+            {"title": t["title"], "kind": t.get("kind"), "assignee": t.get("assignee"), "covers": t.get("covers"), "depends_on": t.get("depends_on")}
+            for t in plan["tasks"]
+        ]
+        out["uncovered"] = plan.get("uncovered")
+        started = api.post(
+            "/v1/start_sprint",
+            {
+                "company_id": cid,
+                "sprint_name": "Saved views 1",
+                "start_date": time.strftime("%Y-%m-%d"),
+                "scope_size": args.scope,
+                "specification_id": spec["id"],
+                "team": plan.get("suggested_team"),
+                "suggested_team": plan.get("suggested_team"),
+                "backlog_items": plan["tasks"],
+            },
+        )
+        state["sprint_id"] = started["sprint_id"]
+    out["sprint_id"] = state["sprint_id"]
+    report["issue"] = out
+
+
+def _sprint(api: Api, cid: int, sprint_id: int) -> dict:
+    return next((s for s in api.get(f"/v1/sprints?company_id={cid}") if s["id"] == sprint_id), {})
+
+
+def step_wait(api, args, state, report):
+    cid, sid = state["company_id"], state["sprint_id"]
+    deadline = time.monotonic() + args.timeout
+    status = ""
+    while time.monotonic() < deadline:
+        status = _sprint(api, cid, sid).get("status", "")
+        if status == "completed":
+            break
+        time.sleep(3)
+    board = api.get(f"/v1/sprints/{sid}/board")
+    report["wait"] = {
+        "sprint_id": sid,
+        "status": status,
+        "board": sorted(f"{i['title']}={i['status']}" for c in board["columns"].values() for i in c),
+    }
+
+
+def _settled_integration(api: Api, sid: int, timeout: int) -> tuple[dict, dict]:
+    """The sprint's integration plan and its latest integration, once that one
+    has finished: the sprint reads "completed" before its integration (a job,
+    ``integration_jobs.OPEN``) has merged the branches and run the suite."""
+    start = time.monotonic()
+    while True:
+        integration = api.get(f"/v1/sprints/{sid}/integration")
+        latest = integration.get("latest") or {}
+        waited = time.monotonic() - start
+        # None yet: the job may not have been queued; give it a minute.
+        if not latest and waited > min(60, timeout):
+            return integration, latest
+        if latest and latest.get("status") not in ("pending", "running"):
+            return integration, latest
+        if waited > timeout:
+            return integration, latest
+        time.sleep(3)
+
+
+def step_review(api, args, state, report):
+    cid, sid = state["company_id"], state["sprint_id"]
+    checkout = Path(args.checkout).resolve()
+    branches = [b.strip(" *+") for b in _git(checkout, "branch", "--list", "fabrique/*").splitlines()]
+    held = [t for t in api.get(f"/v1/inbox?company_id={cid}")["blocked_tasks"] if t.get("sprint_id") == sid]
+    accepted = []
+    if args.accept:
+        # Only what QA approved and the risk tier holds for a person; a task
+        # blocked for triage (its tests failed) is carried over, not accepted.
+        for task in (t for t in held if t.get("risk_hold")):
+            api.patch(f"/v1/backlog/{task['id']}", {"status": "done", "comment": args.accept})
+            accepted.append(task["id"])
+    integration, latest = _settled_integration(api, sid, args.timeout)
+    if args.accept and not latest:
+        # The worker integrates on its own when the sprint closes; tasks a
+        # person accepted after that are integrated now, on the person's word.
+        try:
+            api.post(f"/v1/sprints/{sid}/integrate")
+        except ApiError as e:
+            report.setdefault("notes", []).append(str(e))
+        integration, latest = _settled_integration(api, sid, args.timeout)
+    merged = None
+    if args.merge and latest:
+        try:
+            merged = api.post(f"/v1/sprints/{sid}/integration/merge")
+        except ApiError as e:
+            merged = {"refused": str(e)}
+    report["review"] = {
+        "branches": branches,
+        "waiting_for_a_person": [
+            {"id": t["id"], "title": t["title"], "risk_hold": t.get("risk_hold"), "reason": t.get("reason")} for t in held
+        ],
+        "accepted": accepted,
+        "integration": {k: latest.get(k) for k in ("id", "status", "trigger", "commit", "branch") if latest},
+        "integration_plan": {k: v for k, v in integration.items() if k not in ("latest", "history")},
+        "merged": merged,
+        "base_log": _git(checkout, "log", "--oneline", "-5", "main").splitlines(),
+    }
+
+
+def _pack_summary(pack: dict) -> dict:
+    return {
+        "id": pack["id"],
+        "language": pack["language"],
+        "documents": [d["key"] for d in pack["documents"]],
+        "empty_documents": [d["key"] for d in pack["documents"] if not d["markdown"].strip()],
+        "missing_sections": sum(len(d["missing"]) for d in pack["documents"]),
+        "missing": {d["key"]: d["missing"] for d in pack["documents"] if d["missing"]},
+        "claims": sum(len(d["claims"]) for d in pack["documents"]),
+        "persons": sum(len(d["persons"]) for d in pack["documents"]),
+        "diagrams": len(pack["diagrams"]),
+        "lint_blocking": sum(1 for f in pack["lint"]["findings"] if f["severity"] == "blocking"),
+        "lint_warnings": sum(1 for f in pack["lint"]["findings"] if f["severity"] == "warning"),
+    }
+
+
+def step_pack(api, args, state, report):
+    cid = state["company_id"]
+    packs = {}
+    for language in ("en", "es"):
+        api.put(f"/v1/companies/{cid}/doc_language", {"doc_language": language})
+        packs[language] = _pack_summary(
+            api.post(f"/v1/companies/{cid}/documentation", {"prose": args.prose})
+        )
+    api.put(f"/v1/companies/{cid}/doc_language", {"doc_language": "en"})
+    report["pack"] = packs
+
+
+# --------------------------------------------------------------------------- main
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--api", default=os.environ.get("FABRIQUE_API", "http://127.0.0.1:8000"))
+    parser.add_argument("--checkout", required=True, help="where the snapshot of this repository goes (on the daemon's computer)")
+    parser.add_argument("--state", help="the state file (default: <checkout>.self_host.json)")
+    parser.add_argument("--report", help="also write the JSON report here")
+    parser.add_argument("--steps", default="all")
+    parser.add_argument("--sandbox", default="container", choices=("host", "container", "bwrap"))
+    parser.add_argument("--test-command", default="python -m pytest -q -p no:cacheprovider tests")
+    parser.add_argument("--autonomy", type=int, default=2, help="2: QA's approval closes a low-risk task; a high-risk one waits for a person")
+    parser.add_argument("--scope", default="M")
+    parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--accept", help="review: accept the tasks waiting for a person, with this comment")
+    parser.add_argument("--merge", action="store_true", help="review: merge the sprint's integration into main, locally, once a person has read it")
+    parser.add_argument("--prose", action="store_true", help="pack: ask the TechWriter for the charter's background")
+    args = parser.parse_args(argv)
+    steps = STEPS if args.steps == "all" else tuple(s.strip() for s in args.steps.split(","))
+    unknown = [s for s in steps if s not in STEPS]
+    if unknown:
+        parser.error(f"unknown step(s): {', '.join(unknown)}")
+    state_file = Path(args.state or f"{Path(args.checkout).resolve()}.self_host.json")
+    state = _load(state_file) if state_file.exists() else {}
+    api = Api(args.api, os.environ.get("FABRIQUE_API_TOKEN"))
+    report: dict = {"steps": list(steps)}
+    try:
+        for step in steps:
+            if step == "checkout":
+                step_checkout(args, state, report)
+            else:
+                globals()[f"step_{step}"](api, args, state, report)
+            state_file.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    except ApiError as e:
+        report["error"] = str(e)
+    text = json.dumps(report, indent=2, ensure_ascii=False)
+    if args.report:
+        Path(args.report).write_text(text + "\n", encoding="utf-8")
+    print(text)
+    return 1 if "error" in report else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

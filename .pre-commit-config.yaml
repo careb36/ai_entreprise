@@ -13,6 +13,16 @@ repos:
         files: ^backend/(app|tests)/.*\.py$
       - id: ruff-format
         files: ^backend/(app|tests)/.*\.py$
+  # Secrets in the staged changes, with the same rules and allowlist as CI
+  # (.gitleaks.toml; security-scan.yml job `secrets-pr`). Pinned by commit,
+  # the version CI downloads (v8.21.2); pre-commit builds it with Go, which it
+  # fetches itself on first use. `git commit --no-verify` skips every hook,
+  # and CI still scans the pull request's commits.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 43fae355e6fe4d99d2a7b240a224b85e2903aeb4  # frozen: v8.21.2
+    hooks:
+      - id: gitleaks
+        args: [--config, .gitleaks.toml]
   - repo: local
     hooks:
       - id: no-secrets

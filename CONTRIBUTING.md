@@ -31,8 +31,12 @@ merging changes** — for humans and for AI agents. If you are an agent, read
 
 ## 2. Non-negotiables
 
-1. **No secrets in the repo.** Ever. Use the secret manager. No workflow scans
-   for secrets, so nothing will catch a committed key: check before you commit.
+1. **No secrets in the repo.** Ever. Use the secret manager. Install the
+   pre-commit hooks (`CLAUDE.md`, Local git hooks): gitleaks scans the staged
+   changes with `.gitleaks.toml` before each commit, and CI scans every commit
+   of a pull request again (`security-scan.yml`, `secrets-pr`). A key that
+   reached a commit is compromised even if a later commit removes it: rotate
+   it (`docs/OPERATIONS.md`, Rotate keys).
 2. **Third-party IP.** Do not paste code, prompts, or designs from La Fabrique into
    third-party tools without Security sign-off. No new dependency without
    Security review.
@@ -51,7 +55,11 @@ La Fabrique is released under the [Apache License 2.0](LICENSE). By opening a
 pull request you agree that your contribution is licensed under the same terms
 (inbound = outbound, no separate CLA). Only contribute code you have the right
 to submit: no copied code from a project whose licence is incompatible with
-Apache 2.0, and keep third-party notices intact.
+Apache 2.0, and keep third-party notices intact. A new runtime dependency must
+be under a licence on the allowlist in `scripts/licence_scan.py` (the
+`licences` job fails otherwise); an exception goes in
+`.github/licence-exceptions.txt` with a reason and a review date, and the pull
+request says who accepted it.
 
 ---
 

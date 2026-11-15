@@ -23,7 +23,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ProjectDiscovery, Specification, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.planning import (
     document_approval,
     intake_queue,
@@ -38,19 +39,19 @@ from sqlmodel import Session, select, text
 router = APIRouter(prefix="/v1/specifications", tags=["Core"])
 
 
-class SpecificationBody(BaseModel):
+class SpecificationBody(RequestModel):
     title: str = Field(min_length=1, max_length=spec_check.TITLE_LIMIT)
     summary: str = ""
-    requirements: list[dict[str, Any]] = []
-    quality: list[dict[str, Any]] = []
-    constraints: list[str] = []
+    requirements: list[dict[str, Any]] = Field(default_factory=list)
+    quality: list[dict[str, Any]] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
 
 
 class SpecificationCreate(SpecificationBody):
     company_id: int
 
 
-class DraftRequest(BaseModel):
+class DraftRequest(RequestModel):
     company_id: int
     # Empty on a revision: the answered questions are what the PO works from.
     brief: str = Field(default="", max_length=spec_author.BRIEF_LIMIT)
@@ -58,7 +59,7 @@ class DraftRequest(BaseModel):
     specification_id: int | None = None
 
 
-class AnswerRequest(BaseModel):
+class AnswerRequest(RequestModel):
     answer: str = Field(max_length=spec_check.TEXT_LIMIT)
 
 

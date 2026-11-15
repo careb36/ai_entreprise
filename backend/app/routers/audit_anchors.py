@@ -26,7 +26,7 @@ from auth_policy import (
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import AuditAnchor, User
-from pydantic import BaseModel
+from schemas import RequestModel
 from services.integrations import anchor_settings, anchoring
 from services.platform import audit_anchors
 from services.platform.agent_service import AgentService
@@ -35,7 +35,7 @@ from sqlmodel import Session
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
 
-class AnchorSettingsRequest(BaseModel):
+class AnchorSettingsRequest(RequestModel):
     enabled: bool | None = None
     cadence_minutes: int | None = None
     publish_webhook: bool | None = None
@@ -45,7 +45,7 @@ class AnchorSettingsRequest(BaseModel):
     retire_fingerprint: str | None = None
 
 
-class CustomerSignatureRequest(BaseModel):
+class CustomerSignatureRequest(RequestModel):
     seq: int
     chain_hash: str
     anchored_at: datetime

@@ -18,6 +18,9 @@ about webhooks.
 The URL must be https and, unless ``WEBHOOK_ALLOW_PRIVATE_HOSTS`` is set, must
 not resolve to a private, loopback or link-local address: checked when it is
 saved and again before every post, since a name can resolve elsewhere later.
+Before a post the name is resolved once and the post goes to the address that
+was checked (``services/platform/egress.py``), so a DNS answer that changes
+between the check and the connection cannot steer it inward.
 """
 
 from __future__ import annotations
@@ -25,10 +28,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
-import ipaddress
 import json
 import os
-import socket
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -41,6 +42,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session, select
 
 from services.integrations import webhook_client
+from services.platform import egress
 from services.tasks import board
 
 EVENT_TYPE = "webhook_post"
@@ -66,17 +68,7 @@ def _allow_private() -> bool:
 
 def _public_address(host: str) -> bool:
     """Whether every address *host* resolves to is a public one."""
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return False
-    if not infos:
-        return False
-    for info in infos:
-        address = ipaddress.ip_address(info[4][0])
-        if not address.is_global:
-            return False
-    return True
+    return egress.all_public(host)
 
 
 def check_url(
@@ -102,6 +94,18 @@ def check_url(
             "(set WEBHOOK_ALLOW_PRIVATE_HOSTS to allow it)"
         )
     return url
+
+
+def _target(url: str) -> egress.Target:
+    """Where a post to *url* goes: checked, resolved once and pinned."""
+    check_url(url, resolve=False)
+    try:
+        return egress.pin(url, allow_private=_allow_private())
+    except egress.EgressRefused as exc:
+        raise InvalidWebhook(
+            "url: the host resolves to a private or unreachable address "
+            "(set WEBHOOK_ALLOW_PRIVATE_HOSTS to allow it)"
+        ) from exc
 
 
 def check_events(events: Any) -> list[str]:
@@ -326,10 +330,11 @@ async def deliver(
         SIGNATURE_HEADER: sign(crypto.decrypt_value(hook.encrypted_secret), body),
     }
     try:
-        await asyncio.to_thread(check_url, hook.url)  # DNS lookup off the event loop.
+        # DNS lookup off the event loop; the post goes to the checked address.
+        target = await asyncio.to_thread(_target, hook.url)
         if post is None:
             status_code = await webhook_client.post(
-                hook.url, body, headers, TIMEOUT_SECONDS
+                target, body, headers, TIMEOUT_SECONDS
             )
         else:
             status_code = await post(hook.url, body, headers)

@@ -2,7 +2,8 @@
 Auth router — human user registration and company membership management.
 
 Endpoints:
-- ``POST /v1/auth/register``  — create a new platform user account.
+- ``POST /v1/auth/register``  — create a new platform user account; the
+  answer does not say whether the email already had one.
 - ``POST /v1/auth/login``     — authenticate; start a browser session in
   cookies, or (``token_delivery: "bearer"``) return a Bearer access token.
 - ``POST /v1/auth/refresh``   — rotate the session's refresh token (cookies).
@@ -32,62 +33,108 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from logging_config import logger
 from models import CompanyMember, User
-from passwords import hash_password, needs_rehash, rehash_password, verify_password
+from passwords import (
+    burn_verify,
+    hash_password,
+    needs_rehash,
+    rehash_password,
+    verify_password,
+)
 from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
 from security import limiter
-from services.platform import sessions, sso_flow, teams
+from services.platform import login_throttle, sessions, sso_flow, teams
 from services.platform.agent_service import AgentService
 from services.platform.oidc import SsoError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
 
 
+REGISTERED = {
+    "status": "accepted",
+    "detail": "If this email can be used, the account is ready: sign in with it.",
+}
+
+
+def _register_limit() -> str:
+    return settings.REGISTER_RATE_LIMIT
+
+
+def _login_limit() -> str:
+    return settings.LOGIN_RATE_LIMIT
+
+
 @router.post("/auth/register")
+@limiter.limit(_register_limit)
 async def register_user(
+    request: Request,
     req: UserCreateRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
     """
     Register a new human user for the platform.
 
-    Checks for a duplicate email before inserting.  The plain-text password
-    is hashed with bcrypt and the raw value is never stored.
-
-    Returns the new user's ``user_id`` and ``email``.
+    The answer is the same whether or not the email was already registered,
+    and costs the same (a bcrypt hash either way), so this route does not
+    tell anyone which addresses have accounts (issue #541,
+    WSTG-v42-IDNT-04). An existing account is left untouched. The plain-text
+    password is hashed with bcrypt and the raw value is never stored.
+    Rate-limited per client address (``REGISTER_RATE_LIMIT``).
     """
+    password_hash = hash_password(req.password)
     existing = session.exec(select(User).where(User.email == req.email)).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered.")
-    user = User(
-        email=req.email,
-        full_name=req.full_name,
-        password_hash=hash_password(req.password),
-    )
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    return {"user_id": user.id, "email": user.email}
+    if existing is None:
+        session.add(
+            User(email=req.email, full_name=req.full_name, password_hash=password_hash)
+        )
+        try:
+            session.commit()
+        except IntegrityError:
+            # Registered by a concurrent request a moment ago: the same answer.
+            session.rollback()
+    return {**REGISTERED, "email": req.email}
+
+
+def _refuse_locked(email: str) -> None:
+    wait = login_throttle.retry_after(email)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many sign-in attempts: try again later.",
+            headers={"Retry-After": str(wait)},
+        )
 
 
 @router.post("/auth/login")
+@limiter.limit(_login_limit)
 async def login(
+    request: Request,
     req: LoginRequest,
     response: Response,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Authenticate a human user: session cookies, or a Bearer access token."""
+    """Authenticate a human user: session cookies, or a Bearer access token.
+
+    Limited per client address (``LOGIN_RATE_LIMIT``) and per account, with a
+    backoff after repeated failures (``login_throttle``; WSTG-v42-ATHN-03).
+    An unknown email, an account without a password and a wrong password get
+    the same answer after the same bcrypt work (WSTG-v42-IDNT-04).
+    """
     if not auth_tokens.is_auth_configured():
         raise HTTPException(status_code=503, detail="Authentication is not configured")
+    _refuse_locked(req.email)
 
     user = session.exec(select(User).where(User.email == req.email)).first()
     # An SSO-only account has an empty hash: no password verifies against it.
-    if (
-        user is None
-        or not user.password_hash
-        or not verify_password(req.password, user.password_hash)
-    ):
+    if user is None or not user.password_hash:
+        verified = burn_verify(req.password)
+    else:
+        verified = verify_password(req.password, user.password_hash)
+    if not verified:
+        login_throttle.failure(req.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    login_throttle.success(req.email)
 
     # Upgrade a hash written with a lower cost, now that the password is known
     # to be right. Replaces what passlib's deprecated="auto" did.

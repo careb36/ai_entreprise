@@ -1,28 +1,78 @@
 # Un cambio en un workflow puede tocar cualquier cosa: el workflow corre con el
 # token del repositorio, en un runner self-hosted no efímero que también tiene
-# el daemon del workspace. Lo mismo vale para los manifiestos de despliegue y
-# para el proxy, que es el único sitio que ve las claves de los proveedores.
+# el daemon del workspace (docs/design/SELF_HOSTED_RUNNER.md). Lo mismo vale
+# para los manifiestos de despliegue y para el proxy, que es el único sitio que
+# ve las claves de los proveedores.
 #
 # Un `CODEOWNERS` no bloquea nada por sí solo: GitHub sólo lo aplica como
 # revisión obligatoria cuando la rama protegida tiene activada la opción
-# "Require review from Code Owners". Sigue pendiente en #182.
+# "Require review from Code Owners" (Settings > Branches o Rulesets, regla de
+# `main`). Es un ajuste del propietario del repositorio (#182).
+#
+# La última regla que coincide gana: las rutas concretas van después de `*`.
 
 *                                   @careb36
 
+# CI, las dependencias y lo que decide qué entra por la cadena de suministro.
 /.github/                           @careb36
 /.github/workflows/                 @careb36
 /.github/dependabot.yml             @careb36
+/.github/CODEOWNERS                 @careb36
+/.github/pip-audit-ignore.txt       @careb36
+/.github/licence-exceptions.txt     @careb36
+/.pre-commit-config.yaml            @careb36
+/.gitleaks.toml                     @careb36
+/scripts/check_architecture.py      @careb36
+/scripts/check_frontend_architecture.py @careb36
+/scripts/check_file_sizes.py        @careb36
+/scripts/file_size_baseline.json    @careb36
+/scripts/licence_scan.py            @careb36
+/scripts/hooks/                     @careb36
+/scripts/e2e/                       @careb36
+/backend/poetry.lock                @careb36
+/llm-proxy/poetry.lock              @careb36
+/frontend/package-lock.json         @careb36
+
+# Despliegue, base de datos y migraciones.
 /deployment/                        @careb36
+/docker-compose.yml                 @careb36
 /db/                                @careb36
+/backend/alembic/                   @careb36
+/backend/alembic.ini                @careb36
+/backend/app/migrations.py          @careb36
+
+# El proxy (claves de los proveedores) y el daemon (archivos y comandos del
+# usuario), con su lock y sus scripts de arranque.
 /llm-proxy/                         @careb36
 /vscode-daemon/                     @careb36
-/scripts/e2e/                       @careb36
+/scripts/start-daemon.sh            @careb36
+/scripts/start-daemon.ps1           @careb36
 
-# Los ficheros de política y de secretos: un cambio aquí reescribe qué se
-# considera evidencia y qué claves entran.
+# El bus: quién puede publicar qué en NATS.
+/nats/                              @careb36
+/scripts/nats_config.py             @careb36
+/backend/app/nats_auth.py           @careb36
+/backend/app/nats_client.py         @careb36
+
+# Autenticación, sesiones, roles y criptografía.
+/backend/app/security.py            @careb36
+/backend/app/auth_deps.py           @careb36
+/backend/app/auth_policy.py         @careb36
+/backend/app/auth_tokens.py         @careb36
+/backend/app/passwords.py           @careb36
+/backend/app/session_cookies.py     @careb36
+/backend/app/crypto.py              @careb36
+/backend/app/audit_chain.py         @careb36
+/backend/app/audit_signing.py       @careb36
+/backend/app/routers/auth.py        @careb36
+/backend/app/config.py              @careb36
+/.env.example                       @careb36
+
+# Los ficheros de política: un cambio aquí reescribe qué se considera evidencia.
 /backend/app/services/evidence/verification.py  @careb36
-/backend/app/services/tasks/board.py         @careb36
-/backend/app/routers/auth.py           @careb36
-/backend/app/config.py                     @careb36
-/.env.example                          @careb36
-/SECURITY.md                           @careb36
+/backend/app/services/tasks/board.py            @careb36
+
+# La regla de dependencias, las decisiones de arquitectura y la política.
+/docs/architecture/                 @careb36
+/docs/adr/                          @careb36
+/SECURITY.md                        @careb36

@@ -507,7 +507,14 @@ def test_the_specification_progress_endpoint(test_client, db, signing_key):
 
 
 def test_the_verified_event_carries_the_verifiers_verdict():
-    from services.loop.worker import deliver
+    """board_writes gives every ``verified`` event its run's latest
+    verification as ``{"id", "verdict"}``; the progress reads the verdict
+    from it, and still reads the bare verdict of an earlier event."""
+    from services.tasks import progress
 
-    assert deliver._verdict_payload((7, "refuted")) == {"verification": "refuted"}
-    assert deliver._verdict_payload(None) is None
+    assert progress.verdict_of({"verification": {"id": 7, "verdict": "refuted"}}) == (
+        "refuted"
+    )
+    assert progress.verdict_of({"verification": "verified"}) == "verified"
+    assert progress.verdict_of({"verification": {"verdict": "made up"}}) is None
+    assert progress.verdict_of(None) is None
