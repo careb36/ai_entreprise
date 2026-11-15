@@ -11,7 +11,7 @@ import { Loader2, Pencil, Sparkles } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import { architecturePath, latestArchitecture, useArchitectures, useDraftArchitecture } from '../services/architectures'
 import type { Specification } from '../services/specifications'
-import { CheckSummary, StatusBadge } from '../pages/Specifications'
+import { CheckSummary, StatusBadge } from './SpecificationBadges'
 
 export function ArchitectureSummary({ specification, canWrite }: { specification: Specification; canWrite: boolean }) {
   const { t } = useTranslation()

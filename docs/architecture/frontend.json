@@ -1,0 +1,52 @@
+{
+  "description": "The frontend's dependency rule (issue #519), checked by scripts/check_frontend_architecture.py. Layers are listed from the bottom up, each owning paths under frontend/src; a module imports only from its own layer or one below. The network (fetch, XMLHttpRequest, EventSource, WebSocket, axios) is used only by the modules in network.modules. Tests are exempt from both, but no other module may import a test. The allowlist holds what broke the rule when it was adopted and may only shrink.",
+  "source": "frontend/src",
+  "layers": [
+    {
+      "name": "foundation",
+      "description": "Translations, styles and ambient type declarations: no import of the application.",
+      "paths": ["i18n", "styles", "electron.d.ts", "vite-env.d.ts"]
+    },
+    {
+      "name": "services",
+      "description": "The backend's client (services/api/ and its barrel services/api.ts), one module per domain, its React Query keys and the service hooks that call it.",
+      "paths": ["services"]
+    },
+    {
+      "name": "lib",
+      "description": "Pure helpers and constants; some read the services' types or classify their errors, so they sit above services.",
+      "paths": ["lib"]
+    },
+    {
+      "name": "state",
+      "description": "The zustand stores and the React Query hooks that read the services.",
+      "paths": ["store", "hooks"]
+    },
+    {
+      "name": "components",
+      "description": "Reusable views and the parts of the larger ones (components/glassroom/, components/skeleton/).",
+      "paths": ["components"]
+    },
+    {
+      "name": "pages",
+      "description": "One view per route, and the parts of the larger ones (pages/companyNew/, pages/agentSettings/).",
+      "paths": ["pages"]
+    },
+    {
+      "name": "app",
+      "description": "The router and the entry point.",
+      "paths": ["App.tsx", "main.tsx"]
+    }
+  ],
+  "aliases": {},
+  "tests": {
+    "paths": ["test"],
+    "patterns": ["*.test.ts", "*.test.tsx", "__tests__"]
+  },
+  "network": {
+    "modules": ["services/api/client.ts", "services/api/stream.ts"]
+  },
+  "allowlist": [
+    "services/api/client.ts -> store/useAuthStore.ts"
+  ]
+}

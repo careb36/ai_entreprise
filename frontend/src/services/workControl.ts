@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type SprintBoard } from './api'
-import { QUERY_KEYS } from '../hooks/useQueries'
+import { QUERY_KEYS } from './queryKeys'
 
 /** A sprint as the board returns it, with why the worker paused it. */
 export type SprintState = SprintBoard['sprint'] & { pause_reason?: string | null }

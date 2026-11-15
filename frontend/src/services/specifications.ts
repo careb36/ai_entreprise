@@ -6,8 +6,27 @@
  * Managers write.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Source } from '../components/SourcesConsulted'
 import { ApiError, api, fetchApi } from './api'
+
+/**
+ * A source an agent consulted while drafting (the research tools): an
+ * observation the backend made, or a refusal when the host was not allowed.
+ * `components/SourcesConsulted` shows the list.
+ */
+export interface Source {
+  tool: string
+  url?: string | null
+  host?: string | null
+  allowed?: boolean | null
+  fetched_at?: string | null
+  status?: number | null
+  sha256?: string | null
+  bytes?: number | null
+  package?: string | null
+  ecosystem?: string | null
+  version?: string | null
+  is_error?: boolean | null
+}
 
 export type SpecificationStatus = 'draft' | 'approved' | 'superseded'
 export type FindingSeverity = 'blocking' | 'warning'

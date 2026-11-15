@@ -4,6 +4,7 @@
 # a run.
 #
 # Run the same checks locally with:
+#   python3 scripts/check_frontend_architecture.py
 #   cd frontend && npm ci && npx tsc --noEmit && npm run lint && npm run test:run && npm run build
 
 name: Frontend Build
@@ -13,10 +14,14 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
+      - 'scripts/check_frontend_architecture.py'
+      - 'docs/architecture/frontend.json'
       - '.github/workflows/frontend-build.yml'
   pull_request:
     paths:
       - 'frontend/**'
+      - 'scripts/check_frontend_architecture.py'
+      - 'docs/architecture/frontend.json'
       - '.github/workflows/frontend-build.yml'
   workflow_dispatch:
 
@@ -40,6 +45,14 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
+
+      - name: Check the dependency rule between layers
+        # docs/contexts/frontend.md, issue #519: an import from a layer above,
+        # the network outside the listed services modules or a file in no
+        # layer fails; the allowlist in docs/architecture/frontend.json may
+        # only shrink. Standard-library Python, from the repository root.
+        working-directory: .
+        run: python3 -I scripts/check_frontend_architecture.py
 
       - name: Set up Node.js 24
         uses: actions/setup-node@v7

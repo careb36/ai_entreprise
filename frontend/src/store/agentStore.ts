@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../services/api'
+import { type GlassroomStream, openGlassroomStream } from '../services/api/stream'
 import {
   type AgentEvent,
   type AgentFsmState,
@@ -102,12 +103,11 @@ import {
   MAX_MESSAGES,
 } from '../lib/constants'
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const RECONNECT_DELAY_MS     = SSE_RECONNECT_DELAY_MS
 const MAX_RECONNECT_ATTEMPTS = SSE_MAX_RECONNECT_ATTEMPTS
 const MAX_RECONNECT_DELAY_MS = SSE_MAX_RECONNECT_DELAY_MS
 
-let activeEventSource: EventSource | null = null
+let activeEventSource: GlassroomStream | null = null
 // The ids of the events shown since the last fresh connection (see addMessage).
 const seenEventIds = new Set<string>()
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -146,9 +146,7 @@ export const useAgentStore = create<AgentStore>((set, get) => {
     clearReconnectTimer()
     closeActiveEventSource()
 
-    const params = new URLSearchParams({ sprint_id: sprintId })
-    if (ticket) params.set('ticket', ticket)
-    const eventSource = new EventSource(`${BACKEND_URL}/v1/glassroom/stream?${params}`)
+    const eventSource = openGlassroomStream(sprintId, ticket)
     activeEventSource = eventSource
 
     eventSource.onopen = () => {

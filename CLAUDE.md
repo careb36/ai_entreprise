@@ -122,6 +122,8 @@ Outside `services/`: the workspace daemon (`vscode-daemon/`) is described in wor
 
 **The dependency rule** (issue #469, `docs/ARCHITECTURE.md`, ADRs 0012–0016). A context imports only the contexts its row names; the evidence imports only contracts and platform. The assignment and the rule are data, `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py` (`python3 scripts/check_architecture.py`; `tests/test_check_architecture.py`, and a step of `backend-tests.yml`): a module in no context, a cycle between contexts or an import against the rule fails. Today it reports 0 shims and 0 allowlisted edges, and both stay there. HTTP lives only in named adapter modules: under `services/`, a module that imports an HTTP library (`httpx`, `requests`, `urllib.request`…) must be listed in `http_adapters` in `contexts.json`, returns data and raises named errors, and that list only shrinks unless a new adapter is reviewed (issue #511, after AixleHQ/flow's "no HTTP in domain services" rule). A new module names its context by its folder, `services/<context>/`, in the same pull request. How the code got there is [`docs/architecture/MIGRATION.md`](docs/architecture/MIGRATION.md).
 
+The frontend has a rule of its own (issue #519): `frontend/src` is in layers, from the bottom up foundation (`i18n`, `styles`), `services`, `lib`, state (`store`, `hooks`), `components`, `pages` and the app (`App.tsx`, `main.tsx`); a module imports only from its layer or below, and only the modules in `network.modules` (`services/api/client.ts`, `services/api/stream.ts`) use `fetch`, `EventSource`, `WebSocket`, `XMLHttpRequest` or `axios`. The data is `docs/architecture/frontend.json`, checked by `scripts/check_frontend_architecture.py` (a step of `frontend-build.yml`; `backend/tests/test_check_frontend_architecture.py`), and its allowlist only shrinks; the detail is in [`docs/contexts/frontend.md`](docs/contexts/frontend.md).
+
 ## Tests and lint
 
 The whole section (both tables of test files, the e2e run, the bench, CI) is [`docs/TESTING.md`](docs/TESTING.md).
@@ -140,8 +142,9 @@ python -m pytest llm-proxy/tests -q
 # Frontend
 cd frontend && npx tsc --noEmit && npm run lint && npm run test:run && npm run build
 
-# The dependency rule and the file-size ratchet
+# The dependency rules (backend, frontend) and the file-size ratchet
 python3 scripts/check_architecture.py
+python3 scripts/check_frontend_architecture.py
 python3 scripts/check_file_sizes.py
 ```
 

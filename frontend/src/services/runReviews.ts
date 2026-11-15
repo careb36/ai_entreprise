@@ -5,7 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fetchApi } from './api'
-import { QUERY_KEYS } from '../hooks/useQueries'
+import { QUERY_KEYS } from './queryKeys'
 import { runChangesKey } from './reviewChanges'
 
 export type CommentSide = 'new' | 'old'

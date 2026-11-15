@@ -7,7 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type SprintSummary } from './api'
-import { QUERY_KEYS } from '../hooks/useQueries'
+import { QUERY_KEYS } from './queryKeys'
 import type { CostSummary } from './cost'
 
 /** A sprint in the list, with what the archive and the edit form read. */
