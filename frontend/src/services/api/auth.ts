@@ -33,8 +33,13 @@ export interface LoginResponse {
   csrf_token: string
 }
 
+/**
+ * The same answer whether or not the email already had an account, so it
+ * carries no user id (issue #541).
+ */
 export interface RegisterResponse {
-  user_id: number
+  status: 'accepted'
+  detail: string
   email: string
 }
 

@@ -108,6 +108,22 @@ def disable_auth_for_legacy_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def sign_in_limits_out_of_the_way(monkeypatch):
+    """The suite signs in and registers far more often than a person would,
+    all from the test client's one address: the limits of the password
+    routes (issue #541) are lifted, and their counters and the per-account
+    backoff start empty. ``test_auth_limits.py`` lowers them to test them."""
+    from security import limiter
+    from services.platform import login_throttle
+
+    monkeypatch.setattr(settings, "LOGIN_RATE_LIMIT", "100000/minute")
+    monkeypatch.setattr(settings, "REGISTER_RATE_LIMIT", "100000/minute")
+    monkeypatch.setattr(settings, "LOGIN_FAILURES_BEFORE_BACKOFF", 100000)
+    limiter.reset()
+    login_throttle.reset()
+
+
+@pytest.fixture(autouse=True)
 def release_listens_to_sprint_closed():
     """A closed sprint's integration starts from ``sprint.closed``, as in the
     backend, where ``main.py`` installs the handler; a test that closes a

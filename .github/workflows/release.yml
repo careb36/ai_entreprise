@@ -7,8 +7,10 @@
 name: Release
 
 # A pushed vX.Y.Z tag becomes a GitHub Release whose notes are CHANGELOG.md's
-# section for that version; images.yml publishes the images from the same tag
-# event. How a release is cut: docs/OPERATIONS.md, Releasing.
+# section for that version, with a CycloneDX SBOM of each component's lock
+# attached (issue #522, part C); images.yml publishes, signs and describes the
+# images from the same tag event. How a release is cut: docs/OPERATIONS.md,
+# Releasing.
 on:
   push:
     tags:
@@ -59,6 +61,48 @@ jobs:
             echo "Published as \`${image_root}/<name>:${version}\` (linux/amd64): \`backend\`, \`janitor\`, \`frontend\`, \`llm-proxy\`, \`vscode-daemon\`."
           } > "$RUNNER_TEMP/notes.md"
 
+      - name: Install syft (pinned + checksum)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o syft.tgz \
+            https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.0_linux_amd64.tar.gz
+          echo "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d  syft.tgz" | sha256sum -c -
+          tar -xzf syft.tgz syft
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 syft "$RUNNER_TEMP/bin/syft"
+          "$RUNNER_TEMP/bin/syft" version
+
+      # One SBOM per component, read from the lock the component is built
+      # from (every package the lock pins; the frontend's without its
+      # devDependencies), with a SHA256SUMS over them. The images' own SBOMs,
+      # with the base image's packages, are attested by images.yml.
+      - name: Write The SBOMs
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          out="$RUNNER_TEMP/sbom"
+          mkdir -p "$out"
+          for entry in backend:backend/poetry.lock llm-proxy:llm-proxy/poetry.lock \
+                       vscode-daemon:vscode-daemon/requirements.txt \
+                       frontend:frontend/package-lock.json; do
+            name="${entry%%:*}"
+            lock="${entry#*:}"
+            "$RUNNER_TEMP/bin/syft" scan "file:${lock}" \
+              --source-name "la-fabrique-${name}" --source-version "$version" \
+              -o "cyclonedx-json=${out}/la-fabrique-${name}-${version}.cdx.json"
+          done
+          (cd "$out" && sha256sum -- *.cdx.json > SHA256SUMS)
+          cat "$out/SHA256SUMS"
+          {
+            echo
+            echo "### SBOMs"
+            echo
+            echo "CycloneDX SBOMs of the backend, the llm-proxy, the workspace daemon and the frontend are attached, with \`SHA256SUMS\`. Each image carries its own SBOM as a signed attestation (docs/OPERATIONS.md, Releasing)."
+          } >> "$RUNNER_TEMP/notes.md"
+
       - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,4 +116,4 @@ jobs:
           if git describe --tags --abbrev=0 --match 'v*' "${TAG}^" >/dev/null 2>&1; then
             flags+=(--generate-notes)
           fi
-          gh release create "$TAG" "${flags[@]}"
+          gh release create "$TAG" "${flags[@]}" "$RUNNER_TEMP"/sbom/*.cdx.json "$RUNNER_TEMP/sbom/SHA256SUMS"

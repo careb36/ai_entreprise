@@ -2,7 +2,8 @@
 
 ``_finalize_sprint_if_ready`` builds the retrospective, closes the sprint once
 across replicas (``replicas.close_once`` with ``_complete_sprint_and_plan_follow_up``),
-emits ``sprint.closed`` (``hooks.SPRINT_CLOSED``), and, at a first close only,
+emits ``sprint.closed`` (``hooks.SPRINT_CLOSED``), stores each task's observed
+effort (``services/models/effort.py``, issue #534), and, at a first close only,
 posts the retrospective, runs the procedures round (``procedures_round``) and
 writes the retrospective engram. ``_complete_sprint_and_plan_follow_up`` marks
 the sprint completed once every task is settled and, at autonomy level 3,
@@ -33,6 +34,7 @@ from services.loop.sprint_close import (
 )
 from services.loop.sprint_close import reclosed as _reclosed
 from services.loop.worker import messages, procedures_round
+from services.models import effort
 from services.planning import spec_planning, sprint_team
 from services.planning.sprint_planner import (
     build_self_improvement_objective,
@@ -364,6 +366,20 @@ async def _learn_from_close(sprint_id: int, retro_metrics: dict[str, Any]) -> No
         logger.warning("Procedure proposal failed for sprint=%s: %s", sprint_id, exc)
 
 
+def _observe_effort(sprint_id: int) -> int:
+    """Write each task's ``effort_observed`` event (``services/models/effort.py``);
+    at every close, a new event only when the observation changed. Never
+    stops the close."""
+    try:
+        with Session(engine) as session:
+            written = effort.record_sprint(session, sprint_id)
+            session.commit()
+            return written
+    except Exception as exc:  # noqa: BLE001 - Observing effort never blocks closing.
+        logger.warning("Effort observation failed for sprint=%s: %s", sprint_id, exc)
+        return 0
+
+
 def _burn_retrospective_engram(sprint_id: int, retro_metrics: dict[str, Any]) -> None:
     """Burn retrospective engram to memory so future sprints can learn from it."""
     try:
@@ -464,6 +480,8 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     hooks.emit(
         hooks.SPRINT_CLOSED, nats_client=nats_client, engine=engine, sprint_id=sprint_id
     )
+    # Each task's observed effort, from its own records (issue #534).
+    await asyncio.to_thread(_observe_effort, sprint_id)
     if result.get("reason") == RECLOSED:
         retro_metrics = None  # learned once, at the first close
     if retro_metrics and retro_metrics.get("company_id") is not None:

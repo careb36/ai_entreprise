@@ -42,6 +42,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
 from services.contracts.manifest import parse_file_manifest
+from services.contracts.task_dependencies import depends_on_of
 from services.contracts.verdicts import VERDICT_VERIFIED
 from services.evidence.criteria_tests import (
     ACCEPTANCE_KIND,
@@ -208,13 +209,19 @@ def _test_tasks(
 
 
 def test_files_of(
-    session: Session, sprint_id: int, covers: list[str]
+    session: Session,
+    sprint_id: int,
+    covers: list[str],
+    only: set[int] | None = None,
 ) -> tuple[list[str], list[str]]:
     """The files the sprint's test tasks of *covers* wrote (their latest run's
-    declared files), and the criteria among *covers* that have a test task."""
+    declared files), and the criteria among *covers* that have a test task.
+    With *only*, the test tasks among those ids alone."""
     files: list[str] = []
     named: list[str] = []
     for task, run in _test_tasks(session, sprint_id):
+        if only is not None and task.id not in only:
+            continue
         its = [str(c) for c in task.covers or []]
         if not set(its) & set(covers):
             continue
@@ -227,12 +234,15 @@ def test_files_of(
     return files, named
 
 
-def test_hashes_of(session: Session, sprint_id: int) -> dict[str, str]:
+def test_hashes_of(
+    session: Session, sprint_id: int, only: set[int] | None = None
+) -> dict[str, str]:
     """Per acceptance test file, the sha256 the daemon read back when QA's
-    delivery wrote it (its latest run's verification evidence)."""
+    delivery wrote it (its latest run's verification evidence). With *only*,
+    the test tasks among those ids alone."""
     hashes: dict[str, str] = {}
-    for _task, run in _test_tasks(session, sprint_id):
-        if run is None:
+    for task, run in _test_tasks(session, sprint_id):
+        if run is None or (only is not None and task.id not in only):
             continue
         verification = session.exec(
             select(Verification)
@@ -291,7 +301,28 @@ def test_sources_of(engine: Engine, sprint_id: int, paths: list[str]) -> dict[st
 # ---------------------------------------------------------------------------
 
 
-def evidence_for(engine: Engine, item_id: int) -> dict[str, Any] | None:
+def branch_lineage(session: Session, item: BacklogItem) -> set[int]:
+    """The ids of the tasks whose files a task's branch holds under the Git
+    workflow: the task itself and the done tasks it depends on, transitively
+    (``workspace.git_workflow.delivery_spec`` merges each done dependency's
+    branch into the task's worktree, and that branch holds its own)."""
+    seen = {item.id}
+    queue = list(depends_on_of(item))
+    while queue:
+        task_id = queue.pop()
+        if task_id in seen:
+            continue
+        row = session.get(BacklogItem, task_id)
+        if row is None or row.sprint_id != item.sprint_id or row.status != "done":
+            continue
+        seen.add(task_id)
+        queue += depends_on_of(row)
+    return seen
+
+
+def evidence_for(
+    engine: Engine, item_id: int, git: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """What the Verifier needs about the task's criteria, read before the test run.
 
     ``None`` when the sprint was not planned from a specification or has no
@@ -300,6 +331,18 @@ def evidence_for(engine: Engine, item_id: int) -> dict[str, Any] | None:
     specification), ``excused`` (criteria whose acceptance tests may fail:
     their implementation is not done yet, and never this task's own unless it
     is the test task) and ``test_files`` (the files the test tasks wrote).
+
+    With *git*, the daemon's answer for a delivery on the task's own branch
+    (``evidence["git"]``, the Git workflow), the acceptance tests are the
+    ones that branch can hold (#329 retrospective): ``test_files`` and
+    ``test_hashes`` are those of the test tasks in its lineage
+    (``branch_lineage``), and ``excused`` counts as done only the
+    implementation tasks merged into it. The sprint's other acceptance test
+    files, written on sibling branches, go in ``other_test_hashes``: the
+    guard (``delivery_checks.guard_test_files``) guards one only when it is on
+    the branch's disk (present on its base), and never restores one that is
+    not, so a sibling's test is neither an edit nor run for this task. The
+    sprint's integration branch merges them all and runs the whole suite.
     """
     try:
         with Session(engine) as session:
@@ -319,6 +362,17 @@ def evidence_for(engine: Engine, item_id: int) -> dict[str, Any] | None:
             files, tested = test_files_of(session, sprint.id, every)
             if not tested:
                 return None
+            branch = isinstance(git, dict) and bool(git.get("branch"))
+            lineage = branch_lineage(session, item) if branch else None
+            hashes = test_hashes_of(session, sprint.id)
+            others: dict[str, str] = {}
+            if lineage is not None:
+                files, _ = test_files_of(session, sprint.id, every, lineage)
+                held = test_hashes_of(session, sprint.id, lineage)
+                others = {
+                    p: h for p, h in hashes.items() if p not in held and p not in files
+                }
+                hashes = held
             done = {
                 str(c)
                 for row in session.exec(
@@ -327,6 +381,7 @@ def evidence_for(engine: Engine, item_id: int) -> dict[str, Any] | None:
                     )
                 ).all()
                 if not is_acceptance_task(row)
+                and (lineage is None or row.id in lineage)
                 for c in row.covers or []
             }
             own = set() if is_acceptance_task(item) else set(covers)
@@ -338,7 +393,8 @@ def evidence_for(engine: Engine, item_id: int) -> dict[str, Any] | None:
                 "all": every,
                 "excused": [c for c in every if c not in done and c not in own],
                 "test_files": files,
-                "test_hashes": test_hashes_of(session, sprint.id),
+                "test_hashes": hashes,
+                **({"other_test_hashes": others} if lineage is not None else {}),
             }
     except Exception as exc:  # noqa: BLE001 - Without it the delivery is judged as before.
         logger.debug("Acceptance evidence failed for item=%s: %s", item_id, exc)

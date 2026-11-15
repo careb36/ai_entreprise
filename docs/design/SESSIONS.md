@@ -94,7 +94,13 @@ the SSO exchange setting the cookies), `test_cors_credentials.py`, and
 - XSS can still act in the open tab (see assume breach). The CSP and output
   encoding stay the controls for that.
 - The rate limiter's storage is per process by default
-  (`RATE_LIMIT_STORAGE_URI`); `/v1/auth/login` has no limit of its own yet.
+  (`RATE_LIMIT_STORAGE_URI`), and so is the per-account backoff on
+  `/v1/auth/login` (`LOGIN_RATE_LIMIT` per address and
+  `services/platform/login_throttle.py` per account, issue #541).
+- Access tokens and stream tickets carry `iss` and `aud` since issue #541
+  and tokens without them are refused: a browser renews its access token from
+  the refresh cookie, which is not a JWT, so a session survives the upgrade; a
+  script's Bearer token from before it logs in again.
 - The desktop app's own residual risks are under Desktop app, below.
 - A person invited into a company that already requires SSO keeps a
   password-started session until it expires or is revoked; only turning the

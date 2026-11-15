@@ -1,0 +1,17 @@
+# The workspace daemon's direct dependencies. requirements.txt is the lock
+# compiled from this file: every version pinned, with its sha256 hashes for
+# every platform the daemon runs on (Linux, macOS, Windows; Python 3.9 and
+# newer). After changing this file, recompile from vscode-daemon/:
+#
+#   uv pip compile --universal --python-version 3.9 --generate-hashes \
+#     requirements.in -o requirements.txt
+#
+# Every install uses `pip install --require-hashes -r requirements.txt`
+# (scripts/start-daemon.sh, scripts/start-daemon.ps1, the Dockerfile), and
+# the dependency audit reads the lock (.github/workflows/security-scan.yml).
+
+nats-py>=2.16.0,<3
+# Signs the NATS connection when the daemon uses a .creds file or an nkey seed
+# (NATS_CREDS_FILE / NATS_NKEY_SEED, nats_connect.py). Its one dependency,
+# pynacl, ships wheels for every platform, so it is always installed.
+nkeys==0.2.1

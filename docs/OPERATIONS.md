@@ -121,6 +121,56 @@ What pushing the tag runs:
   buildx and QEMU on the runner. A new package on GHCR is private until its
   visibility is changed in the package's settings.
 
+Each release also records what it is made of and who built it (issue #522,
+part C):
+
+- **SBOMs of the components.** `release.yml` writes a CycloneDX SBOM of each
+  component's lock with [syft](https://github.com/anchore/syft) (Apache-2.0;
+  the release binary is pinned and checked against its sha256 in the
+  workflow): `backend/poetry.lock`, `llm-proxy/poetry.lock`,
+  `vscode-daemon/requirements.txt` and `frontend/package-lock.json` (without
+  its devDependencies). They are attached to the GitHub Release as
+  `la-fabrique-<component>-X.Y.Z.cdx.json` with a `SHA256SUMS`.
+- **SBOMs of the images.** `images.yml` scans each image it pushed (the base
+  image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
+  artifact `sbom-<image>` for 90 days and attached to the image in the
+  registry as a signed CycloneDX attestation.
+- **Signatures.** `images.yml` signs each image by its digest with keyless
+  [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
+  (`id-token: write`, on the publish job only) gets a short-lived certificate
+  from Fulcio naming this workflow and the tag, and the signature is logged in
+  the public Rekor transparency log. No signing key exists to store, rotate
+  or leak.
+
+Verify an image before deploying it (cosign 2.x or 3.x):
+
+```bash
+image=ghcr.io/<owner>/<repo>/backend:X.Y.Z
+cosign verify "$image" \
+  --certificate-identity-regexp '^https://github\.com/<owner>/<repo>/\.github/workflows/images\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+cosign verify-attestation "$image" --type cyclonedx \
+  --certificate-identity-regexp '^https://github\.com/<owner>/<repo>/\.github/workflows/images\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  | jq -r '.payload' | base64 -d | jq '.predicate.metadata.component'
+```
+
+Prefer the digest the run printed in its summary (`...@sha256:...`) to the
+tag: a tag can be pushed again, a digest cannot. A failed verification means
+the image was not built by this repository's `images.yml` from a `v*` tag;
+do not deploy it. Verifying in the cluster at admission (Sigstore's
+policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
+steps run on the self-hosted runner and have not been exercised by a release
+yet; the first tag after this change is their first run
+(`docs/design/SELF_HOSTED_RUNNER.md` records the runner's risks).
+
+Check a release's component SBOMs against their checksums:
+
+```bash
+gh release download vX.Y.Z --pattern '*.cdx.json' --pattern SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
 Every pull request adds its line under `[Unreleased]` in the same pull
 request (`CONTRIBUTING.md`), so cutting a release is a move, not a search
 through the history. Migrations do not roll back: a release that ran a
@@ -304,6 +354,20 @@ each key.
   `fabrique_errors_total` and `fabrique_active_connections`. Each replica
   exposes its own counters, so scrape every replica and add them up.
 
+## Run La Fabrique on itself
+
+The factory can develop La Fabrique the way it develops any project (issue
+#329): `scripts/self_host/self_host.py` makes a "La Fabrique" company on a
+snapshot of this repository, imports La Fabrique's own specification and
+architecture (`docs/architecture/`), checks they render `docs/ARCHITECTURE.md`
+and `docs/adr/` unchanged, and can specify an issue, run its sprint, show the
+integration a person reviews and compile the documentation pack. The steps
+against a real stack, with real models, are in
+[`scripts/self_host/README.md`](../scripts/self_host/README.md); the e2e run
+exercises the same harness with the fake model (step 9d). The snapshot has no
+remote: what is kept comes back to this repository as an ordinary pull
+request.
+
 ## When something is wrong
 
 **The daemon is absent.** `GET /v1/workspace/status` says `absent` (NATS
@@ -375,6 +439,29 @@ skipped and the card says `budget_exceeded`. The budget counts only the
 turns whose usage the provider reported, so the provider's own spending
 limit is still the last guard (`bench/README.md`, "The nightly real-model
 run").
+
+**The runners stop taking jobs, or their disk fills up.** The runner services
+are user services on this machine: `systemctl --user is-active
+'actions-runner-lafabrique*'` answers `active` for all seven while GitHub shows
+some `offline`, or `online` and `busy=false` with the queue growing and nothing
+dispatched (`gh run list --status in_progress` empty). A runner whose job died
+mid-run — usually under disk pressure — keeps its session wedged: the service
+stays up, the connection does not. Check `df -h /` first, then restart the
+wedged services, and only once `gh run list --status in_progress` is empty, or
+you cancel a running e2e job:
+
+```bash
+systemctl --user restart 'actions-runner-lafabrique*'
+```
+
+`runner-hygiene.yml` keeps the disk bounded daily (#566): this repository's
+stopped e2e and smoke containers with their volumes, dangling images older than
+a week, and anonymous dangling volumes older than a week are removed, and the
+buildkit cache is kept under 2 GB. It never prunes by name: the named volumes
+`la-fabrique_*` hold a person's development data (they show `dangling` while
+that stack is down), and the named images belong to the other repositories
+sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
+a finished run leaks nothing.
 
 ## Backups
 

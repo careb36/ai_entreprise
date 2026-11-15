@@ -19,14 +19,15 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
+from schemas import RequestModel
 from services.loop import board_moves
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 
-class CarryRequest(BaseModel):
+class CarryRequest(RequestModel):
     model_config = ConfigDict(extra="forbid")
 
     target_sprint_id: int | None = None

@@ -6,7 +6,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import BacklogItem, Sprint, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.platform import run_secrets
 from sqlmodel import Session
 
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/v1/run-secrets", tags=["Company"])
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-class CreateSecretRequest(BaseModel):
+class CreateSecretRequest(RequestModel):
     company_id: int
     task_id: int
     name: str = Field(min_length=1, max_length=80)

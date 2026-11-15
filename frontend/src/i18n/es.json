@@ -1105,12 +1105,12 @@
     "loginError": "No se pudo iniciar sesión. Inténtalo de nuevo.",
     "invalidCredentials": "Correo electrónico o contraseña no válidos.",
     "notConfigured": "La autenticación no está configurada en este servidor.",
-    "registerSuccess": "Cuenta creada. Ya puedes iniciar sesión.",
+    "registerSuccess": "Si este correo no estaba registrado, tu cuenta está lista. Inicia sesión para continuar.",
     "noAccount": "¿No tienes una cuenta?",
     "registerLink": "Registrarse",
     "haveAccount": "¿Ya tienes una cuenta?",
-    "emailExists": "Ya existe una cuenta con este correo electrónico.",
     "registerError": "No se pudo registrar. Inténtalo de nuevo.",
+    "tooManyAttempts": "Demasiados intentos. Espera un minuto y vuelve a intentarlo.",
     "logout": "Cerrar sesión",
     "switchCompany": "Cambiar empresa",
     "companyPlaceholder": "Empresa {{id}}",
@@ -2234,6 +2234,58 @@
       "costUnpriced_one": "(+{{count}} tarea sin precio)",
       "costUnpriced_other": "(+{{count}} tareas sin precio)"
     }
+  },
+  "calibration": {
+    "title": "Esfuerzo previsto y observado",
+    "hint": "Sprints cerrados: la dificultad estimada antes de que cada tarea se ejecutara, junto al esfuerzo que el backend observó en sus registros al cerrar el sprint.",
+    "spearman": "Concordancia de rangos (tokens)",
+    "spearmanShort": "Concordancia",
+    "offByTwo": "Dos bandas de diferencia",
+    "offByTwoShort": "Dos bandas",
+    "lowReworked": "Tareas bajas con >1 retrabajo",
+    "tokensUnknown": "Tareas con tokens desconocidos",
+    "splitLabel": "Dividir la calibración por",
+    "by": {
+      "band": "Por banda prevista",
+      "role": "Por rol",
+      "producer": "Por productor",
+      "model": "Por modelo servido",
+      "sprint": "Por sprint"
+    },
+    "caption": {
+      "band": "Calibración por banda prevista",
+      "role": "Calibración por rol",
+      "producer": "Calibración por productor",
+      "model": "Calibración por modelo servido",
+      "sprint": "Calibración por sprint"
+    },
+    "column": {
+      "band": "Banda prevista",
+      "role": "Rol",
+      "producer": "Productor",
+      "model": "Modelo servido",
+      "sprint": "Sprint"
+    },
+    "tasks": "Tareas",
+    "overOneRework": ">1 retrabajo",
+    "tokens": "Tokens (mediana, cuartiles)",
+    "spreadValue": "{{median}} ({{q1}}–{{q3}})",
+    "plusUnknown_one": "(+{{count}} desconocida)",
+    "plusUnknown_other": "(+{{count}} desconocidas)",
+    "unknown": "desconocido",
+    "none": "ninguno",
+    "sprintName": "Sprint n.º {{id}}",
+    "signalsLabel": "Lo que sugieren los números",
+    "signal": {
+      "low_band_reworked": "El {{value}} de las tareas bajas necesitó más de un retrabajo: la banda baja puede ser demasiado amplia.",
+      "high_band_not_costlier": "Las tareas altas no consumieron más tokens que las bajas (mediana {{value}}): la banda alta puede ser demasiado amplia.",
+      "no_rank_agreement": "La puntuación prevista no ordena los tokens observados (correlación {{value}})."
+    },
+    "informationOnly": "Solo informativo: la política de enrutamiento nunca se cambia a partir de estos números.",
+    "unknownNote_one": "{{count}} tarea sin un recuento de tokens conocido (sin turnos, o con un turno que el proveedor no informó), fuera de los tokens.",
+    "unknownNote_other": "{{count}} tareas sin un recuento de tokens conocido (sin turnos, o con un turno que el proveedor no informó), fuera de los tokens.",
+    "recomputed_one": "{{count}} tarea anterior a que se guardara la estimación: su previsión se recalculó a partir de su plan.",
+    "recomputed_other": "{{count}} tareas anteriores a que se guardara la estimación: su previsión se recalculó a partir de su plan."
   },
   "consoleProducers": {
     "title": "Productores de consola",

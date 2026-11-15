@@ -23,7 +23,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from logging_config import logger
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import STRICT, RequestModel
 from security import limiter
 from services.platform import oidc, sso_flow
 from sqlmodel import Session
@@ -47,7 +48,9 @@ def _frontend(**params: str) -> RedirectResponse:
     return response
 
 
-class ExchangeRequest(BaseModel):
+class ExchangeRequest(RequestModel):
+    model_config = STRICT
+
     code: str = Field(min_length=1, max_length=512)
 
 

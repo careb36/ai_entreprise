@@ -91,7 +91,7 @@ def _fallback_verdicts(
         e
         for e in events
         if e.event_type == "verified"
-        and (e.payload or {}).get(progress.VERIFICATION_KEY) not in progress.VERDICTS
+        and progress.verdict_of(e.payload) is None
         and (e.verification_id is not None or e.run_id is not None)
     ]
     if not missing:

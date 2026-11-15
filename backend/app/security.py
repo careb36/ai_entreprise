@@ -23,49 +23,77 @@ limiter = Limiter(
 
 
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+# The interactive documentation FastAPI serves (WSTG-v42-CONF-05): turned off
+# by API_DOCS_ENABLED=false, and given a CSP that lets Swagger UI and ReDoc
+# load their scripts while it is on.
+DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
+
+# The API answers JSON (and one event stream); it never renders a page, so
+# nothing may load, frame it or submit to it (issue #541; WSTG-CONF-14 and
+# CONF-12 at latest@87cf4a4, WSTG-v42-CLNT-09).
+API_CSP = (
+    "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
+DOCS_CSP = (
+    "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
+    "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "
+    "https://fonts.googleapis.com 'unsafe-inline'; "
+    "font-src https://fonts.gstatic.com; "
+    "img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:; "
+    "frame-ancestors 'none'"
+)
+BASELINE_HEADERS = {
+    # Prevent MIME type sniffing.
+    "X-Content-Type-Options": "nosniff",
+    # Clickjacking, for browsers that predate frame-ancestors.
+    "X-Frame-Options": "DENY",
+    # The legacy XSS auditor is off: it is gone from current browsers and its
+    # "block" mode was itself a side channel (OWASP Secure Headers Project).
+    "X-XSS-Protection": "0",
+    # HTTPS only; browsers ignore it over plain http.
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    # A response of this API never needs to tell anyone where it came from
+    # (SECURITY.md §3.3).
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    # A window this API opens shares no browsing context with its opener.
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add security headers to all responses."""
+    """Add security headers to all responses.
+
+    Every answer that is not the documentation is ``Cache-Control:
+    no-store`` unless its route chose otherwise (the Glassroom stream's
+    ``no-cache``): an authenticated answer must not stay in a shared or
+    browser cache after logout (WSTG-v42-ATHN-06). The documentation is not
+    authenticated and keeps the browser's default caching.
+    """
 
     async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-
-        # Prevent MIME type sniffing
-        response.headers["X-Content-Type-Options"] = "nosniff"
-
-        # Prevent clickjacking
-        response.headers["X-Frame-Options"] = "DENY"
-
-        # XSS protection
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-
-        # Strict transport security (HTTPS only)
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
-
-        # Content security policy
-        if request.url.path in {"/docs", "/redoc", "/openapi.json"}:
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net "
-                "'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net "
-                "https://fonts.googleapis.com 'unsafe-inline'; "
-                "font-src https://fonts.gstatic.com; "
-                "img-src 'self' data: https://fastapi.tiangolo.com; worker-src blob:"
-            )
+        docs = request.url.path in DOCS_PATHS
+        if docs and not settings.API_DOCS_ENABLED:
+            docs = False
+            response = JSONResponse(status_code=404, content={"detail": "Not Found"})
         else:
-            response.headers["Content-Security-Policy"] = "default-src 'self'"
+            response = await call_next(request)
+        return apply_security_headers(response, docs=docs)
 
-        # Referrer policy
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # Permissions policy
-        response.headers["Permissions-Policy"] = (
-            "geolocation=(), microphone=(), camera=()"
-        )
-
+def apply_security_headers(response, *, docs: bool = False):
+    """The baseline on *response*; also called by the handler of unhandled
+    errors, whose 500 is built outside the middleware stack."""
+    if not settings.SECURITY_HEADERS_ENABLED:
         return response
+    for name, value in BASELINE_HEADERS.items():
+        response.headers[name] = value
+    response.headers["Content-Security-Policy"] = DOCS_CSP if docs else API_CSP
+    if not docs and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def setup_security(app):
