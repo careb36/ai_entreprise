@@ -32,6 +32,8 @@ import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
+import Documentation from './pages/Documentation'
+import Wiki from './pages/Wiki'
 import Models from './pages/Models'
 import Specifications from './pages/Specifications'
 import SpecificationDetail from './pages/SpecificationDetail'
@@ -212,7 +214,6 @@ function NavBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore(state => state.user)
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
@@ -221,7 +222,7 @@ function NavBar() {
   const supportAdmin = Boolean(user?.support_admin)
   const companyName = useAppStore(state => state.companyName)
   const companyId = useAppStore(state => state.companyId)
-  const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
+  const authenticated = Boolean(expiresAt && expiresAt > Date.now())
   const links = useNavLinks()
   // What the company needs a person for, shown on the Review link.
   const inbox = useInbox(authenticated ? companyId : null)
@@ -338,6 +339,8 @@ function NavBar() {
                   <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
+                  <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.teams')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/usage" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.usage')}</Link>}
@@ -455,11 +458,13 @@ function AppContent() {
               <Route path="/company/teams" element={<CompanyTeams />} />
               <Route path="/company/usage" element={<Usage />} />
               <Route path="/company/procedures" element={<Procedures />} />
+              <Route path="/company/wiki" element={<Wiki />} />
               <Route path="/company/models" element={<Models />} />
               <Route path="/company/specifications" element={<Specifications />} />
               <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
               <Route path="/company/specifications/:specId/architecture/new" element={<ArchitectureDetail />} />
               <Route path="/company/specifications/:specId/architectures/:id" element={<ArchitectureDetail />} />
+              <Route path="/company/documentation" element={<Documentation />} />
               <Route path="/company/github" element={<GitHubIntegration />} />
               <Route path="/support" element={<HelpDesk />} />
               <Route path="/agents" element={<AgentSettings />} />

@@ -352,13 +352,33 @@ def owner_has_signed_in(session: Session, conn: SsoConnection) -> bool:
     )
 
 
-def _break_glass(user: User) -> bool:
+def _break_glass_email(email: str | None) -> bool:
     listed = {
         e.strip().lower()
         for e in str(_settings().SSO_BREAK_GLASS_EMAILS).split(",")
         if e.strip()
     }
-    return (user.email or "").lower() in listed
+    return (email or "").lower() in listed
+
+
+def _break_glass(user: User) -> bool:
+    return _break_glass_email(user.email)
+
+
+def members_refused_password(session: Session, company_id: int) -> list[int]:
+    """The members of *company_id* whose password sign-in a requirement of
+    SSO refuses: everyone but the Owners on the break-glass list. Their
+    password-started sessions end when the requirement takes effect."""
+    rows = session.exec(
+        select(CompanyMember.user_id, CompanyMember.human_role, User.email)
+        .join(User, User.id == CompanyMember.user_id)
+        .where(CompanyMember.company_id == company_id)
+    ).all()
+    return [
+        user_id
+        for user_id, role, email in rows
+        if not (role == "Owner" and _break_glass_email(email))
+    ]
 
 
 def check_password_login(session: Session, user: User) -> None:

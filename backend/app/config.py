@@ -169,6 +169,17 @@ class Settings(BaseSettings):
     # issue #439): the notes of the sprint relevant to the task, newest first,
     # within this many characters; 0 leaves the section out.
     SPRINT_BOARD_MAX_CHARS: int = 2000
+    # The project wiki (issue #445, docs/design/PROJECT_WIKI.md). Off: no wiki
+    # section in prompts (vector memory alone, the bench's baseline) and no
+    # compilation at sprint close; the pages stay and the API still serves them.
+    WIKI_ENABLED: bool = True
+    # The pages of a task's modules and concepts in its prompt, within this many
+    # characters, before the vector memory; 0 leaves the section out.
+    WIKI_MAX_CHARS: int = 3000
+    # At sprint close: at most this many pages compiled by a model, each answer
+    # at most this many characters (a longer one is rejected and recorded).
+    WIKI_COMPILE_MAX_PAGES: int = 5
+    WIKI_PAGE_MAX_CHARS: int = 6000
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True
@@ -241,7 +252,17 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str | None = None
     AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
+    # family lives at most this many days from sign-in, however often it is
+    # rotated; a reuse within the grace (two tabs refreshing at once) is
+    # answered 409 without revoking; the refresh route's rate limit.
+    REFRESH_TOKEN_ABSOLUTE_DAYS: int = 7
+    REFRESH_REUSE_GRACE_SECONDS: int = 10
+    REFRESH_RATE_LIMIT: str = "30/minute"
+    # The session cookies are Secure; false only for development over plain
+    # http:// (a browser treats http://localhost as secure anyway).
+    SESSION_COOKIE_SECURE: bool = True
 
     # Single sign-on over OpenID Connect (issue #512; docs/design/SSO.md).
     # The redirect URI registered at each company's identity provider, and

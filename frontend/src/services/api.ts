@@ -17,9 +17,11 @@ import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
 import { teamEndpoints } from './api/teams'
 import { usageEndpoints } from './api/usage'
+import { wikiEndpoints } from './api/wiki'
 import { workspaceEndpoints } from './api/workspace'
 
-export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setOnUnauthorized } from './api/client'
+export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setCsrfToken, setOnUnauthorized, setSessionHooks } from './api/client'
+export type { SessionHooks } from './api/client'
 export * from './api/agents'
 export * from './api/analytics'
 export * from './api/auth'
@@ -37,6 +39,7 @@ export * from './api/support'
 export * from './api/system'
 export * from './api/teams'
 export * from './api/usage'
+export * from './api/wiki'
 export * from './api/workspace'
 
 // ── Public API client ─────────────────────────────────────────────────────────
@@ -60,6 +63,7 @@ const endpoints = {
   ...supportEndpoints(http),
   ...githubEndpoints(http),
   ...ssoEndpoints(http),
+  ...wikiEndpoints(http),
   ...chatEndpoints(http),
   ...teamEndpoints(http),
   ...usageEndpoints(http),

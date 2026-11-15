@@ -17,6 +17,7 @@ from routers.chat_approvals import router as chat_approvals_router
 from routers.chat_interactions import router as chat_interactions_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
+from routers.documentation import router as documentation_router
 from routers.enterprise import router as enterprise_router
 from routers.enterprise_agents import router as enterprise_agents_router
 from routers.enterprise_analytics import router as enterprise_analytics_router
@@ -42,6 +43,7 @@ from routers.support import router as support_router
 from routers.teams import router as teams_router
 from routers.usage import router as usage_router
 from routers.webhooks import router as webhooks_router
+from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 
 __all__ = [
@@ -56,6 +58,7 @@ __all__ = [
     "chat_interactions_router",
     "console_producers_router",
     "costs_router",
+    "documentation_router",
     "enterprise_agents_router",
     "enterprise_analytics_router",
     "enterprise_router",
@@ -81,5 +84,6 @@ __all__ = [
     "teams_router",
     "usage_router",
     "webhooks_router",
+    "wiki_router",
     "workspace_router",
 ]

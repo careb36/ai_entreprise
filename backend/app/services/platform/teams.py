@@ -67,6 +67,22 @@ def team_roles(session: Session, company_id: int, user_id: int) -> list[str]:
     return sorted(str(r) for r in rows)
 
 
+def drop_memberships(session: Session, company_id: int, user_id: int) -> int:
+    """Remove *user_id* from every team of *company_id*; the number removed.
+
+    Called when a person leaves the company, so team rows never outlive the
+    membership: invited again later, they start with no team.
+    """
+    rows = session.exec(
+        select(TeamMember).where(
+            TeamMember.company_id == company_id, TeamMember.user_id == user_id
+        )
+    ).all()
+    for row in rows:
+        session.delete(row)
+    return len(rows)
+
+
 def own_role(session: Session, company_id: int, user_id: int) -> str | None:
     member = session.exec(
         select(CompanyMember).where(

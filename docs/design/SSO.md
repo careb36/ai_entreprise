@@ -36,7 +36,7 @@ IdP ──302──> Backend /v1/auth/sso/callback?code&state   (B1, browser-car
                ├─B8─ GET discovery, JWKS (cached)
                ├── validate ID token, resolve identity, policy, audit row
                └──302──> Frontend /login/sso?code=<one-time handoff>
-Browser ─B1─ POST /v1/auth/sso/exchange {code} → access token (as /auth/login)
+Browser ─B1─ POST /v1/auth/sso/exchange {code} → session cookies (as /auth/login, #524)
 Owner   ─B1─ GET/PUT/DELETE /v1/companies/{id}/sso, POST …/sso/test
 ```
 
@@ -89,10 +89,15 @@ refused, rate limit.
 
 ## Residual risks
 
-- Access tokens are stateless (HS256, `ACCESS_TOKEN_EXPIRE_MINUTES`): turning
-  on "require SSO" or removing someone at the IdP does not end sessions
-  already issued; they expire on their own. Accepted by the owner until
-  server-side sessions exist.
+- Sessions already issued (updated by #524, `docs/design/SESSIONS.md`):
+  turning on "require SSO" now revokes the password-started sessions of the
+  members it would refuse, and removing a member here revokes theirs, at once
+  (access tokens carry their family and are checked on every request).
+  Removing someone **only at the IdP** still ends nothing: their session
+  lasts until its absolute expiry (`REFRESH_TOKEN_ABSOLUTE_DAYS`, 7) unless an
+  Owner removes them here; SCIM deprovisioning would close that. A Bearer
+  access token from `"token_delivery": "bearer"` is not in a family and lives
+  `ACCESS_TOKEN_EXPIRE_MINUTES` (15).
 - `allowed_domains` is not verified by DNS (Flow's AD-17 makes it a verified
   claim): the first company to list a domain holds it, and with auto-join its
   IdP can create accounts for addresses there that do not exist yet; if the
@@ -123,7 +128,7 @@ refused, rate limit.
 1. Should a company be able to restrict sign-in to SSO for API tokens too?
    (Today tokens are company-scoped and created by Managers; unaffected.)
 2. Multi-tenant Entra (`common`/`organizations`) is refused; needed?
-3. SCIM deprovisioning and server-side sessions (phase 4?).
+3. SCIM deprovisioning (phase 4?). Server-side sessions exist since #524.
 
 ## Design
 

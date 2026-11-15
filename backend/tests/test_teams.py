@@ -340,3 +340,29 @@ def test_the_team_fields_are_checked_and_only_members_join(sqlite_session, test_
         ).all()
         == []
     )
+
+
+def test_removing_a_member_from_the_company_drops_their_teams(
+    sqlite_session, test_client
+):
+    acme = _company(sqlite_session)
+    _, owner_headers = _person(sqlite_session, acme.id, "Owner")
+    viewer, _ = _person(sqlite_session, acme.id, "Viewer")
+    other = _company(sqlite_session)
+    sqlite_session.add(
+        CompanyMember(company_id=other.id, user_id=viewer.id, human_role="Viewer")
+    )
+    sqlite_session.commit()
+    _team(sqlite_session, acme.id, "Manager", viewer.id)
+    elsewhere = _team(sqlite_session, other.id, "Manager", viewer.id)
+
+    removed = test_client.delete(
+        f"/v1/company/{acme.id}/members/{viewer.id}", headers=owner_headers
+    )
+    assert removed.status_code == 204, removed.text
+    left = sqlite_session.exec(
+        select(TeamMember).where(TeamMember.user_id == viewer.id)
+    ).all()
+    # Only the other company's team row stays: invited again, no old team applies.
+    assert [row.team_id for row in left] == [elsewhere.id]
+    assert teams.member_role(sqlite_session, acme.id, viewer.id) is None

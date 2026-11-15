@@ -30,6 +30,7 @@ from .company import (
     ProjectDiscovery,
     User,
 )
+from .documentation import DocumentationPack
 from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .integration import SprintIntegration
@@ -40,12 +41,14 @@ from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
+from .session import RefreshToken, SessionFamily
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
 from .team import Team, TeamMember
 from .webhook import CompanyWebhook
+from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
 __all__ = [
     "Agent",
@@ -67,6 +70,7 @@ __all__ = [
     "Company",
     "CompanyMember",
     "CompanyWebhook",
+    "DocumentationPack",
     "GitHubRepoBinding",
     "ManagerDecision",
     "ManagerPolicy",
@@ -76,10 +80,12 @@ __all__ = [
     "ProjectCredential",
     "ProjectDiscovery",
     "ProviderConnection",
+    "RefreshToken",
     "ReviewComment",
     "RunPublication",
     "RunReview",
     "RunSecret",
+    "SessionFamily",
     "Specification",
     "Sprint",
     "SprintBoardNote",
@@ -92,4 +98,8 @@ __all__ = [
     "TeamMember",
     "User",
     "Verification",
+    "WikiLink",
+    "WikiPage",
+    "WikiPageVersion",
+    "WikiSettings",
 ]

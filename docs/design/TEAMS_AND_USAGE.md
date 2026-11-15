@@ -20,8 +20,10 @@ effective(member, company) =
 ```
 
 - A team never makes anyone a member: a `team_members` row without a
-  `company_members` row grants nothing (it can be left behind when a member
-  is removed, #524).
+  `company_members` row grants nothing. Removing a member
+  (`DELETE /v1/company/{id}/members/{user_id}`, #524) also deletes their
+  `team_members` rows of that company in the same transaction
+  (`teams.drop_memberships`), so none is left behind.
 - A team never grants `Owner`: a team row holding any other role (a database
   edited by hand) is ignored, and the API refuses one (422).
 - Only teams of the same company count: `team_members.company_id` and
@@ -154,12 +156,6 @@ and the menu cases in `frontend/src/App.test.tsx`.
   Owner for now, as it already is for a demotion.
 - A person's team in the report is today's, not the one at the time of the
   work; the report says so.
-- A member removed from the company keeps their `team_members` rows (they
-  grant nothing without the membership, T3); if the same account is invited
-  again, the old teams apply again. The member removal in flight (#524,
-  `DELETE /v1/company/{id}/members/{user_id}`) should delete the person's
-  `team_members` rows of that company in the same transaction; until then an
-  Owner sees the teams on the Teams page and removes them.
 
 ## Next
 

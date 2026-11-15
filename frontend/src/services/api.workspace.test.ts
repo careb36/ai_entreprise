@@ -8,7 +8,7 @@ function response(status: number, body: unknown = {}) {
 
 describe('workspace API', () => {
   beforeEach(() => {
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
   })
 
   afterEach(() => {
@@ -24,7 +24,7 @@ describe('workspace API', () => {
     const url = new URL(fetch.mock.calls[0][0])
     expect(url.pathname).toBe('/v1/workspace/browse')
     expect(url.searchParams.get('path')).toBe('C:\\Users\\ana\\source repos')
-    expect(new Headers(fetch.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer valid-token')
+    expect(fetch.mock.calls[0][1].credentials).toBe('include')
 
     await api.browseWorkspace()
     expect(new URL(fetch.mock.calls[1][0]).search).toBe('')

@@ -30,7 +30,9 @@
     "sso": "Single sign-on",
     "chatApprovals": "Chat approvals",
     "teams": "Teams",
-    "usage": "Usage"
+    "usage": "Usage",
+    "wiki": "Wiki",
+    "documentation": "Documentation"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2396,6 +2398,92 @@
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
     }
   },
+  "documentation": {
+    "title": "Documentation",
+    "subtitle": "The project's management documents and architecture diagrams, compiled from what La Fabrique recorded. Every statement cites its source; prose a model wrote is marked as a claim.",
+    "compile": "Compile from the records",
+    "prose": "Ask the TechWriter for the charter's background (a claim)",
+    "compileError": "Could not compile the pack: {{message}}",
+    "loading": "Loading the documentation…",
+    "loadError": "Could not load the documentation: {{message}}",
+    "empty": "No pack has been compiled yet.",
+    "versions": "Version",
+    "versionOption": "Version {{version}} ({{status}})",
+    "version": "Version {{version}}",
+    "inputsHash": "Digest of the records this pack was compiled from",
+    "approve": "Approve",
+    "approveError": "Could not approve the pack: {{message}}",
+    "write": "Write to the repository",
+    "writeError": "Could not write the pack: {{message}}",
+    "written": "{{count}} files written to {{path}}; the daemon's sha256 for each is kept.",
+    "documents": "Documents",
+    "diagrams": "Diagrams",
+    "noDiagrams": "No diagram: the project has no architecture in La Fabrique.",
+    "emptyDiagram": "No element is recorded for this diagram.",
+    "showSource": "Show the Mermaid source",
+    "hideSource": "Hide the source",
+    "file": "File: {{file}}",
+    "sourcesCount_one": "{{count}} source cited",
+    "sourcesCount_other": "{{count}} sources cited",
+    "claimsCount_one": "{{count}} section written by a model",
+    "claimsCount_other": "{{count}} sections written by a model",
+    "status": {
+      "draft": "draft",
+      "approved": "approved",
+      "superseded": "superseded"
+    },
+    "severity": {
+      "blocking": "blocks approval",
+      "warning": "warning",
+      "info": "note"
+    },
+    "levels": {
+      "context": "context level",
+      "container": "container level",
+      "component": "component level"
+    },
+    "kinds": {
+      "person": "Person",
+      "system": "Software system",
+      "external": "External system",
+      "container": "Container",
+      "datastore": "Data store",
+      "component": "Component"
+    },
+    "lint": {
+      "title": "Drift and gaps",
+      "ok": "The pack matches the current records.",
+      "stale_one": "{{count}} finding blocks approval: the records changed since this pack was compiled.",
+      "stale_other": "{{count}} findings block approval: the records changed since this pack was compiled.",
+      "gaps_one": "{{count}} section has no record behind it; the document says so.",
+      "gaps_other": "{{count}} sections have no record behind them; the documents say so."
+    },
+    "personsCount_one": "{{count}} section for a person to complete",
+    "personsCount_other": "{{count}} sections for a person to complete",
+    "placement": "PMBOK Guide 8th ed.: {{domain}}, {{focus}}",
+    "language": "Documents in",
+    "languageError": "Could not change the language: {{message}}",
+    "languages": {
+      "en": "English",
+      "es": "Spanish"
+    },
+    "domains": {
+      "Governance": "Governance",
+      "Scope": "Scope",
+      "Schedule": "Schedule",
+      "Finance": "Finance",
+      "Stakeholders": "Stakeholders",
+      "Resources": "Resources",
+      "Risk": "Risk"
+    },
+    "focusAreas": {
+      "Initiating": "Initiating",
+      "Planning": "Planning",
+      "Executing": "Executing",
+      "Monitoring and Controlling": "Monitoring and Controlling",
+      "Closing": "Closing"
+    }
+  },
   "chat": {
     "title": "Chat approvals",
     "subtitle": "Accept or send back held deliveries from Slack or Microsoft Teams.",
@@ -2554,5 +2642,81 @@
     "empty": "Nothing recorded in this range.",
     "generated": "Generated {{at}} from the records.",
     "costNote": "The cost counts only turns the proxy reported and the catalogue prices; the others are counted apart, never as zero. A person in two teams counts in both."
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "What the project knows: pages the agents compile from verified runs, retrospectives and the sprint board, each statement with its sources. A stale page stays out of prompts until it is revised.",
+    "loading": "Loading the wiki…",
+    "loadError": "Could not load the wiki: {{message}}",
+    "empty": "No pages yet. They are compiled when a sprint closes, or a Manager writes one.",
+    "pages": "Wiki pages",
+    "kinds": {
+      "module": "Module",
+      "concept": "Concept",
+      "glossary": "Glossary",
+      "decisions": "Decisions"
+    },
+    "kindsPlural": {
+      "module": "Modules",
+      "concept": "Concepts",
+      "glossary": "Glossary",
+      "decisions": "Decisions in force"
+    },
+    "status": {
+      "current": "Current",
+      "stale": "Stale",
+      "proposed": "Proposed"
+    },
+    "versionStatus": {
+      "current": "in force",
+      "proposed": "proposed",
+      "rejected": "rejected",
+      "superseded": "superseded"
+    },
+    "verdict": {
+      "verified": "verified",
+      "refuted": "refuted",
+      "unverifiable": "unverifiable"
+    },
+    "lintRule": {
+      "file_missing": "File missing",
+      "file_changed": "File changed",
+      "module_changed": "Module changed",
+      "contradiction": "Contradiction"
+    },
+    "lintTitle": "Stale: left out of prompts until revised",
+    "claimNote": "A page is a claim, not evidence. Beside each statement are the sources its citations resolved to in the records.",
+    "sources": "Sources",
+    "unknownSource": "not found",
+    "noSource": "no source",
+    "personLocked": "Edited by a person: the next compilation only proposes changes.",
+    "modulePath": "Module path: {{path}}",
+    "edit": "Edit",
+    "save": "Save",
+    "saveError": "Could not save: {{message}}",
+    "titleLabel": "Title",
+    "bodyLabel": "Body (Markdown)",
+    "syntaxHelp": "Cite sources as [run:12], [task:7], [note:3], [retro:5], [file:path@sha256], [REQ-1.2] or [ADR-3]. Facts go in a ```facts block, one key: value per line.",
+    "noBody": "This page has no text in force yet.",
+    "proposalTitle": "Proposed version",
+    "proposalNote": "Version {{number}}, proposed by {{who}}. It is not in force until a Manager accepts it.",
+    "uncitedLine": "Line {{line}} has no source: {{excerpt}}",
+    "accept": "Accept",
+    "reject": "Reject",
+    "rejectReason": "Reason (optional)",
+    "history": "History",
+    "byPerson": "by {{who}}",
+    "byAgent": "compiled by {{who}}",
+    "sprint": "sprint {{id}}",
+    "newPage": "New page",
+    "slugLabel": "Slug",
+    "kindLabel": "Kind",
+    "create": "Create",
+    "settings": "Wiki settings",
+    "writeToRepo": "Also write the pages to docs/wiki/ in the repository when a sprint closes",
+    "runLint": "Check the pages now",
+    "lintDone_one": "{{count}} page marked stale.",
+    "lintDone_other": "{{count}} pages marked stale.",
+    "version": "v{{number}}"
   }
 }

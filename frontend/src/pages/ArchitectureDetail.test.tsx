@@ -32,7 +32,7 @@ function stubApi(architecture: Architecture, overrides: Record<string, () => Res
 }
 
 function renderAs(role: 'Owner' | 'Manager' | 'Viewer', id = DRAFT_ARCHITECTURE.id) {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/company/specifications/3/architectures/${id}`]}>
@@ -195,14 +195,15 @@ describe('ArchitectureDetail', () => {
     expect(JSON.parse(String(posted(fetch, '/v1/architectures/draft')![1]!.body))).toEqual({ specification_id: 3, architecture_id: 21 })
   })
 
-  it('fetches the Markdown document with the token and shows it', async () => {
+  it('fetches the Markdown document with the session and shows it', async () => {
     const fetch = stubApi(APPROVED_ARCHITECTURE, { 'GET /v1/architectures/22/document': () => response(200, '# Login design\n\nA session service.') })
     renderAs('Viewer', 22)
 
     fireEvent.click(await screen.findByRole('button', { name: 'View as Markdown' }))
     expect(await screen.findByText(/# Login design/)).toBeInTheDocument()
     const call = fetch.mock.calls.find(([url]) => new URL(url).pathname === '/v1/architectures/22/document')!
-    expect(new Headers(call[1]!.headers).get('Authorization')).toBe('Bearer valid-token')
+    expect(call[1]!.credentials).toBe('include') // the session cookie, never a token in JS
+    expect(new Headers(call[1]!.headers).has('Authorization')).toBe(false)
   })
 
   it('reads only, for a Viewer', async () => {

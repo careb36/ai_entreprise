@@ -7,20 +7,20 @@ Endpoints:
 - ``GET  /v1/auth/sso/callback``    — the provider's redirect; validates and
   redirects to the frontend's ``/login/sso`` with a one-time handoff code, or
   with an ``error`` code the frontend translates.
-- ``POST /v1/auth/sso/exchange``    — trades the handoff code for the access
-  token ``/v1/auth/login`` issues, so the rest of the app is unchanged.
+- ``POST /v1/auth/sso/exchange``    — trades the handoff code for the same
+  browser session ``/v1/auth/login`` starts (HttpOnly cookies, issue #524).
 
 Rate-limited per client address (``SSO_RATE_LIMIT``). The design and its
 threat model: ``docs/design/SSO.md``.
 """
 
-from datetime import timedelta
 from urllib.parse import urlencode
 
 import auth_tokens
+import session_cookies
 from config import settings
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from logging_config import logger
 from pydantic import BaseModel, Field
@@ -108,6 +108,7 @@ def sso_callback(
 @limiter.limit(_rate_limit)
 def sso_exchange(
     request: Request,
+    response: Response,
     req: ExchangeRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ):
@@ -117,13 +118,6 @@ def sso_exchange(
         user = sso_flow.exchange_handoff(session, req.code)
     except oidc.SsoError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired code") from exc
-    token = auth_tokens.create_access_token(
-        user_id=user.id,
-        email=user.email,
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    }
+    # The browser's session, in HttpOnly cookies as after a password login;
+    # no token in the body (issue #524, docs/design/SESSIONS.md).
+    return session_cookies.start(response, session, user, "sso")

@@ -1,6 +1,6 @@
 """Opt-in authentication and company membership policy."""
 
-from auth_deps import bearer, get_current_user
+from auth_deps import bearer, get_current_user, has_credentials
 from config import settings
 from database import get_session
 from fastapi import Depends, HTTPException, Request
@@ -15,16 +15,19 @@ async def current_user_if_required(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
 ) -> User | None:
     if not settings.AUTH_REQUIRED:
-        # Even when auth is not required, resolve the user from the token
-        # if one is provided, so company ownership and memberships work.
+        # Even when auth is not required, resolve the user from the token or
+        # the session cookie if one is sent, so ownership and memberships work.
         try:
-            creds = await bearer(request)
-            if creds is not None and creds.credentials:
-                return get_current_user(credentials=creds, session=session)
+            if has_credentials(request):
+                return get_current_user(
+                    request=request, credentials=await bearer(request), session=session
+                )
         except Exception:  # noqa: BLE001, S110 - Optional identity is ignored when auth is disabled.
             pass
         return None
-    return get_current_user(credentials=await bearer(request), session=session)
+    return get_current_user(
+        request=request, credentials=await bearer(request), session=session
+    )
 
 
 def require_company_role(

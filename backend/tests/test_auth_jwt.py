@@ -31,18 +31,25 @@ def _register_user(client, email=None):
     return response.json()
 
 
-def test_correct_login_issues_an_access_token(test_client, signing_key):
+def test_a_bearer_login_issues_an_access_token(test_client, signing_key):
+    """A non-browser client asks for a Bearer token explicitly; it gets no
+    cookies and no session family (docs/design/SESSIONS.md)."""
     registered = _register_user(test_client)
 
     response = test_client.post(
         "/v1/auth/login",
-        json={"email": registered["email"], "password": "correct-password"},
+        json={
+            "email": registered["email"],
+            "password": "correct-password",
+            "token_delivery": "bearer",
+        },
     )
 
     assert response.status_code == 200
+    assert "set-cookie" not in response.headers
     body = response.json()
     assert body["token_type"] == "bearer"
-    assert body["expires_in"] == 3600
+    assert body["expires_in"] == 900
     claims = auth_tokens.decode_access_token(body["access_token"])
     assert claims["sub"] == str(registered["user_id"])
     assert claims["typ"] == "access"

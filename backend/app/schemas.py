@@ -12,7 +12,7 @@ Naming convention:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from passwords import BCRYPT_MAX_BYTES
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -65,6 +65,9 @@ class CompanyInitRequest(BaseModel):
     git_workflow: bool | None = None
     # Where task branches start; empty: what the repository has checked out.
     git_base_branch: str | None = Field(default=None, max_length=200)
+    # The language of the project's documentation packs, from the creator's
+    # interface language; empty: English (services/planning/project_docs/texts.py).
+    doc_language: Literal["en", "es"] | None = None
 
 
 # How many tasks a sprint of each scope may hold, and the ceiling for any.
@@ -260,6 +263,10 @@ class LoginRequest(BaseModel):
 
     email: str
     password: str
+    # "cookie" (the browser: HttpOnly session cookies, no token in the body)
+    # or "bearer" (a script: the access token in the body, no cookies, no
+    # refresh; docs/design/SESSIONS.md). Automation should prefer API tokens.
+    token_delivery: Literal["cookie", "bearer"] = "cookie"
 
 
 class InviteMemberRequest(BaseModel):

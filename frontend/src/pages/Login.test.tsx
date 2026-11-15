@@ -20,6 +20,7 @@ const { mockApi, MockApiError } = vi.hoisted(() => {
       login: vi.fn(),
       register: vi.fn(),
       me: vi.fn(),
+      logout: vi.fn().mockResolvedValue(undefined),
     },
   }
 })
@@ -27,6 +28,8 @@ const { mockApi, MockApiError } = vi.hoisted(() => {
 vi.mock('../services/api', () => ({
   api: mockApi,
   ApiError: MockApiError,
+  setCsrfToken: () => {},
+  setSessionHooks: () => {},
 }))
 
 function CurrentPath() {
@@ -56,7 +59,7 @@ describe('login and registration', () => {
   })
 
   it.each(['/login', '/register'])('redirects signed-in visitors from %s to their safe return path', async path => {
-    useAuthStore.setState({ token: 'signed-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     renderLogin(`${path}?from=${encodeURIComponent('/target?tab=mine#details')}`)
 
     expect(await screen.findByTestId('current-path')).toHaveTextContent('/target?tab=mine#details')
@@ -74,24 +77,25 @@ describe('login and registration', () => {
     ['/register', '/login?from=/target'],
     ['/login', '/companies/select'],
   ])('redirects signed-in visitors home from %s with return path %s', async (path, from) => {
-    useAuthStore.setState({ token: 'signed-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     renderLogin(`${path}${from ? `?from=${encodeURIComponent(from)}` : ''}`)
 
     expect(await screen.findByTestId('current-path')).toHaveTextContent(/^\/$/)
   })
 
   it.each(['/login', '/register'])('keeps %s accessible with an expired token', path => {
-    useAuthStore.setState({ token: 'expired-token', expiresAt: Date.now() - 1 })
+    useAuthStore.setState({ expiresAt: Date.now() - 1 })
     renderLogin(path)
 
     expect(screen.getByLabelText('Password')).toBeInTheDocument()
   })
 
-  it('stores the token and profile and navigates to the from destination', async () => {
+  it('stores the session and profile and navigates to the from destination', async () => {
     mockApi.login.mockResolvedValue({
-      access_token: 'signed-token',
-      token_type: 'bearer',
-      expires_in: 3600,
+      token_type: 'cookie',
+      expires_in: 900,
+      session_expires_in: 604800,
+      csrf_token: 'csrf-value',
     })
     mockApi.me.mockResolvedValue({
       user_id: 8,
@@ -106,7 +110,7 @@ describe('login and registration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
     expect(await screen.findByTestId('current-path')).toHaveTextContent('/target?tab=mine')
-    expect(useAuthStore.getState().token).toBe('signed-token')
+    expect(useAuthStore.getState().expiresAt).not.toBeNull()
     expect(useAuthStore.getState().user).toEqual({
       user_id: 8,
       email: 'a@example.com',
@@ -118,9 +122,10 @@ describe('login and registration', () => {
 
   it('falls back home for a backslash-based cross-origin return path', async () => {
     mockApi.login.mockResolvedValue({
-      access_token: 'signed-token',
-      token_type: 'bearer',
-      expires_in: 3600,
+      token_type: 'cookie',
+      expires_in: 900,
+      session_expires_in: 604800,
+      csrf_token: 'csrf-value',
     })
     mockApi.me.mockResolvedValue({
       user_id: 8,
@@ -146,7 +151,7 @@ describe('login and registration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password.')
-    expect(useAuthStore.getState().token).toBeNull()
+    expect(useAuthStore.getState().expiresAt).toBeNull()
     expect(useAuthStore.getState().user).toBeNull()
   })
 

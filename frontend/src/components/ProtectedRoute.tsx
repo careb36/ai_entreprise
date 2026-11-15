@@ -7,7 +7,6 @@ import { useAuthStore } from '../store/useAuthStore'
 export default function ProtectedRoute() {
   const location = useLocation()
   const { t } = useTranslation()
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const memberships = useAuthStore(state => state.memberships)
   const supportAdmin = useAuthStore(state => Boolean(state.user?.support_admin))
@@ -18,12 +17,12 @@ export default function ProtectedRoute() {
   const logout = useAuthStore(state => state.logout)
   const companyId = useAppStore(state => state.companyId)
   const setCompany = useAppStore(state => state.setCompany)
-  const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
+  const authenticated = Boolean(expiresAt && expiresAt > Date.now())
 
   useEffect(() => {
-    if (token && !authenticated) logout()
+    if (expiresAt && !authenticated) logout()
     else if (authenticated && !meLoaded && !loadingMe && !profileError) void loadMe().catch(() => {})
-  }, [authenticated, loadMe, loadingMe, logout, meLoaded, profileError, token])
+  }, [authenticated, expiresAt, loadMe, loadingMe, logout, meLoaded, profileError])
 
   useEffect(() => {
     if (meLoaded && !loadingMe && !profileError && memberships.length === 1) {

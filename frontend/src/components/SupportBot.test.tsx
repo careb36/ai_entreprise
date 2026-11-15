@@ -15,7 +15,7 @@ function requestTo(fetch: ReturnType<typeof vi.fn>, pathname: string) {
 
 describe('SupportBot', () => {
   beforeEach(() => {
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     // jsdom has no layout: the chat scrolls its last message into view.
     Element.prototype.scrollIntoView = vi.fn()
   })

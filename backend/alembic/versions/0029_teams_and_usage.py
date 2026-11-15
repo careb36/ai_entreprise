@@ -5,13 +5,11 @@ one team) and ``sprints.started_by_user_id`` (the signed-in account that
 started a sprint, from the session; empty for every existing sprint, which
 the usage report counts as unattributed).
 
-Numbered 0029: 0026 (sessions, #524), 0027 (documentation packs, #530) and
-0028 (the project wiki, #445) are in flight on other branches. Until they
-land this revision follows 0025; whichever merges after them re-points
-``down_revision`` at the head it finds, so the chain keeps one head.
+Follows 0028 (the project wiki, #445), after 0026 (sessions, #524) and 0027
+(documentation packs, #530).
 
 Revision ID: 0029
-Revises: 0025
+Revises: 0028
 Create Date: 2026-11-15 20:00:00 UTC
 """
 
@@ -23,7 +21,7 @@ import sqlmodel
 from alembic import op
 
 revision = "0029"
-down_revision = "0025"
+down_revision = "0028"
 branch_labels = None
 depends_on = None
 

@@ -60,6 +60,7 @@ from models.company import (
     ProjectDiscovery,
     User,
 )
+from models.documentation import DocumentationPack
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.integration import SprintIntegration
@@ -69,12 +70,14 @@ from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
+from models.session import RefreshToken, SessionFamily
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
 from models.team import Team, TeamMember
 from models.webhook import CompanyWebhook
+from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -162,6 +165,10 @@ def no_scrum_master_proxy(monkeypatch):
             return {"error": "no LLM proxy in tests"}
 
     monkeypatch.setattr(scrum_master, "LLMProxyClient", _NoProxy)
+    # The wiki's compilation at sprint close (#445) asks the same way.
+    from services.learning import wiki_compile
+
+    monkeypatch.setattr(wiki_compile, "LLMProxyClient", _NoProxy)
 
 
 SQLModel.metadata.create_all(
@@ -202,6 +209,9 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        DocumentationPack.__table__,
+        SessionFamily.__table__,
+        RefreshToken.__table__,
         ChatConnection.__table__,
         ChatIdentity.__table__,
         ChatLinkCode.__table__,
@@ -210,6 +220,10 @@ SQLModel.metadata.create_all(
         SprintBoardNote.__table__,
         Team.__table__,
         TeamMember.__table__,
+        WikiPage.__table__,
+        WikiPageVersion.__table__,
+        WikiLink.__table__,
+        WikiSettings.__table__,
     ],
 )
 
