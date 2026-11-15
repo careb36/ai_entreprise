@@ -3181,5 +3181,73 @@
     "save": "Guardar vista",
     "saved": "Vista «{{name}}» guardada.",
     "loading": "Cargando tareas…"
+  },
+  "integrationReview": {
+    "title": "La revisión de una persona de esta integración",
+    "loadError": "No se pudieron cargar las revisiones de esta integración.",
+    "gate": {
+      "off": "Esta empresa no exige una aprobación antes de fusionar la integración; la revisión igual queda registrada.",
+      "waiting": "Esta empresa fusiona la integración solo cuando una persona la aprobó: todavía no hay aprobación de este commit.",
+      "approved": "Aprobada por una persona: la integración se puede fusionar."
+    },
+    "published": "Publicada como solicitud en la forja, cuya propia revisión decide la fusión allí; esta revisión controla solo la fusión local.",
+    "publishedLink": "Abrir la solicitud",
+    "setting": {
+      "label": "Exigir la revisión aprobatoria de una persona antes de fusionar la integración"
+    },
+    "history": "Revisiones de esta integración",
+    "none": "Todavía no hay revisiones.",
+    "showDiff": "Mostrar el diff",
+    "hideDiff": "Ocultar el diff",
+    "readingDiff": "El daemon del espacio de trabajo está leyendo el diff...",
+    "truncated": "El diff tiene más archivos de los que se muestran.",
+    "bodyLabel": "Tu revisión",
+    "decision": "Decisión",
+    "hint": {
+      "comment": "Registra lo que leíste, sin una decisión.",
+      "approve": "Aprueba este commit de la integración. Quien inició el sprint no la aprueba.",
+      "request_changes": "Registra que la integración debe cambiar antes de fusionarse."
+    },
+    "submit": "Enviar revisión",
+    "pendingComments_one": "{{count}} comentario va con esta revisión",
+    "pendingComments_other": "{{count}} comentarios van con esta revisión",
+    "outcome": {
+      "recorded": "Registrada",
+      "approved": "Aprobada",
+      "changes_requested": "Cambios solicitados"
+    },
+    "latest": "Última integración: {{status}}",
+    "latestReview": "última revisión de {{author}}: {{event}}",
+    "status": {
+      "tests_passed": "pruebas aprobadas",
+      "tests_failed": "pruebas fallidas",
+      "untested": "sin probar",
+      "conflict": "conflicto",
+      "incomplete": "incompleta",
+      "running": "en curso",
+      "pending": "esperando al daemon",
+      "error": "rechazada por el daemon"
+    },
+    "change": {
+      "added": "agregado",
+      "modified": "modificado",
+      "deleted": "eliminado",
+      "renamed": "renombrado"
+    },
+    "omitted": {
+      "binary": "Un archivo binario: no hay líneas que mostrar.",
+      "too_large": "Demasiado grande para mostrarlo aquí."
+    },
+    "comment": {
+      "inReview": "En la revisión #{{id}}",
+      "pending": "Esperando una revisión",
+      "resolved": "Resuelto",
+      "resolve": "Resolver",
+      "labelGeneral": "Un comentario sobre toda la integración",
+      "label": "Comentario en {{path}}, línea {{line}}",
+      "submit": "Agregar comentario",
+      "add": "Agregar un comentario en {{path}}, línea {{line}}"
+    },
+    "counts": "+{{additions}} −{{deletions}}"
   }
 }

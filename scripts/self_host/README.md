@@ -46,7 +46,7 @@ python3 scripts/self_host/self_host.py --api <backend URL> --checkout <path> [--
 | `records` | Posts and approves La Fabrique's specification and architecture; reads `GET /v1/architectures/{id}/document` and `/adrs?first_number=12` and compares them with the snapshot's files; writes the document through the daemon and checks git sees no change. |
 | `issue` | Posts and approves the #535 specification, posts and approves the revised architecture, asks the PO for a plan (`POST /v1/plan_sprint`: the acceptance tests first) and starts the sprint on it. |
 | `wait` | Polls until the sprint completes (`--timeout`). |
-| `review` | Lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` merges the integration into `main` locally (refused while its suite fails). |
+| `review` | Lists the task branches, the tasks waiting for a person and the sprint's integration; `--accept TEXT` accepts the tasks the risk tier holds for a person (never one blocked for triage), `--merge` records an approving review of the integration (its text the `--accept` comment, else a default; reported under `integration_review`, refused like any approval by the person who started the sprint) and then merges the integration into `main` locally (refused while its suite fails, and, when the company requires an approval, without one). |
 | `pack` | Compiles the documentation pack (#530) in English and in Spanish and reports what each could not say; `--prose` asks the TechWriter for the charter's background. |
 
 The company id, the sprint id and the record ids are kept in
@@ -92,7 +92,9 @@ Out of scope for the e2e; this is how an owner runs it.
    the #535 specification and the fixture revision and plans the sprint.
 5. Run the sprint, then read the evidence: `--steps wait,review`. Review the
    integration branch (`fabrique/sprint-<id>`) in the snapshot as you would a
-   pull request; accept what the risk tier holds with `--accept "…"` and merge
+   pull request, or in the web app (the sprint's Overview, Sprint integration:
+   the diff the daemon reads, line comments and a review, recorded and
+   audited); accept what the risk tier holds with `--accept "…"` and merge
    with `--merge`, or carry the blocked tasks into the next sprint.
 6. `--steps pack` compiles the documentation pack; approve and write it from
    the web app (Documentation) once you have read it.

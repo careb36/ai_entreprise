@@ -2,8 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { GitBranch } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { integrationApi } from '../services/integration'
+import { IntegrationReview } from './IntegrationReview'
 
-export function SprintIntegration({ sprintId }: { sprintId: number }) {
+/** The sprint's integration plan, its latest integration and, once there is one, a person's review of it. */
+export function SprintIntegration({ sprintId, companyId, canReview = false, canConfigure = false }: {
+  sprintId: number; companyId?: number; canReview?: boolean; canConfigure?: boolean
+}) {
   const { t } = useTranslation()
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['sprint-integration', sprintId],
@@ -45,6 +49,18 @@ export function SprintIntegration({ sprintId }: { sprintId: number }) {
       <p className="text-xs text-gray-500">
         {t('sprint.integrationHint', { defaultValue: 'Merge these branches in order, run the full suite on the result, then publish one PR.' })}
       </p>
+      {integration?.latest && (
+        <p className="text-xs text-gray-400">
+          {t('integrationReview.latest', { status: t(`integrationReview.status.${integration.latest.status}`, { defaultValue: integration.latest.status }) })}
+          {integration.latest.commit && <> <code className="text-gray-300">{integration.latest.commit.slice(0, 7)}</code></>}
+          {integration.review?.latest && (
+            <> · {t('integrationReview.latestReview', { author: integration.review.latest.author_name, event: t(`review.event.${integration.review.latest.event}`) })}</>
+          )}
+        </p>
+      )}
+      {integration?.latest && companyId !== undefined && (
+        <IntegrationReview sprintId={sprintId} companyId={companyId} canReview={canReview} canConfigure={canConfigure} />
+      )}
     </section>
   )
 }

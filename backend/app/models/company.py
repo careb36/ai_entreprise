@@ -79,6 +79,10 @@ class Company(SQLModel, table=True):
     # (``services/planning/project_docs/texts.py``): "en" or "es". Set from the
     # creator's interface language in "New company"; an Owner or Manager changes it.
     doc_language: str | None = None
+    # A sprint's integration is merged into the base branch only once a person
+    # approved it in a review (services/release/integration_review.py); off by
+    # default, so nothing changes for a company that does not ask. An Owner writes it.
+    integration_review_required: bool = False
 
 
 class Agent(SQLModel, table=True):
