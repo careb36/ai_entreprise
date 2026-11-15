@@ -11,6 +11,7 @@ import { evidenceEndpoints } from './api/evidence'
 import { githubEndpoints } from './api/github'
 import { memoryEndpoints } from './api/memory'
 import { messageEndpoints } from './api/messages'
+import { progressEndpoints } from './api/progress'
 import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
@@ -29,6 +30,7 @@ export * from './api/evidence'
 export * from './api/github'
 export * from './api/memory'
 export * from './api/messages'
+export * from './api/progress'
 export * from './api/sprints'
 export * from './api/sso'
 export * from './api/stream'
@@ -51,6 +53,7 @@ const endpoints = {
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
   ...boardNoteEndpoints(http),
+  ...progressEndpoints(http),
   ...evidenceEndpoints(http),
   ...analyticsEndpoints(http),
   ...memoryEndpoints(),

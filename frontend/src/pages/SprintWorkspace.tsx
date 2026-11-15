@@ -1,6 +1,7 @@
 /**
  * Sprint page — one page per sprint at `/sprints/:id`, with six tabs:
- * Overview (`/sprints/:id`), Board (`/board`), Live (`/live`), Conversation
+ * Overview (`/sprints/:id`, with the claimed-versus-verified progress of
+ * issue #531), Board (`/board`), Live (`/live`), Conversation
  * (`/conversation`), Board notes (`/notes`, the sprint board of issue #439)
  * and Analytics (`/analytics`). An unknown tab falls back to Overview.
  *
@@ -26,6 +27,7 @@ import { ApiError } from '../services/api'
 import { AutonomyControl, SprintControls, SprintStatusBanner } from '../components/SprintControls'
 import { SprintTeamChips } from '../components/SprintTeam'
 import { SprintIntegration } from '../components/SprintIntegration'
+import { SprintProgress } from '../components/SprintProgress'
 import { parseRouteId } from '../lib/routeId'
 
 export const SPRINT_TABS = ['overview', 'board', 'live', 'conversation', 'notes', 'analytics'] as const
@@ -236,6 +238,8 @@ export const SprintWorkspace: React.FC = () => {
           ) : (
             <>
               <SprintOverview sprintId={sprintId} />
+              <SprintProgress sprintId={sprintId} live={board.sprint.status === 'active'}
+                specificationId={board.sprint.specification_id} />
               <SprintIntegration sprintId={sprintId} />
             </>
           )}

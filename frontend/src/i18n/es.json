@@ -2566,5 +2566,39 @@
       "requirements": "Requisitos",
       "modules": "Módulos"
     }
+  },
+  "sprintProgress": {
+    "title": "Declarado como hecho frente a verificado",
+    "claimed": "Entregado (declarado)",
+    "verified": "Verificado",
+    "gap": "Declarado, sin verificar",
+    "done": "Hecho",
+    "at": "Cuándo",
+    "tasks": "Tareas",
+    "state": "Estado",
+    "requirement": "Requisito",
+    "legend": "Leyenda",
+    "table": "Ver como tabla",
+    "noEvents": "Todavía no hay eventos de tareas.",
+    "chartLabel": "{{claimed}} de {{tasks}} tareas declaradas entregadas, {{verified}} verificadas",
+    "gapSummary": "{{gap}} de {{claimed}} tareas declaradas entregadas no están verificadas.",
+    "live": "En vivo, a partir de los eventos de las tareas",
+    "sealed": "Sellado en el cierre {{n}}; el resumen y la cadena de auditoría se verifican",
+    "sealBroken": "Sellado en el cierre {{n}}; el resumen o la cadena de auditoría no se verifica",
+    "loadError": "No se pudo cargar el progreso del sprint.",
+    "coverageTitle": "Requisitos en los sprints de la especificación",
+    "verdict": {
+      "verified": "Verificado",
+      "refuted": "Refutado",
+      "unverifiable": "No verificable",
+      "none": "Sin veredicto"
+    },
+    "coverage": {
+      "verified": "Verificado",
+      "done": "Hecho",
+      "claimed": "Declarado",
+      "open": "Abierto",
+      "uncovered": "Sin cubrir"
+    }
   }
 }

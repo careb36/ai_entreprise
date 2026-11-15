@@ -40,7 +40,7 @@ from services.planning.sprint_planner import (
 )
 from services.platform import hooks
 from services.platform.glassroom import publish_glassroom
-from services.tasks import dependencies
+from services.tasks import dependencies, progress_snapshot
 from services.tasks.board import SCRUM_MASTER_ROLE
 
 logger = setup_logger("fabrique-task-worker")
@@ -455,6 +455,11 @@ async def _finalize_sprint_if_ready(nats_client: NATSClient, sprint_id: int) -> 
     )
     if not result.get("completed"):
         return
+    # The progress as it stood at this close, sealed in the audit chain
+    # (issue #531); a reclose adds a snapshot and keeps the first.
+    await asyncio.to_thread(
+        progress_snapshot.seal_at_close, engine, sprint_id, retro_metrics
+    )
     # What leaves the factory starts from the event: release integrates (issue #314).
     hooks.emit(
         hooks.SPRINT_CLOSED, nats_client=nats_client, engine=engine, sprint_id=sprint_id

@@ -50,6 +50,7 @@ from routers import (
     specifications_router,
     sprint_control_router,
     sprint_crud_router,
+    sprint_progress_router,
     sprint_router,
     sso_admin_router,
     sso_router,
@@ -143,6 +144,7 @@ app.include_router(integration_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
+app.include_router(sprint_progress_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
 app.include_router(run_secrets_router)

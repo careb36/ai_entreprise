@@ -29,6 +29,8 @@ export const QUERY_KEYS = {
   procedures: (companyId: number) => ['procedures', companyId] as const,
   inbox: (companyId: number) => ['inbox', companyId] as const,
   boardNotes: (sprintId: number) => ['sprint', sprintId, 'board-notes'] as const,
+  sprintProgress: (sprintId: number) => ['sprint', sprintId, 'progress'] as const,
+  specificationProgress: (specId: number) => ['specification', specId, 'progress'] as const,
   messages: (companyId: number, filters: MessageFilters = {}) =>
     ['messages', companyId, filters.sprint_id ?? '', filters.backlog_item_id ?? '', filters.kind ?? '', filters.limit ?? ''] as const,
   verifications: (companyId: number, runId: number) => ['agent-run', companyId, runId, 'verifications'] as const,
