@@ -1847,6 +1847,79 @@
     "loadError": "Could not load what needs you: {{message}}",
     "navCount": "{{count}} waiting for you"
   },
+  "intake": {
+    "title": "Incoming requests",
+    "hint": "Tickets, briefs, integrations and chat requests wait here until a Manager decides them. Snoozed ones come back on their date.",
+    "filter": "Show requests by status",
+    "empty": "No request with this status.",
+    "loadError": "Could not load the requests: {{message}}",
+    "newTitle": "Request title",
+    "newBody": "Details",
+    "send": "Send to the queue",
+    "decision": "Decision",
+    "category": "Category",
+    "noCategory": "None",
+    "sprint": "Sprint",
+    "pickSprint": "Pick an open sprint",
+    "assignee": "Assignee (role)",
+    "specification": "Specification (an approved one gets a new revision)",
+    "pickSpecification": "Pick a specification",
+    "duplicateOf": "Duplicate of (intake:ID or task:ID)",
+    "duplicatePlaceholder": "intake:12",
+    "until": "Snooze until",
+    "reason": "Reason (optional)",
+    "reasonRequired": "Why it is declined (required)",
+    "submit": "Record the decision",
+    "decideError": "Could not record it: {{message}}",
+    "reopen": "Back to pending",
+    "suggestion": "Support agent suggests (a claim): {{status}}, {{category}}. {{reason}}",
+    "suggestionUnusable": "The Support agent gave no usable suggestion.",
+    "decided": "Decided {{status}} by {{who}}",
+    "became": "Became",
+    "duplicates": "Duplicates",
+    "snoozedUntil": "Comes back on {{date}}",
+    "choice": {
+      "accept_task": "Accept as a task",
+      "accept_specification": "Accept into a specification revision",
+      "decline": "Decline",
+      "duplicate": "Mark as a duplicate",
+      "snooze": "Snooze"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "declined": "Declined",
+      "duplicate": "Duplicate",
+      "snoozed": "Snoozed"
+    },
+    "sources": {
+      "ticket": "Ticket",
+      "brief": "Brief",
+      "webhook": "Integration",
+      "chat": "Chat"
+    },
+    "categories": {
+      "bug": "Bug",
+      "feature": "Feature",
+      "question": "Question",
+      "incident": "Incident",
+      "uncategorized": "Uncategorized"
+    },
+    "link": {
+      "intake": "request #{{id}}",
+      "task": "task #{{id}}",
+      "specification": "specification #{{id}}"
+    },
+    "record": {
+      "title": "How the queue is doing",
+      "recorded": "{{share}} closed with what it led to recorded ({{recorded}} of {{received}})",
+      "median": "Median time to a decision: {{duration}}",
+      "agreement": "{{category}}: the Support agent matched the person on {{agreed}} of {{decided}}",
+      "none": "—",
+      "hours": "{{count}} h",
+      "days": "{{count}} days"
+    }
+  },
   "workControl": {
     "plannedTitle": "This sprint has not started",
     "plannedHint": "The agents start working when you start it.",

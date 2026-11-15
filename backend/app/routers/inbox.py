@@ -9,7 +9,9 @@ the agent runs of other producers nobody has approved or rejected (the
 company's own task worker and kickoff runs are decided by the review loop),
 and the sprints whose integration stopped at a merge conflict or a failing
 suite, missed a task's branch or could not start (``integrations``, listed up
-to the limit and counted in full; ``services/release/integration.py``). An archived
+to the limit and counted in full; ``services/release/integration.py``), and how
+many incoming requests wait in the intake queue (``intake_pending``, issue #532;
+``routers/intake.py``). An archived
 sprint's tasks and integrations are left out (``services/loop/sprint_archive.py``).
 
 With ``MANAGER_AGENT_ENABLED`` each item carries the Manager agent's latest
@@ -30,6 +32,7 @@ from models.manager import ManagerDecision
 from services.learning import scrum_master
 from services.loop import sprint_archive
 from services.loop.carry_over import carried_over, carry_mark
+from services.planning import intake_records
 from services.release import integration
 from services.tasks import task_events, task_projection
 from sqlalchemy import func
@@ -155,6 +158,7 @@ async def inbox(
         ).all()
 
     integrations = integration.waiting_for_a_person(session, company_id)
+    intake_pending = intake_records.pending_count(session, company_id)
     agent_decisions = []
     if settings.MANAGER_AGENT_ENABLED:
         agent_decisions = [
@@ -197,8 +201,10 @@ async def inbox(
         "integrations_total": len(integrations),
         "agent_decisions": agent_decisions,
         "blocked_total": blocked_total,
+        "intake_pending": intake_pending,
         "total": blocked_total
         + len(proposals)
         + int(pending_runs or 0)
-        + len(integrations),
+        + len(integrations)
+        + intake_pending,
     }

@@ -2,7 +2,8 @@
 Support router — bug reporting, ticket management, support chat, and log download.
 
 Endpoints:
-- ``POST /v1/support/report_bug``         — submit a new support ticket.
+- ``POST /v1/support/report_bug``         — submit a new support ticket; with a
+  ``company_id`` (a member's), it also enters that company's intake queue.
 - ``GET  /v1/support/tickets``            — list tickets with optional filters.
 - ``GET  /v1/support/tickets/{num}``      — get full detail of a single ticket.
 - ``PATCH /v1/support/tickets/{num}``     — update ticket status / resolution,
@@ -27,15 +28,17 @@ from auth_policy import (
     current_user_if_required,
     is_support_admin,
     require_authenticated,
+    require_company_role,
     require_support_admin,
 )
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from logging_config import logger
-from models import BugReport, User
+from models import BugReport, Company, User
 from schemas import BugReportRequest, BugStatusUpdateRequest, SupportChatRequest
 from services.management.support_agent import CATEGORIES, SEVERITIES, track_record
+from services.planning import intake_queue
 from sqlmodel import Session, func, select, text
 
 router = APIRouter(prefix="/v1/support", tags=["Support"])
@@ -74,13 +77,26 @@ def _known(value: str | None, allowed: tuple[str, ...], field: str) -> str | Non
 
 
 @router.post("/report_bug")
-async def report_bug(req: BugReportRequest, session: Session = Depends(get_session)):  # noqa: B008 - FastAPI dependency marker.
+async def report_bug(
+    req: BugReportRequest,
+    request: Request,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+):
     """
     Create a structured support ticket and return its auto-generated ticket number.
 
     The caller should store the returned ``ticket_num`` for status polling via
-    ``GET /v1/support/tickets/{ticket_num}``.
+    ``GET /v1/support/tickets/{ticket_num}``. With a ``company_id`` the
+    ticket also enters that company's intake queue as a ``ticket`` request
+    (``intake_item_id`` in the answer); the sender must be a member. Without
+    one the form stays public: no sign-in is asked for.
     """
+    user = None
+    if req.company_id is not None:
+        user = await current_user_if_required(request, session)
+        if session.get(Company, req.company_id) is None:
+            raise HTTPException(status_code=404, detail="Company not found")
+        require_company_role(session, user, req.company_id, "Viewer")
     # Nothing the reporter did not choose: a default would pass for their claim.
     severity = _known(req.severity, SEVERITIES, "severity") or None
     category = _known(req.category, CATEGORIES, "category") or None
@@ -98,12 +114,24 @@ async def report_bug(req: BugReportRequest, session: Session = Depends(get_sessi
         browser_info=req.browser_info,
     )
     session.add(report)
+    item = None
+    if req.company_id is not None:
+        item = intake_queue.receive(
+            session,
+            req.company_id,
+            "ticket",
+            req.title,
+            req.description,
+            submitted_by=user.email if user is not None else req.reporter_email,
+            source_ref=ticket_num,
+        )
     session.commit()
     session.refresh(report)
     logger.info(f"Bug report created: {ticket_num} by {req.reporter_email}")
     return {
         "ticket_num": report.ticket_num,
         "id": report.id,
+        "intake_item_id": item.id if item is not None else None,
         "status": report.status,
         "created_at": report.created_at.isoformat(),
         "message": f"Report {report.ticket_num} created. You can track its status at any time.",

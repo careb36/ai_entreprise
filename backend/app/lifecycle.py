@@ -237,6 +237,16 @@ async def startup(app):
     _background_tasks.add(connect_task)
     connect_task.add_done_callback(_on_task_done)
 
+    # Snoozed intake requests come back when their date passes (issue #532).
+    from database import engine as intake_engine
+    from services.planning.intake_queue import run_intake_janitor
+
+    intake_task = asyncio.create_task(
+        run_intake_janitor(intake_engine), name="intake_janitor"
+    )
+    _background_tasks.add(intake_task)
+    intake_task.add_done_callback(_on_task_done)
+
     # The Support agent needs only the database and the LLM proxy.
     if settings.SUPPORT_AGENT_ENABLED:
         from database import engine

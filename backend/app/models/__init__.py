@@ -33,6 +33,7 @@ from .company import (
 from .documentation import DocumentationPack
 from .event import TaskEvent
 from .github import GitHubRepoBinding
+from .intake import IntakeItem
 from .integration import SprintIntegration
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
@@ -71,6 +72,7 @@ __all__ = [
     "CompanyWebhook",
     "DocumentationPack",
     "GitHubRepoBinding",
+    "IntakeItem",
     "ManagerDecision",
     "ManagerPolicy",
     "McpServer",

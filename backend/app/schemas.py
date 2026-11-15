@@ -301,6 +301,9 @@ class BugReportRequest(BaseModel):
     category: str | None = None
     reporter_email: str | None = None
     browser_info: dict[str, Any] | None = None  # User-agent, viewport, etc.
+    # The company the ticket is about: given, the ticket also enters that
+    # company's intake queue (issue #532); the sender must be a member.
+    company_id: int | None = None
 
 
 class BugStatusUpdateRequest(BaseModel):

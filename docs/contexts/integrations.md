@@ -20,6 +20,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 ## Described elsewhere
 
+- `request <text>` (Slack's `/fabrique request …`, a Teams message `request …`): a linked chat account with at least the Viewer role sends a request to the company's intake queue, source `chat`, `source_ref` `<provider>:<workspace>` (`routers/chat_interactions._request`); an unlinked account is told to link first. The queue itself: [planning](planning.md#the-intake-queue).
 - `outbox_service` (the outbox processor that stores `task.assign` and posts webhooks): step 1 of [the sprint loop](../SPRINT_LOOP.md) and the paragraph below.
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS`, `CHAT_APP_URL`, `CHAT_RATE_LIMIT`, `PUBLIC_API_URL`: [configuration](../CONFIGURATION.md).
 - Creating the Slack app or the Teams webhooks, and rotating their secrets: [operations](../OPERATIONS.md#approvals-in-slack-and-teams).

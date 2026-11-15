@@ -1847,6 +1847,79 @@
     "loadError": "No se pudo cargar lo que te necesita: {{message}}",
     "navCount": "{{count}} esperan por vos"
   },
+  "intake": {
+    "title": "Solicitudes entrantes",
+    "hint": "Los tickets, briefs, integraciones y pedidos por chat esperan aquí hasta que un Manager los decida. Los pospuestos vuelven en su fecha.",
+    "filter": "Mostrar solicitudes por estado",
+    "empty": "No hay solicitudes con este estado.",
+    "loadError": "No se pudieron cargar las solicitudes: {{message}}",
+    "newTitle": "Título de la solicitud",
+    "newBody": "Detalles",
+    "send": "Enviar a la cola",
+    "decision": "Decisión",
+    "category": "Categoría",
+    "noCategory": "Ninguna",
+    "sprint": "Sprint",
+    "pickSprint": "Elige un sprint abierto",
+    "assignee": "Asignado (rol)",
+    "specification": "Especificación (una aprobada recibe una nueva revisión)",
+    "pickSpecification": "Elige una especificación",
+    "duplicateOf": "Duplicado de (intake:ID o task:ID)",
+    "duplicatePlaceholder": "intake:12",
+    "until": "Posponer hasta",
+    "reason": "Motivo (opcional)",
+    "reasonRequired": "Por qué se rechaza (obligatorio)",
+    "submit": "Registrar la decisión",
+    "decideError": "No se pudo registrar: {{message}}",
+    "reopen": "Volver a pendiente",
+    "suggestion": "El agente de Soporte sugiere (una afirmación): {{status}}, {{category}}. {{reason}}",
+    "suggestionUnusable": "El agente de Soporte no dio una sugerencia utilizable.",
+    "decided": "Decidido {{status}} por {{who}}",
+    "became": "Se convirtió en",
+    "duplicates": "Duplica",
+    "snoozedUntil": "Vuelve el {{date}}",
+    "choice": {
+      "accept_task": "Aceptar como tarea",
+      "accept_specification": "Aceptar en una revisión de la especificación",
+      "decline": "Rechazar",
+      "duplicate": "Marcar como duplicado",
+      "snooze": "Posponer"
+    },
+    "statuses": {
+      "pending": "Pendiente",
+      "accepted": "Aceptada",
+      "declined": "Rechazada",
+      "duplicate": "Duplicada",
+      "snoozed": "Pospuesta"
+    },
+    "sources": {
+      "ticket": "Ticket",
+      "brief": "Brief",
+      "webhook": "Integración",
+      "chat": "Chat"
+    },
+    "categories": {
+      "bug": "Error",
+      "feature": "Funcionalidad",
+      "question": "Pregunta",
+      "incident": "Incidente",
+      "uncategorized": "Sin categoría"
+    },
+    "link": {
+      "intake": "solicitud #{{id}}",
+      "task": "tarea #{{id}}",
+      "specification": "especificación #{{id}}"
+    },
+    "record": {
+      "title": "Cómo va la cola",
+      "recorded": "{{share}} cerradas con su resultado registrado ({{recorded}} de {{received}})",
+      "median": "Tiempo mediano hasta una decisión: {{duration}}",
+      "agreement": "{{category}}: el agente de Soporte coincidió con la persona en {{agreed}} de {{decided}}",
+      "none": "—",
+      "hours": "{{count}} h",
+      "days": "{{count}} días"
+    }
+  },
   "workControl": {
     "plannedTitle": "Este sprint todavía no empezó",
     "plannedHint": "Los agentes empiezan a trabajar cuando lo inicies.",
