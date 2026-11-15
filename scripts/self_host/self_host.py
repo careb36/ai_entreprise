@@ -68,6 +68,10 @@ AGENTS = [
     {"role": "TechWriter", "name": "Tess Fab"},
 ]
 IDENTITY = ["-c", "user.name=La Fabrique self-hosting", "-c", "user.email=self-host@localhost"]
+# Every local git call is bounded: a repository snapshot of a few thousand files
+# takes seconds, so a call still running after this is a hung host, and the
+# harness fails naming the command instead of waiting for the CI job's timeout.
+GIT_TIMEOUT_SECONDS = 120
 
 
 class ApiError(RuntimeError):
@@ -107,10 +111,25 @@ class Api:
         return self.call("PATCH", path, body)
 
 
+class GitTimeoutError(RuntimeError):
+    """A local git command did not finish within ``GIT_TIMEOUT_SECONDS``."""
+
+
 def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *IDENTITY, *args], cwd=cwd, check=True, capture_output=True, text=True
-    ).stdout
+    try:
+        return subprocess.run(
+            ["git", *IDENTITY, *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+        ).stdout
+    except subprocess.TimeoutExpired as e:
+        command = " ".join(["git", *args])
+        raise GitTimeoutError(
+            f"{command} (in {cwd}) did not finish within {GIT_TIMEOUT_SECONDS} s"
+        ) from e
 
 
 def _load(path: Path) -> dict:

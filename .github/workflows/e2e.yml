@@ -205,5 +205,11 @@ jobs:
         if: always()
         with:
           name: e2e-logs-${{ matrix.sandbox }}
-          path: ${{ runner.temp }}/e2e/*.log
+          # The run's logs, and the self-hosting harness's (step 9d,
+          # scripts/e2e/self_host_step.sh): a step that hangs until the job's
+          # timeout (#575) still leaves its last output here.
+          path: |
+            ${{ runner.temp }}/e2e/*.log
+            ${{ runner.temp }}/e2e/self-host/*.log
+            ${{ runner.temp }}/e2e/self-host/*.json
           if-no-files-found: ignore
