@@ -58,10 +58,22 @@ def _stamp(value: Any) -> str:
     return str(value or "")
 
 
+def verdict_of(payload: Any) -> str | None:
+    """The verdict a ``verified`` event's payload carries: ``{"id", "verdict"}``
+    under ``VERIFICATION_KEY`` (the shape board_writes records), or the bare
+    verdict an earlier event carried."""
+    if not isinstance(payload, Mapping):
+        return None
+    value = payload.get(VERIFICATION_KEY)
+    if isinstance(value, Mapping):
+        value = value.get("verdict")
+    return value if value in VERDICTS else None
+
+
 def normalise(event: Any) -> dict[str, Any]:
     """The fields ``build`` reads from one event (a row or an ``as_dict`` dict)."""
     payload = _get(event, "payload") or {}
-    verdict = payload.get(VERIFICATION_KEY) if isinstance(payload, Mapping) else None
+    verdict = verdict_of(payload)
     if verdict is None and isinstance(event, Mapping):
         # Already normalised (``progress_snapshot.normalised``).
         verdict = event.get("verification")
