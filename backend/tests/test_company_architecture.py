@@ -6,7 +6,7 @@ earlier ones, a check and a coverage that read every specification a version
 covers, a pack that documents every approved specification, and a migration
 that turns the existing architectures into versions
 (``services/planning/arch_versions.py``, ``routers/company_architecture.py``,
-``alembic/versions/0099_company_architecture.py``).
+``alembic/versions/0038_company_architecture.py``).
 """
 
 from __future__ import annotations
@@ -364,7 +364,7 @@ def test_the_migration_makes_the_existing_architectures_versions_of_the_company(
     previous = migrations.alembic_config()
     from alembic.script import ScriptDirectory
 
-    down = ScriptDirectory.from_config(previous).get_revision("0099").down_revision
+    down = ScriptDirectory.from_config(previous).get_revision("0038").down_revision
     _to(db_file, down)
     with db_file.begin() as c:
         for sid in (1, 2):
@@ -389,7 +389,7 @@ def test_the_migration_makes_the_existing_architectures_versions_of_the_company(
                 ),
                 {"id": aid, "sid": sid, "status": status, "at": approved_at},
             )
-    _to(db_file, "0099")
+    _to(db_file, "0038")
     with db_file.connect() as c:
         got = {
             r[0]: (r[1], r[2], r[3])

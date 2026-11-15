@@ -36,6 +36,7 @@ from .event import TaskEvent
 from .github import GitHubRepoBinding
 from .intake import IntakeItem
 from .integration import SprintIntegration
+from .integration_review import IntegrationReview, IntegrationReviewComment
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
@@ -83,6 +84,8 @@ __all__ = [
     "DocumentationPack",
     "GitHubRepoBinding",
     "IntakeItem",
+    "IntegrationReview",
+    "IntegrationReviewComment",
     "ManagerDecision",
     "ManagerPolicy",
     "McpServer",

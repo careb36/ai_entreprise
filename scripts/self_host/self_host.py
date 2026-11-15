@@ -31,8 +31,9 @@ Steps (``--steps``, comma-separated; ``all`` by default):
 - ``review``: the tasks waiting for a person, the task branches and the
   sprint's integration (its branches merged and the suite run, the one
   request a person reviews); with ``--accept TEXT`` a person accepts the
-  held tasks with that comment, and with ``--merge`` merges the integration
-  into ``main`` locally (nothing is pushed: the snapshot has no remote).
+  held tasks with that comment, and with ``--merge`` records an approving
+  review of the integration (the ``--accept`` comment as its text) and merges
+  it into ``main`` locally (nothing is pushed: the snapshot has no remote).
 - ``pack``: the documentation pack (#530) compiled in English and in Spanish,
   with what each could not say.
 
@@ -438,8 +439,19 @@ def step_review(api, args, state, report):
         except ApiError as e:
             report.setdefault("notes", []).append(str(e))
         integration, latest = _settled_integration(api, sid, args.timeout)
-    merged = None
+    merged = reviewed = None
     if args.merge and latest:
+        # The person's reading is recorded before the merge (F7): an approving
+        # review of the integration, with the --accept comment when given. It
+        # may be refused (segregation of duties: the harness started the
+        # sprint); the merge is then asked anyway and answers for itself.
+        try:
+            reviewed = api.post(
+                f"/v1/sprints/{sid}/integration/reviews",
+                {"integration_id": latest.get("id"), "event": "approve", "body": args.accept or "Read the integration's diff."},
+            )
+        except ApiError as e:
+            reviewed = {"refused": str(e)}
         try:
             merged = api.post(f"/v1/sprints/{sid}/integration/merge")
         except ApiError as e:
@@ -452,6 +464,7 @@ def step_review(api, args, state, report):
         "accepted": accepted,
         "integration": {k: latest.get(k) for k in ("id", "status", "trigger", "commit", "branch") if latest},
         "integration_plan": {k: v for k, v in integration.items() if k not in ("latest", "history")},
+        "integration_review": reviewed,
         "merged": merged,
         "base_log": _git(checkout, "log", "--oneline", "-5", "main").splitlines(),
     }

@@ -22,8 +22,8 @@ the upgrade is not recorded, so that is the closest state it can restore.
 
 Follows 0036 (open pull request #582) at merge; renumbered then.
 
-Revision ID: 0099
-Revises: 0035
+Revision ID: 0038
+Revises: 0037
 Create Date: 2026-11-15 23:00:00 UTC
 """
 
@@ -35,8 +35,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0035"
+revision = "0038"
+down_revision = "0037"
 branch_labels = None
 depends_on = None
 

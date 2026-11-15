@@ -3196,5 +3196,73 @@
     "save": "Save view",
     "saved": "View \"{{name}}\" saved.",
     "loading": "Loading tasks…"
+  },
+  "integrationReview": {
+    "title": "A person's review of this integration",
+    "loadError": "Could not load the reviews of this integration.",
+    "gate": {
+      "off": "This company does not require an approval before the integration is merged; a review is still recorded.",
+      "waiting": "This company merges the integration only once a person approved it: no approval of this commit yet.",
+      "approved": "Approved by a person: the integration can be merged."
+    },
+    "published": "Published as a request on the forge, whose own review decides a merge there; this review gates only the local merge.",
+    "publishedLink": "Open the request",
+    "setting": {
+      "label": "Require a person's approving review before the integration is merged"
+    },
+    "history": "Reviews of this integration",
+    "none": "No review yet.",
+    "showDiff": "Show the diff",
+    "hideDiff": "Hide the diff",
+    "readingDiff": "The workspace daemon is reading the diff...",
+    "truncated": "The diff has more files than shown.",
+    "bodyLabel": "Your review",
+    "decision": "Decision",
+    "hint": {
+      "comment": "Records what you read, without a decision.",
+      "approve": "Approves this commit of the integration. Whoever started the sprint does not approve it.",
+      "request_changes": "Records that the integration should change before it is merged."
+    },
+    "submit": "Submit review",
+    "pendingComments_one": "{{count}} comment goes with this review",
+    "pendingComments_other": "{{count}} comments go with this review",
+    "outcome": {
+      "recorded": "Recorded",
+      "approved": "Approved",
+      "changes_requested": "Changes requested"
+    },
+    "latest": "Latest integration: {{status}}",
+    "latestReview": "last review by {{author}}: {{event}}",
+    "status": {
+      "tests_passed": "tests passed",
+      "tests_failed": "tests failed",
+      "untested": "not tested",
+      "conflict": "conflict",
+      "incomplete": "incomplete",
+      "running": "running",
+      "pending": "waiting for the daemon",
+      "error": "refused by the daemon"
+    },
+    "change": {
+      "added": "added",
+      "modified": "modified",
+      "deleted": "deleted",
+      "renamed": "renamed"
+    },
+    "omitted": {
+      "binary": "A binary file: no lines to show.",
+      "too_large": "Too large to show here."
+    },
+    "comment": {
+      "inReview": "In review #{{id}}",
+      "pending": "Waiting for a review",
+      "resolved": "Resolved",
+      "resolve": "Resolve",
+      "labelGeneral": "A comment on the whole integration",
+      "label": "Comment on {{path}}, line {{line}}",
+      "submit": "Add comment",
+      "add": "Add a comment on {{path}}, line {{line}}"
+    },
+    "counts": "+{{additions}} −{{deletions}}"
   }
 }

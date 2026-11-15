@@ -1,7 +1,10 @@
 """A sprint's integration: its task branches merged, the suite run, one request (issue #314).
 
 ``GET /v1/sprints/{id}/integration`` (Viewer) is the plan (which branches,
-in which order) beside the latest integration and the earlier ones.
+in which order) beside the latest integration and the earlier ones, and the
+state of the latest one's reviews (``review``: the latest review, whether it
+is approved and whether the company requires that before a merge;
+``routers/integration_reviews.py``).
 ``POST /v1/sprints/{id}/integrate`` (Manager) integrates now; the task worker
 does it on its own when a sprint closes (``services/release/integration.py``).
 ``POST /v1/sprints/{id}/integration/publish`` (Manager) pushes the
@@ -16,7 +19,7 @@ from models import Sprint, User
 from models.integration import SprintIntegration
 from services.loop import sod_requesters
 from services.platform import sod
-from services.release import integration
+from services.release import integration, integration_review
 from services.release.git_publish import PublishRefused
 from services.release.integration_publish import publish_spec, record_publication
 from services.release.local_merge import (
@@ -70,6 +73,9 @@ async def sprint_integration(
     return {
         **integration.plan(session, sprint.id),
         "latest": history[0] if history else None,
+        "review": integration_review.state(
+            session, sprint.company_id, history[0] if history else None
+        ),
         "history": [
             {
                 "id": row.id,

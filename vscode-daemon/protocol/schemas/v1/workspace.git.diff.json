@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.git.diff",
+  "title": "workspace.git.diff",
+  "description": "The diff a sprint's integration brings into its base: the files between the merge base of base and the pinned commit, their hunks and the sha256 of each side, read-only (git_diff.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.git.diff",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "base": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_root",
+        "commit"
+      ]
+    },
+    "file": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "old_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "type": "string"
+        },
+        "additions": {
+          "type": "integer"
+        },
+        "deletions": {
+          "type": "integer"
+        },
+        "patch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "omitted": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256_old": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "sha256_new": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "change"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "base": {
+          "type": "string"
+        },
+        "base_commit": {
+          "type": "string"
+        },
+        "merge_base": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/file"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}
