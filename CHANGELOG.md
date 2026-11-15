@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The runners' docker state is swept weekly.** `e2e.yml` started a pgvector
+container per job, that image declares a `VOLUME`, and both cleanup sites used
+`docker rm -f`: every run on this machine left an anonymous volume behind, and
+273 of them had reached 22 GB. They now use `docker rm -fv`; a new
+`runner-hygiene.yml` sweeps daily — this repository's stopped e2e and smoke
+containers with their volumes, dangling images older than a week, an anonymous
+dangling volume older than a week, and the buildkit cache kept under 2 GB. It
+never prunes by name: the named volumes here (`la-fabrique_*`) are a person's
+development data and read as `dangling` while their stack is down, and the named
+images belong to the other repositories sharing this host (#566).
+
 * **A new push to `main` cancels the run it replaces.** The checks on the self-hosted runners (backend tests, e2e, frontend build, Docker build, file sizes, workflows, security scan, security baseline) already cancelled a pull request's superseded run; on `main` every merge ran in full and queued ahead of the pull requests, so a burst of merges kept the runners busy validating commits a newer run already covered. Release tags and the image publish (`images.yml`) still never cancel.
 
 * **No source file over 600 lines.** `llm-proxy/app.py` is split into modules with one job each (`routing.py`, `providers.py`, `quota.py`, `embedding.py`, with the listing in `catalogue.py` and tracing in `telemetry.py`), keeping `app.py` as the entry point, and `scripts/verify_infra.py` keeps its command line while its checks move to `scripts/infra_checks/`; the file-size baseline is empty (#519).

@@ -181,7 +181,9 @@ Workflows live in `.github/workflows/` and mostly run on the self-hosted
 `[self-hosted, linux, x64, lafabrique]` runner: `backend-tests.yml` (Poetry,
 ruff, mypy, pytest, then the llm-proxy suite), `frontend-build.yml` (`npm ci`,
 tsc, lint, tests, build), `e2e.yml` (the loop against pgvector/Postgres and NATS with
-JetStream), `security-scan.yml` (Trivy, plus a non-failing `safety check`) and
+JetStream), `security-scan.yml` (Trivy, plus a non-failing `safety check`),
+`runner-hygiene.yml` (a daily sweep of the docker state the runners share with
+every other repository on this machine) and
 a manual SLSA provenance workflow. Feature-branch pushes do **not** trigger the
 test workflows — push a pull request to get a run. Backend and frontend jobs
 are path-filtered on `backend/**`, `llm-proxy/**`, `frontend/**` and their own
