@@ -1,16 +1,21 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+// The packaged desktop app's build: `npm run electron:build` selects it with
+// `--mode electron` (an env var prefix such as ELECTRON=1 does not work in
+// Windows' cmd.exe); ELECTRON=1 is still honoured.
+const isElectronBuild = (mode: string) => Boolean(process.env.ELECTRON) || mode === 'electron'
+
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  // Electron loads dist/index.html from file://, so it needs relative asset
-  // URLs. The web build is served from the site root and must use absolute
-  // ones: with './' a deep link such as /evidence/1 would request
+  // Both builds are served from a site root (the desktop app's from its
+  // local server, frontend/electron/local-server.ts), so asset URLs are
+  // absolute: with './' a deep link such as /evidence/1 would request
   // /evidence/assets/... and render a blank page.
-  // `npm run electron:build` selects it with `--mode electron` (an env var
-  // prefix such as ELECTRON=1 does not work in Windows' cmd.exe); ELECTRON=1
-  // is still honoured.
-  base: process.env.ELECTRON || mode === 'electron' ? './' : '/',
+  base: '/',
+  // The desktop build calls the API on the page's own origin, which its
+  // local server forwards to the backend (docs/design/SESSIONS.md, Desktop app).
+  define: isElectronBuild(mode) ? { 'import.meta.env.VITE_API_SAME_ORIGIN': JSON.stringify('true') } : {},
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',

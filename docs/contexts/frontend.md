@@ -14,6 +14,23 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 
 - **Documentation** (`pages/Documentation.tsx`, `/company/documentation`; `services/documentation.ts`, `components/PackMarkdown.tsx`, `components/C4DiagramView.tsx`, `lib/c4Layout.ts`; issue #530) — The project's documentation packs: the versions, the drift lint, each document as Markdown (`react-markdown` with `remark-gfm` for tables, raw HTML skipped, no images, only `#` and http(s) links kept) with its PMBOK 8th edition domain and focus area, sources, claims and person sections, and the C4 diagrams drawn as SVG from their data (the Mermaid source shown as text, never run). A Manager compiles and writes an approved pack; an Owner approves while the lint finds no drift.
 
+## The desktop app
+
+**`frontend/electron/`** — the Electron main process and preload, compiled by
+`npm run electron:compile` into `dist-electron-main/` and outside the layered
+`frontend/src` tree. `npm run electron:dev` loads the Vite dev server;
+`npm run electron:build` builds the renderer with `--mode electron` and
+packages it. The packaged app does not load `file://`: `local-server.ts`
+serves `dist/` on `127.0.0.1` at a port the system picks and forwards `/v1/*`
+to `BACKEND_URL` (default `http://localhost:8000`), so the page and the API
+share an origin and the session cookies of issue #524 are first-party; the
+desktop build calls the API on its own origin (`VITE_API_SAME_ORIGIN`, so
+`API_BASE` in `services/api/client.ts` is empty). `navigation.ts` keeps the
+main window on that origin, opens other links in the system browser and runs
+single sign-on in a window without the preload; `ipc-handlers.ts` answers only
+the local page. Design and threat model: `docs/design/SESSIONS.md`, Desktop
+app.
+
 ## Layout of the larger views
 
 A view too large for one file keeps its entry file, with the same exports, and puts its parts in a folder beside it, named after it in lower camel case: subcomponents with one job each, and `useXxx` hooks for the state that separates cleanly. Every source file stays at or under 600 lines (`scripts/check_file_sizes.py`).
