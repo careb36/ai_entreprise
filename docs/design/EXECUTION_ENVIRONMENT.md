@@ -199,13 +199,19 @@ prints one machine-readable line.
   into the worktree (`node_modules` yes, a Python `site-packages` no). A
   per-project environment volume (a virtualenv, `GOPATH`) with the same
   lifecycle is next.
-- **Publishing the browser image.** It is built locally today; publishing it
-  for amd64 and arm64 from the release workflow (and pinning
-  `DELIVERY_BROWSER_IMAGE` to its digest in the compose file) is next. A
-  project whose own `@playwright/test` is not 1.64.1 looks for its own
-  browser revision and is reported `runtime_missing`; a matrix of images per
-  Playwright release, or the probe naming the version the project wants, is
-  open.
+- **Publishing the browser image.** Published from the release workflow
+  (#529): `images.yml` pushes `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z`
+  for `linux/amd64,linux/arm64` with buildx under QEMU — outside the
+  five-image matrix, signed by digest with keyless cosign and attested with
+  its CycloneDX SBOM as the five others — and the manual
+  `browser-image-probe.yml` checks the runner can build and run both
+  architectures before a tag relies on it. Operators pin
+  `DELIVERY_BROWSER_IMAGE` to the digest the run printed
+  (`docs/CONFIGURATION.md`, `docs/OPERATIONS.md`); pinning it in the compose
+  file is left to the deployment. A project whose own `@playwright/test` is
+  not 1.64.1 looks for its own browser revision and is reported
+  `runtime_missing`; a matrix of images per Playwright release, or the probe
+  naming the version the project wants, is open.
 - **The full log in the UI.** The evidence records each object and its sha256;
   a view that streams an object back and checks it against the sha256 is not
   built.
