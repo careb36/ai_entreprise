@@ -29,6 +29,7 @@ from models import (
     BusinessUnit,
     Company,
     CompanyMember,
+    SavedView,
     Sprint,
     TaskRelation,
     User,
@@ -123,6 +124,18 @@ def build_world(session) -> World:
             kind="relates_to",
             proposed_by="Authz",
             proposed_role="person",
+        ),
+    )
+    # A company view written by the Viewer, so each role may read and change
+    # it (a view's author changes it; a Manager changes any company view).
+    view = _add(
+        session,
+        SavedView(
+            company_id=cid,
+            name="Authz view",
+            access="company",
+            owner_user_id=users["Viewer"].id,
+            owner_name=users["Viewer"].email,
         ),
     )
     run = _add(
@@ -249,6 +262,7 @@ def build_world(session) -> World:
         "sprint_id": sprint.id,
         "task_id": item.id,
         "relation_id": relation.id,
+        "view_id": view.id,
         "item_id": item.id,
         "backlog_item_id": item.id,
         "run_id": run.id,

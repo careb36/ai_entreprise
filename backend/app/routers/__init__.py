@@ -43,6 +43,7 @@ from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
 from routers.support import router as support_router
 from routers.task_relations import router as task_relations_router
+from routers.task_views import router as task_views_router
 from routers.teams import router as teams_router
 from routers.usage import router as usage_router
 from routers.webhooks import router as webhooks_router
@@ -87,6 +88,7 @@ __all__ = [
     "sso_router",
     "support_router",
     "task_relations_router",
+    "task_views_router",
     "teams_router",
     "usage_router",
     "webhooks_router",

@@ -57,6 +57,7 @@ from routers import (
     sso_router,
     support_router,
     task_relations_router,
+    task_views_router,
     teams_router,
     usage_router,
     webhooks_router,
@@ -152,6 +153,7 @@ app.include_router(integration_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
+app.include_router(task_views_router)
 app.include_router(sprint_progress_router)
 app.include_router(task_relations_router)
 app.include_router(wiki_router)
