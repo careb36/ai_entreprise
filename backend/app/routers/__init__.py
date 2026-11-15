@@ -38,6 +38,7 @@ from routers.sso import router as sso_router
 from routers.sso_admin import router as sso_admin_router
 from routers.support import router as support_router
 from routers.webhooks import router as webhooks_router
+from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 
 __all__ = [
@@ -73,5 +74,6 @@ __all__ = [
     "sso_router",
     "support_router",
     "webhooks_router",
+    "wiki_router",
     "workspace_router",
 ]

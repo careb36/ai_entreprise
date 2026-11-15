@@ -439,6 +439,23 @@ Copy `.env.example` to `.env` and fill in:
   characters (the header and the format take about 800 and are always
   there, the notes get the rest); `0` leaves the section out. Prompt priority 4: `PROMPT_BUDGET` cuts
   it before the repository, the related code and the requirements.
+- `WIKI_ENABLED` (true) — the project wiki (issue #445,
+  `docs/design/PROJECT_WIKI.md`): the `## Project wiki` section of every
+  Developer-path prompt and the compilation and lint at sprint close. Off, the
+  prompt reads the vector memory alone (the bench's baseline) and no page is
+  compiled; the pages stay and the API serves them.
+- `WIKI_MAX_CHARS` (3000) — the wiki section's size: the pages in force of the
+  task's modules and concepts, then the decisions and the glossary, whole pages
+  that fit (the first one cut short rather than left out); `0` leaves it out.
+  Prompt priority 4, placed before the memory: `PROMPT_BUDGET` cuts it after the
+  memory and before the repository. When a page applies, the vector memory is
+  not searched.
+- `WIKI_COMPILE_MAX_PAGES` (5), `WIKI_PAGE_MAX_CHARS` (6000) — at sprint close,
+  at most that many pages compiled by a model (the decisions page, written
+  without one, is apart), each answer at most that many characters (a longer
+  one is rejected and recorded). Whether pages are also written to
+  `docs/wiki/` is a company setting (`PUT /v1/companies/{id}/wiki-settings`,
+  Manager, off by default), not an environment variable.
 - `EDIT_LINT_ENABLED` (true), `EDIT_LINT_TIMEOUT_SECONDS` (60) — after a
   `workspace__edit`, the stack profile's lint command on that file
   (`services/tools/edit_lint.py`), its errors in the same turn as the edit's result.

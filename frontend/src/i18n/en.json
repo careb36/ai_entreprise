@@ -27,7 +27,8 @@
     "procedures": "Procedures",
     "specifications": "Specifications",
     "models": "Models",
-    "sso": "Single sign-on"
+    "sso": "Single sign-on",
+    "wiki": "Wiki"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2389,5 +2390,81 @@
       "requirements": "Requirements",
       "modules": "Modules"
     }
+  },
+  "wiki": {
+    "title": "Wiki",
+    "subtitle": "What the project knows: pages the agents compile from verified runs, retrospectives and the sprint board, each statement with its sources. A stale page stays out of prompts until it is revised.",
+    "loading": "Loading the wiki…",
+    "loadError": "Could not load the wiki: {{message}}",
+    "empty": "No pages yet. They are compiled when a sprint closes, or a Manager writes one.",
+    "pages": "Wiki pages",
+    "kinds": {
+      "module": "Module",
+      "concept": "Concept",
+      "glossary": "Glossary",
+      "decisions": "Decisions"
+    },
+    "kindsPlural": {
+      "module": "Modules",
+      "concept": "Concepts",
+      "glossary": "Glossary",
+      "decisions": "Decisions in force"
+    },
+    "status": {
+      "current": "Current",
+      "stale": "Stale",
+      "proposed": "Proposed"
+    },
+    "versionStatus": {
+      "current": "in force",
+      "proposed": "proposed",
+      "rejected": "rejected",
+      "superseded": "superseded"
+    },
+    "verdict": {
+      "verified": "verified",
+      "refuted": "refuted",
+      "unverifiable": "unverifiable"
+    },
+    "lintRule": {
+      "file_missing": "File missing",
+      "file_changed": "File changed",
+      "module_changed": "Module changed",
+      "contradiction": "Contradiction"
+    },
+    "lintTitle": "Stale: left out of prompts until revised",
+    "claimNote": "A page is a claim, not evidence. Beside each statement are the sources its citations resolved to in the records.",
+    "sources": "Sources",
+    "unknownSource": "not found",
+    "noSource": "no source",
+    "personLocked": "Edited by a person: the next compilation only proposes changes.",
+    "modulePath": "Module path: {{path}}",
+    "edit": "Edit",
+    "save": "Save",
+    "saveError": "Could not save: {{message}}",
+    "titleLabel": "Title",
+    "bodyLabel": "Body (Markdown)",
+    "syntaxHelp": "Cite sources as [run:12], [task:7], [note:3], [retro:5], [file:path@sha256], [REQ-1.2] or [ADR-3]. Facts go in a ```facts block, one key: value per line.",
+    "noBody": "This page has no text in force yet.",
+    "proposalTitle": "Proposed version",
+    "proposalNote": "Version {{number}}, proposed by {{who}}. It is not in force until a Manager accepts it.",
+    "uncitedLine": "Line {{line}} has no source: {{excerpt}}",
+    "accept": "Accept",
+    "reject": "Reject",
+    "rejectReason": "Reason (optional)",
+    "history": "History",
+    "byPerson": "by {{who}}",
+    "byAgent": "compiled by {{who}}",
+    "sprint": "sprint {{id}}",
+    "newPage": "New page",
+    "slugLabel": "Slug",
+    "kindLabel": "Kind",
+    "create": "Create",
+    "settings": "Wiki settings",
+    "writeToRepo": "Also write the pages to docs/wiki/ in the repository when a sprint closes",
+    "runLint": "Check the pages now",
+    "lintDone_one": "{{count}} page marked stale.",
+    "lintDone_other": "{{count}} pages marked stale.",
+    "version": "v{{number}}"
   }
 }

@@ -161,6 +161,9 @@ def _prompt_problems(where: str, obj: Any) -> list[str]:
                 problems.append(
                     f"{where}.prompt.sections.{name} needs counts tokens, prompts and a share from 0 to 1"
                 )
+    for key in ("wiki_prompts", "memory_prompts"):  # optional: cards before #445
+        if key in obj and not _count(obj[key]):
+            problems.append(f"{where}.prompt.{key} must be a count")
     cut = obj.get("cut")
     if not isinstance(cut, dict) or not all(_count(v) for v in cut.values()):
         problems.append(f"{where}.prompt.cut must map section names to counts")

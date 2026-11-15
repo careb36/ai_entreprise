@@ -67,6 +67,7 @@ from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
 from models.webhook import CompanyWebhook
+from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -154,6 +155,10 @@ def no_scrum_master_proxy(monkeypatch):
             return {"error": "no LLM proxy in tests"}
 
     monkeypatch.setattr(scrum_master, "LLMProxyClient", _NoProxy)
+    # The wiki's compilation at sprint close (#445) asks the same way.
+    from services.learning import wiki_compile
+
+    monkeypatch.setattr(wiki_compile, "LLMProxyClient", _NoProxy)
 
 
 SQLModel.metadata.create_all(
@@ -195,6 +200,10 @@ SQLModel.metadata.create_all(
         SsoIdentity.__table__,
         SsoFlowState.__table__,
         SprintBoardNote.__table__,
+        WikiPage.__table__,
+        WikiPageVersion.__table__,
+        WikiLink.__table__,
+        WikiSettings.__table__,
     ],
 )
 

@@ -9,6 +9,7 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 - `GlassRoom` — real-time agent activity monitor via SSE
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
+- `Wiki` — the company's project wiki (`/company/wiki`, issue #445): its pages by kind with their status, a page's statements each with the sources its citations resolved to beside it, the lint's reasons, the proposal waiting, the history; a Manager edits, creates, accepts or rejects proposals, runs the lint and turns the write to `docs/wiki/` on or off (`pages/Wiki.tsx`, `components/WikiPageView.tsx`, `hooks/useWiki.ts`, `services/api/wiki.ts`). Page text may be agent output: `components/WikiMarkdown.tsx` renders it without raw HTML or images and keeps only http(s), mailto and anchor links
 - `BoardNotes` — the sprint page's Board notes tab (`/sprints/:id/notes`, issue #439): the sprint board's notes as claims with what was observed beside each file, the board's numbers, and for a Manager a form to add a note and a way to mark one wrong (`hooks/useBoardNotes.ts`, `services/api/boardNotes.ts`)
 
 ## Layout of the larger views

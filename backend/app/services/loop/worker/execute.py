@@ -35,6 +35,7 @@ from services.loop.worker import (
     prompt_budget,
     related,
     sprint_notes,
+    wiki_section,
 )
 from services.models import model_routing
 from services.platform.glassroom import publish_glassroom
@@ -91,6 +92,7 @@ def _developer_prompt(
     procedures_context: str | None,
     requirements_context: str | None,
     budget: int | None = None,
+    wiki_context: str | None = None,
 ) -> tuple[str, list[str], dict[str, Any]]:
     """The task's user prompt, the pending rework feedback it carries, and its measure.
 
@@ -144,6 +146,13 @@ def _developer_prompt(
             3,
         ),
     ]
+    # The project wiki's pages for this task (claims, #445), before the vector
+    # memory, which is only fetched when no page applies.
+    if wiki_context is None:
+        wiki_context = wiki_section.section(item, company_id, engine=engine)["text"]
+    sections.append(
+        Section(wiki_section.SECTION_NAME, wiki_context or "", wiki_section.PRIORITY)
+    )
     if memory_context:
         sections.append(
             Section(
@@ -219,6 +228,7 @@ def _execute_task(
     lessons_context: str | None = None,
     procedures_context: str | None = None,
     requirements_context: str | None = None,
+    wiki_context: str | None = None,
 ) -> str:
     """
     Call the LLM to produce a deliverable for the given backlog item.
@@ -246,9 +256,18 @@ def _execute_task(
         procedures_context,
         requirements_context,
         prompt_budget.budget_for(agent.get("role")),
+        wiki_context,
     )
     # The backend's own measure of what it sent: an observation beside the run.
     measure["system_tokens"] = prompt_budget.estimate_tokens(system_prompt)
+    # Wiki on or off, and whether the vector memory was the fallback (#445, bench).
+    measure["wiki"] = {
+        "enabled": settings.WIKI_ENABLED,
+        "chars": next(
+            (s["chars"] for s in measure["sections"] if s["name"] == "wiki"), 0
+        ),
+        "memory": bool(memory_context),
+    }
     agent["prompt_sections"] = measure
 
     model = model_routing.resolve_agent_model(

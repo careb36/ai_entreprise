@@ -169,6 +169,17 @@ class Settings(BaseSettings):
     # issue #439): the notes of the sprint relevant to the task, newest first,
     # within this many characters; 0 leaves the section out.
     SPRINT_BOARD_MAX_CHARS: int = 2000
+    # The project wiki (issue #445, docs/design/PROJECT_WIKI.md). Off: no wiki
+    # section in prompts (vector memory alone, the bench's baseline) and no
+    # compilation at sprint close; the pages stay and the API still serves them.
+    WIKI_ENABLED: bool = True
+    # The pages of a task's modules and concepts in its prompt, within this many
+    # characters, before the vector memory; 0 leaves the section out.
+    WIKI_MAX_CHARS: int = 3000
+    # At sprint close: at most this many pages compiled by a model, each answer
+    # at most this many characters (a longer one is rejected and recorded).
+    WIKI_COMPILE_MAX_PAGES: int = 5
+    WIKI_PAGE_MAX_CHARS: int = 6000
     # After a ``workspace__edit``, the stack profile's lint command for that
     # file, its errors in the edit's result (``services/edit_lint.py``).
     EDIT_LINT_ENABLED: bool = True

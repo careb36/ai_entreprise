@@ -29,6 +29,7 @@ import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
+import Wiki from './pages/Wiki'
 import Models from './pages/Models'
 import Specifications from './pages/Specifications'
 import SpecificationDetail from './pages/SpecificationDetail'
@@ -335,6 +336,7 @@ function NavBar() {
                   <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   {canManage && <Link role="menuitem" to="/company/github" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.github', { defaultValue: 'GitHub' })}</Link>}
@@ -446,6 +448,7 @@ function AppContent() {
               <Route path="/company/members" element={<CompanyMembers />} />
               <Route path="/company/sso" element={<CompanySso />} />
               <Route path="/company/procedures" element={<Procedures />} />
+              <Route path="/company/wiki" element={<Wiki />} />
               <Route path="/company/models" element={<Models />} />
               <Route path="/company/specifications" element={<Specifications />} />
               <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
