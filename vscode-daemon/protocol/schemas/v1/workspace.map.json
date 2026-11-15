@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.map",
+  "title": "workspace.map",
+  "description": "The repository map: the project's definitions ranked by use, cut at max_chars (repo_map.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.map",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "max_chars": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "map": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "files_parsed": {
+          "type": "integer"
+        },
+        "files_unparsed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_without_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "definitions": {
+          "type": "integer"
+        },
+        "shown": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "max_chars": {
+          "type": "integer"
+        },
+        "cached": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "map",
+        "fingerprint",
+        "files_parsed",
+        "definitions",
+        "shown",
+        "truncated",
+        "partial",
+        "cached"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

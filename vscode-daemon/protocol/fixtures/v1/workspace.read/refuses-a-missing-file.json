@@ -1,0 +1,21 @@
+{
+  "description": "A file that is not there is a refusal with status 404.",
+  "subject": "workspace.read",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "path": "src/missing.py"
+  },
+  "reply": {
+    "error": {
+      "status": 404,
+      "message": "No such file: src/missing.py"
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.status",
+  "title": "workspace.status",
+  "description": "Which machine this is, the daemon's version and the protocol it speaks (daemon_status.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.status",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {}
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "object",
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "home": {
+              "type": "string"
+            },
+            "sep": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "platform",
+            "home",
+            "sep"
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "protocol_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "protocol_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "daemon_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "heartbeat_seconds": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "jetstream": {
+          "type": "boolean"
+        },
+        "sandbox_cache": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "quarantined": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "quarantined"
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "version",
+        "protocol_version",
+        "protocol_min",
+        "daemon_id",
+        "jetstream"
+      ]
+    }
+  }
+}

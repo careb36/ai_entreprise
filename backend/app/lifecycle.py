@@ -20,6 +20,7 @@ from services.loop.task_worker import process_backlog_tasks
 from services.producers import console_capabilities
 from services.producers.agent_worker import process_agent_tasks
 from services.release import integration_jobs
+from services.workspace import daemon_liveness
 
 # Retained task references for graceful cancellation on shutdown.
 _background_tasks: set[asyncio.Task] = set()
@@ -92,6 +93,13 @@ async def _start_workers(app, client: NATSClient) -> None:
     if getattr(app.state, "nats_workers_started", False):
         return
     app.state.nats_workers_started = True
+
+    # The daemon's heartbeats, observed on this backend's clock: liveness in
+    # GET /v1/workspace/status (services/workspace/daemon_liveness.py).
+    try:
+        await daemon_liveness.listen(client)
+    except Exception as exc:  # noqa: BLE001 - The request-based check stays as the fallback.
+        logger.warning(f"Not observing the daemon's heartbeat: {exc}")
 
     # Ask the daemon once which console assistants it can run, so the task
     # worker does not wait out a timeout per task for a CLI that is absent.

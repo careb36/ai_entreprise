@@ -1,0 +1,29 @@
+{
+  "description": "The daemon says which machine it is and which protocol it speaks: version 1, and the oldest it serves.",
+  "subject": "workspace.status",
+  "request": {},
+  "reply": {
+    "host": {
+      "hostname": "devbox",
+      "platform": "linux",
+      "home": "/home/dev",
+      "sep": "/"
+    },
+    "version": "2026.10",
+    "protocol_version": 1,
+    "protocol_min": 1,
+    "daemon_id": "0123456789abcdef",
+    "heartbeat_seconds": 20.0,
+    "jetstream": true,
+    "sandbox_cache": {
+      "enabled": true,
+      "quarantined": []
+    }
+  },
+  "volatile": [
+    "/host",
+    "/daemon_id",
+    "/sandbox_cache",
+    "/heartbeat_seconds"
+  ]
+}

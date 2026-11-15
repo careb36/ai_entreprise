@@ -1,0 +1,34 @@
+{
+  "description": "A path that leaves the project is not written, and the reply says so per file.",
+  "subject": "workspace.generate",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "files": [
+      {
+        "path": "../outside.txt",
+        "content": "x\n"
+      }
+    ]
+  },
+  "reply": {
+    "ok": false,
+    "workspace_root": "$WORKSPACE",
+    "files": [
+      {
+        "path": "../outside.txt",
+        "status": "rejected"
+      }
+    ],
+    "project_files": {
+      "files": [
+        "README.md"
+      ],
+      "truncated": false
+    }
+  }
+}

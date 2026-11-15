@@ -19,7 +19,7 @@ from typing import Any
 
 from config import settings
 
-from services.workspace import stack_profiles
+from services.workspace import daemon_liveness, stack_profiles
 
 STATUS_TIMEOUT_SECONDS = 3.0
 BROWSE_TIMEOUT_SECONDS = 10.0
@@ -46,6 +46,15 @@ class DaemonUnavailable(Exception):
         self.absent = absent
 
 
+class DaemonIncompatible(DaemonUnavailable):
+    """The daemon answers but speaks a protocol this backend does not.
+
+    A ``DaemonUnavailable``, so every caller that handles a missing daemon
+    handles this one too; its message is the reason (which side to update),
+    never a generic timeout (``daemon_liveness.compatibility``).
+    """
+
+
 def _no_responders(exc: BaseException) -> bool:
     return (
         type(exc).__name__ == "NoRespondersError" or "no responders" in str(exc).lower()
@@ -66,6 +75,11 @@ async def daemon_request(
 ) -> dict[str, Any]:
     if nats_client is None:
         raise DaemonUnavailable("NATS is not connected")
+    incompatible = (
+        None if subject == "workspace.status" else daemon_liveness.incompatibility()
+    )
+    if incompatible:
+        raise DaemonIncompatible(incompatible)
     try:
         reply = await nats_client.request(subject, payload, timeout=timeout)
     except Exception as e:
@@ -84,11 +98,14 @@ async def daemon_request(
 
 
 async def daemon_presence(nats_client: Any) -> dict[str, Any]:
-    """Whether a daemon is ``connected``, ``absent`` or ``unknown``, and why.
+    """Whether a daemon is ``connected``, ``absent``, ``unknown`` or ``incompatible``, and why.
 
     Unknown is not absent: when NATS cannot be reached, no reply arrives in
     time or the daemon answers with an error, the backend cannot tell whether
-    a daemon runs, and says so rather than reporting it stopped.
+    a daemon runs, and says so rather than reporting it stopped. A daemon
+    that answers with a protocol version outside ``SUPPORTED_PROTOCOL`` is
+    ``incompatible``, with the reason; one that reports no version is an
+    older daemon, still ``connected`` (``protocol.state: unknown``).
     """
     try:
         status = await daemon_request(
@@ -121,7 +138,21 @@ async def daemon_presence(nats_client: Any) -> dict[str, Any]:
             "reason": f"the daemon answered with an error: {exc.message}",
             "status": None,
         }
-    return {"state": "connected", "reason": None, "status": status}
+    daemon_liveness.observe_status(status)
+    protocol = daemon_liveness.compatibility(status)
+    if protocol["state"] == "incompatible":
+        return {
+            "state": "incompatible",
+            "reason": protocol["reason"],
+            "status": status,
+            "protocol": protocol,
+        }
+    return {
+        "state": "connected",
+        "reason": None,
+        "status": status,
+        "protocol": protocol,
+    }
 
 
 async def inspect_project(

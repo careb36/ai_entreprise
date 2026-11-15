@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.delivered",
+  "title": "workspace.delivered",
+  "description": "JetStream (FABRIQUE_DELIVERY_RESULTS): the daemon's result of a queued delivery, the workspace.generate reply with the job's ids and the host (daemon.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.delivered",
+  "x-kind": "stream",
+  "$defs": {
+    "message": {
+      "allOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "workspace_root": {
+              "type": "string"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "written",
+                      "skipped_protected",
+                      "rejected",
+                      "rejected_edit",
+                      "rejected_syntax",
+                      "workspace_missing"
+                    ]
+                  },
+                  "absolute_path": {
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "edits_applied": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "path",
+                  "status"
+                ]
+              }
+            },
+            "snapshot": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "files": {
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "git": {
+              "type": "object"
+            },
+            "git_workflow_skipped": {
+              "type": "string"
+            },
+            "project_files": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "files",
+                "truncated"
+              ]
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "files"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "job_id": {
+              "type": "string"
+            },
+            "company_id": {},
+            "sprint_id": {},
+            "item_id": {},
+            "host": {
+              "type": "object",
+              "properties": {
+                "hostname": {
+                  "type": "string"
+                },
+                "platform": {
+                  "type": "string"
+                },
+                "home": {
+                  "type": "string"
+                },
+                "sep": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "hostname",
+                "platform",
+                "home",
+                "sep"
+              ]
+            }
+          },
+          "required": [
+            "job_id",
+            "host"
+          ]
+        }
+      ]
+    }
+  }
+}

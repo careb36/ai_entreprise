@@ -17,9 +17,10 @@ export interface WorkspaceHost {
 
 export interface WorkspaceStatus {
   connected: boolean
-  /** connected, absent (nothing listens) or unknown (the backend cannot tell); older backends omit it. */
-  state?: 'connected' | 'absent' | 'unknown'
-  /** Why the state is absent or unknown. */
+  /** connected, absent (nothing listens), unknown (the backend cannot tell) or incompatible
+   * (it answers with a protocol this backend does not speak); older backends omit it. */
+  state?: 'connected' | 'absent' | 'unknown' | 'incompatible'
+  /** Why the state is absent, unknown or incompatible. */
   reason?: string | null
   host: WorkspaceHost | null
   jetstream?: boolean

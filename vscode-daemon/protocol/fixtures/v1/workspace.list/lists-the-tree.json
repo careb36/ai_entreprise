@@ -1,0 +1,26 @@
+{
+  "description": "The project's tree, folders first with a trailing slash.",
+  "subject": "workspace.list",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "path": null,
+    "depth": 2
+  },
+  "reply": {
+    "path": ".",
+    "entries": [
+      "src/",
+      "README.md",
+      "src/greeting.py",
+      "src/main.py"
+    ],
+    "truncated": false
+  }
+}

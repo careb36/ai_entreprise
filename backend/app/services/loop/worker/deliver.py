@@ -40,7 +40,7 @@ from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
 from services.tools import registry_lookup, signature_lookup
 from services.tools.workspace_edits import with_tool_edits
-from services.workspace import git_workflow, workspace_daemon
+from services.workspace import daemon_liveness, git_workflow, workspace_daemon
 from services.workspace.workspace_daemon import detect_test_command
 
 logger = setup_logger("fabrique-task-worker")
@@ -176,6 +176,12 @@ async def _observe_signatures(
         await signature_lookup.observe(nats_client, evidence, targets)
     except Exception as e:  # noqa: BLE001 - The delivery is not the lookup's hostage.
         logger.warning("Signature lookups failed for a delivery: %s", e)
+
+
+def _heartbeat_note() -> str:
+    """What the backend observed of the daemon's heartbeat, when it explains a missing reply."""
+    beat = daemon_liveness.liveness()
+    return f"; {beat['reason']}" if beat["state"] in {"stale", "offline"} else ""
 
 
 def _plan_queued_delivery(
@@ -371,8 +377,12 @@ async def _deliver_artifacts(
             "expected": expected_hashes(targets),
             "workspace_writes": None,
         }
+        incompatible = daemon_liveness.incompatibility()
         if not workspace_root:
             evidence["reason"] = "workspace path not configured"
+        elif incompatible:
+            # Not sent, and not queued: the same daemon would take the job.
+            evidence["reason"] = f"the workspace daemon is incompatible: {incompatible}"
         else:
             try:
                 reply = await nats_client.request(
@@ -400,6 +410,7 @@ async def _deliver_artifacts(
             except Exception as e:  # noqa: BLE001 - A missing daemon leaves delivery unverifiable.
                 evidence["reason"] = (
                     f"the workspace daemon did not reply ({type(e).__name__})"
+                    + _heartbeat_note()
                 )
                 logger.warning(
                     "Workspace write request failed for item=%s: %s", item["id"], e

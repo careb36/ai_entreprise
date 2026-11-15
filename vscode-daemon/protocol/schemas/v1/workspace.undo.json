@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.undo",
+  "title": "workspace.undo",
+  "description": "Undo a delivery made without a git spec, from its snapshot (delivery_snapshot.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.undo",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "snapshot_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_root",
+        "snapshot_id"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "snapshot": {
+          "type": "string"
+        },
+        "restored": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "ok",
+        "snapshot",
+        "restored",
+        "removed"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

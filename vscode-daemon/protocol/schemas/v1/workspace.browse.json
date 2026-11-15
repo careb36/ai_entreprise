@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.browse",
+  "title": "workspace.browse",
+  "description": "The sub-folders of a folder on the daemon's machine, for the folder picker (host_folders.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.browse",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "object",
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "home": {
+              "type": "string"
+            },
+            "sep": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "platform",
+            "home",
+            "sep"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "is_git": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "path",
+              "is_git"
+            ]
+          }
+        },
+        "shortcuts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ]
+          }
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ]
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "host",
+        "path",
+        "parent",
+        "entries",
+        "shortcuts",
+        "roots",
+        "truncated"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

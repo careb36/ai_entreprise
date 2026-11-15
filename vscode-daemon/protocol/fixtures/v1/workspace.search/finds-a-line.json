@@ -1,0 +1,29 @@
+{
+  "description": "The lines that match a pattern, with how many there are.",
+  "subject": "workspace.search",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "pattern": "def greet",
+    "path": null
+  },
+  "reply": {
+    "pattern": "def greet",
+    "matches": [
+      "src/greeting.py:1: def greet(name):"
+    ],
+    "files_scanned": 3,
+    "truncated": false,
+    "match_count": 1,
+    "match_count_capped": false,
+    "files_matched": 1,
+    "files_truncated": false,
+    "per_file": []
+  }
+}

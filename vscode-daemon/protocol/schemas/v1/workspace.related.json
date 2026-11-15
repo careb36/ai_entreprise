@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.related",
+  "title": "workspace.related",
+  "description": "The files around a task's seeds and the names that tie them: paths, names and sha256, never contents (code_graph.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.related",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hops": {
+          "type": "integer"
+        },
+        "max_files": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "workspace_root",
+        "seeds"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "hop": {
+                "type": "integer"
+              },
+              "seed": {
+                "type": "boolean"
+              },
+              "uses": {
+                "type": "array"
+              },
+              "used_by": {
+                "type": "array"
+              },
+              "more_uses": {
+                "type": "integer"
+              },
+              "more_used_by": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "hop",
+              "seed"
+            ]
+          }
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "seeds_matched": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "seeds_unmatched": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files",
+        "partial",
+        "seeds_matched",
+        "seeds_unmatched"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

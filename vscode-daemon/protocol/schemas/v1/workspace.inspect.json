@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.inspect",
+  "title": "workspace.inspect",
+  "description": "Whether a path is a folder on the daemon's machine, its git remote and branch, and optionally a file snapshot for stack detection (host_folders.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.inspect",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "object",
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "home": {
+              "type": "string"
+            },
+            "sep": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "platform",
+            "home",
+            "sep"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "is_dir": {
+          "type": "boolean"
+        },
+        "git": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "snapshot": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "contents": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "files",
+            "contents",
+            "truncated"
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "path",
+        "name",
+        "exists",
+        "is_dir",
+        "git"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

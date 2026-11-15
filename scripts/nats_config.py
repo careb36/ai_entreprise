@@ -12,7 +12,8 @@ broker gives each component its own user, with only the subjects it needs:
   ``_INBOX.backend``.
 - ``daemon`` hears requests on ``workspace.>`` and answers them under
   ``_INBOX.backend.>``, where the backend's replies arrive; it may also
-  publish its results (``workspace.delivered``), Glassroom status lines and
+  publish its results (``workspace.delivered``), its heartbeat
+  (``workspace.heartbeat``, which nobody answers), Glassroom status lines and
   the JetStream calls of its own consumer on the deliveries stream. It may
   not send a request (``workspace.execute``…), assign a task, read the
   backend's replies, or create, change or delete a stream.
@@ -91,6 +92,8 @@ def daemon_permissions(namespace: str = "") -> dict:
                 # Its answers to the backend's requests (nats_auth.INBOX_PREFIX).
                 f"{BACKEND_INBOX}.>",
                 _subject(namespace, "workspace.delivered"),
+                # Its heartbeat (vscode-daemon/daemon_status.py): an event, never a request.
+                "workspace.heartbeat",
                 "glassroom.*",
                 f"{api}.INFO",
                 f"{api}.STREAM.INFO.{stream}",

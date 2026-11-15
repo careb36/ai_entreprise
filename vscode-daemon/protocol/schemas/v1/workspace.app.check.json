@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.app.check",
+  "title": "workspace.app.check",
+  "description": "Start the application in the sandbox, wait for its port, probe it, run an e2e command, stop it (app_run.py). A failure is an observation (`error`), not a refusal.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.app.check",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string"
+        },
+        "start_command": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "probe_path": {
+          "type": "string"
+        },
+        "e2e_command": {
+          "type": "string"
+        },
+        "command_policy": {
+          "type": "object"
+        },
+        "sandbox": {
+          "type": "object"
+        },
+        "ready_timeout_seconds": {
+          "type": "number"
+        },
+        "e2e_timeout_seconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "workspace_root",
+        "start_command",
+        "port"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "listening": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "refused": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

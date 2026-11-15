@@ -607,6 +607,7 @@ def test_the_daemon_may_not_publish(subject):
     "subject",
     [
         "workspace.delivered",
+        "workspace.heartbeat",
         "glassroom.42",
         "$JS.API.STREAM.INFO.FABRIQUE_DELIVERIES",
         "$JS.API.STREAM.INFO.FABRIQUE_DELIVERY_RESULTS",

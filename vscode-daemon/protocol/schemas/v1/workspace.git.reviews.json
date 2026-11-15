@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.git.reviews",
+  "title": "workspace.git.reviews",
+  "description": "The comments people left on a pull or merge request, read with gh api / glab api (platform_reviews.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.git.reviews",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "url": {
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "github",
+            "gitlab"
+          ]
+        }
+      },
+      "required": [
+        "workspace_root",
+        "url"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "url": {
+          "type": "string"
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "comments"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}
