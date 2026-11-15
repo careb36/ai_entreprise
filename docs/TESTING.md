@@ -132,6 +132,7 @@ Test files:
 | `test_bench_scorecard.py` | The bench (issue #316): every reference specification is data the check approves, numbered as the backend numbers it, with a person-written test per criterion kept apart from the fake producer's files; the grade reads pytest's JUnit report per criterion (pass, fail, missing; a skip is not a pass), the fake's files pass, an empty project fails, a wrong reader fails only its criterion; first attempts counted from the board (a gate's, the Verifier's or QA's `NEEDS WORK:`, a person's send-back, a second delivery; a carry-over note is not this task's), a project's `pytest.py`, `sitecustomize.py`, `conftest.py` or `json.py` cannot replace the grader or forge its report, a report pytest did not finish is not read, a failed collection is an `error` entry, the scorecard's totals and schema (each violation named, NaN, infinities and missing token counters refused, exit 2), the Markdown; `broker.py` refuses port 4222, a broker where a daemon answers and says when one cannot be reached; `compare.py` finds a drop in criteria or first attempts, a rise in rework or tokens and a spec that stopped completing beyond the thresholds, lists a new spec without judging it, picks the newest earlier scorecard and exits 0, 1 or 2; the committed scorecards keep to the schema; each entry splits its tasks by difficulty and model (`routing`, from `services/models/routing_record.py`), the card names its routing policy (`--policy`), schema v2 checks the split and still reads a v1 card, and two runs under different policies compare band by band |
 | `test_bench_prompt_weight.py` | The bench's prompt weight (schema v3, issue #316 after #443): each task's latest run's `prompt_sections` weighed per section (estimated tokens sent and share, a cut section counted under the cut ones and not in the weight, the prompts with related code), a run without a measure counted apart (`prompt_sections_missing`), never as zero; the totals merge the specs' sums; `collect` reads the measures beside the board; the Markdown labels them estimated tokens apart from the provider's; the schema checks the object and still reads v1 and v2 cards; `compare.py` shows the sections before → after without judging them and judges the mean only with `--prompt-tokens`, never against a side with nothing measured; the five reference specifications keep task, requirement and specification titles unique, each fake plan covers every criterion once with its dependencies first, and each new fake producer passes every criterion of its specification while an empty project passes none |
 | `test_bench_budget.py` | The bench's token budget and its nightly real-model job (issue #316): `scripts/bench/budget.py` reads the whole run's reported tokens with the scorecard's reader, stops the running sprint once they pass the budget (reaching it is not passing it), never stops a completed sprint, stops it too when the budget cannot be read, and `check` exits 3 past it; `run.sh` skips the rest; the card's `run` block (`budget_exceeded`, the budget, the tokens spent, the specifications `skipped: budget` with no entry) and its Markdown, unreported turns counted apart and said, the schema names what is wrong in the block and still reads v1–v3 cards without it; `compare.py` does not judge a cut run's totals or the spec the budget stopped, still judges the specs both cards ran in full and exits 0, and real cards in `bench/scorecards/real/` stay apart from the fake ones; `bench.yml`'s real job runs only with `vars.BENCH_REAL_MODELS == 'true'`, reads the proxy's own key names from `secrets.` only in step environments, never prints them, names a missing secret, compares with the real cards and files its own issue, and the fake job is kept as it was |
+| `test_workflow_pinning.py` | Supply chain in CI (issue #522): every third-party action in every workflow, in a step or as a reusable workflow, is pinned by a 40-character commit sha with its version in a trailing comment (local `./` actions and `docker://` images exempt; the SLSA generator, which refuses any ref but a `vX.Y.Z` tag, the one listed exception); Dependabot's `github-actions` ecosystem keeps the pins current; in `security-scan.yml` the dependency audit covers both Python lockfiles and the frontend, no security step has `|| true` or `continue-on-error`, the pull-request gitleaks and Semgrep jobs run on the self-hosted runner over the pull request's range; each entry of `.github/pip-audit-ignore.txt` has a review date and a reason |
 | `test_verificador_benchmark.py` | The Verifier benchmark (`bench/verifier/`, on `sys.path` via `conftest.py`): of the deliveries whose evidence contradicts or cannot support their claims, the verifier believes none (12/12), and every case, the honest controls included, comes back as specified (14/14) |
 
 **End to end, against a real stack:** `scripts/e2e/run.sh` starts the backend,
@@ -324,6 +325,45 @@ CI jobs run on the self-hosted runner labelled `lafabrique`
 machines; only the SLSA release generator stays on `ubuntu-latest`. The
 runner keeps its state between jobs, so a job cleans up what it starts (the
 e2e removes its NATS container) and avoids the ports a local stack uses.
+
+Security checks on every pull request into `main` are in
+`.github/workflows/security-scan.yml`, on the same runner (issue #522):
+
+- `security`: Trivy over the files, uploaded as SARIF.
+- `dependencies`: `pip-audit` over the backend's and the llm-proxy's
+  lockfiles (`poetry export --all-groups`, then `pip-audit --require-hashes
+  --disable-pip`, which reads the pinned versions and installs nothing) and
+  `npm audit --package-lock-only --omit=dev --audit-level=high` over the
+  frontend's. A known vulnerability fails the job. The only way past one
+  without a fix is an entry in `.github/pip-audit-ignore.txt`: the advisory ID,
+  a review date and the reason; an entry without a reason, or whose date has
+  passed, fails the job too. It replaced a `safety check || true` that could
+  never fail.
+- `secrets-pr`: gitleaks (the pinned, checksummed release the weekly baseline
+  uses, with `.gitleaks.toml`) over every commit the pull request adds
+  (`--log-opts base..head`), so a secret added and then removed still fails.
+- `sast-pr`: Semgrep with the weekly baseline's rule set and severity
+  (`p/security-audit`, `ERROR`), with the pull request's base as
+  `--baseline-commit`: it fails only on findings the change adds, so a finding
+  already on `main` does not fail an unrelated pull request.
+
+`security-baseline.yml` still scans the whole history and tree every week.
+Every third-party action is pinned by commit sha with the version in a
+comment; `backend/tests/test_workflow_pinning.py` fails on a tag, and
+`backend-tests.yml` runs on any change under `.github/workflows/` for it.
+Run the same checks locally:
+
+```bash
+# Dependencies (pip-audit and poetry-plugin-export in the environment)
+poetry -C backend export --format requirements.txt --all-groups --output /tmp/backend.txt
+pip-audit --requirement /tmp/backend.txt --require-hashes --disable-pip
+cd frontend && npm audit --package-lock-only --omit=dev --audit-level=high
+
+# A branch's commits and the findings it adds, as the PR jobs do
+gitleaks detect --source . --config .gitleaks.toml --redact --no-banner --log-opts "origin/main..HEAD"
+uv tool run --from "semgrep==1.182.1" semgrep scan --config p/security-audit \
+  --severity ERROR --error --metrics=off --baseline-commit "$(git merge-base origin/main HEAD)" .
+```
 
 CI runs this suite on every pull request that touches `backend/` or the
 workflow itself, and on pushes to `main`

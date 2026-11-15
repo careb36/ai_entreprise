@@ -27,10 +27,10 @@ jobs:
       digests: ${{ steps.hash.outputs.digests }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build Docker images
         run: |
@@ -51,7 +51,7 @@ jobs:
           echo "digests=$(sha256sum le-fabrique-*.tar | base64 -w0)" >> "${GITHUB_OUTPUT}"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: le-fabrique-images-${{ github.ref_name }}
           path: le-fabrique-*.tar
@@ -64,6 +64,11 @@ jobs:
       actions: read
       id-token: write
       contents: write
+    # The one action not pinned by commit sha: the SLSA generator verifies its
+    # own ref and refuses to run unless the reusable workflow is called by a
+    # full `@vX.Y.Z` release tag (slsa-github-generator README, "Referencing
+    # SLSA builders and generators"). The tag is f7dd8c54c2067bafc12ca7a55595d5ee9b75204a
+    # today; backend/tests/test_workflow_pinning.py allows this one entry.
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       base64-subjects: "${{ needs.build.outputs.digests }}"
