@@ -36,7 +36,7 @@ function stubApi(settings: object = SETTINGS, put?: (init: RequestInit) => Respo
 }
 
 function renderAs(canManage: boolean) {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [] })
   return render(
     <QueryClientProvider client={queryClient}>
       <ConsoleProducers companyId={4} canManage={canManage} />
@@ -96,7 +96,7 @@ describe('ConsoleProducers', () => {
       return response(403, { detail: 'not a member of this company' })
     })
     vi.stubGlobal('fetch', fetch)
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [] })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [] })
     const view = render(
       <QueryClientProvider client={queryClient}>
         <ConsoleProducers companyId={4} canManage />

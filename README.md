@@ -689,14 +689,14 @@ la-fabrique/
 
 ## API Reference
 
-Interactive docs at `http://localhost:8000/docs` when running locally. Routes other than the public ones require a JWT (`POST /v1/auth/login`) and a company role: Viewer reads, Manager runs sprints and decides, Owner invites.
+Interactive docs at `http://localhost:8000/docs` when running locally. Routes other than the public ones require a session (the browser's HttpOnly cookies from `POST /v1/auth/login`, or a Bearer JWT or API token for a script; `docs/API.md`) and a company role: Viewer reads, Manager runs sprints and decides, Owner invites.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET`  | `/health` | Service health check; `/health/deep` probes each dependency |
 | `GET`  | `/v1/capabilities` | Feature flags (graph, memory, GitHub, support agent); public |
-| `POST` | `/v1/auth/register` · `/v1/auth/login` · `GET /v1/auth/me` | Accounts and sessions |
-| `POST` | `/v1/company/invite` | Invite a member (Owner) |
+| `POST` | `/v1/auth/register` · `/v1/auth/login` · `/v1/auth/refresh` · `/v1/auth/logout` · `GET /v1/auth/me` | Accounts and sessions (cookies, rotated refresh tokens; `docs/design/SESSIONS.md`) |
+| `POST` | `/v1/company/invite` · `DELETE /v1/company/{id}/members/{user_id}` | Invite or remove a member (Owner); removal ends their sessions |
 | `POST` | `/v1/init_company` | Create a company, its agents and the foundation sprint |
 | `POST` | `/v1/discover_team` | Inspect a project folder through the daemon and suggest a team |
 | `GET` · `POST` · `PATCH` · `DELETE` | `/v1/agents` | The company's agents and their models (Viewer reads; Manager creates, changes, deletes) |

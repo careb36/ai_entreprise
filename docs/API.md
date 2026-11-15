@@ -24,7 +24,8 @@ with `Address already in use` while the compose stack holds port 8000, so stop
 http://localhost:8000
 ```
 
-Most endpoints require a bearer token:
+Most endpoints require a session cookie (a browser) or a bearer token (an
+API token or a script):
 
 ```
 Authorization: Bearer <access_token>
@@ -42,28 +43,42 @@ curl -X POST http://localhost:8000/v1/auth/register \
 
 curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com", "password": "securepass123"}'
+  -d '{"email": "user@example.com", "password": "securepass123", "token_delivery": "bearer"}'
 ```
 
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
   "token_type": "bearer",
-  "expires_in": 3600
+  "expires_in": 900
 }
 ```
+
+`"token_delivery": "bearer"` is for scripts: a 15-minute access token in the
+body, no cookies and no refresh. For automation that runs longer, create an
+API token (`POST /v1/auth/tokens`), which is revocable. A browser omits the
+field: login then sets the session in `HttpOnly` cookies (`fabrique_session`,
+`fabrique_refresh`, `fabrique_csrf`) and the body carries only
+`token_type: "cookie"`, the lifetimes and the CSRF value; a request
+authenticated by the cookie must send `X-Fabrique-CSRF` on `POST`, `PUT`,
+`PATCH` and `DELETE` (`docs/design/SESSIONS.md`). A request with an
+`Authorization: Bearer` header is never CSRF-checked.
 
 Passwords are hashed with bcrypt directly, capped at 72 bytes, because bcrypt
 silently ignores anything past that length. A longer password is rejected at
 registration with 422 rather than accepted and truncated.
 
-The three authentication endpoints:
+The authentication endpoints:
 
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/v1/auth/register` | Create the user and its first company membership |
-| `POST` | `/v1/auth/login` | Issue the JWT |
+| `POST` | `/v1/auth/login` | Start a browser session (cookies), or issue a Bearer JWT with `"token_delivery": "bearer"` |
+| `POST` | `/v1/auth/refresh` | Rotate the session's refresh cookie (CSRF header; rate-limited); 409 when another tab just did |
+| `POST` | `/v1/auth/logout` | Revoke the session and clear its cookies (CSRF header) |
+| `GET` | `/v1/auth/csrf` | The session's CSRF value, for a page that cannot read the API's cookie |
 | `GET` | `/v1/auth/me` | The caller's identity and memberships |
+| `DELETE` | `/v1/company/{id}/members/{user_id}` | Remove a member (Owner; the last Owner stays); ends their sessions |
 
 ### Roles and scope
 
@@ -75,7 +90,8 @@ pass the `company_id` query parameter where the endpoint accepts one.
 ### Public routes
 
 A short, deliberate list: `/health`, `/health/deep`, `/metrics`,
-`/openapi.json`, `/docs`, `/redoc`, register and login, the HMAC-signed GitHub
+`/openapi.json`, `/docs`, `/redoc`, register, login, refresh, logout and the
+CSRF echo (they check the session cookie themselves), the HMAC-signed GitHub
 webhook, the support bug form and chat, `/v1/models`, `/v1/capabilities`, and
 the retired `/v1/approve_task` (410).
 

@@ -28,6 +28,14 @@ Factory leaves local or cloud execution of its Droids to the operator.
 4. Check `GET /health` (below), register the first user in the frontend and
    create a company.
 
+The browser's session lives in `HttpOnly; Secure; SameSite=Strict` cookies
+(issue #524): serve the frontend and the API over https (a browser accepts
+`Secure` cookies from `http://localhost` too), and list the frontend's
+origins in `CORS_ORIGINS` (never `*`). When the frontend and the API are on
+different hosts, the page cannot read the API's CSRF cookie and asks
+`GET /v1/auth/csrf` for it; keep both under one site (the same registrable
+domain) or `SameSite=Strict` cookies are not sent at all.
+
 The backend container runs `alembic upgrade head` before it starts. When you
 run the backend by hand, run the migrations yourself (`cd backend && alembic
 upgrade head`) or set `DB_AUTO_UPGRADE=true`. The backend refuses to start on
@@ -160,9 +168,14 @@ their password. A domain can be listed by one company only.
 
 Every sign-in writes an `sso_sign_in` audit row with what the provider asserted
 and the outcome (`created`, `linked`, `signed_in` or `refused:<reason>`), and
-every change an `sso_connection_*` row. Sessions already issued keep working
-until they expire (`ACCESS_TOKEN_EXPIRE_MINUTES`); requiring SSO or removing
-someone at the provider does not end them.
+every change an `sso_connection_*` row. Turning **Require SSO** on (with the
+connection enabled) ends the browser sessions its members started with a
+password, except a break-glass Owner's; the audit row counts them
+(`sessions_ended`). Removing a member (`DELETE /v1/company/{id}/members/{user_id}`)
+ends all of that person's sessions. Removing someone only at the provider
+ends nothing: their session lasts until it is refreshed past
+`REFRESH_TOKEN_ABSOLUTE_DAYS` or they are removed here (issue #524,
+`docs/design/SESSIONS.md`).
 
 ### Break-glass: the provider is down or misconfigured
 
@@ -187,7 +200,7 @@ database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id
 
 | Key | Where | What rotating does | How |
 |-----|-------|--------------------|-----|
-| `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again. API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
+| `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
 | `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets). Change the key, restart, and enter the values again. |
 | `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |

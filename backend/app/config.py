@@ -223,7 +223,17 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str | None = None
     AUTH_REQUIRED: bool = True
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
+    # family lives at most this many days from sign-in, however often it is
+    # rotated; a reuse within the grace (two tabs refreshing at once) is
+    # answered 409 without revoking; the refresh route's rate limit.
+    REFRESH_TOKEN_ABSOLUTE_DAYS: int = 7
+    REFRESH_REUSE_GRACE_SECONDS: int = 10
+    REFRESH_RATE_LIMIT: str = "30/minute"
+    # The session cookies are Secure; false only for development over plain
+    # http:// (a browser treats http://localhost as secure anyway).
+    SESSION_COOKIE_SECURE: bool = True
 
     # Single sign-on over OpenID Connect (issue #512; docs/design/SSO.md).
     # The redirect URI registered at each company's identity provider, and

@@ -22,7 +22,12 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
 - **Threats to look for:** missing auth on a new route, cross-company reads,
   role escalation, XSS from rendered model output, token theft, CSRF.
 - **Controls:** JWT (HS256, `JWT_SECRET_KEY`) resolved by
-  `backend/app/auth_deps.py`; `AUTH_REQUIRED` on by default; roles Owner >
+  `backend/app/auth_deps.py`, Bearer first, else the browser's
+  `HttpOnly; Secure; SameSite=Strict` session cookie with a signed
+  double-submit CSRF header on unsafe methods; 15-minute access tokens and
+  rotated refresh-token families with reuse detection
+  (`services/platform/sessions.py`, `docs/design/SESSIONS.md`); CORS
+  credentials only with explicit origins (`backend/app/security.py`); `AUTH_REQUIRED` on by default; roles Owner >
   Manager > Viewer and company scoping (`docs/contexts/platform.md`, Auth and
   multi-tenancy); API tokens hashed with role and expiry
   (`services/platform/api_tokens.py`); Glassroom SSE by five-minute ticket;

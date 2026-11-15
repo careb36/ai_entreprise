@@ -40,7 +40,7 @@ function stubApi(lineage: () => Response, memoryGraph = true) {
 describe('Lineage', () => {
   beforeEach(() => {
     queryClient.clear()
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     useAppStore.setState({ companyId: 4 })
   })
 

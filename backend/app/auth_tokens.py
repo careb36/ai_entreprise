@@ -38,8 +38,15 @@ def create_access_token(
     user_id: int,
     email: str,
     expires_delta: timedelta | None = None,
+    session_id: str | None = None,
+    csrf_hash: str | None = None,
 ) -> str:
-    """Create a signed access token for a human user."""
+    """Create a signed access token for a human user.
+
+    A browser session's token carries its family's public id (``sid``) and
+    the digest of its CSRF token (``csrf``); a token without ``sid`` is a
+    Bearer token for a non-browser client (``docs/design/SESSIONS.md``).
+    """
     from config import settings
 
     key = _configured_key()
@@ -59,6 +66,9 @@ def create_access_token(
         "exp": expires_at,
         "typ": "access",
     }
+    if session_id is not None:
+        claims["sid"] = session_id
+        claims["csrf"] = csrf_hash or ""
     return jwt.encode(claims, key, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -83,6 +93,29 @@ def decode_access_token(token: str) -> dict:
     if claims.get("typ") != "access":
         raise InvalidTokenError("Invalid token type")
     return claims
+
+
+def session_id_of(token: str) -> str | None:
+    """The ``sid`` of a correctly signed access token, even an expired one
+    (logout ends the family it names); ``None`` for anything else."""
+    from config import settings
+
+    key = _configured_key()
+    if key is None or not token:
+        return None
+    try:
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_exp": False, "require": ["sub", "typ", "sid"]},
+        )
+    except (jwt.PyJWTError, TypeError, ValueError):
+        return None
+    if claims.get("typ") != "access":
+        return None
+    sid = claims.get("sid")
+    return sid if isinstance(sid, str) else None
 
 
 STREAM_TICKET_MINUTES = 5

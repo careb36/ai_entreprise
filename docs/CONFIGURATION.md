@@ -42,6 +42,26 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- Browser sessions (issue #524; `docs/design/SESSIONS.md`). Login and the SSO
+  exchange set HttpOnly cookies instead of returning a token:
+  - `ACCESS_TOKEN_EXPIRE_MINUTES` — default `15`. The access token's life, in
+    the `fabrique_session` cookie or, for a script that logs in with
+    `"token_delivery": "bearer"`, in the response body.
+  - `REFRESH_TOKEN_ABSOLUTE_DAYS` — default `7`. A session ends this long after
+    sign-in however often it is refreshed; the person signs in again.
+  - `REFRESH_REUSE_GRACE_SECONDS` — default `10`. A refresh token presented
+    again this soon after its rotation, while its successor is unused (two tabs
+    refreshing at once), is answered 409 without revoking; any other reuse
+    revokes the session's family.
+  - `REFRESH_RATE_LIMIT` — default `30/minute`, per client address, on
+    `POST /v1/auth/refresh` (slowapi, `RATE_LIMIT_STORAGE_URI`).
+  - `SESSION_COOKIE_SECURE` — default `true`. The cookies are `Secure`, so the
+    browser sends them over https only (browsers also treat
+    `http://localhost` as secure). Set `false` only to develop over plain
+    http on another host name; the backend warns at startup.
+  - `CORS_ORIGINS` must list the frontend's origins explicitly: with `*` the
+    backend allows no credentials, so a browser on another origin cannot sign
+    in (and warns at startup).
 - Single sign-on over OpenID Connect (issue #512; `docs/design/SSO.md`; setup in
   `docs/OPERATIONS.md`, Single sign-on). Each company's connection is stored in
   the database by its Owner, not in the environment; these settle the deployment:

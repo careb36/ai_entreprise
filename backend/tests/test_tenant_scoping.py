@@ -18,6 +18,8 @@ GLOBAL_TABLES = {
     "backlog_items": "scoped through sprint_id, whose sprint carries company_id",
     "sso_identities": "a person's identity at a provider, like users: it names the account, not a company",
     "sso_flow_states": "one-time sign-in values for minutes; each names its connection, which carries company_id",
+    "session_families": "a person's browser session, like users: it spans every company the person belongs to",
+    "refresh_tokens": "a session family's rotations; each names its family, which names the person",
 }
 
 # Tables whose company_id may be empty, and why.

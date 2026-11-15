@@ -25,7 +25,7 @@ describe('Glassroom stream connection', () => {
   beforeEach(() => {
     FakeEventSource.opened = []
     vi.stubGlobal('EventSource', FakeEventSource)
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
   })
 
   afterEach(() => {
@@ -96,7 +96,7 @@ describe('Glassroom replayed history', () => {
   beforeEach(() => {
     FakeEventSource.opened = []
     vi.stubGlobal('EventSource', FakeEventSource)
-    useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000 })
+    useAuthStore.setState({ expiresAt: Date.now() + 60_000 })
     useAgentStore.getState().clearMessages()
   })
 

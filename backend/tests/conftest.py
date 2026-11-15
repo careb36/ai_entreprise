@@ -61,6 +61,7 @@ from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
+from models.session import RefreshToken, SessionFamily
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -193,6 +194,8 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        SessionFamily.__table__,
+        RefreshToken.__table__,
     ],
 )
 
