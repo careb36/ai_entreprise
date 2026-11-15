@@ -11,6 +11,7 @@ import { useCurrentRole, useSprints } from '../hooks/useQueries'
 import type { SprintSummary } from '../services/api'
 import { useSprintsWithArchived, type ManagedSprint } from '../services/sprintAdmin'
 import { CostLine } from '../components/CostSummary'
+import { SprintPromptWeight } from '../components/PromptWeight'
 import { SprintAdminActions } from '../components/SprintAdminActions'
 import { QuickLaunch } from '../components/QuickLaunch'
 import { sprintPath } from './SprintWorkspace'
@@ -70,6 +71,7 @@ function SprintRow({ sprint, current, companyId, role }: { sprint: ManagedSprint
           </p>
         )}
         {sprint.cost && <div className="mt-1"><CostLine cost={sprint.cost} /></div>}
+        {sprint.cost && sprint.cost.turns > 0 && <SprintPromptWeight sprintId={sprint.id} />}
       </div>
       <p className="flex items-center gap-1 text-xs text-gray-400">
         <CalendarDays size={12} className="shrink-0" />

@@ -2418,7 +2418,8 @@
       "price_ambiguous": "price unknown (model listed at several prices)",
       "model_unknown": "price unknown (model not recorded)"
     },
-    "reportedTokens": "{{tokens}} reported tokens"
+    "reportedTokens": "{{tokens}} reported tokens",
+    "weightTitle": "Prompt weight by section"
   },
   "gitSettings": {
     "title": "Git workflow",
@@ -3045,5 +3046,34 @@
     "save": "Save view",
     "saved": "View \"{{name}}\" saved.",
     "loading": "Loading tasks…"
+  },
+  "promptWeight": {
+    "none": "No prompt measure recorded for these runs.",
+    "summary": "{{calls}} prompts · {{tokens}} estimated tokens, plus {{system}} in the system prompt",
+    "tokensShare": "{{tokens}} · {{pct}}%",
+    "cut_one": "cut {{count}}×",
+    "cut_other": "cut {{count}}×",
+    "cutHint": "Prompts whose budget left this section out (PROMPT_BUDGET).",
+    "estimateHint": "Estimated by the backend from what it sent (characters / 4), not the provider's count.",
+    "show": "Show prompt weight",
+    "hide": "Hide prompt weight",
+    "loading": "Loading the prompt weight…",
+    "error": "The prompt weight could not be read.",
+    "section": {
+      "output_format": "Output format",
+      "task": "Task",
+      "architect_brief": "Architect's brief",
+      "review_feedback": "Review feedback",
+      "previous_attempt": "Previous attempt",
+      "requirements": "Requirements",
+      "standards_and_procedures": "Standards and procedures",
+      "repository": "Repository",
+      "related_code": "Related code",
+      "lessons": "Lessons",
+      "memory": "Memory",
+      "completed_tasks": "Completed tasks",
+      "console_assistant_notes": "Console notes",
+      "wiki": "Wiki"
+    }
   }
 }
