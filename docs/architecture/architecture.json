@@ -156,7 +156,7 @@
       "name": "Model choice",
       "kind": "function",
       "module": "models",
-      "contract": "company_models.resolve(session, company_id, role, configured) -> str\nmodel_routing.estimate_difficulty(...) -> int\nmodel_suggestions.suggest(...) -> one suggestion per role\nrouting_record / model_record over completed sprints",
+      "contract": "company_models.resolve(session, company_id, role, configured) -> str\nmodel_routing.estimate_difficulty(...) -> int\nmodel_suggestions.suggest(...) -> one suggestion per role\nrouting_record / model_record / calibration over completed sprints\neffort.record_sprint(session, sprint_id) -> int (at sprint close)",
       "consumers": ["learning", "planning", "producers", "loop", "management"]
     },
     {
