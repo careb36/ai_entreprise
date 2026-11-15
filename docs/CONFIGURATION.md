@@ -308,10 +308,11 @@ Copy `.env.example` to `.env` and fill in:
   1.64.1 from its lockfile and the Chrome Headless Shell it launches, each
   download checked by sha256 for amd64 and arm64; `docker build
   vscode-daemon/images/browser`, and behind a TLS-intercepting proxy
-  `--secret id=extra_ca,src=<CA bundle>`). Every `v*` tag publishes it
-  multi-arch (`linux/amd64`, `linux/arm64`) as
-  `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z` (#529; `images.yml`, built
-  with buildx under QEMU), signed by digest with keyless cosign and carrying
+  `--secret id=extra_ca,src=<CA bundle>`). Every `v*` tag publishes it for
+  `linux/amd64` as `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z` (#529;
+  `images.yml`; an arm64 host builds it locally from the same Dockerfile, which
+  pins the arm64 browser too, but its browser has not been seen to run on
+  arm64 yet), signed by digest with keyless cosign and carrying
   its CycloneDX SBOM as a signed attestation (`docs/OPERATIONS.md`,
   Releasing): set `DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
   with the digest the publish run's summary printed. Pin it by digest
