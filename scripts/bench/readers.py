@@ -5,8 +5,10 @@
   of one company, or of the whole run for the token budget.
 - ``prompt_sections``: each task's latest task-worker run's prompt measure
   (``prompt_sections`` in the stored verification evidence, issue #443).
+- ``difficulty_estimates``: each task's first ``estimated`` event (issue
+  #319), the difficulty stored before its first attempt.
 
-Both read observations the backend stored; neither estimates what is not there.
+All read observations the backend stored; none estimates what is not there.
 """
 
 from typing import Any
@@ -69,4 +71,23 @@ def prompt_sections(dsn: dict[str, str], company_id: int) -> dict[int, Any]:
             number = ref.partition("-")[2]
             if number.isdigit():
                 out[int(number)] = measure
+    return out
+
+
+def difficulty_estimates(dsn: dict[str, str], company_id: int) -> dict[int, Any]:
+    """Per task, the payload of its first ``estimated`` event (issue #319):
+    the difficulty the task worker stored before its first attempt and the
+    routing it led to. Tasks from before the event are not listed."""
+    import psycopg2  # the backend's environment has it
+
+    out: dict[int, Any] = {}
+    with psycopg2.connect(**dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT ON (task_id) task_id, payload::jsonb FROM task_events "
+            "WHERE company_id = %s AND event_type = 'estimated' AND task_id IS NOT NULL "
+            "ORDER BY task_id, seq, id",
+            (company_id,),
+        )
+        for task_id, payload in cur.fetchall():
+            out[int(task_id)] = payload if isinstance(payload, dict) else {}
     return out

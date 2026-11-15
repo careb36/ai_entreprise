@@ -44,6 +44,7 @@ from models.chat import (
     ChatInteraction,
     ChatLinkCode,
 )
+from models.board_note import SprintBoardNote
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -205,6 +206,7 @@ SQLModel.metadata.create_all(
         ChatLinkCode.__table__,
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
+        SprintBoardNote.__table__,
     ],
 )
 

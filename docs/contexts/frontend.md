@@ -9,6 +9,7 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 - `GlassRoom` — real-time agent activity monitor via SSE
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
+- `BoardNotes` — the sprint page's Board notes tab (`/sprints/:id/notes`, issue #439): the sprint board's notes as claims with what was observed beside each file, the board's numbers, and for a Manager a form to add a note and a way to mark one wrong (`hooks/useBoardNotes.ts`, `services/api/boardNotes.ts`)
 
 ## Layout of the larger views
 
@@ -17,7 +18,7 @@ A view too large for one file keeps its entry file, with the same exports, and p
 - `components/GlassRoom.tsx` → `components/glassroom/`: the top bar, the three columns (`LeftSidebar`, `MessageFeed`, `RightPanel`), the right panel's panels, the message atoms and groups, the agent identities and formatters, and the hooks that derive the feed (`useFeed.ts`: scroll, clock, filters, presence) and the sprint's state (`useSprintInsights.ts`: assistant summary, tasks, quota, health, autonomy tree) from the stream.
 - `pages/CompanyNew.tsx` → `pages/companyNew/`: one component per wizard step (`ProjectStep` … `ReviewStep`), their cards, the constants and types, and the hooks for the project folder (`useProjectFolder`) and the team being drafted (`useTeamDrafts`).
 - `pages/AgentSettings.tsx` → `pages/agentSettings/`: the toolbar, the creator, the role groups and agent cards, the draft fields and model selector, the model recommendation, and the hooks for the list (`useAgentList`), the creator (`useAgentCreator`) and the two-step delete (`useConfirmDelete`).
-- `services/api.ts` is a barrel over `services/api/`: `client.ts` holds the fetch wrapper (base URL, timeout, retries, `ApiError`, the 401 handler), the generic verbs and the file and text downloads (`fetchBlob`, `fetchText`); `stream.ts` opens the Glassroom's event stream (`openGlassroomStream`); each domain module (`agents`, `sprints`, `auth`, `system`, `companies`, `workspace`, `messages`, `evidence`, `analytics`, `memory`, `support`, `github`) holds its types and its endpoints. The barrel assembles the one `api` object and re-exports every name, so callers import from `services/api` as before. The endpoints call the verbs through that object, so a test that spies on `api.get` still sees every endpoint built on it.
+- `services/api.ts` is a barrel over `services/api/`: `client.ts` holds the fetch wrapper (base URL, timeout, retries, `ApiError`, the 401 handler), the generic verbs and the file and text downloads (`fetchBlob`, `fetchText`); `stream.ts` opens the Glassroom's event stream (`openGlassroomStream`); each domain module (`agents`, `sprints`, `auth`, `system`, `companies`, `workspace`, `messages`, `boardNotes`, `evidence`, `analytics`, `memory`, `support`, `github`) holds its types and its endpoints. The barrel assembles the one `api` object and re-exports every name, so callers import from `services/api` as before. The endpoints call the verbs through that object, so a test that spies on `api.get` still sees every endpoint built on it.
 
 ## The dependency rule between layers
 

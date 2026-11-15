@@ -146,6 +146,25 @@ def apply(
     company.role_models = roles or None
 
 
+def apply_policy(session: Session, company: Company, value: Any) -> None:
+    """Replace the company's routing policy (``routing_policy``); empty clears it.
+
+    Checked strictly: a band that names a connection must name one of the
+    company's. Raises ``InvalidModelSettings`` on a bad policy.
+    """
+    from services.models import routing_policy
+
+    try:
+        policy = routing_policy.validate(value)
+    except routing_policy.InvalidPolicy as exc:
+        raise InvalidModelSettings(str(exc)) from exc
+    if policy is not None:
+        for key, target in policy["bands"].items():
+            if not routing_policy.is_tier(target):
+                clean_model(session, company.id, target, f"model_policy.bands.{key}")
+    company.model_policy = policy
+
+
 def serialize(company: Company) -> dict[str, Any]:
     """The choice as stored, and what each role runs with it (no agent override)."""
     from services.models.model_factory import default_model_for_role
@@ -166,9 +185,22 @@ def serialize(company: Company) -> dict[str, Any]:
                 else "deployment"
             ),
         }
+    from services.models import routing_policy
+
+    own = routing_policy.company_policy(company)
+    deployed = routing_policy.deployment_policy()
     return {
         "default_model": company.default_model or None,
         "role_models": dict(roles),
         "roles": list(ROLES),
         "effective": effective,
+        # The routing policy by difficulty: the company's, else the deployment's.
+        "model_policy": company.model_policy or None,
+        "deployment_policy": deployed or None,
+        "policy_source": routing_policy.COMPANY
+        if own
+        else routing_policy.DEPLOYMENT
+        if deployed
+        else None,
+        "difficulty_bands": list(routing_policy.difficulty.BANDS),
     }

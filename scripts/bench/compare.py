@@ -54,6 +54,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget  # the sibling modules, by path
 import prompt_weight
+import routing_split
 from schema import validate
 
 DEFAULTS = {"rate": 0.05, "rework": 0.25, "tokens": 0.5, "prompt_tokens": None}
@@ -326,6 +327,8 @@ def render(
             f"| {b['wall_clock_seconds']:.0f} s → {a['wall_clock_seconds']:.0f} s |"
         )
     lines += render_bands(previous, current)
+    lines += routing_split.render(previous, current, "band")
+    lines += routing_split.render(previous, current, "model")
     lines += prompt_weight.render_table(previous, current)
     if result["new_specs"]:
         lines += [

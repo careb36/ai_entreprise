@@ -14,3 +14,9 @@ Dualboot Partners, LLC, licensed under the Apache License 2.0.
 Portions of .github/workflows/images.yml are adapted from AixleHQ/flow
 (https://github.com/AixleHQ/flow), Copyright 2026 Dualboot Partners, LLC,
 licensed under the Apache License 2.0.
+
+Portions of vscode-daemon/images/browser/Dockerfile and
+vscode-daemon/images/browser/probe-browser.js are adapted from AixleHQ/flow
+(https://github.com/AixleHQ/flow), docker/base/Dockerfile and
+docker/base/probe-browser.js at commit f9efa22, Copyright 2026 Dualboot
+Partners, LLC, licensed under the Apache License 2.0.

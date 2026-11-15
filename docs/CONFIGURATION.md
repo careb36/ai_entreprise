@@ -230,7 +230,12 @@ Copy `.env.example` to `.env` and fill in:
   applied (`test_run.sandbox`) and the Verifier records it as the `sandbox`
   check (`services/workspace/sandbox.py`; `host` is a finding, never a refutation);
   `FABRIQUE_SANDBOX_REQUIRED=container` on the daemon's machine refuses the host
-  for everything (`vscode-daemon/sandbox.py`). In container mode the report
+  for everything (`vscode-daemon/sandbox.py`), a request that names no sandbox
+  included (#525). The console assistants (`CONSOLE_ASSISTANTS_ENABLED`) run in
+  the company's sandbox too, with purpose `assistant`: in `container` or
+  `bwrap` they need `DELIVERY_SANDBOX_NETWORK` on (off by default; otherwise
+  they are skipped with the reason), the CLI in `DELIVERY_SANDBOX_IMAGE`, and
+  the provider's key listed by name in the company's `console_env`. In container mode the report
   names the image that ran (`image_identity`: the content ID and registry
   digest from `image inspect`, observed by the daemon before the run, and the
   container started from that ID; after the run for an image the run pulled;
@@ -248,7 +253,34 @@ Copy `.env.example` to `.env` and fill in:
   mounted or removed. Daemon side, `FABRIQUE_SANDBOX_CACHE=off` refuses the
   cache and `FABRIQUE_SANDBOX_CACHE_STATE` (default
   `~/.fabrique-daemon/sandbox-cache`) holds each project's failed installs and
-  quarantine.
+  quarantine. The application check's container mounts the same cache.
+- `DELIVERY_BROWSER_IMAGE` — optional, default empty (the application check
+  runs in `DELIVERY_SANDBOX_IMAGE`, as before). In container mode, the image the
+  application check runs in when its e2e command drives a browser (QA's smoke
+  suite, or the e2e command of a profile that serves pages): one built from
+  `vscode-daemon/images/browser` (Node, Playwright 1.64.1 from its lockfile and
+  the Chrome Headless Shell it launches, each download checked by sha256 for
+  amd64 and arm64; `docker build vscode-daemon/images/browser`, and behind a
+  TLS-intercepting proxy `--secret id=extra_ca,src=<CA bundle>`). Pin it by
+  digest (`registry/name@sha256:…`); the run records the content ID and digest
+  it started from either way. Before a browser e2e command the daemon also
+  probes for a browser (`vscode-daemon/browser_probe.py`) and `e2e_run` says
+  whether one was present.
+- `DELIVERY_FULL_LOGS` — optional, default `true`. The install, the test run
+  and the application check ask the daemon for their whole output: it uploads
+  each stream (up to `FABRIQUE_FULL_LOG_MAX_MB` on the daemon's machine,
+  default `50`, 1 to 1024; beyond it the object is cut and says `truncated`)
+  to the JetStream object store `FABRIQUE_RUN_LOGS` (prefixed with
+  `NATS_NAMESPACE`), and the backend reads each object back and records its
+  size and sha256, computed here, as `full_log` on the evidence. Needs
+  JetStream; without it, with the setting off or with an older daemon the
+  evidence says `full_log: {observed: false, reason}`.
+  `DELIVERY_FULL_LOG_MAX_MB` (default `50`) is the largest object the backend
+  reads back. Retention is the bucket's, set when the backend starts:
+  `FULL_LOG_RETENTION_DAYS` (default `30`; `0` keeps objects) and
+  `FULL_LOG_BUCKET_MAX_MB` (default `4096`; beyond it the oldest objects go
+  first; `0` for no limit). The janitor does not touch the bucket: the
+  evidence keeps each object's sha256 after the object itself expires.
   The daemon also applies a **command policy** before `workspace.execute`
   runs anything (`vscode-daemon/command_policy.py`, issue #357): the
   request's `command_policy` (`{"mode": "allow"|"deny", "allow": [...],
@@ -412,6 +444,15 @@ Copy `.env.example` to `.env` and fill in:
   uses them (the daemon's `workspace.related`, from the repository map's
   parse cache), and the recent runs that wrote them, cut at that many
   characters; `0` leaves the section out and asks the daemon nothing.
+- `SPRINT_BOARD_MAX_CHARS` (2000) — the `## Sprint board` section of every
+  task prompt (`services/loop/worker/sprint_notes.py`, issue #439;
+  `docs/design/SPRINT_BOARD.md`): the sprint's active notes relevant to the
+  task (by the files, modules and requirements it touches), newest first,
+  each with what the Verifier's records observed about the files it names,
+  then how to write one; the whole section stays within that many
+  characters (the header and the format take about 800 and are always
+  there, the notes get the rest); `0` leaves the section out. Prompt priority 4: `PROMPT_BUDGET` cuts
+  it before the repository, the related code and the requirements.
 - `EDIT_LINT_ENABLED` (true), `EDIT_LINT_TIMEOUT_SECONDS` (60) — after a
   `workspace__edit`, the stack profile's lint command on that file
   (`services/tools/edit_lint.py`), its errors in the same turn as the edit's result.
@@ -428,6 +469,21 @@ Copy `.env.example` to `.env` and fill in:
   Architect's brief and review feedback never are, and the prompt names what
   was left out. Unset or `0`: nothing is cut. Either way each section's weight
   is recorded on the run's evidence as `prompt_sections`.
+- `AGENT_MODEL_POLICY` — optional, empty by default (issue #319). The
+  deployment's routing policy by task difficulty, JSON:
+  `{"bands": {"low": "<model>", "medium": "fast", "high": "<model>"}, "label": "cheap-easy"}`.
+  A band key is a difficulty band of `services/models/difficulty.py` (`low`
+  1-2, `medium` 3, `high` 4-5) or a range of scores (`"1-2"`, `"3-5"`); a
+  value is a model id, a company connection (`conn:<id>:<model>`) or a proxy
+  tier name (`fast`, `powerful`…), which runs on the role default since the
+  proxy serves no model by that name. `label` names the policy in the routing
+  record and the bench (else a fingerprint of the bands). A company's own
+  policy (`Company.model_policy`, the Models page, `PUT
+  /v1/companies/{id}/model_settings` with `model_policy`) replaces it for
+  that company. A policy that cannot be read is ignored with a warning (the
+  role defaults apply), a band that cannot be read is dropped with a warning;
+  an agent's, a role's or the company's chosen model is never re-routed.
+  Unset: every task runs on its role's model, as before.
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
   resolves to public addresses, checked when it is saved and before every post;

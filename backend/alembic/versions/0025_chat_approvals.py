@@ -6,8 +6,8 @@ codes, hashed), ``chat_approval_messages`` (what was posted for which approval
 point, and its head) and ``chat_interactions`` (inbound ids, once, against
 replay). New tables only: nothing existing changes.
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0025
+Revises: 0024
 Create Date: 2026-11-15 18:00:00 UTC
 """
 
@@ -18,8 +18,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0023"
-down_revision = "0022"
+revision = "0025"
+down_revision = "0024"
 branch_labels = None
 depends_on = None
 

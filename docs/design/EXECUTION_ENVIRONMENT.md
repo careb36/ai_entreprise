@@ -76,8 +76,9 @@ sha256 and differs from the registry digest.
 ## What Flow taught
 
 AixleHQ/flow (Apache-2.0) runs agent sessions in containers on a person's
-own machine through a host runner. Design was taken; no code was copied
-(Flow is Go and Rails), so no NOTICE entry is needed.
+own machine through a host runner. For the first slice design was taken and
+no code was copied (Flow is Go and Rails); the second slice adapts two small
+files as code (below, "Taken from Flow, as code"), credited in `NOTICE`.
 
 - **Scope by ownership, never by enumeration**
   (`runner/protocol/PROTOCOL.md` §6.4, `env.scrub` and `env.reset`): act
@@ -109,6 +110,88 @@ own machine through a host runner. Design was taken; no code was copied
   the person's files, mounted from their disk, and the task branch is the
   unit; there is nothing to scrub.
 
+## The second slice (2026-11-15)
+
+- **Done: a pinned browser image** (`vscode-daemon/images/browser/`). Node 22
+  from `node:22-bookworm-slim` pinned by its multi-architecture digest;
+  Playwright 1.64.1 from a `package-lock.json` installed with `npm ci
+  --ignore-scripts` (npm checks each tarball against its sha512 integrity
+  hash); the Chrome Headless Shell that Playwright 1.64.1 launches headless
+  (revision 1248, Chrome 156.0.8078.4), downloaded from the Playwright CDN
+  and checked against a sha256 pinned per architecture through
+  `TARGETARCH` (amd64 and arm64), unpacked where Playwright looks for it;
+  the runtime libraries from Debian; `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD`, so
+  nothing is downloaded at run time; `USER node`, and every file readable by
+  the person's own uid, which the daemon runs it as. The build runs the probe
+  as root and as `node` on amd64 (under QEMU the browser aborts, as Flow
+  found). `DELIVERY_BROWSER_IMAGE` makes the application check run a browser
+  e2e command (QA's smoke suite, or a `web` profile's e2e) in it, in
+  container mode only; the run records the content ID and digest it started
+  from like every container run. A TLS-intercepting proxy is handled with an
+  optional build secret (`extra_ca`), which changes nothing about what is
+  accepted: the integrity hashes and the sha256 decide.
+- **Done: the browser probe** (`vscode-daemon/browser_probe.py`,
+  `images/browser/probe-browser.js`). Before a browser e2e command the daemon
+  launches a browser where the command runs, paints a page and reads it back,
+  and reports `browser_probe` (`available`, `from: image|project`, the
+  versions or the reason). `e2e_run` says "browser present: yes / no / not
+  observed" from it. Only a probe of the image's own pinned Playwright turns
+  an unexplained e2e failure into `runtime_missing`: the project's
+  `node_modules` are shaped by agent-written code, so a "no" from there only
+  annotates.
+- **Done: full logs as evidence** (`vscode-daemon/run_logs.py`,
+  `services/workspace/run_logs.py`). The install, the tests and the
+  application check ask for the whole output; the daemon keeps each stream up
+  to 50 MiB in a temporary file while the command runs (the reply's tail is
+  unchanged), uploads it to the JetStream object store `FABRIQUE_RUN_LOGS`
+  as `run-<hex>/<stream>`, and says which objects and how many bytes, never
+  a hash. The backend reads each back, computes size and sha256 and records
+  `full_log` beside the tail; an older daemon is `observed: false` with the
+  reason. The daemon's NATS user may write that bucket's chunks and metadata
+  and read its info, never purge or delete; an object it overwrites later
+  would no longer match the sha256 on the evidence. **Retention**: the
+  janitor's retention (`backend/janitor/retention.py`) deletes database rows
+  and has no artifact store to follow, so the bucket keeps its own:
+  objects expire after `FULL_LOG_RETENTION_DAYS` (30) and the oldest go
+  first beyond `FULL_LOG_BUCKET_MAX_MB` (4096; `discard: old`, unlike
+  nats-py's default `new`, so a full bucket never refuses new evidence). The
+  evidence's sha256 outlives the object.
+- **Done: install state per sandbox mode** (`dependency_install.install_key`):
+  `<root>` for host, as records were kept before, `<mode>:<root>` otherwise.
+  The key follows the mode the company asks for; a daemon that forces another
+  (`FABRIQUE_SANDBOX_REQUIRED`) is visible in the run's `sandbox` report but
+  does not change the key.
+- **Done: the cache in the application check's container**, mounted as a test
+  run's and kept after it (`purpose: check`).
+
+Exercised for real here (Docker 29.9): the image built for amd64 with the
+probe passing as root and as `node`; a Playwright test (`npx --no-install
+playwright test e2e`, the smoke command) against a real Node application in
+that image through `app_run.check_application`, network off, capabilities
+dropped, the content ID recorded, the probe reporting Chromium 156 from the
+image; the probe as an arbitrary uid (4321) with the network off; the full
+log round trip against a real `nats-server` 2.10 with JetStream and the
+generated permissions (the daemon's purge refused). The arm64 image was not
+built here (no QEMU); its sha256 was computed from the archive, which holds
+an aarch64 binary. Building needed the `extra_ca` secret: the session's
+proxy intercepts TLS, and npm refused its certificate without it.
+
+### Taken from Flow, as code
+
+Flow's `docker/base/Dockerfile` and `docker/base/probe-browser.js` at commit
+f9efa22 (Apache-2.0) are small enough to adapt, and were, with their notice
+in each file's header and an entry in `NOTICE`: the per-architecture
+download checked against a pinned sha256 (`TARGETARCH`, `case`, `sha256sum
+-c`), the Playwright version pinned so the browser baked at build time is
+the one launched at run time, a shared `PLAYWRIGHT_BROWSERS_PATH` readable by
+a non-root user, and the build-time probe run as root and as the
+unprivileged user on amd64 only. Changed: Flow keeps the chrome-for-testing
+channel its MCP launches and deletes the headless shell; a Playwright test
+run headless launches the headless shell, so this image keeps only that, and
+downloads it directly to check it, since `playwright install` verifies
+nothing. The probe drives Playwright directly instead of the MCP server and
+prints one machine-readable line.
+
 ## What remains for #315
 
 - **What an install leaves in a container.** The cache holds downloads, not
@@ -116,19 +199,16 @@ own machine through a host runner. Design was taken; no code was copied
   into the worktree (`node_modules` yes, a Python `site-packages` no). A
   per-project environment volume (a virtualenv, `GOPATH`) with the same
   lifecycle is next.
-- **The application check's container** reports its image identity but does
-  not mount the cache yet (its report says `not_used`).
-- **A pinned browser image** for the Playwright smoke tests, built for amd64
-  and arm64 with its tools pinned by version and checksum, as Flow's
-  `docker/base/Dockerfile` pins and verifies each download per
-  architecture; today the sandbox image is whatever
-  `DELIVERY_SANDBOX_IMAGE` names, and the identity now records which one ran.
-- **Full logs**: the daemon keeps a bounded tail; the whole log should go to a
-  JetStream object store with the backend computing its sha256 on receipt
-  (rule 6 of the positioning: never a hash from the party recorded).
+- **Publishing the browser image.** It is built locally today; publishing it
+  for amd64 and arm64 from the release workflow (and pinning
+  `DELIVERY_BROWSER_IMAGE` to its digest in the compose file) is next. A
+  project whose own `@playwright/test` is not 1.64.1 looks for its own
+  browser revision and is reported `runtime_missing`; a matrix of images per
+  Playwright release, or the probe naming the version the project wants, is
+  open.
+- **The full log in the UI.** The evidence records each object and its sha256;
+  a view that streams an object back and checks it against the sha256 is not
+  built.
 - **A versioned daemon protocol with a heartbeat** (Flow's `PROTOCOL.md` §5.10
-  and §7): today the backend learns a daemon's abilities from its replies'
-  shape, and an older daemon is read as "reported no image identity".
-- **Install state keyed by sandbox.** `Company.dependency_installs` is keyed
-  by folder only; a company that moves from host to container mode is not
-  re-installed until a manifest changes.
+  and §7) is in place (`vscode-daemon/protocol/PROTOCOL.md`); the daemon's
+  abilities are still learned from its replies' shape, not announced.

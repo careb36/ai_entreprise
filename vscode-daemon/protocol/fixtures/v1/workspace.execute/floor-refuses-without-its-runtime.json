@@ -1,0 +1,17 @@
+{
+  "description": "A request without a sandbox on a daemon whose floor (FABRIQUE_SANDBOX_REQUIRED) is container and whose container runtime is missing: read as a host request, raised to the floor, and refused because the floor cannot run. Never run on the host.",
+  "subject": "workspace.execute",
+  "daemon_env": {
+    "FABRIQUE_SANDBOX_REQUIRED": "container",
+    "FABRIQUE_SANDBOX_RUNTIME": "fabrique-no-such-runtime"
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "command": "echo hello",
+    "sprint_id": 5
+  },
+  "reply": {
+    "success": false,
+    "error": "sandbox unavailable: container mode needs Docker or Podman on the daemon's machine; none was found"
+  }
+}

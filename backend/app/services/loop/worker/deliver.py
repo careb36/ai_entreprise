@@ -35,7 +35,7 @@ from services.contracts.manifest import (
 from services.evidence import acceptance
 from services.evidence.verification import evaluate_workspace_writes
 from services.loop import delivery_checks, review_digest
-from services.loop.worker import board_writes, record
+from services.loop.worker import board_writes, record, sprint_notes
 from services.platform.glassroom import publish_glassroom
 from services.platform.orchestration_metrics import VERDICT_REFUTED
 from services.tools import registry_lookup, signature_lookup
@@ -434,6 +434,16 @@ async def _deliver_artifacts(
     await _observe_signatures(nats_client, evidence, targets)
     recorded = await asyncio.to_thread(
         record._record_task_run, item, agent, sprint, deliverable, targets, evidence
+    )
+    # The deliverable's NOTE … END blocks go on the sprint board (#439): claims.
+    await asyncio.to_thread(
+        sprint_notes.record_from_delivery,
+        engine,
+        item,
+        agent,
+        sprint,
+        deliverable,
+        recorded[0] if recorded else None,
     )
     queue_failed = queued_job is not None and not await _publish_queued_delivery(
         nats_client, queued_job, evidence

@@ -20,6 +20,14 @@ Verifier then judges, each reply kept on the run's evidence:
   command, QA's browser smoke tests run as the e2e command when QA wrote them
   (``evidence/browser_smoke.py``), read back per criterion. QA's own
   test-writing task changes no application code: it is not started for it.
+  A browser e2e command asks the daemon to probe for a browser first
+  (``browser_probe``) and, in container mode with ``DELIVERY_BROWSER_IMAGE``,
+  runs in that image instead of ``DELIVERY_SANDBOX_IMAGE``.
+
+The install, the tests and the application check each ask for the whole
+output too (``workspace/run_logs.py``): the daemon uploads it to the object
+store, the backend reads it back, hashes it and records ``full_log`` on the
+record beside the tail.
 
 The workspace sends the requests and returns observations; the evidence
 judges them; this module, in the loop, puts the two together (ADR 0012). The
@@ -40,7 +48,7 @@ from services.evidence import app_check, browser_smoke, criteria_tests
 from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
-from services.workspace import dependency_install, sandbox, workspace_daemon
+from services.workspace import dependency_install, run_logs, sandbox, workspace_daemon
 from services.workspace.dependency_install import REPLY_MARGIN_SECONDS
 from services.workspace.project_profile import Context
 
@@ -51,6 +59,10 @@ logger = logging.getLogger(__name__)
 # 120 s, a cold image is pulled), the last inspect and probe and the teardown
 # (logs, removal), each a runtime call of RUNTIME_CALL_SECONDS (30 s).
 _APP_OVERHEAD_SECONDS = 120.0 + 4 * 30.0
+# The browser probe before a browser e2e command (vscode-daemon/browser_probe.py,
+# PROBE_SECONDS) and the full log's upload after the run.
+_BROWSER_PROBE_SECONDS = 90.0
+_FULL_LOG_UPLOAD_SECONDS = 60.0
 
 
 async def run_delivery_tests(
@@ -99,6 +111,7 @@ async def _run_tests(
         # Never run agent code under a guessed sandbox: the tests stay unverified.
         evidence["test_run"] = {"command": command, "reason": str(e)}
         return
+    full_log = run_logs.request_spec(nats_client)
     try:
         result = await nats_client.request(
             "workspace.execute",
@@ -108,8 +121,10 @@ async def _run_tests(
                 "sprint_id": sprint["id"],
                 # Agent-written code: run as the company's sandbox says.
                 "sandbox": box,
+                **run_logs.request_field(full_log),
             },
-            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS,
+            timeout=settings.DELIVERY_TEST_TIMEOUT_SECONDS
+            + (_FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0),
         )
     except Exception as e:  # noqa: BLE001 - A silent daemon leaves the tests unverified.
         evidence["test_run"] = {
@@ -118,6 +133,9 @@ async def _run_tests(
         }
         return
     workspace_daemon.record_test_run(evidence, command, result)
+    evidence["test_run"]["full_log"] = await run_logs.observe(
+        nats_client, full_log, result
+    )
     reply = result if isinstance(result, dict) else {}
     criteria_tests.record_results(
         evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
@@ -180,6 +198,13 @@ async def check_application(ctx: Context) -> None:
     )
     if e2e and not profile.get("e2e"):
         base["e2e_source"] = browser_smoke.SOURCE_SMOKE
+    browser = browser_smoke.is_browser_e2e(e2e, profile, base.get("e2e_source"))
+    if browser and box.get("mode") == "container" and settings.DELIVERY_BROWSER_IMAGE:
+        # The pinned browser image (vscode-daemon/images/browser); the
+        # daemon records which image ran (its content ID and digest).
+        box = {**box, "image": settings.DELIVERY_BROWSER_IMAGE.strip()}
+        base["image_source"] = "DELIVERY_BROWSER_IMAGE"
+    full_log = run_logs.request_spec(ctx.nats)
     try:
         reply = await ctx.nats.request(
             "workspace.app.check",
@@ -193,10 +218,14 @@ async def check_application(ctx: Context) -> None:
                 "e2e_timeout_seconds": e2e_timeout,
                 "sandbox": box,
                 "sprint_id": ctx.sprint.get("id"),
+                **({"browser_probe": True} if browser else {}),
+                **run_logs.request_field(full_log),
             },
             timeout=ready
             + (e2e_timeout if e2e else 0)
             + _APP_OVERHEAD_SECONDS
+            + (_BROWSER_PROBE_SECONDS if browser else 0)
+            + (_FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0)
             + REPLY_MARGIN_SECONDS,
         )
     except Exception as e:  # noqa: BLE001 - A silent daemon leaves it unverified.
@@ -206,6 +235,9 @@ async def check_application(ctx: Context) -> None:
         }
         return
     evidence["app_run"] = {**base, **_app_record(reply)}
+    if browser:
+        evidence["app_run"]["browser_probe_requested"] = True
+    evidence["app_run"]["full_log"] = await run_logs.observe(ctx.nats, full_log, reply)
     browser_smoke.read_back(evidence)
 
 
@@ -224,6 +256,7 @@ def _app_record(reply: Any) -> dict[str, Any]:
         "stopped",
         "sandbox",
         "refused",
+        "browser_probe",
     )
     record = {k: reply[k] for k in keep if k in reply}
     if reply.get("error"):

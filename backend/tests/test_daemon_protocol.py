@@ -98,12 +98,36 @@ class _Msg:
         self.reply = reply
 
 
+class _ObjectStore:
+    """The JetStream object store the daemon uploads full logs to (``run_logs``)."""
+
+    def __init__(self):
+        self.objects: dict[str, bytes] = {}
+
+    async def put(self, name, data, **_kwargs):
+        self.objects[name] = data.read()
+
+
+class _JetStream:
+    def __init__(self, store: _ObjectStore):
+        self.store = store
+        self.buckets: list[str] = []
+
+    async def object_store(self, bucket):
+        self.buckets.append(bucket)
+        return self.store
+
+
 class _NC:
     def __init__(self):
         self.published: list[tuple[str, Any]] = []
+        self.store = _ObjectStore()
 
     async def publish(self, subject, data, **_kwargs):
         self.published.append((subject, json.loads(data)))
+
+    def jetstream(self):
+        return _JetStream(self.store)
 
 
 def prepare_workspace(doc: dict[str, Any], root: Path) -> None:
@@ -114,7 +138,23 @@ def prepare_workspace(doc: dict[str, Any], root: Path) -> None:
 
 
 def replay(doc: dict[str, Any], root: Path) -> Any:
-    """What the daemon answers (or publishes) for the fixture, in *root*."""
+    """What the daemon answers (or publishes) for the fixture, in *root*,
+    with the fixture's ``daemon_env`` (the daemon machine's own settings,
+    such as ``FABRIQUE_SANDBOX_REQUIRED``) and none of those otherwise."""
+    with pytest.MonkeyPatch.context() as patch:
+        for name in DAEMON_ENV:
+            patch.delenv(name, raising=False)
+        for name, value in (doc.get("daemon_env") or {}).items():
+            assert name in DAEMON_ENV, f"not a daemon setting a fixture sets: {name}"
+            patch.setenv(name, value)
+        return _replay(doc, root)
+
+
+# The daemon machine's settings a fixture may set (``daemon_env``).
+DAEMON_ENV = ("FABRIQUE_SANDBOX_REQUIRED", "FABRIQUE_SANDBOX_RUNTIME")
+
+
+def _replay(doc: dict[str, Any], root: Path) -> Any:
     import daemon
     import daemon_status
 

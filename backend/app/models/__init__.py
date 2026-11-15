@@ -20,6 +20,7 @@ from .chat import (
     ChatInteraction,
     ChatLinkCode,
 )
+from .board_note import SprintBoardNote
 from .company import (
     Agent,
     BusinessUnit,
@@ -80,6 +81,7 @@ __all__ = [
     "RunSecret",
     "Specification",
     "Sprint",
+    "SprintBoardNote",
     "SprintIntegration",
     "SsoConnection",
     "SsoFlowState",
