@@ -354,6 +354,20 @@ each key.
   `fabrique_errors_total` and `fabrique_active_connections`. Each replica
   exposes its own counters, so scrape every replica and add them up.
 
+## Run La Fabrique on itself
+
+The factory can develop La Fabrique the way it develops any project (issue
+#329): `scripts/self_host/self_host.py` makes a "La Fabrique" company on a
+snapshot of this repository, imports La Fabrique's own specification and
+architecture (`docs/architecture/`), checks they render `docs/ARCHITECTURE.md`
+and `docs/adr/` unchanged, and can specify an issue, run its sprint, show the
+integration a person reviews and compile the documentation pack. The steps
+against a real stack, with real models, are in
+[`scripts/self_host/README.md`](../scripts/self_host/README.md); the e2e run
+exercises the same harness with the fake model (step 9d). The snapshot has no
+remote: what is kept comes back to this repository as an ordinary pull
+request.
+
 ## When something is wrong
 
 **The daemon is absent.** `GET /v1/workspace/status` says `absent` (NATS
