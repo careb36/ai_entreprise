@@ -2408,6 +2408,28 @@
     },
     "personsCount_one": "{{count}} section for a person to complete",
     "personsCount_other": "{{count}} sections for a person to complete",
-    "placement": "PMBOK Guide 8th ed.: {{domain}}, {{focus}}"
+    "placement": "PMBOK Guide 8th ed.: {{domain}}, {{focus}}",
+    "language": "Documents in",
+    "languageError": "Could not change the language: {{message}}",
+    "languages": {
+      "en": "English",
+      "es": "Spanish"
+    },
+    "domains": {
+      "Governance": "Governance",
+      "Scope": "Scope",
+      "Schedule": "Schedule",
+      "Finance": "Finance",
+      "Stakeholders": "Stakeholders",
+      "Resources": "Resources",
+      "Risk": "Risk"
+    },
+    "focusAreas": {
+      "Initiating": "Initiating",
+      "Planning": "Planning",
+      "Executing": "Executing",
+      "Monitoring and Controlling": "Monitoring and Controlling",
+      "Closing": "Closing"
+    }
   }
 }

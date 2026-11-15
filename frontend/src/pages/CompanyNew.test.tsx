@@ -613,7 +613,7 @@ describe('project folder on the user\'s computer', () => {
     expect(screen.getByLabelText('Base branch task branches start from')).toHaveValue('main')
     fireEvent.click(screen.getByRole('button', { name: /Initialize Factory/ }))
     await waitFor(() => expect(init).toHaveBeenCalledOnce())
-    expect(init.mock.calls[0][0]).toMatchObject({ git_workflow: true, git_base_branch: 'main' })
+    expect(init.mock.calls[0][0]).toMatchObject({ git_workflow: true, git_base_branch: 'main', doc_language: 'en' })
   })
 
   it('starts the Git choice again from the new folder when the person goes back and picks another', async () => {

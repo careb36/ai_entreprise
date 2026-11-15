@@ -4,7 +4,7 @@ Built from the snapshot (``collect``) alone; no model writes any of them. The
 structure follows the PMBOK Guide, 8th edition (PMI, 2025): traceability in
 Scope (Monitoring and Controlling), the issue log in Governance (Executing),
 the change log in Governance (Monitoring and Controlling); the wording is our
-own.
+own, in the pack's language (``texts``).
 
 The traceability matrix links each requirement to the tasks that cover it, the
 Verifier's verdict on their latest delivery and the commit a sprint
@@ -19,7 +19,14 @@ from __future__ import annotations
 from typing import Any
 
 from services.contracts.verdicts import VERDICT_REFUTED, VERDICT_UNVERIFIABLE
-from services.planning.project_docs.layout import PMBOK, build, missing_line
+from services.planning.project_docs import texts
+from services.planning.project_docs.control_docs import (
+    cell,
+    date,
+    event_ref,
+    task_states,
+)
+from services.planning.project_docs.layout import PMBOK, build, missing_line, tr_of
 from services.planning.project_docs.refs import Sources, ref
 from services.planning.project_docs.sanitize import md_id, md_inline
 from services.planning.project_docs.scope_docs import (
@@ -27,35 +34,21 @@ from services.planning.project_docs.scope_docs import (
     requirement_ref,
     spec_ref,
     task_ref,
-    tasks_of,
 )
 
 REASON_LIMIT = 240
 
 
-def _cell(value: Any, limit: int = 120) -> str:
-    return md_inline(value, limit) if value not in (None, "") else "-"
-
-
-def _date(value: Any) -> str:
-    return md_inline(str(value)[:10]) if value else "-"
-
-
-def event_ref(event: dict[str, Any]) -> dict[str, Any]:
-    return ref(
-        "event",
-        event.get("id"),
-        sha256=event.get("chain_hash"),
-        label=f"{event.get('kind')} by {event.get('actor')}",
-    )
-
-
-def verification_ref(item: dict[str, Any]) -> dict[str, Any]:
+def verification_ref(item: dict[str, Any], lang: str) -> dict[str, Any]:
     return ref(
         "verification",
         item.get("verification_id"),
         sha256=item.get("artifact_sha256"),
-        label=f"run {item.get('run_id')}, {item.get('verdict')}",
+        label=texts.translator(lang)(
+            "label_run_verdict",
+            id=item.get("run_id"),
+            verdict=texts.status(lang, item.get("verdict")),
+        ),
     )
 
 
@@ -81,71 +74,77 @@ TRACE_INPUTS = ("specification", "sprints", "verifications", "integrations")
 
 def traceability(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Requirement, then task, then verified delivery, then integration commit."""
-    title = "Requirements traceability matrix"
+    lang, tr = tr_of(snapshot)
     spec = snapshot.get("specification")
-    src, missing = Sources(), []
+    src, missing = Sources(lang), []
     if not spec:
-        body = [missing_line("the project has no specification in La Fabrique.")]
+        body = [missing_line(lang, tr("no_spec"))]
         return build(
-            "traceability", title, PMBOK, body, src, snapshot, TRACE_INPUTS, ["all"]
+            "traceability",
+            PMBOK,
+            body,
+            src,
+            snapshot,
+            TRACE_INPUTS,
+            [tr("section.all")],
         )
     verified, merged = latest_verification(snapshot), integrated_at(snapshot)
     body = [
-        (
-            f"From specification {md_id(spec['id'])} version {md_id(spec.get('version'))} "
-            f"{src.cite(spec_ref(spec))}. Each link is an observation: the task names "
-            "the criterion, the Verifier read the delivery, the integration reported "
-            "the commit."
+        tr(
+            "trace.intro",
+            id=md_id(spec["id"]),
+            version=md_id(spec.get("version")),
+            mark=src.cite(spec_ref(spec, lang)),
         ),
         "",
-        "| Requirement | Criteria covered | Task | Task status | Latest verification | Integrated at | Sources |",
+        tr("trace.header"),
         "|---|---|---|---|---|---|---|",
     ]
     for req in spec.get("requirements") or []:
         req_id = str(req.get("id"))
-        rmark = src.cite(requirement_ref(spec, req))
+        rmark = src.cite(requirement_ref(spec, req, lang))
         tasks = covering(snapshot, req_id)
         if not tasks:
-            body.append(f"| {md_id(req_id)} | - | none | - | - | - | {rmark} |")
-            missing.append(f"tasks for {req_id}")
+            body.append(
+                f"| {md_id(req_id)} | - | {tr('dash_none')} | - | - | - | {rmark} |"
+            )
+            missing.append(tr("trace.missing_tasks", id=req_id))
             continue
         for sprint, task in tasks:
-            marks = [rmark, src.cite(task_ref(task, sprint.get("id")))]
+            marks = [rmark, src.cite(task_ref(task, sprint.get("id"), lang))]
             criteria = [
                 md_id(c)
                 for c in task.get("covers") or []
                 if str(c) == req_id or str(c).startswith(f"{req_id}.")
             ]
             check = verified.get(task.get("id"))
-            verdict = "none recorded"
+            verdict = tr("trace.none_recorded")
             if check:
-                verdict = md_inline(check.get("verdict"))
-                marks.append(src.cite(verification_ref(check)))
-            commit = "none recorded"
+                verdict = md_inline(texts.status(lang, check.get("verdict")))
+                marks.append(src.cite(verification_ref(check, lang)))
+            commit = tr("trace.none_recorded")
             if task.get("id") in merged:
                 integration, sha = merged[task.get("id")]
-                commit = md_inline(str(sha)[:12]) if sha else "no commit reported"
+                commit = md_inline(str(sha)[:12]) if sha else tr("trace.no_commit")
                 marks.append(
                     src.cite(
                         ref(
                             "integration",
                             integration.get("id"),
                             sha256=sha,
-                            label=f"sprint {integration.get('sprint_id')}",
+                            label=tr("label_sprint", id=integration.get("sprint_id")),
                         )
                     )
                 )
             body.append(
                 f"| {md_id(req_id)} | {', '.join(criteria) or '-'} | T-{md_id(task.get('id'))} "
-                f"{_cell(task.get('title'), 60)} | {_cell(task.get('status'))} | {verdict} | "
-                f"{commit} | {' '.join(marks)} |"
+                f"{cell(task.get('title'), 60)} | {cell(texts.status(lang, task.get('status')))} | "
+                f"{verdict} | {commit} | {' '.join(marks)} |"
             )
     if not spec.get("requirements"):
-        body.append(missing_line("the specification lists no requirement."))
-        missing.append("requirements")
-    return build(
-        "traceability", title, PMBOK, body, src, snapshot, TRACE_INPUTS, missing
-    )
+        body.append(missing_line(lang, tr("no_requirement")))
+        missing.append(tr("section.requirements"))
+    return build("traceability", PMBOK, body, src, snapshot, TRACE_INPUTS, missing)
 
 
 ISSUE_INPUTS = ("sprints", "events", "verifications")
@@ -153,20 +152,23 @@ ISSUE_INPUTS = ("sprints", "events", "verifications")
 
 def issues(snapshot: dict[str, Any]) -> dict[str, Any]:
     """The issue log: what went wrong, who raised it, how it stands now."""
-    title = "Issue log"
-    src = Sources()
-    state_of = {t.get("id"): str(t.get("status")) for _, t in tasks_of(snapshot)}
+    lang, tr = tr_of(snapshot)
+    src = Sources(lang)
+    state_of = task_states(snapshot)
     events = snapshot.get("events") or []
     rows: list[tuple[str, str, str, str, str]] = []
     for event in events:
         kind, task_id = event.get("kind"), event.get("task_id")
-        reason = md_inline(event.get("reason") or "no reason recorded", REASON_LIMIT)
+        reason = md_inline(event.get("reason") or tr("nothing_reason"), REASON_LIMIT)
         status = state_of.get(task_id, "unknown")
         if kind == "blocked":
-            resolution = {"blocked": "open", "done": "resolved: task done"}.get(
-                status, f"back in work: {status}"
-            )
-            text = f"Task T-{md_id(task_id)} was blocked. Reason as recorded: {reason}"
+            if status == "blocked":
+                resolution = tr("issues.open")
+            elif status == "done":
+                resolution = tr("issues.resolved")
+            else:
+                resolution = tr("issues.back", status=texts.status(lang, status))
+            text = tr("issues.blocked", task=md_id(task_id), reason=reason)
         elif kind == "escalated":
             decided = any(
                 e.get("kind") == "decided"
@@ -174,17 +176,17 @@ def issues(snapshot: dict[str, Any]) -> dict[str, Any]:
                 and (e.get("id") or 0) > (event.get("id") or 0)
                 for e in events
             )
-            resolution = "decided by the ScrumMaster" if decided else "open"
-            text = f"Task T-{md_id(task_id)} was escalated to the ScrumMaster. Reason as recorded: {reason}"
+            resolution = tr("issues.decided") if decided else tr("issues.open")
+            text = tr("issues.escalated", task=md_id(task_id), reason=reason)
         else:
             continue
         rows.append(
             (
                 text,
                 md_inline(event.get("actor")),
-                _date(event.get("created_at")),
+                date(event.get("created_at")),
                 resolution,
-                src.cite(event_ref(event)),
+                src.cite(event_ref(event, lang)),
             )
         )
     for item in snapshot.get("verifications") or []:
@@ -193,45 +195,40 @@ def issues(snapshot: dict[str, Any]) -> dict[str, Any]:
         status = state_of.get(item.get("task_id"), "unknown")
         rows.append(
             (
-                f"The Verifier found the delivery of task T-{md_id(item.get('task_id'))} {md_inline(item.get('verdict'))}",
-                "Verifier",
-                _date(item.get("observed_at")),
-                "resolved: task done" if status == "done" else f"task {status}",
-                src.cite(verification_ref(item)),
+                tr(
+                    "issues.failed",
+                    task=md_id(item.get("task_id")),
+                    verdict=md_inline(texts.status(lang, item.get("verdict"))),
+                ),
+                tr("issues.verifier"),
+                date(item.get("observed_at")),
+                tr("issues.resolved")
+                if status == "done"
+                else tr("issues.task_status", status=texts.status(lang, status)),
+                src.cite(verification_ref(item, lang)),
             )
         )
-    body = [
-        (
-            "Issues are what the records show went wrong: a blocked task, an "
-            "escalation, a delivery the Verifier refuted or could not verify. A "
-            "reason quoted from an agent is what it wrote, not a finding."
-        ),
-        "",
-    ]
+    body = [tr("issues.intro"), ""]
     missing = []
     if rows:
+        body += [tr("issues.header"), "|---|---|---|---|---|---|"]
         body += [
-            "| ID | Issue | Raised by | Raised | Status | Source |",
-            "|---|---|---|---|---|---|",
-        ]
-        body += [
-            f"| I-{n} | {t} | {a} | {d} | {_cell(r)} | {m} |"
+            f"| I-{n} | {t} | {a} | {d} | {cell(r)} | {m} |"
             for n, (t, a, d, r, m) in enumerate(rows, 1)
         ]
     else:
-        body.append(
-            missing_line("no block, escalation or failed verification is recorded.")
-        )
-        missing.append("issues")
-    return build("issues", title, PMBOK, body, src, snapshot, ISSUE_INPUTS, missing)
+        body.append(missing_line(lang, tr("issues.none")))
+        missing.append(tr("section.issues"))
+    return build("issues", PMBOK, body, src, snapshot, ISSUE_INPUTS, missing)
 
 
 CHANGE_INPUTS = ("history", "events")
 
 
-def _requirement_delta(entry: dict, previous: dict | None) -> str:
+def _requirement_delta(entry: dict, previous: dict | None, lang: str) -> str:
     if previous is None or "requirement_ids" not in entry:
         return ""
+    tr = texts.translator(lang)
     now, before = (
         set(entry.get("requirement_ids") or []),
         set(previous.get("requirement_ids") or []),
@@ -239,17 +236,17 @@ def _requirement_delta(entry: dict, previous: dict | None) -> str:
     added, removed = sorted(now - before), sorted(before - now)
     parts = []
     if added:
-        parts.append("requirements added: " + ", ".join(md_id(r) for r in added))
+        parts.append(tr("changes.added", ids=", ".join(md_id(r) for r in added)))
     if removed:
-        parts.append("requirements removed: " + ", ".join(md_id(r) for r in removed))
-    return "; ".join(parts) or "same requirement ids"
+        parts.append(tr("changes.removed", ids=", ".join(md_id(r) for r in removed)))
+    return "; ".join(parts) or tr("changes.same")
 
 
 def changes(snapshot: dict[str, Any]) -> dict[str, Any]:
     """The change log: each revision of the specification and the architecture,
     and each task carried between sprints."""
-    title = "Change log"
-    src = Sources()
+    lang, tr = tr_of(snapshot)
+    src = Sources(lang)
     history = snapshot.get("history") or []
     by_id = {(h.get("kind"), h.get("id")): h for h in history}
     rows: list[tuple[str, str, str, str]] = []
@@ -257,57 +254,56 @@ def changes(snapshot: dict[str, Any]) -> dict[str, Any]:
         if entry.get("supersedes_id") is None:
             continue
         previous = by_id.get((entry.get("kind"), entry.get("supersedes_id")))
-        delta = _requirement_delta(entry, previous)
-        what = (
-            f"{md_inline(entry.get('kind')).capitalize()} {md_id(entry.get('id'))} version "
-            f"{md_id(entry.get('version'))} revises {md_id(entry.get('supersedes_id'))}"
-            + (f" ({delta})" if delta else "")
-        )
+        delta = _requirement_delta(entry, previous, lang)
+        what = tr(
+            "changes.revision",
+            kind=tr(f"kind.{entry.get('kind')}"),
+            id=md_id(entry.get("id")),
+            version=md_id(entry.get("version")),
+            previous=md_id(entry.get("supersedes_id")),
+        ) + (f" ({delta})" if delta else "")
         decision = (
-            f"approved {_date(entry.get('approved_at'))}"
+            tr("changes.approved", date=date(entry.get("approved_at")))
             if entry.get("approved_at")
-            else md_inline(entry.get("status"))
+            else md_inline(texts.status(lang, entry.get("status")))
         )
         mark = src.cite(
             ref(
                 entry.get("kind"),
                 entry.get("id"),
-                label=f"version {entry.get('version')}, {entry.get('status')}",
+                label=tr(
+                    "label_version",
+                    version=entry.get("version"),
+                    status=texts.status(lang, entry.get("status")),
+                ),
             )
         )
-        rows.append((what, _date(entry.get("created_at")), decision, mark))
+        rows.append((what, date(entry.get("created_at")), decision, mark))
     for event in snapshot.get("events") or []:
         # A carry writes two events, "to" on the original and "from" on the copy: one row.
         if event.get("kind") != "carried_over" or event.get("direction") != "to":
             continue
         rows.append(
             (
-                f"Task T-{md_id(event.get('task_id'))} of sprint {md_id(event.get('sprint_id'))} carried to another sprint",
-                _date(event.get("created_at")),
-                f"by {md_inline(event.get('actor'))}",
-                src.cite(event_ref(event)),
+                tr(
+                    "changes.carried",
+                    task=md_id(event.get("task_id")),
+                    sprint=md_id(event.get("sprint_id")),
+                ),
+                date(event.get("created_at")),
+                tr("changes.by", actor=md_inline(event.get("actor"))),
+                src.cite(event_ref(event, lang)),
             )
         )
-    body = [
-        (
-            "Changes are recorded as data: a revision of an approved document is a "
-            "new version that supersedes it once approved, and work moved between "
-            "sprints is a task event. In adaptive work the backlog itself carries "
-            "most change; see the WBS."
-        ),
-        "",
-    ]
+    body = [tr("changes.intro"), ""]
     missing = []
     if rows:
-        body += [
-            "| ID | Change | Raised | Decision | Source |",
-            "|---|---|---|---|---|",
-        ]
+        body += [tr("changes.header"), "|---|---|---|---|---|"]
         body += [
             f"| C-{n} | {w} | {d} | {r} | {m} |"
             for n, (w, d, r, m) in enumerate(rows, 1)
         ]
     else:
-        body.append(missing_line("no revision and no carried task is recorded."))
-        missing.append("changes")
-    return build("changes", title, PMBOK, body, src, snapshot, CHANGE_INPUTS, missing)
+        body.append(missing_line(lang, tr("changes.none")))
+        missing.append(tr("section.changes"))
+    return build("changes", PMBOK, body, src, snapshot, CHANGE_INPUTS, missing)

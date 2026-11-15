@@ -38,6 +38,8 @@ class DocumentationPack(SQLModel, table=True):
     architecture_id: int | None = Field(default=None, foreign_key="architectures.id")
     # The role that compiled it ("TechWriter") and who asked for it.
     compiled_by: str = "TechWriter"
+    # The language its fixed text is written in (``Company.doc_language``): en or es.
+    language: str = "en"
     requested_by: str | None = None
     # [{key, title, framework, markdown, sources, missing, claims, inputs, input_sha256}]
     documents: list[dict[str, Any]] = Field(

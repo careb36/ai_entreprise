@@ -506,8 +506,8 @@ def test_the_c4_levels_come_from_the_architecture_and_the_stack():
 
 
 class _Pack:
-    def __init__(self, documents, diagrams):
-        self.documents, self.diagrams = documents, diagrams
+    def __init__(self, documents, diagrams, language="en"):
+        self.documents, self.diagrams, self.language = documents, diagrams, language
 
 
 def test_the_lint_flags_exactly_the_documents_whose_records_changed():
@@ -549,7 +549,7 @@ def test_a_pack_without_diagrams_is_stale_once_an_architecture_exists():
 @pytest.mark.parametrize("value", ["", None, "   "])
 def test_digest_and_layout_helpers_are_stable(value):
     assert refs.digest({"b": 1, "a": [1, 2]}) == refs.digest({"a": [1, 2], "b": 1})
-    lines, wrote = layout.claim_block("TechWriter", value, "background")
+    lines, wrote = layout.claim_block("en", "TechWriter", value, "background")
     assert wrote is False and lines[0].startswith("_No source recorded")
 
 

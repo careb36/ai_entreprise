@@ -27,30 +27,12 @@ import json
 import re
 from typing import Any
 
+from services.planning.project_docs import texts
 from services.planning.project_docs.sanitize import md_id, md_inline
 
 NO_SOURCE = "No source recorded"
 # A digest shows only its hex digits and its prefix (``hmac-sha256:``).
 _HASH_DROP = re.compile(r"[^A-Za-z0-9:\-]")
-
-_KIND_NAMES = {
-    "specification": "Specification",
-    "requirement": "Requirement",
-    "architecture": "Architecture",
-    "module": "Module",
-    "interface": "Interface",
-    "adr": "Decision",
-    "discovery": "Stack discovery",
-    "sprint": "Sprint",
-    "task": "Task",
-    "event": "Task event",
-    "verification": "Verification",
-    "message": "Agent message",
-    "procedure": "Procedure",
-    "integration": "Integration",
-    "membership": "Company membership",
-    "rule": "Factory rule",
-}
 
 
 def digest(value: Any) -> str:
@@ -77,25 +59,30 @@ def ref(
     return out
 
 
-def describe(reference: dict[str, Any]) -> str:
-    """One reference as a line of literal Markdown."""
+def describe(reference: dict[str, Any], lang: str = texts.DEFAULT_LANGUAGE) -> str:
+    """One reference as a line of literal Markdown, its fixed words in *lang*."""
+    tr = texts.translator(lang)
     kind = reference.get("kind", "")
     ident = reference.get("id")
     shown = md_inline(ident, 120) if kind == "rule" else md_id(ident)
-    text = f"{_KIND_NAMES.get(kind, md_inline(kind))} {shown}"
+    name = (
+        tr(f"kind.{kind}") if f"kind.{kind}" in texts.TEXTS["en"] else md_inline(kind)
+    )
+    text = f"{name} {shown}"
     if reference.get("label"):
         text += f": {md_inline(reference['label'], 120)}"
     if reference.get("sha256"):
         text += f" · `{_HASH_DROP.sub('', str(reference['sha256']))[:100]}`"
     if reference.get("claim"):
-        text += " · a claim by the party recorded, not an observation"
+        text += f" · {tr('claim_ref')}"
     return text
 
 
 class Sources:
     """The numbered references of one document."""
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = texts.DEFAULT_LANGUAGE) -> None:
+        self.lang = texts.language(lang)
         self._refs: list[dict[str, Any]] = []
         self._index: dict[str, int] = {}
 
@@ -108,15 +95,18 @@ class Sources:
                 self._refs.append(reference)
                 self._index[key] = len(self._refs)
             marks.append(f"S{self._index[key]}")
-        return f"\\[{', '.join(marks)}\\]" if marks else f"({NO_SOURCE})"
+        if not marks:
+            return f"({texts.translator(self.lang)('no_source')})"
+        return f"\\[{', '.join(marks)}\\]"
 
     def as_list(self) -> list[dict[str, Any]]:
         return [{"mark": f"S{i}", **r} for i, r in enumerate(self._refs, 1)]
 
     def section(self) -> str:
+        tr = texts.translator(self.lang)
         if not self._refs:
-            return (
-                f"## Sources\n\n{NO_SOURCE}: nothing in this document cites a record.\n"
-            )
-        lines = [f"- S{i}: {describe(r)}" for i, r in enumerate(self._refs, 1)]
-        return "## Sources\n\n" + "\n".join(lines) + "\n"
+            return f"{tr('sources_heading')}\n\n{tr('sources_none')}\n"
+        lines = [
+            f"- S{i}: {describe(r, self.lang)}" for i, r in enumerate(self._refs, 1)
+        ]
+        return f"{tr('sources_heading')}\n\n" + "\n".join(lines) + "\n"

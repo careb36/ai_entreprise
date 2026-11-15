@@ -3,7 +3,9 @@
 management documentation (charter, scope, WBS, schedule, RACI, risk register,
 lessons learned, C4 diagrams) with the sources each document cites, the digest
 of the records it read, its approval and the sha256 the daemon read back for
-each file written. A new table only: nothing existing changes.
+each file written; and ``companies.doc_language``, the language the packs are
+written in (en or es; empty reads as English). Nullable: nothing existing
+changes.
 
 Revision ID: 0023
 Revises: 0022
@@ -46,6 +48,7 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("compiled_by", text(), nullable=False),
+        sa.Column("language", text(), nullable=False, server_default="en"),
         sa.Column("requested_by", text(), nullable=True),
         sa.Column("documents", sa.JSON(), nullable=True),
         sa.Column("diagrams", sa.JSON(), nullable=True),
@@ -60,8 +63,12 @@ def upgrade() -> None:
     op.create_index(
         "ix_documentation_packs_company_id", "documentation_packs", ["company_id"]
     )
+    with op.batch_alter_table("companies", schema=None) as batch_op:
+        batch_op.add_column(sa.Column("doc_language", text(), nullable=True))
 
 
 def downgrade() -> None:
+    with op.batch_alter_table("companies", schema=None) as batch_op:
+        batch_op.drop_column("doc_language")
     op.drop_index("ix_documentation_packs_company_id", table_name="documentation_packs")
     op.drop_table("documentation_packs")

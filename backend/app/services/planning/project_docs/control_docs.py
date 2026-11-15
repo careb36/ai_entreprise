@@ -3,10 +3,10 @@
 Built from the snapshot (``collect``) alone; no model writes any of them. The
 structure follows the PMBOK Guide, 8th edition (PMI, 2025), each document in
 its performance domain and focus area (``layout.PLACEMENT``); the wording is
-our own. Where a cell
-comes from how the factory works rather than from a record of this project
-(only a Manager approves a specification, the Verifier checks every delivery),
-it cites the factory rule and its document, never an invented record.
+our own, in the pack's language (``texts``). Where a cell comes from how the
+factory works rather than from a record of this project (only a Manager
+approves a specification, the Verifier checks every delivery), it cites the
+factory rule and its document, never an invented record.
 
 Pure; no I/O.
 """
@@ -16,28 +16,29 @@ from __future__ import annotations
 from typing import Any
 
 from services.contracts import roles as role_catalogue
+from services.planning.project_docs import texts
 from services.planning.project_docs.layout import (
     PMBOK,
     build,
     missing_line,
     person_section,
+    tr_of,
 )
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_id, md_inline
-from services.planning.project_docs.scope_docs import (
-    spec_ref,
-    task_ref,
-    tasks_of,
-)
+from services.planning.project_docs.scope_docs import spec_ref, task_ref, tasks_of
 
 REASON_LIMIT = 240
+LOOP_DOC = "docs/SPRINT_LOOP.md"
+PLANNING_DOC = "docs/contexts/planning.md"
+PACK_DOC = "docs/design/PROJECT_DOCUMENTATION.md"
 
 
-def _cell(value: Any, limit: int = 120) -> str:
+def cell(value: Any, limit: int = 120) -> str:
     return md_inline(value, limit) if value not in (None, "") else "-"
 
 
-def _date(value: Any) -> str:
+def date(value: Any) -> str:
     return md_inline(str(value)[:10]) if value else "-"
 
 
@@ -51,21 +52,29 @@ def sprint_ref(sprint: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def arch_ref(arch: dict[str, Any]) -> dict[str, Any]:
+def arch_ref(arch: dict[str, Any], lang: str) -> dict[str, Any]:
     return ref(
         "architecture",
         arch["id"],
         sha256=arch.get("sha256"),
-        label=f"version {arch.get('version')}, {arch.get('status')}",
+        label=texts.translator(lang)(
+            "label_version",
+            version=arch.get("version"),
+            status=texts.status(lang, arch.get("status")),
+        ),
     )
 
 
-def event_ref(event: dict[str, Any]) -> dict[str, Any]:
+def event_ref(event: dict[str, Any], lang: str) -> dict[str, Any]:
     return ref(
         "event",
         event.get("id"),
         sha256=event.get("chain_hash"),
-        label=f"{event.get('kind')} by {event.get('actor')}",
+        label=texts.translator(lang)(
+            "label_event",
+            kind=texts.status(lang, event.get("kind")),
+            actor=event.get("actor"),
+        ),
     )
 
 
@@ -73,279 +82,231 @@ def rule_ref(document: str, rule: str) -> dict[str, Any]:
     return ref("rule", document, label=rule)
 
 
+def task_states(snapshot: dict[str, Any]) -> dict[Any, str]:
+    return {t.get("id"): str(t.get("status")) for _, t in tasks_of(snapshot)}
+
+
 SCHEDULE_INPUTS = ("specification", "architecture", "sprints", "integrations")
 
 
 def schedule(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Milestones and sprints, with the dates the records hold."""
-    title = "Schedule and milestones"
-    src, missing = Sources(), []
+    lang, tr = tr_of(snapshot)
+    src, missing = Sources(lang), []
     rows: list[str] = []
     spec, arch = snapshot.get("specification"), snapshot.get("architecture")
-    if spec:
+    for name, record, mark in (
+        ("schedule.spec", spec, (lambda r: src.cite(spec_ref(r, lang)))),
+        ("schedule.arch", arch, (lambda r: src.cite(arch_ref(r, lang)))),
+    ):
+        if not record:
+            continue
         state = (
-            "reached" if spec.get("approved_at") else f"pending ({spec.get('status')})"
+            tr("schedule.reached")
+            if record.get("approved_at")
+            else tr("schedule.pending", status=texts.status(lang, record.get("status")))
         )
         rows.append(
-            f"| Specification approved | {_date(spec.get('approved_at'))} | "
-            f"{_cell(state)} | {src.cite(spec_ref(spec))} |"
-        )
-    if arch:
-        state = (
-            "reached" if arch.get("approved_at") else f"pending ({arch.get('status')})"
-        )
-        rows.append(
-            f"| Architecture approved | {_date(arch.get('approved_at'))} | "
-            f"{_cell(state)} | {src.cite(arch_ref(arch))} |"
+            f"| {tr(name)} | {date(record.get('approved_at'))} | {cell(state)} | {mark(record)} |"
         )
     for item in snapshot.get("integrations") or []:
         commit = item.get("tested_commit") or item.get("commit")
-        state = str(item.get("status")) + (
-            f" at commit {str(commit)[:12]}" if commit else ""
+        status = texts.status(lang, item.get("status"))
+        state = (
+            tr("schedule.at_commit", status=status, commit=str(commit)[:12])
+            if commit
+            else status
         )
         mark = src.cite(
             ref(
                 "integration",
                 item.get("id"),
                 sha256=commit,
-                label=f"sprint {item.get('sprint_id')}",
+                label=tr("label_sprint", id=item.get("sprint_id")),
             )
         )
         rows.append(
-            f"| Sprint {md_id(item.get('sprint_id'))} integrated | "
-            f"{_date(item.get('created_at'))} | {_cell(state)} | {mark} |"
+            f"| {tr('schedule.integrated', id=md_id(item.get('sprint_id')))} | "
+            f"{date(item.get('created_at'))} | {cell(state)} | {mark} |"
         )
-    body = ["## Milestones", ""]
+    body = [tr("schedule.milestones"), ""]
     if rows:
-        body += ["| Milestone | Date | State | Source |", "|---|---|---|---|", *rows]
+        body += [tr("schedule.header"), "|---|---|---|---|", *rows]
     else:
-        body.append(missing_line("no approval or integration is recorded yet."))
-        missing.append("milestones")
-    body += ["", "## Sprints", ""]
+        body.append(missing_line(lang, tr("schedule.no_milestones")))
+        missing.append(tr("section.milestones"))
+    body += ["", tr("schedule.sprints"), ""]
     sprints = snapshot.get("sprints") or []
     if sprints:
         body += [
-            (
-                "Dates come from the sprint's start date and its first and last task "
-                "events; La Fabrique records no planned end date."
-            ),
+            tr("schedule.sprints_note"),
             "",
-            "| Sprint | Goal | Status | Start | First event | Last event | Done | Source |",
+            tr("schedule.sprints_header"),
             "|---|---|---|---|---|---|---|---|",
         ]
         for sprint in sprints:
             tasks = sprint.get("tasks") or []
             done = sum(1 for t in tasks if t.get("status") == "done")
             body.append(
-                f"| {md_id(sprint.get('id'))} {_cell(sprint.get('name'), 60)} | "
-                f"{_cell(sprint.get('goal'))} | {_cell(sprint.get('status'))} | "
-                f"{_date(sprint.get('start_date'))} | {_date(sprint.get('first_event_at'))} | "
-                f"{_date(sprint.get('last_event_at'))} | {done}/{len(tasks)} | "
+                f"| {md_id(sprint.get('id'))} {cell(sprint.get('name'), 60)} | "
+                f"{cell(sprint.get('goal'))} | {cell(texts.status(lang, sprint.get('status')))} | "
+                f"{date(sprint.get('start_date'))} | {date(sprint.get('first_event_at'))} | "
+                f"{date(sprint.get('last_event_at'))} | {done}/{len(tasks)} | "
                 f"{src.cite(sprint_ref(sprint))} |"
             )
     else:
-        body.append(missing_line("no sprint has been planned."))
-        missing.append("sprints")
-    return build(
-        "schedule", title, PMBOK, body, src, snapshot, SCHEDULE_INPUTS, missing
-    )
+        body.append(missing_line(lang, tr("schedule.no_sprints")))
+        missing.append(tr("section.sprints"))
+    return build("schedule", PMBOK, body, src, snapshot, SCHEDULE_INPUTS, missing)
 
 
 RACI_INPUTS = ("specification", "architecture", "sprints", "roles", "members")
-LOOP_DOC = "docs/SPRINT_LOOP.md"
-PLANNING_DOC = "docs/contexts/planning.md"
-PACK_DOC = "docs/design/PROJECT_DOCUMENTATION.md"
-
-
-def _who(drafted_by_role: Any, role: str) -> str:
-    return role if drafted_by_role == role else "a person"
 
 
 def raci(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Who is responsible, accountable, consulted and informed for each deliverable."""
-    title = "Responsibility assignment (RACI)"
-    src, missing = Sources(), []
+    lang, tr = tr_of(snapshot)
+    src, missing = Sources(lang), []
     hired = list(snapshot.get("roles") or [])
     roster = src.cite(
-        ref(
-            "membership",
-            "roles",
-            sha256=digest(hired),
-            label="the roles the company hired",
-        )
+        ref("membership", "roles", sha256=digest(hired), label=tr("label_roles"))
     )
     members = snapshot.get("members") or {}
     people = src.cite(
-        ref(
-            "membership",
-            "people",
-            sha256=digest(members),
-            label="people by role, counted",
-        )
+        ref("membership", "people", sha256=digest(members), label=tr("label_people"))
     )
-    plan = src.cite(
-        rule_ref(
-            PLANNING_DOC, "only a Manager approves a specification or an architecture"
-        )
-    )
-    loop = src.cite(
-        rule_ref(
-            LOOP_DOC,
-            "QA reviews and the Verifier checks every delivery; a high risk tier waits for a person",
-        )
-    )
-    pack = src.cite(
-        rule_ref(
-            PACK_DOC,
-            "the TechWriter compiles a documentation pack and an Owner approves it",
-        )
-    )
+    plan = src.cite(rule_ref(PLANNING_DOC, tr("raci.rule_plan")))
+    loop = src.cite(rule_ref(LOOP_DOC, tr("raci.rule_loop")))
+    pack = src.cite(rule_ref(PACK_DOC, tr("raci.rule_pack")))
     spec, arch = snapshot.get("specification"), snapshot.get("architecture")
+    team = tr("raci.team")
 
     def mark_hired(role: str) -> str:
         known = role_catalogue.canonical(role) in role_catalogue.ROLES
-        return f"{role} (not hired)" if known and role not in hired else role
+        return tr("raci.not_hired", role=role) if known and role not in hired else role
+
+    def who(drafted_by_role: Any, role: str) -> str:
+        return role if drafted_by_role == role else tr("raci.person")
 
     rows = []
     if spec:
         rows.append(
             (
-                "Specification",
-                _who(spec.get("drafted_by_role"), "PO"),
+                tr("raci.spec"),
+                who(spec.get("drafted_by_role"), "PO"),
                 "Manager",
                 "Owner",
-                "the team",
-                f"{src.cite(spec_ref(spec))} {plan}",
+                team,
+                f"{src.cite(spec_ref(spec, lang))} {plan}",
             )
         )
     else:
-        missing.append("specification")
+        missing.append(tr("section.specification"))
     if arch:
         rows.append(
             (
-                "Architecture",
-                _who(arch.get("drafted_by_role"), "Architect"),
+                tr("raci.arch"),
+                who(arch.get("drafted_by_role"), "Architect"),
                 "Manager",
                 "PO",
-                "the team",
-                f"{src.cite(arch_ref(arch))} {plan}",
+                team,
+                f"{src.cite(arch_ref(arch, lang))} {plan}",
             )
         )
     else:
-        missing.append("architecture")
+        missing.append(tr("section.architecture"))
     by_role: dict[str, list[tuple[dict, dict]]] = {}
     for sprint, task in tasks_of(snapshot):
-        by_role.setdefault(
-            role_catalogue.canonical(task.get("assignee")) or "unassigned", []
-        ).append((sprint, task))
+        key = role_catalogue.canonical(task.get("assignee")) or tr("unassigned")
+        by_role.setdefault(key, []).append((sprint, task))
     for role in sorted(by_role):
         pairs = by_role[role]
-        marks = " ".join(src.cite(task_ref(t, s.get("id"))) for s, t in pairs[:5])
-        more = f" and {len(pairs) - 5} more" if len(pairs) > 5 else ""
+        marks = " ".join(src.cite(task_ref(t, s.get("id"), lang)) for s, t in pairs[:5])
+        more = f" {tr('raci.more', count=len(pairs) - 5)}" if len(pairs) > 5 else ""
         rows.append(
             (
-                f"Tasks assigned to {role} ({len(pairs)})",
+                tr("raci.tasks", role=role, count=len(pairs)),
                 mark_hired(role),
-                "QA (review), a person for a high risk tier",
+                tr("raci.qa_accountable"),
                 "Architect",
                 "ScrumMaster",
                 f"{marks}{more} {loop}",
             )
         )
     if not by_role:
-        missing.append("tasks")
+        missing.append(tr("section.tasks"))
     rows += [
+        (tr("raci.verification"), tr("raci.verifier"), "-", "-", "QA", loop),
         (
-            "Verification of each delivery",
-            "the Verifier (deterministic checks, not a role)",
-            "-",
-            "-",
-            "QA",
-            loop,
-        ),
-        (
-            "Retrospective and procedures",
+            tr("raci.retro"),
             mark_hired("ScrumMaster"),
-            "Manager, or the board's numbers at autonomy 3",
-            "the team",
-            "the team",
+            tr("raci.retro_accountable"),
+            team,
+            team,
             loop,
         ),
-        (
-            "Documentation pack",
-            mark_hired("TechWriter"),
-            "Owner",
-            "Manager",
-            "the team",
-            pack,
-        ),
+        (tr("raci.pack"), mark_hired("TechWriter"), "Owner", "Manager", team, pack),
     ]
+    roles_text = ", ".join(md_inline(r) for r in hired) or tr("dash_none")
+    people_text = ", ".join(
+        f"{md_inline(k)} {int(v)}" for k, v in sorted(members.items())
+    ) or tr("dash_none")
     body = [
-        (
-            f"Roles hired: {', '.join(md_inline(r) for r in hired) or 'none'} {roster}. "
-            f"People: {', '.join(f'{md_inline(k)} {int(v)}' for k, v in sorted(members.items())) or 'none'} "
-            f"{people}; their names stay in La Fabrique."
+        tr(
+            "raci.roles",
+            roles=roles_text,
+            mark=roster,
+            people=people_text,
+            pmark=people,
         ),
         "",
-        "| Deliverable | Responsible | Accountable | Consulted | Informed | Sources |",
+        tr("raci.header"),
         "|---|---|---|---|---|---|",
     ]
     for name, r, a, c, i, marks in rows:
         body.append(
-            f"| {_cell(name)} | {_cell(r)} | {_cell(a)} | {_cell(c)} | {_cell(i)} | {marks} |"
+            f"| {cell(name)} | {cell(r)} | {cell(a)} | {cell(c)} | {cell(i)} | {marks} |"
         )
-    body += [
-        "",
-        (
-            "Consulted and informed follow how the factory routes its messages "
-            f"{loop}; they are not recorded per deliverable."
-        ),
-    ]
-    return build("raci", title, PMBOK, body, src, snapshot, RACI_INPUTS, missing)
+    body += ["", tr("raci.note", mark=loop)]
+    return build("raci", PMBOK, body, src, snapshot, RACI_INPUTS, missing)
 
 
 RISK_INPUTS = ("sprints", "events", "verifications")
 
 
-def task_states(snapshot: dict[str, Any]) -> dict[Any, str]:
-    return {t.get("id"): str(t.get("status")) for _, t in tasks_of(snapshot)}
-
-
 def risks(snapshot: dict[str, Any]) -> dict[str, Any]:
     """The risk register: the exposure the records show. What already went wrong
     (a block, an escalation) is an issue, in the issue log."""
-    title = "Risk register"
-    src = Sources()
+    lang, tr = tr_of(snapshot)
+    src = Sources(lang)
     state_of = task_states(snapshot)
     rows: list[tuple[str, str, str, str, str]] = []
     for item in snapshot.get("verifications") or []:
         if item.get("tier") != "high":
             continue
-        reasons = (
-            "; ".join(str(r) for r in item.get("reasons") or []) or "no reason recorded"
+        reasons = "; ".join(str(r) for r in item.get("reasons") or []) or tr(
+            "nothing_reason"
         )
-        state = (
-            "closed: task done"
-            if state_of.get(item.get("task_id")) == "done"
-            else "open"
-        )
+        status = state_of.get(item.get("task_id"))
+        state = tr("risks.closed_done") if status == "done" else tr("risks.open")
         mark = src.cite(
             ref(
                 "verification",
                 item.get("verification_id"),
                 sha256=item.get("artifact_sha256"),
-                label=f"run {item.get('run_id')}",
+                label=tr("label_run", id=item.get("run_id")),
             )
         )
         rows.append(
             (
-                (
-                    f"The delivery of task T-{md_id(item.get('task_id'))} touches high-risk "
-                    f"paths: {md_inline(reasons, REASON_LIMIT)}"
+                tr(
+                    "risks.change",
+                    task=md_id(item.get("task_id")),
+                    reasons=md_inline(reasons, REASON_LIMIT),
                 ),
-                "Change risk (Verifier tier high)",
+                tr("risks.change_cat"),
                 state,
-                _date(item.get("observed_at")),
+                date(item.get("observed_at")),
                 mark,
             )
         )
@@ -356,50 +317,30 @@ def risks(snapshot: dict[str, Any]) -> dict[str, Any]:
         status = state_of.get(task_id, "unknown")
         rows.append(
             (
-                f"QA approved task T-{md_id(task_id)}, which waits for a person's acceptance",
-                "Acceptance hold",
-                "open" if status == "blocked" else f"closed: task {status}",
-                _date(event.get("created_at")),
-                src.cite(event_ref(event)),
+                tr("risks.hold", task=md_id(task_id)),
+                tr("risks.hold_cat"),
+                tr("risks.open")
+                if status == "blocked"
+                else tr("risks.closed", status=texts.status(lang, status)),
+                date(event.get("created_at")),
+                src.cite(event_ref(event, lang)),
             )
         )
-    body = [
-        (
-            "Each risk below was observed in the records: a delivery the Verifier "
-            "classified as high risk, or an approved delivery held for a person. "
-            "Project-level risks (market, staffing, budget) are not recorded by "
-            "La Fabrique and are left to a person below."
-        ),
-        "",
-    ]
+    body = [tr("risks.intro"), ""]
     missing = []
     if rows:
+        body += [tr("risks.header"), "|---|---|---|---|---|---|"]
         body += [
-            "| ID | Risk | Category | Status | Raised | Source |",
-            "|---|---|---|---|---|---|",
-        ]
-        body += [
-            f"| R-{n} | {r} | {c} | {_cell(s)} | {d} | {m} |"
+            f"| R-{n} | {r} | {c} | {cell(s)} | {d} | {m} |"
             for n, (r, c, s, d, m) in enumerate(rows, 1)
         ]
     else:
-        body.append(missing_line("no high risk tier or acceptance hold is recorded."))
-        missing.append("observed risks")
-    body += ["", "## Risk appetite and project-level risks", ""]
-    body += person_section(
-        "How much risk the sponsor accepts, the thresholds that call for a person, "
-        "and the risks of the project as a whole, each with an owner and a response."
-    )
+        body.append(missing_line(lang, tr("risks.none")))
+        missing.append(tr("section.observed_risks"))
+    heading = tr("person.risk")
+    body += ["", f"## {heading}", "", *person_section(lang, tr("person.risk_what"))]
     return build(
-        "risks",
-        title,
-        PMBOK,
-        body,
-        src,
-        snapshot,
-        RISK_INPUTS,
-        missing,
-        persons=["Risk appetite and project-level risks"],
+        "risks", PMBOK, body, src, snapshot, RISK_INPUTS, missing, persons=[heading]
     )
 
 
@@ -407,20 +348,13 @@ LESSONS_INPUTS = ("sprints", "retrospectives", "procedures")
 
 
 def lessons(snapshot: dict[str, Any]) -> dict[str, Any]:
-    """Lessons learned: each retrospective, and what its procedures measured."""
-    title = "Lessons learned register"
-    src, missing = Sources(), []
+    """The lessons learned register: each retrospective, and what its procedures measured."""
+    lang, tr = tr_of(snapshot)
+    src, missing = Sources(lang), []
     names = {s.get("id"): s.get("name") for s in snapshot.get("sprints") or []}
     retros = snapshot.get("retrospectives") or []
     procedures = snapshot.get("procedures") or []
-    body = [
-        (
-            "A retrospective is the ScrumMaster's message to the team: a claim. "
-            "Whether a procedure it led to helped is measured by the board's numbers "
-            "in the sprints after it, never by a model."
-        ),
-        "",
-    ]
+    body = [tr("lessons.intro"), ""]
     for retro in retros:
         sprint_id = retro.get("sprint_id")
         mark = src.cite(
@@ -428,33 +362,48 @@ def lessons(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "message",
                 retro.get("id"),
                 sha256=digest(retro),
-                label=f"retrospective by {retro.get('from_role')}",
+                label=tr("label_retro", role=retro.get("from_role")),
                 claim=True,
             )
         )
         body += [
-            f"## Sprint {md_id(sprint_id)}: {_cell(names.get(sprint_id), 80)}",
+            tr(
+                "lessons.sprint",
+                id=md_id(sprint_id),
+                name=cell(names.get(sprint_id), 80),
+            ),
             "",
-            f"- Reported {mark}: {md_inline(retro.get('body'), 800)}",
+            tr("lessons.reported", mark=mark, body=md_inline(retro.get("body"), 800)),
         ]
         followed = [p for p in procedures if p.get("source_sprint_id") == sprint_id]
         for proc in followed:
-            result = proc.get("result") or "not measured yet"
+            result = (
+                texts.status(lang, proc.get("result"))
+                if proc.get("result")
+                else tr("lessons.not_measured")
+            )
             pmark = src.cite(
                 ref(
                     "procedure",
                     proc.get("id"),
                     sha256=digest(proc),
-                    label=proc.get("status") or "",
+                    label=texts.status(lang, proc.get("status") or ""),
                 )
             )
             body.append(
-                f"- Procedure for {md_inline(proc.get('role'))}: {md_inline(proc.get('title'))}, {md_inline(proc.get('status'))}; measured result: {md_inline(result)} {pmark}"
+                tr(
+                    "lessons.procedure",
+                    role=md_inline(proc.get("role")),
+                    title=md_inline(proc.get("title")),
+                    status=md_inline(texts.status(lang, proc.get("status"))),
+                    result=md_inline(result),
+                    mark=pmark,
+                )
             )
         if not followed:
-            body.append("- No procedure was proposed after it.")
+            body.append(tr("lessons.no_procedure"))
         body.append("")
     if not retros:
-        body.append(missing_line("no sprint has closed with a retrospective."))
-        missing.append("retrospectives")
-    return build("lessons", title, PMBOK, body, src, snapshot, LESSONS_INPUTS, missing)
+        body.append(missing_line(lang, tr("lessons.none")))
+        missing.append(tr("section.retrospectives"))
+    return build("lessons", PMBOK, body, src, snapshot, LESSONS_INPUTS, missing)

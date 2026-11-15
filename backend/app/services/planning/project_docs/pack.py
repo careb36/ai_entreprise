@@ -35,12 +35,13 @@ from services.planning.project_docs import (
     control_docs,
     log_docs,
     scope_docs,
+    texts,
 )
 from services.planning.project_docs.layout import (
     DOMAINS,
     FOCUS_AREAS,
-    GENERATED_NOTE,
     input_sha256,
+    tr_of,
 )
 from services.planning.project_docs.refs import digest
 from services.planning.project_docs.sanitize import PROSE_LIMIT, md_inline
@@ -51,18 +52,6 @@ COMPILER_ROLE = "TechWriter"
 PROSE_MAX_TOKENS = 600
 PROSE_TIMEOUT_SECONDS = 60.0
 INDEX_KEY = "index"
-FRAMEWORKS = (
-    (
-        "- PMBOK Guide, 8th edition (Project Management Institute, 2025): the "
-        "documents are placed in its performance domains and focus areas and "
-        "follow the structure of the artifacts it names. No text, definition or "
-        "table of the guide is reproduced."
-    ),
-    (
-        "- The C4 model, by Simon Brown (c4model.com, CC BY 4.0): the levels of "
-        "the architecture diagrams."
-    ),
-)
 
 
 class PackError(Exception):
@@ -78,21 +67,29 @@ def file_name(key: str) -> str:
 
 
 def _index(snapshot: dict[str, Any], documents: list[dict[str, Any]]) -> dict[str, Any]:
+    lang, tr = tr_of(snapshot)
     spec, arch = snapshot.get("specification"), snapshot.get("architecture")
     inputs = tuple(sorted({name for d in documents for name in d["inputs"]}))
+
+    def version_of(record: dict | None) -> str:
+        if not record:
+            return tr("index.none")
+        return tr(
+            "index.version_of",
+            id=md_inline(record["id"]),
+            version=md_inline(record.get("version")),
+        )
+
     body = [
-        f"Project: {md_inline(snapshot['project']['name'])}.",
-        f"Specification: {md_inline(spec['id']) + ' version ' + md_inline(spec.get('version')) if spec else 'none recorded'}.",
-        f"Architecture: {md_inline(arch['id']) + ' version ' + md_inline(arch.get('version')) if arch else 'none recorded'}.",
+        tr("index.project", name=md_inline(snapshot["project"]["name"])),
+        tr("index.spec", value=version_of(spec)),
+        tr("index.arch", value=version_of(arch)),
         "",
-        "## Documents",
+        tr("index.documents"),
         "",
-        (
-            "By performance domain and focus area of the PMBOK Guide, 8th edition; "
-            "the architecture diagrams follow the C4 model."
-        ),
+        tr("index.placement"),
         "",
-        "| Domain | Focus area | Document | File | Sources cited | Sections with no record | For a person | Prose by a model |",
+        tr("index.header"),
         "|---|---|---|---|---|---|---|---|",
     ]
     order = {name: i for i, name in enumerate(DOMAINS)}
@@ -104,36 +101,33 @@ def _index(snapshot: dict[str, Any], documents: list[dict[str, Any]]) -> dict[st
             focus.get(d.get("focus_area") or "", len(focus)),
         ),
     )
+    nothing = tr("index.nothing")
     for d in ranked:
+        domain = texts.domain(lang, d["domain"]) if d.get("domain") else "-"
+        area = texts.focus(lang, d["focus_area"]) if d.get("focus_area") else "-"
         body.append(
-            f"| {d.get('domain') or '-'} | {d.get('focus_area') or '-'} | "
+            f"| {domain} | {area} | "
             f"{md_inline(d['title'])} | {file_name(d['key'])} | {len(d['sources'])} | "
-            f"{md_inline(', '.join(d['missing']) or 'none')} | "
-            f"{md_inline(', '.join(d.get('persons') or []) or 'none')} | "
-            f"{md_inline(', '.join(c['section'] for c in d['claims']) or 'none')} |"
+            f"{md_inline(', '.join(d['missing']) or nothing)} | "
+            f"{md_inline(', '.join(d.get('persons') or []) or nothing)} | "
+            f"{md_inline(', '.join(c['section'] for c in d['claims']) or nothing)} |"
         )
     body += [
         "",
-        "## How to read it",
+        tr("index.read_heading"),
         "",
-        (
-            "Every statement ends with the sources it rests on, in brackets, listed at "
-            "the end of its document with the digest La Fabrique computed or observed. "
-            "A section with no record says so instead of guessing. Prose a model wrote "
-            'is quoted and marked as a claim. A section marked "for a person to '
-            'complete" is a template: the business case, benefits, budget and risk '
-            "appetite are decisions a person stays accountable for, and no agent "
-            "fills them in."
-        ),
+        tr("index.read"),
         "",
-        "## Frameworks",
+        tr("index.frameworks"),
         "",
-        *FRAMEWORKS,
+        tr("index.pmbok"),
+        tr("index.c4"),
     ]
-    lines = ["# Project documentation", "", f"_{GENERATED_NOTE}_", "", *body, ""]
+    title = tr("index.title")
+    lines = [f"# {title}", "", f"_{tr('generated_note')}_", "", *body, ""]
     return {
         "key": INDEX_KEY,
-        "title": "Project documentation",
+        "title": title,
         "framework": "",
         "markdown": "\n".join(lines),
         "sources": [],
@@ -194,7 +188,8 @@ def prose_request(
         "users. Use only the facts below; do not add numbers, dates, names or "
         "promises that are not in them. No headings, lists, links or markup.\n\n"
         f"Project: {spec.get('title')}\nSummary: {spec.get('summary')}\n"
-        f"Requirements:\n{requirements}\n"
+        f"Requirements:\n{requirements}\n\n"
+        + texts.translator(texts.of(snapshot))("prose.instruction")
     )
     configured = (writer.model if writer else "") or ""
     return {
@@ -265,6 +260,7 @@ def compile_pack(
         architecture_id=arch["id"] if arch else None,
         compiled_by=COMPILER_ROLE,
         requested_by=requested_by,
+        language=texts.of(snapshot),
         documents=documents,
         diagrams=diagrams,
         inputs_sha256=digest(
@@ -338,6 +334,15 @@ def lint(pack: DocumentationPack, snapshot: dict[str, Any]) -> dict[str, Any]:
                 "severity": "blocking",
                 "where": "c4",
                 "message": "An architecture exists now; the pack has no diagram of it.",
+            }
+        )
+    current_language = texts.of(snapshot)
+    if texts.language(pack.language) != current_language:
+        findings.append(
+            {
+                "severity": "blocking",
+                "where": INDEX_KEY,
+                "message": f"The pack is written in {texts.language(pack.language)}; the project's documentation language is now {current_language}: compile the pack again.",
             }
         )
     blocking = sum(1 for f in findings if f["severity"] == "blocking")

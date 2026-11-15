@@ -15,7 +15,9 @@ module consumes is used from outside) and says what is not recorded. The code
 level is not built here: it needs the daemon's code graph
 (``services/tools/code_graph.py``) and is left for a later phase.
 
-A diagram is plain data the frontend draws (``nodes``, ``edges``, ``groups``)
+A diagram is plain data the frontend draws (``nodes``, ``edges``, ``groups``; our labels, the
+notes and the titles in the pack's language, the names from the architecture
+as recorded)
 plus its Mermaid source, rendered from that data, and the digest of its inputs
 (``input_sha256``) the drift check compares. Node ids are numbered here
 (``n1``, ``n2``…), never taken from record text, and every label passes
@@ -26,13 +28,11 @@ Pure; no I/O.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from services.planning.project_docs.layout import (
-    GENERATED_NOTE,
-    input_sha256,
-    missing_line,
-)
+from services.planning.project_docs import texts
+from services.planning.project_docs.layout import input_sha256, missing_line, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import (
     md_id,
@@ -43,10 +43,7 @@ from services.planning.project_docs.sanitize import (
 
 C4_INPUTS = ("architecture", "stack")
 LEVELS = ("context", "container", "component")
-C4_CREDIT = (
-    "Structure after the C4 model by Simon Brown (c4model.com, CC BY 4.0); "
-    "the content comes from La Fabrique's records."
-)
+Tr = Callable[..., str]
 OUTSIDE_KINDS = ("http", "cli", "event")
 # Mermaid's shape for each kind of element.
 _SHAPES = {
@@ -159,30 +156,30 @@ def to_mermaid(diagram: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _module_ref(arch: dict, module: dict) -> dict[str, Any]:
+def _module_ref(arch: dict, module: dict, tr: Tr) -> dict[str, Any]:
     return ref(
         "module",
         module.get("id"),
         sha256=digest(module),
-        label=f"architecture {arch['id']} version {arch.get('version')}",
+        label=tr("label_arch_version", id=arch["id"], version=arch.get("version")),
     )
 
 
-def _interface_ref(arch: dict, interface: dict) -> dict[str, Any]:
+def _interface_ref(arch: dict, interface: dict, tr: Tr) -> dict[str, Any]:
     return ref(
         "interface",
         interface.get("id"),
         sha256=digest(interface),
-        label=f"architecture {arch['id']} version {arch.get('version')}",
+        label=tr("label_arch_version", id=arch["id"], version=arch.get("version")),
     )
 
 
-def _stack_ref(stack: dict) -> dict[str, Any]:
+def _stack_ref(stack: dict, tr: Tr) -> dict[str, Any]:
     return ref(
         "discovery",
         stack.get("discovery_id"),
         sha256=stack.get("sha256"),
-        label="read from the project's files",
+        label=tr("label_stack"),
     )
 
 
@@ -203,8 +200,9 @@ def _datastores(stack: dict | None) -> list[tuple[str, str]]:
 
 
 def context(snapshot: dict[str, Any]) -> dict[str, Any]:
+    _, tr = tr_of(snapshot)
     arch, stack = snapshot["architecture"], snapshot.get("stack")
-    d = _Diagram("c4-context", "context", "System context")
+    d = _Diagram("c4-context", "context", tr("c4.title.context"))
     system = d.node(
         "system",
         arch.get("title"),
@@ -215,35 +213,32 @@ def context(snapshot: dict[str, Any]) -> dict[str, Any]:
     for interface in _outside_interfaces(arch):
         outside = d.node(
             f"out-{interface.get('id')}",
-            f"Users of {interface.get('name')}",
+            tr("c4.users_of", name=interface.get("name")),
             "person",
-            f"{interface.get('kind')} interface no module consumes",
-            source=_interface_ref(arch, interface),
+            tr("c4.unconsumed", kind=interface.get("kind")),
+            source=_interface_ref(arch, interface, tr),
         )
-        d.edge(outside, system, f"uses {interface.get('kind')}")
+        d.edge(outside, system, tr("c4.uses_kind", kind=interface.get("kind")))
     for name, kind in _datastores(stack):
         node = d.node(
             f"store-{name}",
             name,
             "external" if kind == "infrastructure" else "datastore",
-            f"{kind} detected in the project's files",
-            source=_stack_ref(stack),
+            tr("c4.detected", kind=tr(f"c4.{kind}")),
+            source=_stack_ref(stack, tr),
         )
-        d.edge(system, node, "uses")
+        d.edge(system, node, tr("c4.uses"))
     if not _outside_interfaces(arch):
-        d.notes.append(
-            "No person or outside system is recorded: the architecture names none, and every interface has a consumer inside the project."
-        )
+        d.notes.append(tr("c4.note_no_outside"))
     if not stack:
-        d.notes.append(
-            "No stack discovery is recorded, so no database or infrastructure is shown."
-        )
+        d.notes.append(tr("c4.note_no_stack"))
     return d.as_dict(snapshot)
 
 
 def container(snapshot: dict[str, Any]) -> dict[str, Any]:
+    _, tr = tr_of(snapshot)
     arch, stack = snapshot["architecture"], snapshot.get("stack")
-    d = _Diagram("c4-container", "container", "Containers")
+    d = _Diagram("c4-container", "container", tr("c4.title.container"))
     boundary = d.group(arch.get("title"))
     for module in arch.get("modules") or []:
         d.node(
@@ -252,62 +247,63 @@ def container(snapshot: dict[str, Any]) -> dict[str, Any]:
             "container",
             module.get("responsibility"),
             group=boundary,
-            source=_module_ref(arch, module),
+            source=_module_ref(arch, module, tr),
         )
     for name, kind in _datastores(stack):
         d.node(
             f"store-{name}",
             name,
             "datastore" if kind == "database" else "external",
-            f"{kind} detected in the project's files",
+            tr("c4.detected", kind=tr(f"c4.{kind}")),
             group=boundary,
-            source=_stack_ref(stack),
+            source=_stack_ref(stack, tr),
         )
     for module in arch.get("modules") or []:
         for dep in module.get("depends_on") or []:
             d.edge(
-                d.id_of(f"mod-{module.get('id')}"), d.id_of(f"mod-{dep}"), "depends on"
+                d.id_of(f"mod-{module.get('id')}"),
+                d.id_of(f"mod-{dep}"),
+                tr("c4.depends_on"),
             )
     for interface in arch.get("interfaces") or []:
         provider = d.id_of(f"mod-{interface.get('module_id')}")
         for consumer in interface.get("consumers") or []:
             d.edge(
-                d.id_of(f"mod-{consumer}"), provider, f"calls {interface.get('name')}"
+                d.id_of(f"mod-{consumer}"),
+                provider,
+                tr("c4.calls", name=interface.get("name")),
             )
     for interface in _outside_interfaces(arch):
         outside = d.node(
             f"out-{interface.get('id')}",
-            f"Users of {interface.get('name')}",
+            tr("c4.users_of", name=interface.get("name")),
             "person",
-            source=_interface_ref(arch, interface),
+            source=_interface_ref(arch, interface, tr),
         )
         d.edge(
             outside,
             d.id_of(f"mod-{interface.get('module_id')}"),
-            f"uses {interface.get('kind')}",
+            tr("c4.uses_kind", kind=interface.get("kind")),
         )
     if _datastores(stack):
-        d.notes.append(
-            "The records do not say which module uses each database or infrastructure item, so no line is drawn to it."
-        )
-    d.notes.append(
-        "The architecture does not record which modules are deployed separately; each module is shown as a container."
-    )
+        d.notes.append(tr("c4.note_no_lines"))
+    d.notes.append(tr("c4.note_containers"))
     return d.as_dict(snapshot)
 
 
 def component(snapshot: dict[str, Any]) -> dict[str, Any]:
+    _, tr = tr_of(snapshot)
     arch = snapshot["architecture"]
-    d = _Diagram("c4-component", "component", "Components")
+    d = _Diagram("c4-component", "component", tr("c4.title.component"))
     for module in arch.get("modules") or []:
         group = d.group(module.get("name"))
         d.node(
             f"mod-{module.get('id')}",
-            f"{module.get('name')} core",
+            tr("c4.core", name=module.get("name")),
             "container",
             module.get("path") or module.get("responsibility"),
             group=group,
-            source=_module_ref(arch, module),
+            source=_module_ref(arch, module, tr),
         )
         for interface in arch.get("interfaces") or []:
             if interface.get("module_id") == module.get("id"):
@@ -315,19 +311,17 @@ def component(snapshot: dict[str, Any]) -> dict[str, Any]:
                     f"if-{interface.get('id')}",
                     interface.get("name"),
                     "component",
-                    f"{interface.get('kind')}: {interface.get('contract') or 'no contract recorded'}",
+                    f"{interface.get('kind')}: {interface.get('contract') or tr('c4.no_contract')}",
                     group=group,
-                    source=_interface_ref(arch, interface),
+                    source=_interface_ref(arch, interface, tr),
                 )
     for interface in arch.get("interfaces") or []:
         target = d.id_of(f"if-{interface.get('id')}")
-        d.edge(d.id_of(f"mod-{interface.get('module_id')}"), target, "provides")
+        d.edge(d.id_of(f"mod-{interface.get('module_id')}"), target, tr("c4.provides"))
         for consumer in interface.get("consumers") or []:
-            d.edge(d.id_of(f"mod-{consumer}"), target, "uses")
+            d.edge(d.id_of(f"mod-{consumer}"), target, tr("c4.uses"))
     if not arch.get("interfaces"):
-        d.notes.append(
-            "The architecture records no interface, so each module shows only its core."
-        )
+        d.notes.append(tr("c4.note_no_interfaces"))
     return d.as_dict(snapshot)
 
 
@@ -340,58 +334,61 @@ def diagrams(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
 
 def document(snapshot: dict[str, Any], built: list[dict[str, Any]]) -> dict[str, Any]:
     """The Markdown document that carries the diagrams, an element table each."""
-    src, missing, body = Sources(), [], []
+    lang, tr = tr_of(snapshot)
+    src, missing, body = Sources(lang), [], []
     arch = snapshot.get("architecture")
     if arch:
-        body.append(
-            f"From architecture {md_id(arch['id'])} version {md_id(arch.get('version'))} ({md_inline(arch.get('status'))}) {src.cite(ref('architecture', arch['id'], sha256=arch.get('sha256')))}."
-        )
-        body.append("")
+        mark = src.cite(ref("architecture", arch["id"], sha256=arch.get("sha256")))
+        body += [
+            tr(
+                "c4.from",
+                id=md_id(arch["id"]),
+                version=md_id(arch.get("version")),
+                status=md_inline(texts.status(lang, arch.get("status"))),
+                mark=mark,
+            ),
+            "",
+        ]
     else:
-        body.append(
-            missing_line(
-                "the project has no architecture in La Fabrique, so no diagram is drawn."
-            )
-        )
-        missing.append("all")
+        body.append(missing_line(lang, tr("c4.no_arch")))
+        missing.append(tr("section.all"))
     for diagram in built:
         body += [
-            f"## {md_inline(diagram['title'])} ({diagram['level']} level)",
+            tr(
+                "c4.heading",
+                title=md_inline(diagram["title"]),
+                level=tr(f"c4.level.{diagram['level']}"),
+            ),
             "",
             "```mermaid",
             diagram["mermaid"].rstrip("\n"),
             "```",
             "",
+            tr("c4.elements"),
+            "|---|---|---|---|",
         ]
-        body += ["| Element | Kind | Description | Source |", "|---|---|---|---|"]
         for node in diagram["nodes"]:
             mark = src.cite(node["source"]) if node.get("source") else "-"
             body.append(
-                f"| {md_inline(node['label'])} | {node['kind']} | {md_inline(node.get('detail') or '-')} | {mark} |"
+                f"| {md_inline(node['label'])} | {tr('c4.kind.' + node['kind'])} | "
+                f"{md_inline(node.get('detail') or '-')} | {mark} |"
             )
         body += [""] + [f"- {md_inline(note)}" for note in diagram["notes"]] + [""]
     if arch:
         body += [
-            "## Code level",
+            tr("c4.code_heading"),
             "",
-            missing_line(
-                "the code level is not compiled yet; it will come from the project's code graph."
-            ),
+            missing_line(lang, tr("c4.code_missing")),
             "",
         ]
-        missing.append("code level")
-    lines = [
-        "# Architecture diagrams (C4)",
-        "",
-        f"_{GENERATED_NOTE} {C4_CREDIT}_",
-        "",
-        *body,
-        "",
-    ]
+        missing.append(tr("section.code_level"))
+    credit = tr("c4.credit")
+    title = tr("title.c4")
+    lines = [f"# {title}", "", f"_{tr('generated_note')} {credit}_", "", *body, ""]
     return {
         "key": "c4",
-        "title": "Architecture diagrams (C4)",
-        "framework": C4_CREDIT,
+        "title": title,
+        "framework": credit,
         "markdown": "\n".join(lines) + "\n" + src.section(),
         "sources": src.as_list(),
         "missing": missing,

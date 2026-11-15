@@ -14,8 +14,8 @@ import { PackMarkdown } from '../components/PackMarkdown'
 import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail } from '../services/api'
 import {
-  type DocumentationPack, type LintFinding, PackConflict,
-  useApprovePack, useCompilePack, usePack, usePacks, useWritePack,
+  DOC_LANGUAGES, type DocLanguage, type DocumentationPack, type LintFinding, PackConflict,
+  useApprovePack, useCompilePack, useDocLanguage, usePack, usePacks, useSetDocLanguage, useWritePack,
 } from '../services/documentation'
 import { useAppStore } from '../store/useAppStore'
 
@@ -65,6 +65,7 @@ function PackView({ pack, canManage, isOwner }: { pack: DocumentationPack; canMa
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 text-sm text-gray-300">
         <span>{t('documentation.version', { version: pack.version })}</span>
+        <span className="text-xs text-gray-400">{t(`documentation.languages.${pack.language ?? 'en'}`)}</span>
         <span className="rounded-full bg-surface-800 px-2 py-0.5 text-xs">{t(`documentation.status.${pack.status}`)}</span>
         <span className="font-mono text-xs text-gray-500" title={t('documentation.inputsHash')}>{pack.inputs_sha256.slice(0, 16)}</span>
         {isOwner && pack.status === 'draft' && (
@@ -111,7 +112,7 @@ function PackView({ pack, canManage, isOwner }: { pack: DocumentationPack; canMa
             {t('documentation.file', { file: doc.file })} · {t('documentation.sourcesCount', { count: doc.sources.length })}
             {doc.claims.length > 0 && <> · {t('documentation.claimsCount', { count: doc.claims.length })}</>}
             {doc.persons.length > 0 && <> · {t('documentation.personsCount', { count: doc.persons.length })}</>}
-            {doc.domain && <> · {t('documentation.placement', { domain: doc.domain, focus: doc.focus_area })}</>}
+            {doc.domain && <> · {t('documentation.placement', { domain: t(`documentation.domains.${doc.domain}`), focus: t(`documentation.focusAreas.${doc.focus_area}`) })}</>}
           </p>
           <PackMarkdown markdown={doc.markdown} />
         </article>
@@ -129,6 +130,8 @@ export default function Documentation() {
   const [chosen, setChosen] = useState<number | null>(null)
   const [prose, setProse] = useState(true)
   const compile = useCompilePack()
+  const language = useDocLanguage(companyId)
+  const setLanguage = useSetDocLanguage()
   const list = packs.data?.packs ?? []
   const selected = chosen ?? list[0]?.id ?? null
   const pack = usePack(selected)
@@ -154,7 +157,15 @@ export default function Documentation() {
           <label className="flex items-center gap-2 text-sm text-gray-300">
             <input type="checkbox" checked={prose} onChange={e => setProse(e.target.checked)} /> {t('documentation.prose')}
           </label>
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            {t('documentation.language')}
+            <select className="input max-w-[10rem]" value={language.data?.doc_language ?? 'en'} disabled={setLanguage.isPending || !language.data}
+              onChange={e => setLanguage.mutate({ companyId, docLanguage: e.target.value as DocLanguage })}>
+              {DOC_LANGUAGES.map(code => <option key={code} value={code}>{t(`documentation.languages.${code}`)}</option>)}
+            </select>
+          </label>
           {compile.isError && <span role="alert" className="text-sm text-red-300">{t('documentation.compileError', { message: errorDetail(compile.error) })}</span>}
+          {setLanguage.isError && <span role="alert" className="text-sm text-red-300">{t('documentation.languageError', { message: errorDetail(setLanguage.error) })}</span>}
         </section>
       )}
 

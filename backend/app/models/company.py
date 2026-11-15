@@ -71,6 +71,10 @@ class Company(SQLModel, table=True):
     # (the provider's key, e.g. ANTHROPIC_API_KEY), beside sandbox_env; never
     # the delivery tests, installs or application checks. A Manager writes it.
     console_env: list[Any] | None = Field(default=None, sa_column=Column(JSON))
+    # The language the project's documentation packs are written in
+    # (``services/planning/project_docs/texts.py``): "en" or "es". Set from the
+    # creator's interface language in "New company"; an Owner or Manager changes it.
+    doc_language: str | None = None
 
 
 class Agent(SQLModel, table=True):

@@ -18,6 +18,7 @@ function stubApi(overrides: Record<string, () => Response> = {}) {
     if (overrides[key]) return overrides[key]()
     if (key === 'GET /v1/companies/4/documentation') return response(200, { packs: [pack()] })
     if (key === 'GET /v1/documentation/11') return response(200, pack())
+    if (key === 'GET /v1/companies/4/doc_language') return response(200, { company_id: 4, doc_language: 'en', chosen: false })
     return response(404)
   })
   vi.stubGlobal('fetch', fetch)
@@ -99,5 +100,18 @@ describe('Documentation', () => {
     stubApi({ 'GET /v1/documentation/11': () => response(200, pack({ status: 'approved' })) })
     renderAs('Manager')
     expect(await screen.findByRole('button', { name: 'Write to the repository' })).toBeInTheDocument()
+  })
+
+  it('lets a manager switch the documents to Spanish, and shows the pack language', async () => {
+    const fetch = stubApi({ 'PUT /v1/companies/4/doc_language': () => response(200, { company_id: 4, doc_language: 'es', chosen: true }) })
+    renderAs('Manager')
+    await screen.findByRole('tab', { name: 'Project charter' })
+    expect(screen.getAllByText('English').length).toBeGreaterThanOrEqual(2) // the pack's language and the option
+    const select = await screen.findByRole('combobox', { name: 'Documents in' })
+    await waitFor(() => expect(select).not.toBeDisabled())
+    fireEvent.change(select, { target: { value: 'es' } })
+    await waitFor(() => expect(fetch.mock.calls.some(([, init]) => (init as RequestInit)?.method === 'PUT')).toBe(true))
+    const put = fetch.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT')!
+    expect(JSON.parse(String((put[1] as RequestInit).body))).toEqual({ doc_language: 'es' })
   })
 })

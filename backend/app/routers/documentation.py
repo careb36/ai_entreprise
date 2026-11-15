@@ -7,6 +7,8 @@ Endpoints (issue #530, ``docs/design/PROJECT_DOCUMENTATION.md``):
 - ``GET  /v1/documentation/{pack_id}/documents/{key}`` — one document as Markdown (Viewer).
 - ``POST /v1/documentation/{pack_id}/approve``        — approve a draft; refused while it drifts (Owner).
 - ``POST /v1/documentation/{pack_id}/write``          — write an approved pack to ``docs/project/`` (Manager).
+- ``GET  /v1/companies/{id}/doc_language``            — the language packs are written in (Viewer).
+- ``PUT  /v1/companies/{id}/doc_language``            — change it, en or es (Manager; audited).
 
 The documents are built deterministically by ``services/planning/project_docs``;
 the only model call is the charter's background, asked of the TechWriter and
@@ -16,7 +18,7 @@ current records, so a stale pack cannot be approved.
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
@@ -25,7 +27,7 @@ from fastapi.responses import PlainTextResponse
 from models import Company, DocumentationPack, User
 from pydantic import BaseModel
 from services.planning import document_approval
-from services.planning.project_docs import collect
+from services.planning.project_docs import collect, texts
 from services.planning.project_docs import pack as packs
 from services.platform.agent_service import AgentService
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
@@ -34,6 +36,10 @@ from sqlmodel import Session, select
 router = APIRouter(tags=["Core"])
 
 WRITE_TIMEOUT_SECONDS = 60.0
+
+
+class LanguageRequest(BaseModel):
+    doc_language: Literal["en", "es"]
 
 
 class CompileRequest(BaseModel):
@@ -58,6 +64,7 @@ def _summary(pack: DocumentationPack) -> dict[str, Any]:
         "specification_id": pack.specification_id,
         "architecture_id": pack.architecture_id,
         "compiled_by": pack.compiled_by,
+        "language": pack.language,
         "inputs_sha256": pack.inputs_sha256,
         "approved_at": _iso(pack.approved_at),
         "written_files": pack.written_files or [],
@@ -293,3 +300,45 @@ async def write_pack(
     session.commit()
     session.refresh(pack)
     return _with_lint(session, pack, company)
+
+
+@router.get("/v1/companies/{company_id}/doc_language")
+async def get_doc_language(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """The language the company's packs are written in, and whether it was chosen."""
+    company = _company(session, user, company_id, "Viewer")
+    return {
+        "company_id": company.id,
+        "doc_language": texts.language(company.doc_language),
+        "chosen": company.doc_language is not None,
+    }
+
+
+@router.put("/v1/companies/{company_id}/doc_language")
+async def put_doc_language(
+    company_id: int,
+    req: LanguageRequest,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """An Owner or Manager sets the language; packs compiled before it are flagged by the lint."""
+    company = _company(session, user, company_id, "Manager")
+    before = company.doc_language
+    company.doc_language = req.doc_language
+    session.add(company)
+    AgentService().audit_interaction(
+        session=session,
+        company_id=company.id,
+        interaction_id=f"doc-language:{company.id}",
+        agent_id=f"human:{_actor(user)}",
+        action="doc_language_updated",
+        details={"before": before},
+        result={"doc_language": req.doc_language},
+        decision_signature=None,
+        cost_tokens=0,
+    )
+    session.commit()
+    return {"company_id": company.id, "doc_language": req.doc_language, "chosen": True}

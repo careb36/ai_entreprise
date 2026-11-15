@@ -32,6 +32,7 @@ export function pack(overrides: Partial<DocumentationPack> = {}): DocumentationP
     specification_id: 3,
     architecture_id: 5,
     compiled_by: 'TechWriter',
+    language: 'en',
     inputs_sha256: 'cd'.repeat(32),
     approved_at: null,
     written_files: [],

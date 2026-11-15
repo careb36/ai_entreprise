@@ -2408,6 +2408,28 @@
     },
     "personsCount_one": "{{count}} sección para que la complete una persona",
     "personsCount_other": "{{count}} secciones para que las complete una persona",
-    "placement": "Guía del PMBOK, 8.ª ed.: {{domain}}, {{focus}}"
+    "placement": "Guía del PMBOK, 8.ª ed.: {{domain}}, {{focus}}",
+    "language": "Documentos en",
+    "languageError": "No se pudo cambiar el idioma: {{message}}",
+    "languages": {
+      "en": "inglés",
+      "es": "español"
+    },
+    "domains": {
+      "Governance": "Gobernanza",
+      "Scope": "Alcance",
+      "Schedule": "Cronograma",
+      "Finance": "Finanzas",
+      "Stakeholders": "Interesados",
+      "Resources": "Recursos",
+      "Risk": "Riesgo"
+    },
+    "focusAreas": {
+      "Initiating": "Inicio",
+      "Planning": "Planificación",
+      "Executing": "Ejecución",
+      "Monitoring and Controlling": "Monitoreo y control",
+      "Closing": "Cierre"
+    }
   }
 }

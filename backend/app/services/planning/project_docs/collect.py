@@ -40,6 +40,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from services.contracts import roles as role_catalogue
+from services.planning.project_docs import texts
 from services.planning.project_docs.refs import digest
 
 LIMIT = 200
@@ -402,6 +403,8 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
     spec = current_specification(session, company.id)
     return {
         "project": {"company_id": company.id, "name": company.company_name},
+        # Not an input of any document's digest: the lint compares it apart.
+        "language": texts.language(company.doc_language),
         "specification": _specification(spec),
         "architecture": _architecture(current_architecture(session, spec)),
         "stack": _stack(session, company.id),

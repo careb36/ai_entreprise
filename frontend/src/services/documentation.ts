@@ -10,6 +10,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api, fetchApi } from './api'
 
 export type PackStatus = 'draft' | 'approved' | 'superseded'
+export type DocLanguage = 'en' | 'es'
+export const DOC_LANGUAGES: DocLanguage[] = ['en', 'es']
+
+export interface DocLanguageSetting {
+  company_id: number
+  doc_language: DocLanguage
+  /** False until someone chose it: then it reads as English. */
+  chosen: boolean
+}
 export type C4Kind = 'person' | 'system' | 'external' | 'container' | 'datastore' | 'component'
 
 export interface PackSource {
@@ -81,6 +90,8 @@ export interface PackSummary {
   specification_id: number | null
   architecture_id: number | null
   compiled_by: string
+  /** The language the pack's fixed text is written in. */
+  language: DocLanguage
   inputs_sha256: string
   approved_at: string | null
   written_files: { path: string; sha256: string }[]
@@ -123,6 +134,9 @@ export const documentationApi = {
       method: 'POST', body: JSON.stringify({ prose }), once: true, timeoutMs: 180_000,
     }),
   approve,
+  language: (companyId: number) => api.get<DocLanguageSetting>(`/v1/companies/${companyId}/doc_language`),
+  setLanguage: (companyId: number, docLanguage: DocLanguage) =>
+    api.put<DocLanguageSetting>(`/v1/companies/${companyId}/doc_language`, { doc_language: docLanguage }),
   /** Writes through the workspace daemon: sent once, and a 503 (no daemon) is not retried. */
   write: (id: number) =>
     fetchApi<DocumentationPack>(`/v1/documentation/${id}/write`, { method: 'POST', body: '{}', once: true, timeoutMs: 120_000 }),
@@ -172,4 +186,27 @@ export function useApprovePack() {
 export function useWritePack() {
   const settle = useSettle()
   return useMutation({ mutationFn: (id: number) => documentationApi.write(id), onSuccess: settle })
+}
+
+export const docLanguageKey = (companyId: number) => ['doc-language', companyId] as const
+
+export function useDocLanguage(companyId: number | null) {
+  return useQuery({
+    queryKey: docLanguageKey(companyId ?? 0),
+    queryFn: () => documentationApi.language(companyId!),
+    enabled: companyId !== null,
+  })
+}
+
+/** A new language flags the packs compiled before it: their lint is read again. */
+export function useSetDocLanguage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ companyId, docLanguage }: { companyId: number; docLanguage: DocLanguage }) =>
+      documentationApi.setLanguage(companyId, docLanguage),
+    onSuccess: setting => {
+      queryClient.setQueryData(docLanguageKey(setting.company_id), setting)
+      queryClient.invalidateQueries({ queryKey: ['documentation-pack'] })
+    },
+  })
 }

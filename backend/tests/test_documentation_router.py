@@ -283,3 +283,64 @@ def test_compiling_with_no_records_says_what_is_missing(
         test_client.post("/v1/companies/999999/documentation", json={}).status_code
         == 404
     )
+
+
+@pytest.mark.usefixtures("enforcement")
+def test_the_pack_follows_the_projects_language_set_by_a_manager(
+    sqlite_session, test_client, no_prose
+):
+    company = _company(sqlite_session)
+    _records(sqlite_session, company)
+    manager = _member(sqlite_session, company.id, "Manager")
+    viewer = _member(sqlite_session, company.id, "Viewer")
+    url = f"/v1/companies/{company.id}/doc_language"
+    assert test_client.get(url, headers=viewer).json() == {
+        "company_id": company.id,
+        "doc_language": "en",
+        "chosen": False,
+    }
+    english = test_client.post(
+        f"/v1/companies/{company.id}/documentation", json={}, headers=manager
+    ).json()
+    assert english["language"] == "en"
+    assert "Write in English." in no_prose[-1]["prompt"]
+    refused = test_client.put(url, json={"doc_language": "es"}, headers=viewer)
+    assert refused.status_code == 403
+    unknown = test_client.put(url, json={"doc_language": "fr"}, headers=manager)
+    assert unknown.status_code == 422
+    assert test_client.put(url, json={"doc_language": "es"}, headers=manager).json()[
+        "chosen"
+    ]
+    lint = test_client.get(f"/v1/documentation/{english['id']}", headers=viewer).json()[
+        "lint"
+    ]
+    assert lint["ok"] is False and "now es" in lint["findings"][-1]["message"]
+    spanish = test_client.post(
+        f"/v1/companies/{company.id}/documentation", json={}, headers=manager
+    ).json()
+    assert spanish["language"] == "es" and spanish["lint"]["ok"] is True
+    assert "in Spanish" in no_prose[-1]["prompt"]
+    titles = [d["title"] for d in spanish["documents"]]
+    assert titles[:2] == [
+        "Documentación del proyecto",
+        "Acta de constitución del proyecto",
+    ]
+    from models import AuditLog
+    from sqlmodel import select
+
+    actions = sqlite_session.exec(
+        select(AuditLog.action).where(
+            AuditLog.interaction_id == f"doc-language:{company.id}"
+        )
+    ).all()
+    assert actions == ["doc_language_updated"]
+
+
+def test_a_new_company_keeps_the_language_its_creator_chose(sqlite_session):
+    from services.loop.company_service import CompanyService
+
+    result = CompanyService(sqlite_session).init_company(
+        company_name=f"Lang {secrets.token_hex(3)}", agents=[], doc_language="es"
+    )
+    company = sqlite_session.get(Company, result["company_id"])
+    assert company.doc_language == "es"

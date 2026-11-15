@@ -294,6 +294,42 @@ be lazy-loaded with `securityLevel: 'strict'`; the data does not change.
   per file is kept on the pack (`written_files`), as `written_sha256` is on an
   architecture.
 
+### The language of a pack: English or Spanish
+
+A pack is written in the project's documentation language,
+`Company.doc_language` (`en` or `es`; migration `0023` adds the column).
+"New company" sends the creator's interface language, so a company created
+from a Spanish interface gets Spanish packs; an empty value reads as English.
+An Owner or Manager changes it on the Documentation page
+(`GET`/`PUT /v1/companies/{id}/doc_language`, Viewer / Manager, audited as
+`doc_language_updated`).
+
+- **Every fixed string comes from a template** (`project_docs/texts.py`):
+  headings, labels, table headers, the "no source recorded" lines, the person
+  templates, the claim header, the source kinds in the list of sources, the
+  check outcomes and results, the C4 titles, notes and the labels that are our
+  text ("Users of X", "X core", "depends on", "calls X"), and the record
+  statuses, verdicts and tiers as shown. Both tables hold the same keys and
+  placeholders (a test holds them in step); the wording is ours in both, and
+  the Spanish is a neutral professional register. The domain and focus area
+  names follow the language in the Markdown and stay the canonical English
+  names in the data (`domain`, `focus_area`).
+- **What does not change with the language:** record text (titles, names,
+  reasons, the module and interface names from the architecture, which keep
+  their spelling in the diagrams too), ids (`REQ-1`, `T-41`, `R-1`), the
+  citation marks and their order, the digests and the input digests, the file
+  names under `docs/project/` and the role names. A test compiles the same
+  records in both languages and compares all of them.
+- **The prose** is asked of the TechWriter in the pack's language (the prompt
+  ends with the instruction for that language) and stays a quoted claim.
+- **The pack records its language** (`DocumentationPack.language`). The
+  language is not an input of any document's digest; instead the lint flags a
+  pack whose language is no longer the project's, which blocks its approval
+  until it is compiled again.
+- **A test** builds a pack in each language and fails if any template
+  fragment of the other language (three words or more, not shared by both)
+  appears in it, with a control that the pack's own fragments are found.
+
 ### Who compiles: the TechWriter, no new role
 
 The compiling is deterministic code; the one model call is the charter's
@@ -451,5 +487,46 @@ anchor for the chain, a four-eyes rule and its report, an access lifecycle,
 an emergency-change path, a backout plan and security-impact note per change,
 an SBOM per release, a findings lifecycle) is listed in the summary's
 recommendations and belongs to its own issues; the documents report the gap
-as "No source recorded" until then. A COBIT 2019 governance matrix follows
-in the same shape once its summary arrives.
+as "No source recorded" until then.
+
+### A COBIT 2019 evidence matrix per project
+
+From the Owner's structural summary of COBIT 2019 (ISACA), in our own words.
+ISACA's usage guidelines (isaca.org/COBITuse) must be read by the Owner
+before any COBIT-derived text is published; the matrix cites objective and
+practice ids with short names in our wording only, never activity, metric or
+output text.
+
+- **Rows:** one per practice (or practice and output) of the objectives the
+  Owner targets with the design factors (by default the focus objectives of the
+  summary).
+- **Column groups:** the objective and practice ids with our short name;
+  activity references as numbers with their capability level; the output's
+  name as a label; the record that answers it (specification, architecture,
+  verdict, approval, release, audit range) with its locator (record id, audit
+  sequence range, commit, digest); its nature, observation or claim (only
+  observations count); who recorded it and its integrity status (chain and
+  signature verified, digest recomputed; a digest from the party recorded is
+  never accepted); the check type, rule id and result; the period and the date
+  last evaluated; the status (evidenced, partial, none) and why; the person
+  accountable for a manual or empty row (a member's role, never an agent); the
+  remediation task in the backlog; the target capability set by the Owner,
+  the evidence-supported ceiling and the per-level rating; the assessor's
+  sign-off (a person, a date, an approval).
+- **Capability, honestly:** computed deterministically from recorded
+  observations only, never written by an agent (no agent may write a level or
+  rating field). Per level, the share of that level's activities with passing
+  evidence in the period, graded on COBIT's scale; a level counts only when it
+  and every lower one are achieved. The result is shown as an
+  **evidence-supported ceiling, never a certified level**: the rating belongs
+  to a qualified, independent assessor. A row with no record is capped at what
+  a person attests, recorded as an approval labelled "attested" and shown
+  apart from "evidenced". Coverage, the period and any integrity failure are
+  shown beside the ceiling; a partial grade is never rounded up. The matrix,
+  its inputs and the computed ceiling are hashed into the audit chain so an
+  auditor can re-perform the computation.
+- **Quick wins the summary names**, all derived from records already kept:
+  a risk profile (APO12.03) from risk tiers, holds and findings; configuration
+  status and integrity reports (BAI10.04, BAI10.05); a control-deficiency
+  register (MEA02.04); an incident and hold trend (DSS02.07); an SBOM per
+  release (BAI03.04).
