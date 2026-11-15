@@ -35,7 +35,7 @@ const links = (linked: unknown[] = []) => ({
 })
 
 function renderAs(role: 'Owner' | 'Viewer') {
-  useAuthStore.setState({ token: 'valid-token', expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
+  useAuthStore.setState({ expiresAt: Date.now() + 60_000, memberships: [{ company_id: 4, human_role: role }] })
   return render(
     <QueryClientProvider client={queryClient}>
       <ChatApprovals />
