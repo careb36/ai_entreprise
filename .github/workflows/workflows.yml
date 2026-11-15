@@ -23,11 +23,12 @@ permissions:
   contents: read
 
 
-# One self-hosted runner takes jobs one at a time: a new push cancels the
-# runs of the commit it replaces instead of queueing behind them.
+# The self-hosted runners are shared by every pull request and by main: a new
+# push cancels the runs of the commit it replaces, on main too (the newest
+# commit's run covers the ones merged before it), instead of queueing behind them.
 concurrency:
   group: workflows-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   lint:
