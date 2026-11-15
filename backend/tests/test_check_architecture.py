@@ -7,7 +7,8 @@ allowlist) and on small trees of their own: an unassigned module, a new
 edge against the rule, a cycle between contexts, a module moved into a
 context folder, a shim left at the flat path, an allowlist that only
 shrinks, and HTTP imported only by the listed adapter modules (a list that
-only shrinks too). They also keep the
+only shrinks too), and every test file with a context in the test map, which
+names only known contexts, existing files and known rules. They also keep the
 records under ``docs/architecture`` approvable by the product's own checks
 and ``docs/ARCHITECTURE.md`` equal to their rendering.
 """
@@ -66,8 +67,12 @@ def test_the_repository_keeps_to_the_rule():
     )
     assert result.returncode == 0, result.stderr
     data = check_architecture.load()
-    analysis = check_architecture.analyse(data)
+    analysis = check_architecture.analyse(data, tests=check_architecture.TESTS)
     assert analysis["problems"] == []
+    # Every test file has a context (the map scripts/affected_tests.py reads).
+    assert analysis["test_files"] == len(
+        list(check_architecture.TESTS.glob("test_*.py"))
+    )
     # Every flat module of services is in exactly one context; a module in a
     # context folder belongs to it by the folder.
     listed = [m for c in data["contexts"].values() for m in c["modules"]]
@@ -379,6 +384,75 @@ def test_a_listed_adapter_without_http_is_reported_and_dropped(tmp_path, capsys)
     before = data_file.read_text()
     assert check_architecture.main(["--update"], data_file, services) == 1
     assert data_file.read_text() == before
+
+
+def _test_files(tmp_path: Path, *names: str) -> Path:
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    for name in names:
+        (tests / name).write_text("def test_x():\n    pass\n")
+    (tests / "conftest.py").write_text("")
+    (tests / "helpers.py").write_text("")
+    return tests
+
+
+def _with_tests(**section: dict) -> dict:
+    return {**_data(**BASE), "tests": section}
+
+
+def test_a_test_map_that_names_every_test_passes(tmp_path):
+    services = _tree(tmp_path, FILES)
+    tests = _test_files(tmp_path, "test_worker.py", "test_rule.py", "test_doc.py")
+    data = _with_tests(
+        sources={"scripts/": "mentions", "vscode/": "loop", "x/": ["test_doc.py"]},
+        always={"$comment": "runs whatever changed", "test_rule.py": "reads all"},
+        files={"test_worker.py": ["loop", "evidence"], "test_doc.py": ["repo"]},
+    )
+    result = check_architecture.analyse(data, services, tests)
+    assert result["problems"] == []
+    # conftest.py and the helpers are no test files.
+    assert result["test_files"] == 3
+    # Without a tests folder the map is not checked (the small trees above).
+    assert check_architecture.analyse(data, services)["test_files"] is None
+
+
+def test_a_test_without_a_context_or_a_wrong_entry_fails(tmp_path):
+    services = _tree(tmp_path, FILES)
+    tests = _test_files(
+        tmp_path, "test_worker.py", "test_new.py", "test_both.py", "test_empty.py"
+    )
+    data = _with_tests(
+        sources={"scripts/": "nonsense", "bench/": ["mentions", "test_ghost.py"]},
+        always={"test_both.py": "reads all", "test_gone.py": " "},
+        files={
+            "test_worker.py": ["loop", "billing"],
+            "test_both.py": ["loop"],
+            "test_empty.py": [],
+            "test_old.py": ["evidence"],
+        },
+    )
+    problems = check_architecture.analyse(data, services, tests)["problems"]
+    expected = [
+        "tests/test_new.py: no context; add it to tests.files",
+        "tests/test_both.py: in both tests.files and tests.always",
+        "tests/test_worker.py: unknown context billing",
+        "tests/test_empty.py: names no context",
+        "tests/test_old.py: listed in tests.files, but no such file",
+        "tests/test_gone.py: listed in tests.always, but no such file",
+        "tests/test_gone.py: in tests.always without its reason",
+        "tests.sources scripts/: unknown rule nonsense",
+        "tests.sources bench/: unknown rule test_ghost.py",
+    ]
+    for start in expected:
+        assert any(p.startswith(start) for p in problems), start
+    assert len(problems) == len(expected)
+
+    # No map at all fails too, and main exits 1 with the tests folder given.
+    bare = check_architecture.analyse(_data(**BASE), services, tests)["problems"]
+    assert bare == ["no tests section in contexts.json: every test file needs one"]
+    data_file = tmp_path / "contexts.json"
+    data_file.write_text(json.dumps(data))
+    assert check_architecture.main([], data_file, services, tests) == 1
 
 
 @pytest.fixture(scope="module")

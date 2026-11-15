@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""
+The backend tests a change can break, from the contexts and their rule.
+
+``docs/architecture/contexts.json`` gives every ``backend/tests/test_*.py`` a
+context (``tests.files``: the contexts it exercises) or puts it in the few that
+always run (``tests.always``, each with its reason). A changed file is read as:
+
+- a module of ``backend/app/services/<context>/``: that context;
+- any other path, by the longest prefix in ``tests.sources``: a context, or
+  ``imports`` (the contexts the module imports, ``platform`` when none: the
+  routers and the app's own modules), ``mentions`` (the tests whose text names
+  the file's path, name or a folder of it: scripts, docs, workflows, the
+  frontend), ``all``, or a test file by name;
+- a file of ``backend/tests``: itself and the tests that import it, directly
+  or through another test or helper; ``conftest.py`` and ``fixtures/`` are
+  ``all``.
+
+A context's change selects the tests of that context and of every context that
+may import it (the reverse of ``depends_on``, transitively): a change in
+platform can break loop. The always-run tests are added. The whole suite runs
+when the script cannot decide: a rule says ``all`` (models, migrations,
+conftest, the lock files, ``contexts.json`` itself) or no rule matches the
+path. The reason is printed.
+
+    python3 scripts/affected_tests.py                 # origin/main...HEAD + working tree
+    python3 scripts/affected_tests.py --base main
+    python3 scripts/affected_tests.py --files backend/app/services/evidence/risk.py
+    python3 scripts/affected_tests.py --run -- -x -n auto
+    python3 scripts/affected_tests.py --suggest backend/tests/test_new.py
+
+The test files go to stdout, one per line (``backend/tests`` for the whole
+suite), the reasons to stderr. ``--run`` runs pytest on them with the
+interpreter running this script, from ``backend/`` with ``PYTHONPATH=.:app``,
+and passes what follows ``--`` through. ``--suggest`` prints the contexts a
+test file's imports and URLs point at, to start its entry in the map; the
+entry is still read and fixed by hand. The script only reads the repository
+(and asks git which files changed). Standard library only.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "docs" / "architecture" / "contexts.json"
+BACKEND = ROOT / "backend"
+APP = BACKEND / "app"
+TESTS = BACKEND / "tests"
+DAEMON = ROOT / "vscode-daemon"
+TESTS_REL = "backend/tests/"
+SERVICES_REL = "backend/app/services/"
+
+
+def load(path: Path = DATA) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+# --- the contexts ------------------------------------------------------------
+
+
+def closure(contexts: dict) -> dict[str, set[str]]:
+    """Each context and every context it may import, transitively."""
+    out: dict[str, set[str]] = {}
+
+    def visit(name: str, seen: frozenset[str]) -> set[str]:
+        if name in out:
+            return out[name]
+        deps: set[str] = set()
+        for dep in contexts.get(name, {}).get("depends_on", []):
+            if dep in contexts and dep not in seen:
+                deps |= {dep} | visit(dep, seen | {dep})
+        out[name] = deps
+        return deps
+
+    for name in contexts:
+        visit(name, frozenset({name}))
+    return out
+
+
+def dependants(contexts: dict, names: set[str]) -> set[str]:
+    """*names* and every context that may import one of them."""
+    below = closure(contexts)
+    return {c for c in contexts if c in names or below[c] & names}
+
+
+def top(contexts: dict, names: set[str]) -> list[str]:
+    """*names* without those another of them may import: the same selection."""
+    below = closure(contexts)
+    return sorted(n for n in names if not any(n in below[m] for m in names - {n}))
+
+
+# --- imports -----------------------------------------------------------------
+
+
+def imported_names(path: Path) -> set[str]:
+    """The absolute dotted names *path* imports, a function's body too."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError, ValueError):
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+            names.add(node.module)
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return names
+
+
+def _stems(folder: Path) -> set[str]:
+    return {p.stem for p in folder.glob("*.py")} if folder.is_dir() else set()
+
+
+def contexts_of_names(names: set[str], contexts: dict, depth: int = 0) -> set[str]:
+    """The contexts a set of imported names reaches: ``services.<context>``,
+    a router or an app module through its own imports, a daemon module."""
+    app_stems, daemon_stems = _stems(APP), _stems(DAEMON)
+    found: set[str] = set()
+    for dotted in names:
+        parts = dotted.split(".")
+        if parts[0] == "app" and len(parts) > 1:
+            parts = parts[1:]
+        head = parts[0]
+        if head == "services" and len(parts) > 1 and parts[1] in contexts:
+            found.add(parts[1])
+        elif head == "routers" and len(parts) > 1 and depth < 2:
+            router = APP / "routers" / f"{parts[1]}.py"
+            if router.is_file():
+                found |= module_contexts(router, contexts, depth + 1)
+        elif head in app_stems and head != "main" and depth < 2:
+            found |= module_contexts(APP / f"{head}.py", contexts, depth + 1)
+        elif head in daemon_stems and head not in app_stems:
+            found.add("workspace")
+    return found
+
+
+def module_contexts(path: Path, contexts: dict, depth: int = 0) -> set[str]:
+    """The contexts a module outside ``services`` stands for: those it imports,
+    or ``platform`` (the app's infrastructure) when it imports none."""
+    found = contexts_of_names(imported_names(path), contexts, depth)
+    return found or {"platform"}
+
+
+# --- the routes a test calls (for --suggest) ---------------------------------
+
+_DECORATOR = re.compile(r"@router\.(?:get|post|put|patch|delete)\(\s*\"([^\"]*)\"")
+_PREFIX = re.compile(r"APIRouter\([^)]*prefix=\"([^\"]*)\"")
+_PATCHED = re.compile(r"[\"']((?:app\.)?(?:services|routers)\.[\w.]+)[\"']")
+
+
+def routes() -> list[tuple[re.Pattern[str], str]]:
+    """Each route's pattern and the router module that serves it."""
+    out = []
+    for router in sorted((APP / "routers").glob("*.py")):
+        text = router.read_text(encoding="utf-8")
+        prefix = m.group(1) if (m := _PREFIX.search(text)) else ""
+        for path in _DECORATOR.findall(text):
+            full = re.sub(r"\\\{[^}]*\\\}", "[^/]+", re.escape(prefix + path))
+            out.append((re.compile(full.rstrip("/") + "/?"), router.stem))
+    return out
+
+
+def urls_in(path: Path) -> set[str]:
+    """The literal paths in *path* (``"/v1/sprints/{id}"`` and f-strings)."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):
+        return set()
+    found = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            text = "".join(
+                v.value if isinstance(v, ast.Constant) else "X" for v in node.values
+            )
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            text = node.value
+        else:
+            continue
+        if text.startswith(("/v1/", "/health")):
+            found.add(text.split("?")[0])
+    return found
+
+
+def suggest(path: Path, data: dict) -> list[str]:
+    """The contexts a test file's imports and URLs point at, reduced to the top."""
+    contexts = data["contexts"]
+    names = imported_names(path)
+    # A patch by name (``mock.patch("services.loop.x.y")``) reaches it too.
+    names |= set(_PATCHED.findall(path.read_text(encoding="utf-8")))
+    found = contexts_of_names(names, contexts)
+    table = routes()
+    for url in urls_in(path):
+        for pattern, router in table:
+            if pattern.fullmatch(url):
+                found |= contexts_of_names({f"routers.{router}"}, contexts)
+                break
+    return top(contexts, found)
+
+
+# --- the tests ---------------------------------------------------------------
+
+
+def test_files(tests: Path = TESTS) -> list[str]:
+    return sorted(p.name for p in tests.glob("test_*.py"))
+
+
+def importers(tests: Path = TESTS) -> dict[str, set[str]]:
+    """For each module of *tests* (by stem), the test files that import it,
+    directly or through another module of *tests*."""
+    stems = {p.stem for p in tests.glob("*.py")}
+    direct: dict[str, set[str]] = {s: set() for s in stems}
+    for path in tests.glob("*.py"):
+        for name in imported_names(path):
+            head = name.split(".")[0]
+            if head in stems and head != path.stem:
+                direct[head].add(path.stem)
+    out: dict[str, set[str]] = {}
+    for stem in stems:
+        seen, todo = set(), [stem]
+        while todo:
+            for user in direct.get(todo.pop(), ()):
+                if user not in seen:
+                    seen.add(user)
+                    todo.append(user)
+        out[stem] = {f"{s}.py" for s in seen if s.startswith("test_")}
+    return out
+
+
+def _names(rel: str) -> list[str]:
+    """What a test may call *rel* by: its path, its name, and its folders two
+    levels deep or more (``frontend/src`` for ``frontend/src/App.tsx``)."""
+    parts = rel.split("/")
+    return [rel, parts[-1], *("/".join(parts[:i]) for i in range(2, len(parts)))]
+
+
+def rule_for(rel: str, sources: dict) -> object | None:
+    """The rule of the longest prefix in *sources* that *rel* starts with."""
+    keys = [k for k in sources if not k.startswith("$") and rel.startswith(k)]
+    return sources[max(keys, key=len)] if keys else None
+
+
+def select(changed: list[str], data: dict, tests: Path = TESTS) -> dict:
+    """The tests to run for *changed* (repository-relative paths), as data:
+    ``tests`` (file names), ``everything`` (the reason, or ``None``), ``notes``."""
+    contexts = data["contexts"]
+    section = data.get("tests") or {}
+    files: dict = {k: v for k, v in section.get("files", {}).items() if k[0] != "$"}
+    always: dict = {k: v for k, v in section.get("always", {}).items() if k[0] != "$"}
+    sources: dict = section.get("sources", {})
+    existing = set(test_files(tests))
+    chosen: set[str] = set()
+    notes: list[str] = []
+    everything: str | None = None
+    users: dict[str, set[str]] | None = None
+    texts: dict[str, str] | None = None
+    reached: set[str] = set()
+
+    for rel in sorted(set(changed)):
+        rel = rel.replace("\\", "/")
+        if rel.startswith(TESTS_REL):
+            name = rel[len(TESTS_REL) :]
+            if name == "conftest.py" or "/" in name or not name.endswith(".py"):
+                everything = everything or f"{rel}: shared by every test"
+                continue
+            users = users if users is not None else importers(tests)
+            hit = set(users.get(name[:-3], set()))
+            if name.startswith("test_"):
+                hit.add(name)
+            chosen |= hit
+            notes.append(f"{rel}: the test itself and its importers ({len(hit)})")
+            continue
+        parts = rel.split("/")
+        if rel.startswith(SERVICES_REL) and len(parts) > 4 and parts[3] in contexts:
+            rule: object = parts[3]
+        else:
+            rule = rule_for(rel, sources)
+        if rule is None:
+            everything = everything or f"{rel}: outside every context and rule"
+            continue
+        for token in rule if isinstance(rule, list) else [rule]:
+            if token == "all":
+                everything = everything or f"{rel}: shared by every context"
+            elif token == "mentions":
+                if texts is None:
+                    texts = {
+                        n: (tests / n).read_text(encoding="utf-8") for n in existing
+                    }
+                hit = {n for n, t in texts.items() if any(w in t for w in _names(rel))}
+                chosen |= hit
+                notes.append(f"{rel}: the tests that name it ({len(hit)})")
+            elif isinstance(token, str) and token.startswith("test_"):
+                chosen.add(token)
+                notes.append(f"{rel}: {token}, named by its rule")
+            elif token == "imports":
+                path = ROOT / rel
+                if not (rel.endswith(".py") and path.is_file()):
+                    everything = everything or f"{rel}: cannot read its imports"
+                    continue
+                names = set(top(contexts, module_contexts(path, contexts)))
+                reached |= dependants(contexts, names)
+                notes.append(f"{rel}: imports {', '.join(sorted(names))}")
+            elif token in contexts:
+                reached |= dependants(contexts, {token})
+                notes.append(f"{rel}: context {token}")
+    if reached:
+        notes.append("contexts reached: " + ", ".join(sorted(reached)))
+        chosen |= {n for n, ctxs in files.items() if set(ctxs) & reached}
+    chosen |= set(always)
+    return {
+        "tests": sorted(chosen & existing),
+        "everything": everything,
+        "notes": notes,
+    }
+
+
+# --- the command -------------------------------------------------------------
+
+
+def _git(*args: str) -> list[str]:
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), *args], check=True, capture_output=True, text=True
+    ).stdout
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def changed_files(base: str) -> list[str]:
+    """The branch's changes since *base* plus the working tree's, untracked too."""
+    return sorted(
+        set(_git("diff", "--name-only", f"{base}...HEAD"))
+        | set(_git("diff", "--name-only", "HEAD"))
+        | set(_git("ls-files", "--others", "--exclude-standard"))
+    )
+
+
+def main(argv: list[str]) -> int:
+    extra: list[str] = []
+    if "--" in argv:
+        at = argv.index("--")
+        argv, extra = argv[:at], argv[at + 1 :]
+    parser = argparse.ArgumentParser(
+        description="The backend tests a change can break."
+    )
+    parser.add_argument("--files", nargs="+", help="the changed files (repo paths)")
+    parser.add_argument("--base", default="origin/main", help="git ref to diff from")
+    parser.add_argument("--run", action="store_true", help="run pytest on them")
+    parser.add_argument("--suggest", nargs="+", help="test files to suggest for")
+    args = parser.parse_args(argv)
+    data = load()
+
+    if args.suggest:
+        print(json.dumps({Path(p).name: suggest(Path(p), data) for p in args.suggest}))
+        return 0
+    if args.files is not None:
+        changed = args.files
+    else:
+        try:
+            changed = changed_files(args.base)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            print(f"Cannot list the changes since {args.base}: {exc}", file=sys.stderr)
+            return 2
+    result = select(changed, data)
+    for note in result["notes"]:
+        print(note, file=sys.stderr)
+    if result["everything"]:
+        print(f"The whole suite: {result['everything']}.", file=sys.stderr)
+        targets = ["tests"]
+    else:
+        print(
+            f"{len(result['tests'])} of {len(test_files())} test files "
+            f"({len(changed)} changed file(s)).",
+            file=sys.stderr,
+        )
+        targets = [f"tests/{name}" for name in result["tests"]]
+    for target in targets:
+        print(f"backend/{target}")
+    if not args.run:
+        return 0
+    if not targets:
+        print("Nothing to run.", file=sys.stderr)
+        return 0
+    env = {**os.environ, "PYTHONPATH": ".:app"}
+    command = [sys.executable, "-m", "pytest", *targets, *extra]
+    return subprocess.run(command, cwd=BACKEND, env=env, check=False).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
