@@ -46,7 +46,5 @@
   "network": {
     "modules": ["services/api/client.ts", "services/api/stream.ts"]
   },
-  "allowlist": [
-    "services/api/client.ts -> store/useAuthStore.ts"
-  ]
+  "allowlist": []
 }

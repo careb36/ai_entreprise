@@ -56,7 +56,7 @@ from routers import (
     webhooks_router,
     workspace_router,
 )
-from security import get_cors_origins, setup_security
+from security import cors_allows_credentials, get_cors_origins, setup_security
 from services.integrations import chat_approvals, webhooks
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
@@ -102,14 +102,15 @@ app = FastAPI(
     ],
 )
 
+_cors_origins = get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(),
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=cors_allows_credentials(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
     # The support logs download names its file in this header.
-    expose_headers=["Content-Disposition"],
+    expose_headers=["Content-Disposition", "X-Fabrique-CSRF"],
 )
 
 # Setup security (rate limiting + security headers)

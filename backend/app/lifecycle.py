@@ -307,6 +307,11 @@ async def startup(app):
         logger.warning(
             "JWT_SECRET_KEY is not configured. POST /v1/auth/login will return 503 until it is set."
         )
+    from session_cookies import warn_if_insecure
+
+    insecure = warn_if_insecure()
+    if insecure:
+        logger.warning(insecure)
 
 
 async def shutdown(app):

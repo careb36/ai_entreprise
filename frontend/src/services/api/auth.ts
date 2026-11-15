@@ -17,10 +17,18 @@ export interface AuthProfile extends AuthUser {
   memberships: CompanyMembership[]
 }
 
+/**
+ * A browser sign-in (password or SSO). The session itself is in HttpOnly
+ * cookies the page cannot read; the body carries only lifetimes and the CSRF
+ * value (issue #524, docs/design/SESSIONS.md).
+ */
 export interface LoginResponse {
-  access_token: string
-  token_type: 'bearer'
+  token_type: 'cookie'
+  /** Seconds the access cookie lives; renewed by refresh. */
   expires_in: number
+  /** Seconds until the session ends however often it is refreshed. */
+  session_expires_in: number
+  csrf_token: string
 }
 
 export interface RegisterResponse {
@@ -32,8 +40,14 @@ export const authEndpoints = () => ({
   login: (email: string, password: string) =>
     fetchApi<LoginResponse>('/v1/auth/login', {
       method: 'POST',
+      auth: false,
+      once: true,
       body: JSON.stringify({ email, password }),
     }),
+
+  /** Ends the session on the server (revokes it) and clears its cookies. */
+  logout: () =>
+    fetchApi<void>('/v1/auth/logout', { method: 'POST', auth: false, once: true }),
 
   register: (data: { email: string; full_name: string; password: string }) =>
     fetchApi<RegisterResponse>('/v1/auth/register', {

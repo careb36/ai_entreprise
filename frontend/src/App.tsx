@@ -210,7 +210,6 @@ function NavBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const user = useAuthStore(state => state.user)
-  const token = useAuthStore(state => state.token)
   const expiresAt = useAuthStore(state => state.expiresAt)
   const logout = useAuthStore(state => state.logout)
   const memberships = useAuthStore(state => state.memberships)
@@ -219,7 +218,7 @@ function NavBar() {
   const supportAdmin = Boolean(user?.support_admin)
   const companyName = useAppStore(state => state.companyName)
   const companyId = useAppStore(state => state.companyId)
-  const authenticated = Boolean(token && expiresAt && expiresAt > Date.now())
+  const authenticated = Boolean(expiresAt && expiresAt > Date.now())
   const links = useNavLinks()
   // What the company needs a person for, shown on the Review link.
   const inbox = useInbox(authenticated ? companyId : null)

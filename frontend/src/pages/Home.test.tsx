@@ -16,7 +16,7 @@ afterEach(() => {
 describe('Home redirect', () => {
   it('replaces / with Evidence for an authenticated company member', async () => {
     useAuthStore.setState({
-      token: 'signed-token', expiresAt: Date.now() + 60_000,
+      expiresAt: Date.now() + 60_000,
       meLoaded: true, loadingMe: false,
       memberships: [{ company_id: 1, human_role: 'Owner' }],
     })

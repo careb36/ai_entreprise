@@ -2,8 +2,9 @@
 docs/design/SSO.md): Authorization Code with PKCE, a one-time ``state`` bound
 to the browser by an HttpOnly cookie, the ID token validated by us, the person
 resolved by ``(issuer, sub)``, the role from the membership (a new member gets
-the default role), a one-time handoff code exchanged for the same token the
-password login issues, and an audit row per completed callback."""
+the default role), a one-time handoff code exchanged for the same browser
+session the password login starts (HttpOnly cookies, issue #524), and an
+audit row per completed callback."""
 
 from __future__ import annotations
 
@@ -28,6 +29,12 @@ from sso_fake_idp import (
 
 def _exchange(client, code):
     return client.post("/v1/auth/sso/exchange", json={"code": code})
+
+
+def _session(response):
+    """The access token the exchange set as the HttpOnly session cookie."""
+    assert "access_token" not in response.json()
+    return response.cookies["fabrique_session"]
 
 
 def _audits(session, company_id, action="sso_sign_in"):
@@ -57,7 +64,7 @@ def test_a_new_person_signs_in_and_joins_with_the_default_role(
     assert sent["code"] == "code-from-idp" and sent["authorization"] is None
     token = _exchange(test_client, landed["code"])
     assert token.status_code == 200, token.text
-    claims = auth_tokens.decode_access_token(token.json()["access_token"])
+    claims = auth_tokens.decode_access_token(_session(token))
     user = sqlite_session.get(User, int(claims["sub"]))
     assert user.email == "ana@acme.test" and user.password_hash == ""
     role = sqlite_session.exec(
@@ -68,7 +75,7 @@ def test_a_new_person_signs_in_and_joins_with_the_default_role(
     assert role == "Viewer"
     me = test_client.get(
         "/v1/auth/me",
-        headers={"Authorization": f"Bearer {token.json()['access_token']}"},
+        headers={"Authorization": f"Bearer {_session(token)}"},
     )
     assert (
         me.status_code == 200 and me.json()["memberships"][0]["company_id"] == acme.id
@@ -207,7 +214,7 @@ def test_an_invited_member_is_linked_keeps_their_role_and_becomes_sso_only(
     user, _ = member(sqlite_session, acme.id, "Manager", email="Lin@Acme.test")
     fake_idp.claims = {"email": "lin@acme.test", "sub": "subject-lin"}
     landed = sign_in(test_client, fake_idp, conn.slug)
-    token = _exchange(test_client, landed["code"]).json()["access_token"]
+    token = _session(_exchange(test_client, landed["code"]))
     assert auth_tokens.decode_access_token(token)["sub"] == str(user.id)
     identity = sqlite_session.exec(
         select(SsoIdentity).where(SsoIdentity.subject == "subject-lin")
@@ -293,8 +300,8 @@ def test_the_identity_follows_the_subject_not_the_email(
     first = _exchange(test_client, sign_in(test_client, fake_idp, conn.slug)["code"])
     fake_idp.claims = {"email": "renamed@acme2.test", "sub": "subject-f"}
     second = _exchange(test_client, sign_in(test_client, fake_idp, conn.slug)["code"])
-    sub = auth_tokens.decode_access_token(first.json()["access_token"])["sub"]
-    assert auth_tokens.decode_access_token(second.json()["access_token"])["sub"] == sub
+    sub = auth_tokens.decode_access_token(_session(first))["sub"]
+    assert auth_tokens.decode_access_token(_session(second))["sub"] == sub
     # An account already linked to another subject at this issuer is not re-linked.
     fake_idp.claims = {"email": "first@acme.test", "sub": "subject-other"}
     assert sign_in(test_client, fake_idp, conn.slug) == {"error": "identity_conflict"}
