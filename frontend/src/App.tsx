@@ -26,6 +26,7 @@ import CompanyMembers from './pages/CompanyMembers'
 import CompanySso from './pages/CompanySso'
 import ChatApprovals from './pages/ChatApprovals'
 import CompanyTeams from './pages/CompanyTeams'
+import CompanyDuties from './pages/CompanyDuties'
 import Usage from './pages/Usage'
 import AuditAnchors from './pages/AuditAnchors'
 import SsoComplete from './pages/SsoComplete'
@@ -345,6 +346,7 @@ function NavBar() {
                   <Link role="menuitem" to="/company/wiki" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.wiki', { defaultValue: 'Wiki' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/teams" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.teams')}</Link>}
+                  {role === 'Owner' && <Link role="menuitem" to="/company/duties" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.duties')}</Link>}
                   {canManage && <Link role="menuitem" to="/company/usage" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.usage')}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso"className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   <Link role="menuitem" to="/company/chat" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.chatApprovals')}</Link>
@@ -459,6 +461,7 @@ function AppContent() {
               <Route path="/company/sso" element={<CompanySso />} />
               <Route path="/company/chat" element={<ChatApprovals />} />
               <Route path="/company/teams" element={<CompanyTeams />} />
+              <Route path="/company/duties" element={<CompanyDuties />} />
               <Route path="/company/usage" element={<Usage />} />
               <Route path="/company/audit-anchors" element={<AuditAnchors />} />
               <Route path="/company/procedures" element={<Procedures />} />

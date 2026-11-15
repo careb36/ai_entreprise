@@ -173,6 +173,7 @@ def record_integration_merge(
     reply: dict[str, Any],
     *,
     merged_by: str,
+    merged_by_user_id: int | None = None,
     agent_id: str | None = None,
 ) -> SprintIntegration:
     facts = _observed(reply)
@@ -182,13 +183,19 @@ def record_integration_merge(
         f"sprint:{row.sprint_id}:integration",
         merged_by,
         "sprint_merged_locally",
-        {"sprint_id": row.sprint_id, "integration_id": row.id},
+        {
+            "sprint_id": row.sprint_id,
+            "integration_id": row.id,
+            "user_id": merged_by_user_id,
+        },
         facts,
         agent_id,
     )
     merged = {
         **facts,
         "merged_by": merged_by,
+        # The account, from the session (the segregation-of-duties report).
+        "merged_by_user_id": merged_by_user_id,
         "merged_at": datetime.now(UTC).isoformat(),
         "audit_log_id": audit_id,
     }
