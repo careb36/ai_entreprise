@@ -6,6 +6,74 @@ A record of how `backend/app/services` was moved into fourteen context folders, 
 
 **Contexts and the dependency rule** (issue #469, `docs/ARCHITECTURE.md`, ADRs 0012–0016). `backend/app/services` is divided into fourteen contexts (contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers, loop, release, integrations, management), each with a folder `services/<context>/` and the contexts it may import; the evidence imports only contracts and platform. The assignment and the rule are data, `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py` (stdlib, `ast`; `tests/test_check_architecture.py`, and a step of `backend-tests.yml`): a module in no context, a cycle between contexts or a new import against the rule fails; the 20 edges that broke it at adoption are an allowlist that `--update` only shrinks. A new module names its context in the same pull request. The records the product's own checks approved are `docs/architecture/specification.json` and `architecture.json` (post them with `POST /v1/specifications` and `POST /v1/architectures`); `docs/ARCHITECTURE.md` is their rendering by `arch_check.as_markdown`. The migration order is ADR 0016, one context per pull request behind re-export shims.
 
+## The contexts at adoption
+
+Generated from `docs/architecture/contexts.json` (the checker's data) at adoption, 2026-11-09. It was the appendix of ADR 0012 until that ADR became a rendering of the architecture record (issue #329), which has no place for an appendix.
+
+| Context | Folder | May import | Modules | Lines |
+|---|---|---|---|---|
+| contracts | `backend/app/services/contracts/` | — | 4 | 551 |
+| platform | `backend/app/services/platform/` | contracts | 10 | 1,422 |
+| tasks | `backend/app/services/tasks/` | contracts, platform | 5 | 1,991 |
+| models | `backend/app/services/models/` | contracts, platform, tasks | 9 | 1,628 |
+| evidence | `backend/app/services/evidence/` | contracts, platform | 13 | 3,661 |
+| workspace | `backend/app/services/workspace/` | contracts, platform | 6 | 2,086 |
+| tools | `backend/app/services/tools/` | contracts, platform, evidence, workspace | 13 | 3,311 |
+| learning | `backend/app/services/learning/` | contracts, platform, tasks, models | 4 | 1,057 |
+| planning | `backend/app/services/planning/` | contracts, platform, tasks, models, evidence, workspace, tools | 11 | 4,492 |
+| producers | `backend/app/services/producers/` | contracts, platform, tasks, models, evidence, workspace, tools | 6 | 2,098 |
+| loop | `backend/app/services/loop/` | contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers | 12 | 5,963 |
+| release | `backend/app/services/release/` | contracts, platform, tasks, models, evidence, workspace, planning, loop | 9 | 1,978 |
+| integrations | `backend/app/services/integrations/` | contracts, platform, tasks, evidence | 2 | 478 |
+| management | `backend/app/services/management/` | contracts, platform, tasks, models, evidence, workspace, tools, learning, planning, producers, loop, release, integrations | 14 | 4,268 |
+| **total** | | | **118** | **34,984** |
+
+## Appendix: module assignment
+
+| Context | Modules |
+|---|---|
+| contracts | `edit_blocks`, `roles`, `sandbox_schemas`, `standards_catalogue` |
+| platform | `agent_service`, `api_tokens`, `glassroom`, `healthcheck`, `idempotency`, `locks`, `memory_graph`, `orchestration_metrics`, `run_secrets`, `token_usage` |
+| tasks | `board`, `dependencies`, `events`, `task_events`, `task_projection` |
+| models | `company_models`, `model_catalog`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `provider_connections`, `routing_record`, `run_cost` |
+| evidence | `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `context_read`, `criteria_tests`, `delivery_gate`, `governance`, `review_changes`, `risk`, `secops_checks`, `standards`, `verification` |
+| workspace | `git_workflow`, `sandbox`, `sandbox_manager`, `stack_profiles`, `workspace_daemon`, `workspace_snapshot` |
+| tools | `developer_tool_replies`, `developer_tool_schemas`, `developer_tools`, `edit_lint`, `mcp_client`, `mcp_config`, `mcp_tools`, `repo_map`, `research_registries`, `research_schemas`, `research_tools`, `tool_history`, `workspace_edits` |
+| learning | `architect`, `procedures`, `retrospective`, `scrum_master` |
+| planning | `arch_author`, `arch_check`, `discovery_service`, `document_approval`, `spec_author`, `spec_check`, `spec_diff`, `spec_impact`, `spec_planning`, `sprint_planner`, `sprint_team` |
+| producers | `agent_worker`, `console_assistants`, `console_capabilities`, `console_clis`, `console_producer`, `github_adapter` |
+| loop | `answers`, `board_moves`, `carry_over`, `company_service`, `edit_plan`, `replicas`, `review_digest`, `run_review`, `sprint_archive`, `sprint_close`, `sprint_control`, `task_worker` |
+| release | `delivery_undo`, `git_publish`, `git_setup`, `integration`, `integration_events`, `integration_jobs`, `integration_publish`, `local_merge`, `review_sync` |
+| integrations | `outbox_service`, `webhooks` |
+| management | `brief_mail`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `support_agent` |
+
+## Appendix: the allowlist at adoption
+
+20 edges break the rule today; they may only be removed.
+
+| Edge | From | To |
+|---|---|---|
+| `acceptance -> task_worker` | evidence | loop |
+| `acceptance -> workspace_daemon` | evidence | workspace |
+| `app_check -> sandbox` | evidence | workspace |
+| `app_check -> stack_profiles` | evidence | workspace |
+| `app_check -> workspace_daemon` | evidence | workspace |
+| `console_producer -> carry_over` | producers | loop |
+| `console_producer -> edit_plan` | producers | loop |
+| `console_producer -> task_worker` | producers | loop |
+| `context_read -> developer_tool_schemas` | evidence | tools |
+| `git_workflow -> dependencies` | workspace | tasks |
+| `standards -> task_worker` | evidence | loop |
+| `task_worker -> integration_jobs` | loop | release |
+| `verification -> console_clis` | evidence | producers |
+| `verification -> mcp_tools` | evidence | tools |
+| `verification -> research_tools` | evidence | tools |
+| `verification -> sandbox` | evidence | workspace |
+| `verification -> task_worker` | evidence | loop |
+| `workspace_daemon -> app_check` | workspace | evidence |
+| `workspace_daemon -> criteria_tests` | workspace | evidence |
+| `workspace_edits -> task_worker` | tools | loop |
+
 ## Step 1: contracts
 
 <a id="step-1"></a>
