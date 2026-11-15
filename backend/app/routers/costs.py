@@ -4,6 +4,10 @@
 the model catalogue's prices; only usage the provider reported is priced,
 estimated tokens come apart, and an unknown price is ``cost_cents: null``
 with the reason. ``GET /v1/sprints`` carries each sprint's cost too.
+
+Each answer also carries ``prompt_weight``: the estimated tokens of each
+prompt section the task worker sent, added up from the measure it kept on
+the runs' evidence (``services/models/prompt_weight.py``, #443).
 """
 
 from auth_policy import current_user_if_required, require_company_role
@@ -11,7 +15,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import BacklogItem, Sprint, User
 from models.agent_run import AgentRun
-from services.models import run_cost
+from services.models import prompt_weight, run_cost
 from sqlmodel import Session
 
 router = APIRouter(prefix="/v1", tags=["Costs"])
@@ -28,7 +32,10 @@ def agent_run_cost(
     run = session.get(AgentRun, run_id)
     if run is None or run.company_id != company_id:
         raise HTTPException(status_code=404, detail="Agent run not found")
-    return run_cost.run_cost(session, run)
+    return {
+        **run_cost.run_cost(session, run),
+        "prompt_weight": prompt_weight.run_weight(session, run),
+    }
 
 
 def _task(session: Session, task_id: int) -> tuple[BacklogItem, Sprint]:
@@ -47,7 +54,10 @@ def task_cost(
 ):
     _, sprint = _task(session, task_id)
     require_company_role(session, user, sprint.company_id, "Viewer")
-    return run_cost.task_cost(session, sprint.company_id, task_id)
+    return {
+        **run_cost.task_cost(session, sprint.company_id, task_id),
+        "prompt_weight": prompt_weight.task_weight(session, sprint.company_id, task_id),
+    }
 
 
 @router.get("/sprints/{sprint_id}/cost")
@@ -65,4 +75,7 @@ def sprint_cost(
         "sprint_id": sprint_id,
         **totals[sprint_id],
         "tasks": run_cost.sprint_task_costs(session, sprint.company_id, sprint_id),
+        "prompt_weight": prompt_weight.sprint_weight(
+            session, sprint.company_id, sprint_id
+        ),
     }
