@@ -15,6 +15,7 @@ import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
+import { wikiEndpoints } from './api/wiki'
 import { workspaceEndpoints } from './api/workspace'
 
 export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setCsrfToken, setOnUnauthorized, setSessionHooks } from './api/client'
@@ -34,6 +35,7 @@ export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
+export * from './api/wiki'
 export * from './api/workspace'
 
 // ── Public API client ─────────────────────────────────────────────────────────
@@ -57,6 +59,7 @@ const endpoints = {
   ...supportEndpoints(http),
   ...githubEndpoints(http),
   ...ssoEndpoints(http),
+  ...wikiEndpoints(http),
   ...chatEndpoints(http),
 }
 
