@@ -162,7 +162,7 @@ do not deploy it. Verifying in the cluster at admission (Sigstore's
 policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
 steps run on the self-hosted runner and have not been exercised by a release
 yet; the first tag after this change is their first run
-(`docs/adr/0017-self-hosted-runner.md` records the runner's risks).
+(`docs/adr/0018-self-hosted-runner.md` records the runner's risks).
 
 Check a release's component SBOMs against their checksums:
 

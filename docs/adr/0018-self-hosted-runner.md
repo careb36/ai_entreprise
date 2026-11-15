@@ -1,4 +1,4 @@
-# ADR 0017: Keep the self-hosted runner for trusted code only, and move it to ephemeral containers on a host of its own
+# ADR 0018: Keep the self-hosted runner for trusted code only, and move it to ephemeral containers on a host of its own
 
 ## Status
 

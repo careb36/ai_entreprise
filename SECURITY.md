@@ -354,7 +354,7 @@ be signed. `.github/CODEOWNERS` names an owner for CI, the locks, the daemon,
 the bus, authentication, migrations and the architecture rules, but GitHub
 enforces it only once "Require review from Code Owners" is on for `main`
 (#182). The self-hosted runner is not ephemeral and shares its machine with
-the daemon; the decision record is `docs/adr/0017-self-hosted-runner.md`.
+the daemon; the decision record is `docs/adr/0018-self-hosted-runner.md`.
 
 ### 5.4 Open advisories and their triage
 
