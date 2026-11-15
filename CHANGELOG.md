@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **The e2e web project's port is picked at run time.** `E2E_WEB_PORT` was fixed at 18765, and the self-hosted runners share one machine: when two runs reached step 9c together, the daemon refused the second greeting's busy port, no browser check ran, no hold was placed and step 10 reported a misleading `worked_before_dependency`. `e2e.yml` now picks it like the backend's and the fake model's ports, `run.sh` defaults to a free port, and step 9c checks the port is free first.
+
 * **The e2e self-hosting step fails loudly and keeps its logs.** Every local git call of `scripts/self_host/self_host.py` now times out after `GIT_TIMEOUT_SECONDS` (120 s) and raises `GitTimeoutError` naming the command, and the `e2e-logs` artifact also keeps the harness's `self-host/*.log` and `*.json`, so a step that hangs (as on #575, 18 minutes with nothing to diagnose) leaves its output.
 
 * **The runners' docker state is swept weekly.** `e2e.yml` started a pgvector

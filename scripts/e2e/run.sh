@@ -80,7 +80,7 @@
 #   E2E_PYTHON [python]            the backend's interpreter (poetry env)
 #   E2E_WORKDIR [mktemp]           logs and the project folder
 #   E2E_TIMEOUT [300]              seconds to wait for each sprint to close
-#   E2E_WEB_PORT [18765]           the port the web project's application uses
+#   E2E_WEB_PORT [a free port]     the port the web project's application uses
 #
 # Exit status is 0 only when every check passed. Logs stay in E2E_WORKDIR.
 set -u
@@ -100,7 +100,12 @@ BACKEND_PORT=${E2E_BACKEND_PORT:-18000}
 LLM_PORT=${E2E_LLM_PORT:-15100}
 PY=${E2E_PYTHON:-python}
 TIMEOUT=${E2E_TIMEOUT:-300}
-WEB_PORT=${E2E_WEB_PORT:-18765}
+# Picked at run time, never a fixed number: the self-hosted runners share one
+# machine, and two e2e runs that reach step 9c together would both start the
+# web project's application on the same port. The daemon refuses a port
+# already in use, so the second run's greeting was never started, no browser
+# check ran, no hold was placed and QA's approval closed it (run 43752094404).
+WEB_PORT=${E2E_WEB_PORT:-$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')}
 WORK=${E2E_WORKDIR:-$(mktemp -d -t fabrique-e2e-XXXXXX)}
 mkdir -p "$WORK/project" "$WORK/audit"
 echo "# E2E project" > "$WORK/project/README.md"
@@ -522,6 +527,9 @@ WEB=$(api -X POST "$API/v1/init_company" -H 'Content-Type: application/json' -d 
   \"company_name\": \"Web Co\", \"project_path\": \"$WORK/web\", \"autonomy_level\": 2, \"start_now\": false,
   \"agents\": [{\"role\": \"Developer\", \"name\": \"Dev Wen\"}, {\"role\": \"QA\", \"name\": \"QA Wes\"}, {\"role\": \"PO\", \"name\": \"Po Wu\"}]}")
 WCID=$(echo "$WEB" | json "d.get('company_id', '')")
+# Said here, so a port something else holds is not read later as a missing hold.
+port_free() { "$PY" -c "import socket, sys; s = socket.socket(); s.settimeout(0.5); sys.exit(s.connect_ex(('127.0.0.1', $WEB_PORT)) == 0)"; }
+check "nothing else listens on the web project's port ($WEB_PORT)" port_free
 check "a Manager says the project serves pages, started on a port" test "$(api "${PUT_JSON[@]}" "$API/v1/companies/$WCID/stack_profile" -d "{\"profile\": {\"start\": \"python3 -m http.server \$PORT --bind 127.0.0.1\", \"port\": $WEB_PORT, \"web\": true}}" | json "d['overrides']['web']")" = True
 WSPEC=$(api "$API/v1/specifications/$SPEC_ID?company_id=$CID" | json "json.dumps({'company_id': $WCID, **{k: d[k] for k in ('title', 'summary', 'requirements', 'quality', 'constraints')}})" | api -X POST "$API/v1/specifications" -H 'Content-Type: application/json' -d @- | json "d.get('id', '')")
 check "its specification is approved" test "$(api -X POST "$API/v1/specifications/$WSPEC/approve" | json "d['status']")" = approved
