@@ -28,7 +28,7 @@ from collections.abc import Callable
 from typing import Any
 
 from services.contracts import roles as role_catalogue
-from services.planning.project_docs import texts
+from services.planning.project_docs import texts, wstg_status
 from services.planning.project_docs.layout import DOMAINS, PMBOK, build, tr_of
 from services.planning.project_docs.refs import Sources, digest, ref
 from services.planning.project_docs.sanitize import md_inline
@@ -230,6 +230,43 @@ def risk_on_every_delivery(snapshot: dict, src: Sources, tr: Tr) -> Result:
     )
 
 
+def security_tests_run(snapshot: dict, src: Sources, tr: Tr) -> Result:
+    """Measured: the threshold is the specification's security target (STD-PO-1)."""
+    rows = [r for r in wstg_status.rows(snapshot) if r["applicable"]]
+    if not rows:
+        return NOT_COMPUTABLE, tr("check.security_none"), ""
+    count = wstg_status.counts(rows)
+    observed = [
+        r["evidence"]
+        for r in rows
+        if r["evidence"] and r["evidence"]["kind"] == "verification"
+    ]
+    marks = " ".join(
+        dict.fromkeys(
+            src.cite(
+                ref(
+                    "verification",
+                    e.get("verification_id"),
+                    sha256=e.get("artifact_sha256"),
+                    label=tr("label_run", id=e.get("run_id")),
+                )
+            )
+            for e in observed[:MAX_MARKS]
+        )
+    )
+    return (
+        MEASURED,
+        tr(
+            "check.security_obs",
+            passing=count[wstg_status.OBSERVED_PASS],
+            applicable=len(rows),
+            failing=count[wstg_status.OBSERVED_FAIL],
+            open=count[wstg_status.NOT_RUN] + count[wstg_status.NEEDS_MANUAL],
+        ),
+        marks,
+    )
+
+
 def _person(_snapshot: dict, _src: Sources, tr: Tr) -> Result:
     return PERSON, tr("check.person_obs"), ""
 
@@ -245,9 +282,12 @@ CHECKS: dict[str, list[tuple[str, CheckFn]]] = {
     "Finance": [("budget", _person)],
     "Stakeholders": [("people", people_recorded), ("external", _person)],
     "Resources": [("team", work_to_hired_roles)],
-    "Risk": [("risk", risk_on_every_delivery)],
+    "Risk": [("risk", risk_on_every_delivery), ("security", security_tests_run)],
 }
 CHECK_INPUTS = (
+    "stack",
+    "wstg_observations",
+    "wstg_reviews",
     "specification",
     "architecture",
     "sprints",

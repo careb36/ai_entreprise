@@ -11,7 +11,9 @@ issue log, risk register and change log read), ``verifications`` (the
 Verifier's verdict and risk tier per delivery), ``history`` (every version of
 the specifications and architectures), ``roles``, ``members``,
 ``retrospectives``, ``procedures``, ``integrations`` (with the commit each
-task was merged at). Each list is bounded (``LIMIT``), newest records kept.
+task was merged at), ``wstg_observations`` (the WSTG items the Verifier's
+checks observed) and ``wstg_reviews`` (a person's recorded reviews, without
+the reviewer's name). Each list is bounded (``LIMIT``), newest records kept.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from models import (
     SprintIntegration,
     TaskEvent,
     Verification,
+    WstgReview,
 )
 from sqlalchemy import and_, func, or_
 from sqlmodel import Session, select
@@ -42,6 +45,7 @@ from sqlmodel import Session, select
 from services.contracts import roles as role_catalogue
 from services.planning.project_docs import texts
 from services.planning.project_docs.refs import digest
+from services.platform import wstg_catalogue
 
 LIMIT = 200
 EVENT_KINDS = ("blocked", "escalated", "decided", "risk_hold", "carried_over")
@@ -415,6 +419,75 @@ def _integrations(session: Session, company_id: int) -> list[dict[str, Any]]:
     ]
 
 
+def _wstg_observations(session: Session, company_id: int) -> list[dict[str, Any]]:
+    """The WSTG items the Verifier's checks observed (the security probe, #540,
+    and tests named after a WSTG test, ``evidence/wstg_tests.py``), per
+    verification, with the run's artifact digest: what the checklist cites."""
+    rows = session.exec(
+        select(Verification, AgentRun.artifact_digest)
+        .join(AgentRun, AgentRun.id == Verification.agent_run_id)
+        .where(Verification.company_id == company_id)
+        .order_by(Verification.id.desc())
+        .limit(LIMIT)
+    ).all()
+    out = []
+    for verification, artifact_digest in sorted(rows, key=lambda r: r[0].id):
+        for check in verification.checks or []:
+            if not isinstance(check, dict) or not isinstance(check.get("items"), list):
+                continue
+            items = [
+                {
+                    "id": wstg_catalogue.versioned(str(i.get("id"))),
+                    "status": str(i.get("status") or ""),
+                    "observation": str(i.get("observation") or "")[:240],
+                }
+                for i in check["items"]
+                if isinstance(i, dict) and wstg_catalogue.versioned(str(i.get("id")))
+            ]
+            if not items:
+                continue
+            tool = check.get("tool") or check.get("name")
+            if check.get("wstg_commit"):
+                tool = f"{tool} (WSTG {str(check['wstg_commit'])[:7]})"
+            out.append(
+                {
+                    "verification_id": verification.id,
+                    "run_id": verification.agent_run_id,
+                    "check": str(check.get("name") or ""),
+                    "tool": str(tool or "")[:160],
+                    "observed_by": str(check.get("observed_by") or ""),
+                    "artifact_sha256": artifact_digest,
+                    "observed_at": _iso(verification.observed_at),
+                    "items": items,
+                }
+            )
+    return out
+
+
+def _wstg_reviews(session: Session, company_id: int) -> list[dict[str, Any]]:
+    """The people's recorded reviews of WSTG tests; the reviewer's name is left out."""
+    rows = session.exec(
+        select(WstgReview)
+        .where(WstgReview.company_id == company_id)
+        .order_by(WstgReview.id.desc())
+        .limit(LIMIT)
+    ).all()
+    return [
+        {
+            "id": r.id,
+            "wstg_id": r.wstg_id,
+            "result": r.result,
+            "reviewed_on": r.reviewed_on,
+            "artifact": (r.artifact or "")[:TEXT_LIMIT],
+            "note": (r.note or "")[:TEXT_LIMIT],
+            "reviewer_role": r.reviewer_role,
+            "created_at": _iso(r.created_at),
+            "record_sha256": r.record_sha256,
+        }
+        for r in sorted(rows, key=lambda r: r.id)
+    ]
+
+
 def snapshot(session: Session, company: Company) -> dict[str, Any]:
     """Everything a pack reads about *company*, as plain data."""
     spec = current_specification(session, company.id)
@@ -434,4 +507,6 @@ def snapshot(session: Session, company: Company) -> dict[str, Any]:
         "retrospectives": _retrospectives(session, company.id),
         "procedures": _procedures(session, company.id),
         "integrations": _integrations(session, company.id),
+        "wstg_observations": _wstg_observations(session, company.id),
+        "wstg_reviews": _wstg_reviews(session, company.id),
     }

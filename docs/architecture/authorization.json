@@ -71,6 +71,9 @@
     "DELETE /v1/sprints/{sprint_id}": {
       "access": "Owner"
     },
+    "DELETE /v1/views/{view_id}": {
+      "access": "Viewer"
+    },
     "GET /health": {
       "access": "public",
       "why": "Liveness for load balancers and the operator."
@@ -230,6 +233,12 @@
     "GET /v1/companies/{company_id}/sandbox": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/security/wstg": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/security/wstg/reviews": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/sso": {
       "access": "Owner"
     },
@@ -247,6 +256,9 @@
     },
     "GET /v1/companies/{company_id}/usage.csv": {
       "access": "Manager"
+    },
+    "GET /v1/companies/{company_id}/views": {
+      "access": "Viewer"
     },
     "GET /v1/companies/{company_id}/webhook": {
       "access": "Viewer"
@@ -375,6 +387,9 @@
       "access": "authenticated",
       "why": "The caller's own ticket; any for a support admin."
     },
+    "GET /v1/tasks": {
+      "access": "Viewer"
+    },
     "GET /v1/tasks/{task_id}/cost": {
       "access": "Viewer"
     },
@@ -382,6 +397,12 @@
       "access": "Viewer"
     },
     "GET /v1/tasks/{task_id}/relations": {
+      "access": "Viewer"
+    },
+    "GET /v1/views/{view_id}": {
+      "access": "Viewer"
+    },
+    "GET /v1/views/{view_id}/preferences": {
       "access": "Viewer"
     },
     "GET /v1/workspace/browse": {
@@ -558,11 +579,27 @@
     "POST /v1/companies/{company_id}/sandbox/cache/reset": {
       "access": "Manager"
     },
+    "POST /v1/companies/{company_id}/security/wstg/reviews": {
+      "access": "Manager",
+      "body": {
+        "wstg_id": "ATHN-02",
+        "result": "pass",
+        "reviewer_name": "Authz reviewer",
+        "reviewed_on": "2026-11-10",
+        "artifact": "Authz pen-test report"
+      }
+    },
     "POST /v1/companies/{company_id}/sso/test": {
       "access": "Owner"
     },
     "POST /v1/companies/{company_id}/teams": {
       "access": "Owner"
+    },
+    "POST /v1/companies/{company_id}/views": {
+      "access": "Viewer",
+      "body": {
+        "name": "Authz view"
+      }
     },
     "POST /v1/companies/{company_id}/webhook/ping": {
       "access": "Manager"
@@ -780,6 +817,12 @@
     },
     "PUT /v1/specifications/{spec_id}": {
       "access": "Manager"
+    },
+    "PUT /v1/views/{view_id}": {
+      "access": "Viewer"
+    },
+    "PUT /v1/views/{view_id}/preferences": {
+      "access": "Viewer"
     }
   }
 }

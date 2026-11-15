@@ -2894,5 +2894,83 @@
     "lintDone_one": "{{count}} página marcada como desactualizada.",
     "lintDone_other": "{{count}} páginas marcadas como desactualizadas.",
     "version": "v{{number}}"
+  },
+  "taskViews": {
+    "filters": "Filtros",
+    "join": "Cumplir",
+    "joinAll": "todas las condiciones (Y)",
+    "joinAny": "alguna condición (O)",
+    "fieldLabel": "Campo de la condición {{n}}",
+    "operatorLabel": "Operador para {{field}}",
+    "valueLabel": "Valor para {{field}}",
+    "field": {
+      "status": "Estado",
+      "verdict": "Veredicto",
+      "risk_tier": "Nivel de riesgo",
+      "producer": "Productor",
+      "assignee_role": "Rol asignado",
+      "rework_count": "Retrabajos",
+      "waits_for_person": "Espera a una persona",
+      "covers": "Cubre",
+      "sprint_id": "Sprint",
+      "title": "Título",
+      "updated_at": "Actualizada"
+    },
+    "op": {
+      "eq": "es",
+      "ne": "no es",
+      "in": "es uno de",
+      "gte": "al menos",
+      "lte": "como mucho"
+    },
+    "value": {
+      "todo": "Por hacer",
+      "in_progress": "En curso",
+      "in_review": "En revisión",
+      "done": "Hecha",
+      "blocked": "Bloqueada",
+      "verified": "Verificada",
+      "refuted": "Refutada",
+      "unverifiable": "No verificable",
+      "none": "Ninguno",
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "true": "Sí",
+      "false": "No"
+    },
+    "listPlaceholder": "Valores separados por comas",
+    "placeholder": {
+      "producer": "le-fabrique-task-worker",
+      "assignee_role": "Developer",
+      "rework_count": "2",
+      "covers": "REQ-3",
+      "sprint_id": "Id del sprint"
+    },
+    "removeCondition": "Quitar la condición {{n}}",
+    "addCondition": "Añadir una condición",
+    "noValue": "—",
+    "noTasks": "Ninguna tarea cumple estos filtros.",
+    "noVerdict": "Sin verificar",
+    "listCaption": "Tareas que cumplen los filtros",
+    "layout": "Disposición",
+    "layoutBoard": "Tablero",
+    "layoutList": "Lista",
+    "savedView": "Vista guardada",
+    "noView": "Sin vista guardada",
+    "access": {
+      "private": "Solo yo",
+      "company": "Empresa"
+    },
+    "accessLabel": "Compartida con",
+    "locked": "bloqueada",
+    "count_one": "{{count}} tarea cumple",
+    "count_other": "{{count}} tareas cumplen",
+    "invalidView": "Esta vista filtra por un campo que ya no está permitido, así que no se aplica.",
+    "nestedView": "Esta vista anida grupos de condiciones; se aplica tal como se guardó.",
+    "viewName": "Nombre de la vista",
+    "save": "Guardar vista",
+    "saved": "Vista «{{name}}» guardada.",
+    "loading": "Cargando tareas…"
   }
 }

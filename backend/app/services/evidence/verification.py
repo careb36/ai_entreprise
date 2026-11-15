@@ -22,6 +22,7 @@ from services.evidence import (
     security_probe,
     sources,
     standards,
+    wstg_tests,
 )
 from services.evidence.console_run import check_console_run
 from services.platform.agent_service import AgentService
@@ -425,6 +426,11 @@ def verify_agent_run(
     probe_check = security_probe.check(evidence)
     if probe_check:
         checks.append(probe_check)
+    # Tests named after an OWASP WSTG test, as the daemon ran them: the
+    # project's security test plan reads the items (issue #539).
+    wstg_check = wstg_tests.check(evidence)
+    if wstg_check:
+        checks.append(wstg_check)
     if evidence and evidence.get("acceptance"):
         # The acceptance tests per criterion (``services.evidence.acceptance``): what the
         # observed run said of this task's criteria, and that an implementation

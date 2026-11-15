@@ -8,6 +8,7 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
 from models import Company
 from services.planning import adr_docs, arch_author, arch_check, spec_check
 
@@ -239,3 +240,22 @@ def test_the_fake_models_plan_covers_every_criterion_of_the_issue():
     assert set(titles) <= set(fake_llm.ACCEPTANCE_MODULES)
     slugs = {fake_llm._slug(t["title"]) for t in fake_llm.SELF_HOST_PLAN["tasks"]}
     assert {fake_llm.ACCEPTANCE_MODULES[t] for t in titles} == slugs
+
+
+def test_a_hung_git_command_fails_naming_the_command(tmp_path, monkeypatch):
+    # PR #575: step 9d hung for 18 minutes with nothing to diagnose; a local git
+    # call must now give up after GIT_TIMEOUT_SECONDS and say which one hung.
+    seen = {}
+
+    def hung(cmd, **kwargs):
+        seen.update(kwargs)
+        raise self_host.subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+
+    monkeypatch.setattr(self_host.subprocess, "run", hung)
+    with pytest.raises(self_host.GitTimeoutError) as raised:
+        self_host._git(tmp_path, "ls-files", "-z")
+    assert seen["timeout"] == self_host.GIT_TIMEOUT_SECONDS
+    message = str(raised.value)
+    assert "git ls-files -z" in message
+    assert str(self_host.GIT_TIMEOUT_SECONDS) in message
+    assert "user.email" not in message  # the identity flags are not the command

@@ -84,7 +84,11 @@ the LangGraph graph is only an optional kickoff conversation.
    is not is recorded in `acceptance.not_on_branch` and neither restored nor
    run, and the sprint's integration runs the whole suite (#329
    retrospective). `services/evidence/criteria_tests.py`
-   holds the reading of the runner's output and the two checks. A criterion
+   holds the reading of the runner's output and the two checks. The same
+   output is read for tests named after an OWASP WSTG test
+   (`test_wstg_athz_02_…`, `services/evidence/wstg_tests.py`, issue #539):
+   the Verifier's `wstg_tests` check records them as items the project's
+   WSTG checklist reads, and never changes the verdict. A criterion
    is `verified` only from the most recent verification across the tasks
    covering it, and only when that run's whole verdict is verified.
    The PO's and the Architect's calls to the proxy (`spec_author`,

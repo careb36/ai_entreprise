@@ -89,6 +89,8 @@ def serialize(pack: DocumentationPack, lint: dict[str, Any]) -> dict[str, Any]:
                 "persons": d.get("persons") or [],
                 "domain": d.get("domain") or "",
                 "focus_area": d.get("focus_area") or "",
+                # CC BY-SA 4.0 for the WSTG checklist and report (issue #539).
+                "licence": d.get("licence"),
                 "input_sha256": d.get("input_sha256"),
             }
             for d in pack.documents or []

@@ -6,6 +6,7 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 
 **`frontend/src/`** — React 18 app. Key views:
 - `KanbanBoard` — sprint task tracking with drag-and-drop (`@dnd-kit`)
+- `SprintTaskViews` — the sprint's Board tab (issue #535, [design](../design/SAVED_VIEWS.md)): the Board and List layouts, the filter builder (`TaskFilterBuilder`, one labelled row per condition, all or any) and the saved views; with no filter on the Board layout it is the `KanbanBoard`, otherwise the server evaluates the filter, limited to the sprint, and `TaskListView` shows the tasks read-only, as a table (grouped when the view says so) or as columns by status (`hooks/useTaskViews.ts`, `lib/taskFilters.ts`, `services/api/taskViews.ts`)
 - `GlassRoom` — real-time agent activity monitor via SSE
 - `SprintWorkspace` — sprint creation and management
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat

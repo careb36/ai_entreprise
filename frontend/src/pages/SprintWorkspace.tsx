@@ -16,7 +16,7 @@ import { MonitorPlay, Radio } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { useAgentStore } from '../store/agentStore'
 import GlassRoom from '../components/GlassRoom'
-import KanbanBoard from '../components/KanbanBoard'
+import { SprintTaskViews } from '../components/SprintTaskViews'
 import { AnalyticsDashboard } from '../components/AnalyticsDashboard'
 import { Conversation } from '../components/Conversation'
 import { BoardNotes } from '../components/BoardNotes'
@@ -114,7 +114,7 @@ function LivePanel({ sprintId }: { sprintId: number }) {
   )
 }
 
-function BoardPanel({ sprintId }: { sprintId: number }) {
+function BoardPanel({ sprintId, companyId }: { sprintId: number; companyId: number | null }) {
   const { t } = useTranslation()
   return (
     <div className="card flex min-h-[34rem] flex-col overflow-hidden">
@@ -122,7 +122,7 @@ function BoardPanel({ sprintId }: { sprintId: number }) {
         {t('workspace.boardOpsHint', { defaultValue: 'Drag tasks to change status or reassign' })}
       </p>
       <div className="min-h-0 flex-1">
-        <KanbanBoard sprintId={String(sprintId)} />
+        <SprintTaskViews sprintId={sprintId} companyId={companyId} />
       </div>
     </div>
   )
@@ -225,7 +225,7 @@ export const SprintWorkspace: React.FC = () => {
           {!board ? (
             <div role="status" className="py-8 text-sm text-gray-400">{t('common.loading', { defaultValue: 'Loading...' })}</div>
           ) : tab === 'board' ? (
-            <BoardPanel sprintId={sprintId} />
+            <BoardPanel sprintId={sprintId} companyId={board?.sprint.company_id ?? null} />
           ) : tab === 'live' ? (
             <LivePanel sprintId={sprintId} />
           ) : tab === 'conversation' ? (

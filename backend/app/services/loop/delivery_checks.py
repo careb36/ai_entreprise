@@ -46,7 +46,7 @@ from config import settings
 from sqlalchemy.engine import Engine
 
 from services.contracts.verdicts import VERDICT_REFUTED
-from services.evidence import app_check, browser_smoke, criteria_tests
+from services.evidence import app_check, browser_smoke, criteria_tests, wstg_tests
 from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
@@ -142,9 +142,10 @@ async def _run_tests(
         nats_client, full_log, result
     )
     reply = result if isinstance(result, dict) else {}
-    criteria_tests.record_results(
-        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
-    )
+    output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    criteria_tests.record_results(evidence, output)
+    # Tests named after a WSTG test (``test_wstg_athz_02_…``, issue #539).
+    wstg_tests.record(evidence, output)
 
 
 def _earlier_failure(evidence: dict[str, Any]) -> str | None:

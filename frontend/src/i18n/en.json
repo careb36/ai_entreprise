@@ -2894,5 +2894,83 @@
     "lintDone_one": "{{count}} page marked stale.",
     "lintDone_other": "{{count}} pages marked stale.",
     "version": "v{{number}}"
+  },
+  "taskViews": {
+    "filters": "Filters",
+    "join": "Match",
+    "joinAll": "all conditions (AND)",
+    "joinAny": "any condition (OR)",
+    "fieldLabel": "Field of condition {{n}}",
+    "operatorLabel": "Operator for {{field}}",
+    "valueLabel": "Value for {{field}}",
+    "field": {
+      "status": "Status",
+      "verdict": "Verdict",
+      "risk_tier": "Risk tier",
+      "producer": "Producer",
+      "assignee_role": "Assignee role",
+      "rework_count": "Rework count",
+      "waits_for_person": "Waits for a person",
+      "covers": "Covers",
+      "sprint_id": "Sprint",
+      "title": "Title",
+      "updated_at": "Updated"
+    },
+    "op": {
+      "eq": "is",
+      "ne": "is not",
+      "in": "is one of",
+      "gte": "at least",
+      "lte": "at most"
+    },
+    "value": {
+      "todo": "To do",
+      "in_progress": "In progress",
+      "in_review": "In review",
+      "done": "Done",
+      "blocked": "Blocked",
+      "verified": "Verified",
+      "refuted": "Refuted",
+      "unverifiable": "Unverifiable",
+      "none": "None",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "true": "Yes",
+      "false": "No"
+    },
+    "listPlaceholder": "Values separated by commas",
+    "placeholder": {
+      "producer": "le-fabrique-task-worker",
+      "assignee_role": "Developer",
+      "rework_count": "2",
+      "covers": "REQ-3",
+      "sprint_id": "Sprint id"
+    },
+    "removeCondition": "Remove condition {{n}}",
+    "addCondition": "Add a condition",
+    "noValue": "—",
+    "noTasks": "No task matches these filters.",
+    "noVerdict": "Not verified",
+    "listCaption": "Tasks that match the filters",
+    "layout": "Layout",
+    "layoutBoard": "Board",
+    "layoutList": "List",
+    "savedView": "Saved view",
+    "noView": "No saved view",
+    "access": {
+      "private": "Only me",
+      "company": "Company"
+    },
+    "accessLabel": "Shared with",
+    "locked": "locked",
+    "count_one": "{{count}} task matches",
+    "count_other": "{{count}} tasks match",
+    "invalidView": "This view filters on a field that is no longer allowed, so it is not applied.",
+    "nestedView": "This view nests groups of conditions; it is applied as saved.",
+    "viewName": "View name",
+    "save": "Save view",
+    "saved": "View \"{{name}}\" saved.",
+    "loading": "Loading tasks…"
   }
 }

@@ -16,6 +16,7 @@ import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
+import { taskViewEndpoints } from './api/taskViews'
 import { taskRelationEndpoints } from './api/taskRelations'
 import { teamEndpoints } from './api/teams'
 import { usageEndpoints } from './api/usage'
@@ -40,6 +41,7 @@ export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
+export * from './api/taskViews'
 export * from './api/taskRelations'
 export * from './api/teams'
 export * from './api/usage'
@@ -61,6 +63,7 @@ const endpoints = {
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
   ...boardNoteEndpoints(http),
+  ...taskViewEndpoints(http),
   ...progressEndpoints(http),
   ...taskRelationEndpoints(http),
   ...evidenceEndpoints(http),
