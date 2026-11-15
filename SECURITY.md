@@ -183,10 +183,18 @@ OpenID Connect provider (single sign-on, below).
   `require_authenticated`). `AUTH_REQUIRED=false` is for a local demo only:
   a token, when sent, is still resolved, but none is required.
 - **Roles per company**, ranked **Owner > Manager > Viewer**
-  (`ROLE_RANK` in `backend/app/auth_policy.py`). Every company-scoped route
+  (`ROLE_RANK` in `backend/app/services/platform/teams.py`, re-exported by
+  `backend/app/auth_policy.py`). Every company-scoped route
   calls `require_company_role(session, user, company_id, minimum)`: a caller
-  who is not a member gets 403, a member below the minimum gets 403. An API
-  token carries its own company and role and is held to the same check.
+  who is not a member gets 403, a member below the minimum gets 403. The role
+  checked is the member's **effective role**: their own membership role raised
+  by the roles of the teams they belong to in that company
+  (`services/platform/teams.py`, `docs/design/TEAMS_AND_USAGE.md`). A team's
+  role is Viewer or Manager, never Owner; a team never makes anyone a member
+  and never reaches another company; teams are created, changed and joined
+  only by a signed-in human Owner (never an API token), and every change is
+  audited. An API token carries its own company and role and is held to the
+  same check; it is minted at most at its creator's effective role.
   Creating a company makes its creator the Owner; inviting a member requires
   Owner. Help-desk administrators are a separate, deployment-wide list
   (`SUPPORT_ADMIN_EMAILS`, `is_support_admin`).
@@ -212,6 +220,10 @@ fallback credential.
   decided at the route that starts or changes the work (Manager to start a
   sprint, Owner to delete one), and the agents' reach is bounded by the
   daemon's sandbox and command policy (§8.3), not by the caller's role.
+- An API token keeps the role it was minted with when its creator is later
+  demoted or leaves the team that made them a Manager, until it is revoked or
+  expires (at most 365 days); refusing such a token at use is planned
+  (`docs/design/TEAMS_AND_USAGE.md`, T5).
 - Service-to-service identity is **not mTLS**. The backend and the daemon
   each have their own NATS user, with TLS and optional client certificates
   (§8.6); the backend and the LLM proxy share `LLM_PROXY_INTERNAL_TOKEN`
