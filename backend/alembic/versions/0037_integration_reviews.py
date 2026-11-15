@@ -8,7 +8,7 @@ so nothing changes until an Owner asks for an approving review before a merge.
 
 Follows 0036 (segregation of duties, #543); renumbered at merge.
 
-Revision ID: 0099
+Revision ID: 0037
 Revises: 0036
 Create Date: 2026-11-15 23:00:00 UTC
 """
@@ -20,7 +20,7 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
+revision = "0037"
 down_revision = "0036"
 branch_labels = None
 depends_on = None
