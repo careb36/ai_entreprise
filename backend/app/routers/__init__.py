@@ -25,6 +25,7 @@ from routers.enterprise_analytics import router as enterprise_analytics_router
 from routers.events import router as events_router
 from routers.github import router as github_router
 from routers.inbox import router as inbox_router
+from routers.intake import router as intake_router
 from routers.integration import router as integration_router
 from routers.manager import router as manager_router
 from routers.mcp import router as mcp_router
@@ -71,6 +72,7 @@ __all__ = [
     "events_router",
     "github_router",
     "inbox_router",
+    "intake_router",
     "integration_router",
     "manager_router",
     "mcp_router",

@@ -43,6 +43,7 @@ MANAGER_AGENT = "manager-agent"
 MANAGER_ITEM = "manager-item"
 MANAGER_BRIEF = "manager-brief"
 SPRINT_INTEGRATION = "sprint-integration"
+INTAKE_WAKE = "intake-wake"
 
 _local_lock = threading.Lock()
 _local_held: set[int] = set()

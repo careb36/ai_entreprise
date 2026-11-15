@@ -5,7 +5,8 @@ Endpoints (``/v1/specifications``):
 - ``GET    /{id}``                    — one, with its check and coverage (Viewer).
 - ``POST   /``                        — a person writes a draft (Manager).
 - ``PUT    /{id}``                    — edit a draft; an approved one is revised (Manager).
-- ``POST   /draft``                   — the PO drafts, or revises, from a brief (Manager).
+- ``POST   /draft``                   — the PO drafts, or revises, from a brief (Manager);
+  a new draft's brief is kept in the intake queue, accepted and linked to it.
 - ``POST   /{id}/questions/{index}``  — answer one of the PO's questions (Manager).
 - ``POST   /{id}/approve``            — approve; refused while the check blocks (Manager).
 - ``POST   /{id}/revise``             — a new draft version of an approved one (Manager).
@@ -26,6 +27,7 @@ from pydantic import Field
 from schemas import RequestModel
 from services.planning import (
     document_approval,
+    intake_queue,
     spec_author,
     spec_check,
     spec_diff,
@@ -237,6 +239,13 @@ async def draft_specification(
     _apply(spec, content, spec_author.PO_ROLE)
     spec.sources = content.get("sources") or []
     session.add(spec)
+    if existing is None:
+        session.flush()
+        # The client's brief enters the intake queue accepted, linked to the
+        # draft it became (issue #532): the request keeps its outcome.
+        intake_queue.record_brief(
+            session, req.company_id, req.brief, spec, _actor(user)
+        )
     session.commit()
     session.refresh(spec)
     return serialize(spec, session)

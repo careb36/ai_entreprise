@@ -64,6 +64,7 @@ from models.company import (
 from models.documentation import DocumentationPack
 from models.event import TaskEvent
 from models.github import GitHubRepoBinding
+from models.intake import IntakeItem
 from models.integration import SprintIntegration
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
@@ -251,6 +252,7 @@ SQLModel.metadata.create_all(
         WikiPageVersion.__table__,
         WikiLink.__table__,
         WikiSettings.__table__,
+        IntakeItem.__table__,
         WstgReview.__table__,
     ],
 )

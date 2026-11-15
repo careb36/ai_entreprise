@@ -38,6 +38,7 @@ from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.board_note import SprintBoardNote
 from models.documentation import DocumentationPack
+from models.intake import IntakeItem
 from models.manager import ManagerDecision
 from models.mcp import McpServer
 from models.procedure import Procedure
@@ -136,6 +137,12 @@ def build_world(session) -> World:
             access="company",
             owner_user_id=users["Viewer"].id,
             owner_name=users["Viewer"].email,
+        ),
+    )
+    intake = _add(
+        session,
+        IntakeItem(
+            company_id=cid, source="brief", title="Authz request", submitted_by="Authz"
         ),
     )
     run = _add(
@@ -264,6 +271,8 @@ def build_world(session) -> World:
         "relation_id": relation.id,
         "view_id": view.id,
         "item_id": item.id,
+        "intake_id": intake.id,
+        "of_task_id": item.id,
         "backlog_item_id": item.id,
         "run_id": run.id,
         "agent_run_id": run.id,

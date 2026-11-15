@@ -16,6 +16,9 @@ vi.mock('../hooks/useQueries', () => ({
 vi.mock('./ClientRequestBox', () => ({
   ClientRequestBox: () => <p>request box</p>,
 }))
+vi.mock('./IntakeQueue', () => ({
+  IntakeQueue: ({ canManage }: { canManage: boolean }) => <p>intake queue {canManage ? 'manager' : 'viewer'}</p>,
+}))
 vi.mock('../services/manager', () => ({
   useClientBrief: () => ({ data: undefined }),
   useOverrideManagerDecision: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),

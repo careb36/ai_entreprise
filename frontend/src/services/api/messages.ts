@@ -91,6 +91,8 @@ export interface Inbox {
   blocked_tasks: InboxBlockedTask[]
   proposals: InboxProposal[]
   pending_runs: number
+  /** Requests waiting in the intake queue (issue #532); counted in `total`. */
+  intake_pending?: number
   total: number
 }
 
