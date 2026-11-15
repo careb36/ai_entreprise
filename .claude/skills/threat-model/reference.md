@@ -1,0 +1,121 @@
+# Trust boundaries and existing controls
+
+The standing trust boundaries of La Fabrique, for the `threat-model` skill.
+Name boundaries by these ids in a threat model; add a new id for a new one.
+Controls were read from `main` on 2026-11-15; check the file before relying on
+a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`.
+
+```
+ Browser ──B1── Backend (FastAPI) ──B2── NATS ──B2── Workspace daemon ──B3── User's disk
+                  │   │   │                                  │
+                  │   │   └──B6── GitHub / webhooks          └──B3── Sandbox (container | bwrap | host)
+                  │   └──B4── LLM proxy ──B4── Model providers
+                  └── Postgres / Neo4j (inside the backend's trust zone)
+ Agent and producer output enters at B5, wherever it is read.
+ CI on the self-hosted runner is B7.
+```
+
+## B1 — Browser ↔ backend
+
+- **Crosses:** REST and SSE from the React frontend; API tokens from external
+  callers.
+- **Threats to look for:** missing auth on a new route, cross-company reads,
+  role escalation, XSS from rendered model output, token theft, CSRF.
+- **Controls:** JWT (HS256, `JWT_SECRET_KEY`) resolved by
+  `backend/app/auth_deps.py`; `AUTH_REQUIRED` on by default; roles Owner >
+  Manager > Viewer and company scoping (`docs/contexts/platform.md`, Auth and
+  multi-tenancy); API tokens hashed with role and expiry
+  (`services/platform/api_tokens.py`); Glassroom SSE by five-minute ticket;
+  security headers (`backend/tests/test_security_headers.py`); bcrypt
+  (`backend/app/passwords.py`); `safeReturnPath()` for redirects
+  (`frontend/src/lib/returnPath.ts`).
+
+## B2 — Backend ↔ NATS ↔ daemon
+
+- **Crosses:** requests the backend sends (`workspace.generate`,
+  `workspace.execute`, `workspace.hash`, …), the daemon's replies on
+  `_INBOX.backend.>`, deliveries on JetStream.
+- **Threats:** anyone on the bus commanding the daemon; the daemon answering
+  itself; replayed or forged replies; secrets on the wire.
+- **Controls:** one NATS user per component with fixed subjects, no
+  `allow_responses` for the daemon (`scripts/nats_config.py`,
+  `nats/nats-server.conf`, `--check`, `backend/tests/test_nats_security.py`);
+  passwords or `.creds`/NKey from the environment; TLS that refuses to fall
+  back (SECURITY.md §8.6; `docs/OPERATIONS.md`, Securing the bus); loopback
+  bind by default with a startup warning otherwise.
+
+## B3 — Daemon ↔ user's disk and sandbox
+
+- **Crosses:** files the daemon writes and reads, commands it runs, agent code
+  executed for tests.
+- **Threats:** path traversal or symlinks out of the project; reading secret
+  files; arbitrary commands; agent code reaching the network, the user's home
+  or the host; resource exhaustion.
+- **Controls:** sandbox modes `container` / `bwrap` / `host`, the applied mode
+  reported and recorded by the Verifier, `FABRIQUE_SANDBOX_REQUIRED`
+  (`vscode-daemon/sandbox.py`, `sandbox_image.py`,
+  `services/workspace/sandbox.py`; `docs/threat_model.md`, sandbox table);
+  command policy with a machine-side deny list the request cannot relax
+  (`vscode-daemon/command_policy.py`); read tools that refuse secret files and
+  symlinks out of the project and redact secret-looking lines
+  (`docs/contexts/tools.md`); deliveries in a Git worktree, never the person's
+  checkout (`vscode-daemon/git_workspace.py`); sha256 read back from disk.
+- **Known gap:** `host` mode runs with the user's privileges; SECURITY.md §8.3
+  predates the sandbox and command policy and needs updating.
+
+## B4 — Backend ↔ LLM proxy ↔ providers
+
+- **Crosses:** prompts (which can include repository content), company
+  provider keys, model responses.
+- **Threats:** a company's key used by another; keys in logs; prompt content
+  leaking secrets to a provider; cost exhaustion.
+- **Controls:** company connections only with `LLM_PROXY_INTERNAL_TOKEN`
+  compared in constant time, no fallback to deployment keys
+  (`llm-proxy/connections.py`); provider keys encrypted with
+  `FERNET_SECRET_KEY`; budgets per agent; the proxy is the only place that sees
+  deployment keys (`.github/CODEOWNERS` header).
+
+## B5 — Agent and producer output as untrusted input
+
+- **Crosses:** everything a model or a third-party producer returns: code,
+  file lists, test reports, digests, tool calls, research requests.
+- **Threats:** prompt injection steering tools; an agent's claim stored as an
+  observation; a producer-supplied hash or exit status trusted; model output
+  executed or rendered.
+- **Controls:** claims and observations in separate fields, the Verifier
+  judging from observations, `unverifiable` as a verdict, no model deciding a
+  claim (`docs/POSITIONING.md`, rules 1–7; `docs/contexts/evidence.md`);
+  research fetches only from an allowlist, without credentials
+  (`services/tools/research_*`); tool loop bounded in rounds; SECURITY.md §8.
+
+## B6 — GitHub and webhooks
+
+- **Crosses:** incoming GitHub webhooks; outgoing notification webhooks;
+  publishing branches and pull requests with the person's credentials.
+- **Threats:** forged webhooks; replay; SSRF through a webhook URL; leaking
+  the signing secret; publishing to the wrong repository.
+- **Controls:** incoming webhook HMAC checked with `hmac.compare_digest`
+  (`services/producers/github_adapter.py`, `backend/tests/test_webhooks.py`);
+  outgoing deliveries signed `X-Fabrique-Signature-256` with retries and an
+  outbox (`docs/contexts/integrations.md`); publish requires Manager
+  (`docs/contexts/release.md`).
+
+## B7 — CI and the self-hosted runner
+
+- **Crosses:** workflow code from pull requests, the repository token, actions
+  and downloaded tools.
+- **Threats:** a malicious PR or action running on a non-ephemeral runner that
+  also hosts the daemon; token over-scope; secrets in logs; unpinned actions.
+- **Controls:** `permissions:` declared per workflow; CODEOWNERS on
+  `.github/`; actionlint; Trivy pinned by sha; tools downloaded with checksum
+  (`security-baseline.yml`); SLSA provenance on release.
+- **Known gaps:** runner not ephemeral; most actions pinned by tag; required
+  Code Owner review pending (#182).
+
+## Data stores (inside the backend's zone)
+
+Postgres (with pgvector) and Neo4j hold company data and the audit chain.
+Integrity of the evidence: HMAC-SHA256 per row and a per-company hash chain
+(`backend/app/audit_signing.py`, `backend/app/audit_chain.py`,
+`AUDIT_SIGNING_KEY`, `GET /v1/audit/chain`). Retention by the janitor
+(`backend/janitor/`); backups in `docs/OPERATIONS.md`.
