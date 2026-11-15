@@ -7,6 +7,12 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Modules:** `architect`, `procedures`, `retrospective`, `scrum_master`, `wiki_compile`, `wiki_sources`, `wiki_store`.
 
+## Components
+
+### The gap between claimed and verified as a procedure's number
+
+**`backend/app/services/learning/procedures.py`** (issue #531) — `board_metrics` adds `claim_gap_rate`: the tasks claimed delivered and not verified over the tasks of the sprints measured, from each sprint's first sealed progress snapshot or, without one, its task events (`services/tasks/progress_snapshot.claim_gap`, [tasks](tasks.md)). It is recorded in a procedure's baseline at adoption and in its outcome; `evaluate` reverts a procedure under which it grew by more than `GAP_TOLERANCE` (0.10) besides the rework and blocked tolerances, and a baseline recorded before #531 (without the key) is not compared on it. `describe_outcome` and the proposal prompt's history name it. The agents' claims are never the measure: the gap counts a task as verified only by the Verifier's verdict.
+
 ## Described elsewhere
 
 - `procedures` (measured, kept or reverted, proposed): step 8 of [the sprint loop](../SPRINT_LOOP.md). The calibration of the difficulty estimate against observed effort (issue #534) is in [models](models.md); it measures the estimator, not a procedure, so it is not one of the procedures' metrics.
