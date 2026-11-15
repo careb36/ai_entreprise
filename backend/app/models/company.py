@@ -49,6 +49,9 @@ class Company(SQLModel, table=True):
     # The company's overrides of the detected stack profile
     # (services/stack_profiles.py): install, test, lint, start, e2e, port,
     # probe_path; an empty command turns that step off. A Manager writes it.
+    # ``folders`` and ``every_delivery`` (services/workspace/stack_roots.py):
+    # a profile per folder and the commands every delivery runs; a row
+    # without them is the root's alone, as before.
     stack_profile: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # The dependency manifests as the last successful install saw them, per
     # folder ({root: {path: sha256}}, workspace/dependency_install.py): written only
