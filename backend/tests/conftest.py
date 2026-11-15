@@ -37,6 +37,7 @@ from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
+from models.board_note import SprintBoardNote
 
 # ---------------------------------------------------------------------------
 # Import the SQLModel table models so their metadata is registered before
@@ -193,6 +194,7 @@ SQLModel.metadata.create_all(
         SsoConnection.__table__,
         SsoIdentity.__table__,
         SsoFlowState.__table__,
+        SprintBoardNote.__table__,
     ],
 )
 

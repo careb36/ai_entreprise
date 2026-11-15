@@ -28,6 +28,11 @@ vi.mock('../components/Conversation', () => ({
     <div>Conversation of company {companyId} for sprint {sprintId}{live ? ' (live)' : ''}</div>
   ),
 }))
+vi.mock('../components/BoardNotes', () => ({
+  BoardNotes: ({ sprintId, canManage }: { sprintId: number; canManage: boolean }) => (
+    <div>Board notes for sprint {sprintId}{canManage ? ' (manage)' : ''}</div>
+  ),
+}))
 vi.mock('./Dashboard', () => ({
   default: ({ sprintId }: { sprintId: number }) => <div>Overview for sprint {sprintId}</div>,
 }))
@@ -172,6 +177,7 @@ describe('workspace sprint validation', () => {
     ['board', 'Board', 'Board for sprint 8'],
     ['live', 'Live', 'Stream for sprint 8'],
     ['conversation', 'Conversation', /Conversation of company \d+ for sprint 8/],
+    ['notes', 'Board notes', 'Board notes for sprint 8'],
     ['analytics', 'Analytics', 'Analytics for sprint 8'],
     ['ANALYTICS', 'Analytics', 'Analytics for sprint 8'],
   ] as [string, string, string | RegExp][])('selects the %s tab from the URL', async (tab, label, content) => {
@@ -179,7 +185,7 @@ describe('workspace sprint validation', () => {
     setup('8', tab)
     expect(await screen.findByText(content)).toBeInTheDocument()
     const tabs = screen.getByRole('tablist', { name: 'Sprint views' })
-    expect(within(tabs).getAllByRole('tab').map(item => item.textContent)).toEqual(['Overview', 'Board', 'Live', 'Conversation', 'Analytics'])
+    expect(within(tabs).getAllByRole('tab').map(item => item.textContent)).toEqual(['Overview', 'Board', 'Live', 'Conversation', 'Board notes', 'Analytics'])
     const selected = within(tabs).getAllByRole('tab').filter(item => item.getAttribute('aria-selected') === 'true')
     expect(selected).toHaveLength(1)
     expect(selected[0]).toHaveTextContent(label)

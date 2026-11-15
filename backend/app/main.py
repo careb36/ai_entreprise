@@ -26,6 +26,7 @@ from routers import (
     architectures_router,
     auth_router,
     board_moves_router,
+    board_notes_router,
     console_producers_router,
     costs_router,
     enterprise_agents_router,
@@ -135,6 +136,7 @@ app.include_router(inbox_router)
 app.include_router(integration_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
+app.include_router(board_notes_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
 app.include_router(run_secrets_router)
