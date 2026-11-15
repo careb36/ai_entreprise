@@ -171,6 +171,7 @@ Use the `useTranslation` hook from i18next; never hardcode English strings in JS
 - [`README.md`](README.md) — Project overview, architecture, setup, and API reference
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — Development standards and workflows
 - [`SECURITY.md`](SECURITY.md) — Security policy and vulnerability reporting
+- [`.claude/skills/`](.claude/skills/README.md) — Claude Code skills based on Microsoft's SDL practices: `sdl-review` (a change before its PR), `threat-model` (a new design), `sdl-program` (the quarterly or pre-release security review)
 - [`docs/POSITIONING.md`](docs/POSITIONING.md) — Project direction and design rules
 - [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — Design with the owner's decisions (not built yet): workflows per board column, task kind or sprint close, as typed-step DAGs whose invariants keep the Verifier, the holds and the history checker; custom columns as views over the five statuses; Owner-only activation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — The backend's contexts and their dependency rule, rendered from `docs/architecture/architecture.json`; ADRs in `docs/adr/`

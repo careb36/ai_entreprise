@@ -43,7 +43,9 @@ gcp-*.json
 google-credentials*.json
 
 # --- AI assistant tool state (AGENTS.md / CLAUDE.md are the versioned instructions) ---
-.claude/
+# Claude Code's local state stays out; the project's skills are versioned.
+.claude/*
+!.claude/skills/
 .cursor/
 .windsurf/
 .continue/
