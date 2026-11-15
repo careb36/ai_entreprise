@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Security skills for Claude Code, based on Microsoft's SDL practices.** `.claude/skills/` holds `sdl-review` (a diff, PR or plan checked against SDL practices 2 to 9, with findings by severity, file:line, practice and fix), `threat-model` (a STRIDE threat model of a new design over this system's trust boundaries) and `sdl-program` (the quarterly or pre-release review of `SECURITY.md`, metrics, the incident plan and training); `sdl-review/reference.md` maps each practice to what the repository has and lacks. `.gitignore` now versions `.claude/skills/` while keeping the rest of `.claude/` out.
 * **Versioned releases.** A pushed `vX.Y.Z` tag on `main` becomes a GitHub Release whose notes are this file's section for that version (a pre-release `vX.Y.Z-rc.N` shows `[Unreleased]`), and the five images are published to GHCR from the same tag; how to cut one is in `docs/OPERATIONS.md`, Releasing (#512).
 * **The Verifier's grounded check.** A delivery that names a package no registry has, an exact version that does not exist or a project import that names no file is refuted; a call to a project function with arguments its signature does not take is a finding (#444; #503, #504).
 * **A prompt budget.** Each section of the Developer's prompt is measured on the run's evidence, and `PROMPT_BUDGET` (or `PROMPT_BUDGET_<ROLE>`) drops whole sections, least needed first, from a prompt over it (#443; #505).
