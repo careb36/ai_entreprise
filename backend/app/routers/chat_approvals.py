@@ -23,7 +23,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import ChatApprovalMessage, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.integrations import chat_connections as conns
 from services.integrations import chat_links
 from services.platform.agent_service import AgentService
@@ -38,7 +39,7 @@ INSTRUCTIONS = {
 }
 
 
-class ChatConnectionIn(BaseModel):
+class ChatConnectionIn(RequestModel):
     workspace_id: str = Field(min_length=1, max_length=64)
     channel: str | None = Field(default=None, max_length=32)
     post_credential: str | None = Field(default=None, max_length=2048)

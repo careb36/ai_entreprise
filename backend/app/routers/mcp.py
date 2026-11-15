@@ -20,7 +20,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import McpServer, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.tools import mcp_client, mcp_config
 from sqlmodel import Session, select
 
@@ -29,14 +30,14 @@ router = APIRouter(prefix="/v1", tags=["Agents"])
 DISCOVERY_TIMEOUT_SECONDS = 30.0
 
 
-class McpServersRequest(BaseModel):
+class McpServersRequest(RequestModel):
     company_id: int
     mcpServers: dict[str, dict[str, Any]] = Field(
         min_length=1
     )  # the map's standard key
 
 
-class McpServerPatch(BaseModel):
+class McpServerPatch(RequestModel):
     enabled: bool | None = None
     roles: list[str] | None = None
     description: str | None = None

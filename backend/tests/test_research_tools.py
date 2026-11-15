@@ -38,7 +38,7 @@ class _Http:
         self.answers = answers
         self.requests = []
 
-    def __call__(self, method, url, body=None, timeout=20.0):
+    def __call__(self, method, url, body=None, timeout=20.0, allow_private=False):
         self.requests.append((method, url, body))
         status, headers, data = self.answers.get(url, (404, {}, b"not here"))
         if isinstance(data, dict | list):

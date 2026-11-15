@@ -25,7 +25,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.planning import arch_author, arch_check, document_approval
 from services.tools import repo_map
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
@@ -36,26 +37,26 @@ router = APIRouter(prefix="/v1/architectures", tags=["Core"])
 WRITE_TIMEOUT_SECONDS = 30.0
 
 
-class ArchitectureBody(BaseModel):
+class ArchitectureBody(RequestModel):
     title: str = Field(min_length=1, max_length=arch_check.TITLE_LIMIT)
     overview: str = ""
-    modules: list[dict[str, Any]] = []
-    interfaces: list[dict[str, Any]] = []
-    decisions: list[dict[str, Any]] = []
-    conventions: list[str] = []
+    modules: list[dict[str, Any]] = Field(default_factory=list)
+    interfaces: list[dict[str, Any]] = Field(default_factory=list)
+    decisions: list[dict[str, Any]] = Field(default_factory=list)
+    conventions: list[str] = Field(default_factory=list)
 
 
 class ArchitectureCreate(ArchitectureBody):
     specification_id: int
 
 
-class DraftRequest(BaseModel):
+class DraftRequest(RequestModel):
     specification_id: int
     # A draft to revise with its answered questions; omitted, a new one.
     architecture_id: int | None = None
 
 
-class AnswerRequest(BaseModel):
+class AnswerRequest(RequestModel):
     answer: str = Field(max_length=arch_check.TEXT_LIMIT)
 
 

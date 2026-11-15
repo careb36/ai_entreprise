@@ -29,7 +29,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, User, WikiPageVersion
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.contracts import wiki, wiki_templates
 from services.learning import wiki_store
 from services.loop import wiki_close
@@ -39,17 +40,17 @@ from sqlmodel import Session
 router = APIRouter(prefix="/v1", tags=["Agents"])
 
 
-class WikiPageWrite(BaseModel):
+class WikiPageWrite(RequestModel):
     kind: str = Field(min_length=1, max_length=20)
     title: str = Field(min_length=1, max_length=wiki.TITLE_LIMIT)
     body: str = Field(max_length=wiki.BODY_LIMIT)
 
 
-class WikiDecision(BaseModel):
+class WikiDecision(RequestModel):
     reason: str | None = Field(default=None, max_length=wiki.REASON_LIMIT)
 
 
-class WikiSettingsWrite(BaseModel):
+class WikiSettingsWrite(RequestModel):
     write_to_repo: bool
 
 

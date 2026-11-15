@@ -4,17 +4,20 @@ from auth_policy import ROLE_RANK, current_user_if_required, require_company_rol
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import STRICT, RequestModel
 from services.platform import api_tokens
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1/auth/tokens", tags=["Company"])
 
 
-class CreateTokenRequest(BaseModel):
+class CreateTokenRequest(RequestModel):
+    model_config = STRICT
+
     company_id: int
     name: str = Field(min_length=1, max_length=80)
-    scopes: list[str] = []
+    scopes: list[str] = Field(default_factory=list)
     role: str = Field(default=api_tokens.DEFAULT_ROLE, pattern="^(Viewer|Manager)$")
     # None: never expires; otherwise 1 to 365 days.
     expires_in_days: int | None = Field(

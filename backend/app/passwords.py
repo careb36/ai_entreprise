@@ -97,3 +97,20 @@ def rehash_password(plain: str) -> str:
     return bcrypt.hashpw(
         _encode(plain)[:BCRYPT_MAX_BYTES], bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     ).decode("ascii")
+
+
+_dummy_hash: bytes | None = None
+
+
+def burn_verify(plain: str) -> bool:
+    """Run one bcrypt check against a throwaway hash; always ``False``.
+
+    Called when a sign-in names no account (or one with no password), so it
+    costs the same as checking a real password and the answer's timing does
+    not say which addresses are registered (WSTG-v42-IDNT-04).
+    """
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = bcrypt.hashpw(b"unused", bcrypt.gensalt(rounds=BCRYPT_ROUNDS))
+    bcrypt.checkpw(_encode(plain)[:BCRYPT_MAX_BYTES], _dummy_hash)
+    return False

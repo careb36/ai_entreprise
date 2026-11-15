@@ -6,7 +6,9 @@ from datetime import UTC, datetime, timedelta
 import auth_tokens
 import jwt
 import pytest
+from conftest import _engine
 from models.company import Company, User
+from sqlmodel import Session, select
 
 
 @pytest.fixture
@@ -28,7 +30,11 @@ def _register_user(client, email=None):
         },
     )
     assert response.status_code == 200, response.text
-    return response.json()
+    # The answer does not say whether the account is new (issue #541); the
+    # tests read the id from the database.
+    with Session(_engine) as session:
+        user = session.exec(select(User).where(User.email == email)).one()
+    return {"user_id": user.id, "email": email}
 
 
 def test_a_bearer_login_issues_an_access_token(test_client, signing_key):

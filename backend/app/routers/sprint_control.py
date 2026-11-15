@@ -25,7 +25,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from logging_config import logger
 from models import Company, Sprint, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.loop import sprint_control
 from services.release import git_setup
 from services.tools import research_tools
@@ -142,7 +143,7 @@ async def resume_sprint(
     return {"status": "active", "dispatched": dispatched}
 
 
-class AutonomyRequest(BaseModel):
+class AutonomyRequest(RequestModel):
     autonomy_level: int = Field(ge=1, le=3)
 
 
@@ -183,7 +184,7 @@ async def set_autonomy(
     return {"company_id": company_id, "autonomy_level": company.autonomy_level}
 
 
-class GitWorkflowRequest(BaseModel):
+class GitWorkflowRequest(RequestModel):
     git_workflow: bool
     # Where a task's branch starts; empty: what the repository has checked out.
     git_base_branch: str | None = Field(default=None, max_length=200)
@@ -197,7 +198,7 @@ def _git_payload(company: Company) -> dict:
     }
 
 
-class ResearchHostsRequest(BaseModel):
+class ResearchHostsRequest(RequestModel):
     # Hosts the research tools may read beside the defaults; exact host names.
     hosts: list[str] = Field(default_factory=list, max_length=100)
 
@@ -254,7 +255,7 @@ async def set_research_hosts(
     return _research_payload(company)
 
 
-class SandboxRequest(BaseModel):
+class SandboxRequest(RequestModel):
     # host, container or bwrap; empty: the deployment's DELIVERY_SANDBOX.
     mode: str | None = Field(default=None, max_length=20)
     # Environment variables a sandboxed run may see, by name.
@@ -349,7 +350,7 @@ async def reset_sandbox_cache(
         raise HTTPException(status_code=e.status, detail=e.message) from e
 
 
-class StackProfileRequest(BaseModel):
+class StackProfileRequest(RequestModel):
     # install, test, lint, start, e2e (an empty string turns the step off),
     # port, probe_path and stack; a field left out keeps the detected value.
     profile: dict[str, Any] = Field(default_factory=dict)
