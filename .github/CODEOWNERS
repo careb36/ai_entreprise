@@ -1,6 +1,6 @@
 # Un cambio en un workflow puede tocar cualquier cosa: el workflow corre con el
 # token del repositorio, en un runner self-hosted no efímero que también tiene
-# el daemon del workspace (docs/adr/0017-self-hosted-runner.md). Lo mismo vale
+# el daemon del workspace (docs/design/SELF_HOSTED_RUNNER.md). Lo mismo vale
 # para los manifiestos de despliegue y para el proxy, que es el único sitio que
 # ve las claves de los proveedores.
 #

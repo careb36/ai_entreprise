@@ -1,12 +1,12 @@
-# ADR 0018: Keep the self-hosted runner for trusted code only, and move it to ephemeral containers on a host of its own
+# Proposal: keep the self-hosted runner for trusted code only, and move it to ephemeral containers on a host of its own
 
 ## Status
 
-Proposed (2026-11-15), issue #522 part C. Records the question and a recommendation; the runner's configuration is not changed by the pull request that adds this record. The owner decides and carries it out.
+A design proposal, not an ADR: `docs/adr/` holds only the decisions rendered from `docs/architecture/architecture.json` (#329). Proposed (2026-11-15), issue #522 part C. Records the question and a recommendation; the runner's configuration is not changed by the pull request that adds this record. The owner decides and carries it out.
 
 ## Context
 
-Every workflow in `.github/workflows/` runs on one self-hosted runner labelled `lafabrique` (`runs-on: [self-hosted, linux, x64, lafabrique]`), because GitHub-hosted runners are blocked by the account's spending limit (`e2e.yml`, `release.yml`). Only the SLSA generator's own reusable workflow runs on `ubuntu-latest`. What is known about that runner:
+Every workflow in `.github/workflows/` runs on the self-hosted runners labelled `lafabrique` (seven instances on one machine) (`runs-on: [self-hosted, linux, x64, lafabrique]`), because GitHub-hosted runners are blocked by the account's spending limit (`e2e.yml`, `release.yml`). Only the SLSA generator's own reusable workflow runs on `ubuntu-latest`. What is known about that runner:
 
 - **It is not ephemeral.** It keeps its state between jobs: `~/.npm`, Docker images and containers, the Docker daemon's login state unless a job isolates it (`images.yml` uses a job-local `DOCKER_CONFIG` for that reason), Poetry and uv caches, and anything a job leaves in its home directory (`docs/TESTING.md`, CI). A job that is compromised can leave a file, a cached package, a Git hook in a cached checkout or a tampered Docker image that a later job, a release job included, then uses.
 - **It shares its machine with the workspace daemon** (`.github/CODEOWNERS` header; SECURITY.md §5.3). The daemon is the component that writes the user's files and runs commands for the agents; on that machine it has the user's projects and the NATS credentials of a daemon. A job that reaches the host reaches those.
