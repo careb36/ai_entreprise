@@ -7,21 +7,9 @@
  */
 import { useTranslation } from 'react-i18next'
 import { BookOpenCheck, ShieldAlert } from 'lucide-react'
+import type { Source } from '../services/specifications'
 
-export interface Source {
-  tool: string
-  url?: string | null
-  host?: string | null
-  allowed?: boolean | null
-  fetched_at?: string | null
-  status?: number | null
-  sha256?: string | null
-  bytes?: number | null
-  package?: string | null
-  ecosystem?: string | null
-  version?: string | null
-  is_error?: boolean | null
-}
+export type { Source }
 
 function formatDate(iso: string) {
   const date = new Date(iso)

@@ -9,7 +9,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type BacklogItem } from './api'
-import { QUERY_KEYS } from '../hooks/useQueries'
+import { QUERY_KEYS } from './queryKeys'
 
 /** The board's answer to a status change; the extra fields only for a move to To do. */
 export type BoardMoveResult = BacklogItem & {

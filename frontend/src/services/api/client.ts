@@ -136,6 +136,28 @@ export async function fetchBlob(endpoint: string): Promise<{ blob: Blob; filenam
   return { blob: await response.blob(), filename: match ? match[1] : null }
 }
 
+/**
+ * GET a text body with the user's token (a Markdown document). A refusal is an
+ * `ApiError` whose message is the body's `detail` when it has one.
+ */
+export async function fetchText(endpoint: string): Promise<string> {
+  const token = useAuthStore.getState().getValidToken()
+  const headers = new Headers()
+  if (token) headers.set('Authorization', ['Bearer', token].join(' '))
+  const response = await fetch(`${API_BASE}${endpoint}`, { headers })
+  if (!response.ok) {
+    let detail: string | undefined
+    try {
+      const body = await response.json()
+      if (typeof body?.detail === 'string') detail = body.detail
+    } catch {
+      detail = undefined
+    }
+    throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, detail)
+  }
+  return response.text()
+}
+
 /** The body's `detail` as a message and as sent (an object carries more, e.g. a 409's findings). */
 async function readDetail(response: Response): Promise<[string | undefined, unknown]> {
   try {

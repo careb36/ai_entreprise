@@ -10,6 +10,7 @@ on:
       - 'llm-proxy/**'
       - 'bench/verifier/**'
       - 'scripts/check_architecture.py'
+      - 'scripts/check_frontend_architecture.py'
       - 'docs/architecture/**'
       - 'docs/ARCHITECTURE.md'
       - '.github/workflows/backend-tests.yml'

@@ -12,32 +12,14 @@ import { useCurrentRole } from '../hooks/useQueries'
 import { errorDetail } from '../services/api'
 import { type Specification, useCreateSpecification, useDraftSpecification, useSpecifications } from '../services/specifications'
 import { SpecificationEditor } from '../components/SpecificationEditor'
+import { CheckSummary, StatusBadge } from '../components/SpecificationBadges'
 import { useAppStore } from '../store/useAppStore'
 
-const STATUS_TONE: Record<Specification['status'], string> = {
-  draft: 'bg-amber-900/50 text-amber-300',
-  approved: 'bg-emerald-900/50 text-emerald-300',
-  superseded: 'bg-gray-800 text-gray-400',
-}
+// Re-exported for the pages that import them from here.
+export { CheckSummary, StatusBadge }
 
 export function specificationPath(id: number) {
   return `/company/specifications/${id}`
-}
-
-export function StatusBadge({ status }: { status: Specification['status'] }) {
-  const { t } = useTranslation()
-  return <span className={`badge ${STATUS_TONE[status]}`}>{t(`specifications.status.${status}`, { defaultValue: status })}</span>
-}
-
-/** "N blocking · M warnings", or that nothing blocks it. */
-export function CheckSummary({ check }: { check: Specification['check'] }) {
-  const { t } = useTranslation()
-  if (check.ok && check.warnings === 0) return <span className="text-xs text-emerald-300">{t('specifications.ready')}</span>
-  return (
-    <span className={`text-xs ${check.blocking > 0 ? 'text-red-300' : 'text-amber-300'}`}>
-      {t('specifications.checkSummary', { blocking: check.blocking, warnings: check.warnings })}
-    </span>
-  )
 }
 
 function SpecificationRow({ specification }: { specification: Specification }) {

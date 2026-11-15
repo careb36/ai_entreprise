@@ -7,10 +7,8 @@
  * Viewers read; Managers write.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Source } from '../components/SourcesConsulted'
-import { API_BASE, ApiError, api, fetchApi } from './api'
-import type { Check, Finding, Question } from './specifications'
-import { useAuthStore } from '../store/useAuthStore'
+import { ApiError, api, fetchApi, fetchText } from './api'
+import type { Check, Finding, Question, Source } from './specifications'
 
 export type ArchitectureStatus = 'draft' | 'approved' | 'superseded'
 export type InterfaceKind = 'http' | 'function' | 'event' | 'cli' | 'schema' | 'other'
@@ -105,14 +103,6 @@ export class ArchitectureConflict extends ApiError {
   }
 }
 
-function authHeaders(contentType?: string) {
-  const token = useAuthStore.getState().getValidToken()
-  const headers = new Headers()
-  if (contentType) headers.set('Content-Type', contentType)
-  if (token) headers.set('Authorization', ['Bearer', token].join(' '))
-  return headers
-}
-
 /** A decision POST through the shared client (its 401 handling included); a structured refusal becomes an `ArchitectureConflict`. */
 async function postDecision<T>(endpoint: string): Promise<T> {
   try {
@@ -132,19 +122,8 @@ async function postDecision<T>(endpoint: string): Promise<T> {
 }
 
 /** The Markdown document as the repository gets it: text, with the token (an `<a href>` could not send it). */
-async function fetchDocument(id: number): Promise<string> {
-  const response = await fetch(`${API_BASE}/v1/architectures/${id}/document`, { headers: authHeaders() })
-  if (!response.ok) {
-    let detail: string | undefined
-    try {
-      const body = await response.json()
-      if (typeof body?.detail === 'string') detail = body.detail
-    } catch {
-      detail = undefined
-    }
-    throw new ApiError(response.status, detail ?? `HTTP ${response.status}`, detail)
-  }
-  return response.text()
+function fetchDocument(id: number): Promise<string> {
+  return fetchText(`/v1/architectures/${id}/document`)
 }
 
 export const architecturesApi = {
