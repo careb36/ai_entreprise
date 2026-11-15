@@ -77,7 +77,13 @@ the LangGraph graph is only an optional kickoff conversation.
    acceptance test files on disk (`workspace.hash`) against what QA's delivery
    wrote; a file that differs or is missing is restored from QA's deliverable
    (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
-   criterion is judged against a weakened test. `services/evidence/criteria_tests.py`
+   criterion is judged against a weakened test. Under the Git workflow the
+   task's branch holds only its base and the done tasks it depends on: the
+   guarded files are its lineage's (`acceptance.branch_lineage`), a sibling
+   task's test file is guarded only when it is on the branch's disk, one that
+   is not is recorded in `acceptance.not_on_branch` and neither restored nor
+   run, and the sprint's integration runs the whole suite (#329
+   retrospective). `services/evidence/criteria_tests.py`
    holds the reading of the runner's output and the two checks. A criterion
    is `verified` only from the most recent verification across the tasks
    covering it, and only when that run's whole verdict is verified.
