@@ -36,6 +36,17 @@ different hosts, the page cannot read the API's CSRF cookie and asks
 `GET /v1/auth/csrf` for it; keep both under one site (the same registrable
 domain) or `SameSite=Strict` cookies are not sent at all.
 
+The packaged desktop app (`npm run electron:build` in `frontend/`) needs none
+of that: it serves its page and forwards `/v1/*` from its own
+`http://127.0.0.1:<port>`, so set only `BACKEND_URL` on the computer that runs
+it (default `http://localhost:8000`; https for a backend on another machine,
+since the app refuses plain http beyond localhost; `docs/CONFIGURATION.md`,
+The desktop app).
+Leave `SESSION_COOKIE_SECURE` on and `CORS_ORIGINS` and `SSO_FRONTEND_URL` as
+they are for the web frontend. If sign-in in the desktop app does not hold,
+check that `BACKEND_URL` reaches the backend and that nothing else rewrote the
+cookies (`docs/design/SESSIONS.md`, Desktop app).
+
 The backend container runs `alembic upgrade head` before it starts. When you
 run the backend by hand, run the migrations yourself (`cd backend && alembic
 upgrade head`) or set `DB_AUTO_UPGRADE=true`. The backend refuses to start on

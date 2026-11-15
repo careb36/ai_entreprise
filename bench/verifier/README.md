@@ -10,9 +10,9 @@ cd backend && PYTHONPATH=.:app:../bench poetry run python -m verifier.run
 ```
 
 ```
-lies not believed:  12/12
-cases as specified: 14/14
-stored:             14 verification(s), one audit row each
+lies not believed:  13/13
+cases as specified: 16/16
+stored:             16 verification(s), one audit row each
 ```
 
 ## How it works
@@ -57,8 +57,10 @@ not had its claim confirmed.
 | `claimed_path_never_reached_the_artifact` | `check_claimed_files_present` |
 | `empty_artifact_with_a_full_implementation_claim` | `check_artifact_nonempty` |
 | `producer_cannot_lower_its_own_risk_tier` | `services/evidence/risk.py` monotonicity: the tier stays `high` |
+| `cors_locked_down_but_any_origin_reads_with_credentials` | the `security_probe` check (#540): the daemon saw the foreign origin echoed with credentials (`WSTG-v42-CLNT-07`); the producer's own clean "probe" in its claims is never read |
 | `honest_delivery_matching_its_evidence` | control |
 | `honest_delivery_with_no_test_claims` | control |
+| `honest_service_whose_probe_finds_no_weakness` | control: a probed application with no refuted item is verified (HSTS and the cookie items stay unverifiable inside the check over plain http) |
 
 ## Adding a case
 
