@@ -93,6 +93,10 @@ def test_every_daemon_install_requires_the_hashes(path):
 SYFT_URL = "https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.0_linux_amd64.tar.gz"
 SYFT_SHA = "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
 
+# The jobs of images.yml that sign what they push: the five-image matrix and
+# the browser sandbox's multi-arch publish (issue #529).
+_SIGNING_JOBS = ("publish", "publish-browser")
+
 
 def test_the_release_attaches_an_sbom_of_each_component():
     job = _workflow("release.yml")["jobs"]["release"]
@@ -117,9 +121,10 @@ def test_the_release_attaches_an_sbom_of_each_component():
 def test_images_are_signed_by_digest_and_carry_their_sbom():
     data = _workflow("images.yml")
     assert data["permissions"] == {"contents": "read"}
-    # The OIDC token only where it signs.
+    # The OIDC token only where it signs: the five-image matrix and the
+    # browser sandbox's multi-arch publish (issue #529).
     for name, job in data["jobs"].items():
-        assert ("id-token" in (job.get("permissions") or {})) is (name == "publish")
+        assert ("id-token" in (job.get("permissions") or {})) is (name in _SIGNING_JOBS)
     publish = data["jobs"]["publish"]
     assert publish["permissions"]["id-token"] == "write"
     steps = publish["steps"]
@@ -152,6 +157,51 @@ def test_images_are_signed_by_digest_and_carry_their_sbom():
     ]
     assert order == sorted(order)
     keep = next(s for s in steps if s.get("name", "").startswith("Keep the SBOM"))
+    assert keep["uses"].startswith("actions/upload-artifact@")
+    assert keep["with"]["if-no-files-found"] == "error"
+
+
+def test_the_browser_sandbox_publishes_multi_arch_signed_and_attested():
+    """The sixth image (issue #529): buildx under QEMU for linux/amd64 and
+    linux/arm64, outside the five-image matrix, signed and attested as the
+    five others."""
+    job = _workflow("images.yml")["jobs"]["publish-browser"]
+    assert job["needs"] == "version"
+    assert job["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+    }
+    uses = [s["uses"] for s in job["steps"] if "uses" in s]
+    assert any(u.startswith("docker/setup-qemu-action@") for u in uses)
+    assert any(u.startswith("docker/setup-buildx-action@") for u in uses)
+    text = _run(job)
+    assert "--platform linux/amd64,linux/arm64" in text
+    assert "--push" in text
+    assert "ghcr.io/${GITHUB_REPOSITORY,,}/${NAME}" in text
+    # The digest signed is buildx's, from its metadata file: a manifest list
+    # never reaches the Docker daemon, and a tag can be moved.
+    assert "--metadata-file" in text and "containerimage.digest" in text
+    assert SYFT_URL in text and SYFT_SHA in text
+    assert 'cosign sign --yes "$IMAGE_REF"' in text
+    assert "cosign attest --yes --type cyclonedx" in text
+    assert not re.search(r"cosign (sign|attest)[^\n]*:\$\{VERSION\}", text)
+    names = [s.get("name", "") for s in job["steps"]]
+    order = [
+        next(i for i, n in enumerate(names) if n.startswith(prefix))
+        for prefix in (
+            "Build and push",
+            "SBOM of",
+            "Install cosign",
+            "Sign",
+            "Keep the SBOM",
+            "Clean up",
+        )
+    ]
+    assert order == sorted(order)
+    keep = next(
+        s for s in job["steps"] if s.get("name", "").startswith("Keep the SBOM")
+    )
     assert keep["uses"].startswith("actions/upload-artifact@")
     assert keep["with"]["if-no-files-found"] == "error"
 
