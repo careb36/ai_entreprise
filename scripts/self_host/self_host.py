@@ -223,6 +223,8 @@ def step_company(api, args, state, report):
             },
         )
         state["company_id"] = result["company_id"]
+        # An existing repository gets no "Sprint 0 — Foundations" (retrospective F8).
+        state["foundation_sprint"] = result.get("foundation_sprint")
         state.pop("sprint_id", None)
         created = True
     cid = state["company_id"]
@@ -233,6 +235,7 @@ def step_company(api, args, state, report):
     report["company"] = {
         "id": cid,
         "created": created,
+        "foundation_sprint": state.get("foundation_sprint"),
         "git_workflow": git.get("git_workflow"),
         "git_base_branch": git.get("git_base_branch"),
         "profile": args.profile,
