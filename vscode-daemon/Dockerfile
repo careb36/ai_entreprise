@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --require-hashes -r /app/requirements.txt
 
-COPY app_run.py browser_probe.py code_graph.py command_policy.py console_run.py daemon.py daemon_status.py delivery.py delivery_journal.py delivery_snapshot.py file_diff.py file_edits.py file_hash.py git_base.py git_workspace.py host_folders.py local_merge.py nats_connect.py nats_scope.py platform_reviews.py project_lock.py repo_map.py run_logs.py sandbox.py sandbox_cache.py sandbox_image.py shell_exec.py signatures.py sprint_integration.py win_job.py workspace_edit.py workspace_read.py /app/
+COPY app_run.py browser_probe.py code_graph.py command_policy.py console_run.py daemon.py daemon_status.py delivery.py delivery_journal.py delivery_snapshot.py file_diff.py file_edits.py file_hash.py git_base.py git_workspace.py host_folders.py local_merge.py nats_connect.py nats_scope.py platform_reviews.py project_lock.py repo_map.py run_logs.py sandbox.py sandbox_cache.py sandbox_image.py security_probe.py shell_exec.py signatures.py sprint_integration.py win_job.py workspace_edit.py workspace_read.py /app/
 
 COPY images/browser/probe-browser.js /app/images/browser/probe-browser.js
 
