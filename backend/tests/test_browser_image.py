@@ -37,6 +37,7 @@ import app_run
 import browser_probe
 import pytest
 import sandbox_cache
+import shell_exec
 from config import settings
 from models.company import Company
 from services.evidence import app_check, browser_smoke
@@ -90,6 +91,17 @@ def fake_node(tmp_path, monkeypatch):
     )
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("PATH", f"{script.parent}{os.pathsep}{os.environ['PATH']}")
+    # The host check's environment puts ~/.nvm, ~/.local/bin and /usr/local/bin
+    # before PATH (shell_exec.build_command_env), so a machine with a real node
+    # there would run it instead of this one: keep the fake first.
+    real_env = shell_exec.build_command_env
+
+    def env_with_fake_node_first():
+        env = real_env()
+        env["PATH"] = f"{script.parent}{os.pathsep}{env['PATH']}"
+        return env
+
+    monkeypatch.setattr(shell_exec, "build_command_env", env_with_fake_node_first)
     return script.parent / "calls"
 
 
