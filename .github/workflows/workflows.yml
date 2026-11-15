@@ -39,6 +39,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Every workflow parses and every expression resolves
-        uses: docker://rhysd/actionlint:1.7.7
+        # By digest, not tag: a tag can be pushed again, a digest cannot.
+        # backend/tests/test_workflow_pinning.py requires it. Resolve a new
+        # one with `docker buildx imagetools inspect rhysd/actionlint:<version>`.
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
         with:
           args: -color

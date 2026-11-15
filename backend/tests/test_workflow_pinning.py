@@ -7,10 +7,11 @@ ecosystem still bumps it (the version stays in a trailing comment).
 
 These tests read every workflow under ``.github/workflows/`` and fail on a
 ``uses:`` of a step or a reusable workflow that names a third-party action by
-anything but a commit sha. Local actions (``./...``) and ``docker://`` images
-are not GitHub actions and are exempt. They also hold the dependency audit and
-the pull-request scans in ``security-scan.yml`` to what makes them able to
-fail.
+anything but a commit sha. Local actions (``./...``) are exempt; a
+``docker://`` image is not a GitHub action but has the same problem (a tag can
+be pushed again), so it must name a ``sha256`` digest with its version in a
+comment. They also hold the dependency audit and the pull-request scans in
+``security-scan.yml`` to what makes them able to fail.
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ DEPENDABOT = REPO / ".github" / "dependabot.yml"
 AUDIT_IGNORE = REPO / ".github" / "pip-audit-ignore.txt"
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
+# docker://image@sha256:<64 hex>. Docker ignores a tag written before the
+# digest, so one is refused: it would only mislead the reader. The version goes
+# in the trailing comment instead.
+DOCKER_DIGEST = re.compile(r"^docker://[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$")
 
 # The one reference that may stay on a tag, with the reason. The SLSA
 # generator checks its own ref and refuses to run unless its reusable workflow
@@ -59,13 +64,17 @@ def _uses(data: dict) -> list[str]:
 
 
 def _is_exempt(ref: str) -> bool:
-    return ref.startswith(("./", "docker://"))
+    return ref.startswith("./")
 
 
 def _unpinned(ref: str) -> str | None:
     """Why ``ref`` is not pinned, or None when it is."""
     if _is_exempt(ref):
         return None
+    if ref.startswith("docker://"):
+        if DOCKER_DIGEST.match(ref):
+            return None
+        return "a docker:// image not pinned by a sha256 digest"
     if "@" not in ref:
         return "no ref"
     action, version = ref.rsplit("@", 1)
@@ -94,6 +103,14 @@ def test_every_sha_pin_names_its_version_in_a_comment(path):
             assert re.match(r"\s+#\s*v\d", match.group(3)), line.strip()
 
 
+@pytest.mark.parametrize("path", _workflow_files(), ids=lambda p: p.name)
+def test_every_docker_digest_names_its_version_in_a_comment(path):
+    for line in path.read_text().splitlines():
+        match = re.search(r"uses:\s*(docker://\S+@sha256:[0-9a-f]{64})(.*)$", line)
+        if match:
+            assert re.match(r"\s+#\s*v?\d", match.group(2)), line.strip()
+
+
 @pytest.mark.parametrize(
     ("ref", "pinned"),
     [
@@ -108,7 +125,11 @@ def test_every_sha_pin_names_its_version_in_a_comment(path):
         (f"{SLSA}@v2.1.0", True),
         (f"{SLSA}@v2", False),
         ("./.github/actions/local", True),
-        ("docker://rhysd/actionlint:1.7.7", True),
+        ("docker://rhysd/actionlint:1.7.7", False),
+        ("docker://rhysd/actionlint", False),
+        ("docker://rhysd/actionlint@sha256:887a259a", False),
+        ("docker://rhysd/actionlint:1.7.7@sha256:" + "a" * 64, False),
+        ("docker://rhysd/actionlint@sha256:" + "a" * 64, True),
     ],
 )
 def test_the_check_tells_a_pin_from_a_tag(ref, pinned):
@@ -137,7 +158,7 @@ def _run(job: dict) -> str:
 
 def test_no_security_step_swallows_its_failure():
     data = _security_scan()
-    for name in ("dependencies", "secrets-pr", "sast-pr"):
+    for name in ("dependencies", "licences", "secrets-pr", "sast-pr"):
         job = data["jobs"][name]
         assert "continue-on-error" not in job, name
         for step in job["steps"]:
@@ -151,6 +172,8 @@ def test_the_dependency_audit_covers_both_lockfiles_and_the_frontend():
     text = _run(job)
     assert "for project in backend llm-proxy" in text
     assert "pip-audit --requirement" in text and "--require-hashes" in text
+    # The daemon's lock is a hashed requirements.txt, not a Poetry project.
+    assert "pip-audit --requirement vscode-daemon/requirements.txt" in text
     assert "--ignore-vuln" in text and ".github/pip-audit-ignore.txt" in text
     assert "npm audit --package-lock-only --omit=dev --audit-level=high" in text
 
