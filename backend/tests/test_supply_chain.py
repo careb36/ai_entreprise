@@ -1,0 +1,240 @@
+"""The release's supply chain (issue #522, part C).
+
+The daemon installs from a hash-pinned lock; a release carries an SBOM of each
+component; the published images are signed by digest and carry their SBOM as
+an attestation; the licence job scans the four components; ``CODEOWNERS``
+names an owner for what decides security; the gitleaks pre-commit hook runs
+the version CI runs. These tests read the files and hold them to that. The
+signing steps themselves only run on a release tag (docs/OPERATIONS.md,
+Releasing).
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO = Path(__file__).resolve().parents[2]
+WORKFLOWS = REPO / ".github" / "workflows"
+DAEMON = REPO / "vscode-daemon"
+SHA40 = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _workflow(name: str) -> dict:
+    data = yaml.safe_load((WORKFLOWS / name).read_text())
+    data["on"] = data.pop(True, data.get("on"))
+    return data
+
+
+def _run(job: dict) -> str:
+    return "\n".join(str(step.get("run", "")) for step in job["steps"])
+
+
+# --- the daemon's lock ---------------------------------------------------------------
+
+
+def _requirements() -> list[str]:
+    """The lock's requirement lines (``name==version ; marker \\``), no hashes."""
+    return [
+        line
+        for line in (DAEMON / "requirements.txt").read_text().splitlines()
+        if line and not line.startswith((" ", "#"))
+    ]
+
+
+def test_the_daemon_lock_pins_every_package_with_its_hashes():
+    text = (DAEMON / "requirements.txt").read_text()
+    assert "requirements.in" in text.splitlines()[1]  # the command that made it
+    assert "--generate-hashes" in text.splitlines()[1]
+    lines = _requirements()
+    assert lines
+    for line in lines:
+        assert re.match(r"^[A-Za-z0-9._-]+==[^ ;]+( ;.*)? \\$", line), line
+    blocks = re.split(r"\n(?=\S)", text)
+    for block in blocks:
+        if block.startswith("#") or not block.strip():
+            continue
+        assert re.search(r"--hash=sha256:[0-9a-f]{64}", block), block.splitlines()[0]
+    names = {line.split("==")[0].lower() for line in lines}
+    # Every direct dependency in requirements.in is in the lock.
+    direct = {
+        re.split(r"[<>=!~ ;]", line, maxsplit=1)[0].lower()
+        for line in (DAEMON / "requirements.in").read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    assert direct == {"nats-py", "nkeys"}
+    assert direct <= names
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        DAEMON / "Dockerfile",
+        REPO / "scripts" / "start-daemon.sh",
+        REPO / "scripts" / "start-daemon.ps1",
+    ],
+    ids=lambda p: p.name,
+)
+def test_every_daemon_install_requires_the_hashes(path):
+    text = path.read_text()
+    installs = [line for line in text.splitlines() if "pip install" in line]
+    assert installs
+    for line in installs:
+        # Nothing is installed beside the lock: a bare `pip install x==1`
+        # would skip the hash check for x.
+        assert "--require-hashes" in line and "requirements.txt" in line, line
+
+
+# --- SBOMs and signatures --------------------------------------------------------------
+
+SYFT_URL = "https://github.com/anchore/syft/releases/download/v1.55.0/syft_1.55.0_linux_amd64.tar.gz"
+SYFT_SHA = "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
+
+
+def test_the_release_attaches_an_sbom_of_each_component():
+    job = _workflow("release.yml")["jobs"]["release"]
+    text = _run(job)
+    assert SYFT_URL in text and f'echo "{SYFT_SHA}  syft.tgz" | sha256sum -c -' in text
+    for lock in (
+        "backend:backend/poetry.lock",
+        "llm-proxy:llm-proxy/poetry.lock",
+        "vscode-daemon:vscode-daemon/requirements.txt",
+        "frontend:frontend/package-lock.json",
+    ):
+        assert lock in text
+    assert "cyclonedx-json=" in text and "SHA256SUMS" in text
+    create = next(s for s in job["steps"] if s.get("name") == "Create Release")
+    assert (
+        '"$RUNNER_TEMP"/sbom/*.cdx.json "$RUNNER_TEMP/sbom/SHA256SUMS"' in create["run"]
+    )
+    names = [s.get("name") for s in job["steps"]]
+    assert names.index("Write The SBOMs") < names.index("Create Release")
+
+
+def test_images_are_signed_by_digest_and_carry_their_sbom():
+    data = _workflow("images.yml")
+    assert data["permissions"] == {"contents": "read"}
+    # The OIDC token only where it signs.
+    for name, job in data["jobs"].items():
+        assert ("id-token" in (job.get("permissions") or {})) is (name == "publish")
+    publish = data["jobs"]["publish"]
+    assert publish["permissions"]["id-token"] == "write"
+    steps = publish["steps"]
+    installer = [
+        s
+        for s in steps
+        if str(s.get("uses", "")).startswith("sigstore/cosign-installer@")
+    ]
+    assert len(installer) == 1
+    assert SHA40.match(installer[0]["uses"].split("@")[1])
+    assert re.match(r"^v\d+\.\d+\.\d+$", installer[0]["with"]["cosign-release"])
+    text = _run(publish)
+    assert SYFT_URL in text and SYFT_SHA in text
+    assert re.search(r'grep -E "\^\$\{image\}@sha256:\[0-9a-f\]\{64\}\$"', text)
+    assert 'cosign sign --yes "$IMAGE_REF"' in text
+    assert "cosign attest --yes --type cyclonedx" in text
+    # Never a tag: what is signed is the digest the registry stored.
+    assert not re.search(r"cosign (sign|attest)[^\n]*:\$\{VERSION\}", text)
+    names = [s.get("name", "") for s in steps]
+    order = [
+        next(i for i, n in enumerate(names) if n.startswith(prefix))
+        for prefix in (
+            "Push",
+            "SBOM of",
+            "Install cosign",
+            "Sign",
+            "Keep the SBOM",
+            "Clean up",
+        )
+    ]
+    assert order == sorted(order)
+    keep = next(s for s in steps if s.get("name", "").startswith("Keep the SBOM"))
+    assert keep["uses"].startswith("actions/upload-artifact@")
+    assert keep["with"]["if-no-files-found"] == "error"
+
+
+def test_the_signing_is_documented_with_its_verification():
+    ops = (REPO / "docs" / "OPERATIONS.md").read_text()
+    assert "cosign verify" in ops and "cosign verify-attestation" in ops
+    assert (
+        "--certificate-oidc-issuer https://token.actions.githubusercontent.com" in ops
+    )
+    assert r"\.github/workflows/images\.yml@refs/tags/v" in ops
+
+
+# --- the licence job -----------------------------------------------------------------
+
+
+def test_the_licence_job_scans_the_four_components():
+    job = _workflow("security-scan.yml")["jobs"]["licences"]
+    assert job["runs-on"] == ["self-hosted", "linux", "x64", "lafabrique"]
+    assert job["permissions"] == {"contents": "read"}
+    text = _run(job)
+    assert "--no-deps --require-hashes" in text
+    assert "for project in backend llm-proxy vscode-daemon" in text
+    assert "python3 -I scripts/licence_scan.py" in text
+    for project in ("backend", "llm-proxy", "vscode-daemon"):
+        assert f'--python "{project}=$RUNNER_TEMP/licence-{project}/bin/python"' in text
+    assert "--npm-lock frontend/package-lock.json" in text
+    # Runtime only: the export names no group, so it is the main group.
+    assert "--all-groups" not in text and "--with" not in text
+
+
+# --- CODEOWNERS and the pre-commit hook --------------------------------------------------
+
+
+def _codeowners() -> dict[str, list[str]]:
+    rules = {}
+    for line in (REPO / ".github" / "CODEOWNERS").read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            pattern, *owners = line.split()
+            rules[pattern] = owners
+    return rules
+
+
+def test_codeowners_covers_what_decides_security():
+    rules = _codeowners()
+    for pattern in (
+        "/.github/",
+        "/.github/workflows/",
+        "/SECURITY.md",
+        "/.pre-commit-config.yaml",
+        "/.gitleaks.toml",
+        "/vscode-daemon/",
+        "/nats/",
+        "/scripts/nats_config.py",
+        "/backend/alembic/",
+        "/backend/app/migrations.py",
+        "/backend/app/security.py",
+        "/backend/app/routers/auth.py",
+        "/docs/architecture/",
+    ):
+        assert pattern in rules, pattern
+    assert all(owners == ["@careb36"] for owners in rules.values())
+
+
+def test_every_path_codeowners_names_exists():
+    for pattern in _codeowners():
+        if pattern == "*":
+            continue
+        assert (REPO / pattern.lstrip("/")).exists(), pattern
+
+
+def test_the_gitleaks_hook_runs_the_version_ci_runs():
+    config = yaml.safe_load((REPO / ".pre-commit-config.yaml").read_text())
+    repo = next(
+        r
+        for r in config["repos"]
+        if r["repo"] == "https://github.com/gitleaks/gitleaks"
+    )
+    assert SHA40.match(repo["rev"])
+    hook = next(h for h in repo["hooks"] if h["id"] == "gitleaks")
+    assert hook["args"] == ["--config", ".gitleaks.toml"]
+    text = (REPO / ".pre-commit-config.yaml").read_text()
+    version = re.search(r"# frozen: (v[\d.]+)", text).group(1)
+    ci = (WORKFLOWS / "security-scan.yml").read_text()
+    assert f"/releases/download/{version}/gitleaks_{version[1:]}_linux_x64" in ci

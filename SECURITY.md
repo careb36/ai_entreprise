@@ -292,7 +292,9 @@ The rules:
 (`.github/workflows/security-scan.yml`, job `secrets-pr`) and over the full
 history in the weekly baseline (`.github/workflows/security-baseline.yml`).
 The pre-commit hooks (`.pre-commit-config.yaml`) refuse a committed `.env`
-but do not run a secret scanner. Stored secrets (provider keys, MCP secrets,
+and run gitleaks over the staged changes with the same `.gitleaks.toml`
+(pinned to the commit of the version CI downloads); a hook is skipped by
+`git commit --no-verify`, which is why CI scans the pull request again. Stored secrets (provider keys, MCP secrets,
 run secrets, project credentials) are encrypted with `FERNET_SECRET_KEY`;
 without it they are stored with a `plaintext:` prefix and the backend warns
 at startup (`backend/app/config.py`, `docs/CONFIGURATION.md`). Secrets live
@@ -329,29 +331,42 @@ in `.env`, not in a secret manager.
 
 **Where the code stands** (§5.2 and §5.3). Lockfiles are committed
 (`backend/poetry.lock`, `llm-proxy/poetry.lock`, `frontend/package-lock.json`,
-`vscode-daemon/requirements.txt`) and Dependabot covers pip, npm, docker,
-docker-compose and GitHub Actions (`.github/dependabot.yml`). Every pull request
-runs, in `.github/workflows/security-scan.yml`: Trivy over the files (SARIF,
-not gating); a dependency audit that fails on a known vulnerability —
-`pip-audit` over the hashed export of `backend/poetry.lock` and
-`llm-proxy/poetry.lock`, and `npm audit --omit=dev --audit-level=high` over
-`frontend/package-lock.json`, with exceptions only in
-`.github/pip-audit-ignore.txt` (each with a reason and a review date that
-fails the job once passed); gitleaks over the pull request's commits; and
-Semgrep failing on the findings the pull request adds. The gating Trivy and
-the full Semgrep and gitleaks scans run weekly
-(`.github/workflows/security-baseline.yml`). Every third-party action is
-pinned by commit sha, checked by `backend/tests/test_workflow_pinning.py`
-(the SLSA generator is the one exception: it runs only from a release tag).
-`vscode-daemon/requirements.txt` is a version range, not a lock, so the audit
-does not cover the daemon yet. A SLSA provenance workflow exists
-(`generator-generic-ossf-slsa3-publish.yml`, on a created GitHub Release or
-by hand), but it hashes images it builds itself rather than the ones
-`images.yml` publishes, and a Release created by `release.yml` with the
-workflow's own token does not start it; the five published images have no
-SBOM and are not signed, and commits and tags are not
-required to be signed. SBOMs and image signing are noted in issue #522 for
-later.
+and `vscode-daemon/requirements.txt`, compiled with every sha256 from
+`vscode-daemon/requirements.in` and installed with `--require-hashes` by the
+daemon's Dockerfile and both start scripts) and Dependabot covers pip, npm,
+docker, docker-compose and GitHub Actions (`.github/dependabot.yml`). Every
+pull request runs, in `.github/workflows/security-scan.yml`: Trivy over the
+files (SARIF, not gating); a dependency audit that fails on a known
+vulnerability — `pip-audit` over the hashed export of `backend/poetry.lock`
+and `llm-proxy/poetry.lock` and over the daemon's lock, and
+`npm audit --omit=dev --audit-level=high` over `frontend/package-lock.json`,
+with exceptions only in `.github/pip-audit-ignore.txt` (each with a reason and
+a review date that fails the job once passed); a licence scan
+(`scripts/licence_scan.py`) that fails on a runtime dependency of the four
+components whose licence is not on the allowlist (MIT, BSD-2/3-Clause,
+Apache-2.0, ISC, MPL-2.0, PSF-2.0, Python-2.0, Unlicense, CC0-1.0, 0BSD,
+BlueOak-1.0.0) or is unknown, with exceptions only in
+`.github/licence-exceptions.txt` (same rule: a reason and a review date);
+gitleaks over the pull request's commits; and Semgrep failing on the findings
+the pull request adds. The gating Trivy and the full Semgrep and gitleaks
+scans run weekly (`.github/workflows/security-baseline.yml`). Every
+third-party action is pinned by commit sha and every `docker://` image by
+digest, checked by `backend/tests/test_workflow_pinning.py` (the SLSA
+generator is the one exception: it runs only from a release tag). A release
+attaches a CycloneDX SBOM of each component's lock (`release.yml`), and
+`images.yml` signs each published image by digest with keyless cosign (GitHub
+OIDC, Fulcio, Rekor) and attaches its CycloneDX SBOM as a signed attestation
+(`docs/OPERATIONS.md`, Releasing); neither has run on a real tag yet, and no
+cluster verifies the signature at admission. A SLSA provenance workflow
+exists (`generator-generic-ossf-slsa3-publish.yml`, on a created GitHub
+Release or by hand), but it hashes images it builds itself rather than the
+ones `images.yml` publishes, and a Release created by `release.yml` with the
+workflow's own token does not start it. Commits and tags are not required to
+be signed. `.github/CODEOWNERS` names an owner for CI, the locks, the daemon,
+the bus, authentication, migrations and the architecture rules, but GitHub
+enforces it only once "Require review from Code Owners" is on for `main`
+(#182). The self-hosted runner is not ephemeral and shares its machine with
+the daemon; the decision record is `docs/design/SELF_HOSTED_RUNNER.md`.
 
 ### 5.4 Open advisories and their triage
 
