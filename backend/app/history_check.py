@@ -16,8 +16,9 @@ and reports histories the loop must never produce:
   hold with its acceptance under the strict rule ``accept_high_risk``);
 - ``carried_twice``: one task carried into another sprint more than once;
 - ``worked_before_dependency``: a task that delivered before every task it
-  depends on was done: the dependency is not done, or it closed (its last
-  approval or person's note) after this task's first deliverable;
+  depends on was done: the dependency is not done, or it closed (its first
+  approval or person's note after its last deliverable, hold or override)
+  after this task's first deliverable;
 - ``decision_without_escalation``: a ScrumMaster decision that names an
   escalation the task never had;
 - ``criteria_verified_without_run``: a run whose Verifier marked a criterion's
@@ -64,6 +65,8 @@ _TASK_WORKER = "le-fabrique-task-worker"
 _HUMAN_LED = "autonomy level 1: every approved task waits for a person"
 _MANAGER_AGENT = "manager agent"
 _AGENT_ACCEPTED = "Accepted by the Manager agent"
+# A person taking back the Manager agent's acceptance or send-back.
+_OVERRIDE = "Override:"
 # The strict rule a company may name to let the agent accept a high-risk hold.
 _HIGH_RISK_RULE = "(rule accept_high_risk,"
 
@@ -125,15 +128,42 @@ def _started_at(comments: list[dict[str, Any]]) -> datetime | None:
     return next((_when(c) for c in comments if _is_deliverable(c)), None)
 
 
+def _is_closing(comment: dict[str, Any]) -> bool:
+    return (
+        _is_approval(comment)
+        or _author(comment) == _PERSON
+        or _is_agent_acceptance(comment)
+    )
+
+
+def _reopens(comment: dict[str, Any]) -> bool:
+    """A comment after which the task is not closed any more: new work, a
+    high-risk hold, or a person taking back the Manager agent's decision."""
+    return (
+        _is_deliverable(comment)
+        or (_author(comment) == "system" and _text(comment).startswith(_RISK_HOLD))
+        or (_author(comment) == _PERSON and _text(comment).startswith(_OVERRIDE))
+    )
+
+
 def _closed_at(comments: list[dict[str, Any]]) -> datetime | None:
-    """When the task was closed: its last approval, person's note or the
-    Manager agent's acceptance (which releases an autonomy-1 hold)."""
-    closing = [
-        c
-        for c in comments
-        if _is_approval(c) or _author(c) == _PERSON or _is_agent_acceptance(c)
-    ]
-    return _when(closing[-1]) if closing else None
+    """When the task was closed: the first approval, person's note or Manager
+    agent's acceptance after the last thing that reopened it (a deliverable,
+    a hold, an override). A person's later note on a task already closed does
+    not close it again (run 43752094404: a note on a done task read as its
+    close). A thread whose last closing comment comes before what reopened
+    it falls back to that comment."""
+    closed: dict[str, Any] | None = None
+    last_closing: dict[str, Any] | None = None
+    for comment in comments:
+        if _reopens(comment):
+            closed = None
+        elif _is_closing(comment):
+            last_closing = comment
+            if closed is None:
+                closed = comment
+    chosen = closed or last_closing
+    return _when(chosen) if chosen else None
 
 
 def check_events(
