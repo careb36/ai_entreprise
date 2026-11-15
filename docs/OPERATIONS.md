@@ -108,12 +108,87 @@ through the history. Migrations do not roll back: a release that ran a
 migration the previous code cannot read cannot be rolled back past without
 the backup (Upgrade, above).
 
+## Single sign-on
+
+A company's Owner connects its identity provider on the **Single sign-on**
+page (`/company/sso`); the design and threat model are in
+`docs/design/SSO.md`, the settings in `docs/CONFIGURATION.md`. The operator's
+part first:
+
+1. Set `SSO_CALLBACK_URL` to the address the browser reaches the backend's
+   `/v1/auth/sso/callback` at (behind a proxy, the public `https://` one) and
+   `SSO_FRONTEND_URL` to the frontend's address. Set `FERNET_SECRET_KEY`, or
+   client secrets are stored with a `plaintext:` prefix.
+2. Put at least one Owner per company that will require SSO in
+   `SSO_BREAK_GLASS_EMAILS` before anyone turns the requirement on (below).
+
+Then, at the provider, register a web application with the redirect URI the
+SSO page shows, and on the page:
+
+- **Google** (Google Workspace): Google Cloud console, APIs & Services,
+  Credentials, *OAuth client ID* of type *Web application*; add the redirect
+  URI. Choose the *Google* preset, paste the client ID and secret, and list
+  the Workspace domains (a `gmail.com` address is never accepted as a
+  company domain).
+- **Microsoft Entra ID**: Entra admin center, App registrations, *New
+  registration*, single tenant, a *Web* redirect URI; create a client secret
+  under *Certificates & secrets*; under *Token configuration* add the
+  optional `email` claim to the ID token (Entra sends no `email` otherwise,
+  and sends no `email_verified`; the tenant-pinned issuer is what vouches for
+  the address). Choose the *Microsoft Entra ID* preset and enter the
+  *Directory (tenant) ID*, a GUID: multi-tenant issuers (`common`,
+  `organizations`) are refused.
+- **Any other OpenID Connect provider** (Okta, Keycloak, Auth0, …): the
+  *Generic* preset with the issuer URL (the one whose
+  `/.well-known/openid-configuration` answers, https). A provider on a
+  private network needs `SSO_ALLOW_PRIVATE_ISSUERS=true`. The provider must
+  support the Authorization Code flow with PKCE (S256) and sign ID tokens
+  with an asymmetric algorithm (RS256, PS256, ES256, …).
+
+Press **Test connection**: it fetches discovery and the signing keys and shows
+what the provider answered. Turn the connection on, then sign in once through
+it yourself (log out, *Sign in with SSO*, type the company's SSO name or your
+work email): only after an Owner has done that can **Require SSO** be turned
+on. With auto-join off, only existing members (invited by email) get in; with
+it on, anyone the provider authenticates in an allowed domain who has no
+account yet joins with the default role, never Owner. An existing account is
+linked only when it is a member of this company and of no other; it then
+becomes SSO-only (its password is cleared) unless it is an Owner. Someone who
+already has an account and is not a member is told to ask an Owner for an
+invitation; someone who belongs to other companies too keeps signing in with
+their password. A domain can be listed by one company only.
+
+Every sign-in writes an `sso_sign_in` audit row with what the provider asserted
+and the outcome (`created`, `linked`, `signed_in` or `refused:<reason>`), and
+every change an `sso_connection_*` row. Sessions already issued keep working
+until they expire (`ACCESS_TOKEN_EXPIRE_MINUTES`); requiring SSO or removing
+someone at the provider does not end them.
+
+### Break-glass: the provider is down or misconfigured
+
+While a company requires SSO, password sign-in is refused for its members.
+To get in:
+
+1. An Owner listed in `SSO_BREAK_GLASS_EMAILS` signs in with their password as
+   usual; each such sign-in writes an `sso_break_glass_login` audit row. A
+   listed address that is not an Owner of every SSO-requiring company it
+   belongs to is still refused.
+2. If no listed Owner can, the operator adds one (`SSO_BREAK_GLASS_EMAILS` in
+   `.env`) and restarts the backend.
+3. The Owner fixes the connection or turns **Require SSO** off (or the
+   connection off: the requirement is void while it is disabled), then the
+   operator removes the address from the list again.
+
+As a last resort the operator can switch the requirement off in the
+database: `UPDATE sso_connections SET require_sso = false WHERE company_id = <id>;`
+(that change is not in the audit chain; record it in the incident notes).
+
 ## Rotate keys
 
 | Key | Where | What rotating does | How |
 |-----|-------|--------------------|-----|
 | `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again. API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
-| `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets) can no longer be read. MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets). Change the key, restart, and enter the values again. |
+| `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets). Change the key, restart, and enter the values again. |
 | `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
 | Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |

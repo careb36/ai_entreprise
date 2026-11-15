@@ -34,6 +34,7 @@ from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
+from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
 from .webhook import CompanyWebhook
 
@@ -68,6 +69,9 @@ __all__ = [
     "Specification",
     "Sprint",
     "SprintIntegration",
+    "SsoConnection",
+    "SsoFlowState",
+    "SsoIdentity",
     "TaskEvent",
     "User",
     "Verification",

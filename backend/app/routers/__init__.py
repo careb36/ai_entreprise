@@ -33,6 +33,8 @@ from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
 from routers.sprint_control import router as sprint_control_router
 from routers.sprint_crud import router as sprint_crud_router
+from routers.sso import router as sso_router
+from routers.sso_admin import router as sso_admin_router
 from routers.support import router as support_router
 from routers.webhooks import router as webhooks_router
 from routers.workspace import router as workspace_router
@@ -65,6 +67,8 @@ __all__ = [
     "sprint_control_router",
     "sprint_crud_router",
     "sprint_router",
+    "sso_admin_router",
+    "sso_router",
     "support_router",
     "webhooks_router",
     "workspace_router",

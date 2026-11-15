@@ -22,6 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, User
 from passwords import hash_password, needs_rehash, rehash_password, verify_password
 from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
+from services.platform import sso_flow
+from services.platform.oidc import SsoError
 from sqlmodel import Session, select
 
 router = APIRouter(prefix="/v1", tags=["Auth"])
@@ -61,7 +63,12 @@ async def login(req: LoginRequest, session: Session = Depends(get_session)):  # 
         raise HTTPException(status_code=503, detail="Authentication is not configured")
 
     user = session.exec(select(User).where(User.email == req.email)).first()
-    if user is None or not verify_password(req.password, user.password_hash):
+    # An SSO-only account has an empty hash: no password verifies against it.
+    if (
+        user is None
+        or not user.password_hash
+        or not verify_password(req.password, user.password_hash)
+    ):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Upgrade a hash written with a lower cost, now that the password is known
@@ -70,6 +77,16 @@ async def login(req: LoginRequest, session: Session = Depends(get_session)):  # 
         user.password_hash = rehash_password(req.password)
         session.add(user)
         session.commit()
+
+    # Checked after the password, so the answer says nothing about an
+    # account to someone who does not know it (docs/design/SSO.md, T14).
+    try:
+        sso_flow.check_password_login(session, user)
+    except SsoError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Your company requires single sign-on: use Sign in with SSO.",
+        ) from exc
 
     expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     token = auth_tokens.create_access_token(

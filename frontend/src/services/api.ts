@@ -10,6 +10,7 @@ import { githubEndpoints } from './api/github'
 import { memoryEndpoints } from './api/memory'
 import { messageEndpoints } from './api/messages'
 import { sprintEndpoints } from './api/sprints'
+import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
 import { workspaceEndpoints } from './api/workspace'
@@ -24,6 +25,7 @@ export * from './api/github'
 export * from './api/memory'
 export * from './api/messages'
 export * from './api/sprints'
+export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
@@ -48,6 +50,7 @@ const endpoints = {
   ...memoryEndpoints(),
   ...supportEndpoints(http),
   ...githubEndpoints(http),
+  ...ssoEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)

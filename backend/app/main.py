@@ -47,6 +47,8 @@ from routers import (
     sprint_control_router,
     sprint_crud_router,
     sprint_router,
+    sso_admin_router,
+    sso_router,
     support_router,
     webhooks_router,
     workspace_router,
@@ -112,6 +114,8 @@ setup_security(app)
 setup_metrics(app)
 
 app.include_router(auth_router)
+app.include_router(sso_router)
+app.include_router(sso_admin_router)
 app.include_router(console_producers_router)
 app.include_router(enterprise_router)
 app.include_router(enterprise_analytics_router)

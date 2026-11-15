@@ -173,6 +173,7 @@
       "models.model_catalog",
       "models.provider_client",
       "platform.healthcheck",
+      "platform.oidc_client",
       "producers.github_adapter",
       "producers.openproject_client",
       "tools.mcp_client",
