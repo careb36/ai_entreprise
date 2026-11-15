@@ -1,0 +1,31 @@
+{
+  "about": "The OWASP WSTG tests the security test plan must select for this specification (issue #539), checked by backend/tests/test_wstg_plan.py. An HTTP API with no sign-in, no roles, no uploads, no database and no outbound fetches: the HTTP surface (R-WEB) and the API (R-API) apply, nothing that needs sign-in.",
+  "catalogue_commit": "87cf4a4688ba49a64068adf6246496cf5459f709",
+  "auto": [
+    "WSTG-v42-CONF-04",
+    "WSTG-v42-CONF-06",
+    "WSTG-v42-CONF-07",
+    "WSTG-87cf4a4-CONF-12",
+    "WSTG-87cf4a4-CONF-14",
+    "WSTG-87cf4a4-INJT-03",
+    "WSTG-87cf4a4-INJT-20",
+    "WSTG-v42-ERRH-01",
+    "WSTG-v42-ERRH-02",
+    "WSTG-v42-CLNT-07",
+    "WSTG-v42-CLNT-09"
+  ],
+  "manual": [
+    "WSTG-v42-INFO-02",
+    "WSTG-v42-CONF-02",
+    "WSTG-v42-CRYP-01",
+    "WSTG-87cf4a4-APIT-01",
+    "WSTG-87cf4a4-APIT-03"
+  ],
+  "not_applicable_includes": [
+    "WSTG-v42-ATHN-03",
+    "WSTG-87cf4a4-APIT-02",
+    "WSTG-87cf4a4-INJT-05",
+    "WSTG-87cf4a4-INJT-19",
+    "WSTG-87cf4a4-SESS-10"
+  ]
+}
