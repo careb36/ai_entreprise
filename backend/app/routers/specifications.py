@@ -23,6 +23,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import ProjectDiscovery, Specification, User
 from pydantic import BaseModel, Field
+from services.loop import sod_requesters
 from services.planning import (
     document_approval,
     spec_author,
@@ -31,6 +32,7 @@ from services.planning import (
     spec_impact,
     spec_planning,
 )
+from services.platform import sod
 from sqlmodel import Session, select, text
 
 router = APIRouter(prefix="/v1/specifications", tags=["Core"])
@@ -278,6 +280,20 @@ async def approve_specification(
     """
     spec = _load(session, user, spec_id, "Manager")
     _only_draft(spec)
+    # Segregation of duties (#543): who drafted or revised it does not approve it.
+    try:
+        sod.enforce(
+            session,
+            spec.company_id,
+            sod.APPROVE_SPEC,
+            {"kind": "specification", "id": spec.id, "version": spec.version},
+            sod.actor_of(session, user),
+            sod_requesters.of_specification(session, spec),
+        )
+    except sod.SodRefused as refused:
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
     try:
         document_approval.approve_specification(session, spec, _actor(user))
     except document_approval.ApprovalRefused as exc:

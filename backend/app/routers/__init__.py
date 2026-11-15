@@ -6,6 +6,7 @@ importing each router module individually.  This keeps ``main.py`` clean and
 makes it easy to rename or split router modules in the future.
 """
 
+from routers.access_review import router as access_review_router
 from routers.agent_runs import router as agent_runs_router
 from routers.agents import router as agents_router
 from routers.api_tokens import router as api_tokens_router
@@ -33,6 +34,7 @@ from routers.procedures import router as procedures_router
 from routers.providers import router as providers_router
 from routers.reviews import router as reviews_router
 from routers.run_secrets import router as run_secrets_router
+from routers.sod import router as sod_router
 from routers.specifications import router as specifications_router
 from routers.sprint import router as sprint_router
 from routers.sprint_control import router as sprint_control_router
@@ -47,6 +49,7 @@ from routers.wiki import router as wiki_router
 from routers.workspace import router as workspace_router
 
 __all__ = [
+    "access_review_router",
     "agent_runs_router",
     "agents_router",
     "api_tokens_router",
@@ -74,6 +77,7 @@ __all__ = [
     "providers_router",
     "reviews_router",
     "run_secrets_router",
+    "sod_router",
     "specifications_router",
     "sprint_control_router",
     "sprint_crud_router",

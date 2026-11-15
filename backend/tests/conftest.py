@@ -71,6 +71,7 @@ from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
 from models.session import RefreshToken, SessionFamily
+from models.sod import AccessReview, SodPolicy
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -220,6 +221,8 @@ SQLModel.metadata.create_all(
         SprintBoardNote.__table__,
         Team.__table__,
         TeamMember.__table__,
+        SodPolicy.__table__,
+        AccessReview.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,
         WikiLink.__table__,

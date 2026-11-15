@@ -198,6 +198,28 @@ OpenID Connect provider (single sign-on, below).
   Creating a company makes its creator the Owner; inviting a member requires
   Owner. Help-desk administrators are a separate, deployment-wide list
   (`SUPPORT_ADMIN_EMAILS`, `is_support_admin`).
+- **Segregation of duties** (issue #543,
+  `docs/design/SEGREGATION_OF_DUTIES.md`). A role says what a person may do;
+  this says what they may not do to their own work. The account that started
+  a sprint does not accept its held deliveries (review, board or chat) or merge its runs
+  or its integration, and the person who drafted a specification does not
+  approve it (`services/platform/sod.py`, called at each approval point with
+  requesters read from records, never a request body). A refusal is a 403 and
+  a committed `sod_refused` audit row; an API token acts for its creator. The
+  rule is on by default for high-risk work; turning it off or widening it is
+  an Owner's audited choice. A company where one person can approve gets an
+  explicit, audited single-person exception with a reason, never a silent
+  bypass, and it lapses when a second person can approve. The report
+  (`GET /v1/companies/{id}/sod/report`) lists every approval with requester
+  and approver, from the records.
+- **Access review** (PCI DSS 4.0 Req. 7.2.4, structure only). Every 90 days
+  by default an Owner confirms or removes each member (own, team-derived and
+  effective role, SSO and chat links, last observed activity) and each
+  working API token (`/v1/companies/{id}/access-review`); inactive accounts
+  are flagged, a review past its 14-day grace is flagged missed and recorded
+  late, and removals apply at once. The service accounts inventory
+  (`/v1/companies/{id}/service-accounts`) names every credential that acts
+  without a person, with owner, scope and age, never a value.
 - **Public routes** are an explicit list: `/health`, registration and login,
   the HMAC-signed GitHub webhook, support bug reporting and chat,
   `/v1/models`, `/v1/capabilities` and the retired `/v1/approve_task` (410)
@@ -224,6 +246,11 @@ fallback credential.
   demoted or leaves the team that made them a Manager, until it is revoked or
   expires (at most 365 days); refusing such a token at use is planned
   (`docs/design/TEAMS_AND_USAGE.md`, T5).
+- Emergency changes on their own path (a reason, an after-the-fact approval
+  by another person within a deadline, listed in the report) are designed,
+  not built (`docs/design/SEGREGATION_OF_DUTIES.md`, Next). The Manager agent
+  approving under a policy its requester wrote is listed in the report as an
+  agent's approval, not refused.
 - Service-to-service identity is **not mTLS**. The backend and the daemon
   each have their own NATS user, with TLS and optional client certificates
   (§8.6); the backend and the LLM proxy share `LLM_PROXY_INTERNAL_TOKEN`

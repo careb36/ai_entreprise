@@ -42,6 +42,7 @@ from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
 from .session import RefreshToken, SessionFamily
+from .sod import AccessReview, SodPolicy
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -51,6 +52,7 @@ from .webhook import CompanyWebhook
 from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
 __all__ = [
+    "AccessReview",
     "Agent",
     "AgentMessage",
     "AgentRun",
@@ -86,6 +88,7 @@ __all__ = [
     "RunReview",
     "RunSecret",
     "SessionFamily",
+    "SodPolicy",
     "Specification",
     "Sprint",
     "SprintBoardNote",

@@ -293,16 +293,16 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Teams', 'Usage', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Documentation', 'Wiki', 'Members', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
 
-    // Members, Teams, Usage and GitHub follow the company's effective role (a
+    // Members, Teams, Duties and access, Usage and GitHub follow the company's effective role (a
     // team can raise a Viewer to Manager, never to Owner); the help desk
     // follows the platform's support admin flag, whatever the role.
     it.each([
-      ['Owner', undefined, false, ['Members', 'Teams', 'Usage', 'Single sign-on', 'GitHub']],
+      ['Owner', undefined, false, ['Members', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'GitHub']],
       ['Manager', undefined, false, ['Usage', 'GitHub']],
       ['Viewer', 'Manager', false, ['Usage', 'GitHub']],
       ['Viewer', undefined, false, []],
@@ -316,9 +316,9 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       const admin = within(screen.getByRole('menu')).getAllByRole('menuitem')
-        .filter(item => ['Members', 'Teams', 'Usage', 'Single sign-on', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
+        .filter(item => ['Members', 'Teams', 'Duties and access', 'Usage', 'Single sign-on', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
       expect(admin.map(item => [item.textContent, item.getAttribute('href')])).toEqual(
-        expected.map(name => [name, { Members: '/company/members', Teams: '/company/teams', Usage: '/company/usage', 'Single sign-on': '/company/sso', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
+        expected.map(name => [name, { Members: '/company/members', Teams: '/company/teams', 'Duties and access': '/company/duties', Usage: '/company/usage', 'Single sign-on': '/company/sso', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
       )
     })
 

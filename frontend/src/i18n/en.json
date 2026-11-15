@@ -32,7 +32,8 @@
     "teams": "Teams",
     "usage": "Usage",
     "wiki": "Wiki",
-    "documentation": "Documentation"
+    "documentation": "Documentation",
+    "duties": "Duties and access"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -2718,5 +2719,140 @@
     "lintDone_one": "{{count}} page marked stale.",
     "lintDone_other": "{{count}} pages marked stale.",
     "version": "v{{number}}"
+  },
+  "duties": {
+    "title": "Duties and access",
+    "subtitle": "Who asks for a change does not approve it; who can reach the company is reviewed on a schedule.",
+    "ownerOnly": "Only owners manage duties and access reviews. Your role here is {{role}}.",
+    "policy": {
+      "title": "Segregation of duties",
+      "mode": "Which approvals the rule holds",
+      "modes": {
+        "off": "Off",
+        "high_risk": "High-risk work (default)",
+        "all": "All approvals"
+      },
+      "modeHint": {
+        "off": "No approval is checked. Turning the rule off is recorded in the audit.",
+        "high_risk": "The person who started a sprint does not accept its held deliveries or merge its work; the person who drafted a specification does not approve it.",
+        "all": "High-risk work, and also another producer's runs and architectures."
+      },
+      "interval": "Access review every (days)",
+      "inactive": "Flag accounts inactive after (days)",
+      "save": "Save"
+    },
+    "solo": {
+      "title": "Single-person exception",
+      "hint": "Only one person here can approve, so every approval is theirs. Grant the exception with a reason; each use is recorded and listed in the report.",
+      "reasonLabel": "Reason (kept in the audit)",
+      "grant": "Grant the exception",
+      "inForce": "The single-person exception is in force: your own approvals pass and each one is recorded.",
+      "notInForce_one": "The exception is granted but not in force: {{count}} person can approve.",
+      "notInForce_other": "The exception is granted but not in force: {{count}} people can approve, so another person approves.",
+      "reason": "Reason: {{reason}} (granted by {{by}})",
+      "withdraw": "Withdraw the exception",
+      "unavailable_one": "{{count}} person can approve. The single-person exception is not needed.",
+      "unavailable_other": "{{count}} people can approve, so the single-person exception is not available."
+    },
+    "review": {
+      "title": "Access review",
+      "now": "now",
+      "state": {
+        "scheduled": "Next review due on {{due}} (every {{days}} days).",
+        "due": "A review is due ({{due}}). Confirm or remove each account below.",
+        "missed": "The review due on {{due}} was missed. Complete it now; it will be recorded as late."
+      },
+      "account": "Account",
+      "access": "Access",
+      "lastActivity": "Last activity",
+      "decision": "Decision",
+      "roles": "own {{own}}, effective {{effective}}",
+      "team": "team {{name}} ({{role}})",
+      "sso": "SSO linked",
+      "chat": "{{provider}} linked",
+      "token": "API token, {{role}}, created by {{by}}",
+      "inactive": "Inactive",
+      "never": "Never",
+      "decideFor": "Decision for {{name}}",
+      "confirm": "Confirm",
+      "remove": "Remove",
+      "note": "Note (optional)",
+      "complete": "Complete the review",
+      "history": "Earlier reviews",
+      "noHistory": "No review has been completed yet.",
+      "doneOnTime": "{{when}}: completed by {{by}}, {{removed}} removed.",
+      "doneLate": "{{when}}: completed late by {{by}}, {{removed}} removed."
+    },
+    "report": {
+      "title": "Approvals and duties report",
+      "status": {
+        "separated": "Separated",
+        "exception": "Audited exception",
+        "violation": "Violation",
+        "unattributed": "Unattributed",
+        "not_a_person": "By an agent"
+      },
+      "violations": "Violations and exceptions",
+      "noViolations": "Every approval was made by someone other than who asked for the work.",
+      "allApprovals_one": "{{count}} approval",
+      "allApprovals_other": "All {{count}} approvals",
+      "allApprovalsLabel": "All approvals",
+      "action": "Action",
+      "subject": "Work",
+      "requester": "Asked for by",
+      "approver": "Approved by",
+      "statusLabel": "Status",
+      "matrix": "Who did which duty",
+      "who": "Who",
+      "role": "Role",
+      "formerMember": "Former member",
+      "allWithRole": "All {{role}}s",
+      "agent": "Agent",
+      "both": "requests and approves",
+      "refusals_one": "{{count}} approval was refused by the rule.",
+      "refusals_other": "{{count}} approvals were refused by the rule."
+    },
+    "duty": {
+      "request": "Request",
+      "plan": "Plan",
+      "deliver": "Deliver",
+      "verify": "Verify",
+      "approve": "Approve",
+      "release": "Release"
+    },
+    "actions": {
+      "accept_held_delivery": "Accept a held delivery",
+      "approve_specification": "Approve a specification",
+      "approve_architecture": "Approve an architecture",
+      "approve_run": "Approve a run",
+      "release": "Release"
+    },
+    "accounts": {
+      "title": "Service accounts",
+      "hint": "Credentials that act without a person at the keyboard. Names, scopes and ages only; never a value.",
+      "none": "No service accounts.",
+      "company": "Company service accounts",
+      "deployment": "Deployment service accounts",
+      "kind": "Kind",
+      "name": "Name",
+      "owner": "Owner",
+      "scope": "Scope",
+      "age": "Age",
+      "status": "Status",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "kinds": {
+        "api_token": "API token",
+        "webhook": "Webhook",
+        "chat_connection": "Chat connection",
+        "sso_client": "SSO client",
+        "model_provider": "Model provider",
+        "github_webhook": "GitHub webhook",
+        "nats_backend": "Backend on NATS",
+        "nats_daemon": "Daemon on NATS"
+      },
+      "proxyPresent": "LLM proxy internal token: set",
+      "proxyMissing": "LLM proxy internal token: not set"
+    }
   }
 }
