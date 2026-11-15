@@ -1,8 +1,26 @@
-"""Creation and validation of signed human-user access tokens."""
+"""Creation and validation of signed human-user access tokens.
+
+Every token names who issued it and for whom (``iss``, ``aud``; issue #541,
+WSTG-SESS-10 at latest@87cf4a4): access tokens are for ``JWT_AUDIENCE``, the
+Glassroom stream tickets for ``<JWT_AUDIENCE>:glassroom``, both issued by
+``JWT_ISSUER``, and validation requires both, so a token minted for another
+service under a shared key, or a ticket presented as an access token, is
+refused. Only an HMAC algorithm is accepted (``HMAC_ALGORITHMS``): a
+configuration naming ``none`` or an asymmetric algorithm with the shared
+secret refuses to sign or verify anything.
+
+Tokens issued before ``iss`` and ``aud`` existed are refused: an access token
+lives ``ACCESS_TOKEN_EXPIRE_MINUTES`` and a browser session renews it from its
+refresh cookie (which is not a JWT), so a browser does not notice; a script's
+Bearer token from before the upgrade logs in again.
+"""
 
 from datetime import UTC, datetime, timedelta
 
 import jwt
+
+HMAC_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
+GLASSROOM_AUDIENCE_SUFFIX = ":glassroom"
 
 
 class AuthTokenError(Exception):
@@ -31,6 +49,32 @@ def _configured_key() -> str | None:
 def is_auth_configured() -> bool:
     """True when a JWT signing key is configured."""
     return _configured_key() is not None
+
+
+def _algorithm() -> str:
+    """The configured algorithm, which must be an HMAC one."""
+    from config import settings
+
+    algorithm = str(settings.JWT_ALGORITHM or "").strip()
+    if algorithm not in HMAC_ALGORITHMS:
+        raise AuthNotConfiguredError(
+            f"JWT_ALGORITHM must be one of {sorted(HMAC_ALGORITHMS)}"
+        )
+    return algorithm
+
+
+def _issuer() -> str:
+    from config import settings
+
+    return settings.JWT_ISSUER
+
+
+def _audience(kind: str = "access") -> str:
+    from config import settings
+
+    if kind == "glassroom":
+        return settings.JWT_AUDIENCE + GLASSROOM_AUDIENCE_SUFFIX
+    return settings.JWT_AUDIENCE
 
 
 def create_access_token(
@@ -65,16 +109,17 @@ def create_access_token(
         "iat": now,
         "exp": expires_at,
         "typ": "access",
+        "iss": _issuer(),
+        "aud": _audience(),
     }
     if session_id is not None:
         claims["sid"] = session_id
         claims["csrf"] = csrf_hash or ""
-    return jwt.encode(claims, key, algorithm=settings.JWT_ALGORITHM)
+    return jwt.encode(claims, key, algorithm=_algorithm())
 
 
 def decode_access_token(token: str) -> dict:
     """Verify an access token's signature, expiration, and token type."""
-    from config import settings
 
     key = _configured_key()
     if key is None:
@@ -84,8 +129,10 @@ def decode_access_token(token: str) -> dict:
         claims = jwt.decode(
             token,
             key,
-            algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "exp", "typ"]},
+            algorithms=[_algorithm()],
+            audience=_audience(),
+            issuer=_issuer(),
+            options={"require": ["sub", "exp", "typ", "iss", "aud"]},
         )
     except (jwt.PyJWTError, TypeError, ValueError) as exc:
         raise InvalidTokenError("Invalid or expired token") from exc
@@ -98,7 +145,6 @@ def decode_access_token(token: str) -> dict:
 def session_id_of(token: str) -> str | None:
     """The ``sid`` of a correctly signed access token, even an expired one
     (logout ends the family it names); ``None`` for anything else."""
-    from config import settings
 
     key = _configured_key()
     if key is None or not token:
@@ -107,10 +153,12 @@ def session_id_of(token: str) -> str | None:
         claims = jwt.decode(
             token,
             key,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=[_algorithm()],
+            audience=_audience(),
+            issuer=_issuer(),
             options={"verify_exp": False, "require": ["sub", "typ", "sid"]},
         )
-    except (jwt.PyJWTError, TypeError, ValueError):
+    except (AuthNotConfiguredError, jwt.PyJWTError, TypeError, ValueError):
         return None
     if claims.get("typ") != "access":
         return None
@@ -131,7 +179,6 @@ def create_stream_ticket(
     for one sprint and a few minutes, and membership is checked again when it
     is used.
     """
-    from config import settings
 
     key = _configured_key()
     if key is None:
@@ -143,13 +190,14 @@ def create_stream_ticket(
         "iat": now,
         "exp": now + (expires_delta or timedelta(minutes=STREAM_TICKET_MINUTES)),
         "typ": "glassroom",
+        "iss": _issuer(),
+        "aud": _audience("glassroom"),
     }
-    return jwt.encode(claims, key, algorithm=settings.JWT_ALGORITHM)
+    return jwt.encode(claims, key, algorithm=_algorithm())
 
 
 def decode_stream_ticket(ticket: str, sprint_id: int) -> int:
     """The user a valid ticket for *sprint_id* was issued to; raises otherwise."""
-    from config import settings
 
     key = _configured_key()
     if key is None:
@@ -158,8 +206,10 @@ def decode_stream_ticket(ticket: str, sprint_id: int) -> int:
         claims = jwt.decode(
             ticket,
             key,
-            algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "exp", "typ", "sprint"]},
+            algorithms=[_algorithm()],
+            audience=_audience("glassroom"),
+            issuer=_issuer(),
+            options={"require": ["sub", "exp", "typ", "sprint", "iss", "aud"]},
         )
         user_id = int(claims["sub"])
     except (jwt.PyJWTError, TypeError, ValueError) as exc:

@@ -38,6 +38,11 @@ export default function Login() {
         setError(t('auth.invalidCredentials', {
           defaultValue: 'Invalid email or password.',
         }))
+      } else if (err instanceof ApiError && err.status === 429) {
+        // Limited per address and per account (issue #541).
+        setError(t('auth.tooManyAttempts', {
+          defaultValue: 'Too many attempts. Please wait a minute and try again.',
+        }))
       } else {
         setError(err instanceof Error ? err.message : t('auth.loginError', {
           defaultValue: 'Unable to log in. Please try again.',
@@ -66,7 +71,7 @@ export default function Login() {
       </h1>
       {searchParams.get('registered') === 'true' && (
         <p role="status" className="text-green-300 mb-4">
-          {t('auth.registerSuccess', { defaultValue: 'Account created. You can now log in.' })}
+          {t('auth.registerSuccess', { defaultValue: 'If this email was not registered already, your account is ready. Log in to continue.' })}
         </p>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">

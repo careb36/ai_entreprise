@@ -251,8 +251,25 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     JWT_SECRET_KEY: str | None = None
     AUTH_REQUIRED: bool = True
+    # An HMAC algorithm only (HS256, HS384, HS512): anything else refuses to
+    # sign or verify (issue #541).
     JWT_ALGORITHM: str = "HS256"
+    # Every access token names its issuer and audience, and validation
+    # requires both (issue #541); the Glassroom stream tickets use
+    # "<JWT_AUDIENCE>:glassroom". Two deployments that share a
+    # JWT_SECRET_KEY must not share these values.
+    JWT_ISSUER: str = "la-fabrique"
+    JWT_AUDIENCE: str = "la-fabrique-api"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Password sign-in and registration (issue #541, WSTG-v42-ATHN-03): per
+    # client address, and per account with a backoff that doubles after
+    # LOGIN_FAILURES_BEFORE_BACKOFF failures in LOGIN_FAILURE_WINDOW_SECONDS,
+    # up to LOGIN_BACKOFF_MAX_SECONDS.
+    LOGIN_RATE_LIMIT: str = "10/minute"
+    REGISTER_RATE_LIMIT: str = "5/minute"
+    LOGIN_FAILURES_BEFORE_BACKOFF: int = 5
+    LOGIN_FAILURE_WINDOW_SECONDS: int = 900
+    LOGIN_BACKOFF_MAX_SECONDS: int = 900
     # Browser sessions (issue #524; docs/design/SESSIONS.md): a refresh-token
     # family lives at most this many days from sign-in, however often it is
     # rotated; a reuse within the grace (two tabs refreshing at once) is
@@ -318,6 +335,16 @@ class Settings(BaseSettings):
     RATE_LIMIT_STORAGE_URI: str = "memory://"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     SECURITY_HEADERS_ENABLED: bool = True
+    # The interactive API documentation (/docs, /redoc, /openapi.json). On for
+    # development; turn it off where the API faces the internet (issue #541,
+    # WSTG-v42-CONF-05).
+    API_DOCS_ENABLED: bool = True
+    # An optional notice of each unhandled error (issue #541): the error id,
+    # the exception class and the route template, never a traceback, message,
+    # path or body. Off unless set; https only. ERROR_REPORT_SOURCE names this
+    # deployment in the report.
+    ERROR_REPORT_URL: str = ""
+    ERROR_REPORT_SOURCE: str = ""
     # The knowledge graph is optional (issue #328): off, nothing is recorded
     # in it and its readers answer "not recorded"; memory search runs on
     # pgvector alone.

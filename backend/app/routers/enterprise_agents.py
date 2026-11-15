@@ -10,6 +10,7 @@ Endpoints (split out of ``routers/enterprise.py``, which re-exports them):
 
 from auth_policy import (
     current_user_if_required,
+    require_authenticated,
     require_company_role,
 )
 from database import get_session
@@ -92,8 +93,16 @@ async def create_agent(
 
 
 @router.post("/agents/generate_prompt", tags=["Enterprise"])
-async def generate_agent_prompt(req: AgentPromptRequest):
-    """Auto-generate a system prompt for an agent."""
+async def generate_agent_prompt(
+    req: AgentPromptRequest,
+    user: User | None = Depends(current_user_if_required),  # noqa: B008
+):
+    """Auto-generate a system prompt for an agent (any signed-in caller).
+
+    Public until issue #541: no company data, but a route is protected unless
+    it is on the documented public list (SECURITY.md §3.2).
+    """
+    require_authenticated(user)
     return {
         "system_prompt": _build_template_prompt(
             req.role, req.seniority, req.specialty, req.persona

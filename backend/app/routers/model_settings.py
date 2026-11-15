@@ -31,7 +31,7 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Company, ProviderConnection, User
-from pydantic import BaseModel
+from schemas import RequestModel
 from services.models import (
     calibration,
     company_models,
@@ -45,7 +45,7 @@ logger = logging.getLogger("fabrique")
 router = APIRouter(prefix="/v1", tags=["Providers"])
 
 
-class ModelSettings(BaseModel):
+class ModelSettings(RequestModel):
     default_model: str | None = None
     role_models: dict[str, Any] | None = None
     # The routing policy by difficulty (issue #319); left out: kept as it is.

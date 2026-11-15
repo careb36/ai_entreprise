@@ -23,7 +23,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Body, Depends, HTTPException
 from models import Sprint, User
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import ConfigDict, Field, StringConstraints
+from schemas import RequestModel
 from services.loop import sprint_archive
 from sqlmodel import Session
 
@@ -37,7 +38,7 @@ Goal = Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)]
 MAX_DURATION_DAYS = 90
 
 
-class SprintUpdate(BaseModel):
+class SprintUpdate(RequestModel):
     """The fields a Manager may edit; any other field is refused (422)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -47,7 +48,7 @@ class SprintUpdate(BaseModel):
     duration_days: int | None = Field(default=None, ge=1, le=MAX_DURATION_DAYS)
 
 
-class SprintRemoval(BaseModel):
+class SprintRemoval(RequestModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: Annotated[str, StringConstraints(max_length=500)] | None = None

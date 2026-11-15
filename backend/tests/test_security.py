@@ -9,10 +9,14 @@ def test_security_headers_present(test_client):
 
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert response.headers.get("X-Frame-Options") == "DENY"
-    assert response.headers.get("X-XSS-Protection") == "1; mode=block"
+    # The legacy XSS auditor is turned off, not configured (issue #541).
+    assert response.headers.get("X-XSS-Protection") == "0"
     assert "max-age=31536000" in response.headers.get("Strict-Transport-Security", "")
-    assert response.headers.get("Content-Security-Policy") == "default-src 'self'"
-    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert response.headers.get("Content-Security-Policy").startswith(
+        "default-src 'none'; frame-ancestors 'none'"
+    )
+    assert response.headers.get("Referrer-Policy") == "no-referrer"
+    assert response.headers.get("Cross-Origin-Opener-Policy") == "same-origin"
 
 
 def test_cors_origins_configured(test_client):
