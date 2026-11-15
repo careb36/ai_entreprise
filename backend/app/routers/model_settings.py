@@ -14,6 +14,10 @@ Endpoints:
 - ``GET /v1/companies/{id}/routing_record`` — done, rework and reported tokens
   per difficulty and model over the completed sprints (Viewer;
   ``services/routing_record.py``, issue #319).
+- ``GET /v1/companies/{id}/calibration`` — the difficulty predicted before
+  each task ran scored against the effort observed from its records, per
+  band, role, producer, model and sprint (Viewer;
+  ``services/models/calibration.py``, issue #534).
 
 An agent's own model still wins (the Agents page); without one, the company's
 model for its role, then the company's default, then the deployment's
@@ -29,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import Company, ProviderConnection, User
 from pydantic import BaseModel
 from services.models import (
+    calibration,
     company_models,
     model_record,
     model_suggestions,
@@ -124,3 +129,14 @@ def get_routing_record(
     require_company_role(session, user, company_id, "Viewer")
     _company(session, company_id)
     return routing_record.record(session, company_id)
+
+
+@router.get("/companies/{company_id}/calibration")
+def get_calibration(
+    company_id: int,
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+) -> dict[str, Any]:
+    require_company_role(session, user, company_id, "Viewer")
+    _company(session, company_id)
+    return calibration.record(session, company_id)

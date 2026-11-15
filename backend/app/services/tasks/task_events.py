@@ -36,6 +36,10 @@ Kinds:
 - ``estimated``: the task's difficulty as its plan stood before an attempt
   and the routing it led to (``payload.difficulty``, ``payload.routing``;
   ``services/models/difficulty.py``); an event only, no comment;
+- ``effort_observed``: what the task took, read by the backend from its own
+  records at sprint close (``payload.observed``: tokens, wall time, rework,
+  review failures, files the daemon wrote; ``services/models/effort.py``);
+  an observation, an event only, no comment, no change to the task's state;
 - ``board_note``: a note on the sprint board (``services/tasks/sprint_board.py``)
   written or marked wrong, with its author: a claim, never a verdict; and
   ``board_note_rejected``: the blocks of a delivery that were not notes, and why;
@@ -87,6 +91,7 @@ KINDS = frozenset(
         "note",
         "integration",
         "estimated",
+        "effort_observed",
         "board_note",
         "board_note_rejected",
         "legacy",
