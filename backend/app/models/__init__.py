@@ -44,6 +44,7 @@ from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
+from .team import Team, TeamMember
 from .webhook import CompanyWebhook
 
 __all__ = [
@@ -87,6 +88,8 @@ __all__ = [
     "SsoFlowState",
     "SsoIdentity",
     "TaskEvent",
+    "Team",
+    "TeamMember",
     "User",
     "Verification",
 ]

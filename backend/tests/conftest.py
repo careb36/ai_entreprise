@@ -73,6 +73,7 @@ from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
+from models.team import Team, TeamMember
 from models.webhook import CompanyWebhook
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
@@ -207,6 +208,8 @@ SQLModel.metadata.create_all(
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
         SprintBoardNote.__table__,
+        Team.__table__,
+        TeamMember.__table__,
     ],
 )
 

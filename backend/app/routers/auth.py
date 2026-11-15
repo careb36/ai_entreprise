@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from models import CompanyMember, User
 from passwords import hash_password, needs_rehash, rehash_password, verify_password
 from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
-from services.platform import sso_flow
+from services.platform import sso_flow, teams
 from services.platform.oidc import SsoError
 from sqlmodel import Session, select
 
@@ -116,7 +116,15 @@ async def get_me(
         "full_name": user.full_name,
         "support_admin": is_support_admin(user),
         "memberships": [
-            {"company_id": membership.company_id, "human_role": membership.human_role}
+            {
+                "company_id": membership.company_id,
+                "human_role": membership.human_role,
+                # Raised by the member's teams (never to Owner); what the
+                # routes check (auth_policy.require_company_role).
+                "effective_role": teams.member_role(
+                    session, membership.company_id, user.id
+                ),
+            }
             for membership in memberships
         ],
     }

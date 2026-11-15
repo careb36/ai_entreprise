@@ -3,10 +3,10 @@
 from auth_policy import ROLE_RANK, current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
-from models import CompanyMember, User
+from models import User
 from pydantic import BaseModel, Field
-from services.platform import api_tokens
-from sqlmodel import Session, select
+from services.platform import api_tokens, teams
+from sqlmodel import Session
 
 router = APIRouter(prefix="/v1/auth/tokens", tags=["Company"])
 
@@ -38,14 +38,10 @@ def _serialize(t) -> dict:
 
 
 def _own_role(session: Session, user: User | None, company_id: int) -> str | None:
+    """The caller's effective role (teams included): a token never outranks it."""
     if user is None:
         return None
-    member = session.exec(
-        select(CompanyMember).where(
-            CompanyMember.user_id == user.id, CompanyMember.company_id == company_id
-        )
-    ).first()
-    return member.human_role if member else None
+    return teams.member_role(session, company_id, user.id)
 
 
 @router.post("")

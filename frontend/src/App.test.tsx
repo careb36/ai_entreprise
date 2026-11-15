@@ -295,30 +295,32 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Members', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Members', 'Teams', 'Usage', 'Single sign-on', 'Chat approvals', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
 
-    // Members and GitHub follow the company role; the help desk follows the
-    // platform's support admin flag, whatever the role.
+    // Members, Teams, Usage and GitHub follow the company's effective role (a
+    // team can raise a Viewer to Manager, never to Owner); the help desk
+    // follows the platform's support admin flag, whatever the role.
     it.each([
-      ['Owner', false, ['Members', 'Single sign-on', 'GitHub']],
-      ['Manager', false, ['GitHub']],
-      ['Viewer', false, []],
-      ['Viewer', true, ['Help desk']],
-    ] as const)('offers the admin pages a %s (support admin: %s) can use', (role, supportAdmin, expected) => {
+      ['Owner', undefined, false, ['Members', 'Teams', 'Usage', 'Single sign-on', 'GitHub']],
+      ['Manager', undefined, false, ['Usage', 'GitHub']],
+      ['Viewer', 'Manager', false, ['Usage', 'GitHub']],
+      ['Viewer', undefined, false, []],
+      ['Viewer', undefined, true, ['Help desk']],
+    ] as const)('offers the admin pages a %s (effective %s, support admin: %s) can use', (role, effective, supportAdmin, expected) => {
       authenticate()
       useAuthStore.setState({
-        memberships: [{ company_id: 1, human_role: role }],
+        memberships: [{ company_id: 1, human_role: role, effective_role: effective }],
         user: { user_id: 1, email: 'person@example.invalid', full_name: 'Person', support_admin: supportAdmin },
       })
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       const admin = within(screen.getByRole('menu')).getAllByRole('menuitem')
-        .filter(item => ['Members', 'Single sign-on', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
+        .filter(item => ['Members', 'Teams', 'Usage', 'Single sign-on', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
       expect(admin.map(item => [item.textContent, item.getAttribute('href')])).toEqual(
-        expected.map(name => [name, { Members: '/company/members', 'Single sign-on': '/company/sso', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
+        expected.map(name => [name, { Members: '/company/members', Teams: '/company/teams', Usage: '/company/usage', 'Single sign-on': '/company/sso', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
       )
     })
 
