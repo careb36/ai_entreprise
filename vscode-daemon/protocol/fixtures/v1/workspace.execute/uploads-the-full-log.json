@@ -1,0 +1,38 @@
+{
+  "description": "A command run with `full_log`: the daemon uploads each stream whole to the object store and says which objects and how many bytes, never a hash (the backend reads them back and hashes them).",
+  "subject": "workspace.execute",
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "command": "echo hello",
+    "full_log": {
+      "bucket": "FABRIQUE_RUN_LOGS",
+      "name": "run-0123456789abcdef"
+    }
+  },
+  "reply": {
+    "success": true,
+    "stdout": "hello\n",
+    "stderr": "",
+    "exit_code": 0,
+    "full_log": {
+      "bucket": "FABRIQUE_RUN_LOGS",
+      "max_bytes": 52428800,
+      "objects": [
+        {
+          "stream": "stdout",
+          "object": "run-0123456789abcdef/stdout",
+          "bytes": 6,
+          "total_bytes": 6,
+          "truncated": false
+        },
+        {
+          "stream": "stderr",
+          "object": "run-0123456789abcdef/stderr",
+          "bytes": 0,
+          "total_bytes": 0,
+          "truncated": false
+        }
+      ]
+    }
+  }
+}

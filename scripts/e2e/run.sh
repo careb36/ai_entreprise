@@ -463,6 +463,11 @@ counter_check() {  # counter_check <run id> <check name> <python expression over
   api "$API/v1/agent_runs/$1/verifications?company_id=$CID" | json "(lambda c: ($3))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$2'))"; }
 COUNTER_FIRST=${COUNTER_RUNS%% *}; COUNTER_LAST=${COUNTER_RUNS##* }
 check "the delivery's tests ran where DELIVERY_SANDBOX says ($SANDBOX), and the Verifier recorded the daemon's own report" test "$(counter_check "$COUNTER_LAST" sandbox "c['sandbox']['mode'], c['isolated']")" = "('$SANDBOX', $([ "$SANDBOX" = host ] && echo False || echo True))"
+run_evidence() {  # run_evidence <run id> <python expression over e, the evidence of its latest verification>
+  api "$API/v1/agent_runs/$1/verifications?company_id=$CID" | json "(lambda e: ($2))(d['verifications'][-1]['evidence'])"; }
+# Full logs (#315): the daemon uploaded the test run's whole output to the
+# JetStream object store; the backend read it back and computed the sha256.
+check "the delivery's test output went whole to the object store, and the backend hashed what it read back" test "$(run_evidence "$COUNTER_LAST" "e['test_run']['full_log']['observed'], e['test_run']['full_log']['observed_by'], sorted(o['stream'] for o in e['test_run']['full_log']['objects']), all(len(o['sha256']) == 64 and o['size'] == o['daemon_bytes'] for o in e['test_run']['full_log']['objects'])")" = "(True, 'backend', ['stderr', 'stdout'], True)"
 check "the counter's Developer read the greeting's module through the daemon before delivering, and the read is evidence with the file's hash" test "$(counter_check "$COUNTER_LAST" tools_used "c['calls'][0]['tool'], c['calls'][0]['path'], c['calls'][0]['sha256']")" = "('read', 'src/add_greeting.py', '$(sha256sum "$WORK/project/src/add_greeting.py" | cut -d' ' -f1)')"
 check "its prompt opened with the repository map, naming that module" test "$(prompt_seen "## Task: Add greeting counter.*## Repository.*src/add_greeting.py")" = yes
 check "the Verifier said the first delivery rewrote QA's test without reading it, and the second changed no existing file" test "$(counter_check "$COUNTER_FIRST" context_read "c['read'], c['modified_unread']")" = "(['src/add_greeting.py'], ['tests/test_req_2.py'])" -a "$(counter_check "$COUNTER_LAST" context_read "c['modified_unread'], c['observation']")" = "([], 'read 1 file(s); no existing file was changed')"
@@ -536,6 +541,7 @@ WRUN=$(api "$API/v1/agent_runs?company_id=$WCID&external_ref=task-$WGREETING" | 
 web_check() { api "$API/v1/agent_runs/$WRUN/verifications?company_id=$WCID" | json "(lambda c: ($2))(next(c for c in d['verifications'][-1]['checks'] if c['name'] == '$1'))"; }
 check "the greeting's application was started and answered on its port" test "$(web_check application_started "c['outcome']")" = pass
 check "the smoke suite ran as the e2e command, and the missing browser is unverifiable with its reason, never a pass or a refutation" test "$(web_check e2e_run "c['outcome'], c.get('runtime_missing'), 'npx --no-install playwright test' in c['observation'], 'observed nothing in a browser' in c['observation']")" = "('unverifiable', True, True, True)"
+check "the daemon probed for a browser where the smoke suite ran and found none: browser present: no, from its observation" test "$(web_check e2e_run "c['browser']['present'], c['browser']['observed_by'], 'browser present: no (' in c['observation']")" = "(False, 'daemon', True)"
 check "the unit tests still decided the greeting's criteria" test "$(web_check criteria_tests "c['outcome'], c['results']")" = "('pass', {'REQ-1.1': 'pass', 'REQ-1.2': 'pass'})"
 
 echo "10. every task's history, read independently"

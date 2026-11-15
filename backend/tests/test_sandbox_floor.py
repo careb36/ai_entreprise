@@ -151,3 +151,13 @@ def test_nothing_else_in_the_daemon_reaches_the_host_shell():
     app = (DAEMON / "app_run.py").read_text(encoding="utf-8")
     check = app.split("def check_application(", 1)[1]
     assert check.index("sandbox.normalize(") < check.index("_run_host(")
+    # The browser probe runs node in the project's folder on the host only
+    # from the application check's host path, which is past ``normalize``.
+    on_host = {
+        p.name
+        for p in DAEMON.glob("*.py")
+        if re.search(r"\bbrowser_probe\.on_host\(", p.read_text(encoding="utf-8"))
+    }
+    assert on_host <= {"app_run.py"}
+    host_path = app.split("def _run_host(", 1)[1].split("\ndef ", 1)[0]
+    assert "browser_probe.on_host(" in host_path or not on_host

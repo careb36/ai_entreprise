@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabrique:daemon-protocol:v1:workspace.app.check",
   "title": "workspace.app.check",
-  "description": "Start the application in the sandbox, wait for its port, probe it, run an e2e command, stop it (app_run.py). A failure is an observation (`error`), not a refusal.",
+  "description": "Start the application in the sandbox, wait for its port, probe it, run an e2e command, stop it (app_run.py). A failure is an observation (`error`), not a refusal. With `browser_probe` the daemon first reports whether a browser launches there; with `full_log` the whole log and e2e output go to the object store.",
   "x-protocol-version": 1,
   "x-subject": "workspace.app.check",
   "x-kind": "request",
@@ -36,6 +36,28 @@
         },
         "e2e_timeout_seconds": {
           "type": "number"
+        },
+        "full_log": {
+          "type": "object",
+          "description": "Upload the whole output to this JetStream object store bucket, as `<name>/<stream>` (run_logs.py). Names are letters, digits, `_` and `-`.",
+          "properties": {
+            "bucket": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          "required": [
+            "bucket",
+            "name"
+          ]
+        },
+        "browser_probe": {
+          "type": "boolean",
+          "description": "Probe for a browser where the e2e command runs, before it (browser_probe.py)."
         }
       },
       "required": [
@@ -61,6 +83,121 @@
         },
         "error": {
           "type": "string"
+        },
+        "browser_probe": {
+          "type": "object",
+          "description": "Whether a browser Playwright can launch was there, as the daemon observed it before the e2e command (browser_probe.py).",
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "from": {
+              "enum": [
+                "image",
+                "project"
+              ]
+            },
+            "package": {
+              "type": "string"
+            },
+            "playwright": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "browser": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "exit_code": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "output_tail": {
+              "type": "string"
+            },
+            "observed_by": {
+              "const": "daemon"
+            }
+          },
+          "required": [
+            "available",
+            "observed_by"
+          ]
+        },
+        "full_log": {
+          "type": "object",
+          "description": "What the daemon uploaded for the request's `full_log`: the objects, their byte counts, or `error`. Never a hash: the backend reads each object back and computes the sha256 itself (rule 6, docs/POSITIONING.md).",
+          "properties": {
+            "bucket": {
+              "type": "string"
+            },
+            "max_bytes": {
+              "type": "integer"
+            },
+            "objects": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string"
+                  },
+                  "object": {
+                    "type": "string"
+                  },
+                  "bytes": {
+                    "type": "integer"
+                  },
+                  "total_bytes": {
+                    "type": "integer"
+                  },
+                  "truncated": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "stream",
+                  "object",
+                  "bytes",
+                  "total_bytes",
+                  "truncated"
+                ],
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "sha256"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "digest"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "error": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bucket",
+            "objects"
+          ]
+        },
+        "sandbox": {
+          "type": "object"
         }
       }
     }
