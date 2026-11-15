@@ -163,7 +163,8 @@ Copy `.env.example` to `.env` and fill in:
   (24) — optional. With the Manager agent on and `SMTP_HOST` set, the
   client's brief (`services/management/brief_mail.py`: the deterministic
   `manager_brief.brief` rendered as plain text) goes by mail to the Owners and
-  Managers of each company that has a `ManagerPolicy`, once per interval; each
+  Managers of each company that has a `ManagerPolicy` (by effective role: a
+  member a team makes a Manager receives it too), once per interval; each
   send is audited as `manager_brief_sent` with its window and how many people
   it reached (never an address), the next window starts where the last sent
   one ended, and a failed send is retried from the same start at most once an

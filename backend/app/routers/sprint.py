@@ -59,6 +59,12 @@ VALID_STATUSES = {"todo", "in_progress", "in_review", "done", "blocked"}
 VALID_PRIORITIES = {"low", "medium", "high", "critical"}
 
 
+def _person_id(user: User | None) -> int | None:
+    if user is None or getattr(user, "_api_token_company_id", None) is not None:
+        return None
+    return user.id
+
+
 @router.post("/start_sprint")
 async def start_sprint(
     req: SprintStartRequest,
@@ -121,6 +127,8 @@ async def start_sprint(
         specification_id=req.specification_id,
         team=team,
         team_source=team_source,
+        # From the session, never the body; an API token starts it unattributed.
+        started_by_user_id=_person_id(user),
     )
 
     # Resolve the company's default business unit for quota tracking.

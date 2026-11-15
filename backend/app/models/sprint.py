@@ -70,6 +70,11 @@ class Sprint(SQLModel, table=True):
     team: Any | None = Field(default=None, sa_column=Column(JSON))
     # Who chose it: "suggested", "person", "automatic" or "all" (no team).
     team_source: str | None = None
+    # The signed-in account that started it (``POST /v1/start_sprint``),
+    # taken from the session, never the request body; empty for a sprint the
+    # platform opened (carry-over, the next sprint) or one from before
+    # migration 0029. The usage report attributes the sprint's work by it.
+    started_by_user_id: int | None = Field(default=None, foreign_key="users.id")
 
 
 class BacklogItem(SQLModel, table=True):
