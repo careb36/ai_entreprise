@@ -19,6 +19,7 @@ from services.evidence import (
     grounding,
     risk,
     secops_checks,
+    security_probe,
     sources,
     standards,
     wstg_tests,
@@ -420,6 +421,11 @@ def verify_agent_run(
     # The dependency install, the application started and probed, and its
     # e2e run (``services/app_check.py``), as the daemon reported them.
     checks.extend(app_check.checks(evidence))
+    # The running application's answers to the daemon's security probe, as
+    # WSTG items (``services/evidence/security_probe.py``, issue #540).
+    probe_check = security_probe.check(evidence)
+    if probe_check:
+        checks.append(probe_check)
     # Tests named after an OWASP WSTG test, as the daemon ran them: the
     # project's security test plan reads the items (issue #539).
     wstg_check = wstg_tests.check(evidence)

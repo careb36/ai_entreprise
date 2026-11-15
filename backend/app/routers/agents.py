@@ -38,7 +38,7 @@ from logging_config import logger
 from models import AuditLog, BacklogItem, BusinessUnit, Sprint, User
 from models.agent_run import AgentRun
 from schemas import AuditRequest, GenerateRequest
-from services.platform import memory_graph
+from services.platform import audit_anchors, memory_graph
 from services.platform.agent_service import AgentService
 from sqlmodel import Session, or_, select
 
@@ -459,10 +459,17 @@ async def verify_audit_chain(
     A row deleted, inserted, reordered, altered or moved from another company
     shows as a break at its sequence number; the head (last number and hash)
     can be recorded elsewhere to notice newest rows being dropped.
+
+    ``anchors`` is the anchor coverage (issue #542,
+    ``services/platform/audit_anchors.coverage``): the chain alone verifies
+    with the factory's own key, so which ranges are anchored outside the
+    factory, and which tail is not, is reported beside it.
     """
     require_authenticated(user)
     require_company_role(session, user, company_id, "Viewer")
-    return verify_chain(session, company_id)
+    report = verify_chain(session, company_id)
+    report["anchors"] = audit_anchors.coverage(session, company_id)
+    return report
 
 
 @router.get("/memory/search")

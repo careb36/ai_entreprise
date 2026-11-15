@@ -2,8 +2,8 @@
 ``wstg_reviews`` table, company-scoped. A new table only: nothing existing
 changes.
 
-Revision ID: 0099
-Revises: 0028
+Revision ID: 0034
+Revises: 0033
 Create Date: 2026-11-15 22:00:00 UTC
 """
 
@@ -14,8 +14,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0028"
+revision = "0034"
+down_revision = "0033"
 branch_labels = None
 depends_on = None
 

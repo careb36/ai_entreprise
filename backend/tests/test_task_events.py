@@ -408,8 +408,9 @@ def test_a_carry_over_is_an_event_on_both_tasks(db):
     [clone] = carry_over.carry_over(db, company.id, [item.id], nxt, "ana", "Manager")
     db.commit()
 
-    assert _kinds(db, item.id) == ["blocked", "carried_over"]
-    assert _kinds(db, clone.id) == ["carried_over"]
+    # The confirmed relation between the attempts is on both chains (#533).
+    assert _kinds(db, item.id) == ["blocked", "carried_over", "relation"]
+    assert _kinds(db, clone.id) == ["carried_over", "relation"]
     directions = [
         e.payload["direction"]
         for e in task_events.for_task(db, item.id) + task_events.for_task(db, clone.id)

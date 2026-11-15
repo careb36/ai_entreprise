@@ -135,7 +135,9 @@ the LangGraph graph is only an optional kickoff conversation.
    and with `autonomy_level` 3 the follow-up
    sprint carries the closed sprint's blocked tasks on its own, once each. The
    new task carries what blocked the old one (a `Previous attempt` prompt
-   section); the old one is marked and leaves the inbox. The escalation gets
+   section); the old one is marked and leaves the inbox, and the two are
+   linked by a confirmed `relates_to` relation (`services/tasks/relations.py`,
+   `rule:carry_over`; information only, never a dependency). The escalation gets
    an answer (`services/learning/scrum_master.py`): the ScrumMaster reads what blocked
    the task, the rework asked for and how the company's second attempts went
    (`track_record`: done out of carried, with and without its brief, counted

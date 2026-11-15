@@ -613,7 +613,7 @@ proposal never removes or changes a rule's row. No producer calls it yet.
   command, and the WSTG commit); `pass` is observed-pass, `refuted` /
   `finding` / `fail` observed-fail; `unverifiable` sets nothing and is shown
   beside the row;
-- a **person's recorded review** (`WstgReview`, migration `0099`): who
+- a **person's recorded review** (`WstgReview`, migration `0034`): who
   reviewed (kept in the database only), the date, the artifact, the result
   (`pass`, `fail`, or `not_applicable` with a note), the recorder's company
   role and `record_sha256`, computed by the backend over the stored fields.

@@ -24,6 +24,7 @@ from routers import (
     agents_router,
     api_tokens_router,
     architectures_router,
+    audit_anchors_router,
     auth_router,
     board_moves_router,
     board_notes_router,
@@ -51,16 +52,21 @@ from routers import (
     specifications_router,
     sprint_control_router,
     sprint_crud_router,
+    sprint_progress_router,
     sprint_router,
     sso_admin_router,
     sso_router,
     support_router,
+    task_relations_router,
+    task_views_router,
+    teams_router,
+    usage_router,
     webhooks_router,
     wiki_router,
     workspace_router,
 )
 from security import cors_allows_credentials, get_cors_origins, setup_security
-from services.integrations import chat_approvals, webhooks
+from services.integrations import anchoring, chat_approvals, webhooks
 from services.platform.healthcheck import aggregate
 from services.release import integration_jobs
 
@@ -69,6 +75,8 @@ settings = Settings()
 webhooks.install()
 # A risk hold posts its approval to the company's Slack or Teams (issue #512).
 chat_approvals.install()
+# A closed sprint or a release anchors the audit chain's head (issue #542).
+anchoring.install()
 # A closed sprint's integration starts from the loop's sprint.closed event (issue #314).
 integration_jobs.install()
 
@@ -136,6 +144,7 @@ app.include_router(sprint_crud_router)
 app.include_router(board_moves_router)
 app.include_router(costs_router)
 app.include_router(agents_router)
+app.include_router(audit_anchors_router)
 app.include_router(agent_runs_router)
 app.include_router(api_tokens_router)
 app.include_router(support_router)
@@ -145,6 +154,9 @@ app.include_router(integration_router)
 app.include_router(manager_router)
 app.include_router(messages_router)
 app.include_router(board_notes_router)
+app.include_router(task_views_router)
+app.include_router(sprint_progress_router)
+app.include_router(task_relations_router)
 app.include_router(wiki_router)
 app.include_router(procedures_router)
 app.include_router(reviews_router)
@@ -160,6 +172,8 @@ app.include_router(model_settings_router)
 app.include_router(webhooks_router)
 app.include_router(chat_approvals_router)
 app.include_router(chat_interactions_router)
+app.include_router(teams_router)
+app.include_router(usage_router)
 
 # Register exception handlers
 register_exception_handlers(app)
