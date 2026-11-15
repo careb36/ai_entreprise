@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+* **CI supply chain and scans that can fail.** Every third-party action in every workflow is pinned by commit sha with its version in a comment, and `backend/tests/test_workflow_pinning.py` fails on a tag (the SLSA generator, which only runs from a `vX.Y.Z` tag, is the one exception); `security-scan.yml` replaces `safety check || true` with `pip-audit` over the backend's and the llm-proxy's lockfiles and `npm audit --omit=dev --audit-level=high` over the frontend's, failing on a known vulnerability unless `.github/pip-audit-ignore.txt` lists it with a reason and a review date that has not passed; gitleaks over a pull request's commits and Semgrep on the findings it adds now run on every pull request, beside the weekly full scans. The OpenTelemetry packages move from 1.45.1 to 1.45.2 (0.66b1 to 0.66b2) in both lockfiles for CVE-2026-126360 in `opentelemetry-api` (#522).
+
 ### Changed
 
 * **No source file over 600 lines.** `llm-proxy/app.py` is split into modules with one job each (`routing.py`, `providers.py`, `quota.py`, `embedding.py`, with the listing in `catalogue.py` and tracing in `telemetry.py`), keeping `app.py` as the entry point, and `scripts/verify_infra.py` keeps its command line while its checks move to `scripts/infra_checks/`; the file-size baseline is empty (#519).
