@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/evidence/`
 - **Responsibility:** Judging a run from what was observed: the Verifier's checks and verdict, the risk tier, the quality standards check, acceptance tests per criterion, the context-read check, the application and browser checks as read from the daemon's reply, SecOps scans, the gate before QA, the changes of a run and the ingestion of AgentRun records. It reads the daemon's reply as data from contracts; it never calls the daemon, the loop, the tools or a producer.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `governance`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `signatures`, `sources`, `standards`, `touched`, `verification`.
+- **Modules:** `acceptance`, `agent_run_service`, `app_check`, `browser_smoke`, `console_run`, `context_read`, `criteria_tests`, `delivery_gate`, `governance`, `grounding`, `imports`, `manifests`, `review_changes`, `risk`, `secops_checks`, `signatures`, `sources`, `standards`, `touched`, `verification`, `wstg_tests`.
 
 ## Components
 
@@ -24,6 +24,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ### Which runs wrote which files
 
 **`backend/app/services/evidence/touched.py`** (#438) — A read of recorded observations, never a verdict: `runs_touching(session, company_id, paths, limit=5)` gives the latest task-worker runs of a company (`external_ref` `task-<id>`) whose latest daemon report (`workspace_writes`, the per-file report the daemon read back from disk) says it wrote any of the paths, newest first, as `{run_id, backlog_item_id, title, verdict, written, finished_at}`, with the verdict the Verifier last recorded for the run and only the files whose status was `written`; `written_by_task(session, company_id, item_id)` gives the files a task's own earlier runs wrote (at most 50). Both scan the company's latest `SCAN_RUNS` (200) runs and read the evidence in Python, not with JSON operators in SQL, so the same code runs on SQLite and Postgres. The related code in the Developer's prompt reads them ([tools](tools.md)).
+
+### Tests named after a WSTG test
+
+**`backend/app/services/evidence/wstg_tests.py`** (#539) — After a delivery's test run, `record` reads the runner's per-test lines (`criteria_tests.test_lines`) for tests named after an OWASP WSTG test (`test_wstg_athz_02_…`) and keeps `pass` or `fail` per test on `evidence["test_run"]["wstg"]`; the Verifier's `wstg_tests` check turns them into items in the security probe's shape (`{id, name, status, observation}`, the versioned id from `services/platform/wstg_catalogue.py`). The check's outcome is always `pass`: a failing security test reports a weakness of the application, which `tests_run` already judges, not a fault of the delivery. Only the daemon's output is read, never a producer's claim. The project's WSTG checklist (planning, `project_docs/wstg_status.py`) reads these items and the security probe's.
 
 ## Described elsewhere
 

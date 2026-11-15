@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/platform/`
 - **Responsibility:** The infrastructure every context may use: the audit writes (AgentService), the advisory locks across replicas, idempotency claims, the Glassroom publisher, the KPI turn records, token usage, API tokens, run secrets, the health check, the knowledge graph reader and, after the migration, the engram processor from backend/memory. It knows nothing of tasks, runs or companies' decisions.
 - **May import:** [contracts](contracts.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `agent_service`, `api_tokens`, `engram_processor`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `locks`, `memory_graph`, `orchestration_metrics`, `run_secrets`, `token_usage`.
+- **Modules:** `agent_service`, `api_tokens`, `engram_processor`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `locks`, `memory_graph`, `orchestration_metrics`, `run_secrets`, `token_usage`, `wstg_catalogue`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `healthcheck` (the LLM proxy's probe). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
@@ -50,6 +50,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ## Described elsewhere
 
 - `token_usage`: the cost paragraph in [models](models.md).
+- `wstg_catalogue` (the OWASP WSTG tests with their versioned ids, read from `app/data/wstg/catalogue.json`, CC BY-SA 4.0, built by `scripts/wstg_catalogue.py`): the security test plan in [planning](planning.md).
 - `glassroom` (`publish_glassroom`): the console assistants paragraph in [producers](producers.md).
 - `hooks` (`sprint.closed`): the integration paragraph in [release](release.md) and step 11 of [the migration record](../architecture/MIGRATION.md).
 - `api_tokens`, `memory_graph` (`NEO4J_ENABLED`), the audit chain and the bus's credentials: [configuration](../CONFIGURATION.md).

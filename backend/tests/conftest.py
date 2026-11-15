@@ -70,6 +70,7 @@ from models.procedure import Procedure
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
+from models.security_review import WstgReview
 from models.session import RefreshToken, SessionFamily
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
@@ -221,6 +222,7 @@ SQLModel.metadata.create_all(
         WikiPageVersion.__table__,
         WikiLink.__table__,
         WikiSettings.__table__,
+        WstgReview.__table__,
     ],
 )
 

@@ -47,6 +47,7 @@ from routers import (
     providers_router,
     reviews_router,
     run_secrets_router,
+    security_tests_router,
     specifications_router,
     sprint_control_router,
     sprint_crud_router,
@@ -151,6 +152,7 @@ app.include_router(run_secrets_router)
 app.include_router(specifications_router)
 app.include_router(architectures_router)
 app.include_router(documentation_router)
+app.include_router(security_tests_router)
 app.include_router(workspace_router)
 app.include_router(mcp_router)
 app.include_router(providers_router)

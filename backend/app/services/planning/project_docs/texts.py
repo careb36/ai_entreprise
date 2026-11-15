@@ -17,12 +17,21 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from services.planning.project_docs import texts_en, texts_es
+from services.planning.project_docs import (
+    texts_en,
+    texts_es,
+    texts_wstg_en,
+    texts_wstg_es,
+)
 
 LANGUAGES = ("en", "es")
 DEFAULT_LANGUAGE = "en"
 
-TEXTS: dict[str, dict[str, str]] = {"en": texts_en.TEXTS, "es": texts_es.TEXTS}
+# The security documents' strings (issue #539) live in their own modules.
+TEXTS: dict[str, dict[str, str]] = {
+    "en": {**texts_en.TEXTS, **texts_wstg_en.TEXTS},
+    "es": {**texts_es.TEXTS, **texts_wstg_es.TEXTS},
+}
 
 DOMAIN_NAMES = {
     "es": {

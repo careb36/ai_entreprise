@@ -35,6 +35,7 @@ from services.planning.project_docs import (
     control_docs,
     log_docs,
     scope_docs,
+    security_docs,
     texts,
 )
 from services.planning.project_docs.layout import (
@@ -122,6 +123,7 @@ def _index(snapshot: dict[str, Any], documents: list[dict[str, Any]]) -> dict[st
         "",
         tr("index.pmbok"),
         tr("index.c4"),
+        tr("index.wstg"),
     ]
     title = tr("index.title")
     lines = [f"# {title}", "", f"_{tr('generated_note')}_", "", *body, ""]
@@ -158,6 +160,8 @@ def build_documents(
         log_docs.changes(snapshot),
         control_docs.lessons(snapshot),
         checks.document(snapshot),
+        security_docs.checklist(snapshot),
+        security_docs.report(snapshot),
         c4.document(snapshot, diagrams),
     ]
     return [_index(snapshot, documents), *documents], diagrams

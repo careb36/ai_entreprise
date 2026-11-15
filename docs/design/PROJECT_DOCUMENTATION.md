@@ -67,6 +67,8 @@ Brown, c4model.com, CC BY 4.0).
 | Schedule | Planning | Schedule and milestones (`schedule.md`) | approvals, sprints, integrations |
 | Resources | Planning | Responsibility assignment, RACI (`raci.md`) | roster, members, tasks, factory rules |
 | Risk | Planning | Risk register (`risks.md`) | verifications, holds; one person section |
+| Scope | Monitoring and Controlling | Security test checklist, OWASP WSTG (`wstg_checklist.md`, CC BY-SA 4.0) | specification, architecture, stack discovery, the Verifier's WSTG items, people's recorded reviews |
+| Risk | Monitoring and Controlling | Security test report (`security_report.md`, CC BY-SA 4.0) | the same |
 | (C4) | - | Architecture diagrams (`c4.md`) | architecture, stack discovery |
 
 Finance and Stakeholders have no document of their own in phase 1: what they
@@ -118,6 +120,7 @@ measure yet) and **person** (a judgement or data not held). Phase 1's set:
 | Stakeholders | Outside stakeholders are engaged | person |
 | Resources | Work goes to the team that was formed | assigned tasks go to hired roles |
 | Risk | The risk process runs on every delivery | every verified delivery carries a risk tier |
+| Risk | The security tests that apply are run | applicable WSTG tests observed passing, against the specification's security target (measured; STD-PO-1) |
 
 `CHECKS` is a dictionary of lists per domain: a later phase adds a check by
 appending `(outcome, how, function)`.
@@ -393,7 +396,7 @@ DocumentationPack (approved) ──B2──> NATS workspace.generate ──> dae
 | T5 | B5 | R, T | A stale pack is approved and presented as current, or prose is mistaken for evidence | M | M | Medium | Input digests per document and diagram; approval refused while the lint blocks; prose quoted as a claim, outside the digest; the approval and the write audited with the pack's input digest. Tests: drift blocks approval; prose marked; audit rows written |
 | T6 | B1/B3 | I | Members' emails reach a repository shared with outsiders | M | M | Medium | The snapshot holds roles and counts only; `approved_by` stays in the database. Test: the snapshot contains no `@` |
 | T7 | B4 | I, D | The TechWriter prompt leaks repository content, or compile is spammed to burn budget | L | L | Low | The prompt carries only the spec's title, summary and up to 30 requirement titles; one bounded call (600 tokens) per compile; Manager only; the proxy's budgets apply |
-| T8 | B1 | D | A large company makes compiling or rendering heavy | L | L | Low | Every list in the snapshot capped at 200 rows; text fields cut; thirteen files per write |
+| T8 | B1 | D | A large company makes compiling or rendering heavy | L | L | Low | Every list in the snapshot capped at 200 rows; text fields cut; fifteen files per write |
 | T9 | B2/B3 | S, T | A forged daemon reply reports files written | L | M | Low | Existing: NATS users and subjects (`scripts/nats_config.py`); every file must be reported `written` with a sha256 or the write is a 502 and nothing is recorded |
 | T10 | B5 | E, R | An agent decides what only a person may (a budget, a risk appetite) and the pack presents it as the company's position | M | M | Medium | New: those sections are templates no builder fills; the prose call writes only the charter's background, in its own quoted section. Test: the prose never lands in a person section |
 
@@ -530,3 +533,157 @@ output text.
   status and integrity reports (BAI10.04, BAI10.05); a control-deficiency
   register (MEA02.04); an incident and hold trend (DSS02.07); an SBOM per
   release (BAI03.04).
+
+## Security test plan and checklist (OWASP WSTG, issue #539)
+
+A project already gets secret scanning, a dependency audit and SAST
+(`evidence/secops_checks.py`) and the standards STD-SEC-1..3, and the
+security probe (#540) observes some of the running application's answers.
+Nothing said which web security tests apply to the project or which ran. This
+section adds that, as evidence.
+
+### The catalogue and its licence
+
+`backend/app/data/wstg/catalogue.json` is built by `scripts/wstg_catalogue.py`
+from the guide's `checklists/checklist.json` at a pinned commit (87cf4a4) and
+`checklists/WSTG-Checklist_v4.2.xlsx`. Each test carries a versioned
+identifier in the probe's scheme: `WSTG-v42-<CAT>-<NN>` when release 4.2 has
+the same test under the same identifier (names compared without the
+"Test"/"Testing for" prefixes, case, punctuation and plurals), else
+`WSTG-87cf4a4-<CAT>-<NN>` (a test 4.2 lacks, or an identifier 4.2 gave to
+another test: `APIT-01` was GraphQL in 4.2 and is API Reconnaissance now).
+`services/platform/wstg_catalogue.py` reads it and maps any spelling of an id
+to the versioned one, so a probe item, a QA test name and a person's review
+cite the same row.
+
+The catalogue is a derivative of the guide and stays under **CC BY-SA 4.0**:
+the licence, the attribution, the commit and what La Fabrique changed are
+fields of the file, and `NOTICE` lists it. The generated checklist and report
+are adaptations too: each ends with a footer giving the licence, the
+attribution and the commit (`security_docs.footer`, in the pack's language),
+and the document carries `licence`. The code that reads and builds them stays
+Apache-2.0. Only the tests' names, references and objectives come from the
+guide; every other string is ours, and the report's structure follows chapter
+5 (Reporting) without reproducing its text.
+
+### The rule table
+
+`services/planning/wstg_plan.py`. A signal is read from the specification,
+the architecture and the detected stack, and cited by where it was found
+(`specification REQ-2: "log in"`, an `http` interface, a framework, a
+database); words are matched on word boundaries in English and Spanish. No
+model decides a signal or a rule.
+
+| Rule | Signal | Tests (auto by the probe / auto by a QA test / manual) |
+|---|---|---|
+| R-WEB | an HTTP surface | CONF-04, -06, -07, -12, -14, CLNT-07, -09, ERRH-01, -02 / - / INFO-02, CONF-02, CRYP-01 |
+| R-BROWSER | a browser client | - / INJT-01, INJT-02 / CLNT-01, -03, -12, -14 |
+| R-AUTH | sign-in | SESS-02 / ATHN-03, ATHN-04, IDNT-04, SESS-03, -05, -06 / ATHN-01, -02, -06, -07, -09, SESS-01, -07 |
+| R-ROLES | roles and permissions | - / ATHZ-02, -03, -04 / IDNT-01 |
+| R-API | an API | - / INJT-03, INJT-20 / APIT-01, APIT-03 |
+| R-API-AUTH | an API and sign-in | - / APIT-02, APIT-04 / - |
+| R-UPLOAD | file uploads | - / BUSL-08, ATHZ-01 / BUSL-09 |
+| R-DATABASE | a database | - / INJT-05 / - |
+| R-OUTBOUND | outbound fetches | - / INJT-19 / - |
+| R-PAYMENTS | payments | - / - / BUSL-10, BUSL-01, BUSL-04 |
+| R-OAUTH | OAuth or OpenID Connect | - / - / ATHZ-05 |
+| R-SAML | SAML | - / - / ATHN-12 |
+| R-GRAPHQL | GraphQL | - / APIT-99 / - |
+| R-WEBSOCKETS | WebSockets | - / CLNT-10 / - |
+| R-JWT | JSON Web Tokens | - / SESS-10 / - |
+
+The probe rows are exactly the ten tests `services/evidence/security_probe.py`
+(#540) observes. A sign-in, an API or a browser client implies an HTTP
+surface. A test no rule selects is not applicable, with the signals that
+would bring it in ("no sign of sign-in in the specification, the
+architecture or the detected stack"). A model may only propose additions
+(`plan(..., proposals=[{id, role, reason}])`): a proposed test no rule
+selected becomes a `manual` row marked as a claim with who proposed it; a
+proposal never removes or changes a rule's row. No producer calls it yet.
+
+### Statuses: observations and reviews only
+
+`project_docs/wstg_status.py`. A row's status comes from the newest of:
+
+- an **observation**: a WSTG item of a Verifier check stored on a
+  `Verification` (the probe's `security_probe`, and `wstg_tests`, which reads
+  the daemon's run for tests named `test_wstg_<cat>_<nn>_…`), cited with the
+  verification id, the run, the sha256 of the run's evidence
+  (`AgentRun.artifact_digest`) and the tool (the check's name, its tool or
+  command, and the WSTG commit); `pass` is observed-pass, `refuted` /
+  `finding` / `fail` observed-fail; `unverifiable` sets nothing and is shown
+  beside the row;
+- a **person's recorded review** (`WstgReview`, migration `0099`): who
+  reviewed (kept in the database only), the date, the artifact, the result
+  (`pass`, `fail`, or `not_applicable` with a note), the recorder's company
+  role and `record_sha256`, computed by the backend over the stored fields.
+
+Without either, an applicable `auto` row is not-run, a `manual` one
+needs-manual, and a row the plan did not select not-applicable with its
+reason. No row is observed without a verification id or a review id (a test
+holds it); nothing a producer said about its own run is read.
+
+A Manager records a review with
+`POST /v1/companies/{id}/security/wstg/reviews` (Owner or Manager; a Viewer
+and other companies are refused; 422 for a test the catalogue does not hold,
+a future date, or `not_applicable` without a note; audited as
+`wstg_review_recorded` with the digest). `GET /v1/companies/{id}/security/wstg`
+(Viewer) returns the signals, every row with its status and evidence, and the
+counts.
+
+### The two documents
+
+| Document | Built from | Kind |
+|---|---|---|
+| WSTG checklist (`wstg_checklist.md`) | the signals with where they were found; per applicable or observed test: how it is settled, why it applies (the rules, in the pack's language), its status and the verification or review it rests on; then every other test with why it does not apply | catalogue, specification, architecture, discovery, verification and review refs |
+| Security test report (`security_report.md`) | chapter 5's structure: 1. introduction (version control, who tested as counts, scope, limitations, timeline, disclaimer), 2. executive summary (the counts; prose would be a quoted claim), 3. findings (observed failures only, with severity and the evidence), appendices (the rule table, the severity scale, the tools) | the same; remediation is a person section |
+
+Both are written in the pack's language (`texts_wstg_en.py`,
+`texts_wstg_es.py`), read `specification`, `architecture`, `stack`,
+`wstg_observations` and `wstg_reviews` (their drift digest), and end with the
+licence footer. The check results gain "The security tests that apply are
+run" (Risk, measured): the applicable tests observed passing, against the
+specification's security target (STD-PO-1), whose threshold the Owner sets.
+
+### Where the plan feeds the rest
+
+- **Documentation:** the two documents above and the measured check (built).
+- **STD-PO-1:** the measured check gives the security attribute a number;
+  `docs/STANDARDS.md` says so (built).
+- **QA's tasks:** `wstg_plan.security_test_tasks(plan, limit)` shapes one
+  test-writing task per applicable `qa_test` row, like the acceptance test
+  tasks, and the Verifier's `wstg_tests` check reads the tests back (built).
+  The sprint planner does not add the tasks yet: a QA task is judged by its
+  own run, and a security test that fails because the application is weak
+  would refute QA's delivery and send it back to QA, who cannot fix the
+  application. Wiring it needs either an exemption like the acceptance
+  tests' (`criteria_tests.excused_failures`) for `test_wstg_*` failures in
+  QA's own task, or the tasks placed after the implementation they test; that
+  is the next step, together with a sprint-planning switch.
+- **The threat model:** the `threat-model` skill and a person reviewing a
+  design read the checklist's applicable rows as the tests a mitigation must
+  pass; a row a threat model adds by hand is a proposal (a claim) until a
+  rule or a review settles it (documented, not built).
+
+### Threat model (the review endpoint and the documents)
+
+| ID | Boundary | STRIDE | Threat | Mitigation |
+|---|---|---|---|---|
+| W1 | B1 | S, E | A Viewer, an outsider or an agent records a review to turn a row observed-pass | `require_company_role` Manager on the route; agents have no route to it; the audit chain records the person (`wstg_review_recorded`). Tests: `test_security_tests_router.py` |
+| W2 | B1 | T, R | A request hands in a digest or a hash of the artifact to make a review look verified | The request's extra fields are ignored; `record_sha256` is the backend's over the stored fields; the artifact is a reference, not a proof. Test: a supplied digest is not kept |
+| W3 | B5 | T | A producer reports its own security test results or probe items to set rows | Only `Verification.checks` items (the daemon's output and the probe's reply) are read; `wstg_tests` reads `test_run` output, never `claims`. Test: a claimed result is not read |
+| W4 | B5→B1/B3 | T, E | A review's artifact or note, or a probe observation, carries Markdown or HTML into the pack | `md_inline` on every value; ids through `md_id`; the frontend's renderer drops HTML (T1 above) |
+| W5 | B1/B3 | I | The reviewer's name reaches a repository shared with outsiders | The snapshot carries the recorder's role, never the name; a test holds it |
+
+### What was taken from where
+
+- **OWASP Web Security Testing Guide** (github.com/OWASP/wstg, CC BY-SA 4.0):
+  the checklist (test ids, names, references, objectives) as the catalogue,
+  release 4.2's workbook to tell which ids are the same test, and the report
+  structure of chapter 5. Adapted and shared under the same licence.
+- **The security probe (#540)**: the versioned id scheme and the item shape
+  (`{id, name, status, observation}`), reused so its results mark rows.
+- **The acceptance tests** (`evidence/acceptance.py`): the test-name token
+  read back from the runner output, for `test_wstg_*`.
+- **Kiro (Amazon)**: requirements first, so a plan can be derived from the
+  specification and the design rather than asked of a model.

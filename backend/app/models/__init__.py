@@ -41,6 +41,7 @@ from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
 from .runtime import AssistantRuntimeState
+from .security_review import WstgReview
 from .session import RefreshToken, SessionFamily
 from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
@@ -99,4 +100,5 @@ __all__ = [
     "WikiPage",
     "WikiPageVersion",
     "WikiSettings",
+    "WstgReview",
 ]

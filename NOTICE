@@ -7,6 +7,23 @@ LICENSE file).
 Third-party portions
 --------------------
 
+backend/app/data/wstg/catalogue.json is adapted from the OWASP Web Security
+Testing Guide checklist (checklists/checklist.json and
+checklists/WSTG-Checklist_v4.2.xlsx, https://github.com/OWASP/wstg, commit
+87cf4a4688ba49a64068adf6246496cf5459f709), by the OWASP Foundation and the
+WSTG contributors, licensed under the Creative Commons Attribution-ShareAlike
+4.0 International licence (CC BY-SA 4.0,
+https://creativecommons.org/licenses/by-sa/4.0/). La Fabrique added versioned
+identifiers; the file stays under CC BY-SA 4.0, not the Apache License. The
+security test checklists and reports La Fabrique generates from it for a
+project (docs/project/wstg_checklist.md and docs/project/security_report.md in
+that project's repository) are adaptations too and carry the same licence and
+attribution in their footer. The code that reads the catalogue and builds
+those documents (scripts/wstg_catalogue.py,
+backend/app/services/platform/wstg_catalogue.py,
+backend/app/services/planning/wstg_plan.py and
+backend/app/services/planning/project_docs/) is under the Apache License 2.0.
+
 Portions of .github/workflows/release.yml and scripts/release_notes.py are
 adapted from AixleHQ/flow (https://github.com/AixleHQ/flow), Copyright 2026
 Dualboot Partners, LLC, licensed under the Apache License 2.0.
