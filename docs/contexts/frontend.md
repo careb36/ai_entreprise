@@ -11,6 +11,23 @@ Not a backend context: the React application under `frontend/`. The index is [`C
 - `SupportBot` — bilingual (EN/ES) built-in help desk chat
 - `BoardNotes` — the sprint page's Board notes tab (`/sprints/:id/notes`, issue #439): the sprint board's notes as claims with what was observed beside each file, the board's numbers, and for a Manager a form to add a note and a way to mark one wrong (`hooks/useBoardNotes.ts`, `services/api/boardNotes.ts`)
 
+## The desktop app
+
+**`frontend/electron/`** — the Electron main process and preload, compiled by
+`npm run electron:compile` into `dist-electron-main/` and outside the layered
+`frontend/src` tree. `npm run electron:dev` loads the Vite dev server;
+`npm run electron:build` builds the renderer with `--mode electron` and
+packages it. The packaged app does not load `file://`: `local-server.ts`
+serves `dist/` on `127.0.0.1` at a port the system picks and forwards `/v1/*`
+to `BACKEND_URL` (default `http://localhost:8000`), so the page and the API
+share an origin and the session cookies of issue #524 are first-party; the
+desktop build calls the API on its own origin (`VITE_API_SAME_ORIGIN`, so
+`API_BASE` in `services/api/client.ts` is empty). `navigation.ts` keeps the
+main window on that origin, opens other links in the system browser and runs
+single sign-on in a window without the preload; `ipc-handlers.ts` answers only
+the local page. Design and threat model: `docs/design/SESSIONS.md`, Desktop
+app.
+
 ## Layout of the larger views
 
 A view too large for one file keeps its entry file, with the same exports, and puts its parts in a folder beside it, named after it in lower camel case: subcomponents with one job each, and `useXxx` hooks for the state that separates cleanly. Every source file stays at or under 600 lines (`scripts/check_file_sizes.py`).
