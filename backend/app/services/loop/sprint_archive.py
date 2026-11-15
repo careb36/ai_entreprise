@@ -53,6 +53,7 @@ from models import (
     Sprint,
     SprintBoardNote,
     SprintIntegration,
+    SprintProgressSnapshot,
     TaskEvent,
 )
 from models.manager import ManagerDecision
@@ -172,6 +173,14 @@ def evidence_of(session: Session, sprint: Sprint) -> list[str]:
         select(func.count(SprintBoardNote.id)).where(SprintBoardNote.sprint_id == sid),
     ):
         found.append("sprint_board_notes")
+
+    if _count(
+        session,
+        select(func.count(SprintProgressSnapshot.id)).where(
+            SprintProgressSnapshot.sprint_id == sid
+        ),
+    ):
+        found.append("progress_snapshots")
 
     if _count(
         session,

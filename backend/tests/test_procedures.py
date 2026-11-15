@@ -166,6 +166,7 @@ def test_adoption_records_the_numbers_of_the_last_two_completed_sprints(db):
         "tasks": 4,
         "rework_per_task": 0.5,
         "blocked_rate": 0.25,
+        "claim_gap_rate": 0.0,
     }
     assert procedure.adopted_after_sprint_id == last.id
     assert procedure.status == "active"

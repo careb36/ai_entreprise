@@ -78,7 +78,7 @@ measures on SQLite.
 
 ## Saved views
 
-`models/saved_view.py`, migration `0099_saved_views.py`. A `SavedView` is
+`models/saved_view.py`, migration `0033_saved_views.py`. A `SavedView` is
 company-scoped: `name`, `filters` (the parsed tree, `{}` for every task),
 `group_by`, `order_by` (`-` in front for descending), `layout` (`board` or
 `list`), `visible_columns`, `access` (`private` or `company`), `locked`, its

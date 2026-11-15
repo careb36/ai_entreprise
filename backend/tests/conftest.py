@@ -37,6 +37,7 @@ from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
+from models.audit_anchor import AuditAnchor, AuditAnchorSettings
 from models.board_note import SprintBoardNote
 from models.chat import (
     ChatApprovalMessage,
@@ -67,6 +68,7 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
+from models.progress import SprintProgressSnapshot
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
@@ -76,6 +78,8 @@ from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
+from models.task_relation import TaskRelation
+from models.team import Team, TeamMember
 from models.webhook import CompanyWebhook
 from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 from sqlalchemy.pool import StaticPool
@@ -188,6 +192,8 @@ SQLModel.metadata.create_all(
         AgentRunApproval.__table__,
         Verification.__table__,
         AuditLog.__table__,
+        AuditAnchor.__table__,
+        AuditAnchorSettings.__table__,
         GitHubRepoBinding.__table__,
         BugReport.__table__,
         AgentMessage.__table__,
@@ -220,6 +226,10 @@ SQLModel.metadata.create_all(
         SprintBoardNote.__table__,
         SavedView.__table__,
         SavedViewPreference.__table__,
+        SprintProgressSnapshot.__table__,
+        TaskRelation.__table__,
+        Team.__table__,
+        TeamMember.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,
         WikiLink.__table__,

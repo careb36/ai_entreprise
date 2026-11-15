@@ -63,6 +63,8 @@ Primary trust boundaries:
 9. **Backend ↔ Slack and Microsoft Teams** — a public inbound endpoint that can accept a held delivery: forged or replayed interactions, a chat user acting as someone else, a role read from the payload, a stale click deciding a changed task, leaked bot tokens or signing secrets. Each request is verified by the platform's HMAC (Slack v0 with a five-minute timestamp; the Teams outgoing webhook's HMAC with the activity's timestamp), its id is stored once, the chat user must be linked by a one-time code to a La Fabrique account, the role comes from that account's membership exactly as on the web, and the decision is the web's own function, audited with `via` (`docs/design/CHAT_APPROVALS.md`).
 10. **Other software on the user's computer ↔ the desktop app's local server** — the packaged Electron app serves its page and forwards `/v1/*` to the backend from `http://127.0.0.1:<port>` so the session cookies are first-party; any local process or browser page can reach that port. It refuses a foreign `Host` (DNS rebinding), another `Origin`, a request `Sec-Fetch-Site` marks as from another site and an unsafe method without its own `Origin`, forwards only `/v1/*` to the configured backend, never reflects a CORS grant, and keeps the identity provider's pages away from the app's IPC (`docs/design/SESSIONS.md`, Desktop app).
 
+10. **Backend ↔ an RFC 3161 timestamping authority and the customer's anchor endpoints** — the audit chain is keyed by the factory's own key, so its head is anchored outside (issue #542, `docs/design/AUDIT_ANCHORS.md`): a token from the authority the Owner chose is checked against the certificate the Owner pinned, never against what the answer says; a customer-held Ed25519 key signs heads the factory cannot forge; a webhook's receipt is a claim. Threats: an insider re-signing the chain with `AUDIT_SIGNING_KEY`, a fake authority, a malformed token, SSRF through the authority's URL, a receipt taken as proof. An auditor verifies with the authority's published certificate and the customer's own public key, not with the factory's copies.
+
 Key threat actors: malicious end users, compromised external content, malicious model output, insider developers, CI/CD attackers.
 
 Reference frameworks:
@@ -183,10 +185,18 @@ OpenID Connect provider (single sign-on, below).
   `require_authenticated`). `AUTH_REQUIRED=false` is for a local demo only:
   a token, when sent, is still resolved, but none is required.
 - **Roles per company**, ranked **Owner > Manager > Viewer**
-  (`ROLE_RANK` in `backend/app/auth_policy.py`). Every company-scoped route
+  (`ROLE_RANK` in `backend/app/services/platform/teams.py`, re-exported by
+  `backend/app/auth_policy.py`). Every company-scoped route
   calls `require_company_role(session, user, company_id, minimum)`: a caller
-  who is not a member gets 403, a member below the minimum gets 403. An API
-  token carries its own company and role and is held to the same check.
+  who is not a member gets 403, a member below the minimum gets 403. The role
+  checked is the member's **effective role**: their own membership role raised
+  by the roles of the teams they belong to in that company
+  (`services/platform/teams.py`, `docs/design/TEAMS_AND_USAGE.md`). A team's
+  role is Viewer or Manager, never Owner; a team never makes anyone a member
+  and never reaches another company; teams are created, changed and joined
+  only by a signed-in human Owner (never an API token), and every change is
+  audited. An API token carries its own company and role and is held to the
+  same check; it is minted at most at its creator's effective role.
   Creating a company makes its creator the Owner; inviting a member requires
   Owner. Help-desk administrators are a separate, deployment-wide list
   (`SUPPORT_ADMIN_EMAILS`, `is_support_admin`).
@@ -212,6 +222,10 @@ fallback credential.
   decided at the route that starts or changes the work (Manager to start a
   sprint, Owner to delete one), and the agents' reach is bounded by the
   daemon's sandbox and command policy (§8.3), not by the caller's role.
+- An API token keeps the role it was minted with when its creator is later
+  demoted or leaves the team that made them a Manager, until it is revoked or
+  expires (at most 365 days); refusing such a token at use is planned
+  (`docs/design/TEAMS_AND_USAGE.md`, T5).
 - Service-to-service identity is **not mTLS**. The backend and the daemon
   each have their own NATS user, with TLS and optional client certificates
   (§8.6); the backend and the LLM proxy share `LLM_PROXY_INTERNAL_TOKEN`

@@ -11,6 +11,8 @@ vi.mock('../services/cost', async importOriginal => ({
   ...(await importOriginal<typeof import('../services/cost')>()),
   useTaskCost: vi.fn(() => ({ data: undefined })),
 }))
+// The relations section reads its own data (components/TaskRelations.test.tsx).
+vi.mock('../components/TaskRelations', () => ({ TaskRelations: () => null }))
 vi.mock('../hooks/useQueries', () => ({
   useSprintBoard: vi.fn(),
   useAgentRuns: vi.fn(),

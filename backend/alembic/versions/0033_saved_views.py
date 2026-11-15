@@ -3,8 +3,8 @@
 only: the filters are evaluated from the task projections, so nothing
 existing changes.
 
-Revision ID: 0099
-Revises: 0028
+Revision ID: 0033
+Revises: 0032
 Create Date: 2026-11-15 22:00:00 UTC
 """
 
@@ -15,8 +15,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0028"
+revision = "0033"
+down_revision = "0032"
 branch_labels = None
 depends_on = None
 

@@ -28,19 +28,18 @@ from typing import Any
 
 from config import settings
 from models import AuditLog, Company
-from models.company import CompanyMember, User
+from models.company import User
 from models.manager import ManagerPolicy
 from sqlmodel import Session, select
 
 from services.management import manager_brief
-from services.platform import locks
+from services.platform import locks, teams
 from services.platform.agent_service import AgentService
 
 logger = logging.getLogger(__name__)
 
 ACTION = "manager_brief_sent"
 AGENT_ID = "system:manager-brief"
-RECIPIENT_ROLES = ("Owner", "Manager")
 LIST_LIMIT = 10
 HISTORY_LIMIT = 200
 RETRY_AFTER = timedelta(hours=1)
@@ -58,14 +57,11 @@ def enabled() -> bool:
 
 def recipients(session: Session, company_id: int) -> list[str]:
     """The account emails of the company's Owners and Managers, sorted, once each."""
-    rows = session.exec(
-        select(User.email)
-        .join(CompanyMember, CompanyMember.user_id == User.id)
-        .where(
-            CompanyMember.company_id == company_id,
-            CompanyMember.human_role.in_(RECIPIENT_ROLES),
-        )
-    ).all()
+    # The effective role: a member a team makes a Manager receives it too.
+    people = teams.members_with_role(session, company_id, "Manager")
+    if not people:
+        return []
+    rows = session.exec(select(User.email).where(User.id.in_(list(people)))).all()
     return sorted({e.strip() for e in rows if e and "@" in e})
 
 
