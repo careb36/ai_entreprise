@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Route } from 'lucide-react'
 import { useRoutingRecord } from '../services/routing'
+import { RoutingSplit } from './RoutingSplit'
 
 function pct(value: number) {
   return `${Math.round(value * 100)}%`
@@ -69,6 +70,7 @@ export function RoutingRecord({ companyId }: { companyId: number }) {
           </tbody>
         </table>
       </div>
+      <RoutingSplit data={data} />
       {unreported > 0 && (
         <p className="text-xs text-gray-500">
           {t('routing.unreported', { count: unreported, defaultValue: '{{count}} turns without a reported token count, left out of the tokens.' })}

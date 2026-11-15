@@ -2081,7 +2081,25 @@
     },
     "statConnections": "Conexiones",
     "statModels": "Modelos",
-    "statValidated": "Validadas"
+    "statValidated": "Validadas",
+    "policy": {
+      "title": "Modelo según la dificultad de la tarea",
+      "subtitle": "Antes de cada intento se estima la dificultad de la tarea a partir de su plan (criterios, módulos y archivos, dependencias, intento y retrabajo), nunca con un modelo. Indica el modelo de cada franja; una franja vacía conserva el modelo por defecto del rol. Un modelo elegido para un agente, un rol o la empresa nunca se reasigna.",
+      "sourceCompany": "Se aplica la política de esta empresa.",
+      "sourceDeployment": "La empresa no tiene política: se aplica la del despliegue (se muestra como sugerencia).",
+      "sourceNone": "Sin política: cada tarea usa el modelo de su rol.",
+      "band": {
+        "low": "Dificultad baja",
+        "medium": "Dificultad media",
+        "high": "Dificultad alta"
+      },
+      "roleDefault": "Modelo del rol",
+      "label": "Nombre de la política (aparece en los registros)",
+      "tiers": "Un identificador de modelo, un modelo de una conexión (conn:<id>:<model>) o un nivel del proxy (fast, powerful…); un nivel usa el modelo del rol y la ejecución registra por qué.",
+      "save": "Guardar la política",
+      "clear": "Quitar la política",
+      "saved": "Política guardada."
+    }
   },
   "manager": {
     "suggestion": "El agente Manager sugiere: {{decision}}",
@@ -2179,7 +2197,36 @@
     "noDelivery": "sin entrega",
     "firstAttemptValue": "{{rate}} ({{first}}; {{done}} hechas)",
     "unreported_one": "{{count}} turno sin conteo de tokens informado, fuera de los tokens.",
-    "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens."
+    "unreported_other": "{{count}} turnos sin conteo de tokens informado, fuera de los tokens.",
+    "split": {
+      "label": "Dividir los sprints cerrados por",
+      "by": {
+        "band": "Por franja",
+        "model": "Por modelo servido",
+        "policy": "Por política"
+      },
+      "caption": {
+        "band": "Tareas por franja de dificultad",
+        "model": "Tareas por modelo servido",
+        "policy": "Tareas por política de enrutamiento"
+      },
+      "column": {
+        "band": "Franja",
+        "model": "Modelo servido",
+        "policy": "Política"
+      },
+      "bandName": {
+        "low": "Baja",
+        "medium": "Media",
+        "high": "Alta"
+      },
+      "noPolicy": "sin política",
+      "done": "Hechas",
+      "cost": "Coste",
+      "costUnknown": "desconocido",
+      "costUnpriced_one": "(+{{count}} tarea sin precio)",
+      "costUnpriced_other": "(+{{count}} tareas sin precio)"
+    }
   },
   "consoleProducers": {
     "title": "Productores de consola",

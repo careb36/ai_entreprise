@@ -33,6 +33,9 @@ Kinds:
   steps; ``moved``: a person changed the status on the board; ``note``: a note
   with no transition;
 - ``integration``: a sprint's integration of task branches;
+- ``estimated``: the task's difficulty as its plan stood before an attempt
+  and the routing it led to (``payload.difficulty``, ``payload.routing``;
+  ``services/models/difficulty.py``); an event only, no comment;
 - ``legacy``: the migration found a thread it could not read back whole.
 
 Each event with text carries the flags the board's questions read
@@ -80,6 +83,7 @@ KINDS = frozenset(
         "moved",
         "note",
         "integration",
+        "estimated",
         "legacy",
     }
 )

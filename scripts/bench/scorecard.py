@@ -14,11 +14,11 @@ Subcommands, used by ``scripts/bench/run.sh``:
   comments, the runs, the specification's own coverage; a failed reading
   marks the entry ``error``, never a green zero) and the reported tokens from the
   audit log (only rows whose usage the provider reported, ``tokens:
-  reported``), and writes one spec entry. The entry splits the tasks by
-  difficulty and the model of their last delivery (``routing``, read by the
-  backend's ``services/models/routing_record.py``, the same split the Sprints page
-  shows), so two runs under different ``AGENT_MODEL_POLICY`` values compare
-  band by band. It also reads each task's latest run's prompt measure
+  reported``), and writes one spec entry. The entry splits the tasks by the
+  difficulty stored before their first attempt and the model of their last
+  delivery (``routing``, by ``services/models/routing_record.py`` as on the
+  Sprints page), so two policies compare band by band and model by model
+  (``routing_split.py``). It also reads each task's latest run's prompt measure
   (``prompt_sections``, the backend's estimate per section of what it sent)
   and weighs them per spec (``prompt``, ``prompt_weight.py``; schema v3).
 - ``write --out-dir DIR [--policy LABEL] ENTRY...`` joins the entries into
@@ -55,7 +55,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget
 import prompt_weight
-from readers import prompt_sections, reported_tokens
+from readers import difficulty_estimates, prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
 
 __all__ = [
@@ -237,13 +237,15 @@ def routing_rows(
     runs_per_task: dict[int, int],
     turns: dict[int, list[tuple[str | None, int | None]]],
     policy: dict[str, Any] | None = None,
+    estimates: dict[int, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """The spec's tasks per difficulty (as planned) and model of the last
-    delivery: done, first attempts, rework, blocked and reported tokens."""
-    rr = _routing_record()
+    """The spec's tasks per difficulty (the stored estimate of the first
+    attempt, else as planned) and model of the last delivery: done, first
+    attempts, rework, blocked and reported tokens."""
+    rr, est = _routing_record(), estimates or {}
     facts = [
         rr.task_fact(
-            difficulty=rr.difficulty_of(i),
+            difficulty=rr.difficulty_of(i, est.get(i.get("id"), {}).get("difficulty")),
             model=last_model.get(i.get("id")),
             status=i.get("status"),
             comments=i.get("comments"),
@@ -467,8 +469,7 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
     status, verified, error = args.status, None, args.error or None
     tokens: dict[str, int] = {}
     models: dict[str, list[str]] = {}
-    routing: list[dict[str, Any]] = []
-    prompt: dict[str, Any] | None = None
+    routing, prompt, estimates = [], None, {}
     try:
         if args.sprint:
             board = _get(args.api, f"/v1/sprints/{args.sprint}/board")
@@ -487,17 +488,15 @@ def collect(args: argparse.Namespace) -> dict[str, Any]:
             spec = _get(args.api, f"/v1/specifications/{args.spec_id}")
             verified = (spec.get("coverage") or {}).get("verified")
         if args.company:
-            dsn = dict(
-                zip(
-                    ("host", "port", "user", "password", "dbname"), args.pg, strict=True
-                )
-            )
+            keys = ("host", "port", "user", "password", "dbname")
+            dsn = dict(zip(keys, args.pg, strict=True))
             tokens, models, turns = reported_tokens(dsn, args.company)
             measures = prompt_sections(dsn, args.company)
+            estimates = difficulty_estimates(dsn, args.company)
             prompt = prompt_weight.weigh(
                 [measures[i["id"]] for i in items if i["id"] in measures]
             )
-        routing = routing_rows(items, last_model, runs, turns, _policy_from_env())
+        routing = routing_rows(items, last_model, runs, turns, _policy_from_env(), estimates)
     except Exception as exc:  # noqa: BLE001 - a failed collection is recorded, not hidden.
         # An observation that could not be made is never a green zero.
         status = "error"

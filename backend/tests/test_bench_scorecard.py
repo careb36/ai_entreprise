@@ -556,6 +556,67 @@ def test_two_policies_compare_band_by_band(tmp_path, capsys):
     assert compare.render_bands(legacy, legacy) == []
 
 
+def test_the_stored_estimate_places_a_task_and_two_policies_compare_by_band_and_model():
+    import routing_split  # scripts/bench/routing_split.py, by path
+
+    # Task 1 has one criterion (low as planned) but its first attempt was
+    # estimated high (the architecture mapped it to three modules).
+    stored = {1: {"difficulty": {"score": 4, "band": "high"}}}
+    before, after = _entry(), _entry()
+    before["routing"] = _routed(["strong", "strong"], reported=(40, 60))
+    after["routing"] = scorecard.routing_rows(
+        ROUTED_ITEMS,
+        {1: "cheap", 2: "strong"},
+        {1: 1, 2: 2},
+        {1: [("reported", 10)], 2: [("reported", 60)]},
+        None,
+        stored,
+    )
+    assert [(r["difficulty"], r["difficulty_band"]) for r in after["routing"]] == [
+        (4, "high"),
+        (4, "high"),
+    ]
+    old, new = _card(before), _card(after, stamp="20260102T000000Z")
+    old["policy"], new["policy"] = "all-strong", "cheap-easy"
+    assert scorecard.validate(new) == []
+    bands = routing_split.split(new, "band")
+    assert list(bands) == ["high"] and bands["high"]["tasks"] == 2
+    # The bench prices no turn: the cost is unknown for every task, never 0.
+    assert bands["high"]["cents"] is None and bands["high"]["cost_unknown"] == 2
+    text = compare.render(old, new, compare.compare(old, new))
+    assert "### By difficulty band (policy `all-strong` → `cheap-easy`)" in text
+    assert "| low | 1 → – | 1 → – | 1.00 → – |" in text
+    assert "| high | 1 → 2 | 0 → 1 |" in text
+    assert "### By served model (policy `all-strong` → `cheap-easy`)" in text
+    assert (
+        "| cheap | – → 1 | – → 1 | – → 1.00 | – → 0.00 | – → 0.00 | – → 10 | – → unknown |"
+        in text
+    )
+    # A card from before the band was recorded is placed by its score.
+    legacy = copy.deepcopy(old)
+    for row in legacy["specs"][0]["routing"]:
+        row.pop("difficulty_band"), row.pop("cost_cents"), row.pop("cost_unknown")
+    assert list(routing_split.split(legacy, "band")) == ["low", "high"]
+    assert scorecard.validate(legacy) == []
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        (lambda r: r.update(difficulty_band="extreme"), "difficulty_band must be"),
+        (lambda r: r.update(cost_cents=-1), "cost_cents must be"),
+        (lambda r: r.update(cost_cents=float("inf")), "cost_cents must be"),
+        (lambda r: r.update(cost_unknown=-2), "cost_unknown must be a count"),
+    ],
+)
+def test_the_schema_checks_the_optional_band_and_cost(change, problem):
+    entry = _entry()
+    entry["routing"] = _routed(["cheap", "strong"])
+    card = _card(entry)
+    change(card["specs"][0]["routing"][0])
+    assert any(problem in p for p in scorecard.validate(card)), scorecard.validate(card)
+
+
 # ---------------------------------------------------------------------------
 # What the produced project cannot do to its grade
 # ---------------------------------------------------------------------------

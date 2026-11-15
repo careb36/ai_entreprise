@@ -43,11 +43,25 @@ export interface ConnectionModels {
 
 export type ModelSource = 'role' | 'company' | 'deployment'
 
+/**
+ * The routing policy by task difficulty (issue #319): a band (`low`, `medium`,
+ * `high`, or a range of scores such as `1-2`) to a model id or a proxy tier.
+ */
+export interface ModelPolicy {
+  bands: Record<string, string>
+  label?: string
+}
+
 export interface ModelSettings {
   default_model: string | null
   role_models: Record<string, string>
   roles: string[]
   effective: Record<string, { model: string; source: ModelSource }>
+  /** The company's own policy; null: the deployment's, else none. */
+  model_policy?: ModelPolicy | null
+  deployment_policy?: ModelPolicy | null
+  policy_source?: 'company' | 'deployment' | null
+  difficulty_bands?: string[]
 }
 
 /** How a model did on the company's tasks in a role (completed sprints). */
@@ -117,6 +131,13 @@ export const modelsApi = {
     api.get<ModelSettings>(`${base(companyId)}/model_settings`),
   saveSettings: (companyId: number, body: { default_model: string | null; role_models: Record<string, string> }) =>
     api.put<ModelSettings>(`${base(companyId)}/model_settings`, body),
+  /** The routing policy, with the stored model choices sent back unchanged (a PUT replaces them). */
+  savePolicy: (companyId: number, current: Pick<ModelSettings, 'default_model' | 'role_models'>, policy: ModelPolicy | null) =>
+    api.put<ModelSettings>(`${base(companyId)}/model_settings`, {
+      default_model: current.default_model,
+      role_models: current.role_models,
+      model_policy: policy,
+    }),
   suggestions: (companyId: number) =>
     api.get<{ suggestions: Record<string, ModelSuggestion | null>; candidates: number }>(
       `${base(companyId)}/model_suggestions`,

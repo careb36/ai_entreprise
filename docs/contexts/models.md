@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/models/`
 - **Responsibility:** Which model a role runs and what it costs: the models.dev catalogue, prices, the company's provider connections and model settings, difficulty routing, the suggestions per role and the records over completed sprints, and, after the migration, the role defaults from backend/llm/model_factory.py. It never calls a provider; the LLM proxy does.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `company_models`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `provider_client`, `provider_connections`, `routing_record`, `run_cost`.
+- **Modules:** `company_models`, `difficulty`, `model_catalog`, `model_factory`, `model_prices`, `model_record`, `model_routing`, `model_suggestions`, `provider_client`, `provider_connections`, `routing_policy`, `routing_record`, `run_cost`.
 - **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `model_catalog` (the models.dev fetch) and `provider_client` (`list_models`, raising `ProviderUnreachable`; `provider_connections.validate` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
@@ -61,22 +61,55 @@ Developer, Architect consultation and QA review, and the Reviewer agent (its
 own entry, else QA's) all read it; difficulty routing (`AGENT_MODEL_POLICY`)
 refines only the deployment's default, never a model a person chose. A model
 may be one of the company's provider connections (`conn:<id>:<model>`).
-Difficulty routing (`services/models/model_routing.py`): `estimate_difficulty` is a
-1..5 function of the plan (criteria covered, the modules they map to, a
-rework), and `AGENT_MODEL_POLICY` maps bands (`{"bands": {"1-2": …, "3-5":
-…}}`) to models, a proxy tier name falling back to the role default.
-Whether it pays is counted, never claimed: `services/models/routing_record.py`
-splits the company's completed sprints by the difficulty each task was routed
-by (recomputed from its stored `covers` with no rework, the first attempt's
-input, so nothing new is stored and no migration was needed) and the model the
-proxy reported for its last delivery, with tasks, done, done at the first
-attempt (done, no `NEEDS WORK:`, no person's send-back, at most one
-delivery), rework per task, blocked share and the audit log's tokens of the
+Difficulty routing (issue #319; taken as design from OpenHands' LLM
+configuration per agent, a cheaper model for routine steps, and Factory's
+model choice per droid and task). **The estimate**
+(`services/models/difficulty.py`) is a pure function of what is known before
+a task runs, never asked of a model: the criteria it covers, the approved
+architecture's modules covering them and the paths they map to, the tasks it
+waits for, the attempt (deliveries so far plus one), and the `NEEDS WORK:`
+requests and a person's send-backs on its board. Each input adds a fixed
+weight (base 1; criteria up to 3; modules up to 2; three files or more +1;
+two dependencies or more +1; any rework +1; a send-back +1), clamped to 1..5,
+banded `low` (1-2), `medium` (3) or `high` (4-5), and returned as `{score,
+band, inputs, weights, version}`; without architecture or dependencies it is
+the score routing always used (`model_routing.estimate_difficulty`, which the
+Architect/editor threshold reads). **The policy**
+(`services/models/routing_policy.py`) maps bands (`low`/`medium`/`high`, or
+score ranges such as `"1-2"`) to a model, a connection model or a proxy tier,
+with an optional `label`: the company's (`Company.model_policy`, migration
+0023, written by a Manager through `PUT /v1/companies/{id}/model_settings`
+with `model_policy`, checked strictly: a bad band or a connection not the
+company's is a 422; omitted, it is kept; `null` clears it; the Models page's
+"Model by task difficulty" card, `components/RoutingPolicy.tsx`), else the
+deployment's `AGENT_MODEL_POLICY`. A policy that cannot be read is ignored
+with a warning and a band that cannot be read dropped with one, so the role
+default stays; a tier name runs on the role default (the proxy serves no model
+by that name) and the routing says so. **The choice**
+(`model_routing.route`) returns the model to request with the estimate and
+`routing: {policy, source, band, requested, chosen, reason}` (`configured`: a
+person's choice, never re-routed; `no_policy`, `no_band`, `band`,
+`tier_role_default`, `editor_plan`); `resolve_agent_model` is its model. The
+task worker calls it through `services/loop/task_routing.py`, which stores the
+estimate and the routing on the task as an `estimated` event and on the run's
+evidence (`difficulty`, `routing`); the served model stays `AgentRun.model`,
+the proxy's report. Whether it pays is counted, never claimed:
+`services/models/routing_record.py` splits the company's completed sprints by
+the difficulty each task's first attempt was routed by (its first `estimated`
+event; a task from before the event is recomputed from its `covers`) and the
+model the proxy reported for its last delivery, with tasks, done, done at the
+first attempt (done, no `NEEDS WORK:`, no person's send-back, at most one
+delivery), rework per task, blocked share, the audit log's tokens of the
 turns whose usage the provider reported (estimated or unavailable turns are
-counted apart, never added); `GET /v1/companies/{id}/routing_record` (Viewer,
-`routers/model_settings.py`) serves it with the policy's band beside each
-row, and the Sprints page shows it beside the learning tiles
-(`components/RoutingRecord.tsx`, `services/routing.ts`). The bench records the
+counted apart, never added) and the cost in cents (`run_cost`; a task whose
+cost is unknown is counted apart, never as 0), and sums the same numbers
+`by_difficulty_band`, `by_model` and `by_policy` (the label each task ran
+under), so a policy is kept or reverted on numbers, the way procedures are;
+`GET /v1/companies/{id}/routing_record` (Viewer, `routers/model_settings.py`)
+serves it with the effective policy's band beside each row
+(`policy_label`, `policy_source`), and the Sprints page shows it beside the
+learning tiles (`components/RoutingRecord.tsx`, the split view
+`components/RoutingSplit.tsx`, `services/routing.ts`). The bench records the
 same split per specification (below). **Architect and editor mode**
 (`services/loop/edit_plan.py`, taken from Aider's architect/editor split), off
 unless `ARCHITECT_EDITOR_MODE=true`: a Developer task whose difficulty is at

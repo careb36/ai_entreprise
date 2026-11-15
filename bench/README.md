@@ -70,7 +70,7 @@ on a change under `bench/verifier/`. `verifier/README.md` lists the cases.
 | Status | `completed`, `timeout`, `budget_exceeded` (the run passed its token budget while this sprint ran, and it was stopped), or `error` when a step failed or a number could not be read: a missing observation is never a green zero. |
 | Tokens | The audit log's task-worker turns whose usage the provider reported (`tokens: reported`); turns without a reported count are counted apart, never estimated. |
 | Models | The model served per role, from the same turns. |
-| By difficulty and model (`routing`) | Each task under the difficulty it was routed by (`services/models/model_routing.estimate_difficulty` of its planned `covers`, no rework) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band. The backend's `services/models/routing_record.py` makes the split, the same one the Sprints page shows. |
+| By difficulty and model (`routing`) | Each task under the difficulty its first attempt was routed by (the worker's first `estimated` event, `services/models/difficulty.py`: criteria, the architecture's modules and files, dependencies, attempt and rework; read by `readers.difficulty_estimates`; a task without one is recomputed from its planned `covers`) and the model the proxy reported for its last delivery: tasks, done, done at the first attempt, rework per task, blocked share and the task's reported tokens (its other turns counted apart), with the policy's band and the estimate's own band (`difficulty_band`: `low`, `medium`, `high`). The cost in cents (`cost_cents`) is left unknown (`null`, counted in `cost_unknown`), never 0: the bench prices no turn. The backend's `services/models/routing_record.py` makes the split, the same one the Sprints page shows. |
 | Policy | The routing policy's label on the card (`policy`): `BENCH_POLICY`, else the `AGENT_MODEL_POLICY` the run passed to the backend, else `default`. |
 | Prompt weight (`prompt`) | Each task's latest task-worker run's `prompt_sections`, read from its stored verification evidence (#443, `services/loop/worker/prompt_budget.py`): the backend's own measure of the Developer prompt it sent. Per spec and in total: the prompts measured, the estimated tokens in all and per task (the system prompt apart), per section the tokens sent and their share, the prompts with a section cut and which sections, and the prompts that carried `related_code` (#438). Estimated tokens are characters / 4, never the provider's count (`tokens` above). A run with no measure (a backend from before #443) is counted apart (`prompt_sections_missing`), never as a prompt of zero tokens. |
 
@@ -108,21 +108,31 @@ cards:
 ```bash
 AGENT_MODEL_POLICY='' BENCH_POLICY=role-defaults \
   scripts/bench/run.sh --out /tmp/bench-a
-AGENT_MODEL_POLICY='{"bands": {"1-2": "<cheaper model>", "3-5": "<stronger model>"}}' \
+AGENT_MODEL_POLICY='{"bands": {"low": "<cheaper model>", "medium": "<cheaper model>", "high": "<stronger model>"}}' \
   BENCH_POLICY=by-difficulty scripts/bench/run.sh --out /tmp/bench-b
 python3 scripts/bench/compare.py /tmp/bench-b/<stamp>.json --previous /tmp/bench-a/<stamp>.json
 ```
 
 The diff judges the totals and each specification as for any two runs, and
-adds a table by difficulty: per band, tasks, the share done at the first
+adds a table by difficulty: per score, tasks, the share done at the first
 attempt, rework per task, the blocked share, the reported tokens and the
-models that delivered, before → after. That table is shown, never judged: a
+models that delivered, before → after; then the same numbers, with done and
+the cost when known, by difficulty band (`low`, `medium`, `high`) and by
+served model (`scripts/bench/routing_split.py`). These tables are shown, never judged: a
 policy is meant to move work between models, and whether it pays is read
 from first attempts and tokens per band. With the fake models every policy
 gets the same answers, so only a real proxy (`BENCH_LLM_URL`) tells two
-policies apart; the nightly real-model run uses the default policy. Schema v2 and
-v3 cards carry the split; a v1 card (the references kept before it) is
-still read and compared, without a table by difficulty.
+policies apart; the nightly real-model run uses the default policy. With the
+fake, a run per policy still checks the circuit end to end: the backend reads
+the policy, stores each task's estimate and routing (`estimated` events, the
+run's evidence), and the two cards compare band by band and model by model
+(the fake answers `fake-model` whatever was requested, so the served model is
+the same on both sides). A policy can also be set for one company on the
+Models page instead of `AGENT_MODEL_POLICY`; the bench creates its own
+companies, so it uses the environment variable. Schema v2 and v3 cards carry
+the split; a v1 card (the references kept before it) is still read and
+compared, without a table by difficulty, and a card without the band and
+cost fields places its rows by score.
 
 ## Reading the prompt weight
 
