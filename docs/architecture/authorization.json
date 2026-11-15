@@ -47,6 +47,9 @@
     "DELETE /v1/companies/{company_id}/providers/{provider_id}": {
       "access": "Manager"
     },
+    "DELETE /v1/companies/{company_id}/sod/exception": {
+      "access": "Owner"
+    },
     "DELETE /v1/companies/{company_id}/sso": {
       "access": "Owner"
     },
@@ -191,6 +194,9 @@
     "GET /v1/companies/{company_id}/architecture/versions/{version}": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/access-review": {
+      "access": "Owner"
+    },
     "GET /v1/companies/{company_id}/autonomy": {
       "access": "Viewer"
     },
@@ -253,6 +259,15 @@
     },
     "GET /v1/companies/{company_id}/security/wstg/reviews": {
       "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/service-accounts": {
+      "access": "Owner"
+    },
+    "GET /v1/companies/{company_id}/sod/policy": {
+      "access": "Owner"
+    },
+    "GET /v1/companies/{company_id}/sod/report": {
+      "access": "Manager"
     },
     "GET /v1/companies/{company_id}/sso": {
       "access": "Owner"
@@ -582,6 +597,9 @@
     "POST /v1/companies/{company_id}/architecture/revisions": {
       "access": "Manager"
     },
+    "POST /v1/companies/{company_id}/access-review": {
+      "access": "Owner"
+    },
     "POST /v1/companies/{company_id}/chat/links/{provider}/code": {
       "access": "Viewer"
     },
@@ -612,6 +630,9 @@
         "reviewed_on": "2026-11-10",
         "artifact": "Authz pen-test report"
       }
+    },
+    "POST /v1/companies/{company_id}/sod/exception": {
+      "access": "Owner"
     },
     "POST /v1/companies/{company_id}/sso/test": {
       "access": "Owner"
@@ -838,6 +859,9 @@
     },
     "PUT /v1/companies/{company_id}/sandbox": {
       "access": "Manager"
+    },
+    "PUT /v1/companies/{company_id}/sod/policy": {
+      "access": "Owner"
     },
     "PUT /v1/companies/{company_id}/sso": {
       "access": "Owner"

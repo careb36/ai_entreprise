@@ -17,7 +17,9 @@ from models import User
 from models.agent_run import AgentRun
 from models.review import ReviewComment, RunPublication, RunReview
 from schemas import ReviewCommentCreate, RunReviewCreate
+from services.loop import sod_requesters
 from services.loop.run_review import ReviewRefused, check_comment_target, submit_review
+from services.platform import sod
 from services.release.delivery_undo import UndoRefused, record_undo, undo_spec
 from services.release.git_publish import (
     PublishRefused,
@@ -172,6 +174,7 @@ def create_run_review(
             body=payload.body,
             author_name=author_name,
             author_user_id=author_id,
+            actor=sod.actor_of(session, user),
         )
     except ReviewRefused as refused:
         session.rollback()
@@ -247,10 +250,28 @@ async def merge_run(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Merge the run's task branch into the base branch, locally (``services/local_merge``)."""
+    """Merge the run's task branch into the base branch, locally (``services/local_merge``).
+
+    A release: the person who started the run's sprint does not merge it
+    (segregation of duties, ``services/platform/sod.py``); refused before the
+    daemon is asked.
+    """
     require_company_role(session, user, company_id, "Manager")
     run = _run(session, run_id, company_id)
     author_name, author_id = _author(user, None)
+    try:
+        sod.enforce(
+            session,
+            company_id,
+            sod.RELEASE,
+            {"kind": "agent_run", "id": run.id, "how": "local_merge"},
+            sod.actor_of(session, user),
+            sod_requesters.of_run(session, run),
+        )
+    except sod.SodRefused as refused:
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
     try:
         reply = await daemon_request(
             getattr(request.app.state, "nats_client", None),

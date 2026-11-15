@@ -33,8 +33,10 @@ from schemas import (
 from services.evidence import acceptance
 from services.loop import board_moves, sprint_archive
 from services.loop.carry_over import CarryOverError, carry_over
+from services.loop.run_review import ReviewRefused, segregate_board_acceptance
 from services.models import run_cost
 from services.planning import arch_author, spec_check, spec_planning, sprint_team
+from services.platform import sod
 from services.tasks import dependencies, sprint_board, task_events
 from services.tasks.board import (
     count_architect_advice,
@@ -494,6 +496,16 @@ async def update_backlog_item(
         starts, comment = board_moves.prepare(sprint, item, req.status, req.comment)
     except board_moves.BoardMoveError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    if req.status == "done" and sprint is not None:
+        # Marking a held delivery done accepts it: segregation of duties (#543).
+        try:
+            segregate_board_acceptance(
+                session, item, sprint, sod.actor_of(session, user)
+            )
+        except ReviewRefused as refused:
+            raise HTTPException(
+                status_code=refused.status, detail=refused.detail
+            ) from refused
 
     if req.priority:
         item.priority = req.priority

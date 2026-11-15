@@ -17,8 +17,10 @@ from schemas import AgentRunApprovalRequest, AgentRunCreate, AgentRunVerificatio
 from services.evidence.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.evidence.review_changes import run_changes
 from services.evidence.verification import verify_agent_run
+from services.loop import sod_requesters
 from services.loop.run_review import record_approval
 from services.management.reviewer_agent import track_record as reviewer_track_record
+from services.platform import sod
 from services.release.delivery_undo import snapshot_of
 from sqlalchemy import String, cast
 from sqlmodel import Session, select
@@ -243,6 +245,21 @@ def approve_run(
     ).first()
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")
+    if payload.decision == "approved":
+        # Segregation of duties (#543), when the company's mode is ``all``.
+        try:
+            sod.enforce(
+                session,
+                payload.company_id,
+                sod.APPROVE_RUN,
+                {"kind": "agent_run", "id": run.id, "via": "approve"},
+                sod.actor_of(session, user),
+                sod_requesters.of_run(session, run),
+            )
+        except sod.SodRefused as refused:
+            raise HTTPException(
+                status_code=refused.status, detail=refused.detail
+            ) from refused
 
     approval = record_approval(
         session,
