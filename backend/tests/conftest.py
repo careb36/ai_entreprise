@@ -37,6 +37,7 @@ from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
+from models.audit_anchor import AuditAnchor, AuditAnchorSettings
 from models.board_note import SprintBoardNote
 from models.chat import (
     ChatApprovalMessage,
@@ -67,6 +68,7 @@ from models.integration import SprintIntegration
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
+from models.progress import SprintProgressSnapshot
 from models.provider import ProviderConnection
 from models.review import ReviewComment, RunPublication, RunReview
 from models.run_secret import RunSecret
@@ -75,6 +77,7 @@ from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
 from models.support import BugReport
+from models.task_relation import TaskRelation
 from models.team import Team, TeamMember
 from models.webhook import CompanyWebhook
 from models.wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
@@ -101,6 +104,22 @@ _engine = create_engine(
 def disable_auth_for_legacy_tests(monkeypatch):
     # The legacy suite predates authentication enforcement.
     monkeypatch.setattr(settings, "AUTH_REQUIRED", False)
+
+
+@pytest.fixture(autouse=True)
+def sign_in_limits_out_of_the_way(monkeypatch):
+    """The suite signs in and registers far more often than a person would,
+    all from the test client's one address: the limits of the password
+    routes (issue #541) are lifted, and their counters and the per-account
+    backoff start empty. ``test_auth_limits.py`` lowers them to test them."""
+    from security import limiter
+    from services.platform import login_throttle
+
+    monkeypatch.setattr(settings, "LOGIN_RATE_LIMIT", "100000/minute")
+    monkeypatch.setattr(settings, "REGISTER_RATE_LIMIT", "100000/minute")
+    monkeypatch.setattr(settings, "LOGIN_FAILURES_BEFORE_BACKOFF", 100000)
+    limiter.reset()
+    login_throttle.reset()
 
 
 @pytest.fixture(autouse=True)
@@ -188,6 +207,8 @@ SQLModel.metadata.create_all(
         AgentRunApproval.__table__,
         Verification.__table__,
         AuditLog.__table__,
+        AuditAnchor.__table__,
+        AuditAnchorSettings.__table__,
         GitHubRepoBinding.__table__,
         BugReport.__table__,
         AgentMessage.__table__,
@@ -218,6 +239,8 @@ SQLModel.metadata.create_all(
         ChatApprovalMessage.__table__,
         ChatInteraction.__table__,
         SprintBoardNote.__table__,
+        SprintProgressSnapshot.__table__,
+        TaskRelation.__table__,
         Team.__table__,
         TeamMember.__table__,
         WikiPage.__table__,

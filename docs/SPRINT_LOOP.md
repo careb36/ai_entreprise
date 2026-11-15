@@ -77,7 +77,13 @@ the LangGraph graph is only an optional kickoff conversation.
    acceptance test files on disk (`workspace.hash`) against what QA's delivery
    wrote; a file that differs or is missing is restored from QA's deliverable
    (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
-   criterion is judged against a weakened test. `services/evidence/criteria_tests.py`
+   criterion is judged against a weakened test. Under the Git workflow the
+   task's branch holds only its base and the done tasks it depends on: the
+   guarded files are its lineage's (`acceptance.branch_lineage`), a sibling
+   task's test file is guarded only when it is on the branch's disk, one that
+   is not is recorded in `acceptance.not_on_branch` and neither restored nor
+   run, and the sprint's integration runs the whole suite (#329
+   retrospective). `services/evidence/criteria_tests.py`
    holds the reading of the runner's output and the two checks. A criterion
    is `verified` only from the most recent verification across the tasks
    covering it, and only when that run's whole verdict is verified.
@@ -131,7 +137,9 @@ the LangGraph graph is only an optional kickoff conversation.
    and with `autonomy_level` 3 the follow-up
    sprint carries the closed sprint's blocked tasks on its own, once each. The
    new task carries what blocked the old one (a `Previous attempt` prompt
-   section); the old one is marked and leaves the inbox. The escalation gets
+   section); the old one is marked and leaves the inbox, and the two are
+   linked by a confirmed `relates_to` relation (`services/tasks/relations.py`,
+   `rule:carry_over`; information only, never a dependency). The escalation gets
    an answer (`services/learning/scrum_master.py`): the ScrumMaster reads what blocked
    the task, the rework asked for and how the company's second attempts went
    (`track_record`: done out of carried, with and without its brief, counted

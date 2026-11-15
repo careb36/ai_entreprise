@@ -25,7 +25,7 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from models import Company, DocumentationPack, User
-from pydantic import BaseModel
+from schemas import RequestModel
 from services.planning import document_approval
 from services.planning.project_docs import collect, texts
 from services.planning.project_docs import pack as packs
@@ -38,11 +38,11 @@ router = APIRouter(tags=["Core"])
 WRITE_TIMEOUT_SECONDS = 60.0
 
 
-class LanguageRequest(BaseModel):
+class LanguageRequest(RequestModel):
     doc_language: Literal["en", "es"]
 
 
-class CompileRequest(BaseModel):
+class CompileRequest(RequestModel):
     # Ask the TechWriter for the charter's background (the only prose).
     prose: bool = True
 

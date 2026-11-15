@@ -42,6 +42,24 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- `JWT_ALGORITHM` — default `HS256`; only `HS256`, `HS384` or `HS512` is
+  accepted, anything else (`none`, an asymmetric name) refuses to sign or
+  verify. `JWT_ISSUER` (default `la-fabrique`) and `JWT_AUDIENCE` (default
+  `la-fabrique-api`; the Glassroom tickets use `<JWT_AUDIENCE>:glassroom`) go
+  into every token and are required when one is checked (issue #541). Two
+  deployments that share a `JWT_SECRET_KEY` must not share them. Changing
+  either ends every access token and stream ticket at once, as rotating the
+  key does; browser sessions renew theirs from the refresh cookie.
+- Password sign-in and registration (issue #541; SECURITY.md §3.1):
+  - `LOGIN_RATE_LIMIT` — default `10/minute`, per client address, on
+    `POST /v1/auth/login`; `REGISTER_RATE_LIMIT` — default `5/minute` on
+    `POST /v1/auth/register` (slowapi, `RATE_LIMIT_STORAGE_URI`).
+  - `LOGIN_FAILURES_BEFORE_BACKOFF` (5), `LOGIN_FAILURE_WINDOW_SECONDS` (900),
+    `LOGIN_BACKOFF_MAX_SECONDS` (900) — the per-account backoff: after that
+    many failures within the window, each further failure locks the
+    account's password sign-in for twice as long as the last (2 s, 4 s, …),
+    at most the maximum; a locked account answers 429 with `Retry-After`. Per
+    process.
 - Browser sessions (issue #524; `docs/design/SESSIONS.md`). Login and the SSO
   exchange set HttpOnly cookies instead of returning a token:
   - `ACCESS_TOKEN_EXPIRE_MINUTES` — default `15`. The access token's life, in
@@ -179,6 +197,13 @@ Copy `.env.example` to `.env` and fill in:
   `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
   a deleted, inserted, reordered, altered or moved row breaks it). Without a
   key the chain is unkeyed and says so.
+  The factory holds this key, so the chain alone does not stop the factory
+  rewriting itself: anchor its head outside (issue #542,
+  `docs/design/AUDIT_ANCHORS.md`). Anchors have no environment variable; an
+  Owner sets them per company (`PUT /v1/audit/anchors/settings`, the Audit
+  anchors page): cadence (15 to 1440 minutes, 60 by default), posting to the
+  company's webhook, the RFC 3161 authority's URL and certificate, and the
+  customer's Ed25519 public keys.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
   the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
@@ -278,13 +303,20 @@ Copy `.env.example` to `.env` and fill in:
 - `DELIVERY_BROWSER_IMAGE` — optional, default empty (the application check
   runs in `DELIVERY_SANDBOX_IMAGE`, as before). In container mode, the image the
   application check runs in when its e2e command drives a browser (QA's smoke
-  suite, or the e2e command of a profile that serves pages): one built from
-  `vscode-daemon/images/browser` (Node, Playwright 1.64.1 from its lockfile and
-  the Chrome Headless Shell it launches, each download checked by sha256 for
-  amd64 and arm64; `docker build vscode-daemon/images/browser`, and behind a
-  TLS-intercepting proxy `--secret id=extra_ca,src=<CA bundle>`). Pin it by
-  digest (`registry/name@sha256:…`); the run records the content ID and digest
-  it started from either way. Before a browser e2e command the daemon also
+  suite, or the e2e command of a profile that serves pages): the published one,
+  or one built locally from `vscode-daemon/images/browser` (Node, Playwright
+  1.64.1 from its lockfile and the Chrome Headless Shell it launches, each
+  download checked by sha256 for amd64 and arm64; `docker build
+  vscode-daemon/images/browser`, and behind a TLS-intercepting proxy
+  `--secret id=extra_ca,src=<CA bundle>`). Every `v*` tag publishes it
+  multi-arch (`linux/amd64`, `linux/arm64`) as
+  `ghcr.io/<owner>/<repo>/browser-sandbox:X.Y.Z` (#529; `images.yml`, built
+  with buildx under QEMU), signed by digest with keyless cosign and carrying
+  its CycloneDX SBOM as a signed attestation (`docs/OPERATIONS.md`,
+  Releasing): set `DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
+  with the digest the publish run's summary printed. Pin it by digest
+  (`registry/name@sha256:…`); the run records the content ID and digest it
+  started from either way. Before a browser e2e command the daemon also
   probes for a browser (`vscode-daemon/browser_probe.py`) and `e2e_run` says
   whether one was present.
 - `DELIVERY_FULL_LOGS` — optional, default `true`. The install, the test run
@@ -524,16 +556,37 @@ Copy `.env.example` to `.env` and fill in:
   role defaults apply), a band that cannot be read is dropped with a warning;
   an agent's, a role's or the company's chosen model is never re-routed.
   Unset: every task runs on its role's model, as before.
+- `API_DOCS_ENABLED` — default `true`. The interactive documentation
+  (`/docs`, `/redoc`, `/openapi.json`); `false` answers 404 on all three.
+  Leave it on for development; turn it off where the API faces the internet
+  (issue #541, WSTG-v42-CONF-05).
+- `SECURITY_HEADERS_ENABLED` — default `true`. The header baseline of
+  SECURITY.md §3.3 on every answer (`backend/app/security.py`); `false` only
+  behind a proxy that sets the same headers.
+- `ERROR_REPORT_URL` — optional, empty by default. An https endpoint the
+  operator controls that receives one POST per unhandled error: the error id,
+  the exception's class, the HTTP method, the route template and
+  `ERROR_REPORT_SOURCE` (optional, a name for this deployment); never a
+  traceback, a message, a path or a request body. The answer to the client
+  carries only the error id, and the traceback stays in the backend's log
+  under it. (Replaces the former `FABRIQUE_VENDOR_SUPPORT_URL`, which sent the
+  traceback and is no longer read.)
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
-  resolves to public addresses, checked when it is saved and before every post;
+  resolves to public addresses, checked when it is saved and before every post,
+  and the post goes to the address that was checked (`services/platform/egress.py`);
   `true` allows a private, loopback or link-local host (a receiver on the LAN).
+  The same check applies to a company's RFC 3161 timestamping authority
+  (`tsa_url` of the audit anchors), which may also be http.
 - `RESEARCH_TOOLS_ENABLED` (true), `RESEARCH_ROLES` (Architect, PO, SecOps,
   TechWriter, Designer), `RESEARCH_ALLOWED_HOSTS` (empty), `RESEARCH_TOOL_ROUNDS` (6) —
   the research tools (`services/tools/research_tools.py`): the roles that decide
   read official documentation, the package registries and OSV through the
   backend, from the default hosts plus these and the company's own; every
-  source is evidence. `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
+  source is evidence. Only a host named in `RESEARCH_ALLOWED_HOSTS` may
+  resolve to a private or loopback address (a local mirror); a default host or
+  one on a company's list is fetched only on a public address, resolved once
+  and pinned (issue #541). `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
   `RESEARCH_CRATES_URL`, `RESEARCH_GO_URL` and `RESEARCH_OSV_URL` may point
   at a mirror (the e2e points PyPI at its fake).
 - `GROUNDING_LOOKUPS_ENABLED` (true), `GROUNDING_MAX_LOOKUPS` (20) — the

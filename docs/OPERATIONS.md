@@ -116,10 +116,16 @@ What pushing the tag runs:
 - **`images.yml`** makes the same checks and publishes the five images
   `docker-build.yml` builds (`backend`, `janitor`, `frontend`, `llm-proxy`,
   `vscode-daemon`) to `ghcr.io/<owner>/<repo>/<service>:X.Y.Z`, plus
-  `:latest` for a stable release. They are built for `linux/amd64` only, on
-  the self-hosted runner with plain `docker build`; multi-arch images need
-  buildx and QEMU on the runner. A new package on GHCR is private until its
-  visibility is changed in the package's settings.
+  `:latest` for a stable release. Those five are built for `linux/amd64`
+  only, on the self-hosted runner with plain `docker build`. A sixth image,
+  `browser-sandbox` (`vscode-daemon/images/browser`, issue #529), is
+  published from the same tag by a job of its own, outside that list:
+  `linux/amd64,linux/arm64` with buildx under QEMU, the same `:X.Y.Z` (plus
+  `:latest` for a stable release), the same SBOM and the same keyless
+  signature as the rest. `.github/workflows/browser-image-probe.yml` (manual,
+  `workflow_dispatch`) is the check that the runner can build and run both
+  architectures before a release tag relies on it. A new package on GHCR is
+  private until its visibility is changed in the package's settings.
 
 Each release also records what it is made of and who built it (issue #522,
 part C):
@@ -134,13 +140,17 @@ part C):
 - **SBOMs of the images.** `images.yml` scans each image it pushed (the base
   image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
   artifact `sbom-<image>` for 90 days and attached to the image in the
-  registry as a signed CycloneDX attestation.
+  registry as a signed CycloneDX attestation. The multi-arch `browser-sandbox`
+  is scanned by its digest in the registry (a manifest list is never in the
+  Docker daemon) and its SBOM catalogs the `linux/amd64` variant; the arm64
+  one differs only in the browser binary, which the Dockerfile checks against
+  its own pinned sha256.
 - **Signatures.** `images.yml` signs each image by its digest with keyless
   [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
-  (`id-token: write`, on the publish job only) gets a short-lived certificate
-  from Fulcio naming this workflow and the tag, and the signature is logged in
-  the public Rekor transparency log. No signing key exists to store, rotate
-  or leak.
+  (`id-token: write`, on the two publish jobs only) gets a short-lived
+  certificate from Fulcio naming this workflow and the tag, and the signature
+  is logged in the public Rekor transparency log. No signing key exists to
+  store, rotate or leak.
 
 Verify an image before deploying it (cosign 2.x or 3.x):
 
@@ -163,6 +173,14 @@ policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
 steps run on the self-hosted runner and have not been exercised by a release
 yet; the first tag after this change is their first run
 (`docs/design/SELF_HOSTED_RUNNER.md` records the runner's risks).
+
+The browser sandbox is pinned the same way: the publish run's summary prints
+the line to paste into the backend's environment,
+`DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
+(`docs/CONFIGURATION.md`), so the application check runs its browser e2e
+commands in the published multi-arch image, by digest. The verification
+commands above apply to it unchanged (same workflow, same certificate
+identity; its digest names the manifest list).
 
 Check a release's component SBOMs against their checksums:
 
@@ -324,7 +342,7 @@ both.
 |-----|-------|--------------------|-----|
 | `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
 | `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
-| `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. |
+| `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. Anchors (issue #542) are not affected by the rotation: they cover the statement, not the key, and their tokens and customer signatures still verify. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
 | Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
 
@@ -440,6 +458,29 @@ turns whose usage the provider reported, so the provider's own spending
 limit is still the last guard (`bench/README.md`, "The nightly real-model
 run").
 
+**The runners stop taking jobs, or their disk fills up.** The runner services
+are user services on this machine: `systemctl --user is-active
+'actions-runner-lafabrique*'` answers `active` for all seven while GitHub shows
+some `offline`, or `online` and `busy=false` with the queue growing and nothing
+dispatched (`gh run list --status in_progress` empty). A runner whose job died
+mid-run — usually under disk pressure — keeps its session wedged: the service
+stays up, the connection does not. Check `df -h /` first, then restart the
+wedged services, and only once `gh run list --status in_progress` is empty, or
+you cancel a running e2e job:
+
+```bash
+systemctl --user restart 'actions-runner-lafabrique*'
+```
+
+`runner-hygiene.yml` keeps the disk bounded daily (#566): this repository's
+stopped e2e and smoke containers with their volumes, dangling images older than
+a week, and anonymous dangling volumes older than a week are removed, and the
+buildkit cache is kept under 2 GB. It never prunes by name: the named volumes
+`la-fabrique_*` hold a person's development data (they show `dangling` while
+that stack is down), and the named images belong to the other repositories
+sharing this host. `e2e.yml` now removes its containers with `docker rm -fv`, so
+a finished run leaks nothing.
+
 ## Backups
 
 `scripts/backup.sh` writes `backups/postgres-<db>-<UTC time>.dump`
@@ -522,11 +563,32 @@ database, archive a company's whole chain, never part of it:
 2. Export the company's rows with every column the chain hashes:
    `\copy (SELECT * FROM audit_log WHERE company_id = <id> ORDER BY chain_seq) TO 'audit-<id>.csv' CSV HEADER`.
    Keep with it the `GET /v1/audit/chain` answer of that moment (its
-   `head`) and, if the chain is keyed, which `AUDIT_SIGNING_KEY` keyed it.
+   `head` and `anchors`), the export of each anchor
+   (`GET /v1/audit/anchors/{id}/export`) and, if the chain is keyed, which
+   `AUDIT_SIGNING_KEY` keyed it.
 3. Keep the archive read-only. Deleting the archived rows from the live
    database is not supported yet, because the chain would report the gap.
    Until the chain can start from a checkpoint, the archive is a copy and
    the database keeps the rows.
+
+**Anchoring the audit chain outside** (issue #542,
+`docs/design/AUDIT_ANCHORS.md`). `AUDIT_SIGNING_KEY` is held by the factory,
+so the chain alone does not stop someone with that key and the database from
+rewriting it. An Owner turns on anchors on the Audit anchors page
+(`/company/audit-anchors`): a cadence (hourly by default), posting each head
+to the company's webhook, an RFC 3161 timestamping authority (its URL and its
+certificate, taken from the authority itself), and the customer's Ed25519
+public keys, whose private halves sign heads from the customer's own job.
+`GET /v1/audit/anchors` (and `anchors` in `GET /v1/audit/chain`) must read
+`covered` after a cadence; `uncovered_tail` between cadences is normal,
+`no_anchors` means nothing outside covers the chain, and `anchor_mismatch` is
+an incident: the chain or an anchor was rewritten (handle it as SECURITY.md
+§9). An anchor whose delivery failed shows as `undelivered`: check the
+webhook's last error or the authority's URL, then `POST /v1/audit/anchors`.
+Rotating a customer key: add the new public key, move the signing job to it,
+then retire the old one (it keeps verifying what it signed). Replacing the
+authority's certificate: paste the new one; anchors keep the certificate
+they were verified with.
 
 ## How many workers may run
 

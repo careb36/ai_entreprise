@@ -20,7 +20,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import Sprint, SprintBoardNote, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.contracts import board_notes
 from services.loop.worker import sprint_notes
 from services.platform.agent_service import AgentService
@@ -34,7 +35,7 @@ def _links() -> Any:
     return Field(default_factory=list, max_length=board_notes.MAX_LINKS_PER_KIND)
 
 
-class BoardNoteCreateRequest(BaseModel):
+class BoardNoteCreateRequest(RequestModel):
     kind: str = Field(min_length=1, max_length=40)
     text: str = Field(min_length=1, max_length=board_notes.TEXT_LIMIT)
     files: list[str] = _links()
@@ -44,7 +45,7 @@ class BoardNoteCreateRequest(BaseModel):
     supersedes_id: int | None = None
 
 
-class MarkWrongRequest(BaseModel):
+class MarkWrongRequest(RequestModel):
     reason: str | None = Field(default=None, max_length=board_notes.REASON_LIMIT)
 
 

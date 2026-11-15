@@ -13,6 +13,7 @@ from .agent_run import AgentRun, AgentRunApproval, Verification
 from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
+from .audit_anchor import AuditAnchor, AuditAnchorSettings
 from .board_note import SprintBoardNote
 from .chat import (
     ChatApprovalMessage,
@@ -37,6 +38,7 @@ from .integration import SprintIntegration
 from .manager import ManagerDecision, ManagerPolicy
 from .mcp import McpServer
 from .procedure import Procedure
+from .progress import SprintProgressSnapshot
 from .provider import ProviderConnection
 from .review import ReviewComment, RunPublication, RunReview
 from .run_secret import RunSecret
@@ -46,6 +48,7 @@ from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
+from .task_relation import TaskRelation
 from .team import Team, TeamMember
 from .webhook import CompanyWebhook
 from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
@@ -58,6 +61,8 @@ __all__ = [
     "ApiToken",
     "Architecture",
     "AssistantRuntimeState",
+    "AuditAnchor",
+    "AuditAnchorSettings",
     "AuditLog",
     "BacklogItem",
     "BugReport",
@@ -90,10 +95,12 @@ __all__ = [
     "Sprint",
     "SprintBoardNote",
     "SprintIntegration",
+    "SprintProgressSnapshot",
     "SsoConnection",
     "SsoFlowState",
     "SsoIdentity",
     "TaskEvent",
+    "TaskRelation",
     "Team",
     "TeamMember",
     "User",

@@ -11,10 +11,12 @@ import { evidenceEndpoints } from './api/evidence'
 import { githubEndpoints } from './api/github'
 import { memoryEndpoints } from './api/memory'
 import { messageEndpoints } from './api/messages'
+import { progressEndpoints } from './api/progress'
 import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
+import { taskRelationEndpoints } from './api/taskRelations'
 import { teamEndpoints } from './api/teams'
 import { usageEndpoints } from './api/usage'
 import { wikiEndpoints } from './api/wiki'
@@ -32,11 +34,13 @@ export * from './api/evidence'
 export * from './api/github'
 export * from './api/memory'
 export * from './api/messages'
+export * from './api/progress'
 export * from './api/sprints'
 export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
+export * from './api/taskRelations'
 export * from './api/teams'
 export * from './api/usage'
 export * from './api/wiki'
@@ -57,6 +61,8 @@ const endpoints = {
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
   ...boardNoteEndpoints(http),
+  ...progressEndpoints(http),
+  ...taskRelationEndpoints(http),
   ...evidenceEndpoints(http),
   ...analyticsEndpoints(http),
   ...memoryEndpoints(),

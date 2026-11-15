@@ -15,6 +15,7 @@ from logging_config import logger
 from memory_client import MemoryClient
 from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
+from services.integrations.anchoring import cadence_loop as anchor_cadence_loop
 from services.integrations.outbox_service import process_outbox
 from services.loop.task_worker import process_backlog_tasks
 from services.producers import console_capabilities
@@ -113,6 +114,8 @@ async def _start_workers(app, client: NATSClient) -> None:
         "task_worker": process_backlog_tasks(client),
         # Sprint integrations the daemon could not take at close (issue #314).
         "integration_retry": integration_jobs.retry_loop(client, _engine()),
+        # The audit chain's head anchored outside on the Owner's cadence (issue #542).
+        "audit_anchor_cadence": anchor_cadence_loop(_engine()),
     }
     for name, coro in worker_coros.items():
         task = asyncio.create_task(coro, name=name)

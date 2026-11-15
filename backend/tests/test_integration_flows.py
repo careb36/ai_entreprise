@@ -186,7 +186,7 @@ class TestAuthenticationFlow:
             },
         )
         assert register_response.status_code == 200
-        _user_id = register_response.json()["user_id"]
+        assert register_response.json()["email"] == "auth-test@example.com"
 
         # Login
         login_response = test_client.post(

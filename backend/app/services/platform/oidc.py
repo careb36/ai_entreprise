@@ -18,16 +18,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import ipaddress
 import secrets
-import socket
 import time
 from typing import Any
 from urllib.parse import urlsplit
 
 import jwt
 
-from services.platform import oidc_client
+from services.platform import egress, oidc_client
 
 # The httpx transport every request uses; the tests put a fake IdP here.
 HTTP_TRANSPORT: Any = None
@@ -66,14 +64,15 @@ def _settings():
     return settings
 
 
+_PRIVATE = "the host resolves to a private or unreachable address"
+
+
+def _allow_private() -> bool:
+    return bool(_settings().SSO_ALLOW_PRIVATE_ISSUERS)
+
+
 def _public_address(host: str) -> bool:
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return False
-    return bool(infos) and all(
-        ipaddress.ip_address(info[4][0]).is_global for info in infos
-    )
+    return egress.all_public(host)
 
 
 def check_url(url: str, *, field: str = "issuer", resolve: bool = True) -> str:
@@ -91,8 +90,7 @@ def check_url(url: str, *, field: str = "issuer", resolve: bool = True) -> str:
         raise SsoError("invalid_config", f"{field}: must be an https URL")
     if parts.username or parts.password or parts.fragment:
         raise SsoError("invalid_config", f"{field}: no credentials or fragment")
-    allow_private = bool(_settings().SSO_ALLOW_PRIVATE_ISSUERS)
-    if resolve and not allow_private and not _public_address(parts.hostname):
+    if resolve and not _allow_private() and not _public_address(parts.hostname):
         raise SsoError(
             "invalid_config",
             f"{field}: the host resolves to a private or unreachable address "
@@ -104,7 +102,11 @@ def check_url(url: str, *, field: str = "issuer", resolve: bool = True) -> str:
 def _get(url: str) -> dict[str, Any]:
     timeout = float(_settings().SSO_HTTP_TIMEOUT_SECONDS)
     try:
-        return oidc_client.get_json(url, timeout, transport=HTTP_TRANSPORT)
+        return oidc_client.get_json(
+            url, timeout, transport=HTTP_TRANSPORT, allow_private=_allow_private()
+        )
+    except egress.EgressRefused as exc:
+        raise SsoError("invalid_config", f"{url}: {_PRIVATE}") from exc
     except oidc_client.OidcUnreachable as exc:
         raise SsoError("idp_unreachable", f"{url}: unreachable ({exc})") from exc
     except oidc_client.OidcHttpError as exc:
@@ -275,7 +277,10 @@ def exchange_code(
             timeout,
             auth=auth,
             transport=HTTP_TRANSPORT,
+            allow_private=_allow_private(),
         )
+    except egress.EgressRefused as exc:
+        raise SsoError("invalid_config", f"token endpoint: {_PRIVATE}") from exc
     except oidc_client.OidcUnreachable as exc:
         raise SsoError("idp_unreachable", f"token endpoint: {exc}") from exc
     except oidc_client.OidcHttpError as exc:

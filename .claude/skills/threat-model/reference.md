@@ -14,7 +14,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
  Agent and producer output enters at B5, wherever it is read.
  CI on the self-hosted runner is B7; a company's identity provider is B8;
  Slack and Microsoft Teams (approvals in chat) are B9; the desktop app's
- local server on 127.0.0.1, which other local software can reach, is B10.
+ local server on 127.0.0.1, which other local software can reach, is B10; an
+ RFC 3161 timestamping authority (audit anchors) is B11.
 ```
 
 ## B1 — Browser ↔ backend
@@ -23,6 +24,10 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   callers.
 - **Threats to look for:** missing auth on a new route, cross-company reads,
   role escalation, XSS from rendered model output, token theft, CSRF.
+- **WSTG:** WSTG-v42-ATHZ-02, ATHZ-04, ATHN-03, ATHN-06, IDNT-04, SESS-01 to
+  SESS-07, CLNT-01, CLNT-09, ERRH-01, ERRH-02, CONF-05; latest@87cf4a4
+  APIT-02, APIT-04, SESS-10, INJT-20, CONF-12, CONF-14. A new route is
+  declared in `docs/architecture/authorization.json`.
 - **Controls:** JWT (HS256, `JWT_SECRET_KEY`) resolved by
   `backend/app/auth_deps.py`, Bearer first, else the browser's
   `HttpOnly; Secure; SameSite=Strict` session cookie with a signed
@@ -44,6 +49,9 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   `_INBOX.backend.>`, deliveries on JetStream.
 - **Threats:** anyone on the bus commanding the daemon; the daemon answering
   itself; replayed or forged replies; secrets on the wire.
+- **WSTG:** WSTG-v42-BUSL-02, BUSL-03 (forged and replayed messages),
+  CRYP-01 (the bus's TLS); otherwise outside the guide (a message bus), so
+  the yearly test covers it (`SECURITY.md` §16).
 - **Controls:** one NATS user per component with fixed subjects, no
   `allow_responses` for the daemon (`scripts/nats_config.py`,
   `nats/nats-server.conf`, `--check`, `backend/tests/test_nats_security.py`);
@@ -58,6 +66,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
 - **Threats:** path traversal or symlinks out of the project; reading secret
   files; arbitrary commands; agent code reaching the network, the user's home
   or the host; resource exhaustion.
+- **WSTG:** WSTG-v42-ATHZ-01 (directory traversal), INPV-12 (command
+  injection), BUSL-08, BUSL-09 (unexpected and malicious files).
 - **Controls:** sandbox modes `container` / `bwrap` / `host`, the applied mode
   reported and recorded by the Verifier, `FABRIQUE_SANDBOX_REQUIRED`
   (`vscode-daemon/sandbox.py`, `sandbox_image.py`,
@@ -79,6 +89,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   provider keys, model responses.
 - **Threats:** a company's key used by another; keys in logs; prompt content
   leaking secrets to a provider; cost exhaustion.
+- **WSTG:** WSTG-v42-ATHZ-02 (a connection used across companies),
+  BUSL-05 (limits on use), CRYP-01 (provider TLS).
 - **Controls:** company connections only with `LLM_PROXY_INTERNAL_TOKEN`
   compared in constant time, no fallback to deployment keys
   (`llm-proxy/connections.py`); provider keys encrypted with
@@ -92,6 +104,9 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
 - **Threats:** prompt injection steering tools; an agent's claim stored as an
   observation; a producer-supplied hash or exit status trusted; model output
   executed or rendered.
+- **WSTG:** WSTG-v42-BUSL-03 (integrity checks), CLNT-01, CLNT-03 (output
+  rendered), INPV-19 (research fetches, latest@87cf4a4 INJT-19); prompt
+  injection itself is outside the guide (OWASP Top 10 for LLM Applications).
 - **Controls:** claims and observations in separate fields, the Verifier
   judging from observations, `unverifiable` as a verdict, no model deciding a
   claim (`docs/POSITIONING.md`, rules 1–7; `docs/contexts/evidence.md`);
@@ -104,6 +119,9 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   publishing branches and pull requests with the person's credentials.
 - **Threats:** forged webhooks; replay; SSRF through a webhook URL; leaking
   the signing secret; publishing to the wrong repository.
+- **WSTG:** WSTG-v42-BUSL-02 (forged requests), INPV-19 (latest@87cf4a4
+  INJT-19; `backend/tests/test_ssrf_vectors.py`), ATHZ-02 (publish needs
+  Manager).
 - **Controls:** incoming webhook HMAC checked with `hmac.compare_digest`
   (`services/producers/github_adapter.py`, `backend/tests/test_webhooks.py`);
   outgoing deliveries signed `X-Fabrique-Signature-256` with retries and an
@@ -116,6 +134,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   and downloaded tools.
 - **Threats:** a malicious PR or action running on a non-ephemeral runner that
   also hosts the daemon; token over-scope; secrets in logs; unpinned actions.
+- **WSTG:** outside the guide (the build system); SDL practices 5 and 6.
 - **Controls:** `permissions:` declared per workflow; CODEOWNERS on
   `.github/`; actionlint; Trivy pinned by sha; tools downloaded with checksum
   (`security-baseline.yml`); SLSA provenance on release.
@@ -130,6 +149,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   provider (any Owner can run one) asserting another company's people;
   account pre-hijacking; SSRF through the issuer URL; a company locking
   itself out.
+- **WSTG:** WSTG-v42-ATHN-04, IDNT-02, SESS-05 (login CSRF), INPV-19
+  (latest@87cf4a4 INJT-19), latest@87cf4a4 SESS-10 (ID token checks).
 - **Controls:** the backend validates the ID token itself (asymmetric
   algorithms only, `iss`, `aud`, `exp`, nonce; `services/platform/oidc.py`);
   PKCE with a one-time `state` bound to the browser; identity by
@@ -152,6 +173,9 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   payload; a click on an old message deciding a task that changed; one
   company's workspace deciding for another; SSRF through the Teams URL; the
   bot token, signing secret or webhook URL leaking through the API or logs.
+- **WSTG:** WSTG-v42-BUSL-02, BUSL-04, BUSL-06 (forged, late and
+  out-of-order decisions), ATHZ-02, INPV-19 (latest@87cf4a4 INJT-19, the
+  Teams URL), latest@87cf4a4 INJT-20 (a role read from the payload).
 - **Controls:** signature over the raw body before parsing, Slack v0 with the
   timestamp within 300 s, the Teams outgoing webhook's HMAC with the signed
   activity's timestamp within 300 s, `hmac.compare_digest`
@@ -188,6 +212,26 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   `docs/design/SESSIONS.md`, Desktop app).
 - **Known gaps:** a process running as the user can read Electron's cookie
   store on disk.
+
+## B11 — The backend and an RFC 3161 timestamping authority
+
+- **Crosses:** the audit chain's head (a statement's SHA-256 with a nonce) sent
+  to the authority the Owner chose; the time-stamp token it answers
+  (issue #542).
+- **Threats:** a fake authority or a man in the middle back-dating or forging
+  a token; a malformed or huge answer; SSRF through the authority's URL; the
+  pinned certificate replaced by someone who can write the database.
+- **Controls:** the token is checked against the certificate the Owner pinned,
+  never against what the answer carries (signature, imprint, nonce, `genTime`
+  within validity, time-stamping EKU, ESS certificate hash;
+  `services/platform/rfc3161.py`); answers capped at 64 KiB, DER reader refuses
+  indefinite lengths, high tags, trailing bytes and short values; the URL
+  passes `webhooks.check_url` at save and before each request
+  (`services/integrations/tsa_client.py`, no redirects); Owner-only settings,
+  audited; `docs/design/AUDIT_ANCHORS.md`, `backend/tests/test_rfc3161.py`.
+- **Known gaps:** the in-product coverage report trusts the certificate stored
+  in the factory's database; an auditor verifies with the authority's
+  published certificate instead.
 
 ## Data stores (inside the backend's zone)
 
