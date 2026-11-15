@@ -3,9 +3,6 @@ row per close of a sprint with the time series built from its task events,
 the retrospective's numbers, the sha256 the backend computed over both and
 the audit row that seals it. A new table only: nothing existing changes.
 
-Numbered 0099 so it cannot collide with the migrations of parallel work; it
-is renumbered when merged.
-
 Revision ID: 0031
 Revises: 0030
 Create Date: 2026-11-15 18:00:00 UTC
