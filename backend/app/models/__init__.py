@@ -47,6 +47,7 @@ from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
 from .webhook import CompanyWebhook
+from .wiki import WikiLink, WikiPage, WikiPageVersion, WikiSettings
 
 __all__ = [
     "Agent",
@@ -94,4 +95,8 @@ __all__ = [
     "TaskEvent",
     "User",
     "Verification",
+    "WikiLink",
+    "WikiPage",
+    "WikiPageVersion",
+    "WikiSettings",
 ]

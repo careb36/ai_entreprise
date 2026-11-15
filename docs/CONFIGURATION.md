@@ -473,6 +473,23 @@ Copy `.env.example` to `.env` and fill in:
   characters (the header and the format take about 800 and are always
   there, the notes get the rest); `0` leaves the section out. Prompt priority 4: `PROMPT_BUDGET` cuts
   it before the repository, the related code and the requirements.
+- `WIKI_ENABLED` (true) — the project wiki (issue #445,
+  `docs/design/PROJECT_WIKI.md`): the `## Project wiki` section of every
+  Developer-path prompt and the compilation and lint at sprint close. Off, the
+  prompt reads the vector memory alone (the bench's baseline) and no page is
+  compiled; the pages stay and the API serves them.
+- `WIKI_MAX_CHARS` (3000) — the wiki section's size: the pages in force of the
+  task's modules and concepts, then the decisions and the glossary, whole pages
+  that fit (the first one cut short rather than left out); `0` leaves it out.
+  Prompt priority 4, placed before the memory: `PROMPT_BUDGET` cuts it after the
+  memory and before the repository. When a page applies, the vector memory is
+  not searched.
+- `WIKI_COMPILE_MAX_PAGES` (5), `WIKI_PAGE_MAX_CHARS` (6000) — at sprint close,
+  at most that many pages compiled by a model (the decisions page, written
+  without one, is apart), each answer at most that many characters (a longer
+  one is rejected and recorded). Whether pages are also written to
+  `docs/wiki/` is a company setting (`PUT /v1/companies/{id}/wiki-settings`,
+  Manager, off by default), not an environment variable.
 - `EDIT_LINT_ENABLED` (true), `EDIT_LINT_TIMEOUT_SECONDS` (60) — after a
   `workspace__edit`, the stack profile's lint command on that file
   (`services/tools/edit_lint.py`), its errors in the same turn as the edit's result.
@@ -523,3 +540,20 @@ Copy `.env.example` to `.env` and fill in:
   answers on the evidence as `registry_lookups`; verification then reads them
   and never reaches the network. Off, or over the bound, a dependency without
   an answer is a finding, never a refutation.
+
+## The desktop app
+
+Read by the Electron main process (`frontend/electron/`) when it starts, not
+by the backend:
+
+- `BACKEND_URL` — default `http://localhost:8000`. The backend the packaged
+  app's local server forwards `/v1/*` to (issue #524; `docs/design/SESSIONS.md`,
+  Desktop app). It must be https, or plain http only on this machine
+  (`localhost`, 127.0.0.0/8, `[::1]`), since the session cookies travel on that
+  connection; anything else stops the app at launch with the reason. The app serves its page and that API from one origin,
+  `http://127.0.0.1:<port>` with a port picked at each launch, so the backend
+  needs no `CORS_ORIGINS` or `SSO_FRONTEND_URL` entry for it and
+  `SESSION_COOKIE_SECURE` stays on. For SSO, `SSO_CALLBACK_URL` must keep the
+  path `/v1/auth/sso/callback`.
+- `ELECTRON_DEV_URL` — default `http://localhost:5173`. The Vite dev server
+  `npm run electron:dev` loads.

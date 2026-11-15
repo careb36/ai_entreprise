@@ -29,7 +29,13 @@ the LangGraph graph is only an optional kickoff conversation.
    never recorded as the served model. No policy: the role default, as before.
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
-   the company's past decisions from memory (scoped by `company_id`), and
+   the **Project wiki**: the company's pages in force (not stale, not proposed)
+   for the task's modules and concepts, then the decisions in force and the
+   glossary, within `WIKI_MAX_CHARS`, each statement with its citations and
+   called a claim (`services/loop/worker/wiki_section.py`,
+   [design](design/PROJECT_WIKI.md)); only when no module or concept page
+   applies, the company's past decisions from vector memory (scoped by
+   `company_id`), and
    **Lessons from Recent Sprints**: the retrospective counts and the review
    requests from the company's last two completed sprints, read from the board
    (`_load_recent_lessons`), and the **Company Procedures** in force for the
@@ -175,6 +181,20 @@ the LangGraph graph is only an optional kickoff conversation.
    - Adoption records the numbers of the last two completed sprints as the
      baseline. Outcomes and proposals are posted to the team as `proposal`
      messages. The numbers decide, never a model.
+   - Then the **project wiki** (`services/loop/wiki_close.py`,
+     [design](design/PROJECT_WIKI.md)): the TechWriter (else the ScrumMaster)
+     updates the pages the sprint's verified runs touched, at most
+     `WIKI_COMPILE_MAX_PAGES`, from the runs and the files the daemon observed
+     them write, the retrospective and the board's active notes, in the
+     project's language; every citation is resolved against the records (an
+     unknown one rejects the page; an uncited statement, or a person's edit in
+     force, makes the version a proposal). The decisions page is written from
+     the approved architecture without a model. The deterministic lint then
+     marks pages `stale` (a cited file missing or changed, the module changed by
+     a later verified run, two pages contradicting each other on a fact), and,
+     with the company's setting on, the compiled pages go to `docs/wiki/`
+     through the daemon. A failure is recorded (`wiki_compiled`) and never stops
+     the close.
 9. With `AGENT_GRAPH_ENABLED=true`, `agent_worker` also runs the graph kickoff for
    the sprint; its transcript is ingested as an `AgentRun` (`le-fabrique-graph`).
    A failed kickoff never blocks the sprint.
