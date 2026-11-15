@@ -1,9 +1,4 @@
 {
-  "backend/app/routers/enterprise.py": 666,
-  "backend/app/services/planning/discovery_service.py": 767,
-  "backend/app/services/planning/sprint_planner.py": 792,
-  "backend/app/services/producers/console_assistants.py": 617,
-  "backend/app/services/producers/graph.py": 720,
   "llm-proxy/app.py": 658,
   "scripts/verify_infra.py": 722,
   "vscode-daemon/daemon.py": 648

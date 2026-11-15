@@ -40,6 +40,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Session, select
 
+from services.integrations import webhook_client
 from services.tasks import board
 
 EVENT_TYPE = "webhook_post"
@@ -320,17 +321,19 @@ async def deliver(
     try:
         await asyncio.to_thread(check_url, hook.url)  # DNS lookup off the event loop.
         if post is None:
-            import httpx
-
-            async with httpx.AsyncClient(
-                timeout=TIMEOUT_SECONDS, follow_redirects=False
-            ) as client:
-                response = await client.post(hook.url, content=body, headers=headers)
-            status_code = response.status_code
+            status_code = await webhook_client.post(
+                hook.url, body, headers, TIMEOUT_SECONDS
+            )
         else:
             status_code = await post(hook.url, body, headers)
     except Exception as exc:
-        _record(session, hook, "error", f"{type(exc).__name__}: {exc}")
+        # The adapter's error already names the transport's exception.
+        reason = (
+            str(exc)
+            if isinstance(exc, webhook_client.WebhookPostError)
+            else f"{type(exc).__name__}: {exc}"
+        )
+        _record(session, hook, "error", reason)
         raise
     if not 200 <= status_code < 300:
         _record(session, hook, str(status_code), f"HTTP {status_code}")

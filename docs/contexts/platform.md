@@ -6,12 +6,13 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Responsibility:** The infrastructure every context may use: the audit writes (AgentService), the advisory locks across replicas, idempotency claims, the Glassroom publisher, the KPI turn records, token usage, API tokens, run secrets, the health check, the knowledge graph reader and, after the migration, the engram processor from backend/memory. It knows nothing of tasks, runs or companies' decisions.
 - **May import:** [contracts](contracts.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
 - **Modules:** `agent_service`, `api_tokens`, `engram_processor`, `glassroom`, `healthcheck`, `hooks`, `idempotency`, `locks`, `memory_graph`, `orchestration_metrics`, `run_secrets`, `token_usage`.
+- **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `healthcheck` (the LLM proxy's probe). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
 
 ### The FastAPI app and its routers
 
-**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `sprint_planning` (included by `sprint`), `sprint_crud`, `board_moves`, `agents`, `agent_runs`, `costs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise`, `providers`, `model_settings`, `webhooks`, `console_producers`).
+**`backend/app/main.py`** — The FastAPI app: lifespan (workers, JetStream, schema backfills), middleware and the routers it includes. The routes live in `backend/app/routers/` (`sprint`, `sprint_planning` (included by `sprint`), `sprint_crud`, `board_moves`, `agents`, `agent_runs`, `costs`, `inbox`, `messages`, `procedures`, `support`, `workspace`, `github`, `auth`, `enterprise` (with `enterprise_analytics` and `enterprise_agents`, registered beside it and re-exported by it), `providers`, `model_settings`, `webhooks`, `console_producers`).
 
 ### The schema's version (Alembic)
 

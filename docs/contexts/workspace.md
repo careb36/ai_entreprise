@@ -5,7 +5,8 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/workspace/`
 - **Responsibility:** The client of the workspace daemon over NATS: requests and their errors, the delivery test run, the project inspection and snapshot, the sandbox modes, the stack profiles and the Git workflow's delivery spec. It sends and returns observations; it never judges them.
 - **May import:** [contracts](contracts.md), [platform](platform.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `dependency_install`, `git_workflow`, `project_profile`, `sandbox`, `sandbox_manager`, `stack_profiles`, `workspace_daemon`, `workspace_snapshot`.
+- **Modules:** `dependency_install`, `git_workflow`, `project_profile`, `sandbox`, `sandbox_http`, `sandbox_manager`, `stack_profiles`, `workspace_daemon`, `workspace_snapshot`.
+- **HTTP adapters** (`http_adapters` in `docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`, issue #511): `sandbox_http` (the pre-QA sandbox's health and validate endpoints, raising `SandboxUnreachable`; `sandbox_manager` calls it). Only these modules of the context may import an HTTP library; each returns data and raises named errors, and the rest of the context calls it.
 
 ## Components
 

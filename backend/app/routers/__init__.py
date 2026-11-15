@@ -15,6 +15,8 @@ from routers.board_moves import router as board_moves_router
 from routers.console_producers import router as console_producers_router
 from routers.costs import router as costs_router
 from routers.enterprise import router as enterprise_router
+from routers.enterprise_agents import router as enterprise_agents_router
+from routers.enterprise_analytics import router as enterprise_analytics_router
 from routers.events import router as events_router
 from routers.github import router as github_router
 from routers.inbox import router as inbox_router
@@ -44,6 +46,8 @@ __all__ = [
     "board_moves_router",
     "console_producers_router",
     "costs_router",
+    "enterprise_agents_router",
+    "enterprise_analytics_router",
     "enterprise_router",
     "events_router",
     "github_router",
