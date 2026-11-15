@@ -13,6 +13,7 @@ from .agent_run import AgentRun, AgentRunApproval, Verification
 from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
+from .audit_anchor import AuditAnchor, AuditAnchorSettings
 from .board_note import SprintBoardNote
 from .chat import (
     ChatApprovalMessage,
@@ -56,6 +57,8 @@ __all__ = [
     "ApiToken",
     "Architecture",
     "AssistantRuntimeState",
+    "AuditAnchor",
+    "AuditAnchorSettings",
     "AuditLog",
     "BacklogItem",
     "BugReport",

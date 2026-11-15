@@ -37,6 +37,7 @@ from models.agent_run import AgentRun, AgentRunApproval, Verification
 from models.api_token import ApiToken
 from models.architecture import Architecture
 from models.audit import AuditLog
+from models.audit_anchor import AuditAnchor, AuditAnchorSettings
 from models.board_note import SprintBoardNote
 from models.chat import (
     ChatApprovalMessage,
@@ -182,6 +183,8 @@ SQLModel.metadata.create_all(
         AgentRunApproval.__table__,
         Verification.__table__,
         AuditLog.__table__,
+        AuditAnchor.__table__,
+        AuditAnchorSettings.__table__,
         GitHubRepoBinding.__table__,
         BugReport.__table__,
         AgentMessage.__table__,

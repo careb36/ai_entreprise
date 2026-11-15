@@ -263,7 +263,7 @@ both.
 |-----|-------|--------------------|-----|
 | `JWT_SECRET_KEY` | backend | Every session and Glassroom ticket stops working, and people log in again: access tokens no longer verify, and the refresh-token families end too, since refresh tokens are stored as HMAC under this key and match nothing after the change (issue #524, `docs/design/SESSIONS.md`). API tokens (`/v1/auth/tokens`) are stored as hashes and keep working until they expire or are revoked. To end every browser session without rotating (a suspected session theft), run `UPDATE session_families SET revoked_at = now(), revoked_reason = 'operator' WHERE revoked_at IS NULL;` and record it in the incident notes. | Change it in `.env` and restart every backend replica at once: a replica with the old key refuses the new tokens. |
 | `FERNET_SECRET_KEY` | backend | Nothing re-encrypts yet. Values encrypted under the old key (project credentials, MCP server secrets, provider connection keys, run secrets, SSO client secrets, Slack and Teams credentials) can no longer be read; a company that requires SSO cannot sign in until its Owner enters the client secret again (break-glass, Single sign-on above). MCP servers and run secrets still list by name; an unreadable run secret is left out of the run and logged. | Before the change, note what each company stored (Models page, MCP servers, run secrets, Chat approvals). Change the key, restart, and enter the values again. |
-| `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. |
+| `AUDIT_SIGNING_KEY` | backend | Rows keyed with the old key no longer verify: `GET /v1/audit/chain` reports `hash_mismatch` from the first of them. The rows are intact; only the key that proves it changed. | Rotate only when the key leaked. First archive each company's chain (Archiving the audit chain, below) and keep the old key with that archive in your secret store, so the old part can still be verified offline. Then change the key, restart, and record the date. Anchors (issue #542) are not affected by the rotation: they cover the statement, not the key, and their tokens and customer signatures still verify. |
 | `LLM_PROXY_INTERNAL_TOKEN` | backend and llm-proxy | While the two values differ, company provider connections (`conn:<id>:<model>`) fail and say why. The deployment's own models keep working. | Set the same new value on both and restart both. |
 | Model keys (`GEMINI_API_KEY`, …) | llm-proxy | Nothing beyond the restart. | Change the key and restart `llm-proxy`. A company changes its own provider key on its Models page. |
 
@@ -447,11 +447,32 @@ database, archive a company's whole chain, never part of it:
 2. Export the company's rows with every column the chain hashes:
    `\copy (SELECT * FROM audit_log WHERE company_id = <id> ORDER BY chain_seq) TO 'audit-<id>.csv' CSV HEADER`.
    Keep with it the `GET /v1/audit/chain` answer of that moment (its
-   `head`) and, if the chain is keyed, which `AUDIT_SIGNING_KEY` keyed it.
+   `head` and `anchors`), the export of each anchor
+   (`GET /v1/audit/anchors/{id}/export`) and, if the chain is keyed, which
+   `AUDIT_SIGNING_KEY` keyed it.
 3. Keep the archive read-only. Deleting the archived rows from the live
    database is not supported yet, because the chain would report the gap.
    Until the chain can start from a checkpoint, the archive is a copy and
    the database keeps the rows.
+
+**Anchoring the audit chain outside** (issue #542,
+`docs/design/AUDIT_ANCHORS.md`). `AUDIT_SIGNING_KEY` is held by the factory,
+so the chain alone does not stop someone with that key and the database from
+rewriting it. An Owner turns on anchors on the Audit anchors page
+(`/company/audit-anchors`): a cadence (hourly by default), posting each head
+to the company's webhook, an RFC 3161 timestamping authority (its URL and its
+certificate, taken from the authority itself), and the customer's Ed25519
+public keys, whose private halves sign heads from the customer's own job.
+`GET /v1/audit/anchors` (and `anchors` in `GET /v1/audit/chain`) must read
+`covered` after a cadence; `uncovered_tail` between cadences is normal,
+`no_anchors` means nothing outside covers the chain, and `anchor_mismatch` is
+an incident: the chain or an anchor was rewritten (handle it as SECURITY.md
+§9). An anchor whose delivery failed shows as `undelivered`: check the
+webhook's last error or the authority's URL, then `POST /v1/audit/anchors`.
+Rotating a customer key: add the new public key, move the signing job to it,
+then retire the old one (it keeps verifying what it signed). Replacing the
+authority's certificate: paste the new one; anchors keep the certificate
+they were verified with.
 
 ## How many workers may run
 
