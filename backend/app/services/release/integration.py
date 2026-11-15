@@ -9,9 +9,9 @@ and the whole suite passes on the integrated result.
 the workspace daemon merges the done tasks' branches into
 ``fabrique/sprint-<id>`` with real git (``vscode-daemon/sprint_integration.py``,
 ``workspace.git.integrate``), and, with ``DELIVERY_TESTS_ENABLED``, runs the
-project's test command on the integrated worktree through the same path and
-sandbox as a delivery's tests (``delivery_checks.run_delivery_tests``). The
-backend never shells out. What the daemon answered is kept as a
+project's test command, every folder's suite and the every-delivery commands
+on the integrated worktree as a delivery's tests run them
+(``delivery_checks.run_delivery_tests``); the backend never shells out. What the daemon answered is kept as a
 ``SprintIntegration``: the merges, the conflict (files and hunks) at the
 first merge git could not make, and the test run. A conflict or a failing
 suite waits for a person (``GET /v1/inbox``, ``integrations``). The branch is
@@ -34,6 +34,7 @@ from models.agent_run import TASK_WORKER_PRODUCER, AgentRun, Verification
 from models.integration import WAITS_FOR_A_PERSON, SprintIntegration
 from sqlmodel import Session, create_engine, select
 
+from services.evidence import command_runs
 from services.loop import delivery_checks
 from services.planning.spec_planning import acceptance_summaries
 from services.platform import locks
@@ -321,6 +322,8 @@ async def _run_suite(
     )
     test_run = dict(evidence.get("test_run") or {})
     test_run.pop("criteria", None)
+    if evidence.get("command_runs"):  # The folders' suites, required checks (F5).
+        test_run["command_runs"] = evidence["command_runs"]
     if test_run.get("command") and test_run.get("exit_code") is not None:
         test_run["commit"] = reply.get("commit")
     test_run["workspace_root"] = worktree
@@ -336,7 +339,8 @@ def status_of(
         return "incomplete"
     test_run = test_run or {}
     exit_code = test_run.get("exit_code")
-    if test_run.get("timed_out") or (isinstance(exit_code, int) and exit_code != 0):
+    failed = isinstance(exit_code, int) and exit_code != 0
+    if test_run.get("timed_out") or failed or command_runs.failed(test_run):
         return "tests_failed"
     return "tests_passed" if exit_code == 0 else "untested"
 
