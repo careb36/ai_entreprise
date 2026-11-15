@@ -46,6 +46,7 @@ from .specification import Specification
 from .sprint import BacklogItem, OutboxEvent, Sprint
 from .sso import SsoConnection, SsoFlowState, SsoIdentity
 from .support import BugReport
+from .task_relation import TaskRelation
 from .webhook import CompanyWebhook
 
 __all__ = [
@@ -92,6 +93,7 @@ __all__ = [
     "SsoFlowState",
     "SsoIdentity",
     "TaskEvent",
+    "TaskRelation",
     "User",
     "Verification",
 ]

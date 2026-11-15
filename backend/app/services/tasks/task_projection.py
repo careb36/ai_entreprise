@@ -34,13 +34,15 @@ from services.tasks import board, task_events
 
 # Events that never say anything about the task's own state: lineage, advice,
 # the System's integration note (it moves branches, not the task) and the
-# sprint board's notes (claims left for the other tasks, issue #439).
+# sprint board's notes (claims left for the other tasks, issue #439) and the
+# relations between tasks (issue #533).
 _ADVICE_KINDS = {
     "carried_over",
     "advised",
     "integration",
     "board_note",
     "board_note_rejected",
+    "relation",
 }
 # A dependency hold (``services/dependencies.py``) says so in its payload.
 DEPENDENCY_HOLD = "dependency"

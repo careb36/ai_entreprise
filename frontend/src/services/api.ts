@@ -15,6 +15,7 @@ import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
+import { taskRelationEndpoints } from './api/taskRelations'
 import { workspaceEndpoints } from './api/workspace'
 
 export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, setCsrfToken, setOnUnauthorized, setSessionHooks } from './api/client'
@@ -34,6 +35,7 @@ export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
+export * from './api/taskRelations'
 export * from './api/workspace'
 
 // ── Public API client ─────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ const endpoints = {
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
   ...boardNoteEndpoints(http),
+  ...taskRelationEndpoints(http),
   ...evidenceEndpoints(http),
   ...analyticsEndpoints(http),
   ...memoryEndpoints(),
