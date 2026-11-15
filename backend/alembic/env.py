@@ -24,7 +24,10 @@ from sqlmodel import SQLModel
 
 config = context.config
 if config.config_file_name is not None and os.getenv("ALEMBIC_QUIET") != "1":
-    fileConfig(config.config_file_name)
+    # Keep the loggers that already exist: migrations also run inside the
+    # backend's process (migrations.upgrade_to_head), where the default
+    # disable_existing_loggers=True would silence every logger made before.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata
 

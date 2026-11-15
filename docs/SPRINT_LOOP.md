@@ -14,6 +14,19 @@ the LangGraph graph is only an optional kickoff conversation.
    so assignments published while it was down are processed when it starts. It
    loads the item and the assigned agent
    (empty model → role default from `services/models/model_factory.py`) and calls the LLM proxy.
+   Before each attempt `services/loop/task_routing.py` estimates the task's
+   difficulty from its plan (`services/models/difficulty.py`: criteria
+   covered, the approved architecture's modules and files for them,
+   dependencies, the attempt, the rework requests and send-backs on its
+   board; a score 1..5 in a band `low`/`medium`/`high`, with its inputs and
+   weights), and, when the company or the deployment has a routing policy
+   (`services/models/routing_policy.py`, `AGENT_MODEL_POLICY`) and no person
+   chose the agent's model, requests the band's model instead of the role
+   default. The estimate and the routing (`{policy, source, band, requested,
+   chosen, reason}`) are stored on the task as an `estimated` event and on
+   the run's evidence as `difficulty` and `routing`, beside the model the
+   proxy reports serving (`AgentRun.model`, the observation); the request is
+   never recorded as the served model. No policy: the role default, as before.
    The prompt asks for every file as a fenced block with `path=<relative path>`;
    on rework it also carries the pending `NEEDS WORK:` feedback. It also carries
    the company's past decisions from memory (scoped by `company_id`), and

@@ -5,6 +5,7 @@ import ConsoleProducers from '../components/ConsoleProducers'
 import GitWorkflowPanel from '../components/GitWorkflowPanel'
 import ModelChoices from '../components/ModelChoices'
 import ModelConnections from '../components/ModelConnections'
+import RoutingPolicy from '../components/RoutingPolicy'
 import { useCurrentRole } from '../hooks/useQueries'
 import { useAppStore } from '../store/useAppStore'
 import { modelsApi } from '../services/models'
@@ -62,6 +63,7 @@ export default function Models() {
           </div>
           <ModelConnections companyId={companyId} canManage={canManage} />
           <ModelChoices companyId={companyId} canManage={canManage} />
+          <RoutingPolicy companyId={companyId} canManage={canManage} />
           <GitWorkflowPanel key={companyId} companyId={companyId} canManage={canManage} />
           <ConsoleProducers companyId={companyId} canManage={canManage} />
         </>

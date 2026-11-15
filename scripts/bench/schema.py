@@ -4,7 +4,12 @@
 
 Version 2 (issue #319) adds the routing policy's label (``policy``) and, per
 spec, the tasks split by difficulty and model (``routing``). A version 1 card
-(the references kept before it) is still read, without either.
+(the references kept before it) is still read, without either. Optional and
+additive, still version 3 (issue #319, difficulty routing): a routing row may
+carry the estimate's band (``difficulty_band``: ``low``, ``medium``,
+``high``), its cost in US cents (``cost_cents``, a number or null when
+unknown) and the tasks whose cost is unknown (``cost_unknown``); a row
+without them is read as before.
 
 Version 3 (issue #316, after #443) adds, per spec and in the totals, the
 weight of the prompts the backend sent (``prompt``, ``prompt_weight.py``):
@@ -85,6 +90,7 @@ def _count(value: Any) -> bool:
 
 _ROUTING_COUNTS = ("tasks", "done", "done_first_attempt", "blocked", "rework")
 _ROUTING_RATES = ("rework_per_task", "blocked_share", "first_attempt_rate")
+_DIFFICULTY_BANDS = ("low", "medium", "high")
 
 
 def _routing_problems(where: str, rows: Any) -> list[str]:
@@ -112,6 +118,13 @@ def _routing_problems(where: str, rows: Any) -> list[str]:
             for k in _ROUTING_RATES
             if not _number(row.get(k))
         )
+        if row.get("difficulty_band") not in (None, *_DIFFICULTY_BANDS):
+            problems.append(f"{at}.difficulty_band must be low, medium or high")
+        cents = row.get("cost_cents")
+        if cents is not None and (not _number(cents) or cents < 0):
+            problems.append(f"{at}.cost_cents must be a finite number or null")
+        if "cost_unknown" in row and not _count(row["cost_unknown"]):
+            problems.append(f"{at}.cost_unknown must be a count")
         tokens = row.get("tokens") if isinstance(row.get("tokens"), dict) else {}
         problems.extend(
             f"{at}.tokens.{k} must be a count"

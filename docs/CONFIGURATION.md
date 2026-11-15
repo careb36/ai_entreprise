@@ -455,6 +455,21 @@ Copy `.env.example` to `.env` and fill in:
   Architect's brief and review feedback never are, and the prompt names what
   was left out. Unset or `0`: nothing is cut. Either way each section's weight
   is recorded on the run's evidence as `prompt_sections`.
+- `AGENT_MODEL_POLICY` — optional, empty by default (issue #319). The
+  deployment's routing policy by task difficulty, JSON:
+  `{"bands": {"low": "<model>", "medium": "fast", "high": "<model>"}, "label": "cheap-easy"}`.
+  A band key is a difficulty band of `services/models/difficulty.py` (`low`
+  1-2, `medium` 3, `high` 4-5) or a range of scores (`"1-2"`, `"3-5"`); a
+  value is a model id, a company connection (`conn:<id>:<model>`) or a proxy
+  tier name (`fast`, `powerful`…), which runs on the role default since the
+  proxy serves no model by that name. `label` names the policy in the routing
+  record and the bench (else a fingerprint of the bands). A company's own
+  policy (`Company.model_policy`, the Models page, `PUT
+  /v1/companies/{id}/model_settings` with `model_policy`) replaces it for
+  that company. A policy that cannot be read is ignored with a warning (the
+  role defaults apply), a band that cannot be read is dropped with a warning;
+  an agent's, a role's or the company's chosen model is never re-routed.
+  Unset: every task runs on its role's model, as before.
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
   resolves to public addresses, checked when it is saved and before every post;
