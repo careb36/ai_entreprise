@@ -540,3 +540,20 @@ Copy `.env.example` to `.env` and fill in:
   answers on the evidence as `registry_lookups`; verification then reads them
   and never reaches the network. Off, or over the bound, a dependency without
   an answer is a finding, never a refutation.
+
+## The desktop app
+
+Read by the Electron main process (`frontend/electron/`) when it starts, not
+by the backend:
+
+- `BACKEND_URL` — default `http://localhost:8000`. The backend the packaged
+  app's local server forwards `/v1/*` to (issue #524; `docs/design/SESSIONS.md`,
+  Desktop app). It must be https, or plain http only on this machine
+  (`localhost`, 127.0.0.0/8, `[::1]`), since the session cookies travel on that
+  connection; anything else stops the app at launch with the reason. The app serves its page and that API from one origin,
+  `http://127.0.0.1:<port>` with a port picked at each launch, so the backend
+  needs no `CORS_ORIGINS` or `SSO_FRONTEND_URL` entry for it and
+  `SESSION_COOKIE_SECURE` stays on. For SSO, `SSO_CALLBACK_URL` must keep the
+  path `/v1/auth/sso/callback`.
+- `ELECTRON_DEV_URL` — default `http://localhost:5173`. The Vite dev server
+  `npm run electron:dev` loads.
