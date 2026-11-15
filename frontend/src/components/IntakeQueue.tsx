@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
+import type { Translate } from '../i18n/translate'
 import { Inbox as InboxIcon, Send } from 'lucide-react'
 import { errorDetail } from '../services/api'
 import {
@@ -37,7 +37,7 @@ function LinkTo({ link }: { link: IntakeLink }) {
   return path ? <Link to={path} className="underline">{label}</Link> : <span>{label}</span>
 }
 
-function formatDuration(seconds: number | null, t: TFunction) {
+function formatDuration(seconds: number | null, t: Translate) {
   if (seconds === null) return t('intake.record.none', { defaultValue: '—' })
   const hours = seconds / 3600
   return hours < 48
