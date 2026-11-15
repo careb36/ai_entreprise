@@ -108,7 +108,7 @@ that the daemon's credential is not observed from here, and whether
 the access review with its schedule (a missed one as an alert), the report
 and the inventory.
 
-Migration `0099` adds `sod_policies` and `access_reviews`; no existing row
+Migration `0036` adds `sod_policies` and `access_reviews`; no existing row
 changes, and a company without a policy row gets the defaults.
 
 ## Assets

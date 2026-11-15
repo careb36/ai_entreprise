@@ -33,7 +33,8 @@
     "usage": "Uso",
     "wiki": "Wiki",
     "documentation": "Documentación",
-    "duties": "Funciones y accesos"
+    "duties": "Funciones y accesos",
+    "auditAnchors": "Anclajes de auditoría"
   },
   "dashboard": {
     "title": "La Fabrique",
@@ -1850,6 +1851,79 @@
     "loadError": "No se pudo cargar lo que te necesita: {{message}}",
     "navCount": "{{count}} esperan por vos"
   },
+  "intake": {
+    "title": "Solicitudes entrantes",
+    "hint": "Los tickets, briefs, integraciones y pedidos por chat esperan aquí hasta que un Manager los decida. Los pospuestos vuelven en su fecha.",
+    "filter": "Mostrar solicitudes por estado",
+    "empty": "No hay solicitudes con este estado.",
+    "loadError": "No se pudieron cargar las solicitudes: {{message}}",
+    "newTitle": "Título de la solicitud",
+    "newBody": "Detalles",
+    "send": "Enviar a la cola",
+    "decision": "Decisión",
+    "category": "Categoría",
+    "noCategory": "Ninguna",
+    "sprint": "Sprint",
+    "pickSprint": "Elige un sprint abierto",
+    "assignee": "Asignado (rol)",
+    "specification": "Especificación (una aprobada recibe una nueva revisión)",
+    "pickSpecification": "Elige una especificación",
+    "duplicateOf": "Duplicado de (intake:ID o task:ID)",
+    "duplicatePlaceholder": "intake:12",
+    "until": "Posponer hasta",
+    "reason": "Motivo (opcional)",
+    "reasonRequired": "Por qué se rechaza (obligatorio)",
+    "submit": "Registrar la decisión",
+    "decideError": "No se pudo registrar: {{message}}",
+    "reopen": "Volver a pendiente",
+    "suggestion": "El agente de Soporte sugiere (una afirmación): {{status}}, {{category}}. {{reason}}",
+    "suggestionUnusable": "El agente de Soporte no dio una sugerencia utilizable.",
+    "decided": "Decidido {{status}} por {{who}}",
+    "became": "Se convirtió en",
+    "duplicates": "Duplica",
+    "snoozedUntil": "Vuelve el {{date}}",
+    "choice": {
+      "accept_task": "Aceptar como tarea",
+      "accept_specification": "Aceptar en una revisión de la especificación",
+      "decline": "Rechazar",
+      "duplicate": "Marcar como duplicado",
+      "snooze": "Posponer"
+    },
+    "statuses": {
+      "pending": "Pendiente",
+      "accepted": "Aceptada",
+      "declined": "Rechazada",
+      "duplicate": "Duplicada",
+      "snoozed": "Pospuesta"
+    },
+    "sources": {
+      "ticket": "Ticket",
+      "brief": "Brief",
+      "webhook": "Integración",
+      "chat": "Chat"
+    },
+    "categories": {
+      "bug": "Error",
+      "feature": "Funcionalidad",
+      "question": "Pregunta",
+      "incident": "Incidente",
+      "uncategorized": "Sin categoría"
+    },
+    "link": {
+      "intake": "solicitud #{{id}}",
+      "task": "tarea #{{id}}",
+      "specification": "especificación #{{id}}"
+    },
+    "record": {
+      "title": "Cómo va la cola",
+      "recorded": "{{share}} cerradas con su resultado registrado ({{recorded}} de {{received}})",
+      "median": "Tiempo mediano hasta una decisión: {{duration}}",
+      "agreement": "{{category}}: el agente de Soporte coincidió con la persona en {{agreed}} de {{decided}}",
+      "none": "—",
+      "hours": "{{count}} h",
+      "days": "{{count}} días"
+    }
+  },
   "workControl": {
     "plannedTitle": "Este sprint todavía no empezó",
     "plannedHint": "Los agentes empiezan a trabajar cuando lo inicies.",
@@ -2527,6 +2601,41 @@
       "codeHow": "En Teams, menciona el webhook de La Fabrique seguido de: link {{code}}"
     }
   },
+  "taskRelations": {
+    "title": "Tareas relacionadas",
+    "claimsNote": "Vínculos con otras tareas, de este sprint o de otros. Una relación propuesta es una afirmación hasta que un Manager la confirma; solo un «bloqueada por» confirmado dentro de un mismo sprint retiene la tarea.",
+    "loading": "Cargando las tareas relacionadas…",
+    "error": "No se pudieron cargar las tareas relacionadas.",
+    "empty": "No hay tareas relacionadas.",
+    "listLabel": "Relaciones con otras tareas",
+    "names": {
+      "blocked_by": "Bloqueada por",
+      "blocking": "Bloquea a",
+      "duplicate": "Duplicada de",
+      "relates_to": "Relacionada con"
+    },
+    "states": {
+      "proposed": "Propuesta",
+      "confirmed": "Confirmada"
+    },
+    "task": "tarea n.º {{id}}",
+    "taskWithTitle": "tarea n.º {{id}}: {{title}}",
+    "inSprint": "en {{sprint}}",
+    "drivesDispatch": "Espera a que termine antes de empezar",
+    "proposedBy": "Propuesta por {{by}}",
+    "confirmedBy": "confirmada por {{by}}",
+    "theSystem": "el Sistema",
+    "aRule": "la regla {{rule}}",
+    "confirm": "Confirmar",
+    "reject": "Rechazar",
+    "remove": "Quitar",
+    "addTitle": "Relacionar con otra tarea",
+    "relationLabel": "Relación",
+    "otherLabel": "Tarea n.º",
+    "otherPlaceholder": "42",
+    "confirmNow": "Confirmar ahora",
+    "add": "Añadir relación"
+  },
   "boardNotes": {
     "title": "Notas del tablero",
     "claimsNote": "Notas breves que las tareas del sprint se dejan entre sí. Una nota es una afirmación de su autor; junto a cada archivo se muestra lo que observaron los registros del Verificador.",
@@ -2569,6 +2678,94 @@
       "symbols": "Símbolos",
       "requirements": "Requisitos",
       "modules": "Módulos"
+    }
+  },
+  "auditAnchors": {
+    "title": "Anclajes de auditoría",
+    "subtitle": "La cabeza de la cadena de auditoría registrada fuera de La Fabrique, donde no puede reescribirla.",
+    "managersOnly": "Solo los propietarios y los gestores ven los anclajes de auditoría. Tu rol aquí es {{role}}.",
+    "coverage": "Cobertura",
+    "head": "Última fila de la cadena",
+    "verifiedThrough": "Verificada hasta la fila",
+    "coveredThrough": "Cubierta hasta la fila (con las declaraciones del webhook)",
+    "uncovered": "Las filas {{from}} a {{to}} aún no están cubiertas por ningún anclaje externo.",
+    "failure": "El anclaje {{kind}} de la fila {{seq}} ya no coincide: {{reason}}",
+    "anchorNow": "Anclar ahora",
+    "queued": "{{count}} anclaje(s) en cola.",
+    "settings": "Configuración",
+    "ownerEdits": "Solo un propietario cambia esta configuración.",
+    "enabled": "Anclar la cabeza de forma periódica",
+    "cadence": "Cada cuántos minutos (de 15 a 1440)",
+    "publishWebhook": "Enviar cada cabeza al webhook de la empresa",
+    "noWebhook": "La empresa no tiene un webhook habilitado: configúralo primero.",
+    "tsaUrl": "URL de la autoridad de sellado de tiempo RFC 3161",
+    "tsaCert": "El certificado de la autoridad (PEM)",
+    "tsaCertStored": "Certificado guardado, SHA-256 {{sha256}}. Pega uno nuevo para reemplazarlo.",
+    "customerKeys": "Claves del cliente (Ed25519)",
+    "customerKeysHelp": "Tu propio proceso firma cada cabeza con la clave privada, que nunca llega a La Fabrique; aquí solo se guarda la clave pública.",
+    "addKey": "Añadir una clave pública (PEM o base64)",
+    "retire": "Retirar",
+    "retired": "retirada",
+    "save": "Guardar",
+    "saved": "Guardado.",
+    "status": {
+      "empty": "La cadena está vacía.",
+      "no_anchors": "Ningún anclaje externo cubre la cadena todavía.",
+      "uncovered_tail": "Anclada, con filas más recientes aún sin cubrir.",
+      "covered": "Todas las filas hasta la cabeza están ancladas fuera.",
+      "anchor_mismatch": "Un anclaje ya no coincide con la cadena: se reescribió la cadena o el anclaje."
+    },
+    "kind": {
+      "webhook": "Webhook",
+      "tsa": "Sello de tiempo",
+      "customer_key": "Clave del cliente"
+    },
+    "state": {
+      "verified": "verificado",
+      "claim": "declaración (la copia del destino)",
+      "pending": "pendiente",
+      "undelivered": "no entregado",
+      "mismatch": "no coincide"
+    },
+    "columns": {
+      "kind": "Tipo",
+      "seq": "Fila",
+      "state": "Estado",
+      "anchoredAt": "Anclado el"
+    }
+  },
+  "sprintProgress": {
+    "title": "Declarado como hecho frente a verificado",
+    "claimed": "Entregado (declarado)",
+    "verified": "Verificado",
+    "gap": "Declarado, sin verificar",
+    "done": "Hecho",
+    "at": "Cuándo",
+    "tasks": "Tareas",
+    "state": "Estado",
+    "requirement": "Requisito",
+    "legend": "Leyenda",
+    "table": "Ver como tabla",
+    "noEvents": "Todavía no hay eventos de tareas.",
+    "chartLabel": "{{claimed}} de {{tasks}} tareas declaradas entregadas, {{verified}} verificadas",
+    "gapSummary": "{{gap}} de {{claimed}} tareas declaradas entregadas no están verificadas.",
+    "live": "En vivo, a partir de los eventos de las tareas",
+    "sealed": "Sellado en el cierre {{n}}; el resumen y la cadena de auditoría se verifican",
+    "sealBroken": "Sellado en el cierre {{n}}; el resumen o la cadena de auditoría no se verifica",
+    "loadError": "No se pudo cargar el progreso del sprint.",
+    "coverageTitle": "Requisitos en los sprints de la especificación",
+    "verdict": {
+      "verified": "Verificado",
+      "refuted": "Refutado",
+      "unverifiable": "No verificable",
+      "none": "Sin veredicto"
+    },
+    "coverage": {
+      "verified": "Verificado",
+      "done": "Hecho",
+      "claimed": "Declarado",
+      "open": "Abierto",
+      "uncovered": "Sin cubrir"
     }
   },
   "teams": {
@@ -2854,5 +3051,83 @@
       "proxyPresent": "Token interno del proxy LLM: definido",
       "proxyMissing": "Token interno del proxy LLM: sin definir"
     }
+  },
+  "taskViews": {
+    "filters": "Filtros",
+    "join": "Cumplir",
+    "joinAll": "todas las condiciones (Y)",
+    "joinAny": "alguna condición (O)",
+    "fieldLabel": "Campo de la condición {{n}}",
+    "operatorLabel": "Operador para {{field}}",
+    "valueLabel": "Valor para {{field}}",
+    "field": {
+      "status": "Estado",
+      "verdict": "Veredicto",
+      "risk_tier": "Nivel de riesgo",
+      "producer": "Productor",
+      "assignee_role": "Rol asignado",
+      "rework_count": "Retrabajos",
+      "waits_for_person": "Espera a una persona",
+      "covers": "Cubre",
+      "sprint_id": "Sprint",
+      "title": "Título",
+      "updated_at": "Actualizada"
+    },
+    "op": {
+      "eq": "es",
+      "ne": "no es",
+      "in": "es uno de",
+      "gte": "al menos",
+      "lte": "como mucho"
+    },
+    "value": {
+      "todo": "Por hacer",
+      "in_progress": "En curso",
+      "in_review": "En revisión",
+      "done": "Hecha",
+      "blocked": "Bloqueada",
+      "verified": "Verificada",
+      "refuted": "Refutada",
+      "unverifiable": "No verificable",
+      "none": "Ninguno",
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "true": "Sí",
+      "false": "No"
+    },
+    "listPlaceholder": "Valores separados por comas",
+    "placeholder": {
+      "producer": "le-fabrique-task-worker",
+      "assignee_role": "Developer",
+      "rework_count": "2",
+      "covers": "REQ-3",
+      "sprint_id": "Id del sprint"
+    },
+    "removeCondition": "Quitar la condición {{n}}",
+    "addCondition": "Añadir una condición",
+    "noValue": "—",
+    "noTasks": "Ninguna tarea cumple estos filtros.",
+    "noVerdict": "Sin verificar",
+    "listCaption": "Tareas que cumplen los filtros",
+    "layout": "Disposición",
+    "layoutBoard": "Tablero",
+    "layoutList": "Lista",
+    "savedView": "Vista guardada",
+    "noView": "Sin vista guardada",
+    "access": {
+      "private": "Solo yo",
+      "company": "Empresa"
+    },
+    "accessLabel": "Compartida con",
+    "locked": "bloqueada",
+    "count_one": "{{count}} tarea cumple",
+    "count_other": "{{count}} tareas cumplen",
+    "invalidView": "Esta vista filtra por un campo que ya no está permitido, así que no se aplica.",
+    "nestedView": "Esta vista anida grupos de condiciones; se aplica tal como se guardó.",
+    "viewName": "Nombre de la vista",
+    "save": "Guardar vista",
+    "saved": "Vista «{{name}}» guardada.",
+    "loading": "Cargando tareas…"
   }
 }

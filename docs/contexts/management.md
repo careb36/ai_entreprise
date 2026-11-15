@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/management/`
 - **Responsibility:** The owner as a client: the Manager agent with its inbox, policy, rules, observations, actions and record, the client's brief and its mail, the Reviewer agent and the Support agent. It may read and act through every other context; no other context imports it.
 - **May import:** [contracts](contracts.md), [platform](platform.md), [tasks](tasks.md), [models](models.md), [evidence](evidence.md), [workspace](workspace.md), [tools](tools.md), [learning](learning.md), [planning](planning.md), [producers](producers.md), [loop](loop.md), [release](release.md), [integrations](integrations.md) (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `brief_mail`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `sod_report`, `support_agent`.
+- **Modules:** `brief_mail`, `intake_triage`, `manager_actions`, `manager_actions_extra`, `manager_agent`, `manager_brief`, `manager_inbox`, `manager_inbox_extra`, `manager_observe`, `manager_policy`, `manager_record`, `manager_record_extra`, `manager_rules`, `reviewer_agent`, `sod_report`, `support_agent`.
 
 ## Components
 
@@ -16,6 +16,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 ### The segregation-of-duties report
 
 **`backend/app/services/management/sod_report.py`** / **`routers/sod.py`** — `GET /v1/companies/{id}/sod/report` (Manager, `no-store`; issue #543, [`docs/design/SEGREGATION_OF_DUTIES.md`](../design/SEGREGATION_OF_DUTIES.md)): every approval recorded (held deliveries accepted and runs approved from `run_reviews`, specifications and architectures from `approved_by`, run and integration merges) beside its requesters, as `separated`, `exception` (matched to its `sod_exception_applied` row), `violation`, `unattributed` or `not_a_person`; the `sod_refused` rows; and the matrix of duties (request, plan, deliver, verify, approve, release) per member with their effective role, per role and per agent role, flagging a member who both requests and approves. Computed from records only; `approver_name` is never read.
+
+### The Support agent on the intake queue
+
+**`backend/app/services/management/intake_triage.py`** — In the Support agent's loop (`SUPPORT_AGENT_ENABLED`, after the tickets, under `locks.SUPPORT_AGENT`), up to five pending requests nobody has triaged get a suggestion (issue #532): `DECISION … CATEGORY … DUPLICATE_OF … REASON … END`, with a decision among `accepted`, `declined`, `duplicate`, `snoozed`, a category among `bug`, `feature`, `question`, `incident`, and for a duplicate one reference from the candidates the prompt lists (the company's other requests and open tasks), checked by `parse_suggestion`; any other answer marks the request triaged without a suggestion, and a failed call leaves it for the next cycle. The request's text is treated as data and the agent has no tools. The suggestion is stored in `suggested_*` and never moves the request; a Manager decides ([planning](planning.md#the-intake-queue)), and `GET /v1/companies/{id}/intake-record` compares the two per category.
 
 ## Described elsewhere
 

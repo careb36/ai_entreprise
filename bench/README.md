@@ -16,6 +16,9 @@ bench/
     acceptance/test_*.py the acceptance tests a person wrote; they grade the result
     fake/plan.json       the fake producer's plan (CI only, see below)
     fake/files/...       the files the fake producer delivers
+    wstg_expected.json   (optional) the OWASP WSTG tests the security test
+                         plan must select for it, auto and manual (issue #539;
+                         backend/tests/test_wstg_plan.py)
   scorecards/<stamp>.json, <stamp>.md   one per run kept as a reference (fake)
   scorecards/real/<stamp>.json, .md     the real-model references
   verifier/              the Verifier benchmark (see below and verifier/README.md)

@@ -78,7 +78,11 @@ the LangGraph graph is only an optional kickoff conversation.
    wrote; a file that differs or is missing is restored from QA's deliverable
    (`AgentRun.artifact_text`, parsed again) and the delivery refuted, so no
    criterion is judged against a weakened test. `services/evidence/criteria_tests.py`
-   holds the reading of the runner's output and the two checks. A criterion
+   holds the reading of the runner's output and the two checks. The same
+   output is read for tests named after an OWASP WSTG test
+   (`test_wstg_athz_02_…`, `services/evidence/wstg_tests.py`, issue #539):
+   the Verifier's `wstg_tests` check records them as items the project's
+   WSTG checklist reads, and never changes the verdict. A criterion
    is `verified` only from the most recent verification across the tasks
    covering it, and only when that run's whole verdict is verified.
    The PO's and the Architect's calls to the proxy (`spec_author`,
@@ -131,7 +135,9 @@ the LangGraph graph is only an optional kickoff conversation.
    and with `autonomy_level` 3 the follow-up
    sprint carries the closed sprint's blocked tasks on its own, once each. The
    new task carries what blocked the old one (a `Previous attempt` prompt
-   section); the old one is marked and leaves the inbox. The escalation gets
+   section); the old one is marked and leaves the inbox, and the two are
+   linked by a confirmed `relates_to` relation (`services/tasks/relations.py`,
+   `rule:carry_over`; information only, never a dependency). The escalation gets
    an answer (`services/learning/scrum_master.py`): the ScrumMaster reads what blocked
    the task, the rework asked for and how the company's second attempts went
    (`track_record`: done out of carried, with and without its brief, counted

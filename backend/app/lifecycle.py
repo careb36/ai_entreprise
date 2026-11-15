@@ -15,6 +15,7 @@ from logging_config import logger
 from memory_client import MemoryClient
 from nats_auth import exposed_bind_warning
 from nats_client import NATSClient
+from services.integrations.anchoring import cadence_loop as anchor_cadence_loop
 from services.integrations.outbox_service import process_outbox
 from services.loop.task_worker import process_backlog_tasks
 from services.producers import console_capabilities
@@ -113,6 +114,8 @@ async def _start_workers(app, client: NATSClient) -> None:
         "task_worker": process_backlog_tasks(client),
         # Sprint integrations the daemon could not take at close (issue #314).
         "integration_retry": integration_jobs.retry_loop(client, _engine()),
+        # The audit chain's head anchored outside on the Owner's cadence (issue #542).
+        "audit_anchor_cadence": anchor_cadence_loop(_engine()),
     }
     for name, coro in worker_coros.items():
         task = asyncio.create_task(coro, name=name)
@@ -236,6 +239,16 @@ async def startup(app):
     app.state.nats_connect_task = connect_task
     _background_tasks.add(connect_task)
     connect_task.add_done_callback(_on_task_done)
+
+    # Snoozed intake requests come back when their date passes (issue #532).
+    from database import engine as intake_engine
+    from services.planning.intake_queue import run_intake_janitor
+
+    intake_task = asyncio.create_task(
+        run_intake_janitor(intake_engine), name="intake_janitor"
+    )
+    _background_tasks.add(intake_task)
+    intake_task.add_done_callback(_on_task_done)
 
     # The Support agent needs only the database and the LLM proxy.
     if settings.SUPPORT_AGENT_ENABLED:

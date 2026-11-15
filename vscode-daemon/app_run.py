@@ -10,6 +10,12 @@ listened, answered and with which status, how the e2e command ended, the
 tail of the application's log, and the sandbox applied. Never the agent's
 word; the backend's Verifier reads this reply.
 
+With ``security_probe: true``, once the application listens, the daemon
+sends it a fixed set of requests (headers, cookies, CORS from a foreign
+origin, OPTIONS and TRACE, a missing path, a malformed body, ``/.git/HEAD``
+and ``/.env``) from where it runs and reports the answers as
+``security_probe`` (``security_probe.py``, issue #540).
+
 With ``browser_probe: true`` the daemon first checks, where the e2e command
 is about to run, that a browser Playwright can launch is there
 (``browser_probe.py``) and reports it as ``browser_probe``. With
@@ -47,6 +53,7 @@ import run_logs
 import sandbox
 import sandbox_cache
 import sandbox_image
+import security_probe
 import shell_exec
 import win_job
 
@@ -217,6 +224,8 @@ def _run_host(req: Dict[str, Any], box: Dict[str, Any]) -> Dict[str, Any]:
                 time.sleep(POLL_SECONDS)
             if out.get("listening"):
                 out["probe"] = http_probe(req["app_url"] + req["probe_path"])
+                if req["security_probe"]:
+                    out["security_probe"] = security_probe.on_host(req["app_url"], req["probe_path"])
                 if req.get("e2e"):
                     if req["browser_probe"]:
                         out["browser_probe"] = browser_probe.on_host(cwd, env)
@@ -347,6 +356,10 @@ def _watch_container(runtime: str, name: str, req: Dict[str, Any], out: Dict[str
         if time.monotonic() - began > req["ready_seconds"]:
             break
         time.sleep(POLL_SECONDS)
+    if out.get("listening") and req["security_probe"]:
+        out["security_probe"] = security_probe.in_container(
+            runtime, name, req["app_url"], req["probe_path"], sandbox.run_bounded,
+        )
     if out.get("listening") and req.get("e2e"):
         if req["browser_probe"]:
             out["browser_probe"] = browser_probe.in_container(runtime, name, env_args)
@@ -384,6 +397,7 @@ def check_application(data: Dict[str, Any], keep_full: bool = False) -> Dict[str
         "ready_seconds": _bounded(data.get("ready_timeout_seconds"), DEFAULT_READY_SECONDS, MAX_READY_SECONDS),
         "e2e_seconds": _bounded(data.get("e2e_timeout_seconds"), DEFAULT_E2E_SECONDS, MAX_E2E_SECONDS),
         "browser_probe": data.get("browser_probe") is True,
+        "security_probe": data.get("security_probe") is True,
         "keep_full": bool(keep_full),
     }
     try:

@@ -179,6 +179,13 @@ Copy `.env.example` to `.env` and fill in:
   `chain_seq`, `prev_hash` and `chain_hash`; `GET /v1/audit/chain` shows where
   a deleted, inserted, reordered, altered or moved row breaks it). Without a
   key the chain is unkeyed and says so.
+  The factory holds this key, so the chain alone does not stop the factory
+  rewriting itself: anchor its head outside (issue #542,
+  `docs/design/AUDIT_ANCHORS.md`). Anchors have no environment variable; an
+  Owner sets them per company (`PUT /v1/audit/anchors/settings`, the Audit
+  anchors page): cadence (15 to 1440 minutes, 60 by default), posting to the
+  company's webhook, the RFC 3161 authority's URL and certificate, and the
+  customer's Ed25519 public keys.
   Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `NATS_BIND` — optional, default `127.0.0.1`. The host address NATS listens on;
   the workspace daemon on this computer connects there. `0.0.0.0` exposes it to
@@ -367,11 +374,13 @@ Copy `.env.example` to `.env` and fill in:
   or container; bwrap and a port already in use are refused, a required
   sandbox is never replaced by the host, the command policy applies), wait
   for its port (`DELIVERY_APP_READY_TIMEOUT_SECONDS`, 60), GET the probe path
-  (below 500 passes), run the profile's e2e command with `APP_URL`
-  (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and reply with the log's
-  tail: the `application_started` and `e2e_run` checks. The backend waits
-  for the reply beyond those bounds for the container's launch (120 s) and
-  teardown; the container is removed by name whatever happens after its
+  (below 500 passes), send it the security probe (headers, cookies, CORS,
+  methods, error bodies, `/.git/HEAD` and `/.env`, at most 40 s; the
+  `security_probe` check, `docs/contexts/evidence.md`), run the profile's e2e
+  command with `APP_URL` (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and
+  reply with the log's tail: the `application_started` and `e2e_run` checks.
+  The backend waits for the reply beyond those bounds for the container's
+  launch (120 s), the security probe (60 s) and teardown; the container is removed by name whatever happens after its
   launch; on the host the application's process group is stopped (on
   Windows the Job Object it was started suspended into, created with
   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, which also holds the children of a
@@ -526,6 +535,8 @@ Copy `.env.example` to `.env` and fill in:
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
   resolves to public addresses, checked when it is saved and before every post;
   `true` allows a private, loopback or link-local host (a receiver on the LAN).
+  The same check applies to a company's RFC 3161 timestamping authority
+  (`tsa_url` of the audit anchors), which may also be http.
 - `RESEARCH_TOOLS_ENABLED` (true), `RESEARCH_ROLES` (Architect, PO, SecOps,
   TechWriter, Designer), `RESEARCH_ALLOWED_HOSTS` (empty), `RESEARCH_TOOL_ROUNDS` (6) —
   the research tools (`services/tools/research_tools.py`): the roles that decide

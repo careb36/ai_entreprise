@@ -16,7 +16,9 @@ Verifier then judges, each reply kept on the run's evidence:
   daemon waits for the port, sends one GET to the probe path, runs the
   profile's e2e command when there is one, stops the application and replies
   with what it saw. That reply is ``evidence["app_run"]``; the Verifier's
-  ``application_started`` and ``e2e_run`` checks read it. Without an e2e
+  ``application_started`` and ``e2e_run`` checks read it. The daemon also
+  sends the running application a fixed set of security probes
+  (``security_probe``, issue #540), read by the ``security_probe`` check. Without an e2e
   command, QA's browser smoke tests run as the e2e command when QA wrote them
   (``evidence/browser_smoke.py``), read back per criterion. QA's own
   test-writing task changes no application code: it is not started for it.
@@ -44,7 +46,7 @@ from config import settings
 from sqlalchemy.engine import Engine
 
 from services.contracts.verdicts import VERDICT_REFUTED
-from services.evidence import app_check, browser_smoke, criteria_tests
+from services.evidence import app_check, browser_smoke, criteria_tests, wstg_tests
 from services.evidence.acceptance import test_sources_of
 from services.evidence.criteria_tests import ACCEPTANCE_KIND
 from services.evidence.verification import check_tests_run
@@ -62,6 +64,9 @@ _APP_OVERHEAD_SECONDS = 120.0 + 4 * 30.0
 # The browser probe before a browser e2e command (vscode-daemon/browser_probe.py,
 # PROBE_SECONDS) and the full log's upload after the run.
 _BROWSER_PROBE_SECONDS = 90.0
+# The security probe once the application listens (vscode-daemon/security_probe.py,
+# PROBE_SECONDS: its own 40 s bound and the in-container margin).
+_SECURITY_PROBE_SECONDS = 60.0
 _FULL_LOG_UPLOAD_SECONDS = 60.0
 
 
@@ -137,9 +142,10 @@ async def _run_tests(
         nats_client, full_log, result
     )
     reply = result if isinstance(result, dict) else {}
-    criteria_tests.record_results(
-        evidence, f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
-    )
+    output = f"{reply.get('stdout') or ''}{reply.get('stderr') or ''}"
+    criteria_tests.record_results(evidence, output)
+    # Tests named after a WSTG test (``test_wstg_athz_02_…``, issue #539).
+    wstg_tests.record(evidence, output)
 
 
 def _earlier_failure(evidence: dict[str, Any]) -> str | None:
@@ -218,12 +224,14 @@ async def check_application(ctx: Context) -> None:
                 "e2e_timeout_seconds": e2e_timeout,
                 "sandbox": box,
                 "sprint_id": ctx.sprint.get("id"),
+                "security_probe": True,
                 **({"browser_probe": True} if browser else {}),
                 **run_logs.request_field(full_log),
             },
             timeout=ready
             + (e2e_timeout if e2e else 0)
             + _APP_OVERHEAD_SECONDS
+            + _SECURITY_PROBE_SECONDS
             + (_BROWSER_PROBE_SECONDS if browser else 0)
             + (_FULL_LOG_UPLOAD_SECONDS if full_log.get("bucket") else 0)
             + REPLY_MARGIN_SECONDS,
@@ -235,6 +243,8 @@ async def check_application(ctx: Context) -> None:
         }
         return
     evidence["app_run"] = {**base, **_app_record(reply)}
+    # Asked for on every check: a reply without it is not observed, never clean.
+    evidence["app_run"]["security_probe_requested"] = True
     if browser:
         evidence["app_run"]["browser_probe_requested"] = True
     evidence["app_run"]["full_log"] = await run_logs.observe(ctx.nats, full_log, reply)
@@ -257,6 +267,7 @@ def _app_record(reply: Any) -> dict[str, Any]:
         "sandbox",
         "refused",
         "browser_probe",
+        "security_probe",
     )
     record = {k: reply[k] for k in keep if k in reply}
     if reply.get("error"):

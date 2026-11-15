@@ -9,8 +9,8 @@ No existing row changes: a company without a policy row gets the defaults
 
 Follows 0029 (teams and the usage report, #512); renumbered at merge.
 
-Revision ID: 0099
-Revises: 0029
+Revision ID: 0036
+Revises: 0035
 Create Date: 2026-11-15 22:00:00 UTC
 """
 
@@ -21,8 +21,8 @@ import sqlmodel
 
 from alembic import op
 
-revision = "0099"
-down_revision = "0029"
+revision = "0036"
+down_revision = "0035"
 branch_labels = None
 depends_on = None
 

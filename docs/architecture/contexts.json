@@ -170,6 +170,7 @@
     "$comment": "HTTP only in named adapter modules (issue #511; after AixleHQ/flow's 'no HTTP in domain services' design rule, Apache-2.0, design only). Under backend/app/services, a module that imports an HTTP library (httpx, httpx2, requests, aiohttp, urllib3, urllib.request) must be listed here, keyed as the checker keys modules (<context>.<stem>); an adapter returns data and raises named errors, never transport exceptions, and the domain modules call it. Checked by scripts/check_architecture.py: a new HTTP import outside this list fails, and a listed module that no longer imports one is reported and dropped by --update. The list may only shrink, unless a new adapter is reviewed in the pull request that adds it.",
     "modules": [
       "integrations.chat_client",
+      "integrations.tsa_client",
       "integrations.webhook_client",
       "models.model_catalog",
       "models.provider_client",

@@ -161,5 +161,6 @@ Every screen meets WCAG 2.2 AA: it works with the keyboard alone, names every co
 **STD-PO-1** — A specification names its quality attributes with a number  
 *Binds:* PO.  
 Beside the requirements, a specification says what it expects of security, performance, reliability and accessibility, each with a target a test can measure; a promise without a number is not a target.  
-*Checked:* the specification check warns on a quality area left out and on a target without a number.
+*Checked:* the specification check warns on a quality area left out and on a target without a number.  
+*Security target:* the project's security test plan (OWASP WSTG, issue #539) gives the security area a number a test can measure: the share of the WSTG tests that apply to the project observed passing. The documentation pack's check results report it (Risk, `measured`) beside the specification's own target; the Owner sets the threshold, the factory never does.
 

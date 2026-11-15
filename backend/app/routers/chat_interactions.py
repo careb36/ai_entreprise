@@ -8,6 +8,10 @@ Decisions from Slack and Teams — the public inbound endpoints (issue #512, pha
   webhook's callback URL (``@Fabrique approve CODE``, ``sendback CODE
   <reason>``, ``link CODE``).
 
+Both also take ``request <text>`` (issue #532): a linked account with at
+least the Viewer role sends a request to the company's intake queue, source
+``chat`` (``services/planning/intake_queue.py``); a Manager decides it in the web.
+
 Each request is refused unless, in this order: the URL names an enabled
 connection; the platform's signature holds over the raw body
 (``services/integrations/chat_signatures.py``; Slack's timestamp, or the
@@ -49,6 +53,7 @@ from services.integrations.chat_signatures import (
     verify_teams,
 )
 from services.loop.run_review import ReviewRefused, submit_review
+from services.planning import intake_queue
 from services.platform.agent_service import AgentService
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
@@ -271,6 +276,36 @@ def _link(
     return f"Linked: approvals you decide here are recorded as {user.full_name if user else 'you'}."
 
 
+def _request(session: Session, row: ChatConnection, chat_user: str, text: str) -> str:
+    """A request for the company's intake queue (issue #532), from a linked
+    chat account with at least the Viewer role; the source is ``chat``."""
+    text = text.strip()
+    if not text:
+        return "Usage: request <what you need>."
+    identity = chat_links.identity_of(
+        session, row.company_id, row.provider, row.workspace_id, chat_user
+    )
+    user = session.get(User, identity.user_id) if identity else None
+    if user is None:
+        return LINK_FIRST
+    try:
+        require_company_role(session, user, row.company_id, "Viewer")
+    except HTTPException:
+        return "Sending a request needs a role in this company in La Fabrique."
+    title, _, rest = text.partition("\n")
+    item = intake_queue.receive(
+        session,
+        row.company_id,
+        "chat",
+        title,
+        text if rest else "",
+        submitted_by=user.email,
+        source_ref=f"{row.provider}:{row.workspace_id}",
+    )
+    session.commit()
+    return f"Request #{item.id} is in the intake queue; a Manager decides it."
+
+
 # ---------------------------------------------------------------------------
 # Slack
 # ---------------------------------------------------------------------------
@@ -328,7 +363,15 @@ def _slack_command(
                 session, row, form.get("user_id") or "", form.get("user_name"), words[1]
             )
         )
-    return _slack_reply("Usage: /fabrique link CODE (ask for the code in La Fabrique).")
+    if words and words[0].lower() == "request":
+        raw = (form.get("text") or "").strip()
+        return _slack_reply(
+            _request(session, row, form.get("user_id") or "", raw[len("request") :])
+        )
+    return _slack_reply(
+        "Usage: /fabrique link CODE (ask for the code in La Fabrique), "
+        "or /fabrique request <what you need>."
+    )
 
 
 def _slack_action(
@@ -441,6 +484,9 @@ async def teams_messages(
             )
         except Refusal as refusal:
             return _teams_reply(str(refusal))
+    if command == "request":
+        return _teams_reply(_request(session, row, chat_user, " ".join(words[1:])))
     return _teams_reply(
-        "Usage: approve CODE, sendback CODE <reason>, or link CODE (from La Fabrique)."
+        "Usage: approve CODE, sendback CODE <reason>, link CODE (from La Fabrique), "
+        "or request <what you need>."
     )

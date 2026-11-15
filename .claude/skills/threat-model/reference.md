@@ -14,7 +14,8 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
  Agent and producer output enters at B5, wherever it is read.
  CI on the self-hosted runner is B7; a company's identity provider is B8;
  Slack and Microsoft Teams (approvals in chat) are B9; the desktop app's
- local server on 127.0.0.1, which other local software can reach, is B10.
+ local server on 127.0.0.1, which other local software can reach, is B10; an
+ RFC 3161 timestamping authority (audit anchors) is B11.
 ```
 
 ## B1 — Browser ↔ backend
@@ -188,6 +189,26 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   `docs/design/SESSIONS.md`, Desktop app).
 - **Known gaps:** a process running as the user can read Electron's cookie
   store on disk.
+
+## B11 — The backend and an RFC 3161 timestamping authority
+
+- **Crosses:** the audit chain's head (a statement's SHA-256 with a nonce) sent
+  to the authority the Owner chose; the time-stamp token it answers
+  (issue #542).
+- **Threats:** a fake authority or a man in the middle back-dating or forging
+  a token; a malformed or huge answer; SSRF through the authority's URL; the
+  pinned certificate replaced by someone who can write the database.
+- **Controls:** the token is checked against the certificate the Owner pinned,
+  never against what the answer carries (signature, imprint, nonce, `genTime`
+  within validity, time-stamping EKU, ESS certificate hash;
+  `services/platform/rfc3161.py`); answers capped at 64 KiB, DER reader refuses
+  indefinite lengths, high tags, trailing bytes and short values; the URL
+  passes `webhooks.check_url` at save and before each request
+  (`services/integrations/tsa_client.py`, no redirects); Owner-only settings,
+  audited; `docs/design/AUDIT_ANCHORS.md`, `backend/tests/test_rfc3161.py`.
+- **Known gaps:** the in-product coverage report trusts the certificate stored
+  in the factory's database; an auditor verifies with the authority's
+  published certificate instead.
 
 ## Data stores (inside the backend's zone)
 

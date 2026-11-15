@@ -1,0 +1,1520 @@
+{
+ "licence": "CC BY-SA 4.0",
+ "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+ "attribution": "Adapted from the OWASP Web Security Testing Guide checklist (checklists/checklist.json and checklists/WSTG-Checklist_v4.2.xlsx, https://github.com/OWASP/wstg, commit 87cf4a4688ba49a64068adf6246496cf5459f709), by the OWASP Foundation and the WSTG contributors, licensed under CC BY-SA 4.0.",
+ "changes": "La Fabrique added the versioned identifiers (WSTG-v42-... where release 4.2 has the same test, WSTG-<commit>-... otherwise), the short id and the in_v42 flag; names, references and objectives are the guide's.",
+ "source": "https://github.com/OWASP/wstg",
+ "commit": "87cf4a4688ba49a64068adf6246496cf5459f709",
+ "categories": [
+  {
+   "id": "WSTG-INFO",
+   "name": "Information Gathering",
+   "tests": [
+    {
+     "id": "WSTG-v42-INFO-01",
+     "short": "INFO-01",
+     "upstream_id": "WSTG-INFO-01",
+     "name": "Conduct Search Engine Reconnaissance for Information Leakage",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/01-Conduct_Search_Engine_Reconnaissance_for_Information_Leakage",
+     "objectives": [
+      "Identify what sensitive design and configuration information of the application, system, or organization is exposed directly (on the organization's site) or indirectly (via third-party services)."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-02",
+     "short": "INFO-02",
+     "upstream_id": "WSTG-INFO-02",
+     "name": "Fingerprint Web Server",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server",
+     "objectives": [
+      "Determine the version and type of a running web server to enable further discovery of any known vulnerabilities."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-03",
+     "short": "INFO-03",
+     "upstream_id": "WSTG-INFO-03",
+     "name": "Review Webserver Metafiles for Information Leakage",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage",
+     "objectives": [
+      "Identify hidden or obfuscated paths and functionality through the analysis of metadata files.",
+      "Extract and map other information that could lead to a better understanding of the systems at hand."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INFO-04",
+     "short": "INFO-04",
+     "upstream_id": "WSTG-INFO-04",
+     "name": "Attack Surface Identification",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/04-Attack_Surface_Identification",
+     "objectives": [
+      "Enumerate all web applications within scope.",
+      "Identify DNS names, domains, and virtual hosts associated with the target.",
+      "Discover additional domains and subdomains using passive and active DNS techniques.",
+      "Analyze digital certificates and Certificate Transparency logs for additional hostnames."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-05",
+     "short": "INFO-05",
+     "upstream_id": "WSTG-INFO-05",
+     "name": "Review Web Page Content for Information Leakage",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/05-Review_Web_Page_Content_for_Information_Leakage",
+     "objectives": [
+      "Review web page comments, metadata, and redirect bodies to find any information leakage.",
+      "Gather JavaScript files and review the JS code to better understand the application and to find any information leakage.",
+      "Identify if source map files or other frontend debug files exist."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-06",
+     "short": "INFO-06",
+     "upstream_id": "WSTG-INFO-06",
+     "name": "Identify Application Entry Points",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/06-Identify_Application_Entry_Points",
+     "objectives": [
+      "Identify possible entry and injection points through request and response analysis."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-07",
+     "short": "INFO-07",
+     "upstream_id": "WSTG-INFO-07",
+     "name": "Map Execution Paths Through Application",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/07-Map_Execution_Paths_Through_Application",
+     "objectives": [
+      "Map the target application and understand the principal workflows."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-08",
+     "short": "INFO-08",
+     "upstream_id": "WSTG-INFO-08",
+     "name": "Fingerprint Web Application Framework",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/08-Fingerprint_Web_Application_Framework",
+     "objectives": [
+      "Fingerprint the components used by the web applications.",
+      "Identify the versions of those components and determine whether any are outdated, unsupported, or affected by known vulnerabilities."
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-09",
+     "short": "INFO-09",
+     "upstream_id": "WSTG-INFO-09",
+     "name": "Fingerprint Web Application",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/09-Fingerprint_Web_Application",
+     "objectives": [
+      ""
+     ]
+    },
+    {
+     "id": "WSTG-v42-INFO-10",
+     "short": "INFO-10",
+     "upstream_id": "WSTG-INFO-10",
+     "name": "Map Application Architecture",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/01-Information_Gathering/10-Map_Application_Architecture",
+     "objectives": [
+      "Understand the architecture of the application and the technologies in use."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-CONF",
+   "name": "Configuration and Deployment Management",
+   "tests": [
+    {
+     "id": "WSTG-v42-CONF-01",
+     "short": "CONF-01",
+     "upstream_id": "WSTG-CONF-01",
+     "name": "Network Infrastructure Configuration",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/01-Network_Infrastructure_Configuration",
+     "objectives": [
+      "Review the applications' configurations set across the network and validate that they are not vulnerable.",
+      "Validate that used frameworks and systems are secure and not susceptible to known vulnerabilities due to unmaintained software or default settings and credentials.",
+      "Where the infrastructure is cloud-hosted or containerized, review network isolation controls (security groups/NSGs, VPC/subnet layout, load balancer/CDN configuration, service mesh policies, Kubernetes `NetworkPolicy`) for unintended exposure or overly permissive rules."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-02",
+     "short": "CONF-02",
+     "upstream_id": "WSTG-CONF-02",
+     "name": "Application Platform Configuration",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/02-Application_Platform_Configuration",
+     "objectives": [
+      "Ensure that default, sample, and known files have been removed from the deployed platform, container image, or serverless package.",
+      "Validate that no debugging code, debug endpoints, debug modes, or unused modules/dependencies are left enabled in production environments.",
+      "Review the logging mechanisms set in place for the application, including what sensitive data may be captured and who/what can access or retain it.",
+      "Confirm framework-, container-, and serverless-specific production hardening settings are applied rather than left at insecure defaults."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-03",
+     "short": "CONF-03",
+     "upstream_id": "WSTG-CONF-03",
+     "name": "File Extensions Handling for Sensitive Information",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/03-File_Extensions_Handling_for_Sensitive_Information",
+     "objectives": [
+      ""
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-04",
+     "short": "CONF-04",
+     "upstream_id": "WSTG-CONF-04",
+     "name": "Review Old Backup and Unreferenced Files for Sensitive Information",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information",
+     "objectives": [
+      "Find and analyze old, backup, and unreferenced files - including files exposed only through their extension, and objects left in cloud storage - that might contain sensitive information.",
+      "Validate that no system or framework bypasses exist for any rules put in place to prevent these files from being served."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-05",
+     "short": "CONF-05",
+     "upstream_id": "WSTG-CONF-05",
+     "name": "Enumerate Infrastructure and Application Admin Interfaces",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces",
+     "objectives": [
+      "Identify hidden administrator interfaces and functionality, including cloud, container-orchestration, API-management, and CI/CD management consoles.",
+      "Check any discovered interface for default, weak, or reused credentials, and for exposure to networks/users beyond those intended."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-06",
+     "short": "CONF-06",
+     "upstream_id": "WSTG-CONF-06",
+     "name": "HTTP Methods",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/06-HTTP_Methods",
+     "objectives": [
+      "Enumerate supported HTTP methods.",
+      "Test for access control bypass.",
+      "Test HTTP method overriding techniques."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-07",
+     "short": "CONF-07",
+     "upstream_id": "WSTG-CONF-07",
+     "name": "HTTP Strict Transport Security",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/07-HTTP_Strict_Transport_Security",
+     "objectives": [
+      "Review the HSTS header, its directives, and their values for consistency with current best practice.",
+      "Confirm the site is protected against the first-request trust gap, either via preload or an otherwise hardened HTTP-to-HTTPS path.",
+      "Confirm HSTS is applied consistently across the domain and relevant subdomains, and does not mask mixed-content issues."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-09",
+     "short": "CONF-09",
+     "upstream_id": "WSTG-CONF-09",
+     "name": "File Permissions",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/09-File_Permissions",
+     "objectives": [
+      "Review and identify any rogue file permissions on the host filesystem, in container images/filesystems, and on cloud storage objects.",
+      "Assess whether Kubernetes volume mounts and `securityContext` settings enforce least-privilege access to files and secrets.",
+      "Identify secrets stored with overly broad permissions, wherever they are held (filesystem, container image, orchestration secret store, cloud secrets manager export, CI artifacts)."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-10",
+     "short": "CONF-10",
+     "upstream_id": "WSTG-CONF-10",
+     "name": "Subdomain Takeover",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/10-Subdomain_Takeover",
+     "objectives": [
+      "Enumerate all possible domains (previous and current), including wildcard-covered names.",
+      "Identify any forgotten or misconfigured domains, and any dangling-service signature not covered by a known response fingerprint.",
+      "Identify links and resources that point to external domains, buckets, or accounts that no longer exist and could be claimed.",
+      "Where a takeover is confirmed feasible, assess whether the parent application's cookies, CORS policy, OAuth redirect validation, or CSP allowlist extend trust to the claimed subdomain."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CONF-11",
+     "short": "CONF-11",
+     "upstream_id": "WSTG-CONF-11",
+     "name": "Cloud Storage",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/11-Cloud_Storage",
+     "objectives": [
+      "Assess that the access control configuration for the storage services (bucket/container-level public access, and object/principal-level ACLs or IAM policies) is properly in place.",
+      "Assess whether signed/presigned URLs are scoped, time-limited, and handled appropriately.",
+      "Assess whether object versioning and lifecycle configuration could expose old or supposedly-removed sensitive data."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CONF-12",
+     "short": "CONF-12",
+     "upstream_id": "WSTG-CONF-12",
+     "name": "Content Security Policy",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/12-Content_Security_Policy",
+     "objectives": [
+      "Review the Content-Security-Policy header or meta element to identify misconfigurations."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CONF-13",
+     "short": "CONF-13",
+     "upstream_id": "WSTG-CONF-13",
+     "name": "Path Confusion",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/13-Path_Confusion",
+     "objectives": [
+      "Make sure application paths are configured and normalized consistently across all components (application, proxy, cache, CDN, WAF) that make decisions based on the path.",
+      "Identify cases where trailing slashes, case sensitivity, or encoding differences cause a security control (auth/access rules, routing, cache keying) to be bypassed or behave inconsistently."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CONF-14",
+     "short": "CONF-14",
+     "upstream_id": "WSTG-CONF-14",
+     "name": "Other HTTP Security Header Misconfigurations",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/14-Other_HTTP_Security_Header_Misconfigurations",
+     "objectives": [
+      "Identify improperly configured security headers.",
+      "Assess the impact of misconfigured security headers.",
+      "Validate the correct implementation of required security headers."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CONF-15",
+     "short": "CONF-15",
+     "upstream_id": "WSTG-CONF-15",
+     "name": "Feature Flag Security Bypass",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management/15-Feature_Flag_Security_Bypass",
+     "objectives": [
+      "Identify feature flags and kill-switches that control security-relevant functionality.",
+      "Determine whether feature flag states can be manipulated by an unauthorized client, and verify that backend security controls remain enforced independently of client-side flag state.",
+      "Verify that security controls remain consistently enforced across flag transitions, rollbacks, staged deployments, and services or instances, including whether stale security assertions or session state can be reused after a transition.",
+      "Evaluate fail-safe behavior when the feature flag service is unavailable.",
+      "Identify sensitive information exposed through feature flag configurations, and stale flags that may expose deprecated or unpatched code paths."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-IDNT",
+   "name": "Identity Management",
+   "tests": [
+    {
+     "id": "WSTG-v42-IDNT-01",
+     "short": "IDNT-01",
+     "upstream_id": "WSTG-IDNT-01",
+     "name": "Role Definitions",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/03-Identity_Management/01-Role_Definitions",
+     "objectives": [
+      "Identify and document roles used by the application.",
+      "Attempt to switch, change, or access another role.",
+      "Review the granularity of the roles and the needs behind the permissions given."
+     ]
+    },
+    {
+     "id": "WSTG-v42-IDNT-02",
+     "short": "IDNT-02",
+     "upstream_id": "WSTG-IDNT-02",
+     "name": "User Registration Process",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/03-Identity_Management/02-User_Registration_Process",
+     "objectives": [
+      "Verify that the identity requirements for user registration are aligned with business and security requirements.",
+      "Validate the registration process."
+     ]
+    },
+    {
+     "id": "WSTG-v42-IDNT-03",
+     "short": "IDNT-03",
+     "upstream_id": "WSTG-IDNT-03",
+     "name": "Account Provisioning Process",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/03-Identity_Management/03-Account_Provisioning_Process",
+     "objectives": [
+      "Verify which accounts may provision other accounts and of what type."
+     ]
+    },
+    {
+     "id": "WSTG-v42-IDNT-04",
+     "short": "IDNT-04",
+     "upstream_id": "WSTG-IDNT-04",
+     "name": "Account Enumeration and Guessable User Account",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/03-Identity_Management/04-Account_Enumeration_and_Guessable_User_Account",
+     "objectives": [
+      "Review processes that pertain to user identification (*e.g.* registration, login, etc.).",
+      "Enumerate users where possible through response analysis."
+     ]
+    },
+    {
+     "id": "WSTG-v42-IDNT-05",
+     "short": "IDNT-05",
+     "upstream_id": "WSTG-IDNT-05",
+     "name": "Weak or Unenforced Username Policy",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/03-Identity_Management/05-Weak_or_Unenforced_Username_Policy",
+     "objectives": [
+      ""
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-ATHN",
+   "name": "Authentication",
+   "tests": [
+    {
+     "id": "WSTG-v42-ATHN-01",
+     "short": "ATHN-01",
+     "upstream_id": "WSTG-ATHN-01",
+     "name": "Credentials Transported over an Encrypted Channel",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/01-Credentials_Transported_over_an_Encrypted_Channel",
+     "objectives": [
+      ""
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-02",
+     "short": "ATHN-02",
+     "upstream_id": "WSTG-ATHN-02",
+     "name": "Default Credentials",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/02-Default_Credentials",
+     "objectives": [
+      "Determine whether the application has any user accounts with default passwords.",
+      "Review whether new user accounts are created with weak or predictable passwords."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-03",
+     "short": "ATHN-03",
+     "upstream_id": "WSTG-ATHN-03",
+     "name": "Weak Lock Out Mechanism",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/03-Weak_Lock_Out_Mechanism",
+     "objectives": [
+      "Evaluate the account lockout mechanism's ability to mitigate brute force password guessing.",
+      "Evaluate the unlock mechanism's resistance to unauthorized account unlocking."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-04",
+     "short": "ATHN-04",
+     "upstream_id": "WSTG-ATHN-04",
+     "name": "Bypassing Authentication Schema",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/04-Bypassing_Authentication_Schema",
+     "objectives": [
+      "Ensure that authentication is applied across all services that require it."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-05",
+     "short": "ATHN-05",
+     "upstream_id": "WSTG-ATHN-05",
+     "name": "Vulnerable Remember Password",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/05-Vulnerable_Remember_Password",
+     "objectives": [
+      "Validate that the generated session is managed securely and do not put the user's credentials in danger."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-06",
+     "short": "ATHN-06",
+     "upstream_id": "WSTG-ATHN-06",
+     "name": "Browser Cache Weaknesses",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/06-Browser_Cache_Weaknesses",
+     "objectives": [
+      "Review if the application stores sensitive information on the client-side.",
+      "Review if access can occur without authorization."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-ATHN-07",
+     "short": "ATHN-07",
+     "upstream_id": "WSTG-ATHN-07",
+     "name": "Weak Authentication Methods",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/07-Weak_Authentication_Methods",
+     "objectives": [
+      "Determine the resistance of the application against brute force password guessing using available password dictionaries by evaluating the length, complexity, reuse, and aging requirements of passwords."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-08",
+     "short": "ATHN-08",
+     "upstream_id": "WSTG-ATHN-08",
+     "name": "Weak Security Question Answer",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/08-Weak_Security_Question_Answer",
+     "objectives": [
+      "Determine the complexity and how straight-forward the questions are.",
+      "Assess possible user answers and brute force capabilities."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-09",
+     "short": "ATHN-09",
+     "upstream_id": "WSTG-ATHN-09",
+     "name": "Weak Password Change or Reset Functionalities",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/09-Weak_Password_Change_or_Reset_Functionalities",
+     "objectives": [
+      "Determine whether the password change and reset functionality allows accounts to be compromised."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHN-10",
+     "short": "ATHN-10",
+     "upstream_id": "WSTG-ATHN-10",
+     "name": "Weaker Authentication in Alternative Channel",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/10-Weaker_Authentication_in_Alternative_Channel",
+     "objectives": [
+      "Identify alternative authentication channels.",
+      "Assess the security measures used and if any bypasses exists on the alternative channels."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-ATHN-11",
+     "short": "ATHN-11",
+     "upstream_id": "WSTG-ATHN-11",
+     "name": "Multi-Factor Authentication (MFA)",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/11-Multi-Factor_Authentication",
+     "objectives": [
+      "Identify the type of MFA used by the application.",
+      "Determine whether the MFA implementation is robust and secure.",
+      "Attempt to bypass the MFA."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-ATHN-12",
+     "short": "ATHN-12",
+     "upstream_id": "WSTG-ATHN-12",
+     "name": "SAML Authentication",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/04-Authentication/12-SAML_Authentication",
+     "objectives": [
+      "Identify the SAML flow in use and the endpoints involved.",
+      "Determine whether the SP validates the signature, and that the signature covers the data the SP uses.",
+      "Determine whether the SP enforces the conditions in the assertion (audience, validity period, recipient, and request binding).",
+      "Assess whether assertions can be replayed or accepted from an untrusted source."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-ATHZ",
+   "name": "Authorization",
+   "tests": [
+    {
+     "id": "WSTG-v42-ATHZ-01",
+     "short": "ATHZ-01",
+     "upstream_id": "WSTG-ATHZ-01",
+     "name": "Directory Traversal and File Include",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/05-Authorization/01-Directory_Traversal_File_Include",
+     "objectives": [
+      "Identify injection points that pertain to path traversal.",
+      "Assess bypassing techniques and identify the extent of path traversal."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHZ-02",
+     "short": "ATHZ-02",
+     "upstream_id": "WSTG-ATHZ-02",
+     "name": "Bypassing Authorization Schema",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/05-Authorization/02-Bypassing_Authorization_Schema",
+     "objectives": [
+      "Assess if unauthenticated, horizontal, or vertical access is possible."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHZ-03",
+     "short": "ATHZ-03",
+     "upstream_id": "WSTG-ATHZ-03",
+     "name": "Privilege Escalation",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/05-Authorization/03-Privilege_Escalation",
+     "objectives": [
+      "Identify injection points related to privilege manipulation.",
+      "Fuzz or otherwise attempt to bypass security measures."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ATHZ-04",
+     "short": "ATHZ-04",
+     "upstream_id": "WSTG-ATHZ-04",
+     "name": "Insecure Direct Object References",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/05-Authorization/04-Insecure_Direct_Object_References",
+     "objectives": [
+      "Identify points where object references may occur.",
+      "Assess the access control measures and if they're vulnerable to IDOR."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-ATHZ-05",
+     "short": "ATHZ-05",
+     "upstream_id": "WSTG-ATHZ-05",
+     "name": "OAuth Weaknesses",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/05-Authorization/05-OAuth_Weaknesses",
+     "objectives": [
+      "Determine if OAuth2 implementation is vulnerable or using a deprecated or custom implementation."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-SESS",
+   "name": "Session Management",
+   "tests": [
+    {
+     "id": "WSTG-v42-SESS-01",
+     "short": "SESS-01",
+     "upstream_id": "WSTG-SESS-01",
+     "name": "Session Management Schema",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/01-Session_Management_Schema",
+     "objectives": [
+      "Gather session tokens, for the same user and for different users where possible.",
+      "Analyze and ensure that enough randomness exists to stop session forging attacks.",
+      "Modify cookies that are not signed and contain information that can be manipulated."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-02",
+     "short": "SESS-02",
+     "upstream_id": "WSTG-SESS-02",
+     "name": "Cookies Attributes",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/02-Cookies_Attributes",
+     "objectives": [
+      "Ensure that the proper security configuration is set for cookies."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-03",
+     "short": "SESS-03",
+     "upstream_id": "WSTG-SESS-03",
+     "name": "Session Fixation",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/03-Session_Fixation",
+     "objectives": [
+      "Analyze the authentication mechanism and its flow.",
+      "Force cookies and assess the impact."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-04",
+     "short": "SESS-04",
+     "upstream_id": "WSTG-SESS-04",
+     "name": "Exposed Session Variables",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/04-Exposed_Session_Variables",
+     "objectives": [
+      "Ensure that proper encryption is implemented.",
+      "Review the caching configuration.",
+      "Assess the channel and methods' security."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-05",
+     "short": "SESS-05",
+     "upstream_id": "WSTG-SESS-05",
+     "name": "Cross Site Request Forgery",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/05-Cross_Site_Request_Forgery",
+     "objectives": [
+      "Determine whether it is possible to initiate requests on a user's behalf that are not initiated by the user."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-06",
+     "short": "SESS-06",
+     "upstream_id": "WSTG-SESS-06",
+     "name": "Logout Functionality",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/06-Logout_Functionality",
+     "objectives": [
+      "Assess the logout UI.",
+      "Verify that the session is properly terminated server-side after logout."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-07",
+     "short": "SESS-07",
+     "upstream_id": "WSTG-SESS-07",
+     "name": "Session Timeout",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/07-Session_Timeout",
+     "objectives": [
+      "Validate that an idle timeout exists and is enforced server-side.",
+      "Validate that an absolute timeout limits the total lifetime of a session."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-08",
+     "short": "SESS-08",
+     "upstream_id": "WSTG-SESS-08",
+     "name": "Session Puzzling",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/08-Session_Puzzling",
+     "objectives": [
+      "Identify all session variables.",
+      "Break the logical flow of session generation."
+     ]
+    },
+    {
+     "id": "WSTG-v42-SESS-09",
+     "short": "SESS-09",
+     "upstream_id": "WSTG-SESS-09",
+     "name": "Session Hijacking",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/09-Session_Hijacking",
+     "objectives": [
+      "Identify vulnerable session cookies.",
+      "Hijack vulnerable cookies and assess the risk level."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-SESS-10",
+     "short": "SESS-10",
+     "upstream_id": "WSTG-SESS-10",
+     "name": "JSON Web Tokens",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/10-JSON_Web_Tokens",
+     "objectives": [
+      "Determine whether the JWTs expose sensitive information.",
+      "Determine whether the JWTs can be tampered with or modified."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-SESS-11",
+     "short": "SESS-11",
+     "upstream_id": "WSTG-SESS-11",
+     "name": "Concurrent Sessions",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/06-Session_Management/11-Concurrent_Sessions",
+     "objectives": [
+      "Evaluate the application's session management by assessing the handling of multiple active sessions for a single user account."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-INJT",
+   "name": "Injection",
+   "tests": [
+    {
+     "id": "WSTG-87cf4a4-INJT-01",
+     "short": "INJT-01",
+     "upstream_id": "WSTG-INJT-01",
+     "name": "Reflected Cross Site Scripting",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/01-Reflected_Cross_Site_Scripting",
+     "objectives": [
+      "Identify variables that are reflected in responses.",
+      "Assess the input they accept and the encoding that gets applied on return (if any)."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-02",
+     "short": "INJT-02",
+     "upstream_id": "WSTG-INJT-02",
+     "name": "Stored Cross Site Scripting",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/02-Stored_Cross_Site_Scripting",
+     "objectives": [
+      "Identify stored input that is reflected on the client-side.",
+      "Assess the input they accept and the encoding that gets applied on return (if any)."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-03",
+     "short": "INJT-03",
+     "upstream_id": "WSTG-INJT-03",
+     "name": "HTTP Verb Tampering",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/03-HTTP_Verb_Tampering",
+     "objectives": [
+      ""
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-04",
+     "short": "INJT-04",
+     "upstream_id": "WSTG-INJT-04",
+     "name": "HTTP Parameter Pollution",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/04-HTTP_Parameter_Pollution",
+     "objectives": [
+      "Identify the back end and the parsing method used.",
+      "Assess injection points and try bypassing input filters using HPP."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-05",
+     "short": "INJT-05",
+     "upstream_id": "WSTG-INJT-05",
+     "name": "SQL Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/05-SQL_Injection",
+     "objectives": [
+      "Identify SQL injection points.",
+      "Assess the severity of the injection and the level of access that can be achieved through it."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-06",
+     "short": "INJT-06",
+     "upstream_id": "WSTG-INJT-06",
+     "name": "LDAP Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/06-LDAP_Injection",
+     "objectives": [
+      "Identify LDAP injection points.",
+      "Assess the severity of the injection."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-07",
+     "short": "INJT-07",
+     "upstream_id": "WSTG-INJT-07",
+     "name": "XML Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/07-XML_Injection",
+     "objectives": [
+      "Identify XML injection points.",
+      "Assess the types of exploits that can be attained and their severities."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-08",
+     "short": "INJT-08",
+     "upstream_id": "WSTG-INJT-08",
+     "name": "SSI Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/08-SSI_Injection",
+     "objectives": [
+      "Identify SSI injection points.",
+      "Assess the severity of the injection."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-09",
+     "short": "INJT-09",
+     "upstream_id": "WSTG-INJT-09",
+     "name": "XPath Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/09-XPath_Injection",
+     "objectives": [
+      "Identify XPATH injection points."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-10",
+     "short": "INJT-10",
+     "upstream_id": "WSTG-INJT-10",
+     "name": "IMAP SMTP Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/10-IMAP_SMTP_Injection",
+     "objectives": [
+      "Identify IMAP/SMTP injection points.",
+      "Understand the data flow and deployment structure of the system.",
+      "Assess the injection impacts."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-11",
+     "short": "INJT-11",
+     "upstream_id": "WSTG-INJT-11",
+     "name": "Code Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/11-Code_Injection",
+     "objectives": [
+      "Identify injection points where you can inject code into the application.",
+      "Assess the injection severity."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-12",
+     "short": "INJT-12",
+     "upstream_id": "WSTG-INJT-12",
+     "name": "Command Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/12-Command_Injection",
+     "objectives": [
+      "Identify and assess command injection points.",
+      "Bypass special characters and OS commands filter."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-13",
+     "short": "INJT-13",
+     "upstream_id": "WSTG-INJT-13",
+     "name": "Format String Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/13-Format_String_Injection",
+     "objectives": [
+      "Assess whether injecting format string conversion specifiers into user-controlled fields causes undesired behavior from the application."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-14",
+     "short": "INJT-14",
+     "upstream_id": "WSTG-INJT-14",
+     "name": "Incubated Vulnerability",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/14-Incubated_Vulnerability",
+     "objectives": [
+      "Identify injections that are stored and require a recall step to the stored injection.",
+      "Understand how a recall step could occur.",
+      "Set listeners or activate the recall step if possible."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-15",
+     "short": "INJT-15",
+     "upstream_id": "WSTG-INJT-15",
+     "name": "HTTP Response Splitting",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/15-HTTP_Response_Splitting",
+     "objectives": [
+      "Identify user-controlled input that is reflected into HTTP response headers.",
+      "Assess whether CR (`\\r`) and LF (`\\n`) characters can be injected into response headers.",
+      "Determine the potential impact of successful HTTP Response Splitting attacks, such as cache poisoning or client-side exploitation."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-16",
+     "short": "INJT-16",
+     "upstream_id": "WSTG-INJT-16",
+     "name": "HTTP Request Smuggling",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/16-HTTP_Request_Smuggling",
+     "objectives": [
+      "Identify request boundary inconsistencies between frontend and backend components",
+      "Detect classic CL/TE desynchronization vulnerabilities",
+      "Evaluate protocol translation logic (HTTP/2 → HTTP/1.1)",
+      "Assess H2C upgrade handling and downgrade safety",
+      "Confirm backend request queue poisoning"
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-17",
+     "short": "INJT-17",
+     "upstream_id": "WSTG-INJT-17",
+     "name": "Host Header Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/17-Host_Header_Injection",
+     "objectives": [
+      "Assess if the Host header is being parsed dynamically in the application.",
+      "Bypass security controls that rely on the header."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-18",
+     "short": "INJT-18",
+     "upstream_id": "WSTG-INJT-18",
+     "name": "Server-side Template Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/18-Server-side_Template_Injection",
+     "objectives": [
+      "Detect template injection vulnerability points.",
+      "Identify the templating engine.",
+      "Build the exploit."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-19",
+     "short": "INJT-19",
+     "upstream_id": "WSTG-INJT-19",
+     "name": "Server-Side Request Forgery",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/19-Server-Side_Request_Forgery",
+     "objectives": [
+      "Identify SSRF injection points.",
+      "Test if the injection points are exploitable.",
+      "Asses the severity of the vulnerability."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-20",
+     "short": "INJT-20",
+     "upstream_id": "WSTG-INJT-20",
+     "name": "Mass Assignment",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/20-Mass_Assignment",
+     "objectives": [
+      "Identify requests that modify objects",
+      "Assess if it is possible to modify fields never intended to be modified from outside"
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-21",
+     "short": "INJT-21",
+     "upstream_id": "WSTG-INJT-21",
+     "name": "CSV Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/21-CSV_Injection",
+     "objectives": [
+      "Identify CSV/spreadsheet export features that include untrusted input.",
+      "Verify whether attacker-controlled values are interpreted as formulas when the export is opened in common spreadsheet applications.",
+      "Check whether separator/quote injection can move a dangerous prefix to the start of a cell.",
+      "Validate whether mitigations remain effective in Microsoft Excel after saving and re-opening the CSV.",
+      "Assess practical impact based on who opens the export and how it is used."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-22",
+     "short": "INJT-22",
+     "upstream_id": "WSTG-INJT-22",
+     "name": "Prototype Pollution",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/22-Prototype_Pollution",
+     "objectives": [
+      "Identify functions and libraries that recursively merge, clone, or assign user-controlled properties.",
+      "Determine whether user input can reach and modify `Object.prototype`.",
+      "Identify gadgets that turn prototype pollution into a concrete impact."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-INJT-23",
+     "short": "INJT-23",
+     "upstream_id": "WSTG-INJT-23",
+     "name": "Insecure Deserialization",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/07-Injection/23-Insecure_Deserialization",
+     "objectives": [
+      "Identify entry points where the application accepts serialized objects from untrusted",
+      "urces (for example, HTTP headers, parameters, or cookies).",
+      "Determine the serialization format used by the application.",
+      "Assess whether serialized input is validated or restricted prior to deserialization.",
+      "Evaluate whether manipulation of serialized data leads to unsafe behavior or security",
+      "pact."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-ERRH",
+   "name": "Error Handling",
+   "tests": [
+    {
+     "id": "WSTG-v42-ERRH-01",
+     "short": "ERRH-01",
+     "upstream_id": "WSTG-ERRH-01",
+     "name": "Improper Error Handling",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/08-Error_Handling/01-Improper_Error_Handling",
+     "objectives": [
+      "Identify existing error output.",
+      "Analyze the different output returned.",
+      "Determine whether errors expose sensitive information or cause the application to fail open."
+     ]
+    },
+    {
+     "id": "WSTG-v42-ERRH-02",
+     "short": "ERRH-02",
+     "upstream_id": "WSTG-ERRH-02",
+     "name": "Stack Traces",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/08-Error_Handling/02-Stack_Traces",
+     "objectives": [
+      ""
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-CRYP",
+   "name": "Weak Cryptography",
+   "tests": [
+    {
+     "id": "WSTG-v42-CRYP-01",
+     "short": "CRYP-01",
+     "upstream_id": "WSTG-CRYP-01",
+     "name": "Weak Transport Layer Security",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/09-Weak_Cryptography/01-Weak_Transport_Layer_Security",
+     "objectives": [
+      "Validate the service configuration.",
+      "Review the digital certificate's cryptographic strength and validity.",
+      "Ensure that the TLS security is not bypassable and is properly implemented across the application."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CRYP-02",
+     "short": "CRYP-02",
+     "upstream_id": "WSTG-CRYP-02",
+     "name": "Padding Oracle",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/09-Weak_Cryptography/02-Padding_Oracle",
+     "objectives": [
+      "Identify encrypted messages that rely on padding.",
+      "Attempt to break the padding of the encrypted messages and analyze the returned error messages for further analysis."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CRYP-03",
+     "short": "CRYP-03",
+     "upstream_id": "WSTG-CRYP-03",
+     "name": "Sensitive Information Sent via Unencrypted Channels",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/09-Weak_Cryptography/03-Sensitive_Information_Sent_via_Unencrypted_Channels",
+     "objectives": [
+      "Identify sensitive information transmitted through the various channels.",
+      "Assess the privacy and security of the channels used."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CRYP-04",
+     "short": "CRYP-04",
+     "upstream_id": "WSTG-CRYP-04",
+     "name": "Weak Cryptographic Primitives",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/09-Weak_Cryptography/04-Weak_Cryptographic_Primitives",
+     "objectives": [
+      "Provide a guideline for the identification weak encryption or hashing uses and implementations."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-BUSL",
+   "name": "Business Logic",
+   "tests": [
+    {
+     "id": "WSTG-v42-BUSL-01",
+     "short": "BUSL-01",
+     "upstream_id": "WSTG-BUSL-01",
+     "name": "Business Logic Data Validation",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/01-Business_Logic_Data_Validation",
+     "objectives": [
+      "Identify data injection points.",
+      "Validate that all checks are occurring on the backend and can't be bypassed.",
+      "Attempt to break the format of the expected data and analyze how the application is handling it.",
+      "Determine whether parameters that the frontend restricts (type, range, set of allowed values, or relationship to other fields) are restricted again on the server."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-02",
+     "short": "BUSL-02",
+     "upstream_id": "WSTG-BUSL-02",
+     "name": "Ability to Forge Requests",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/02-Ability_to_Forge_Requests",
+     "objectives": [
+      "Review the project documentation looking for guessable, predictable, or hidden functionality of fields.",
+      "Insert logically valid data in order to bypass normal business logic workflow."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-03",
+     "short": "BUSL-03",
+     "upstream_id": "WSTG-BUSL-03",
+     "name": "Integrity Checks",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/03-Integrity_Checks",
+     "objectives": [
+      "Review the project documentation for components of the system that move, store, or handle data.",
+      "Determine what type of data is logically acceptable by the component and what types the system should guard against.",
+      "Determine who should be allowed to modify or read that data in each component.",
+      "Attempt to insert, update, or delete data values used by each component that should not be allowed per the business logic workflow."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-04",
+     "short": "BUSL-04",
+     "upstream_id": "WSTG-BUSL-04",
+     "name": "Process Timing",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/04-Process_Timing",
+     "objectives": [
+      "Review the project documentation for system functionality that may be impacted by time.",
+      "Develop and execute misuse cases."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-05",
+     "short": "BUSL-05",
+     "upstream_id": "WSTG-BUSL-05",
+     "name": "Number of Times a Function Can Be Used Limits",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/05-Number_of_Times_a_Function_Can_Be_Used_Limits",
+     "objectives": [
+      "Identify functions that must set limits to the times they can be called.",
+      "Assess if there is a logical limit set on the functions and if it is properly validated."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-06",
+     "short": "BUSL-06",
+     "upstream_id": "WSTG-BUSL-06",
+     "name": "Circumvention of Work Flows",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/06-Circumvention_of_Work_Flows",
+     "objectives": [
+      "Review the project documentation for methods to skip or go through steps in the application process in a different order from the intended business logic flow.",
+      "Develop a misuse case and try to circumvent every logic flow identified."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-07",
+     "short": "BUSL-07",
+     "upstream_id": "WSTG-BUSL-07",
+     "name": "Defenses Against Application Misuse",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/07-Defenses_Against_Application_Misuse",
+     "objectives": [
+      "Generate notes from all tests conducted against the system.",
+      "Review which tests had a different functionality based on aggressive input.",
+      "Understand the defenses in place and verify if they are enough to protect the system against bypassing techniques."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-08",
+     "short": "BUSL-08",
+     "upstream_id": "WSTG-BUSL-08",
+     "name": "Upload of Unexpected File Types",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/08-Upload_of_Unexpected_File_Types",
+     "objectives": [
+      "Review the project documentation for file types that are rejected by the system.",
+      "Verify that the unwelcomed file types are rejected and handled safely.",
+      "Verify that file batch uploads are secure and do not allow any bypass against the set security measures."
+     ]
+    },
+    {
+     "id": "WSTG-v42-BUSL-09",
+     "short": "BUSL-09",
+     "upstream_id": "WSTG-BUSL-09",
+     "name": "Upload of Malicious Files",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/09-Upload_of_Malicious_Files",
+     "objectives": [
+      "Identify the file upload functionality.",
+      "Review the project documentation to identify what file types are considered acceptable, and what types would be considered dangerous or malicious.",
+      "If documentation is not available then consider what would be appropriate based on the purpose of the application.",
+      "Determine how the uploaded files are processed.",
+      "Obtain or create a set of malicious files for testing.",
+      "Try to upload the malicious files to the application and determine whether it is accepted and processed."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-BUSL-10",
+     "short": "BUSL-10",
+     "upstream_id": "WSTG-BUSL-10",
+     "name": "Payment Functionality",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/10-Business_Logic/10-Payment_Functionality",
+     "objectives": [
+      "Determine whether the business logic for the e-commerce functionality is robust.",
+      "Understand how the payment functionality works.",
+      "Determine whether the payment functionality is secure."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-CLNT",
+   "name": "Client-side",
+   "tests": [
+    {
+     "id": "WSTG-v42-CLNT-01",
+     "short": "CLNT-01",
+     "upstream_id": "WSTG-CLNT-01",
+     "name": "DOM-Based Cross Site Scripting",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/01-DOM-based_Cross_Site_Scripting",
+     "objectives": [
+      "Identify DOM sinks.",
+      "Build payloads that pertain to every sink type."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-02",
+     "short": "CLNT-02",
+     "upstream_id": "WSTG-CLNT-02",
+     "name": "JavaScript Execution",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/02-JavaScript_Execution",
+     "objectives": [
+      "Identify sinks and possible JavaScript injection points."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-03",
+     "short": "CLNT-03",
+     "upstream_id": "WSTG-CLNT-03",
+     "name": "HTML Injection",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/03-HTML_Injection",
+     "objectives": [
+      "Identify HTML injection points and assess the severity of the injected content."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-04",
+     "short": "CLNT-04",
+     "upstream_id": "WSTG-CLNT-04",
+     "name": "Client-side URL Redirect",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/04-Client-side_URL_Redirect",
+     "objectives": [
+      "Identify injection points that handle URLs or paths.",
+      "Assess the locations that the system could redirect to."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-05",
+     "short": "CLNT-05",
+     "upstream_id": "WSTG-CLNT-05",
+     "name": "CSS Injection",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/05-CSS_Injection",
+     "objectives": [
+      "Identify CSS injection points.",
+      "Assess the impact of the injection."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-06",
+     "short": "CLNT-06",
+     "upstream_id": "WSTG-CLNT-06",
+     "name": "Client-side Resource Manipulation",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/06-Client-side_Resource_Manipulation",
+     "objectives": [
+      "Identify sinks with weak input validation.",
+      "Assess the impact of the resource manipulation."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-07",
+     "short": "CLNT-07",
+     "upstream_id": "WSTG-CLNT-07",
+     "name": "Cross Origin Resource Sharing",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/07-Cross_Origin_Resource_Sharing",
+     "objectives": [
+      "Identify endpoints that implement CORS.",
+      "Ensure that the CORS configuration is secure or harmless."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-09",
+     "short": "CLNT-09",
+     "upstream_id": "WSTG-CLNT-09",
+     "name": "Clickjacking",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/09-Clickjacking",
+     "objectives": [
+      "Assess application vulnerability to clickjacking attacks."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-10",
+     "short": "CLNT-10",
+     "upstream_id": "WSTG-CLNT-10",
+     "name": "WebSockets",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/10-WebSockets",
+     "objectives": [
+      "Identify the usage of WebSockets.",
+      "Assess its implementation by using the same tests on normal HTTP channels."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-11",
+     "short": "CLNT-11",
+     "upstream_id": "WSTG-CLNT-11",
+     "name": "Web Messaging",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/11-Web_Messaging",
+     "objectives": [
+      "Assess the security of the message's origin.",
+      "Validate that it's using safe methods and validating its input."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-12",
+     "short": "CLNT-12",
+     "upstream_id": "WSTG-CLNT-12",
+     "name": "Browser Storage",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/12-Browser_Storage",
+     "objectives": [
+      "Determine whether the site is storing sensitive data in client-side storage.",
+      "The code handling of the storage objects should be examined for possibilities of injection attacks, such as utilizing unvalidated input or vulnerable libraries."
+     ]
+    },
+    {
+     "id": "WSTG-v42-CLNT-13",
+     "short": "CLNT-13",
+     "upstream_id": "WSTG-CLNT-13",
+     "name": "Cross Site Script Inclusion",
+     "in_v42": true,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/13-Cross_Site_Script_Inclusion",
+     "objectives": [
+      "Locate sensitive data across the system.",
+      "Assess the leakage of sensitive data through various techniques."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CLNT-14",
+     "short": "CLNT-14",
+     "upstream_id": "WSTG-CLNT-14",
+     "name": "Reverse Tabnabbing",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/14-Reverse_Tabnabbing",
+     "objectives": [
+      "Identify links and `window.open()` calls that open a new tab or window without `noopener`.",
+      "Assess whether a page opened from the application can change the location of the original page through `window.opener`."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CLNT-15",
+     "short": "CLNT-15",
+     "upstream_id": "WSTG-CLNT-15",
+     "name": "Client-side Template Injection",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/15-Client-Side_Template_Injection",
+     "objectives": [
+      "Identify the client-side framework and its version used by the application.",
+      "Detect injection points where user input is reflected into the DOM and processed by the template engine.",
+      "Assess if the injection allows for arbitrary JavaScript execution (XSS) via the template syntax."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-CLNT-16",
+     "short": "CLNT-16",
+     "upstream_id": "WSTG-CLNT-16",
+     "name": "DOM Clobbering",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/11-Client-side/16-DOM_Clobbering",
+     "objectives": [
+      "Identify injection points where user-supplied HTML keeps its `id` or `name` attributes.",
+      "Identify scripts that read global variables, `document` properties, or form properties that may be undefined, and pass them to sensitive operations.",
+      "Assess whether clobbering those references changes the behavior of the application."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-APIT",
+   "name": "API Testing",
+   "tests": [
+    {
+     "id": "WSTG-87cf4a4-APIT-01",
+     "short": "APIT-01",
+     "upstream_id": "WSTG-APIT-01",
+     "name": "API Reconnaissance",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/12-API_Testing/01-API_Reconnaissance",
+     "objectives": [
+      "Find all API endpoints supported by the backend server code, documented or undocumented.",
+      "Find all parameters for each endpoint supported by the backend server, documented or undocumented.",
+      "Discover interesting data related to APIs in HTML and JavaScript sent to clients."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-APIT-02",
+     "short": "APIT-02",
+     "upstream_id": "WSTG-APIT-02",
+     "name": "API Broken Object Level Authorization",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/12-API_Testing/02-API_Broken_Object_Level_Authorization",
+     "objectives": [
+      "The objective of this test is to identify whether the API enforces proper **object-level authorization** checks, ensuring that users can only access and manipulate objects they are authorized to interact with."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-APIT-03",
+     "short": "APIT-03",
+     "upstream_id": "WSTG-APIT-03",
+     "name": "Excessive Data Exposure",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/12-API_Testing/03-Excessive_Data_Exposure",
+     "objectives": [
+      "Identify API responses that contain more data than what the client application displays or requires.",
+      "Detect sensitive fields returned in API responses such as password hashes, authentication tokens, internal object IDs, PII, or infrastructure details.",
+      "Determine whether the API relies on client-side filtering rather than server-side field selection to control data exposure."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-APIT-04",
+     "short": "APIT-04",
+     "upstream_id": "WSTG-APIT-04",
+     "name": "API Broken Function Level Authorization",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/12-API_Testing/04-API_Broken_Function_Level_Authorization",
+     "objectives": [
+      "The goal of this test is to determine if the API enforces **role or privilege-based access control** to restrict users from accessing or executing functions they are not authorized to use. This ensures that function-level security boundaries are properly enforced."
+     ]
+    },
+    {
+     "id": "WSTG-87cf4a4-APIT-99",
+     "short": "APIT-99",
+     "upstream_id": "WSTG-APIT-99",
+     "name": "GraphQL",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/12-API_Testing/99-GraphQL",
+     "objectives": [
+      "Assess that a secure and production-ready configuration is deployed.",
+      "Validate all input fields against generic attacks.",
+      "Ensure that proper access controls are applied."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "WSTG-WASM",
+   "name": "WebAssembly Testing",
+   "tests": [
+    {
+     "id": "WSTG-87cf4a4-WASM-01",
+     "short": "WASM-01",
+     "upstream_id": "WSTG-WASM-01",
+     "name": "WebAssembly Reconnaissance",
+     "in_v42": false,
+     "reference": "https://wstg.owasp.org/latest/4-Web_Application_Security_Testing/13-WebAssembly_Testing/01-WebAssembly_Reconnaissance",
+     "objectives": [
+      "Find all WebAssembly modules loaded by the target application, including those not named `.wasm`, compressed, lazy-loaded, loaded through `fetch`, and manual instantiation, or embedded in JavaScript.",
+      "Identify the compiler toolchain and source language (e.g., C/C++, Rust, Go, .NET) from section metadata, imports, exports, and glue code.",
+      "Detect exposed debugging artifacts: source maps, DWARF information, and the `name` custom section.",
+      "Map the infrastructure attack surface by extracting embedded URLs, API endpoints, and internal hostnames or IP addresses."
+     ]
+    }
+   ]
+  }
+ ]
+}

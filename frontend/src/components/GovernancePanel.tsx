@@ -9,6 +9,7 @@ import type { InboxWithManager, ManagerDecision } from '../services/manager'
 import { ClientBriefCard, ManagerDecisions, ManagerSuggestion } from './ManagerDecisions'
 import { ManagerPolicyPanel } from './ManagerPolicyPanel'
 import { ClientRequestBox } from './ClientRequestBox'
+import { IntakeQueue } from './IntakeQueue'
 
 // The note written on the task when a person sends it back to work. Not
 // translated: the backend recognises it (services/tasks/board.py SEND_BACK_MARKER)
@@ -216,6 +217,7 @@ function Inbox({ companyId }: { companyId: number }) {
       {canManage && <ClientRequestBox companyId={companyId} />}
       <ManagerDecisions decisions={data?.agent_decisions ?? []} canManage={canManage} />
       <ManagerPolicyPanel companyId={companyId} canManage={canManage} />
+      <IntakeQueue companyId={companyId} canManage={canManage} />
       {inbox.isError && (
         <div role="alert" className="alert-error flex items-center justify-between gap-3">
           <span>{t('inbox.loadError', { message: errorDetail(inbox.error), defaultValue: 'Could not load what needs you: {{message}}' })}</span>

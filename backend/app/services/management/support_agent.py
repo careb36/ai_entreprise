@@ -250,6 +250,18 @@ async def run_support_agent(engine) -> None:
             )
             if count:
                 logger.info("Support agent triaged %s ticket(s)", count)
+            # And the intake queue's pending requests (issue #532).
+            from services.management import intake_triage
+
+            suggested = await asyncio.to_thread(
+                locks.run_exclusive,
+                engine,
+                locks.SUPPORT_AGENT,
+                intake_triage.triage_cycle,
+                engine,
+            )
+            if suggested:
+                logger.info("Support agent suggested on %s request(s)", suggested)
         except Exception as exc:  # noqa: BLE001 - Keep the loop alive.
             logger.warning("Support agent cycle failed: %s", exc)
         await asyncio.sleep(settings.SUPPORT_AGENT_INTERVAL_SECONDS)
