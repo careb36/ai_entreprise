@@ -92,6 +92,7 @@ async def init_company(
             start_now=req.start_now,
             git_workflow=git_setup.workflow_for(observed, req.git_workflow),
             git_base_branch=base,
+            doc_language=req.doc_language,
         )
         return result
     except Exception as exc:  # noqa: BLE001 - Translate service failures to a sanitized API error.

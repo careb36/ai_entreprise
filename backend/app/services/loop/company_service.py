@@ -60,6 +60,7 @@ class CompanyService:
         start_now: bool = True,
         git_workflow: bool = False,
         git_base_branch: str | None = None,
+        doc_language: str | None = None,
     ) -> dict[str, Any]:
         """
         Bootstrap a new company tenant with its AI agents and project credentials.
@@ -81,6 +82,7 @@ class CompanyService:
             autonomy_level=autonomy_level,
             git_workflow=git_workflow,
             git_base_branch=git_base_branch,
+            doc_language=doc_language,
         )
         self.session.add(company)
         self.session.flush()

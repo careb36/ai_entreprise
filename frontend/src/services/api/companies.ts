@@ -24,6 +24,8 @@ export interface InitCompanyRequest {
   /** Kept only when the daemon observes a repository at project_path; the base is where task branches start. */
   git_workflow?: boolean
   git_base_branch?: string | null
+  /** The language of the project's documentation packs (issue #530). */
+  doc_language?: 'en' | 'es'
 }
 
 export interface InitCompanyResponse {

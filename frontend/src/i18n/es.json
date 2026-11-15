@@ -28,6 +28,7 @@
     "specifications": "Especificaciones",
     "models": "Modelos",
     "sso": "Inicio de sesión único",
+    "documentation": "Documentación",
     "chatApprovals": "Aprobaciones por chat"
   },
   "dashboard": {
@@ -2392,6 +2393,92 @@
       "account_exists": "Ya existe una cuenta con este correo fuera de esta empresa. Pide a un propietario que la invite y entra con SSO.",
       "link_refused": "Esta cuenta pertenece también a otras empresas, así que no puede vincularse al inicio de sesión único de esta empresa. Entra con tu contraseña.",
       "account_missing": "La cuenta vinculada a esta identidad ya no existe. Pide ayuda a un propietario."
+    }
+  },
+  "documentation": {
+    "title": "Documentación",
+    "subtitle": "Los documentos de gestión del proyecto y sus diagramas de arquitectura, compilados a partir de lo que La Fabrique registró. Cada afirmación cita su fuente; la prosa que escribió un modelo se marca como afirmación sin verificar.",
+    "compile": "Compilar desde los registros",
+    "prose": "Pedir al TechWriter los antecedentes del acta (una afirmación sin verificar)",
+    "compileError": "No se pudo compilar el paquete: {{message}}",
+    "loading": "Cargando la documentación…",
+    "loadError": "No se pudo cargar la documentación: {{message}}",
+    "empty": "Todavía no se compiló ningún paquete.",
+    "versions": "Versión",
+    "versionOption": "Versión {{version}} ({{status}})",
+    "version": "Versión {{version}}",
+    "inputsHash": "Resumen criptográfico de los registros con los que se compiló este paquete",
+    "approve": "Aprobar",
+    "approveError": "No se pudo aprobar el paquete: {{message}}",
+    "write": "Escribir en el repositorio",
+    "writeError": "No se pudo escribir el paquete: {{message}}",
+    "written": "{{count}} archivos escritos en {{path}}; se guarda el sha256 que informó el daemon para cada uno.",
+    "documents": "Documentos",
+    "diagrams": "Diagramas",
+    "noDiagrams": "Sin diagramas: el proyecto no tiene arquitectura en La Fabrique.",
+    "emptyDiagram": "No hay ningún elemento registrado para este diagrama.",
+    "showSource": "Mostrar el código Mermaid",
+    "hideSource": "Ocultar el código",
+    "file": "Archivo: {{file}}",
+    "sourcesCount_one": "{{count}} fuente citada",
+    "sourcesCount_other": "{{count}} fuentes citadas",
+    "claimsCount_one": "{{count}} sección escrita por un modelo",
+    "claimsCount_other": "{{count}} secciones escritas por un modelo",
+    "status": {
+      "draft": "borrador",
+      "approved": "aprobado",
+      "superseded": "reemplazado"
+    },
+    "severity": {
+      "blocking": "impide aprobar",
+      "warning": "advertencia",
+      "info": "nota"
+    },
+    "levels": {
+      "context": "nivel de contexto",
+      "container": "nivel de contenedores",
+      "component": "nivel de componentes"
+    },
+    "kinds": {
+      "person": "Persona",
+      "system": "Sistema de software",
+      "external": "Sistema externo",
+      "container": "Contenedor",
+      "datastore": "Almacén de datos",
+      "component": "Componente"
+    },
+    "lint": {
+      "title": "Desvíos y vacíos",
+      "ok": "El paquete coincide con los registros actuales.",
+      "stale_one": "{{count}} hallazgo impide aprobar: los registros cambiaron desde que se compiló este paquete.",
+      "stale_other": "{{count}} hallazgos impiden aprobar: los registros cambiaron desde que se compiló este paquete.",
+      "gaps_one": "{{count}} sección no tiene ningún registro detrás; el documento lo indica.",
+      "gaps_other": "{{count}} secciones no tienen ningún registro detrás; los documentos lo indican."
+    },
+    "personsCount_one": "{{count}} sección para que la complete una persona",
+    "personsCount_other": "{{count}} secciones para que las complete una persona",
+    "placement": "Guía del PMBOK, 8.ª ed.: {{domain}}, {{focus}}",
+    "language": "Documentos en",
+    "languageError": "No se pudo cambiar el idioma: {{message}}",
+    "languages": {
+      "en": "inglés",
+      "es": "español"
+    },
+    "domains": {
+      "Governance": "Gobernanza",
+      "Scope": "Alcance",
+      "Schedule": "Cronograma",
+      "Finance": "Finanzas",
+      "Stakeholders": "Interesados",
+      "Resources": "Recursos",
+      "Risk": "Riesgo"
+    },
+    "focusAreas": {
+      "Initiating": "Inicio",
+      "Planning": "Planificación",
+      "Executing": "Ejecución",
+      "Monitoring and Controlling": "Monitoreo y control",
+      "Closing": "Cierre"
     }
   },
   "chat": {
