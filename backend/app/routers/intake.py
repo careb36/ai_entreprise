@@ -10,9 +10,9 @@ Endpoints:
 - ``GET  /v1/companies/{company_id}/intake-record``  — the queue's numbers:
   the share closed with what it led to recorded, the median time to a
   decision, the Support agent's agreement with people per category (Viewer).
-- ``GET  /v1/intake/{item_id}``                      — one item with its history
+- ``GET  /v1/intake/{intake_id}``                    — one item with its history
   from the audit log (Viewer).
-- ``POST /v1/intake/{item_id}/accept|decline|duplicate|snooze|reopen`` — a
+- ``POST /v1/intake/{intake_id}/accept|decline|duplicate|snooze|reopen`` — a
   person's decision (Manager).
 
 Tickets arrive from ``POST /v1/support/report_bug`` with a ``company_id``,
@@ -30,7 +30,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models import Company, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.contracts import intake_rules as intake
 from services.planning import intake_queue, intake_records
 from services.planning.intake_queue import IntakeRefused
@@ -39,12 +40,12 @@ from sqlmodel import Session
 router = APIRouter(prefix="/v1", tags=["Company"])
 
 
-class IntakeCreate(BaseModel):
+class IntakeCreate(RequestModel):
     title: str = Field(min_length=1, max_length=intake.TITLE_LIMIT)
     body: str = Field(default="", max_length=intake.BODY_LIMIT)
 
 
-class Decision(BaseModel):
+class Decision(RequestModel):
     category: str | None = Field(default=None, max_length=20)
     reason: str | None = Field(default=None, max_length=intake.REASON_LIMIT)
 
@@ -164,13 +165,13 @@ def _item_for(session: Session, user: User | None, item_id: int, role: str):
     return item
 
 
-@router.get("/intake/{item_id}")
+@router.get("/intake/{intake_id}")
 async def get_intake(
-    item_id: int,
+    intake_id: int,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    item = _item_for(session, user, item_id, "Viewer")
+    item = _item_for(session, user, intake_id, "Viewer")
     return intake_records.serialize(item) | {
         "history": intake_records.history(session, item)
     }
@@ -184,15 +185,15 @@ def _decided(session: Session, item) -> dict:
     }
 
 
-@router.post("/intake/{item_id}/accept")
+@router.post("/intake/{intake_id}/accept")
 async def accept_intake(
-    item_id: int,
+    intake_id: int,
     req: AcceptRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """Accept as a task in an open sprint, or into a specification revision."""
-    item = _item_for(session, user, item_id, "Manager")
+    item = _item_for(session, user, intake_id, "Manager")
     try:
         intake_queue.accept(
             session,
@@ -212,14 +213,14 @@ async def accept_intake(
     return _decided(session, item)
 
 
-@router.post("/intake/{item_id}/decline")
+@router.post("/intake/{intake_id}/decline")
 async def decline_intake(
-    item_id: int,
+    intake_id: int,
     req: DeclineRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    item = _item_for(session, user, item_id, "Manager")
+    item = _item_for(session, user, intake_id, "Manager")
     try:
         intake_queue.decline(session, item, _actor(user), req.reason, req.category)
     except IntakeRefused as exc:
@@ -228,14 +229,14 @@ async def decline_intake(
     return _decided(session, item)
 
 
-@router.post("/intake/{item_id}/duplicate")
+@router.post("/intake/{intake_id}/duplicate")
 async def duplicate_intake(
-    item_id: int,
+    intake_id: int,
     req: DuplicateRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    item = _item_for(session, user, item_id, "Manager")
+    item = _item_for(session, user, intake_id, "Manager")
     try:
         intake_queue.mark_duplicate(
             session,
@@ -252,14 +253,14 @@ async def duplicate_intake(
     return _decided(session, item)
 
 
-@router.post("/intake/{item_id}/snooze")
+@router.post("/intake/{intake_id}/snooze")
 async def snooze_intake(
-    item_id: int,
+    intake_id: int,
     req: SnoozeRequest,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    item = _item_for(session, user, item_id, "Manager")
+    item = _item_for(session, user, intake_id, "Manager")
     try:
         intake_queue.snooze(
             session, item, _actor(user), req.until, req.category, req.reason
@@ -270,14 +271,14 @@ async def snooze_intake(
     return _decided(session, item)
 
 
-@router.post("/intake/{item_id}/reopen")
+@router.post("/intake/{intake_id}/reopen")
 async def reopen_intake(
-    item_id: int,
+    intake_id: int,
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
     """A snoozed, declined or duplicate request back to pending."""
-    item = _item_for(session, user, item_id, "Manager")
+    item = _item_for(session, user, intake_id, "Manager")
     try:
         intake_queue.reopen(session, item, _actor(user))
     except IntakeRefused as exc:

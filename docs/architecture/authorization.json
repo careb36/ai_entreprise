@@ -209,6 +209,12 @@
     "GET /v1/companies/{company_id}/git": {
       "access": "Viewer"
     },
+    "GET /v1/companies/{company_id}/intake": {
+      "access": "Viewer"
+    },
+    "GET /v1/companies/{company_id}/intake-record": {
+      "access": "Viewer"
+    },
     "GET /v1/companies/{company_id}/manager_policy": {
       "access": "Viewer"
     },
@@ -292,6 +298,9 @@
       "why": "A five-minute ticket for one sprint; membership checked again."
     },
     "GET /v1/inbox": {
+      "access": "Viewer"
+    },
+    "GET /v1/intake/{intake_id}": {
       "access": "Viewer"
     },
     "GET /v1/manager_decisions": {
@@ -570,6 +579,9 @@
     "POST /v1/companies/{company_id}/documentation": {
       "access": "Manager"
     },
+    "POST /v1/companies/{company_id}/intake": {
+      "access": "Viewer"
+    },
     "POST /v1/companies/{company_id}/providers": {
       "access": "Manager"
     },
@@ -628,6 +640,24 @@
     "POST /v1/init_company": {
       "access": "authenticated",
       "why": "Creates a company whose Owner is the caller."
+    },
+    "POST /v1/intake/{intake_id}/accept": {
+      "access": "Manager"
+    },
+    "POST /v1/intake/{intake_id}/decline": {
+      "access": "Manager"
+    },
+    "POST /v1/intake/{intake_id}/duplicate": {
+      "access": "Manager"
+    },
+    "POST /v1/intake/{intake_id}/reopen": {
+      "access": "Manager"
+    },
+    "POST /v1/intake/{intake_id}/snooze": {
+      "access": "Manager",
+      "body": {
+        "until": "2099-01-01T00:00:00Z"
+      }
     },
     "POST /v1/integrations/github/backfill": {
       "access": "Manager"
@@ -741,7 +771,10 @@
     },
     "POST /v1/support/report_bug": {
       "access": "public",
-      "why": "Anyone can report a bug."
+      "why": "Anyone can report a bug. With a company_id the ticket also enters that company's intake queue and the sender must be a Viewer of it (tests/test_intake_sources.py); the sample is the public form, without one.",
+      "body": {
+        "company_id": null
+      }
     },
     "POST /v1/task_relations/{relation_id}/confirm": {
       "access": "Manager"
