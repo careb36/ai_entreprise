@@ -295,7 +295,7 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       expect(within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent))
-        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Members', 'GitHub', 'Log out'])
+        .toEqual(['Switch company', 'New company', 'Agents', 'Quotas', 'Models', 'Procedures', 'Specifications', 'Members', 'Single sign-on', 'GitHub', 'Log out'])
       fireEvent.pointerDown(document.body)
       expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     })
@@ -303,7 +303,7 @@ describe('app navigation', () => {
     // Members and GitHub follow the company role; the help desk follows the
     // platform's support admin flag, whatever the role.
     it.each([
-      ['Owner', false, ['Members', 'GitHub']],
+      ['Owner', false, ['Members', 'Single sign-on', 'GitHub']],
       ['Manager', false, ['GitHub']],
       ['Viewer', false, []],
       ['Viewer', true, ['Help desk']],
@@ -316,9 +316,9 @@ describe('app navigation', () => {
       render(<App />)
       fireEvent.click(screen.getByRole('button', { name: 'Example company' }))
       const admin = within(screen.getByRole('menu')).getAllByRole('menuitem')
-        .filter(item => ['Members', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
+        .filter(item => ['Members', 'Single sign-on', 'GitHub', 'Help desk'].includes(item.textContent ?? ''))
       expect(admin.map(item => [item.textContent, item.getAttribute('href')])).toEqual(
-        expected.map(name => [name, { Members: '/company/members', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
+        expected.map(name => [name, { Members: '/company/members', 'Single sign-on': '/company/sso', GitHub: '/company/github', 'Help desk': '/support' }[name]]),
       )
     })
 

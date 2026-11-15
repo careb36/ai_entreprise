@@ -1,3 +1,19 @@
+# Security Scan — what every pull request into main is checked for, and what
+# a push to main and the weekly run check again:
+#
+#   security      Trivy over the files, uploaded as SARIF.
+#   dependencies  pip-audit over the backend's and the llm-proxy's lockfiles,
+#                 npm audit over the frontend's; a known vulnerability fails
+#                 the job unless .github/pip-audit-ignore.txt lists it with a
+#                 reason and a review date that has not passed.
+#   secrets-pr    gitleaks over the pull request's own commits (pull requests
+#                 only; the weekly full-history scan is security-baseline.yml).
+#   sast-pr       Semgrep, failing only on findings the pull request adds
+#                 (pull requests only; the weekly full scan is
+#                 security-baseline.yml, with the same rule set and severity).
+#
+# Run the same checks locally with the commands in docs/TESTING.md (CI).
+
 name: Security Scan
 
 on:
@@ -24,15 +40,7 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Python 3.12 (uv)
-        shell: bash
-        run: |
-          python3 -m pip install --user --break-system-packages uv >/dev/null
-          ~/.local/bin/uv python install 3.12
-          ~/.local/bin/uv venv --python 3.12 --seed "$RUNNER_TEMP/venv-3.12"
-          echo "$RUNNER_TEMP/venv-3.12/bin" >> "$GITHUB_PATH"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -47,14 +55,166 @@ jobs:
           output: 'trivy-results.sarif'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         continue-on-error: true
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Safety check (Python dependencies)
-        working-directory: ./backend
+  dependencies:
+    name: Dependencies (pip-audit, npm audit)
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      # Poetry asks the keyring on every command; on the runner that opens DBus
+      # and hangs (backend-tests.yml). Nothing here needs a secret.
+      POETRY_NO_INTERACTION: "1"
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv (pinned + checksum)
         run: |
-          pip install safety
-          safety check || true
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o uv.tgz \
+            https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-unknown-linux-gnu.tar.gz
+          echo "b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6  uv.tgz" | sha256sum -c -
+          tar -xzf uv.tgz --strip-components=1 uv-x86_64-unknown-linux-gnu/uv
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 uv "$RUNNER_TEMP/bin/uv"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/uv" --version
+
+      - name: Install Poetry and pip-audit (pinned)
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/audit-venv"
+          uv pip install --python "$RUNNER_TEMP/audit-venv/bin/python" \
+            "poetry==2.5.1" "poetry-plugin-export==1.10.1" "pip-audit==2.10.1"
+          echo "$RUNNER_TEMP/audit-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Audit the Python lockfiles (backend, llm-proxy)
+        run: |
+          # The ignore list: one vulnerability per line, "ID YYYY-MM-DD reason".
+          # An entry without a reason, or whose review date has passed, fails.
+          ignore=()
+          today="$(date -u +%F)"
+          while read -r id review reason; do
+            case "$id" in ''|'#'*) continue ;; esac
+            if [ -z "$reason" ] || ! [[ "$review" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+              echo "::error file=.github/pip-audit-ignore.txt::$id needs a review date and a reason"
+              exit 1
+            fi
+            if [[ "$review" < "$today" ]]; then
+              echo "::error file=.github/pip-audit-ignore.txt::$id was to be reviewed by $review"
+              exit 1
+            fi
+            echo "Ignoring $id until $review: $reason"
+            ignore+=(--ignore-vuln "$id")
+          done < .github/pip-audit-ignore.txt
+          # The lockfile itself, every group, with its hashes: pip-audit reads
+          # the pinned versions and installs nothing.
+          for project in backend llm-proxy; do
+            echo "::group::$project"
+            poetry -C "$project" export --format requirements.txt --all-groups \
+              --output "$RUNNER_TEMP/$project-requirements.txt"
+            pip-audit --requirement "$RUNNER_TEMP/$project-requirements.txt" \
+              --require-hashes --disable-pip --progress-spinner off \
+              "${ignore[@]}"
+            echo "::endgroup::"
+          done
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Audit the frontend lockfile
+        working-directory: frontend
+        # Runtime dependencies only; high and critical fail. npm audit has no
+        # ignore list: a finding is fixed by an update or an override.
+        run: npm audit --package-lock-only --omit=dev --audit-level=high
+
+  secrets-pr:
+    name: Secrets in the pull request (gitleaks)
+    if: github.event_name == 'pull_request'
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned + checksum)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o gitleaks.tgz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 gitleaks "$RUNNER_TEMP/bin/gitleaks"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/gitleaks" version
+
+      - name: Scan the pull request's commits for secrets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Every commit the branch adds, not only its last state: a secret
+          # added and then removed is still in the history that gets merged.
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --log-opts "${BASE_SHA}..${HEAD_SHA}" \
+            --redact \
+            --verbose \
+            --exit-code 1 \
+            --no-banner
+
+  sast-pr:
+    name: SAST on the pull request (Semgrep)
+    if: github.event_name == 'pull_request'
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install uv (pinned + checksum)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o uv.tgz \
+            https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-unknown-linux-gnu.tar.gz
+          echo "b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6  uv.tgz" | sha256sum -c -
+          tar -xzf uv.tgz --strip-components=1 uv-x86_64-unknown-linux-gnu/uv
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 uv "$RUNNER_TEMP/bin/uv"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/uv" --version
+
+      - name: Scan for security issues the pull request adds
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # The checkout is the merge of the branch into main, whose first
+          # parent is BASE_SHA: with it as the baseline, Semgrep reports only
+          # the findings this change adds, so a finding already on main (the
+          # weekly scan's) does not fail an unrelated pull request.
+          uv tool run --from "semgrep==1.182.1" semgrep scan \
+            --config p/security-audit \
+            --severity ERROR \
+            --error \
+            --metrics=off \
+            --baseline-commit "$BASE_SHA" \
+            .

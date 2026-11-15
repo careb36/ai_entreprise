@@ -1,9 +1,35 @@
 # SECURITY.md — La Fabrique Multi-Agent Platform
 
-**Version:** 1.0
-**Owner:** Security Engineering
-**Applies to:** FastAPI control plane, React/Vite frontend, LangGraph agents, PostgreSQL, Neo4j, Kubernetes deployments
-**Last reviewed:** Sprint 0 — Foundations
+**Version:** 1.1
+**Owner:** the repository owner (accepts risk); every contributor and agent meets it
+**Applies to:** FastAPI control plane, React/Vite frontend, LangGraph agents, the workspace daemon and NATS, PostgreSQL, Neo4j, the LLM proxy, Kubernetes deployments
+**Last reviewed:** 2026-11-15 — checked against the code and against Microsoft SDL practices with the `sdl-program` skill (`.claude/skills/sdl-program/`), issue #522
+
+**How to read this document.** Each section mixes *what is built* (it cites
+the file that does it) and *requirements and targets* (rules every change is
+held to, some of which the code does not meet yet). Where the code falls
+short of a rule, the section says so under "Where the code stands" or marks
+the item **planned**, with the issue that tracks it. A control described
+without a file is a target, not a claim that it exists.
+
+---
+
+## Reporting a vulnerability
+
+Report a vulnerability privately through this repository's **Security** tab
+→ **Advisories** → **Report a vulnerability** (GitHub private vulnerability
+reporting). Do **not** open a public issue, pull request or discussion for a
+suspected vulnerability. Include the affected component, the version or
+commit, the impact and the steps to reproduce.
+
+Private vulnerability reporting must be enabled in the repository's settings
+(Settings → Code security → Private vulnerability reporting); the repository
+owner turns it on. Until it is enabled the button does not appear, and a
+reporter should open a public issue that says only "security report, please
+contact me", with no detail.
+
+What happens next is §9: triage against the severity table in §9.2, a fix on
+`main`, and a release (§15).
 
 ---
 
@@ -15,7 +41,8 @@ This document defines the security requirements, secure coding rules, and review
 - React/Vite frontend and static asset delivery
 - LangGraph agent graphs, prompts, and tool definitions
 - PostgreSQL and Neo4j persistence layers
-- Kubernetes manifests, Helm charts, container images, and CI/CD pipelines
+- The workspace daemon (`vscode-daemon/`), its sandbox and command policy, and the NATS bus between it and the backend
+- Kubernetes manifests (`deployment/k8s/`; there are no Helm charts), container images, and CI/CD pipelines
 
 The goal is to ensure the platform is secure by default, auditable, and resilient against both classic web/API attacks and LLM-specific risks such as prompt injection and tool-call abuse.
 
@@ -31,6 +58,8 @@ Primary trust boundaries:
 4. **Agents ↔ External Tools/APIs** — tool-call abuse, excessive permissions, secret leakage.
 5. **Services ↔ PostgreSQL/Neo4j** — database compromise, unauthorized queries, data leakage.
 6. **CI/CD ↔ Kubernetes/Registry** — malicious images, leaked secrets, supply chain compromise.
+7. **Backend ↔ NATS ↔ workspace daemon ↔ the user's disk** — anything that can publish a request can ask the daemon to write files and run commands on the machine that holds the projects (§8.3, §8.6).
+8. **Backend ↔ a company's identity provider** — forged or replayed ID tokens, login CSRF, one company's provider asserting another company's people, SSRF through the issuer URL (§3.1, `docs/design/SSO.md`).
 
 Key threat actors: malicious end users, compromised external content, malicious model output, insider developers, CI/CD attackers.
 
@@ -44,24 +73,134 @@ Reference frameworks:
 
 ## 3. Authentication and Authorization
 
-### 3.1 Identity Provider
+### 3.1 Identity: what is built
 
-- Use **OIDC/OAuth 2.1** with a trusted IdP for all human users.
-- Frontend uses **Authorization Code with PKCE** for SPAs. Never use implicit flow.
-- Backend validates JWT access tokens on every request. Accept only tokens signed by the configured IdP and with correct `iss`, `aud`, `exp`, `nbf`.
-- Short-lived access tokens: **≤ 15 minutes**.
-- Refresh tokens are server-side, rotated on use, and bound to the client.
+La Fabrique authenticates people itself today; there is no external identity
+provider yet.
 
-### 3.2 API Authorization
+- **Passwords** are hashed with `bcrypt` directly, cost 12
+  (`backend/app/passwords.py`). The schema rejects a password over bcrypt's
+  72-byte limit instead of truncating it (`backend/app/schemas.py`), and a
+  successful login re-hashes a stored hash whose cost is below the current one
+  (`backend/app/routers/auth.py`).
+- **Access tokens.** `POST /v1/auth/login` issues a JWT signed with **HS256**
+  and the shared secret `JWT_SECRET_KEY` (`backend/app/auth_tokens.py`,
+  `backend/app/config.py`). Claims: `sub`, `email`, `iat`, `exp`, `typ:
+  access`. It lives `ACCESS_TOKEN_EXPIRE_MINUTES`, **60 minutes** by default.
+  Validation checks the signature, the single configured algorithm, `exp`,
+  and that `sub`, `exp` and `typ` are present and `typ` is `access`; there is
+  no `iss`, `aud` or `nbf` claim. There is no refresh token: a person logs in
+  again when the token expires.
+- **Transport of the token.** The API reads it from the `Authorization:
+  Bearer` header (`backend/app/auth_deps.py`, `HTTPBearer`), never from a
+  cookie. The Glassroom stream, which a browser `EventSource` cannot give a
+  header, takes a five-minute ticket for one sprint instead
+  (`create_stream_ticket`, `typ: glassroom`; membership is checked again
+  when it is used).
+- **Without `JWT_SECRET_KEY`** login answers 503 and the backend warns at
+  startup (`backend/app/lifecycle.py`).
+- **API tokens** for external callers (`POST /v1/auth/tokens`,
+  `backend/app/services/platform/api_tokens.py`): one company per token, a
+  role (`Viewer` by default, `Manager` at most, never above its creator's),
+  an expiry (90 days by default, at most 365), revocable. Only the token's
+  sha256 is stored; the raw value (`fab_` + 32 random bytes) is shown once.
+  A request made with one acts as `api-token:<id>`, so audit rows name it.
+- **Rotation.** Changing `JWT_SECRET_KEY` ends every session and stream
+  ticket; API tokens keep working (`docs/OPERATIONS.md`, Rotate keys).
 
-- Enforce **RBAC/ReBAC** at the FastAPI layer.
-- Define roles: `admin`, `operator`, `agent-developer`, `viewer`.
-- Use a **deny-by-default** policy: no endpoint is public unless explicitly declared.
-- Route-level authorization must be enforced by middleware or dependencies, not only in UI.
-- Each LangGraph agent run must inherit the caller’s identity and permissions. Never let an agent perform actions the calling user cannot perform.
-- Service-to-service calls use **mTLS** or a hardened service mesh identity. Do not share user tokens between services.
+- **Single sign-on** (issue #512, phase 3; design and threat model in
+  `docs/design/SSO.md`). An Owner configures one OpenID Connect connection
+  per company (`/v1/companies/{id}/sso`, `backend/app/routers/sso_admin.py`);
+  Google and Microsoft Entra ID are presets of the same mechanism. The client
+  secret is encrypted with `FERNET_SECRET_KEY` and never returned. Sign-in
+  (`backend/app/routers/sso.py`, `services/platform/sso_flow.py`) is
+  Authorization Code with PKCE, a one-time `state` bound to the browser by an
+  `HttpOnly` cookie, and a nonce. The backend validates the ID token itself
+  (`services/platform/oidc.py`): signature with asymmetric algorithms only,
+  `iss`, `aud`, `exp`/`iat` with `SSO_CLOCK_SKEW_SECONDS` of leeway, the nonce,
+  and `email_verified` when present. The person is identified by
+  `(issuer, sub)`; the provider's claims establish identity only, and the role
+  always comes from La Fabrique's membership. A provider is trusted only for
+  its own company: an existing account is linked by email only when it
+  belongs to that company alone, auto-join never adopts an existing account,
+  one company at most lists a given domain, and public mail domains are
+  refused. The provider is reached only through
+  `services/platform/oidc_client.py` (https, public addresses re-checked
+  before each fetch unless `SSO_ALLOW_PRIVATE_ISSUERS`, no redirects, a 1 MiB
+  cap). A one-time, 60-second code is exchanged for the same access token the
+  password login issues. An Owner can require SSO for the company's members
+  once the connection is enabled and an Owner has signed in through it;
+  Owners listed in `SSO_BREAK_GLASS_EMAILS` keep their password, and each
+  such sign-in is audited. Every sign-in and every configuration change
+  writes an audit row (never the secret); the public routes are limited by
+  `SSO_RATE_LIMIT`.
+- **Known gaps.** Allowed domains are not verified by DNS (the first company
+  to list one holds it); sessions already issued stay valid until they
+  expire when SSO becomes required or a person is removed at the provider;
+  the password login itself has no rate limit. Still **targets, not
+  present**: access tokens of 15 minutes or less and server-side refresh
+  tokens rotated on use (with #524, the token out of `localStorage`). A
+  deployment that needs a shorter session lowers
+  `ACCESS_TOKEN_EXPIRE_MINUTES`.
+
+### 3.2 API Authorization: what is built
+
+- **Enforcement is on by default.** `AUTH_REQUIRED` defaults to `true`
+  (`backend/app/config.py`); with it, a protected route without a valid token
+  answers 401 (`backend/app/auth_policy.py`, `current_user_if_required`,
+  `require_authenticated`). `AUTH_REQUIRED=false` is for a local demo only:
+  a token, when sent, is still resolved, but none is required.
+- **Roles per company**, ranked **Owner > Manager > Viewer**
+  (`ROLE_RANK` in `backend/app/auth_policy.py`). Every company-scoped route
+  calls `require_company_role(session, user, company_id, minimum)`: a caller
+  who is not a member gets 403, a member below the minimum gets 403. An API
+  token carries its own company and role and is held to the same check.
+  Creating a company makes its creator the Owner; inviting a member requires
+  Owner. Help-desk administrators are a separate, deployment-wide list
+  (`SUPPORT_ADMIN_EMAILS`, `is_support_admin`).
+- **Public routes** are an explicit list: `/health`, registration and login,
+  the HMAC-signed GitHub webhook, support bug reporting and chat,
+  `/v1/models`, `/v1/capabilities` and the retired `/v1/approve_task` (410)
+  (`docs/contexts/platform.md`, Auth and multi-tenancy).
+- **Company scoping.** Data is namespaced by `company_id`; audit writes and
+  memory stores take the company from the caller's membership, never from the
+  request's payload.
+- **Rate limiting.** `slowapi`, `RATE_LIMIT_DEFAULT` (100/minute by default,
+  `backend/app/security.py`).
+
+Requirements that still hold for every change: deny by default (a new route
+is protected unless it is added to the public list on purpose); route-level
+authorization in a dependency, never only in the UI; no default `admin` or
+fallback credential.
+
+**Where the code stands, and what is planned:**
+
+- Agents act as the company's workers, not as the person who started the
+  sprint: a run does not carry its caller's identity. What a person may do is
+  decided at the route that starts or changes the work (Manager to start a
+  sprint, Owner to delete one), and the agents' reach is bounded by the
+  daemon's sandbox and command policy (§8.3), not by the caller's role.
+- Service-to-service identity is **not mTLS**. The backend and the daemon
+  each have their own NATS user, with TLS and optional client certificates
+  (§8.6); the backend and the LLM proxy share `LLM_PROXY_INTERNAL_TOKEN`
+  (`docs/OPERATIONS.md`, Rotate keys). mTLS or a service-mesh identity
+  between all services is a target.
 
 ### 3.3 Frontend Exposure
+
+**Where the code stands.** The backend's `SecurityHeadersMiddleware`
+(`backend/app/security.py`, `SECURITY_HEADERS_ENABLED`) sends
+`Content-Security-Policy: default-src 'self'` (a looser policy only on
+`/docs`, `/redoc` and `/openapi.json`), `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Strict-Transport-Security`,
+`Referrer-Policy: strict-origin-when-cross-origin` and a `Permissions-Policy`
+that turns off geolocation, microphone and camera; it does not send
+`Cross-Origin-Opener-Policy`. CORS allows only `CORS_ORIGINS`. The frontend
+keeps its access token in `localStorage` (`frontend/src/store/useAuthStore.ts`,
+zustand `persist`, key `fabrique-auth-storage`), which the rule below forbids:
+a known gap until the token moves to memory or an `HttpOnly` cookie (#524).
+
+The rules:
 
 - Protect all frontend routes with authentication guards; that is UX only, not security.
 - Store tokens in **memory only** or secure, `HttpOnly`, `SameSite=Lax/Strict` cookies. Never in `localStorage` or `sessionStorage`.
@@ -96,8 +235,19 @@ Reference frameworks:
 
 ### 4.3 Detection
 
-- CI scans all PRs for secrets and high-entropy strings.
+- CI scans for secrets and high-entropy strings.
 - Alerts on secret exposure trigger the incident response process.
+
+**Where the code stands.** gitleaks (pinned, downloaded with a checksum,
+`.gitleaks.toml`) runs over each pull request's own commits
+(`.github/workflows/security-scan.yml`, job `secrets-pr`) and over the full
+history in the weekly baseline (`.github/workflows/security-baseline.yml`).
+The pre-commit hooks (`.pre-commit-config.yaml`) refuse a committed `.env`
+but do not run a secret scanner. Stored secrets (provider keys, MCP secrets,
+run secrets, project credentials) are encrypted with `FERNET_SECRET_KEY`;
+without it they are stored with a `plaintext:` prefix and the backend warns
+at startup (`backend/app/config.py`, `docs/CONFIGURATION.md`). Secrets live
+in `.env`, not in a secret manager.
 
 ---
 
@@ -128,9 +278,39 @@ Reference frameworks:
 - Build from pinned, minimal base images. Do not pull `latest` base images.
 - Restrict CI/CD pipeline permissions. Approval required for changes to `.github/workflows` or deploy files.
 
+**Where the code stands** (§5.2 and §5.3). Lockfiles are committed
+(`backend/poetry.lock`, `llm-proxy/poetry.lock`, `frontend/package-lock.json`,
+`vscode-daemon/requirements.txt`) and Dependabot covers pip, npm, docker,
+docker-compose and GitHub Actions (`.github/dependabot.yml`). Every pull request
+runs, in `.github/workflows/security-scan.yml`: Trivy over the files (SARIF,
+not gating); a dependency audit that fails on a known vulnerability —
+`pip-audit` over the hashed export of `backend/poetry.lock` and
+`llm-proxy/poetry.lock`, and `npm audit --omit=dev --audit-level=high` over
+`frontend/package-lock.json`, with exceptions only in
+`.github/pip-audit-ignore.txt` (each with a reason and a review date that
+fails the job once passed); gitleaks over the pull request's commits; and
+Semgrep failing on the findings the pull request adds. The gating Trivy and
+the full Semgrep and gitleaks scans run weekly
+(`.github/workflows/security-baseline.yml`). Every third-party action is
+pinned by commit sha, checked by `backend/tests/test_workflow_pinning.py`
+(the SLSA generator is the one exception: it runs only from a release tag).
+`vscode-daemon/requirements.txt` is a version range, not a lock, so the audit
+does not cover the daemon yet. A SLSA provenance workflow exists
+(`generator-generic-ossf-slsa3-publish.yml`, on a created GitHub Release or
+by hand), but it hashes images it builds itself rather than the ones
+`images.yml` publishes, and a Release created by `release.yml` with the
+workflow's own token does not start it; the five published images have no
+SBOM and are not signed, and commits and tags are not
+required to be signed. SBOMs and image signing are noted in issue #522 for
+later.
+
 ### 5.4 Open advisories and their triage
 
-Dependabot reports 64 open alerts on `main`. That number mixes what reaches a
+*Snapshot taken on 2026-10-29 (commit `6f343f7`); the counts were not re-read
+in the 2026-11-15 review, since the Dependabot API was not reachable from it.
+Re-read them with the commands in `.claude/skills/sdl-program/SKILL.md`, step 1.*
+
+Dependabot reported 64 open alerts on `main`. That number mixes what reaches a
 browser with what only runs on a build machine, so it is worth separating:
 
 | Surface | Advisories | Manifest |
@@ -204,6 +384,19 @@ planned piece of work with its own tests instead of a red PR every Monday.
 - Lock down RBAC: each workload gets its own ServiceAccount with minimal permissions.
 - Admission policies: block privileged pods, host networking, unknown registries.
 
+### 6.3 Where the code stands
+
+These are targets the images and manifests do not meet yet. The five
+Dockerfiles (`backend/`, `backend/janitor/`, `frontend/`, `llm-proxy/`,
+`vscode-daemon/`) start from `python:3.12-slim` or `node:26-alpine` by tag,
+not by digest, and none sets a `USER`, so the containers run as root.
+`deployment/k8s/backend.yaml` is a single Deployment and Service with the
+image `fabrique-backend:latest`, no `securityContext` and no NetworkPolicy.
+The compose stack is what the project runs and tests (`docker-compose.yml`,
+`docs/OPERATIONS.md`, Deploy). The containers that run agent-written code
+are a different matter: the daemon's sandbox containers drop every
+capability, forbid privilege escalation and run as the host user (§8.3).
+
 ---
 
 ## 7. Data Privacy and Database Security
@@ -266,50 +459,137 @@ Core rules:
 - For tools that modify state, require idempotency keys and maintain an audit trail.
 - Never expose raw database connection or Kubernetes API as a tool.
 
-### 8.3 Workspace Command Execution — a Known Limitation
+### 8.3 Workspace Command Execution: the Sandbox and the Command Policy
 
-`vscode-daemon/daemon.py` runs workspace commands through the host shell
-(`subprocess.run(_build_shell_command(command), shell=...)`, `daemon.py:270`).
-There is **no sandbox** and **no command blocklist** under it.
+The workspace daemon (`vscode-daemon/`) is the only component that runs
+commands on the computer that holds the user's projects. It runs natively,
+as the user who started it (`./scripts/start-daemon.sh`), and answers
+`workspace.execute` through `execute_shell_command` in
+`vscode-daemon/shell_exec.py`, in this order:
 
-The missing blocklist is deliberate. A blocklist screens a string; it cannot
-fence a process. `rm -rf` and `rm  -rf` (two spaces), `rm -r -f` (split flags)
-and `rm --recursive --force` are the same intent with different spellings, so
-any list that catches the first three misses the fourth, while blocking the
-benign `touch rm-rf-notes.txt`. DeepCode reached the same conclusion and wrote
-it down in `core/harness/command_guard.py`:
+1. **The command policy** (`vscode-daemon/command_policy.py`, issue #357)
+   decides whether the command runs at all.
+2. **The sandbox** (`vscode-daemon/sandbox.py`) decides where it runs, when
+   the request carries a `sandbox`.
+3. Otherwise it runs in the host shell, with the daemon's privileges.
+
+**The sandbox is the boundary.** Modes (`DELIVERY_SANDBOX` for the
+deployment, or a company's own, `GET`/`PUT /v1/companies/{id}/sandbox`,
+Viewer / Manager; `docs/CONFIGURATION.md`):
+
+- `host` (the default): the command runs as the daemon's user, with its
+  files, network and environment. Nothing is isolated.
+- `container`: an ephemeral Docker or Podman container per run with only the
+  task's worktree mounted at `/workspace`, network off unless
+  `DELIVERY_SANDBOX_NETWORK`, CPU, memory and process limits, every
+  capability dropped (`--cap-drop ALL`), `no-new-privileges`, the host
+  user's uid, and only the environment variables the company lists by name
+  (values from the daemon's machine, never from the request).
+- `bwrap`: bubblewrap namespaces on Linux, system directories read-only, the
+  worktree read-write, network unshared unless opened, a fresh `/tmp`, the
+  same environment rule; no CPU or memory limit, and the report says so.
+
+The daemon reports the mode it applied (`test_run.sandbox`) and never falls
+back to the host on its own: a mode that cannot run fails the run with the
+reason, and the tests read as unverified, not passed. The Verifier records
+the report as the `sandbox` check (`backend/app/services/workspace/sandbox.py`);
+a host run is a finding, never a refutation. The person running the daemon
+can refuse the host: `FABRIQUE_SANDBOX_REQUIRED=container` (or `bwrap`) runs
+a `host` request in that mode instead and says so (`forced_by_daemon`).
+
+Requests that carry a `sandbox`: the delivery test run
+(`services/loop/delivery_checks.py`), the Developer's test tool
+(`services/tools/developer_tools.py`), the lint after an edit
+(`services/tools/edit_lint.py`), the dependency install
+(`services/workspace/dependency_install.py`), a console producer's run
+(`services/producers/console_producer.py`) and the application check
+(`vscode-daemon/app_run.py`).
+
+**Which image ran, and the dependency cache** (issue #315,
+`docs/design/EXECUTION_ENVIRONMENT.md`; the cache and its quarantine are
+#514). In container mode the daemon asks the runtime for the image's content
+ID and registry digest before the run and starts the container from that ID,
+so a moved tag cannot change what ran; an image the run pulled is observed
+after it and the report says so (`vscode-daemon/sandbox_image.py`). With
+`DELIVERY_SANDBOX_CACHE` (off by default) a volume per project, selected by
+both its name and its label, holds the package managers' caches
+(`vscode-daemon/sandbox_cache.py`): kept after a run, removed after a failed
+install, and quarantined after three failed installs in a row until a
+Manager resets it (`POST /v1/companies/{id}/sandbox/cache/reset`, audited).
+A same-named volume without the label is never used or removed, and
+`FABRIQUE_SANDBOX_CACHE=off` on the daemon's machine refuses the cache.
+
+**The command policy is a first pass, not the boundary.** A blocklist screens
+a string; it cannot fence a process: `rm -rf`, `rm -r -f` and
+`rm --recursive --force` are one intent with three spellings. DeepCode wrote
+the same conclusion down in `core/harness/command_guard.py`:
 
 > A blocklist can never be a security boundary; the sandbox is. But if we keep a
 > blocklist at all, it should honestly catch what it *claims* to, rather than
 > offering a false sense of coverage.
 
-That project ships a sandbox (seatbelt on macOS, bwrap on Linux) as the actual
-boundary and keeps its screened blocklist as a shallow first pass in front of
-it. **We have neither.** Adding the blocklist without the sandbox would buy the
-false sense of coverage and nothing else, so the gap stays visible here instead.
+So the policy reads the command as a shell would and fails closed on what it
+does not model. A request's `command_policy` is `allow` (each simple
+command's words must start with a listed pattern's words, never a
+substring; a redirection other than stream duplication or `/dev/null` is
+refused) or `deny` (a pattern found in the text or in the unquoted words
+refuses it). The scanner splits `;`, `&&`, `||`, pipes, background jobs,
+subshells and `$(...)`, backtick and `<(...)` substitutions (each checked,
+at most `MAX_DEPTH` deep), honouring quotes; text it cannot read, a
+here-document, `$'…'` quoting, a comment or an unknown mode is refused, and
+on Windows a policy refuses every command rather than read it with the wrong
+quoting rules. The daemon's machine may keep its own deny list,
+`FABRIQUE_COMMAND_DENY`, which a request cannot relax. A refusal is
+`{"success": false, "refused": true, "error": <reason>}` and nothing runs.
 
-What this means today, and what it does not:
+**The wire is versioned and observed** (issue #517). Protocol version 1 is
+written down in `vscode-daemon/protocol/PROTOCOL.md`, with a JSON Schema per
+subject (`vscode-daemon/protocol/schemas/v1/`) and recorded request/reply
+pairs both sides replay. The daemon publishes `workspace.heartbeat` every
+`FABRIQUE_HEARTBEAT_SECONDS` (at most 25; `vscode-daemon/daemon_status.py`);
+the backend records when *it* observed each one and decides `online`,
+`stale` or `offline` (`services/workspace/daemon_liveness.py`). A daemon
+whose protocol range does not overlap the backend's is `incompatible`, with
+a reason naming the side to update, never a generic timeout. What the daemon
+says about itself is kept under `reported_by_daemon`, apart from what the
+backend observed.
 
-- The daemon is **host-side, by design** (`./scripts/start-daemon.sh`, not in
-  Docker), so a workspace command runs with the privileges of the developer who
-  started it. An agent that emits `curl … | sh` gets a shell on that machine.
-- The commands the pipeline runs on its own are **not** model output:
-  `_detect_test_command` in `backend/app/services/loop/task_worker.py:1901` derives
-  the test command from repository markers (`package.json`, `pytest.ini`,
-  `pyproject.toml`, a `tests/` folder) or from `DELIVERY_TEST_COMMAND`. No LLM
-  picks it, so prompt injection cannot reach that string.
-- The exposure is a **human or agent** invoking `workspace.execute` with an
-  arbitrary command, and the mitigations are the ones already in place: the
-  daemon listens on NATS with a scoped namespace, the subjects it accepts
-  are a fixed list, and with credentials on the bus only the backend's user
-  may send it a request (§8.6).
+**The bus** gives the daemon its own NATS user, which can answer requests but
+not send them (§8.6, `scripts/nats_config.py`).
 
-Tracked as a limitation, not a fixed issue. Closing it means running the
-workspace inside a container or a kernel sandbox with the project bind-mounted
-and egress restricted — a change to how the daemon is deployed, not a check
-added to it. Until then, treat `workspace.execute` as privileged: connect the
-daemon to brokers you trust, and do not point it at a workspace whose commands
-you would not run yourself.
+**The commands the pipeline picks itself are not model output.**
+`detect_test_command` (`backend/app/services/workspace/workspace_daemon.py`)
+derives the test command from repository markers (`package.json`,
+`pytest.ini`, `pyproject.toml`, a `tests/` folder) or takes
+`DELIVERY_TEST_COMMAND`; the Developer's test tool runs that command or a
+narrower one on the same runner, never an arbitrary one. No model picks the
+string, so prompt injection cannot reach it; the code it runs is
+agent-written, which is what the sandbox is for.
+
+**What remains open:**
+
+- `host` is still the default and an allowed mode. A deployment that runs
+  agent code sets `DELIVERY_SANDBOX=container` and, on the daemon's machine,
+  `FABRIQUE_SANDBOX_REQUIRED=container` (§10.8).
+- `FABRIQUE_SANDBOX_REQUIRED` applies only to a request that carries a
+  `sandbox`. The console assistants' consultations
+  (`services/producers/console_assistants.py`, a configured CLI template run
+  with the agent's prompt) send `workspace.execute` with neither a `sandbox`
+  nor a `command_policy`, so they run on the host; only the daemon's own
+  `FABRIQUE_COMMAND_DENY` applies to them (#525).
+- The backend does not send a per-company command policy yet
+  (`docs/CONFIGURATION.md`): the only policy it sends is the console
+  producer's, which allows only that CLI's own command
+  (`services/producers/console_clis.py`, `command_policy`). Without a policy
+  and without `FABRIQUE_COMMAND_DENY`, every command runs.
+- The sandbox's network is on or off; there is no egress allowlist.
+- The dependency cache is writable by every run of a project, so one run can
+  leave something for the next; that is why it is off by default and removed
+  after a failed install.
+
+Until those close, treat `workspace.execute` as privileged: connect the
+daemon only to brokers you trust, with credentials (§8.6), and do not point
+it at a workspace whose commands you would not run yourself.
 
 ### 8.4 LangGraph-Specific
 
@@ -340,8 +620,9 @@ part of the daemon's attack surface, not plumbing behind it (issue #327).
   (by subject, not with `allow_responses`: that grant would let a holder of
   the daemon's credentials publish to `workspace.delivered` with
   `workspace.execute` as reply subject and then "answer" itself, commanding
-  the real daemon), and publishes only `workspace.delivered`, `glassroom.*`
-  and the JetStream calls of its own consumer on the deliveries stream. It
+  the real daemon), and publishes only `workspace.delivered`, its heartbeat
+  `workspace.heartbeat` (an event nobody answers, §8.3), `glassroom.*` and
+  the JetStream calls of its own consumer on the deliveries stream. It
   cannot send a request (`workspace.execute`…), assign a task, read the
   backend's replies, or create, change or delete a stream; the streams are the
   backend's, and the daemon waits until they exist. `--namespace` writes the
@@ -377,7 +658,10 @@ what it needs.
 
 ### 9.1 Reporting
 
-- Report security incidents to `security@your-org.example` immediately.
+- Report security incidents and vulnerabilities privately through this
+  repository's **Security** tab → **Advisories** → **Report a
+  vulnerability** (see "Reporting a vulnerability" at the top; the owner must
+  have enabled private vulnerability reporting in the repository settings).
 - Do **not** open a public issue for suspected vulnerabilities.
 - Include affected component, timestamp, impact, and any reproduce steps.
 
@@ -425,7 +709,7 @@ Every PR that touches backend, frontend, agents, or infrastructure must pass thi
 
 - [ ] New endpoints enforce authentication unless explicitly public and approved
 - [ ] Authorization checked server-side for every role/permission
-- [ ] Token validation includes signature, issuer, audience, expiry
+- [ ] Token validation includes signature, a single allowed algorithm, expiry and token type (`backend/app/auth_tokens.py`); for an SSO ID token, also the issuer, audience, nonce and an asymmetric algorithm (`services/platform/oidc.py`, §3.1)
 - [ ] No default `admin` or insecure fallback credentials
 - [ ] Agent inherits caller permissions and cannot exceed them
 
@@ -487,6 +771,11 @@ Before the stack serves anyone but the person running it:
       no longer used. A token cannot create tokens, and the audit rows its
       requests write name it (`api-token:<id>`); `JWT_SECRET_KEY` set and
       `AUTH_REQUIRED` on.
+- [ ] **Single sign-on.** `SSO_CALLBACK_URL` and `SSO_FRONTEND_URL` are the
+      public https addresses; `SSO_BREAK_GLASS_EMAILS` names at least one
+      Owner before any company requires SSO; `SSO_ALLOW_PRIVATE_ISSUERS`
+      stays off; `FERNET_SECRET_KEY` is set, so client secrets are encrypted
+      (§3.1, `docs/OPERATIONS.md`).
 - [ ] **Secrets at rest.** `FERNET_SECRET_KEY` set, so provider keys, MCP
       secrets, run secrets and project credentials are encrypted (the backend
       warns at startup without it); `AUDIT_SIGNING_KEY` keys the audit chain.
@@ -565,6 +854,43 @@ When auditing the platform, verify the following controls:
 
 ## 14. Contact
 
-Security team: `security@your-org.example`
-Responsible disclosure: see `SECURITY.md` in repository root or contact the address above.
-Do not include sensitive details in public issues.
+Report a vulnerability privately through this repository's **Security** tab →
+**Advisories** → **Report a vulnerability** (GitHub private vulnerability
+reporting, enabled by the repository owner in the repository settings).
+There is no security mailbox. Do not include sensitive details in public
+issues, pull requests or discussions.
+
+---
+
+## 15. Supported Versions and Security Releases
+
+La Fabrique is released as `vX.Y.Z` tags on `main`, following Semantic
+Versioning; each tag becomes a GitHub Release whose notes are its section of
+`CHANGELOG.md`, and publishes the five images to GHCR
+(`docs/OPERATIONS.md`, Releasing; `.github/workflows/release.yml`,
+`.github/workflows/images.yml`; issue #512, phase 1). No stable version has
+been tagged yet: until the first one, only `main` is supported.
+
+| Version | Security fixes |
+|---|---|
+| `main` | Yes: every fix lands here first |
+| The latest minor release (`X.Y.*`) | Yes: a patch release `X.Y.Z+1` |
+| Older minor releases | No: upgrade to the latest minor |
+| Pre-releases (`vX.Y.Z-rc.N`) | No: they are for staging only |
+
+How a fix ships:
+
+1. The report is triaged privately against §9.2; the fix is prepared in a
+   private security advisory's temporary fork or on a branch whose name and
+   pull request do not describe the vulnerability before it is released.
+2. It merges to `main` with its line under `[Unreleased]` → `### Security`
+   in `CHANGELOG.md`, worded so it does not hand over an exploit before the
+   release is out.
+3. A patch release is cut at once by the usual process (`docs/OPERATIONS.md`,
+   Releasing), not held for the next planned release.
+4. The advisory is published with the fixed version, and a CVE requested
+   through GitHub when the severity warrants it. Fixes to third-party or
+   adapted code listed in `NOTICE` ship the same way.
+
+Operators upgrade by the steps in `docs/OPERATIONS.md`, Upgrade; a migration
+that cannot be rolled back is named in the release notes.

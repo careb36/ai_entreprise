@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ApiError } from '../services/api'
+import { ApiError, ssoStartUrl } from '../services/api'
 import { useAuthStore } from '../store/useAuthStore'
 import { safeReturnPath } from '../lib/returnPath'
 
@@ -16,6 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [ssoKey, setSsoKey] = useState('')
   const from = searchParams.get('from')
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -30,6 +31,10 @@ export default function Login() {
         setError(t('auth.notConfigured', {
           defaultValue: 'Authentication is not configured on this server.',
         }))
+      } else if (err instanceof ApiError && err.status === 403) {
+        setError(t('sso.requiredForCompany', {
+          defaultValue: 'Your company requires single sign-on. Use Sign in with SSO below.',
+        }))
       } else if (err instanceof ApiError && err.status === 401) {
         setError(t('auth.invalidCredentials', {
           defaultValue: 'Invalid email or password.',
@@ -42,6 +47,13 @@ export default function Login() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  function startSso(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!ssoKey.trim()) return
+    // A full-page navigation: the backend sets a cookie and redirects to the provider.
+    window.location.assign(ssoStartUrl(ssoKey))
   }
 
   if (token && expiresAt && expiresAt > Date.now() && !submitting) {
@@ -86,6 +98,25 @@ export default function Login() {
           {submitting
             ? t('auth.loggingIn', { defaultValue: 'Logging in…' })
             : t('auth.loginTitle', { defaultValue: 'Log in' })}
+        </button>
+      </form>
+      <form onSubmit={startSso} className="space-y-3 mt-6 border-t border-surface-700 pt-5" aria-labelledby="sso-title">
+        <h2 id="sso-title" className="text-sm font-semibold text-white">
+          {t('sso.loginTitle', { defaultValue: 'Single sign-on' })}
+        </h2>
+        <label className="block text-sm text-gray-300">
+          {t('sso.loginKey', { defaultValue: 'Work email or company SSO name' })}
+          <input
+            className="input mt-1 w-full"
+            type="text"
+            autoComplete="username"
+            value={ssoKey}
+            onChange={event => setSsoKey(event.target.value)}
+            placeholder={t('sso.loginKeyPlaceholder', { defaultValue: 'name@company.com or acme' })}
+          />
+        </label>
+        <button className="btn-secondary w-full" type="submit" disabled={!ssoKey.trim()}>
+          {t('sso.signIn', { defaultValue: 'Sign in with SSO' })}
         </button>
       </form>
       <p className="text-sm text-gray-400 mt-5">

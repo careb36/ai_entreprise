@@ -12,7 +12,7 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
                   │   └──B4── LLM proxy ──B4── Model providers
                   └── Postgres / Neo4j (inside the backend's trust zone)
  Agent and producer output enters at B5, wherever it is read.
- CI on the self-hosted runner is B7.
+ CI on the self-hosted runner is B7; a company's identity provider is B8.
 ```
 
 ## B1 — Browser ↔ backend
@@ -60,8 +60,11 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   symlinks out of the project and redact secret-looking lines
   (`docs/contexts/tools.md`); deliveries in a Git worktree, never the person's
   checkout (`vscode-daemon/git_workspace.py`); sha256 read back from disk.
-- **Known gap:** `host` mode runs with the user's privileges; SECURITY.md §8.3
-  predates the sandbox and command policy and needs updating.
+- **Known gap:** `host` mode runs with the user's privileges and is the
+  default; `FABRIQUE_SANDBOX_REQUIRED` reaches only requests that carry a
+  `sandbox`, so the console assistants' consultations run on the host; the
+  backend sends no per-company command policy (SECURITY.md §8.3, "What
+  remains open").
 
 ## B4 — Backend ↔ LLM proxy ↔ providers
 
@@ -109,8 +112,27 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
 - **Controls:** `permissions:` declared per workflow; CODEOWNERS on
   `.github/`; actionlint; Trivy pinned by sha; tools downloaded with checksum
   (`security-baseline.yml`); SLSA provenance on release.
-- **Known gaps:** runner not ephemeral; most actions pinned by tag; required
+- **Known gaps:** runner not ephemeral (actions are pinned by sha since #523); required
   Code Owner review pending (#182).
+
+## B8 — The backend and a company's identity provider
+
+- **Crosses:** the issuer URL an Owner configures, the discovery document and
+  signing keys fetched from it, the ID token and the browser's redirects.
+- **Threats:** forged or replayed ID tokens; login CSRF; one company's
+  provider (any Owner can run one) asserting another company's people;
+  account pre-hijacking; SSRF through the issuer URL; a company locking
+  itself out.
+- **Controls:** the backend validates the ID token itself (asymmetric
+  algorithms only, `iss`, `aud`, `exp`, nonce; `services/platform/oidc.py`);
+  PKCE with a one-time `state` bound to the browser; identity by
+  `(issuer, sub)`, the role from La Fabrique's membership; linking by email
+  only for an account in this company alone, one company per domain
+  (`services/platform/sso_flow.py`); https, public addresses re-checked per
+  fetch, no redirects, a size cap (`services/platform/oidc_client.py`);
+  "require SSO" only after an Owner signed in through it, with break-glass;
+  audit rows; `docs/design/SSO.md`.
+- **Known gaps:** domains not verified by DNS; issued sessions not revoked.
 
 ## Data stores (inside the backend's zone)
 

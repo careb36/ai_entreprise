@@ -1,4 +1,4 @@
-const blockedPaths = new Set(['/login', '/register', '/companies/select'])
+const blockedPaths = new Set(['/login', '/login/sso', '/register', '/companies/select'])
 
 export function safeReturnPath(from: string | null | undefined, fallback = '/'): string {
   if (

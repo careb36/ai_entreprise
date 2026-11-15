@@ -239,6 +239,21 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # Single sign-on over OpenID Connect (issue #512; docs/design/SSO.md).
+    # The redirect URI registered at each company's identity provider, and
+    # where the browser lands afterwards (the frontend's /login/sso).
+    SSO_CALLBACK_URL: str = "http://localhost:8000/v1/auth/sso/callback"
+    SSO_FRONTEND_URL: str = "http://localhost:5173"
+    # Applied to the start, callback and exchange routes, per client address.
+    SSO_RATE_LIMIT: str = "20/minute"
+    # Owners (comma-separated emails) who may still sign in with a password
+    # when their company requires SSO: the operator's break-glass list.
+    SSO_BREAK_GLASS_EMAILS: str = ""
+    # Allow an issuer on a private or loopback address (a Keycloak on the LAN).
+    SSO_ALLOW_PRIVATE_ISSUERS: bool = False
+    SSO_HTTP_TIMEOUT_SECONDS: float = 10.0
+    SSO_CLOCK_SKEW_SECONDS: int = 60
+
     # Audit signing — separate HMAC key for decision_signature values.
     # ---------------------------------------------------------------------------
     AUDIT_SIGNING_KEY: str | None = None

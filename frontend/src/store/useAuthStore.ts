@@ -13,6 +13,8 @@ interface AuthState {
   loadingMe: boolean
   profileError: string | null
   login: (email: string, password: string) => Promise<void>
+  /** Trades the one-time code the SSO callback handed over for a session. */
+  loginWithSso: (code: string) => Promise<void>
   loadMe: () => Promise<void>
   logout: () => void
   getValidToken: () => string | null
@@ -32,6 +34,18 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password) => {
         queryClient.clear()
         const response = await api.login(email, password)
+        set({
+          token: response.access_token,
+          expiresAt: Date.now() + response.expires_in * 1000,
+          meLoaded: false,
+          profileError: null,
+        })
+        await get().loadMe()
+      },
+
+      loginWithSso: async code => {
+        queryClient.clear()
+        const response = await api.ssoExchange(code)
         set({
           token: response.access_token,
           expiresAt: Date.now() + response.expires_in * 1000,

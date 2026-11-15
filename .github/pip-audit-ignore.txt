@@ -1,0 +1,11 @@
+# Known vulnerabilities pip-audit may skip in the backend's and the llm-proxy's
+# lockfiles (.github/workflows/security-scan.yml, job `dependencies`).
+#
+# One per line: the advisory ID, the date by which it is reviewed again
+# (YYYY-MM-DD), and the reason it cannot be fixed yet. The audit fails on an
+# entry with no reason or whose review date has passed, so an exception is
+# never permanent. Prefer a lockfile update; list an entry only when no fixed
+# version can be taken, and say in the pull request who accepted the risk.
+#
+# Example (not active):
+#   PYSEC-0000-00000 2026-12-31 no fixed release yet; the vulnerable path is not reachable from the API
