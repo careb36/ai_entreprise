@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from models import User
 from models.github import GitHubRepoBinding
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.evidence.agent_run_service import ArtifactTooLargeError, ingest_agent_run
 from services.producers import github_adapter
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +19,7 @@ from sqlmodel import Session, select
 router = APIRouter(prefix="/v1/integrations/github", tags=["GitHub"])
 
 
-class GitHubBindingRequest(BaseModel):
+class GitHubBindingRequest(RequestModel):
     company_id: int
     owner: str = Field(min_length=1)
     repo: str = Field(min_length=1)
@@ -26,7 +27,7 @@ class GitHubBindingRequest(BaseModel):
     inclusion_rule: Literal["all", "bots_only", "non_bots"] = "all"
 
 
-class GitHubBackfillRequest(BaseModel):
+class GitHubBackfillRequest(RequestModel):
     company_id: int
     owner: str
     repo: str

@@ -47,11 +47,10 @@ if [ ! -x "$VENV/bin/python" ]; then
   fi
 fi
 
-"$VENV/bin/python" -m pip install --quiet --disable-pip-version-check -r "$DAEMON_DIR/requirements.txt"
-# A .creds file or an nkey seed signs the connection with nkeys.
-if [ -n "${NATS_CREDS_FILE:-}${NATS_NKEY_SEED:-}" ]; then
-  "$VENV/bin/python" -m pip install --quiet --disable-pip-version-check "nkeys==0.2.1"
-fi
+# The hash-pinned lock (vscode-daemon/requirements.in): a package whose bytes
+# differ from the recorded sha256 is refused. It includes nkeys, which signs
+# the connection when a .creds file or an nkey seed is used.
+"$VENV/bin/python" -m pip install --quiet --disable-pip-version-check --require-hashes -r "$DAEMON_DIR/requirements.txt"
 
 # The broker's "daemon" user, from the same variable docker compose reads.
 if [ -z "${NATS_USER:-}" ] && [ -n "${NATS_DAEMON_PASSWORD:-}" ]; then

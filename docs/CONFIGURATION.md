@@ -42,6 +42,24 @@ Copy `.env.example` to `.env` and fill in:
 - `JWT_SECRET_KEY` — required for authentication. Login returns 503 until configured.
   Generate with: `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 - `AUTH_REQUIRED` — set to `true` to enforce authentication on sensitive routes
+- `JWT_ALGORITHM` — default `HS256`; only `HS256`, `HS384` or `HS512` is
+  accepted, anything else (`none`, an asymmetric name) refuses to sign or
+  verify. `JWT_ISSUER` (default `la-fabrique`) and `JWT_AUDIENCE` (default
+  `la-fabrique-api`; the Glassroom tickets use `<JWT_AUDIENCE>:glassroom`) go
+  into every token and are required when one is checked (issue #541). Two
+  deployments that share a `JWT_SECRET_KEY` must not share them. Changing
+  either ends every access token and stream ticket at once, as rotating the
+  key does; browser sessions renew theirs from the refresh cookie.
+- Password sign-in and registration (issue #541; SECURITY.md §3.1):
+  - `LOGIN_RATE_LIMIT` — default `10/minute`, per client address, on
+    `POST /v1/auth/login`; `REGISTER_RATE_LIMIT` — default `5/minute` on
+    `POST /v1/auth/register` (slowapi, `RATE_LIMIT_STORAGE_URI`).
+  - `LOGIN_FAILURES_BEFORE_BACKOFF` (5), `LOGIN_FAILURE_WINDOW_SECONDS` (900),
+    `LOGIN_BACKOFF_MAX_SECONDS` (900) — the per-account backoff: after that
+    many failures within the window, each further failure locks the
+    account's password sign-in for twice as long as the last (2 s, 4 s, …),
+    at most the maximum; a locked account answers 429 with `Retry-After`. Per
+    process.
 - Browser sessions (issue #524; `docs/design/SESSIONS.md`). Login and the SSO
   exchange set HttpOnly cookies instead of returning a token:
   - `ACCESS_TOKEN_EXPIRE_MINUTES` — default `15`. The access token's life, in
@@ -212,8 +230,8 @@ Copy `.env.example` to `.env` and fill in:
 - `NATS_USER` / `NATS_PASSWORD`, `NATS_CREDS_FILE` (wins), `NATS_NKEY_SEED`
   (a seed file) — how the backend (`app/nats_auth.py`) and the daemon
   (`vscode-daemon/nats_connect.py`, the same rules) authenticate;
-  `start-daemon.sh --creds FILE` / `.ps1 -Creds FILE`, and `nkeys` is installed
-  only for a creds file or a seed. Unset, no authentication as before. No log
+  `start-daemon.sh --creds FILE` / `.ps1 -Creds FILE` (`nkeys`, which signs
+  with a creds file or a seed, is in the daemon's hash-pinned lock). Unset, no authentication as before. No log
   line or `/health` field carries a secret.
 - `NATS_TLS`, `NATS_TLS_CA`, `NATS_TLS_CERT`, `NATS_TLS_KEY`, `NATS_TLS_VERIFY`
   — optional. The broker requires TLS once `nats/certs` holds `server.crt` and
@@ -531,9 +549,25 @@ Copy `.env.example` to `.env` and fill in:
   role defaults apply), a band that cannot be read is dropped with a warning;
   an agent's, a role's or the company's chosen model is never re-routed.
   Unset: every task runs on its role's model, as before.
+- `API_DOCS_ENABLED` — default `true`. The interactive documentation
+  (`/docs`, `/redoc`, `/openapi.json`); `false` answers 404 on all three.
+  Leave it on for development; turn it off where the API faces the internet
+  (issue #541, WSTG-v42-CONF-05).
+- `SECURITY_HEADERS_ENABLED` — default `true`. The header baseline of
+  SECURITY.md §3.3 on every answer (`backend/app/security.py`); `false` only
+  behind a proxy that sets the same headers.
+- `ERROR_REPORT_URL` — optional, empty by default. An https endpoint the
+  operator controls that receives one POST per unhandled error: the error id,
+  the exception's class, the HTTP method, the route template and
+  `ERROR_REPORT_SOURCE` (optional, a name for this deployment); never a
+  traceback, a message, a path or a request body. The answer to the client
+  carries only the error id, and the traceback stays in the backend's log
+  under it. (Replaces the former `FABRIQUE_VENDOR_SUPPORT_URL`, which sent the
+  traceback and is no longer read.)
 - `WEBHOOK_ALLOW_PRIVATE_HOSTS` — optional, default `false`. A company's
   notification webhook (`services/integrations/webhooks.py`) must be an https URL whose host
-  resolves to public addresses, checked when it is saved and before every post;
+  resolves to public addresses, checked when it is saved and before every post,
+  and the post goes to the address that was checked (`services/platform/egress.py`);
   `true` allows a private, loopback or link-local host (a receiver on the LAN).
   The same check applies to a company's RFC 3161 timestamping authority
   (`tsa_url` of the audit anchors), which may also be http.
@@ -542,7 +576,10 @@ Copy `.env.example` to `.env` and fill in:
   the research tools (`services/tools/research_tools.py`): the roles that decide
   read official documentation, the package registries and OSV through the
   backend, from the default hosts plus these and the company's own; every
-  source is evidence. `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
+  source is evidence. Only a host named in `RESEARCH_ALLOWED_HOSTS` may
+  resolve to a private or loopback address (a local mirror); a default host or
+  one on a company's list is fetched only on a public address, resolved once
+  and pinned (issue #541). `RESEARCH_PYPI_URL`, `RESEARCH_NPM_URL`,
   `RESEARCH_CRATES_URL`, `RESEARCH_GO_URL` and `RESEARCH_OSV_URL` may point
   at a mirror (the e2e points PyPI at its fake).
 - `GROUNDING_LOOKUPS_ENABLED` (true), `GROUNDING_MAX_LOOKUPS` (20) — the

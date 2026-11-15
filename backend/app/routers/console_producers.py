@@ -24,7 +24,8 @@ from auth_policy import current_user_if_required, require_company_role
 from database import get_session
 from fastapi import APIRouter, Depends, HTTPException
 from models import AssistantRuntimeState, Company, User
-from pydantic import BaseModel, Field
+from pydantic import Field
+from schemas import RequestModel
 from services.producers import console_assistants, console_clis
 from services.workspace import sandbox
 from sqlmodel import Session, select
@@ -32,7 +33,7 @@ from sqlmodel import Session, select
 router = APIRouter(prefix="/v1", tags=["Core"])
 
 
-class ConsoleProducersRequest(BaseModel):
+class ConsoleProducersRequest(RequestModel):
     producers: dict[str, Any] = Field(default_factory=dict)
     env: list[Any] | None = None
 

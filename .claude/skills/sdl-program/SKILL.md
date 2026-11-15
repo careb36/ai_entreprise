@@ -17,6 +17,14 @@ the sources and the repository mapping are in
 name security changes); after any incident; when a reviewer finds the
 documents disagree with the code.
 
+**Yearly:** the person-led penetration test of `SECURITY.md` §16 (business
+logic, cross-tenant SSO, NATS and the daemon, Slack and Teams spoofing, prompt
+injection through agent output, the deployed TLS), reported in the OWASP WSTG
+chapter-5 structure. In the quarterly review, check its date: more than a year
+since the last report, or a release that changed authentication, roles or the
+daemon since, is a gap to file. Its findings are filed as issues and each fix
+ships with a test (practice 7, `../sdl-review/reference.md`).
+
 **Output:** one pull request with the document updates and a CHANGELOG line,
 plus one issue per gap that cannot be closed in that PR. Every number in the
 PR states where it came from and when it was read; a number with no source is

@@ -14,6 +14,7 @@ without a contract, no decision recorded.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 MAX_MODULES = 40
@@ -43,6 +44,20 @@ def _refs(value: Any) -> list[str]:
     if isinstance(value, str):
         value = [part for part in value.replace(";", ",").split(",")]
     return [_text(v, TITLE_LIMIT) for v in _items(value, 50) if _text(v, TITLE_LIMIT)]
+
+
+def _decision_record(d: dict[str, Any]) -> dict[str, str]:
+    """A decision's optional ADR fields, kept only when well formed: ``date``
+    (``YYYY-MM-DD``, when it was accepted) and ``slug`` (the ADR file's name,
+    lowercase words and hyphens). See ``services/planning/adr_docs.py``."""
+    out: dict[str, str] = {}
+    date = _text(d.get("date"), 10)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        out["date"] = date
+    slug = _text(d.get("slug"), 60).lower()
+    if re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", slug):
+        out["slug"] = slug
+    return out
 
 
 def normalize(arch: dict[str, Any]) -> dict[str, Any]:
@@ -114,6 +129,7 @@ def normalize(arch: dict[str, Any]) -> dict[str, Any]:
             "context": _text(d.get("context")),
             "decision": _text(d.get("decision")),
             "consequences": _text(d.get("consequences")),
+            **_decision_record(d),
         }
         for number, d in enumerate(_items(arch.get("decisions"), MAX_DECISIONS), 1)
         if isinstance(d, dict)

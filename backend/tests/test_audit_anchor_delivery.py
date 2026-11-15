@@ -17,9 +17,10 @@ import tsa_fake
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from egress_fakes import FakeResolver
 from models import AuditAnchor, OutboxEvent, Sprint
 from services.integrations import anchor_settings, anchoring, webhooks
-from services.platform import audit_anchors
+from services.platform import audit_anchors, egress
 from sqlmodel import select
 from test_audit_anchors import company, write
 
@@ -40,7 +41,9 @@ def no_anchor_events_left(sqlite_session):
 def _setup(monkeypatch, tmp_path):
     fernet = Fernet.generate_key().decode()
     monkeypatch.setattr(crypto, "_configured_key", lambda: fernet)
-    monkeypatch.setattr(webhooks, "_public_address", lambda host: True)
+    # example.com may not resolve in the sandbox: a fake DNS answers a public
+    # address, as in test_webhooks.py; the posts are pinned to it (#541).
+    monkeypatch.setattr(egress, "RESOLVER", FakeResolver())
     audit_key = secrets.token_hex(32)
     monkeypatch.setattr(audit_signing, "_configured_key", lambda: audit_key)
     monkeypatch.setenv("AUDIT_LOG_PATH", str(tmp_path))
@@ -435,3 +438,54 @@ def test_the_routes_respect_roles_and_report_coverage(
         headers=headers(viewer),
     )
     assert stranger.status_code == 403
+
+
+def test_a_tsa_url_that_resolves_to_a_private_address_is_refused(
+    sqlite_session, tsa, monkeypatch
+):
+    """The TSA URL is a company's setting, checked when saved and resolved
+    once and pinned when sent, like a webhook's (#541, INJT-19): a name that
+    answers a private address at send time is refused before anything is sent."""
+    cid = company()
+    write(sqlite_session, cid)
+    configure(sqlite_session, cid, tsa, webhook=False)
+    (anchor,) = anchoring.take(sqlite_session, cid, "cadence")
+    sqlite_session.commit()
+    # Public when saved, private when sent: a rebinding DNS answer.
+    monkeypatch.setattr(
+        egress, "RESOLVER", FakeResolver({"tsa.example.com": ["10.0.0.5"]})
+    )
+    sent = []
+
+    async def request(target, body, timeout):
+        sent.append(target)
+        return b""
+
+    with pytest.raises((egress.EgressRefused, webhooks.InvalidWebhook)):
+        asyncio.run(
+            anchoring.deliver_tsa(
+                sqlite_session, {"anchor_id": anchor.id}, request=request
+            )
+        )
+    assert sent == [] and anchor.status == "pending"
+
+
+def test_the_tsa_request_goes_to_the_pinned_address(sqlite_session, tsa):
+    cid = company()
+    write(sqlite_session, cid)
+    configure(sqlite_session, cid, tsa, webhook=False)
+    (anchor,) = anchoring.take(sqlite_session, cid, "cadence")
+    sqlite_session.commit()
+    sent = []
+    answer = fake_tsa_request(tsa)
+
+    async def request(target, body, timeout):
+        sent.append(target)
+        return await answer(target, body, timeout)
+
+    asyncio.run(
+        anchoring.deliver_tsa(sqlite_session, {"anchor_id": anchor.id}, request=request)
+    )
+    (target,) = sent
+    assert "93.184.215.14" in target.connect_url
+    assert target.headers() == {"Host": "tsa.example.com"}

@@ -542,7 +542,10 @@ def test_the_daemon_image_copies_every_module():
     )
     modules = {p.name for p in (REPO / "vscode-daemon").glob("*.py")}
     assert modules <= copied
-    assert "nkeys==" in dockerfile
+    # nkeys comes from the hash-pinned lock (test_daemon_lock.py).
+    assert "--require-hashes -r /app/requirements.txt" in dockerfile
+    lock = (REPO / "vscode-daemon" / "requirements.txt").read_text()
+    assert re.search(r"^nkeys==", lock, re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------

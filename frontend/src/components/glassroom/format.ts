@@ -1,5 +1,6 @@
 import i18n from '../../i18n'
 import type { BacklogItem } from '../../services/api'
+import type { Translate } from '../../i18n/translate'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ export function extractBlockedReason(comments: BacklogItem['comments'] | undefin
   return undefined
 }
 
-export function phaseLabel(t: (key: string, opts?: Record<string, unknown>) => string, phase?: string): string {
+export function phaseLabel(t: Translate, phase?: string): string {
   const labels: Record<string, string> = {
     queued: 'Queued',
     claimed: 'Claimed',
@@ -119,7 +120,7 @@ export function phaseLabel(t: (key: string, opts?: Record<string, unknown>) => s
   return t(`glassroom.phaseLabels.${key}`, { defaultValue: labels[key] ?? phase ?? 'Unknown' })
 }
 
-export function getEventTypes(t: (key: string, opts?: Record<string, unknown>) => string) {
+export function getEventTypes(t: Translate) {
   return [
     { value: '', label: t('glassroom.eventTypes.all', { defaultValue: 'All types' }) },
     { value: 'message', label: t('glassroom.eventTypes.message', { defaultValue: 'Message' }) },
