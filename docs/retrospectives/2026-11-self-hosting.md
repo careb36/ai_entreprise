@@ -168,6 +168,12 @@ forge after `integration/publish`. A local snapshot has no remote, so the
 person's reading of the integration left no record beyond the merge (or its
 refusal).
 
+*Done* (follow-up 7): the integration is now reviewed as a run is, with
+line comments anchored to the diff the daemon reads and a review recorded and
+audited with its actor, published or not; a company may require an approving
+review before the local merge (`services/release/integration_review.py`,
+[release](../contexts/release.md#a-persons-review-of-the-integration)).
+
 ### F8. Smaller frictions
 
 - `init_company` with `start_now: false` still plans a foundation sprint
@@ -237,9 +243,18 @@ refusal).
 6. **Quote the failing tests in a "tests failed" comment.**
    *Problem:* F6. *Proposal:* the comment and the block reason lead with
    `failing_tests` and the per-criterion results, then the output's tail.
-7. **A person's review of a sprint's integration.**
+7. **A person's review of a sprint's integration.** *Done.*
    *Problem:* F7. *Proposal:* reviews and line comments on the integration as
    on a run, recorded and audited, whether or not it is published to a forge.
+   *Built:* `services/release/integration_review.py`, `routers/integration_reviews.py`
+   and the daemon's read-only `workspace.git.diff` (`vscode-daemon/git_diff.py`):
+   comments anchored to the daemon's diff with the file's hash, reviews with
+   the commit and the diff's hash, audited with the account; an Owner's
+   setting, off by default, makes the local merge wait for an approval of the
+   integration's commit, and the sprint's starter does not give it
+   (segregation of duties); `self_host.py --merge` records an approving
+   review first. *Measure:* the e2e review step's report carries
+   `integration_review` beside `merged`.
 8. **No foundation sprint for an existing repository.**
    *Problem:* F8. *Proposal:* `init_company` on a folder the daemon observes to
    be a repository with code plans no foundation sprint unless asked.

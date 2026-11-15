@@ -66,6 +66,7 @@ from models.event import TaskEvent
 from models.github import GitHubRepoBinding
 from models.intake import IntakeItem
 from models.integration import SprintIntegration
+from models.integration_review import IntegrationReview, IntegrationReviewComment
 from models.manager import ManagerDecision, ManagerPolicy
 from models.mcp import McpServer
 from models.procedure import Procedure
@@ -251,6 +252,8 @@ SQLModel.metadata.create_all(
         TeamMember.__table__,
         SodPolicy.__table__,
         AccessReview.__table__,
+        IntegrationReview.__table__,
+        IntegrationReviewComment.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,
         WikiLink.__table__,
