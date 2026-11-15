@@ -1,0 +1,73 @@
+{
+  "$comment": "Issue #535 (saved views of a sprint's tasks, with filters on verdict, risk and producer) written as a La Fabrique specification, in the PO's shape: requirements with criteria in Given/When/Then form, read as EARS event-driven requirements (WHEN <trigger> THE SYSTEM SHALL <response>), as Kiro's requirements.md does; design only, nothing taken from Kiro's code. Only the narrow core is specified: the filter, its agreement with the board and the views' access. The list layout and custom columns (#437) are left to a later specification. Post it with POST /v1/specifications, adding the company_id (scripts/self_host/self_host.py does); the ids are assigned by spec_check.normalize. This file specifies the issue; it does not implement it.",
+  "title": "Saved views of a sprint's tasks, filtered on the evidence",
+  "summary": "A Manager asks questions about the evidence (every refuted delivery this month, the tasks waiting for a person by producer, the tasks covering REQ-3) and the kanban board cannot answer them. A filter is a JSON tree of conditions over an allowlist of fields, evaluated on the server from the task projections; a saved view keeps a filter with its layout, for its author or for the company. From issue #535; the design follows Plane's IssueView (AGPL-3.0-only, design only, no code taken).",
+  "requirements": [
+    {
+      "title": "Filter expressions over an allowlist of fields",
+      "description": "A filter is a tree of conditions (field, operator, value) under AND groups. The fields come from a server-side allowlist: status, verdict, risk tier, producer, assignee role, rework count, waits for a person, covers REQ, sprint. Any other field is refused, never ignored.",
+      "criteria": [
+        {
+          "given": "a filter with one condition on a field outside the allowlist, such as title",
+          "when": "GET /v1/tasks?filter= is called with it",
+          "then": "the response is 422 and names the field, and no task is evaluated"
+        },
+        {
+          "given": "a sprint with one blocked task waiting for a person, one blocked task that is not, and one done task",
+          "when": "the filter is an AND group of status = blocked and waits_for_person = true",
+          "then": "only the first task is returned"
+        }
+      ]
+    },
+    {
+      "title": "The filtered list agrees with the board",
+      "description": "The filter is evaluated from the same projections the board reads (TaskRecord), so the board and a view never disagree about the same tasks.",
+      "criteria": [
+        {
+          "given": "a sprint whose board lists three tasks as done",
+          "when": "GET /v1/tasks is called with the filter status = done and the sprint's id",
+          "then": "it returns exactly those three tasks, the count the board shows"
+        }
+      ]
+    },
+    {
+      "title": "Saved views, private or for the company",
+      "description": "A SavedView is company-scoped and keeps the filters, group_by, order_by, layout (board or list), visible columns, access (private or company) and locked. Each person's display preferences are kept apart from the view.",
+      "criteria": [
+        {
+          "given": "a private view saved by one member",
+          "when": "another member of the company lists the views",
+          "then": "the private view is not listed"
+        },
+        {
+          "given": "a locked company view",
+          "when": "a Viewer tries to change its filters",
+          "then": "the response is 403 and the view is unchanged"
+        }
+      ]
+    }
+  ],
+  "quality": [
+    {
+      "attribute": "performance",
+      "target": "a filter over 5,000 tasks answers in under 300 ms at the 95th percentile, within the page budget of docs/ux/performance_usability_benchmark.md"
+    },
+    {
+      "attribute": "security",
+      "target": "0 conditions evaluated on a field outside the allowlist; a view's access is checked on every read, by the company role"
+    },
+    {
+      "attribute": "reliability",
+      "target": "a saved view whose filter names a field no longer in the allowlist is reported invalid when read: 0 partial results"
+    },
+    {
+      "attribute": "accessibility",
+      "target": "the filter controls meet WCAG 2.2 AA: each has a label and is reachable by keyboard, with 0 serious or critical axe findings"
+    }
+  ],
+  "constraints": [
+    "Plane is AGPL-3.0-only: its design may be studied, no code is taken",
+    "The filter is evaluated from the task projections; the only new table is the saved view",
+    "The frontend follows the layer rule of issue #519"
+  ]
+}

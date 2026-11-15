@@ -166,7 +166,12 @@ the LangGraph graph is only an optional kickoff conversation.
    (`sprint_notes.record_from_delivery`), each a `board_note` event with its
    author; a person adds one or marks one wrong on the Board notes tab. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
    `kind`) feeds the sprint's Conversation tab and the task page.
-8. When a sprint closes, procedures are measured and proposed
+8. When a sprint closes, each task's observed effort is read from its own
+   records (tokens the proxy reported, claimed to done, rework, review
+   failures, files the daemon wrote) and stored as an `effort_observed` event,
+   the side the difficulty estimate is scored against
+   (`services/models/effort.py`, `services/models/calibration.py`, issue
+   #534; [models](contexts/models.md)). Then procedures are measured and proposed
    (`services/learning/procedures.py`):
    - Each active procedure with two completed sprints since its adoption is
      kept, or reverted if rework per task or the share of blocked tasks got

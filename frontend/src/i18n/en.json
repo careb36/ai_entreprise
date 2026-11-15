@@ -2234,6 +2234,58 @@
       "costUnpriced_other": "(+{{count}} tasks unpriced)"
     }
   },
+  "calibration": {
+    "title": "Predicted and observed effort",
+    "hint": "Closed sprints: the difficulty estimated before each task ran, beside the effort the backend observed in its records at sprint close.",
+    "spearman": "Rank agreement (tokens)",
+    "spearmanShort": "Rank agreement",
+    "offByTwo": "Two bands off",
+    "offByTwoShort": "Two bands off",
+    "lowReworked": "Low tasks with >1 rework",
+    "tokensUnknown": "Tasks with unknown tokens",
+    "splitLabel": "Split the calibration by",
+    "by": {
+      "band": "By predicted band",
+      "role": "By role",
+      "producer": "By producer",
+      "model": "By served model",
+      "sprint": "By sprint"
+    },
+    "caption": {
+      "band": "Calibration by predicted band",
+      "role": "Calibration by role",
+      "producer": "Calibration by producer",
+      "model": "Calibration by served model",
+      "sprint": "Calibration by sprint"
+    },
+    "column": {
+      "band": "Predicted band",
+      "role": "Role",
+      "producer": "Producer",
+      "model": "Served model",
+      "sprint": "Sprint"
+    },
+    "tasks": "Tasks",
+    "overOneRework": ">1 rework",
+    "tokens": "Tokens (median, quartiles)",
+    "spreadValue": "{{median}} ({{q1}}–{{q3}})",
+    "plusUnknown_one": "(+{{count}} unknown)",
+    "plusUnknown_other": "(+{{count}} unknown)",
+    "unknown": "unknown",
+    "none": "none",
+    "sprintName": "Sprint #{{id}}",
+    "signalsLabel": "What the numbers suggest",
+    "signal": {
+      "low_band_reworked": "{{value}} of the low tasks needed more than one rework: the low band may be too wide.",
+      "high_band_not_costlier": "High tasks took no more tokens than low ones (median {{value}}): the high band may be too wide.",
+      "no_rank_agreement": "The predicted score does not rank the observed tokens (correlation {{value}})."
+    },
+    "informationOnly": "Information only: the routing policy is never changed from these numbers.",
+    "unknownNote_one": "{{count}} task without a known token count (no turn, or a turn the provider did not report), left out of the tokens.",
+    "unknownNote_other": "{{count}} tasks without a known token count (no turn, or a turn the provider did not report), left out of the tokens.",
+    "recomputed_one": "{{count}} task from before the estimate was stored: its prediction recomputed from its plan.",
+    "recomputed_other": "{{count}} tasks from before the estimate was stored: their prediction recomputed from their plan."
+  },
   "consoleProducers": {
     "title": "Console producers",
     "subtitle": "A terminal coding agent can produce a role's tasks instead of the model. The workspace daemon runs it headless in the task's worktree, with the company's sandbox; the delivery is what the daemon saw it change, never what it says.",
