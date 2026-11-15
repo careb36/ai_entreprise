@@ -30,6 +30,7 @@ import GitHubIntegration from './pages/GitHubIntegration'
 import HelpDesk from './pages/HelpDesk'
 import Lineage from './pages/Lineage'
 import Procedures from './pages/Procedures'
+import Documentation from './pages/Documentation'
 import Models from './pages/Models'
 import Specifications from './pages/Specifications'
 import SpecificationDetail from './pages/SpecificationDetail'
@@ -335,6 +336,7 @@ function NavBar() {
                   <Link role="menuitem" to="/company/models" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.models', { defaultValue: 'Models' })}</Link>
                   <Link role="menuitem" to="/company/procedures" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.procedures', { defaultValue: 'Procedures' })}</Link>
                   <Link role="menuitem" to="/company/specifications" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.specifications', { defaultValue: 'Specifications' })}</Link>
+                  <Link role="menuitem" to="/company/documentation" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.documentation', { defaultValue: 'Documentation' })}</Link>
                   {role === 'Owner' && <Link role="menuitem" to="/company/members" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.members', { defaultValue: 'Members' })}</Link>}
                   {role === 'Owner' && <Link role="menuitem" to="/company/sso" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.sso', { defaultValue: 'Single sign-on' })}</Link>}
                   <Link role="menuitem" to="/company/chat" className="block rounded-lg px-3 py-2 text-sm hover:bg-surface-800">{t('nav.chatApprovals')}</Link>
@@ -453,6 +455,7 @@ function AppContent() {
               <Route path="/company/specifications/:id" element={<SpecificationDetail />} />
               <Route path="/company/specifications/:specId/architecture/new" element={<ArchitectureDetail />} />
               <Route path="/company/specifications/:specId/architectures/:id" element={<ArchitectureDetail />} />
+              <Route path="/company/documentation" element={<Documentation />} />
               <Route path="/company/github" element={<GitHubIntegration />} />
               <Route path="/support" element={<HelpDesk />} />
               <Route path="/agents" element={<AgentSettings />} />

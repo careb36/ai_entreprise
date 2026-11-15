@@ -28,7 +28,7 @@ import { TeamStep } from './companyNew/TeamStep'
 import { ReviewStep } from './companyNew/ReviewStep'
 
 export default function CompanyNew() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const steps = STEPS.map(step => t(`companyNew.steps.${step}`, { defaultValue: step }))
   const navigate = useNavigate()
   const setCompany = useAppStore(state => state.setCompany)
@@ -134,6 +134,8 @@ export default function CompanyNew() {
       project_path: projectPath.trim() || undefined,
       detected_stack: discoveryResult || undefined,
       ...gitChoiceFor(inspected, gitChoice),
+      // The documentation packs follow the creator's interface language; editable later.
+      doc_language: (i18n.language ?? '').startsWith('es') ? 'es' as const : 'en' as const,
     }
 
     initCompanyMutation.mutate(payload, {
