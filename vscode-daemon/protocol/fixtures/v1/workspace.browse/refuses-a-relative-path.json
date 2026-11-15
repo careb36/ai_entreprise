@@ -1,0 +1,13 @@
+{
+  "description": "A path that is not absolute on the daemon's machine is a refusal with status 400.",
+  "subject": "workspace.browse",
+  "request": {
+    "path": "projects/app"
+  },
+  "reply": {
+    "error": {
+      "status": 400,
+      "message": "Not an absolute path on this machine: projects/app"
+    }
+  }
+}

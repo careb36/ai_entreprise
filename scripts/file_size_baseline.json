@@ -1,5 +1,4 @@
 {
   "llm-proxy/app.py": 658,
-  "scripts/verify_infra.py": 722,
-  "vscode-daemon/daemon.py": 648
+  "scripts/verify_infra.py": 722
 }

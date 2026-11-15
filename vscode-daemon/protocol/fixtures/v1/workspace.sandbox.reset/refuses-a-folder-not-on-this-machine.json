@@ -1,0 +1,13 @@
+{
+  "description": "A reset for a folder that is not on the daemon's machine is a refusal with status 400.",
+  "subject": "workspace.sandbox.reset",
+  "request": {
+    "workspace_root": "$WORKSPACE/not-here"
+  },
+  "reply": {
+    "error": {
+      "status": 400,
+      "message": "workspace_root must be a folder on the daemon's machine"
+    }
+  }
+}

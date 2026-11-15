@@ -181,7 +181,7 @@ FAKE_LLM_PORT=$LLM_PORT FAKE_LLM_PROMPTS=$PROMPTS FAKE_LLM_VIOLATIONS=$VIOLATION
   FAKE_LLM_CONNECTIONS=$CONNECTIONS FAKE_LLM_INTERNAL_TOKEN=$INTERNAL_TOKEN "$PY" "$REPO/scripts/e2e/fake_llm.py" > "$WORK/llm.log" 2>&1 & LPID=$!
 mkdir -p "$WORK/no-browsers"
 env $DAEMON_NATS_ENV PATH="$WORK/bin:$PATH" CONSOLE_ASSISTANT_COMMANDS=e2e-copilot PLAYWRIGHT_BROWSERS_PATH="$WORK/no-browsers" \
-  NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
+  NATS_URL=$NATS_URL NATS_NAMESPACE=$NATS_NAMESPACE WORKSPACE_ROOT="$WORK/project" FABRIQUE_SNAPSHOT_STATE="$WORK/snapshots" FABRIQUE_HEARTBEAT_SECONDS=2 "$PY" "$REPO/vscode-daemon/daemon.py" > "$WORK/daemon.log" 2>&1 & DPID=$!
 cleanup() { kill ${BPID:-} $DPID $LPID ${NPID:-} 2>/dev/null; wait 2>/dev/null; }
 trap cleanup EXIT
 # The backend asks the daemon once, at startup, which assistants it can run.
@@ -234,6 +234,10 @@ wait_value() {  # wait_value <seconds> <expected> <command...>: true once the co
   while (( SECONDS < deadline )); do [ "$("$@")" = "$expected" ] && return 0; sleep 2; done
   [ "$("$@")" = "$expected" ]
 }
+# The daemon's protocol and heartbeat (vscode-daemon/protocol/PROTOCOL.md):
+# the backend observes a beat on its own clock and speaks the daemon's protocol.
+daemon_liveness() { api "$API/v1/workspace/status" | json "(d['liveness']['source'], d['liveness']['state'], d['protocol']['state'], d['state'])"; }
+check "the backend observed the daemon's heartbeat and speaks its protocol" wait_value 20 "('heartbeat', 'online', 'compatible', 'connected')" daemon_liveness
 # A sprint reads "completed" moments before the close writes the rest (the
 # retrospective, the procedures' outcomes and proposals), so those checks wait.
 messages_of_kind() { api "$API/v1/messages?company_id=$CID&kind=$1" | json "len(d['messages'])"; }

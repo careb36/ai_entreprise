@@ -1,0 +1,14 @@
+{
+  "description": "A command run on the host: its output and exit code as the daemon observed them.",
+  "subject": "workspace.execute",
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "command": "echo hello"
+  },
+  "reply": {
+    "success": true,
+    "stdout": "hello\n",
+    "stderr": "",
+    "exit_code": 0
+  }
+}

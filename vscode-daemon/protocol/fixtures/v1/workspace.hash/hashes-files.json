@@ -1,0 +1,37 @@
+{
+  "description": "The sha256 of files as they are on disk; a missing file and a path outside are said so.",
+  "subject": "workspace.hash",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "paths": [
+      "src/greeting.py",
+      "src/missing.py",
+      "../outside.txt"
+    ]
+  },
+  "reply": {
+    "files": [
+      {
+        "path": "src/greeting.py",
+        "status": "present",
+        "bytes": 66,
+        "sha256": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2"
+      },
+      {
+        "path": "src/missing.py",
+        "status": "missing"
+      },
+      {
+        "path": "../outside.txt",
+        "status": "rejected"
+      }
+    ]
+  }
+}

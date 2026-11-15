@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from models.company import Company, ProjectDiscovery
 from services.loop.worker import deliver as worker_deliver
-from services.workspace import workspace_daemon
+from services.workspace import daemon_liveness, workspace_daemon
 from sqlmodel import select
 
 _DAEMON_PATH = Path(__file__).resolve().parents[2] / "vscode-daemon" / "daemon.py"
@@ -79,7 +79,10 @@ def test_browse_missing_or_relative_folder_is_an_error(daemon, tmp_path):
 
 
 def test_windows_drives_are_offered_as_roots(daemon, monkeypatch):
-    monkeypatch.setattr(daemon, "IS_WINDOWS", True)
+    # The folder picker lives in host_folders.py; daemon.py re-exports it.
+    import host_folders
+
+    monkeypatch.setattr(host_folders, "IS_WINDOWS", True)
     monkeypatch.setattr(
         daemon.os.path, "isdir", lambda p: p in {"C:\\", "D:\\"}, raising=True
     )
@@ -303,6 +306,7 @@ def _with_nats(test_client, nats):
 
 
 def test_status_reports_the_daemon_machine(test_client, daemon):
+    daemon_liveness.reset()  # no heartbeat observed: liveness falls back to the request
     connected = _with_nats(test_client, _DaemonNATS(daemon)).get("/v1/workspace/status")
     absent = _with_nats(test_client, _NoDaemonNATS()).get("/v1/workspace/status")
 
@@ -312,7 +316,16 @@ def test_status_reports_the_daemon_machine(test_client, daemon):
     assert connected.json()["state"] == "connected"
     # The daemon's dependency cache: allowed, and the projects quarantined.
     assert set(connected.json()["sandbox_cache"]) == {"enabled", "quarantined"}
-    assert absent.json() == {
+    # This fake daemon reports no protocol version: an older daemon, still served.
+    assert connected.json()["protocol"]["state"] == "unknown"
+    assert connected.json()["protocol"]["reason"] == (
+        "unknown protocol version (older daemon)"
+    )
+    absent_body = absent.json()
+    # The protocol, heartbeat and liveness fields are added beside the old ones
+    # (tests/test_daemon_protocol.py); the old ones keep their values.
+    added = ("protocol", "heartbeat", "liveness", "reported_by_daemon")
+    assert {k: v for k, v in absent_body.items() if k not in added} == {
         "connected": False,
         "state": "absent",
         "reason": "no daemon is listening",
@@ -320,6 +333,9 @@ def test_status_reports_the_daemon_machine(test_client, daemon):
         "sandbox_cache": None,
         "jetstream": False,
     }
+    assert absent_body["reported_by_daemon"] is None
+    assert absent_body["liveness"] == {"state": "offline", "source": "request"}
+    assert absent_body["heartbeat"]["state"] == "not_observed"
 
 
 def test_status_says_unknown_when_it_cannot_tell(test_client):

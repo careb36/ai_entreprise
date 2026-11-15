@@ -1,0 +1,23 @@
+{
+  "description": "The first heartbeat after the daemon starts: sequence 1, its id and protocol version. The daemon publishes it; nobody answers.",
+  "subject": "workspace.heartbeat",
+  "reply": {
+    "daemon_id": "0123456789abcdef",
+    "sequence": 1,
+    "protocol_version": 1,
+    "protocol_min": 1,
+    "version": "2026.10",
+    "host": {
+      "hostname": "devbox",
+      "platform": "linux"
+    },
+    "interval_seconds": 20.0,
+    "sent_at": "2026-11-14T12:00:00+00:00"
+  },
+  "volatile": [
+    "/daemon_id",
+    "/host/hostname",
+    "/host/platform",
+    "/sent_at"
+  ]
+}

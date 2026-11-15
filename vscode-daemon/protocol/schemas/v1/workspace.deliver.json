@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.deliver",
+  "title": "workspace.deliver",
+  "description": "JetStream (FABRIQUE_DELIVERIES, namespaced by NATS_NAMESPACE): a delivery queued while the daemon was offline, consumed by the daemon (daemon.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.deliver",
+  "x-kind": "stream",
+  "$defs": {
+    "message": {
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "workspace_root": {
+          "type": "string"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        "git": {
+          "type": "object"
+        },
+        "company_id": {},
+        "sprint_id": {},
+        "item_id": {}
+      },
+      "required": [
+        "job_id",
+        "workspace_root",
+        "files"
+      ]
+    }
+  }
+}

@@ -433,6 +433,25 @@ describe('project folder on the user\'s computer', () => {
     expect(screen.getByText('./scripts/start-daemon.sh')).toBeInTheDocument()
   })
 
+  it('names the protocol problem when the daemon answers but is incompatible, without the start instructions', () => {
+    daemon.status = {
+      data: {
+        connected: false,
+        state: 'incompatible',
+        reason: 'the workspace daemon speaks protocol 2; this backend supports 1: update the backend',
+        host: { hostname: 'ana-mbp', platform: 'darwin', home: '/Users/ana', sep: '/' },
+        jetstream: true,
+      },
+      isPending: false,
+      error: null,
+    }
+    renderWizard()
+    expect(
+      screen.getByText(/The workspace daemon on ana-mbp answers, but cannot be used: the workspace daemon speaks protocol 2/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('./scripts/start-daemon.sh')).not.toBeInTheDocument()
+  })
+
   it('inspects the folder chosen in the picker and shows the canonical path, provider and branch', async () => {
     const browse = vi.spyOn(api, 'browseWorkspace').mockResolvedValue(listing)
     const inspect = vi.spyOn(api, 'inspectWorkspace').mockResolvedValue(githubProject)

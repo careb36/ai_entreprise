@@ -1,0 +1,50 @@
+{
+  "description": "A named function's parameters, a name that is not defined, and the file's sha256.",
+  "subject": "workspace.signatures",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "wanted": [
+      {
+        "path": "src/greeting.py",
+        "names": [
+          "greet",
+          "farewell"
+        ]
+      }
+    ]
+  },
+  "reply": {
+    "files": [
+      {
+        "path": "src/greeting.py",
+        "sha256": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2",
+        "status": "read",
+        "names": {
+          "farewell": {
+            "status": "missing"
+          },
+          "greet": {
+            "status": "found",
+            "kind": "function",
+            "line": 1,
+            "positional_only": [],
+            "positional": [
+              "name"
+            ],
+            "positional_defaults": 0,
+            "varargs": false,
+            "keyword_only": [],
+            "varkw": false
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.search",
+  "title": "workspace.search",
+  "description": "Lines matching a regular expression, bounded, with the count when there are more (workspace_read.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.search",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "workspace_root",
+        "pattern"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string"
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_scanned": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "match_count": {
+          "type": "integer"
+        },
+        "match_count_capped": {
+          "type": "boolean"
+        },
+        "files_matched": {
+          "type": "integer"
+        },
+        "files_truncated": {
+          "type": "boolean"
+        },
+        "per_file": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "pattern",
+        "matches",
+        "files_scanned",
+        "truncated",
+        "match_count"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

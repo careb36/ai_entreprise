@@ -9,9 +9,8 @@ that machine's files.  The backend reaches it over NATS:
                           with a `git` spec, a commit on the task's branch from the base as its remote has it (git_workspace.py, git_base.py)
 - workspace.execute:      run a shell command in the project and return its output
 - workspace.capabilities: the console assistant CLIs found on PATH
-- workspace.status:       which machine this is (hostname, platform, home)
-- workspace.browse:       list the sub-folders of a folder, for the folder picker
-- workspace.inspect:      validate a project folder: git remote/branch, optional file snapshot
+- workspace.status:       which machine this is, the protocol version it speaks; workspace.heartbeat: published every <=25 s (daemon_status.py)
+- workspace.browse / inspect: the folder picker, and a project folder's git remote/branch and file snapshot (host_folders.py)
 - workspace.hash:         sha256 of named files as they are on disk (file_hash.py); workspace.undo: undo a delivery (delivery_snapshot.py)
 - workspace.list / read / search / find / map, workspace.edit / edit.finish: the Developer's tools (workspace_read.py, repo_map.py, workspace_edit.py); workspace.signatures: named Python definitions' signatures for the Verifier (signatures.py); workspace.related: the files around a task's seeds (code_graph.py); workspace.console.prepare / collect: a console producer's worktree, then what it changed (console_run.py)
 - workspace.git.publish / merge / base_status: push a branch and open its request (gh, glab), merge it locally (local_merge.py), or the base against its remote (git_base.py)
@@ -20,6 +19,7 @@ that machine's files.  The backend reaches it over NATS:
 - workspace.git.integrate: a sprint's task branches merged in a worktree (sprint_integration.py)
 - workspace.deliver:      (JetStream) files queued while offline; result on workspace.delivered
 
+The wire, versioned, with a schema per subject: protocol/PROTOCOL.md.
 Start it with scripts/start-daemon.sh (macOS/Linux) or .ps1 (Windows); it reconnects to NATS on its own.
 """
 
@@ -28,40 +28,38 @@ import hashlib
 import json
 import logging
 import os
-import platform
 import shutil
-import stat
-import string
-import subprocess
-import sys
+import subprocess  # noqa: F401 - tests patch daemon.subprocess.run
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import app_run
+import daemon_status
 import delivery_journal
+from daemon_status import DAEMON_VERSION, host_info  # noqa: F401 - re-exported for callers of daemon.py
 from delivery import deliver as _deliver
 import file_diff
 import file_edits
 import file_hash
 import git_base, git_workspace  # noqa: E401 - one line: this file may only shrink.
 from git_workspace import git_info, remote_web_url  # noqa: F401 - re-exported for callers of daemon.py
+import host_folders
+from host_folders import WorkspaceError, browse, filesystem_roots, inspect_project, project_snapshot  # noqa: F401 - re-exported
 import nats_connect
 import nats_scope
 import local_merge, platform_reviews, sprint_integration  # noqa: E401 - one line: this file may only shrink.
 import shell_exec
 import code_graph, console_run, delivery_snapshot, repo_map, sandbox_cache, signatures, workspace_edit, workspace_read  # noqa: E401 - one line: this file may only shrink.
-from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command
+from shell_exec import COMMAND_TIMEOUT_SECONDS, execute_shell_command  # noqa: F401 - re-exported
 _build_shell_command = shell_exec.build_shell_command  # Old private name; the logic is in shell_exec.
 from nats.errors import TimeoutError as NATSTimeoutError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("fabrique-daemon")
 
-DAEMON_VERSION = "2026.10"
 NATS_URL = os.getenv("NATS_URL", "nats://localhost:4222")
 WORKSPACE_ROOT_DEFAULT = os.getenv("WORKSPACE_ROOT", os.path.expanduser("~/factory-workspaces"))
-IS_WINDOWS = os.name == "nt"
 PROTECTED_ROOT_DOCS = set()
 # Console assistant commands workspace.capabilities reports when the request names none.
 ASSISTANT_COMMANDS_DEFAULT = os.getenv("CONSOLE_ASSISTANT_COMMANDS", "copilot,claude")
@@ -276,205 +274,6 @@ async def handle_capabilities(nc, msg):
         await nc.publish(msg.reply, json.dumps(response).encode())
 
 
-# ---------------------------------------------------------------------------
-# This machine: identity, folder browsing, project inspection
-# ---------------------------------------------------------------------------
-
-
-def host_info() -> Dict[str, Any]:
-    """Which machine answered: the backend shows it next to host paths."""
-    return {
-        "hostname": platform.node() or "unknown",
-        "platform": sys.platform,
-        "home": str(Path.home()),
-        "sep": os.sep,
-    }
-
-
-class WorkspaceError(Exception):
-    """A folder request that cannot be served; ``status`` follows HTTP."""
-
-    def __init__(self, status: int, message: str):
-        super().__init__(message)
-        self.status = status
-        self.message = message
-
-
-# Folders never offered in the picker (dependencies, build output, VCS data).
-BROWSE_SKIP_DIRS = {
-    "node_modules", "__pycache__", "venv", "env", "dist", "build", "coverage",
-    "target", "vendor", "$RECYCLE.BIN", "System Volume Information",
-}
-BROWSE_MAX_ENTRIES = 500
-# Common places people clone repositories, offered as shortcuts when present.
-CLONE_FOLDERS = (
-    "code", "Code", "projects", "Projects", "src", "dev", "Developer", "repos",
-    "git", "GitHub", "workspace", "workspaces", "Documents/GitHub",
-    "Documents/GitLab", "source/repos", "IdeaProjects", "PycharmProjects",
-    "WebstormProjects",
-)
-
-
-def _host_path(path: str) -> Path:
-    """An absolute path on this machine, with ``~`` expanded."""
-    candidate = Path(os.path.expanduser(path.strip()))
-    if not candidate.is_absolute():
-        raise WorkspaceError(400, f"Not an absolute path on this machine: {path}")
-    return candidate
-
-
-def _is_hidden(entry: os.DirEntry) -> bool:
-    if entry.name.startswith("."):
-        return True
-    if IS_WINDOWS:
-        try:
-            attributes = entry.stat().st_file_attributes
-        except OSError:
-            return True
-        return bool(attributes & (stat.FILE_ATTRIBUTE_HIDDEN | stat.FILE_ATTRIBUTE_SYSTEM))
-    return False
-
-
-def filesystem_roots() -> List[Dict[str, str]]:
-    if IS_WINDOWS:
-        drives = [f"{letter}:\\" for letter in string.ascii_uppercase]
-        return [{"name": d, "path": d} for d in drives if os.path.isdir(d)]
-    return [{"name": "/", "path": "/"}]
-
-
-def clone_shortcuts() -> List[Dict[str, str]]:
-    home = Path.home()
-    shortcuts = [{"name": "Home", "path": str(home)}]
-    seen = {str(home).lower() if IS_WINDOWS else str(home)}
-    for relative in CLONE_FOLDERS:
-        folder = home / relative
-        key = str(folder).lower() if IS_WINDOWS else str(folder)
-        if key not in seen and folder.is_dir():
-            seen.add(key)
-            shortcuts.append({"name": relative, "path": str(folder)})
-    return shortcuts
-
-
-def browse(path: Optional[str] = None) -> Dict[str, Any]:
-    """The sub-folders of *path* (default: the home folder) on this machine."""
-    target = _host_path(path).resolve() if path else Path.home()
-    if not target.is_dir():
-        raise WorkspaceError(404, f"Folder not found on {host_info()['hostname']}: {target}")
-    entries = []
-    truncated = False
-    try:
-        with os.scandir(target) as it:
-            for entry in it:
-                if entry.name in BROWSE_SKIP_DIRS or _is_hidden(entry):
-                    continue
-                try:
-                    if not entry.is_dir():
-                        continue
-                except OSError:
-                    continue
-                if len(entries) >= BROWSE_MAX_ENTRIES:
-                    truncated = True
-                    break
-                entries.append({
-                    "name": entry.name,
-                    "path": entry.path,
-                    "is_git": os.path.exists(os.path.join(entry.path, ".git")),
-                })
-    except PermissionError:
-        raise WorkspaceError(403, f"Permission denied: {target}")
-    entries.sort(key=lambda e: e["name"].lower())
-    parent = target.parent
-    return {
-        "host": host_info(),
-        "path": str(target),
-        "parent": str(parent) if parent != target else None,
-        "entries": entries,
-        "shortcuts": clone_shortcuts(),
-        "roots": filesystem_roots(),
-        "truncated": truncated,
-    }
-
-
-# What the backend's stack detection reads.  Paths are listed for every file;
-# contents only for these build/config files.  ``.env`` is never sent.
-SNAPSHOT_SKIP_DIRS = {
-    ".git", ".svn", "node_modules", "__pycache__", ".venv", "venv", "env", "dist",
-    "build", ".next", ".nuxt", "target", ".gradle", ".idea", ".vscode", "coverage",
-    ".pytest_cache", ".mypy_cache", "vendor",
-}
-SNAPSHOT_KEY_FILES = {
-    "package.json", "pyproject.toml", "requirements.txt", "setup.cfg", "pytest.ini",
-    "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "go.mod",
-    "docker-compose.yml", "docker-compose.yaml", ".env.example", "application.yml",
-    "application.properties", "database.yml", "Chart.yaml",
-    "README.md", "README.rst", "README.txt", "README",
-}
-SNAPSHOT_MAX_FILES = 5000
-SNAPSHOT_MAX_DEPTH_FOR_CONTENT = 3
-SNAPSHOT_MAX_FILE_BYTES = 64 * 1024
-SNAPSHOT_MAX_TOTAL_BYTES = 400 * 1024
-
-
-def _wants_content(relative: str, name: str, depth: int) -> bool:
-    if name in SNAPSHOT_KEY_FILES:
-        return depth <= SNAPSHOT_MAX_DEPTH_FOR_CONTENT
-    lowered = relative.lower()
-    return name.endswith((".yaml", ".yml")) and ("k8s" in lowered or "kubernetes" in lowered)
-
-
-def project_snapshot(root: Path) -> Dict[str, Any]:
-    """Relative paths of the project's files plus the text of its config files."""
-    files: List[str] = []
-    contents: Dict[str, str] = {}
-    total = 0
-    truncated = False
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SNAPSHOT_SKIP_DIRS)
-        rel_dir = Path(dirpath).relative_to(root)
-        depth = len(rel_dir.parts)
-        for name in sorted(filenames):
-            relative = (rel_dir / name).as_posix()
-            files.append(relative)
-            if _wants_content(relative, name, depth) and total < SNAPSHOT_MAX_TOTAL_BYTES:
-                try:
-                    with open(os.path.join(dirpath, name), "rb") as fh:
-                        raw = fh.read(SNAPSHOT_MAX_FILE_BYTES)
-                except OSError:
-                    raw = b""
-                text = raw.decode("utf-8", errors="ignore")
-                if name.startswith("README"):
-                    text = text[:2000]
-                contents[relative] = text
-                total += len(text)
-            if len(files) >= SNAPSHOT_MAX_FILES:
-                truncated = True
-                break
-        if truncated:
-            break
-    return {"files": files, "contents": contents, "truncated": truncated}
-
-
-def inspect_project(path: str, with_snapshot: bool = False) -> Dict[str, Any]:
-    """Whether *path* is a folder on this machine, and what repository it holds."""
-    candidate = _host_path(path)
-    try:
-        resolved = candidate.resolve()
-    except OSError:
-        resolved = candidate
-    is_dir = resolved.is_dir()
-    result: Dict[str, Any] = {
-        "host": host_info(),
-        "path": str(resolved),
-        "name": resolved.name or str(resolved),
-        "exists": resolved.exists(),
-        "is_dir": is_dir,
-        "git": git_info(resolved) if is_dir else None,
-    }
-    if with_snapshot and is_dir:
-        result["snapshot"] = project_snapshot(resolved)
-    return result
-
-
 async def _reply(nc, msg, body: Dict[str, Any]) -> None:
     if msg.reply:
         await nc.publish(msg.reply, json.dumps(body).encode())
@@ -488,33 +287,10 @@ def _request_body(msg) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-async def handle_browse(nc, msg):
-    """``workspace.browse`` → the folder listing, or ``{"error": {status, message}}``."""
-    data = _request_body(msg)
-    try:
-        body = await asyncio.to_thread(browse, data.get("path") or None)
-    except WorkspaceError as e:
-        body = {"error": {"status": e.status, "message": e.message}}
-    await _reply(nc, msg, body)
-
-
-async def handle_inspect(nc, msg):
-    """``workspace.inspect`` → folder, git and (when asked) file snapshot."""
-    data = _request_body(msg)
-    path = data.get("path")
-    if not isinstance(path, str) or not path.strip():
-        body = {"error": {"status": 400, "message": "A folder path is required."}}
-    else:
-        try:
-            body = await asyncio.to_thread(inspect_project, path, bool(data.get("snapshot")))
-        except WorkspaceError as e:
-            body = {"error": {"status": e.status, "message": e.message}}
-    await _reply(nc, msg, body)
-
-
 async def handle_status(nc, msg, jetstream=False):
+    """``workspace.status`` → host, version, protocol version and range, daemon id (``daemon_status.py``)."""
     jetstream = jetstream() if callable(jetstream) else jetstream
-    await _reply(nc, msg, {"host": host_info(), "version": DAEMON_VERSION, "jetstream": bool(jetstream), "sandbox_cache": await asyncio.to_thread(sandbox_cache.status)})
+    await _reply(nc, msg, await asyncio.to_thread(daemon_status.status_body, jetstream))
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +378,27 @@ async def connect_with_retry():
     return await nats_connect.connect_with_retry(NATS_URL)
 
 
+def subscriptions(nc, jetstream=lambda: False):
+    """(subject, callback) for every request subject this daemon serves (``protocol/PROTOCOL.md``)."""
+    def bound(handler, *extra):
+        async def callback(msg): await handler(nc, msg, *extra)  # noqa: E704 - one line per handler.
+        return callback
+
+    return [
+        ("workspace.generate", bound(handle_msg)),
+        ("workspace.execute", bound(handle_msg)),
+        ("workspace.capabilities", bound(handle_capabilities)),
+        ("workspace.status", bound(handle_status, jetstream)),
+        ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
+        ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
+        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS)),
+        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (*host_folders.HANDLERS, ("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.base_status", git_base.handle_status))),
+        ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
+        ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
+        ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
+    ]
+
+
 async def main():
     logger.info("Connecting to NATS at %s...", nats_connect.safe_url(NATS_URL))
     nc = await connect_with_retry()
@@ -610,34 +407,17 @@ async def main():
     # The streams are the backend's: the consumer waits until they exist.
     state = {"jetstream": False}
     consumer = asyncio.create_task(consume_queued_deliveries(nc, nc.jetstream(), state))
-
-    def bound(handler, *extra):
-        async def callback(msg): await handler(nc, msg, *extra)  # noqa: E704 - one line per handler.
-        return callback
-
-    for subject, callback in (
-        ("workspace.generate", bound(handle_msg)),
-        ("workspace.execute", bound(handle_msg)),
-        ("workspace.capabilities", bound(handle_capabilities)),
-        ("workspace.status", bound(handle_status, lambda: state["jetstream"])),
-        ("workspace.browse", bound(handle_browse)),
-        ("workspace.inspect", bound(handle_inspect)),
-        ("workspace.hash", bound(file_hash.handle_hash, _reply, _request_body, _resolve_target_path)),
-        ("workspace.undo", bound(delivery_snapshot.handle_undo, _reply, _request_body, _resolve_target_path)),
-        *((subject, bound(handler, _reply, _request_body, _resolve_target_path)) for subject, handler in (*workspace_read.HANDLERS, *workspace_edit.HANDLERS, *repo_map.HANDLERS, *signatures.HANDLERS, *code_graph.HANDLERS, *console_run.HANDLERS, *sandbox_cache.HANDLERS)),
-        *((subject, bound(handler, _reply, _request_body)) for subject, handler in (("workspace.git.publish", git_workspace.handle_publish), ("workspace.git.merge", local_merge.handle_merge_local), ("workspace.git.base_status", git_base.handle_status))),
-        ("workspace.git.reviews", bound(platform_reviews.handle_reviews, _reply, _request_body)),
-        ("workspace.app.check", bound(app_run.handle_app_check, _reply, _request_body)),
-        ("workspace.git.integrate", bound(sprint_integration.handle_integrate, _reply, _request_body)),
-    ):
+    for subject, callback in subscriptions(nc, lambda: state["jetstream"]):
         await nc.subscribe(subject, queue=QUEUE_GROUP, cb=callback)
+    heartbeat = asyncio.create_task(daemon_status.heartbeat_loop(nc))
 
-    logger.info("Daemon ready on %s (%s), home %s.", host["hostname"], host["platform"], host["home"])
+    logger.info("Daemon ready on %s (%s), home %s, protocol %d.", host["hostname"], host["platform"], host["home"], daemon_status.PROTOCOL_VERSION)
     try:
         while True:
             await asyncio.sleep(3600)
     finally:
         consumer.cancel()
+        heartbeat.cancel()
         await nc.drain()
 
 

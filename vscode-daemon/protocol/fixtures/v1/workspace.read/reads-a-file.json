@@ -1,0 +1,28 @@
+{
+  "description": "A file's numbered lines and the sha256 of the whole file.",
+  "subject": "workspace.read",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "path": "src/greeting.py",
+    "start_line": null
+  },
+  "reply": {
+    "path": "src/greeting.py",
+    "sha256": "1e7d666fc9540ff50cd2596cbfb592a08e67527c01d3ea485ca46be24335e6d2",
+    "bytes": 66,
+    "binary": false,
+    "text": "    1| def greet(name):\n    2|     \"\"\"Say hello.\"\"\"\n    3|     return f\"Hello, {name}\"",
+    "lines": 3,
+    "lines_indexed_to_byte": null,
+    "first_line": 1,
+    "last_line": 3,
+    "truncated": false
+  }
+}

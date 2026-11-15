@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.sandbox.reset",
+  "title": "workspace.sandbox.reset",
+  "description": "Remove a project's dependency cache volume (only the daemon's, by name and label) and lift its quarantine (sandbox_cache.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.sandbox.reset",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        }
+      },
+      "required": [
+        "workspace_root"
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "properties": {
+        "project_key": {
+          "type": "string"
+        },
+        "volume": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        },
+        "volume_reset": {
+          "type": "object"
+        },
+        "failed_installs_before": {
+          "type": "integer"
+        },
+        "quarantine_cleared": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "volume_reset"
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "message"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ]
+    },
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/refusal"
+        },
+        {
+          "$ref": "#/$defs/ok"
+        }
+      ]
+    }
+  }
+}

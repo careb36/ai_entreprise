@@ -156,6 +156,32 @@ the task. When the daemon connects it writes them and reports on
 `workspace.delivered`, and the run is verified against the hashes recorded
 at delivery. There is nothing to replay by hand.
 
+**Offline is not incompatible.** `GET /v1/workspace/status` tells them apart
+([`vscode-daemon/protocol/PROTOCOL.md`](../vscode-daemon/protocol/PROTOCOL.md)):
+- `liveness` comes from the daemon's heartbeat (`workspace.heartbeat`, every
+  20 s by default), timed on the backend's clock: `online`, `stale` after
+  `DAEMON_HEARTBEAT_STALE_SECONDS` (60) without one, `offline` after
+  `DAEMON_HEARTBEAT_OFFLINE_SECONDS` (90). `heartbeat` says when the last one
+  was observed and how many beats were missed. `source: request` means no
+  heartbeat was ever observed (a daemon from before protocol 1, or a broker
+  configuration that does not allow the subject: regenerate it with
+  `python3 scripts/nats_config.py`) and the state comes from asking
+  `workspace.status`, as before. Offline: start the daemon, as above.
+- `state: incompatible` means the daemon answers but speaks a protocol
+  version outside the backend's range; `reason` says which side to update
+  (`update the daemon`: restart it from the same checkout as the backend,
+  `./scripts/start-daemon.sh`; `update the backend`: deploy the backend that
+  matches the daemon). Meanwhile requests to it are refused with that reason
+  and a task's delivery is not sent or queued: its evidence says `the
+  workspace daemon is incompatible: <reason>`. Once a compatible daemon
+  answers or beats, work resumes; the refusal lifts at the latest
+  `DAEMON_HEARTBEAT_OFFLINE_SECONDS` after the incompatible one was last heard.
+- `protocol.state: unknown` with `unknown protocol version (older daemon)` is
+  a daemon that reports no version: it is served as before. Update it when
+  convenient to get the heartbeat.
+- Everything the daemon says about itself (version, protocol, host, id) is
+  under `reported_by_daemon`: its claim, not an observation.
+
 **A sprint is stuck.** Check in this order:
 1. Its status. `planned`, `paused` and `cancelled` sprints do not move. A
    planned sprint starts with `POST /v1/sprints/{id}/start`; a paused one

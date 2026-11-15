@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.heartbeat",
+  "title": "workspace.heartbeat",
+  "description": "Published by the daemon every heartbeat_seconds (at most 25); nobody answers it (daemon_status.py).",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.heartbeat",
+  "x-kind": "publish",
+  "$defs": {
+    "message": {
+      "type": "object",
+      "properties": {
+        "daemon_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "protocol_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "protocol_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "version": {
+          "type": "string"
+        },
+        "host": {
+          "type": "object",
+          "properties": {
+            "hostname": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hostname",
+            "platform"
+          ]
+        },
+        "interval_seconds": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "sent_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "daemon_id",
+        "sequence",
+        "protocol_version",
+        "protocol_min",
+        "version",
+        "host",
+        "interval_seconds",
+        "sent_at"
+      ]
+    }
+  }
+}

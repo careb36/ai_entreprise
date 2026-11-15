@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:workspace.console.collect",
+  "title": "workspace.console.collect",
+  "description": "What the CLI changed in the worktree since head, read back with sha256; the worktree put back (console_run.py). A failure is `ok: false` with `error`.",
+  "x-protocol-version": 1,
+  "x-subject": "workspace.console.collect",
+  "x-kind": "request",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "properties": {
+        "workspace_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "An absolute path on the daemon's machine."
+        },
+        "head": {
+          "type": "string"
+        },
+        "guard": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "workspace_root",
+        "head"
+      ]
+    },
+    "reply": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "worktree": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string"
+        },
+        "head_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "refused": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restored": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok"
+      ]
+    }
+  }
+}

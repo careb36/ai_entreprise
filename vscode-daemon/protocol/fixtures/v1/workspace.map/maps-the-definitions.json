@@ -1,0 +1,28 @@
+{
+  "description": "The repository map: the definitions ranked by use.",
+  "subject": "workspace.map",
+  "workspace": {
+    "files": {
+      "README.md": "# App\n",
+      "src/greeting.py": "def greet(name):\n    \"\"\"Say hello.\"\"\"\n    return f\"Hello, {name}\"\n",
+      "src/main.py": "from greeting import greet\n\n\ndef main():\n    print(greet(\"World\"))\n"
+    }
+  },
+  "request": {
+    "workspace_root": "$WORKSPACE",
+    "max_chars": 2000
+  },
+  "reply": {
+    "map": "src/greeting.py:\n    1| def greet(name)  [used in 1 file]\nsrc/main.py:\n    4| def main()",
+    "fingerprint": "9a5201f105f47c8ffa91dfcefdf106b0710f52f5152ee1d9131e393f7595978b",
+    "files_parsed": 2,
+    "files_unparsed": [],
+    "files_without_refs": [],
+    "definitions": 2,
+    "shown": 2,
+    "truncated": false,
+    "partial": false,
+    "max_chars": 2000,
+    "cached": false
+  }
+}

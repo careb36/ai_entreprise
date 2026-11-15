@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabrique:daemon-protocol:v1:glassroom.*",
+  "title": "glassroom.*",
+  "description": "A status line for a sprint's Glassroom stream, glassroom.<sprint_id> (daemon.py).",
+  "x-protocol-version": 1,
+  "x-subject": "glassroom.*",
+  "x-kind": "publish",
+  "$defs": {
+    "message": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "const": "System"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "type": {
+          "const": "status"
+        }
+      },
+      "required": [
+        "agent",
+        "timestamp",
+        "content",
+        "type"
+      ]
+    }
+  }
+}
