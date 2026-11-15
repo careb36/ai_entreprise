@@ -274,27 +274,38 @@ async def guard_test_files(
     ``acceptance["tampered"]`` and ``acceptance["restored"]``, so
     ``criteria_tests.check_untouched`` refutes the delivery and the criteria are
     judged against QA's tests. A daemon without the operation leaves things
-    as they were."""
+    as they were.
+
+    Under the Git workflow, ``acceptance["other_test_hashes"]`` holds the
+    sibling tasks' test files (``acceptance.evidence_for``): one is guarded
+    only when it is on the task branch's disk (its base holds it); one the
+    daemon does not report ``present`` is listed in ``acceptance["not_on_branch"]``,
+    never restored, never an edit and never run for this task."""
     acceptance = evidence.get("acceptance") or {}
     hashes = acceptance.get("test_hashes") or {}
-    if not hashes or acceptance.get("kind") == ACCEPTANCE_KIND:
+    others = acceptance.get("other_test_hashes") or {}
+    if (not hashes and not others) or acceptance.get("kind") == ACCEPTANCE_KIND:
         return
     root = evidence.get("workspace_root")
     try:
         reply = await workspace_daemon.daemon_request(
             nats_client,
             "workspace.hash",
-            {"workspace_root": root, "paths": list(hashes)},
+            {"workspace_root": root, "paths": [*hashes, *others]},
             timeout,
         )
     except Exception as exc:  # noqa: BLE001 - An older daemon has no workspace.hash; the delivery is judged as before.
         logger.warning("Acceptance test files not checked on disk: %s", exc)
         return
-    on_disk = {
-        f.get("path"): f.get("sha256")
-        for f in reply.get("files") or []
-        if isinstance(f, dict)
-    }
+    files_seen = [f for f in reply.get("files") or [] if isinstance(f, dict)]
+    on_disk = {f.get("path"): f.get("sha256") for f in files_seen}
+    if others:
+        present = {f.get("path") for f in files_seen if f.get("status") == "present"}
+        held = {p: h for p, h in others.items() if p in present}
+        acceptance["not_on_branch"] = [p for p in others if p not in present]
+        hashes = acceptance["test_hashes"] = {**hashes, **held}
+        guarded = acceptance.setdefault("test_files", [])
+        guarded += [p for p in held if p not in guarded]
     tampered = [path for path, sha in hashes.items() if on_disk.get(path) != sha]
     if not tampered:
         return

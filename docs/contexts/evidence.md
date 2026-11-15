@@ -25,6 +25,10 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 **`backend/app/services/evidence/touched.py`** (#438) — A read of recorded observations, never a verdict: `runs_touching(session, company_id, paths, limit=5)` gives the latest task-worker runs of a company (`external_ref` `task-<id>`) whose latest daemon report (`workspace_writes`, the per-file report the daemon read back from disk) says it wrote any of the paths, newest first, as `{run_id, backlog_item_id, title, verdict, written, finished_at}`, with the verdict the Verifier last recorded for the run and only the files whose status was `written`; `written_by_task(session, company_id, item_id)` gives the files a task's own earlier runs wrote (at most 50). Both scan the company's latest `SCAN_RUNS` (200) runs and read the evidence in Python, not with JSON operators in SQL, so the same code runs on SQLite and Postgres. The related code in the Developer's prompt reads them ([tools](tools.md)).
 
+### Acceptance tests a task branch holds
+
+**`backend/app/services/evidence/acceptance.py`** (`evidence_for`, `branch_lineage`; #329 retrospective) — With the daemon's `git` answer for a delivery on the task's own branch, what the delivery is judged against is what that branch can hold: `test_files` and `test_hashes` come from the test tasks in the task's lineage (itself and its done dependencies, transitively, the branches `workspace.git_workflow.delivery_spec` merges), `excused` counts as done only the implementation tasks in that lineage, and the sprint's other test files go in `other_test_hashes` for the loop's guard to check on disk (`loop/delivery_checks.guard_test_files`). Without the Git workflow every acceptance test of the sprint is guarded, as before.
+
 ## Described elsewhere
 
 - `touched.verified_writes` (the writes of the latest verified task-worker runs, optionally of some tasks, with the daemon's sha256 and diff and when they were observed): what the project wiki compiles from and lints against, [the project wiki](../design/PROJECT_WIKI.md).

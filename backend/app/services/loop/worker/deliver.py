@@ -306,7 +306,7 @@ async def _on_delivery_result(nats_client: NATSClient, data: dict[str, Any]) -> 
     written, _ = evaluate_workspace_writes(files, evidence)
     if settings.DELIVERY_TESTS_ENABLED and written == "pass":
         evidence["acceptance"] = await asyncio.to_thread(
-            acceptance.evidence_for, engine, item_id
+            acceptance.evidence_for, engine, item_id, evidence.get("git")
         )
         await delivery_checks.guard_test_files(
             nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
@@ -423,7 +423,7 @@ async def _deliver_artifacts(
         written, _ = evaluate_workspace_writes([t["path"] for t in targets], evidence)
         if settings.DELIVERY_TESTS_ENABLED and written == "pass":
             evidence["acceptance"] = await asyncio.to_thread(
-                acceptance.evidence_for, engine, item["id"]
+                acceptance.evidence_for, engine, item["id"], evidence.get("git")
             )
             await delivery_checks.guard_test_files(
                 nats_client, engine, evidence, settings.DELIVERY_TEST_TIMEOUT_SECONDS
