@@ -366,11 +366,13 @@ Copy `.env.example` to `.env` and fill in:
   or container; bwrap and a port already in use are refused, a required
   sandbox is never replaced by the host, the command policy applies), wait
   for its port (`DELIVERY_APP_READY_TIMEOUT_SECONDS`, 60), GET the probe path
-  (below 500 passes), run the profile's e2e command with `APP_URL`
-  (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and reply with the log's
-  tail: the `application_started` and `e2e_run` checks. The backend waits
-  for the reply beyond those bounds for the container's launch (120 s) and
-  teardown; the container is removed by name whatever happens after its
+  (below 500 passes), send it the security probe (headers, cookies, CORS,
+  methods, error bodies, `/.git/HEAD` and `/.env`, at most 40 s; the
+  `security_probe` check, `docs/contexts/evidence.md`), run the profile's e2e
+  command with `APP_URL` (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and
+  reply with the log's tail: the `application_started` and `e2e_run` checks.
+  The backend waits for the reply beyond those bounds for the container's
+  launch (120 s), the security probe (60 s) and teardown; the container is removed by name whatever happens after its
   launch; on the host the application's process group is stopped (on
   Windows the Job Object it was started suspended into, created with
   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, which also holds the children of a
