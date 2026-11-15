@@ -14,6 +14,7 @@ from services.contracts.verdicts import (
 )
 from services.evidence import (
     app_check,
+    command_runs,
     context_read,
     criteria_tests,
     grounding,
@@ -418,6 +419,11 @@ def verify_agent_run(
         sandbox_check = check_sandbox(evidence)
         if sandbox_check:
             checks.append(sandbox_check)
+    # The folders' suites and installs and the every-delivery commands
+    # (``services/evidence/command_runs.py``), each as the daemon replied.
+    required = command_runs.check(evidence)
+    if required:
+        checks.append(required)
     # The dependency install, the application started and probed, and its
     # e2e run (``services/app_check.py``), as the daemon reported them.
     checks.extend(app_check.checks(evidence))

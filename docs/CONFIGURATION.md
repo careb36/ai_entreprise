@@ -376,6 +376,21 @@ Copy `.env.example` to `.env` and fill in:
   override it for the deployment, and the company's own
   (`Company.stack_profile`, `GET`/`PUT /v1/companies/{id}/stack_profile`,
   Viewer / Manager) override both; an empty command turns that step off.
+  **Per folder** (`services/workspace/stack_roots.py`, self-hosting
+  retrospective F5): a repository whose root has neither a stack nor a named
+  test command is searched for sub-folders with their own manifest, two
+  deep; the company's profile may name folders (`"folders": {"backend":
+  {"stack": "python", "install": "poetry install", "test": "poetry run
+  pytest"}}`, whatever the root holds) and commands every delivery runs
+  (`"every_delivery": ["python3 scripts/check_architecture.py", {"command":
+  "make lint", "folder": "backend"}]`, at most 10); the deployment's
+  `DELIVERY_*` settings stay the root's. A delivery runs the suites of the
+  folders it wrote in (the daemon's write report), every folder's for a file
+  outside them when the root has no suite, each as `cd <folder> && <command>`
+  in the same sandbox (an allow-list command policy must list `cd`), then
+  the every-delivery commands; each run is the Verifier's `required_commands`
+  check. A stored profile without `folders` is the root's alone. No setting
+  is added.
   The delivery tests run the resolved profile's test command (a company
   naming only `stack` gets that stack's runner); a detected profile has none
   without a suite (npm's placeholder `test` script, nothing for pytest to

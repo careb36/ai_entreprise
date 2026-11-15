@@ -144,6 +144,15 @@ wrote, not by the backend's suite, the frontend's lint and tests, the
 architecture checks or the file-size ratchet that CI runs. A real-model run
 needs a profile per folder before its verdicts mean anything for La Fabrique.
 
+*Done (follow-up 5):* the stack profile resolves per folder
+(`services/workspace/stack_roots.py`): `backend/`, `frontend/` and
+`llm-proxy/` are found with their own install and test commands, a company
+names or overrides folders and adds commands every delivery runs, a delivery
+runs the suites of the folders the daemon saw it write in, and the Verifier's
+`required_commands` check records and judges each run. The harness's
+`company` step sets La Fabrique's suites per folder and its architecture and
+file-size checks (`scripts/self_host/README.md`).
+
 ### F6. A "tests failed" comment quotes the warnings, not the failures
 
 The comment on the blocked task and its block reason quote the end of the
@@ -220,6 +229,17 @@ review before the local merge (`services/release/integration_review.py`,
    Poetry, `frontend/` npm, `llm-proxy/` Poetry) and a delivery runs the
    suites of the folders it touched; a company may add commands that run on
    every delivery (La Fabrique's architecture checks).
+   *Done:* `Company.stack_profile` takes `folders` and `every_delivery`
+   (no migration: a JSON column, and a profile in the old shape is the
+   root's alone); folders are detected up to two deep when the root has
+   neither a stack nor a test command of its own. The files are the daemon's
+   report of what it wrote (`workspace_writes`); a file in no folder runs the
+   root's suite, or every folder's when the root has none. Each run is kept
+   in `evidence["command_runs"]` with its folder, exit status and the sha256
+   the backend computed; a failure refutes, a runtime that is not installed
+   leaves the delivery unverifiable. A sprint's integration runs every
+   folder's suite. Not done: the lint after an edit still reads the root's
+   profile, not the edited file's folder.
 6. **Quote the failing tests in a "tests failed" comment.**
    *Problem:* F6. *Proposal:* the comment and the block reason lead with
    `failing_tests` and the per-criterion results, then the output's tail.

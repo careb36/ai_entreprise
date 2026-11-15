@@ -9,6 +9,9 @@
 # acceptance tests first and runs it with the fake model; a person reads the
 # sprint's integration and merges it locally; the documentation pack is
 # compiled in English and Spanish. Run twice: the second run makes nothing new.
+# The e2e's sandbox has none of the repository's toolchains, so the company
+# runs one root command (the sprint's tests), not La Fabrique's suites per
+# folder (`--profile sprint-tests`, scripts/self_host/README.md).
 # Uses run.sh's check, json, API, PY, REPO, WORK, SANDBOX, TEST_COMMAND, TIMEOUT.
 
 echo "9d. the factory builds itself (issue #329)"
@@ -18,7 +21,7 @@ rm -rf "$SELF/la-fabrique" "$SELF/la-fabrique.self_host.json"
 self_host() {  # self_host <report name> <harness arguments...>
   local name=$1; shift
   "$PY" "$REPO/scripts/self_host/self_host.py" --api "$API" --checkout "$SELF/la-fabrique" \
-    --sandbox "$SANDBOX" --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
+    --sandbox "$SANDBOX" --profile sprint-tests --test-command "$TEST_COMMAND tests" --timeout "$TIMEOUT" \
     --report "$SELF/$name.json" "$@" > "$SELF/$name.log" 2>&1
 }
 report() { "$PY" -c "import sys, json; d = json.load(open(sys.argv[1])); print($2)" "$SELF/$1.json"; }
