@@ -16,6 +16,7 @@ import { sprintEndpoints } from './api/sprints'
 import { ssoEndpoints } from './api/sso'
 import { supportEndpoints } from './api/support'
 import { systemEndpoints } from './api/system'
+import { dutiesEndpoints } from './api/duties'
 import { taskViewEndpoints } from './api/taskViews'
 import { taskRelationEndpoints } from './api/taskRelations'
 import { teamEndpoints } from './api/teams'
@@ -41,6 +42,7 @@ export * from './api/sso'
 export * from './api/stream'
 export * from './api/support'
 export * from './api/system'
+export * from './api/duties'
 export * from './api/taskViews'
 export * from './api/taskRelations'
 export * from './api/teams'
@@ -76,6 +78,7 @@ const endpoints = {
   ...chatEndpoints(http),
   ...teamEndpoints(http),
   ...usageEndpoints(http),
+  ...dutiesEndpoints(http),
 }
 
 export const api = Object.assign(http, endpoints)

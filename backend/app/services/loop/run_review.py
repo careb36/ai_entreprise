@@ -16,6 +16,11 @@ decision does depends on who produced the run:
 
 A review is a person's words, never evidence: it is audited like an
 approval, and the verdict on the run stays the Verifier's.
+
+An approval is held to segregation of duties first (issue #543,
+``services/platform/sod.py``): the person who started the task's sprint does
+not accept its held delivery, from the web or a chat button alike; the
+refusal is audited and the review is not recorded.
 """
 
 from __future__ import annotations
@@ -28,7 +33,9 @@ from models.sprint import BacklogItem, Sprint
 from sqlmodel import Session, select
 
 from services.evidence.review_changes import run_changes
+from services.loop import sod_requesters
 from services.loop.carry_over import carried_over
+from services.platform import sod
 from services.platform.agent_service import AgentService
 from services.tasks import task_events, task_projection
 from services.tasks.board import SEND_BACK_MARKER
@@ -239,6 +246,66 @@ def _act_on_task(
     return "sent_back"
 
 
+def _segregate(
+    session: Session,
+    run: AgentRun,
+    author_user_id: int | None,
+    actor: sod.Person | None,
+    via: str | None,
+) -> str | None:
+    """Hold an approval to segregation of duties; the outcome, or raise 403.
+
+    A task's approval is checked only when it would accept a held delivery;
+    otherwise the review loop's own 409 answers, as before.
+    """
+    item = task_of(session, run)
+    if item is not None and not (
+        item.status == "blocked"
+        and task_projection.awaits_risk_acceptance(session, item)
+    ):
+        return None
+    if actor is None and author_user_id is not None and author_user_id > 0:
+        actor = sod.person_of_user_id(session, author_user_id)
+    try:
+        return sod.enforce(
+            session,
+            run.company_id,
+            sod.ACCEPT_HELD if item is not None else sod.APPROVE_RUN,
+            {
+                "kind": "task" if item is not None else "agent_run",
+                "id": item.id if item is not None else run.id,
+                "agent_run_id": run.id,
+                "via": via or "web",
+            },
+            actor,
+            sod_requesters.of_run(session, run),
+        )
+    except sod.SodRefused as refused:
+        raise ReviewRefused(refused.status, refused.detail) from refused
+
+
+def segregate_board_acceptance(
+    session: Session, item: BacklogItem, sprint: Sprint, actor: sod.Person | None
+) -> str | None:
+    """A person marking a held delivery done accepts it, as an ``approve`` does
+    (``PATCH /v1/backlog/{id}``): the same rule holds; raise ``ReviewRefused``."""
+    if item.status != "blocked" or not task_projection.awaits_risk_acceptance(
+        session, item
+    ):
+        return None
+    try:
+        return sod.enforce(
+            session,
+            sprint.company_id,
+            sod.ACCEPT_HELD,
+            {"kind": "task", "id": item.id, "via": "board"},
+            actor,
+            sod_requesters.of_sprint(session, sprint),
+        )
+    except sod.SodRefused as refused:
+        raise ReviewRefused(refused.status, refused.detail) from refused
+
+
 def submit_review(
     session: Session,
     run: AgentRun,
@@ -248,17 +315,23 @@ def submit_review(
     author_name: str,
     author_user_id: int | None,
     via: str | None = None,
+    actor: sod.Person | None = None,
 ) -> RunReview:
     """Record a review, carry its open comments, and do what its decision asks.
 
     *via* names where the person decided when it is not the web (``slack``,
     ``teams``; ``routers/chat_interactions.py``); the audit row carries it.
+    *actor* is who decides for segregation of duties (an API token stands for
+    its creator, ``sod.actor_of``); by default the account *author_user_id*.
     """
     comments = open_comments(session, run)
     if event == "request_changes" and not body and not comments:
         raise ReviewRefused(
             422, "Say what to change: a comment on a line, or the review's text."
         )
+    sod_outcome = None
+    if event == "approve":
+        sod_outcome = _segregate(session, run, author_user_id, actor, via)
     review = RunReview(
         company_id=run.company_id,
         agent_run_id=run.id,
@@ -300,6 +373,7 @@ def submit_review(
             "review_id": review.id,
             "user_id": author_user_id,
             "via": via or "web",
+            "sod": sod_outcome,
         },
         result={"outcome": review.outcome, "comments": len(comments), "body": body},
         decision_signature=None,

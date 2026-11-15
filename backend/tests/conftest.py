@@ -76,6 +76,7 @@ from models.run_secret import RunSecret
 from models.saved_view import SavedView, SavedViewPreference
 from models.security_review import WstgReview
 from models.session import RefreshToken, SessionFamily
+from models.sod import AccessReview, SodPolicy
 from models.specification import Specification
 from models.sprint import BacklogItem, OutboxEvent, Sprint
 from models.sso import SsoConnection, SsoFlowState, SsoIdentity
@@ -248,6 +249,8 @@ SQLModel.metadata.create_all(
         TaskRelation.__table__,
         Team.__table__,
         TeamMember.__table__,
+        SodPolicy.__table__,
+        AccessReview.__table__,
         WikiPage.__table__,
         WikiPageVersion.__table__,
         WikiLink.__table__,
