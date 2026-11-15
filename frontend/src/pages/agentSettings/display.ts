@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry } from '../../services/api'
+import type { Translate } from '../../i18n/translate'
 
 export const COMMON_ROLES = [
   // Product & Design
@@ -42,7 +43,7 @@ export function groupedTiers(models: ModelCatalogEntry[]): string[] {
   return [...new Set(models.map(model => model.tier))]
 }
 
-export function formatRelativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
+export function formatRelativeTime(iso: string | null, t: Translate): string {
   if (!iso) return t('agentsConfig.never')
   const date = new Date(iso)
   const diffMs = Date.now() - date.getTime()
