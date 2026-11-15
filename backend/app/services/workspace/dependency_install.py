@@ -14,6 +14,19 @@ install covers (``stack_profiles.installed_by``: a detected command, its own
 stack's manifests in the root; a named one, all) are recorded as installed,
 and only after it exited 0, so a failed one is retried and a manifest no
 install ran for (``not_covered``) is never taken as installed.
+
+What an install leaves depends on where it ran: packages installed on the
+host are not in a container, and the reverse. So the record is kept per
+sandbox mode (``install_key``): ``<root>`` for ``host`` (the key records had
+before modes were told apart, all made in the default mode), ``<mode>:<root>``
+for ``container`` and ``bwrap``. A company that moves from host to container
+mode installs again at its next delivery that writes a manifest. The mode is
+the one the company asks for; a daemon that forces another one
+(``FABRIQUE_SANDBOX_REQUIRED``) is reported in the run's ``sandbox``, and the
+record follows the company's request.
+
+The install asks for its whole output too (``run_logs.py``): the record's
+``full_log`` is what the backend read back and hashed.
 """
 
 from __future__ import annotations
@@ -24,7 +37,7 @@ from typing import Any
 
 from config import settings
 
-from services.workspace import sandbox, stack_profiles
+from services.workspace import run_logs, sandbox, stack_profiles
 from services.workspace.project_profile import Context
 
 logger = logging.getLogger(__name__)
@@ -34,13 +47,21 @@ OUTPUT_TAIL_CHARS = 2000
 REPLY_MARGIN_SECONDS = 30.0
 
 
+def install_key(root: str, mode: str | None) -> str:
+    """Where an install's record is kept: per folder and sandbox mode."""
+    mode = (mode or "host").strip().lower()
+    return root if mode == "host" else f"{mode}:{root}"
+
+
 def changed_manifests(
-    evidence: dict[str, Any], installs: dict[str, Any] | None
+    evidence: dict[str, Any], installs: dict[str, Any] | None, mode: str = "host"
 ) -> list[dict[str, Any]]:
     """The manifests the delivery wrote whose sha256 (the daemon's, read back
-    from disk) differs from the last successful install's in that folder."""
+    from disk) differs from the last successful install's in that folder and
+    sandbox mode."""
     root = evidence.get("workspace_root") or ""
-    seen = ((installs or {}).get(root) or {}) if isinstance(installs, dict) else {}
+    key = install_key(root, mode)
+    seen = ((installs or {}).get(key) or {}) if isinstance(installs, dict) else {}
     changed = []
     for write in evidence.get("workspace_writes") or []:
         if not isinstance(write, dict) or write.get("status") != "written":
@@ -79,7 +100,7 @@ def _command_record(command: str, reply: Any) -> dict[str, Any]:
 
 
 def _record_installed(
-    engine: Any, company_id: Any, root: str, manifests: list[dict[str, Any]]
+    engine: Any, company_id: Any, key: str, manifests: list[dict[str, Any]]
 ) -> None:
     from database import engine as default_engine
     from models.company import Company
@@ -90,9 +111,9 @@ def _record_installed(
         if company is None:
             return
         installs = dict(company.dependency_installs or {})
-        seen = dict(installs.get(root) or {})
+        seen = dict(installs.get(key) or {})
         seen.update({m["path"]: m["sha256"] for m in manifests})
-        installs[root] = seen
+        installs[key] = seen
         company.dependency_installs = installs
         session.add(company)
         session.commit()
@@ -105,7 +126,15 @@ async def install_if_needed(ctx: Context) -> None:
     if not settings.DELIVERY_INSTALL_ENABLED:
         return
     evidence = ctx.evidence
-    changed = changed_manifests(evidence, ctx.company().get("installs"))
+    try:
+        box: dict[str, Any] | None = await asyncio.to_thread(
+            sandbox.request_for_sprint, ctx.sprint, ctx.engine
+        )
+        unavailable = None
+    except sandbox.PolicyUnavailable as e:
+        box, unavailable = None, str(e)
+    mode = (box or {}).get("mode") or "host"
+    changed = changed_manifests(evidence, ctx.company().get("installs"), mode)
     if not changed:
         return
     profile = await ctx.profile()
@@ -134,13 +163,14 @@ async def install_if_needed(ctx: Context) -> None:
             "reason": f"`{command}` in the project's root does not install {paths}",
         }
         return
-    try:
-        box = await asyncio.to_thread(
-            sandbox.request_for_sprint, ctx.sprint, ctx.engine
-        )
-    except sandbox.PolicyUnavailable as e:
-        evidence["dependency_install"] = {**base, "command": command, "reason": str(e)}
+    if box is None:
+        evidence["dependency_install"] = {
+            **base,
+            "command": command,
+            "reason": unavailable,
+        }
         return
+    base["sandbox_mode"] = mode  # The key its record is kept under (install_key).
     # The install's own setting, both ways: a registry may be needed, and a
     # lifecycle script must not reach the network when it is turned off.
     # ``purpose``: the daemon resets the project's dependency cache after a
@@ -151,6 +181,7 @@ async def install_if_needed(ctx: Context) -> None:
         "purpose": "install",
     }
     timeout = float(settings.DELIVERY_INSTALL_TIMEOUT_SECONDS)
+    full_log = run_logs.request_spec(ctx.nats)
     try:
         reply = await ctx.nats.request(
             "workspace.execute",
@@ -160,6 +191,7 @@ async def install_if_needed(ctx: Context) -> None:
                 "sprint_id": ctx.sprint.get("id"),
                 "sandbox": box,
                 "timeout_seconds": timeout,
+                **run_logs.request_field(full_log),
             },
             timeout=timeout + REPLY_MARGIN_SECONDS,
         )
@@ -171,6 +203,7 @@ async def install_if_needed(ctx: Context) -> None:
         }
         return
     record = {**base, **_command_record(command, reply)}
+    record["full_log"] = await run_logs.observe(ctx.nats, full_log, reply)
     evidence["dependency_install"] = record
     if record["exit_code"] == 0 and not record["timed_out"]:
         company_id = ctx.company().get("id")
@@ -180,7 +213,7 @@ async def install_if_needed(ctx: Context) -> None:
                     _record_installed,
                     ctx.engine,
                     company_id,
-                    evidence["workspace_root"],
+                    install_key(evidence["workspace_root"], mode),
                     covered,
                 )
             except Exception as e:  # noqa: BLE001 - The next delivery installs again.

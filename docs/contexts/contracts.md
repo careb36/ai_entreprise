@@ -5,7 +5,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 - **Folder:** `backend/app/services/contracts/`
 - **Responsibility:** The shapes several contexts exchange, as plain data and pure functions: the verdict names, the file manifest of a deliverable (parse_file_manifest, the allowed artifact extensions), SEARCH/REPLACE edit blocks, the daemon's delivery reply as the evidence reads it, the task record's fields, the role catalogue and the standards catalogue. It performs no I/O and imports no other context; it never decides anything.
 - **May import:** no other context (`docs/architecture/contexts.json`, checked by `scripts/check_architecture.py`).
-- **Modules:** `edit_blocks`, `manifest`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `tool_calls`, `verdicts`.
+- **Modules:** `board_notes`, `edit_blocks`, `manifest`, `roles`, `sandbox_report`, `sandbox_schemas`, `standards_catalogue`, `task_dependencies`, `tool_calls`, `verdicts`.
 
 ## Components
 
@@ -17,5 +17,6 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 - `manifest` (`parse_file_manifest`) and `edit_blocks` (SEARCH/REPLACE edits): step 3 of [the sprint loop](../SPRINT_LOOP.md).
 - `standards_catalogue`: the quality standards paragraph in [evidence](evidence.md).
+- `board_notes` (the sprint board's kinds, bounds, the `NOTE … END` format and its parser, the relevance of a note to a task): [the sprint board](../design/SPRINT_BOARD.md).
 - `tool_calls`, `sandbox_report`, `task_dependencies`, `verdicts`: where each came from is in [the migration record](../architecture/MIGRATION.md) (steps 1, 5 and 6).
 - How the context was moved into its folder: [the migration record](../architecture/MIGRATION.md#step-1).

@@ -1233,7 +1233,8 @@
       "board": "Board",
       "live": "Live",
       "analytics": "Analytics",
-      "conversation": "Conversation"
+      "conversation": "Conversation",
+      "notes": "Board notes"
     },
     "streamConnected": "Stream connected",
     "streamDisconnected": "Stream disconnected",
@@ -2390,6 +2391,50 @@
       "account_exists": "An account with this email already exists outside this company. Ask an owner to invite it, then sign in with SSO.",
       "link_refused": "This account belongs to other companies too, so it cannot be linked to this company's single sign-on. Sign in with your password.",
       "account_missing": "The account linked to this identity no longer exists. Ask an owner for help."
+    }
+  },
+  "boardNotes": {
+    "title": "Board notes",
+    "claimsNote": "Short notes the sprint's tasks leave each other. A note is its author's claim; beside each file is what the Verifier's records observed.",
+    "showInactive": "Show superseded and marked wrong",
+    "metrics": "{{active}} active · {{wrong}} marked wrong · rework for a contradiction with another task: {{contradictions}} of {{rework}}",
+    "loading": "Loading the board notes…",
+    "error": "Could not load the board notes.",
+    "empty": "No notes yet. Agents leave them in their deliveries as they work.",
+    "listLabel": "Notes on the sprint board",
+    "addTitle": "Add a note",
+    "kindLabel": "Kind",
+    "filesLabel": "Files",
+    "filesPlaceholder": "src/store.py, src/api.py",
+    "requirementsLabel": "Requirements",
+    "requirementsPlaceholder": "REQ-1.2",
+    "textLabel": "Note",
+    "add": "Add note",
+    "aPerson": "A person",
+    "task": "task #{{id}}",
+    "observed": "observed: changed by verified run #{{run}}",
+    "notObserved": "not observed",
+    "supersedes": "Supersedes note #{{id}}",
+    "markedWrongBy": "Marked wrong by {{by}}",
+    "markWrong": "Mark wrong",
+    "reasonLabel": "Why it is wrong (optional)",
+    "confirmWrong": "Mark as wrong",
+    "kinds": {
+      "decision": "Decision",
+      "interface_change": "Interface change",
+      "schema_change": "Schema change",
+      "gotcha": "Gotcha",
+      "question": "Question"
+    },
+    "status": {
+      "active": "Active",
+      "superseded": "Superseded",
+      "marked_wrong": "Marked wrong"
+    },
+    "links": {
+      "symbols": "Symbols",
+      "requirements": "Requirements",
+      "modules": "Modules"
     }
   }
 }

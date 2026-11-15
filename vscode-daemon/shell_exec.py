@@ -100,8 +100,26 @@ def summarize_command_result(command: str, result: dict[str, Any]) -> str:
     return f"Workspace command failed (exit {exit_code}): {command_preview}"
 
 
+def _text(data: Any) -> str:
+    """Output captured before a timeout: text, or bytes on some platforms."""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data or ""
+
+
+def _with_full(result: dict[str, Any], keep_full: bool) -> dict[str, Any]:
+    """A host run captured each stream whole: kept for the full log when asked."""
+    if keep_full:
+        import run_logs
+
+        run_logs.keep(result, "stdout", run_logs.spool_of(result.get("stdout")))
+        run_logs.keep(result, "stderr", run_logs.spool_of(result.get("stderr")))
+    return result
+
+
 def execute_shell_command(
-    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None, timeout: Any = None
+    command: str, cwd: str = ".", sandbox: Any = None, policy: Any = None, timeout: Any = None,
+    keep_full: bool = False,
 ) -> dict[str, Any]:
     """Execute a shell command and return a structured result.
 
@@ -113,6 +131,8 @@ def execute_shell_command(
                  refuses is not run (``command_policy.py``) and the result
                  says ``refused`` with the reason.
         timeout: The request's ``timeout_seconds`` (``bounded_timeout``).
+        keep_full: Keep each stream whole (up to the full log's cap) under
+                 ``run_logs.KEY`` for the caller to upload (``run_logs.py``).
 
     Returns:
         Dict with keys ``success`` (bool), ``stdout``, ``stderr``,
@@ -135,10 +155,10 @@ def execute_shell_command(
         try:
             box = sandbox_runner.normalize(sandbox)
             if box["mode"] != "host":
-                return sandbox_runner.run_sandboxed(command, cwd, sandbox, seconds)
+                return sandbox_runner.run_sandboxed(command, cwd, sandbox, seconds, keep_full)
         except sandbox_runner.SandboxUnavailable as exc:
             return {"success": False, "error": f"sandbox unavailable: {exc}"}
-        result = execute_shell_command(command, cwd, timeout=seconds)
+        result = execute_shell_command(command, cwd, timeout=seconds, keep_full=keep_full)
         result["sandbox"] = sandbox_runner.report(box)
         return result
     logger.info(f"Executing: {command} in {cwd}")
@@ -152,20 +172,20 @@ def execute_shell_command(
             text=True,
             timeout=seconds,
         )
-        return {
+        return _with_full({
             "success": result.returncode == 0,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "exit_code": result.returncode,
-        }
+        }, keep_full)
     except subprocess.TimeoutExpired as e:
-        return {
+        return _with_full({
             "success": False,
-            "stdout": e.output or "",
-            "stderr": e.stderr or "",
+            "stdout": _text(e.output),
+            "stderr": _text(e.stderr),
             "timed_out": True,
             "timeout_seconds": seconds,
             "error": f"command timed out after {seconds}s",
-        }
+        }, keep_full)
     except Exception as e:  # noqa: BLE001 - a command that cannot start must not kill the daemon
         return {"success": False, "error": str(e)}

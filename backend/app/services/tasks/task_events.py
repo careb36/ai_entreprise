@@ -36,6 +36,9 @@ Kinds:
 - ``estimated``: the task's difficulty as its plan stood before an attempt
   and the routing it led to (``payload.difficulty``, ``payload.routing``;
   ``services/models/difficulty.py``); an event only, no comment;
+- ``board_note``: a note on the sprint board (``services/tasks/sprint_board.py``)
+  written or marked wrong, with its author: a claim, never a verdict; and
+  ``board_note_rejected``: the blocks of a delivery that were not notes, and why;
 - ``legacy``: the migration found a thread it could not read back whole.
 
 Each event with text carries the flags the board's questions read
@@ -84,6 +87,8 @@ KINDS = frozenset(
         "note",
         "integration",
         "estimated",
+        "board_note",
+        "board_note_rejected",
         "legacy",
     }
 )

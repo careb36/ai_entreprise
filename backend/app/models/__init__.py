@@ -13,6 +13,7 @@ from .agent_run import AgentRun, AgentRunApproval, Verification
 from .api_token import ApiToken
 from .architecture import Architecture
 from .audit import AuditLog
+from .board_note import SprintBoardNote
 from .company import (
     Agent,
     BusinessUnit,
@@ -68,6 +69,7 @@ __all__ = [
     "RunSecret",
     "Specification",
     "Sprint",
+    "SprintBoardNote",
     "SprintIntegration",
     "SsoConnection",
     "SsoFlowState",

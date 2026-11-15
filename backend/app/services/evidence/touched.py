@@ -109,6 +109,36 @@ def runs_touching(
     return out
 
 
+def verified_writers(
+    session: Session, company_id: int | None, paths: Iterable[str]
+) -> dict[str, dict[str, Any] | None]:
+    """Per path, the latest task-worker run whose latest verdict is
+    ``verified`` and whose daemon report says it wrote the path:
+    ``{run_id, backlog_item_id}``, or None when no such run is on record.
+
+    What the sprint board shows beside a note that names a file (issue #439):
+    an observation, kept apart from the note's claim."""
+    wanted = [p for p in dict.fromkeys(paths) if isinstance(p, str) and p]
+    found: dict[str, dict[str, Any] | None] = {p: None for p in wanted}
+    if company_id is None or not wanted:
+        return found
+    runs = _latest_task_runs(session, company_id)
+    reports = _reports(session, runs)
+    for run in runs:
+        verdict, written = reports.get(run.id, ("", []))
+        if verdict != "verified":
+            continue
+        for path in written:
+            if path in found and found[path] is None:
+                found[path] = {
+                    "run_id": run.id,
+                    "backlog_item_id": (run.subject or {}).get("backlog_item_id"),
+                }
+        if all(found.values()):
+            break
+    return found
+
+
 def written_by_task(session: Session, company_id: int, item_id: int) -> list[str]:
     """The files the daemon reports this task's earlier runs wrote, the latest
     run's first, at most ``MAX_TASK_FILES``."""

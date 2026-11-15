@@ -66,6 +66,10 @@ DURABLE_STREAMS: tuple[DurableStream, ...] = (
 DURABLE_SUBJECTS = frozenset(
     subject for stream in DURABLE_STREAMS for subject in stream.subjects
 )
+# The object store of runs' full logs (services/workspace/run_logs.py): the
+# daemon writes each run's whole output there, the backend reads it back and
+# hashes it. Its user may write here and nowhere else (scripts/nats_config.py).
+RUN_LOG_BUCKET = "FABRIQUE_RUN_LOGS"
 
 
 def _namespace() -> str:
@@ -107,6 +111,30 @@ def _scoped_subject(subject: str) -> str:
     return f"{namespace}.{subject}" if namespace else subject
 
 
+def run_log_bucket() -> str:
+    """The full logs' object store bucket, namespaced like the streams."""
+    return _scoped(RUN_LOG_BUCKET)
+
+
+def _run_log_config(days: float, max_mb: int) -> js_api.StreamConfig:
+    """The bucket's stream, as nats-py's ``create_object_store`` builds it
+    except that the oldest objects go first when it is full (a full bucket
+    must not refuse new evidence; the sha256 is on the evidence already) and
+    objects expire after *days* (0 keeps them)."""
+    name = run_log_bucket()
+    return js_api.StreamConfig(
+        name=f"OBJ_{name}",
+        description="Full logs of the daemon's runs (issue #315)",
+        subjects=[f"$O.{name}.C.>", f"$O.{name}.M.>"],
+        max_age=days * 24 * 3600 if days > 0 else None,
+        max_bytes=max_mb * 1024 * 1024 if max_mb > 0 else -1,
+        storage=js_api.StorageType.FILE,
+        discard=js_api.DiscardPolicy.OLD,
+        allow_rollup_hdrs=True,
+        allow_direct=True,
+    )
+
+
 def _stream_config(stream: DurableStream) -> js_api.StreamConfig:
     return js_api.StreamConfig(
         name=_scoped(stream.name),
@@ -140,6 +168,8 @@ class NATSClient:
         self.subscriptions: dict[str, asyncio.Task] = {}
         # Set by ``enable_jetstream`` once the durable streams exist.
         self.js = None
+        # The full logs' bucket, once it exists (``enable_jetstream``).
+        self.run_logs_bucket: str | None = None
         # How the connection authenticates and whether it uses TLS; no secret.
         self.security = nats_auth.describe()
 
@@ -203,11 +233,33 @@ class NATSClient:
             self.js = None
             return False
         self.js = js
+        self.run_logs_bucket = await self._ensure_run_logs(js)
         logger.info(
             "JetStream enabled: durable streams %s",
             ", ".join(stream.name for stream in DURABLE_STREAMS),
         )
         return True
+
+    async def _ensure_run_logs(self, js) -> str | None:
+        """Create (or update) the full logs' bucket; ``None`` when it cannot
+        be, and the runs' evidence then says the full log was not kept."""
+        from config import settings
+
+        config = _run_log_config(
+            float(settings.FULL_LOG_RETENTION_DAYS or 0),
+            int(settings.FULL_LOG_BUCKET_MAX_MB or 0),
+        )
+        try:
+            try:
+                await js.add_stream(config)
+            except BadRequestError:
+                await js.update_stream(config)
+        except Exception as e:  # noqa: BLE001 - Full logs off; the tails still go on the evidence.
+            logger.warning(
+                "No object store for full logs (%s: %s)", type(e).__name__, e
+            )
+            return None
+        return run_log_bucket()
 
     async def publish(
         self, subject: str, payload: dict[str, Any], *, msg_id: str | None = None

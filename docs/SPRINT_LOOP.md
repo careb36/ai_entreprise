@@ -33,7 +33,13 @@ the LangGraph graph is only an optional kickoff conversation.
    **Lessons from Recent Sprints**: the retrospective counts and the review
    requests from the company's last two completed sprints, read from the board
    (`_load_recent_lessons`), and the **Company Procedures** in force for the
-   agent's role (QA's go into its review prompt).
+   agent's role (QA's go into its review prompt). It also carries the
+   **Sprint board**: the notes the sprint's other tasks left that concern
+   this one (by the files, modules and requirements it touches; active ones
+   only, newest first, within `SPRINT_BOARD_MAX_CHARS`), each a claim with
+   what the Verifier's records observed beside the files it names, and how
+   to write a note (`services/loop/worker/sprint_notes.py`,
+   [design](design/SPRINT_BOARD.md)).
 3. `parse_file_manifest` (`services/contracts/manifest.py`) turns the answer into files (a block marked `edit`
    carries SEARCH/REPLACE edits instead, `services/contracts/edit_blocks.py`; the daemon
    applies them exactly and writes a `.py` or `.json` file only if it still
@@ -147,7 +153,10 @@ the LangGraph graph is only an optional kickoff conversation.
    - the ScrumMaster's retrospective to the team when a sprint closes.
 
    Messages are claims: comments still drive the review loop, and the evidence
-   decides. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
+   decides. So are the **sprint board's notes**: after a delivery is recorded,
+   its `NOTE kind=… files=…` … `END` blocks become notes of the sprint
+   (`sprint_notes.record_from_delivery`), each a `board_note` event with its
+   author; a person adds one or marks one wrong on the Board notes tab. `GET /v1/messages` (Viewer; filters `sprint_id`, `backlog_item_id`,
    `kind`) feeds the sprint's Conversation tab and the task page.
 8. When a sprint closes, procedures are measured and proposed
    (`services/learning/procedures.py`):

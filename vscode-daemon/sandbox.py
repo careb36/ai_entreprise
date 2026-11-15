@@ -46,6 +46,7 @@ import threading
 import uuid
 from typing import Any
 
+import run_logs
 import sandbox_cache
 import sandbox_image
 
@@ -225,18 +226,22 @@ def report(box: dict[str, Any], runtime: str | None = None) -> dict[str, Any]:
 
 
 class _Tail:
-    """The last ``limit`` bytes of a stream, drained by a thread."""
+    """The last ``limit`` bytes of a stream, drained by a thread; with a
+    *spool*, every byte up to its own cap too (``run_logs``)."""
 
-    def __init__(self, stream: Any, limit: int) -> None:
+    def __init__(self, stream: Any, limit: int, spool: run_logs.Spool | None = None) -> None:
         self.data = bytearray()
         self.total = 0
         self._limit = limit
+        self.spool = spool
         self._thread = threading.Thread(target=self._drain, args=(stream,), daemon=True)
         self._thread.start()
 
     def _drain(self, stream: Any) -> None:
         for chunk in iter(lambda: stream.read(65536), b""):
             self.total += len(chunk)
+            if self.spool is not None:
+                self.spool.write(chunk)
             self.data += chunk
             if len(self.data) > self._limit:
                 del self.data[: len(self.data) - self._limit]
@@ -274,6 +279,7 @@ def run_bounded(
     cwd: str | None = None,
     env: dict[str, str] | None = None,
     own_group: bool = False,
+    keep_full: bool = False,
 ) -> dict[str, Any]:
     """Run *argv*, keeping at most ``MAX_OUTPUT_BYTES`` of each stream's tail.
     Returns ``exit_code`` (``None`` when killed at *timeout*), the decoded
@@ -282,13 +288,16 @@ def run_bounded(
     With *own_group* the command runs in a process group (a session) of its
     own and the whole group (the tree on Windows) is killed at the timeout and
     once it ends, so a shell's children (a test runner, a browser) never
-    outlive it; otherwise only *argv*'s process is killed, as before."""
+    outlive it; otherwise only *argv*'s process is killed, as before.
+
+    With *keep_full* each stream is also kept whole up to the full log's cap,
+    under ``run_logs.KEY`` (``stdout``, ``stderr``), for the caller to upload."""
     process = subprocess.Popen(
         argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env,
         start_new_session=own_group and os.name != "nt",
     )
-    out = _Tail(process.stdout, MAX_OUTPUT_BYTES)
-    err = _Tail(process.stderr, MAX_OUTPUT_BYTES)
+    out = _Tail(process.stdout, MAX_OUTPUT_BYTES, run_logs.Spool() if keep_full else None)
+    err = _Tail(process.stderr, MAX_OUTPUT_BYTES, run_logs.Spool() if keep_full else None)
     timed_out = False
     try:
         process.wait(timeout=timeout)
@@ -304,18 +313,23 @@ def run_bounded(
             # The shell is gone; what it left running in its group goes too.
             kill_tree(process)
     stdout, stderr = out.text(), err.text()
-    return {
+    result = {
         "exit_code": None if timed_out else process.returncode,
         "stdout": stdout,
         "stderr": stderr,
         "timed_out": timed_out,
         "output_truncated": out.total > MAX_OUTPUT_BYTES or err.total > MAX_OUTPUT_BYTES,
     }
+    run_logs.keep(result, "stdout", out.spool)
+    run_logs.keep(result, "stderr", err.spool)
+    return result
 
 
-def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[str, Any]:
+def run_sandboxed(command: str, cwd: str, request: Any, timeout: int, keep_full: bool = False) -> dict[str, Any]:
     """Run *command* in *cwd* as the request's sandbox says; the result carries
     ``sandbox`` (what was applied). Host mode is the caller's own runner.
+    With *keep_full* it also keeps each stream whole for the full log
+    (``run_logs.KEY``), which the caller uploads and removes.
 
     Raises ``SandboxUnavailable`` when the container runtime could not start
     the container: nothing ran, so there is no exit status and no sandbox to
@@ -336,7 +350,8 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
         argv = bwrap_command(box, command, cwd)
     applied = report(box, runtime)
     logger.info("Sandboxed (%s): %s in %s", box["mode"], command, cwd)
-    run = run_bounded(argv, timeout)
+    run = run_bounded(argv, timeout, keep_full=keep_full)
+    spools = {run_logs.KEY: run.pop(run_logs.KEY)} if run_logs.KEY in run else {}
     if runtime:
         applied["image_identity"] = sandbox_image.observed_after(runtime, box["image"], identity)
     if run["timed_out"]:
@@ -353,8 +368,10 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
             "timeout_seconds": timeout,
             "error": f"command timed out after {timeout}s",
             "sandbox": applied,
+            **spools,
         }
     if runtime and run["exit_code"] == RUNTIME_FAILURE_EXIT:
+        run_logs.discard(spools)
         raise SandboxUnavailable(
             f"{os.path.basename(runtime)} could not start the container: "
             f"{run['stderr'].strip()[-500:] or 'no message'}"
@@ -368,4 +385,5 @@ def run_sandboxed(command: str, cwd: str, request: Any, timeout: int) -> dict[st
         "output_truncated": run["output_truncated"],
         "exit_code": run["exit_code"],
         "sandbox": applied,
+        **spools,
     }

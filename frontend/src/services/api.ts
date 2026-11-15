@@ -4,6 +4,7 @@ import { createHttp } from './api/client'
 import { agentEndpoints } from './api/agents'
 import { analyticsEndpoints } from './api/analytics'
 import { authEndpoints } from './api/auth'
+import { boardNoteEndpoints } from './api/boardNotes'
 import { companyEndpoints } from './api/companies'
 import { evidenceEndpoints } from './api/evidence'
 import { githubEndpoints } from './api/github'
@@ -19,6 +20,7 @@ export { API_BASE, ApiError, errorDetail, fetchApi, fetchText, isClientError, se
 export * from './api/agents'
 export * from './api/analytics'
 export * from './api/auth'
+export * from './api/boardNotes'
 export * from './api/companies'
 export * from './api/evidence'
 export * from './api/github'
@@ -45,6 +47,7 @@ const endpoints = {
   ...companyEndpoints(http),
   ...workspaceEndpoints(),
   ...messageEndpoints(http),
+  ...boardNoteEndpoints(http),
   ...evidenceEndpoints(http),
   ...analyticsEndpoints(http),
   ...memoryEndpoints(),

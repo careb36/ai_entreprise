@@ -11,7 +11,7 @@ Part of the project's guidance for agents; the index is [`CLAUDE.md`](../../CLAU
 
 - `procedures` (measured, kept or reverted, proposed): step 8 of [the sprint loop](../SPRINT_LOOP.md).
 - `scrum_master` (the triage of an escalation, `scrum_master.ask`): step 6 of [the sprint loop](../SPRINT_LOOP.md).
-- `retrospective` (the lessons in the prompt, the message to the team): steps 2 and 7 of [the sprint loop](../SPRINT_LOOP.md).
+- `retrospective` (the lessons in the prompt, the message to the team): steps 2 and 7 of [the sprint loop](../SPRINT_LOOP.md); it also carries the sprint board's counts, the contradiction measure and the notes worth keeping (`promotable_notes`, as claims) into the summary the memory engram and the procedure proposals read ([the sprint board](../design/SPRINT_BOARD.md)).
 - `architect` (the Architect's record): the console assistants paragraph in [producers](producers.md).
 - The tests of each (`test_procedures.py`, `test_scrum_master.py`, `test_architect.py`, `test_memory_lessons.py`): [testing](../TESTING.md).
 - `CLAUDE.md` had no paragraph of its own for this context before it was split; the documents above hold what was written about it.
