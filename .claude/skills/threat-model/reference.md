@@ -60,8 +60,11 @@ a row. The wider picture is `SECURITY.md` §2 and §8 and `docs/threat_model.md`
   symlinks out of the project and redact secret-looking lines
   (`docs/contexts/tools.md`); deliveries in a Git worktree, never the person's
   checkout (`vscode-daemon/git_workspace.py`); sha256 read back from disk.
-- **Known gap:** `host` mode runs with the user's privileges; SECURITY.md §8.3
-  predates the sandbox and command policy and needs updating.
+- **Known gap:** `host` mode runs with the user's privileges and is the
+  default; `FABRIQUE_SANDBOX_REQUIRED` reaches only requests that carry a
+  `sandbox`, so the console assistants' consultations run on the host; the
+  backend sends no per-company command policy (SECURITY.md §8.3, "What
+  remains open").
 
 ## B4 — Backend ↔ LLM proxy ↔ providers
 
