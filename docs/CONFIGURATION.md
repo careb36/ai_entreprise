@@ -205,8 +205,8 @@ Copy `.env.example` to `.env` and fill in:
 - `NATS_USER` / `NATS_PASSWORD`, `NATS_CREDS_FILE` (wins), `NATS_NKEY_SEED`
   (a seed file) — how the backend (`app/nats_auth.py`) and the daemon
   (`vscode-daemon/nats_connect.py`, the same rules) authenticate;
-  `start-daemon.sh --creds FILE` / `.ps1 -Creds FILE`, and `nkeys` is installed
-  only for a creds file or a seed. Unset, no authentication as before. No log
+  `start-daemon.sh --creds FILE` / `.ps1 -Creds FILE` (`nkeys`, which signs
+  with a creds file or a seed, is in the daemon's hash-pinned lock). Unset, no authentication as before. No log
   line or `/health` field carries a secret.
 - `NATS_TLS`, `NATS_TLS_CA`, `NATS_TLS_CERT`, `NATS_TLS_KEY`, `NATS_TLS_VERIFY`
   — optional. The broker requires TLS once `nats/certs` holds `server.crt` and

@@ -163,6 +163,9 @@ def parse_draft(text_: str) -> dict[str, Any] | None:
     arch = arch_check.normalize(parsed)
     if not arch["title"] or not arch["modules"]:
         return None
+    # When a decision was accepted is a person's record, never the model's.
+    for decision in arch["decisions"]:
+        decision.pop("date", None)
     return arch
 
 

@@ -8,6 +8,7 @@ quickstart; the files below go deeper, each with a single job.
 | Document | What it answers |
 | --- | --- |
 | [`POSITIONING.md`](POSITIONING.md) | Why the evidence layer is the product, and the design rules that follow from that position. |
+| [`retrospectives/2026-11-self-hosting.md`](retrospectives/2026-11-self-hosting.md) | La Fabrique run on itself (issue #329): what worked, what the factory could not do on its own repository, the follow-up issues. `scripts/self_host/` is the harness. |
 | [`STANDARDS.md`](STANDARDS.md) | The quality standards every project is held to, by discipline, and which of them the loop checks without a model. |
 | [`ARCHITECTURE.md`](../ARCHITECTURE.md) | How the pieces fit: FastAPI, NATS, the daemon, the proxy, the engram graph. |
 | [`API.md`](API.md) | Every HTTP route, generated and verified against the running app. |

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-09). Recorded as ADR-2 of the architecture in `docs/architecture/architecture.json` (issue #469); `docs/ARCHITECTURE.md` is rendered from it.
+Accepted (2026-11-09). ADR-2 of architecture v1, *La Fabrique backend: contexts and their dependency rule*, for the specification *Backend contexts and their dependency rule*. Written by La Fabrique from the architecture record; edit it there, not here.
 
 ## Context
 

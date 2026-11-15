@@ -55,6 +55,12 @@
 #      or a refutation; the greeting, approved on that unverifiable run,
 #      waits for a person at autonomy level 2 (no browser observed it).
 #      tests/test_browser_smoke.py drives a real browser.
+#  9d. The factory builds itself (issue #329, scripts/e2e/self_host_step.sh):
+#      a "La Fabrique" company on a snapshot of this repository, its own
+#      specification and architecture imported and rendered back unchanged
+#      (docs/ARCHITECTURE.md, docs/adr/), issue #535 specified, planned with
+#      the acceptance tests first and run, the integration read by a person,
+#      the documentation pack compiled in English and Spanish.
 #  10. Every task's history is legal, read by app/history_check.py, which
 #      shares no code with the readers it checks.
 #  11. QA only reviewed delivered work (the fake model's order check).
@@ -545,6 +551,9 @@ check "the daemon sent it the security probe: ten WSTG items, HSTS unverifiable 
 check "the smoke suite ran as the e2e command, and the missing browser is unverifiable with its reason, never a pass or a refutation" test "$(web_check e2e_run "c['outcome'], c.get('runtime_missing'), 'npx --no-install playwright test' in c['observation'], 'observed nothing in a browser' in c['observation']")" = "('unverifiable', True, True, True)"
 check "the daemon probed for a browser where the smoke suite ran and found none: browser present: no, from its observation" test "$(web_check e2e_run "c['browser']['present'], c['browser']['observed_by'], 'browser present: no (' in c['observation']")" = "(False, 'daemon', True)"
 check "the unit tests still decided the greeting's criteria" test "$(web_check criteria_tests "c['outcome'], c['results']")" = "('pass', {'REQ-1.1': 'pass', 'REQ-1.2': 'pass'})"
+
+# 9d. the factory builds itself (issue #329), in a file of its own.
+. "$REPO/scripts/e2e/self_host_step.sh"
 
 echo "10. every task's history, read independently"
 # app/history_check.py imports none of the production readers it checks.
