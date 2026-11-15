@@ -48,13 +48,13 @@ import sys
 import tempfile
 import time
 import urllib.request
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget
 import prompt_weight
+from junit_xml import JUnitError, testcases
 from readers import difficulty_estimates, prompt_sections, reported_tokens
 from schema import FAIL, MISSING, PASS, SCHEMA_VERSION, SPEC_STATUSES, validate
 
@@ -95,20 +95,17 @@ def criterion_of_test(name: str) -> str | None:
 def criteria_from_junit(xml_text: str, criteria: list[str]) -> dict[str, str]:
     """Per criterion: ``pass`` when it has tests and all passed, ``fail`` when
     one failed, errored or was skipped, ``missing`` when no test named it ran.
-    A report that cannot be read leaves every criterion missing."""
+    A report that cannot be read, or that declares a DTD or an entity
+    (``junit_xml``), leaves every criterion missing."""
     seen: dict[str, list[bool]] = {}
     try:
-        root = ET.fromstring(xml_text) if xml_text.strip() else None
-    except ET.ParseError:
-        root = None
-    for case in root.iter("testcase") if root is not None else []:
-        criterion = criterion_of_test(case.get("name", ""))
-        if criterion is None:
-            continue
-        failed = any(
-            case.find(tag) is not None for tag in ("failure", "error", "skipped")
-        )
-        seen.setdefault(criterion, []).append(not failed)
+        cases = testcases(xml_text) if xml_text.strip() else []
+    except JUnitError:
+        cases = []
+    for name, passed in cases:
+        criterion = criterion_of_test(name)
+        if criterion is not None:
+            seen.setdefault(criterion, []).append(passed)
     return {
         c: (MISSING if c not in seen else PASS if all(seen[c]) else FAIL)
         for c in criteria

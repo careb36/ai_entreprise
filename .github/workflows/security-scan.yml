@@ -2,10 +2,15 @@
 # a push to main and the weekly run check again:
 #
 #   security      Trivy over the files, uploaded as SARIF.
-#   dependencies  pip-audit over the backend's and the llm-proxy's lockfiles,
-#                 npm audit over the frontend's; a known vulnerability fails
+#   dependencies  pip-audit over the backend's, the llm-proxy's and the
+#                 daemon's lockfiles, npm audit over the frontend's; a known
+#                 vulnerability fails
 #                 the job unless .github/pip-audit-ignore.txt lists it with a
 #                 reason and a review date that has not passed.
+#   licences      every runtime dependency of the backend, the llm-proxy, the
+#                 daemon and the frontend under an allowed licence
+#                 (scripts/licence_scan.py); an exception needs a reason and a
+#                 review date in .github/licence-exceptions.txt.
 #   secrets-pr    gitleaks over the pull request's own commits (pull requests
 #                 only; the weekly full-history scan is security-baseline.yml).
 #   sast-pr       Semgrep, failing only on findings the pull request adds
@@ -25,11 +30,12 @@ on:
     - cron: '0 6 * * 1'
 
 
-# Un único runner self-hosted atiende un job a la vez: al llegar un push nuevo
-# se cancelan las ejecuciones del commit que reemplaza en vez de encolarse.
+# The self-hosted runners are shared by every pull request and by main: a new
+# push cancels the runs of the commit it replaces, on main too (the newest
+# commit's run covers the ones merged before it), instead of queueing behind them.
 concurrency:
   group: security-scan-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   security:
@@ -94,7 +100,7 @@ jobs:
             "poetry==2.5.1" "poetry-plugin-export==1.10.1" "pip-audit==2.10.1"
           echo "$RUNNER_TEMP/audit-venv/bin" >> "$GITHUB_PATH"
 
-      - name: Audit the Python lockfiles (backend, llm-proxy)
+      - name: Audit the Python lockfiles (backend, llm-proxy, vscode-daemon)
         run: |
           # The ignore list: one vulnerability per line, "ID YYYY-MM-DD reason".
           # An entry without a reason, or whose review date has passed, fails.
@@ -124,6 +130,13 @@ jobs:
               "${ignore[@]}"
             echo "::endgroup::"
           done
+          # The daemon has no Poetry project: its lock is the hash-pinned
+          # requirements.txt compiled from vscode-daemon/requirements.in.
+          echo "::group::vscode-daemon"
+          pip-audit --requirement vscode-daemon/requirements.txt \
+            --require-hashes --disable-pip --progress-spinner off \
+            "${ignore[@]}"
+          echo "::endgroup::"
 
       - name: Set up Node.js 24
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -136,6 +149,62 @@ jobs:
         # Runtime dependencies only; high and critical fail. npm audit has no
         # ignore list: a finding is fixed by an update or an override.
         run: npm audit --package-lock-only --omit=dev --audit-level=high
+
+  licences:
+    name: Licences of the runtime dependencies
+    runs-on: [self-hosted, linux, x64, lafabrique]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      POETRY_NO_INTERACTION: "1"
+      PYTHON_KEYRING_BACKEND: keyring.backends.null.Keyring
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv (pinned + checksum)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o uv.tgz \
+            https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-unknown-linux-gnu.tar.gz
+          echo "b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6  uv.tgz" | sha256sum -c -
+          tar -xzf uv.tgz --strip-components=1 uv-x86_64-unknown-linux-gnu/uv
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 uv "$RUNNER_TEMP/bin/uv"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/uv" --version
+
+      - name: Install Poetry (pinned)
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/tools-venv"
+          uv pip install --python "$RUNNER_TEMP/tools-venv/bin/python" \
+            "poetry==2.5.1" "poetry-plugin-export==1.10.1"
+          echo "$RUNNER_TEMP/tools-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install each runtime lock in a throwaway environment
+        run: |
+          # Runtime only: the main group of each Poetry lock (no dev tools),
+          # and the daemon's lock. --no-deps and --require-hashes install
+          # exactly the files the locks name; the scan reads their metadata.
+          # These are the packages backend-tests.yml installs on this runner.
+          for project in backend llm-proxy; do
+            poetry -C "$project" export --format requirements.txt \
+              --output "$RUNNER_TEMP/$project-runtime.txt"
+          done
+          cp vscode-daemon/requirements.txt "$RUNNER_TEMP/vscode-daemon-runtime.txt"
+          for project in backend llm-proxy vscode-daemon; do
+            uv venv --python 3.12 "$RUNNER_TEMP/licence-$project"
+            uv pip install --python "$RUNNER_TEMP/licence-$project/bin/python" \
+              --no-deps --require-hashes -r "$RUNNER_TEMP/$project-runtime.txt"
+          done
+
+      - name: Every runtime dependency under an allowed licence
+        run: |
+          python3 -I scripts/licence_scan.py \
+            --python "backend=$RUNNER_TEMP/licence-backend/bin/python" \
+            --python "llm-proxy=$RUNNER_TEMP/licence-llm-proxy/bin/python" \
+            --python "vscode-daemon=$RUNNER_TEMP/licence-vscode-daemon/bin/python" \
+            --npm-lock frontend/package-lock.json
 
   secrets-pr:
     name: Secrets in the pull request (gitleaks)

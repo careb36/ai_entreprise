@@ -121,6 +121,56 @@ What pushing the tag runs:
   buildx and QEMU on the runner. A new package on GHCR is private until its
   visibility is changed in the package's settings.
 
+Each release also records what it is made of and who built it (issue #522,
+part C):
+
+- **SBOMs of the components.** `release.yml` writes a CycloneDX SBOM of each
+  component's lock with [syft](https://github.com/anchore/syft) (Apache-2.0;
+  the release binary is pinned and checked against its sha256 in the
+  workflow): `backend/poetry.lock`, `llm-proxy/poetry.lock`,
+  `vscode-daemon/requirements.txt` and `frontend/package-lock.json` (without
+  its devDependencies). They are attached to the GitHub Release as
+  `la-fabrique-<component>-X.Y.Z.cdx.json` with a `SHA256SUMS`.
+- **SBOMs of the images.** `images.yml` scans each image it pushed (the base
+  image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
+  artifact `sbom-<image>` for 90 days and attached to the image in the
+  registry as a signed CycloneDX attestation.
+- **Signatures.** `images.yml` signs each image by its digest with keyless
+  [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
+  (`id-token: write`, on the publish job only) gets a short-lived certificate
+  from Fulcio naming this workflow and the tag, and the signature is logged in
+  the public Rekor transparency log. No signing key exists to store, rotate
+  or leak.
+
+Verify an image before deploying it (cosign 2.x or 3.x):
+
+```bash
+image=ghcr.io/<owner>/<repo>/backend:X.Y.Z
+cosign verify "$image" \
+  --certificate-identity-regexp '^https://github\.com/<owner>/<repo>/\.github/workflows/images\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+cosign verify-attestation "$image" --type cyclonedx \
+  --certificate-identity-regexp '^https://github\.com/<owner>/<repo>/\.github/workflows/images\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  | jq -r '.payload' | base64 -d | jq '.predicate.metadata.component'
+```
+
+Prefer the digest the run printed in its summary (`...@sha256:...`) to the
+tag: a tag can be pushed again, a digest cannot. A failed verification means
+the image was not built by this repository's `images.yml` from a `v*` tag;
+do not deploy it. Verifying in the cluster at admission (Sigstore's
+policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
+steps run on the self-hosted runner and have not been exercised by a release
+yet; the first tag after this change is their first run
+(`docs/design/SELF_HOSTED_RUNNER.md` records the runner's risks).
+
+Check a release's component SBOMs against their checksums:
+
+```bash
+gh release download vX.Y.Z --pattern '*.cdx.json' --pattern SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
 Every pull request adds its line under `[Unreleased]` in the same pull
 request (`CONTRIBUTING.md`), so cutting a release is a move, not a search
 through the history. Migrations do not roll back: a release that ran a

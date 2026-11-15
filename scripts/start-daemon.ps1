@@ -36,13 +36,11 @@ if (-not (Test-Path $VenvPython)) {
     if ($LASTEXITCODE -ne 0) { throw 'Could not create the virtual environment.' }
 }
 
-& $VenvPython -m pip install --quiet --disable-pip-version-check -r (Join-Path $DaemonDir 'requirements.txt')
+# The hash-pinned lock (vscode-daemon/requirements.in): a package whose bytes
+# differ from the recorded sha256 is refused. It includes nkeys, which signs
+# the connection when a .creds file or an nkey seed is used.
+& $VenvPython -m pip install --quiet --disable-pip-version-check --require-hashes -r (Join-Path $DaemonDir 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Could not install the daemon requirements.' }
-# A .creds file or an nkey seed signs the connection with nkeys.
-if ($env:NATS_CREDS_FILE -or $env:NATS_NKEY_SEED) {
-    & $VenvPython -m pip install --quiet --disable-pip-version-check 'nkeys==0.2.1'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not install nkeys.' }
-}
 # The broker's "daemon" user, from the same variable docker compose reads.
 if (-not $env:NATS_USER -and $env:NATS_DAEMON_PASSWORD) {
     $env:NATS_USER = 'daemon'
