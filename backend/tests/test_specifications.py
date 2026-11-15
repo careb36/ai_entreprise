@@ -424,6 +424,8 @@ def test_a_revision_is_a_new_version_that_supersedes_the_approved_one(
 ):
     company = _company(sqlite_session)
     manager = _member(sqlite_session, company.id, "Manager")
+    # Segregation of duties (#543): who drafts does not approve.
+    approver = _member(sqlite_session, company.id, "Manager")
     v1 = test_client.post(
         "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
     ).json()
@@ -433,7 +435,7 @@ def test_a_revision_is_a_new_version_that_supersedes_the_approved_one(
         ).status_code
         == 409
     )
-    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=approver)
     v2 = test_client.post(f"/v1/specifications/{v1['id']}/revise", headers=manager)
     assert v2.status_code == 201
     v2 = v2.json()
@@ -450,7 +452,7 @@ def test_a_revision_is_a_new_version_that_supersedes_the_approved_one(
         headers=manager,
     ).json()
     assert edited["title"] == "Task board v2"
-    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=approver)
     statuses = {
         s["id"]: s["status"]
         for s in test_client.get(
@@ -469,10 +471,12 @@ def test_specification_diff_and_impact_report_changed_criteria(
 ):
     company = _company(sqlite_session)
     manager = _member(sqlite_session, company.id, "Manager")
+    # Segregation of duties (#543): who drafts does not approve.
+    approver = _member(sqlite_session, company.id, "Manager")
     v1 = test_client.post(
         "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
     ).json()
-    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=approver)
 
     # A revision that rewords one criterion and drops a requirement.
     import copy
@@ -488,7 +492,7 @@ def test_specification_diff_and_impact_report_changed_criteria(
     test_client.put(
         f"/v1/specifications/{v2['id']}", json=revised_good, headers=manager
     )
-    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=approver)
 
     diff = test_client.get(
         f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=manager
@@ -516,10 +520,12 @@ def test_specification_diff_and_impact_report_changed_criteria(
 def test_diff_endpoint_http(sqlite_session, test_client):
     company = _company(sqlite_session)
     manager = _member(sqlite_session, company.id, "Manager")
+    # Segregation of duties (#543): who drafts does not approve.
+    approver = _member(sqlite_session, company.id, "Manager")
     v1 = test_client.post(
         "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
     ).json()
-    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=approver)
     v2 = test_client.post(
         f"/v1/specifications/{v1['id']}/revise", headers=manager
     ).json()
@@ -528,7 +534,7 @@ def test_diff_endpoint_http(sqlite_session, test_client):
         json={**GOOD, "title": "Task board v2"},
         headers=manager,
     )
-    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=approver)
 
     r = test_client.get(
         f"/v1/specifications/{v2['id']}/diff?against={v1['id']}", headers=manager
@@ -552,10 +558,12 @@ def test_diff_endpoint_http(sqlite_session, test_client):
 def test_impact_endpoint_http(sqlite_session, test_client):
     company = _company(sqlite_session)
     manager = _member(sqlite_session, company.id, "Manager")
+    # Segregation of duties (#543): who drafts does not approve.
+    approver = _member(sqlite_session, company.id, "Manager")
     v1 = test_client.post(
         "/v1/specifications", json={"company_id": company.id, **GOOD}, headers=manager
     ).json()
-    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v1['id']}/approve", headers=approver)
     v2 = test_client.post(
         f"/v1/specifications/{v1['id']}/revise", headers=manager
     ).json()
@@ -564,7 +572,7 @@ def test_impact_endpoint_http(sqlite_session, test_client):
         json={**GOOD, "title": "Task board v2"},
         headers=manager,
     )
-    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=manager)
+    test_client.post(f"/v1/specifications/{v2['id']}/approve", headers=approver)
 
     r = test_client.get(f"/v1/specifications/{v2['id']}/impact", headers=manager)
     assert r.status_code == 200

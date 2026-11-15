@@ -1,0 +1,78 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, type AccessDecision, type SodPolicyInput } from '../services/api'
+
+const policyKey = (companyId: number | null) => ['sod-policy', companyId] as const
+const reportKey = (companyId: number | null) => ['sod-report', companyId] as const
+const reviewKey = (companyId: number | null) => ['access-review', companyId] as const
+const accountsKey = (companyId: number | null) => ['service-accounts', companyId] as const
+
+/** The segregation-of-duties policy, for the company's Owners. */
+export function useSodPolicy(companyId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: policyKey(companyId),
+    queryFn: () => api.getSodPolicy(companyId as number),
+    enabled: enabled && companyId !== null,
+  })
+}
+
+type PolicyChange =
+  | { kind: 'update'; data: SodPolicyInput }
+  | { kind: 'grant'; reason: string }
+  | { kind: 'withdraw' }
+
+/** One mutation for the policy and the single-person exception; each is audited. */
+export function useSodPolicyChange(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async (change: PolicyChange): Promise<unknown> => {
+      const id = companyId as number
+      switch (change.kind) {
+        case 'update': return api.updateSodPolicy(id, change.data)
+        case 'grant': return api.grantSodException(id, change.reason)
+        case 'withdraw': return api.withdrawSodException(id)
+      }
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: policyKey(companyId) })
+      client.invalidateQueries({ queryKey: reviewKey(companyId) })
+    },
+  })
+}
+
+/** The matrix and every approval with its requester, computed from the records. */
+export function useSodReport(companyId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: reportKey(companyId),
+    queryFn: () => api.getSodReport(companyId as number),
+    enabled: enabled && companyId !== null,
+  })
+}
+
+/** The access review: its schedule, what to review, and the history. */
+export function useAccessReview(companyId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: reviewKey(companyId),
+    queryFn: () => api.getAccessReview(companyId as number),
+    enabled: enabled && companyId !== null,
+  })
+}
+
+export function useCompleteAccessReview(companyId: number | null) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ decisions, note }: { decisions: AccessDecision[]; note: string | null }) =>
+      api.completeAccessReview(companyId as number, decisions, note),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: reviewKey(companyId) })
+      client.invalidateQueries({ queryKey: accountsKey(companyId) })
+    },
+  })
+}
+
+export function useServiceAccounts(companyId: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: accountsKey(companyId),
+    queryFn: () => api.getServiceAccounts(companyId as number),
+    enabled: enabled && companyId !== null,
+  })
+}

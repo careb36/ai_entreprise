@@ -28,7 +28,9 @@ from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import Field
 from schemas import RequestModel
+from services.loop import sod_requesters
 from services.planning import adr_docs, arch_author, arch_check, document_approval
+from services.platform import sod
 from services.tools import repo_map
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
@@ -326,6 +328,20 @@ async def approve_architecture(
     """Approve a draft; the version it revises, and any other approved one of the specification, become superseded."""
     arch, spec = _load(session, user, arch_id, "Manager")
     _only_draft(arch)
+    # Segregation of duties (#543), when the company's mode is ``all``.
+    try:
+        sod.enforce(
+            session,
+            arch.company_id,
+            sod.APPROVE_ARCH,
+            {"kind": "architecture", "id": arch.id, "version": arch.version},
+            sod.actor_of(session, user),
+            sod_requesters.of_architecture(session, arch),
+        )
+    except sod.SodRefused as refused:
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
     try:
         document_approval.approve_architecture(session, arch, spec, _actor(user))
     except document_approval.ApprovalRefused as exc:

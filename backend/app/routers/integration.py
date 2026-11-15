@@ -14,6 +14,8 @@ from database import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request
 from models import Sprint, User
 from models.integration import SprintIntegration
+from services.loop import sod_requesters
+from services.platform import sod
 from services.release import integration
 from services.release.git_publish import PublishRefused
 from services.release.integration_publish import publish_spec, record_publication
@@ -144,13 +146,31 @@ async def merge_sprint_integration(
     session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
     user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
 ):
-    """Merge the latest integration branch into the base branch, locally: nothing is pushed."""
+    """Merge the latest integration branch into the base branch, locally: nothing is pushed.
+
+    A release: the person who started the sprint does not merge it
+    (segregation of duties, ``services/platform/sod.py``).
+    """
     sprint = _sprint(session, user, sprint_id, "Manager")
     row = integration.latest(session, sprint.id)
     if row is None or row.company_id != sprint.company_id:
         raise HTTPException(
             status_code=409, detail="This sprint has not been integrated"
         )
+    actor = sod.actor_of(session, user)
+    try:
+        sod.enforce(
+            session,
+            sprint.company_id,
+            sod.RELEASE,
+            {"kind": "sprint_integration", "id": row.id, "sprint_id": sprint.id},
+            actor,
+            sod_requesters.of_sprint(session, sprint),
+        )
+    except sod.SodRefused as refused:
+        raise HTTPException(
+            status_code=refused.status, detail=refused.detail
+        ) from refused
     try:
         reply = await daemon_request(
             getattr(request.app.state, "nats_client", None),
@@ -158,7 +178,13 @@ async def merge_sprint_integration(
             integration_merge_spec(session, row),
             timeout=PUBLISH_TIMEOUT_SECONDS,
         )
-        return record_integration_merge(session, row, reply, merged_by=_who(user))
+        return record_integration_merge(
+            session,
+            row,
+            reply,
+            merged_by=_who(user),
+            merged_by_user_id=actor.user_id if actor else None,
+        )
     except (PublishRefused, DaemonUnavailable, DaemonError) as exc:
         session.rollback()
         raise _refused(exc) from exc
