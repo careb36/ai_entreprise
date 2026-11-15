@@ -181,7 +181,8 @@ Copy `.env.example` to `.env` and fill in:
   (24) — optional. With the Manager agent on and `SMTP_HOST` set, the
   client's brief (`services/management/brief_mail.py`: the deterministic
   `manager_brief.brief` rendered as plain text) goes by mail to the Owners and
-  Managers of each company that has a `ManagerPolicy`, once per interval; each
+  Managers of each company that has a `ManagerPolicy` (by effective role: a
+  member a team makes a Manager receives it too), once per interval; each
   send is audited as `manager_brief_sent` with its window and how many people
   it reached (never an address), the next window starts where the last sent
   one ended, and a failed send is retried from the same start at most once an
@@ -384,11 +385,13 @@ Copy `.env.example` to `.env` and fill in:
   or container; bwrap and a port already in use are refused, a required
   sandbox is never replaced by the host, the command policy applies), wait
   for its port (`DELIVERY_APP_READY_TIMEOUT_SECONDS`, 60), GET the probe path
-  (below 500 passes), run the profile's e2e command with `APP_URL`
-  (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and reply with the log's
-  tail: the `application_started` and `e2e_run` checks. The backend waits
-  for the reply beyond those bounds for the container's launch (120 s) and
-  teardown; the container is removed by name whatever happens after its
+  (below 500 passes), send it the security probe (headers, cookies, CORS,
+  methods, error bodies, `/.git/HEAD` and `/.env`, at most 40 s; the
+  `security_probe` check, `docs/contexts/evidence.md`), run the profile's e2e
+  command with `APP_URL` (`DELIVERY_E2E_TIMEOUT_SECONDS`, 300), stop it and
+  reply with the log's tail: the `application_started` and `e2e_run` checks.
+  The backend waits for the reply beyond those bounds for the container's
+  launch (120 s), the security probe (60 s) and teardown; the container is removed by name whatever happens after its
   launch; on the host the application's process group is stopped (on
   Windows the Job Object it was started suspended into, created with
   `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, which also holds the children of a

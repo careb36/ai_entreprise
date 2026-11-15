@@ -188,8 +188,12 @@ def test_reply_without_a_verdict_is_a_failed_review_not_an_approval(
 
 
 def _events(session: Session, item_id: int) -> list[TaskEvent]:
+    """The task's transitions; the effort observed at sprint close (issue
+    #534, ``test_calibration.py``) is not one."""
     return session.exec(
-        select(TaskEvent).where(TaskEvent.task_id == item_id).order_by(TaskEvent.id)
+        select(TaskEvent)
+        .where(TaskEvent.task_id == item_id, TaskEvent.event_type != "effort_observed")
+        .order_by(TaskEvent.id)
     ).all()
 
 

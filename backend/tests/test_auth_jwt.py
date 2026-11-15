@@ -141,7 +141,9 @@ def test_me_returns_user_and_company_membership_without_password_hash(
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == registered["email"]
-    assert body["memberships"] == [{"company_id": company.id, "human_role": "Manager"}]
+    assert body["memberships"] == [
+        {"company_id": company.id, "human_role": "Manager", "effective_role": "Manager"}
+    ]
     assert "password_hash" not in body
 
 

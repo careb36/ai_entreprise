@@ -4,6 +4,7 @@ Endpoints (``/v1/architectures``):
 - ``GET    /?specification_id=``      — the architectures of a specification (Viewer).
 - ``GET    /{id}``                    — one, with its check (Viewer).
 - ``GET    /{id}/document``           — it as ``docs/ARCHITECTURE.md`` (Viewer).
+- ``GET    /{id}/adrs``               — its decisions as ``docs/adr/`` files (Viewer).
 - ``POST   /``                        — a person writes a draft (Manager).
 - ``PUT    /{id}``                    — edit a draft (Manager).
 - ``POST   /draft``                   — the Architect drafts, or revises (Manager).
@@ -22,12 +23,12 @@ from typing import Any
 
 from auth_policy import current_user_if_required, require_company_role
 from database import get_session
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from models import Architecture, Specification, User
 from pydantic import Field
 from schemas import RequestModel
-from services.planning import arch_author, arch_check, document_approval
+from services.planning import adr_docs, arch_author, arch_check, document_approval
 from services.tools import repo_map
 from services.workspace.workspace_daemon import DaemonError, DaemonUnavailable
 from sqlmodel import Session, select
@@ -193,6 +194,33 @@ async def get_document(
     """The architecture as the Markdown the repository gets."""
     arch, _ = _load(session, user, arch_id, "Viewer")
     return arch_author.document(session, arch)
+
+
+@router.get("/{arch_id}/adrs")
+async def get_adrs(
+    arch_id: int,
+    first_number: int = Query(default=1, ge=1, le=9999),
+    session: Session = Depends(get_session),  # noqa: B008 - FastAPI dependency marker.
+    user: User | None = Depends(current_user_if_required),  # noqa: B008 - FastAPI dependency marker.
+):
+    """Its decisions as ADR files, ``docs/adr/NNNN-<slug>.md`` (``services/planning/adr_docs.py``).
+
+    ``first_number`` is the number of ADR-1, for a repository whose ADRs
+    started before the factory recorded them."""
+    arch, spec = _load(session, user, arch_id, "Viewer")
+    approved_on = (
+        arch.approved_at.date().isoformat()
+        if arch.status != "draft" and arch.approved_at
+        else None
+    )
+    files = adr_docs.adr_documents(
+        arch_author.content_of(arch),
+        spec.title,
+        arch.version,
+        first_number=first_number,
+        approved_on=approved_on,
+    )
+    return {"architecture_id": arch.id, "files": files}
 
 
 @router.post("", status_code=201)

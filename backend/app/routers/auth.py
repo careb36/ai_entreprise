@@ -42,7 +42,7 @@ from passwords import (
 )
 from schemas import InviteMemberRequest, LoginRequest, UserCreateRequest
 from security import limiter
-from services.platform import login_throttle, sessions, sso_flow
+from services.platform import login_throttle, sessions, sso_flow, teams
 from services.platform.agent_service import AgentService
 from services.platform.oidc import SsoError
 from sqlalchemy.exc import IntegrityError
@@ -277,7 +277,15 @@ async def get_me(
         "full_name": user.full_name,
         "support_admin": is_support_admin(user),
         "memberships": [
-            {"company_id": membership.company_id, "human_role": membership.human_role}
+            {
+                "company_id": membership.company_id,
+                "human_role": membership.human_role,
+                # Raised by the member's teams (never to Owner); what the
+                # routes check (auth_policy.require_company_role).
+                "effective_role": teams.member_role(
+                    session, membership.company_id, user.id
+                ),
+            }
             for membership in memberships
         ],
     }
@@ -355,6 +363,7 @@ async def remove_member(
             )
     role = member.human_role
     session.delete(member)
+    left_teams = teams.drop_memberships(session, company_id, user_id)
     session.commit()
     ended = sessions.revoke_users(session, [user_id], "member_removed")
     AgentService().audit_interaction(
@@ -364,7 +373,7 @@ async def remove_member(
         agent_id=f"human:{caller.email}" if caller else "human:anonymous",
         action="member_removed",
         details={"company_id": company_id, "user_id": user_id},
-        result={"human_role": role, "sessions_ended": ended},
+        result={"human_role": role, "sessions_ended": ended, "teams_left": left_teams},
         decision_signature=None,
         cost_tokens=0,
     )

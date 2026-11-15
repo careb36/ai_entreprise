@@ -176,7 +176,7 @@ request; a subject that refuses has `$defs/ok` and `$defs/refusal`).
 | `workspace.git.merge` | request | `local_merge.py` | `workspace_root`, `branch`, `base`, `commit`? | `ok`, `base`, `before`, `after`, `fast_forward`, `already` |
 | `workspace.git.base_status` | request | `git_base.py` | `workspace_root`, `base`? | `is_repo`, and how the base stands against its remote |
 | `workspace.git.reviews` | request | `platform_reviews.py` | `workspace_root`, `url`, `provider` | `ok`, `url`, `comments`, `truncated` |
-| `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `full_log`?, or `error` |
+| `workspace.app.check` | request | `app_run.py`, `browser_probe.py`, `security_probe.py`, `run_logs.py` | `workspace_root`, `start_command`, `port`, `probe_path`?, `e2e_command`?, `sandbox`?, `browser_probe`?, `security_probe`?, `full_log`? | `listening`, probes, the e2e run, `browser_probe`?, `security_probe`?, `full_log`?, or `error` |
 | `workspace.git.integrate` | request | `sprint_integration.py` | `workspace_root`, `branch`, `merge` | `ok`, the integration branch and its merges, or the conflict |
 | `workspace.deliver` | JetStream, consumed | `daemon.py` | — | A delivery queued while the daemon was offline: `job_id`, `workspace_root`, `files`, `git`? |
 | `workspace.delivered` | JetStream, published | `daemon.py` | — | The `workspace.generate` reply with `job_id`, `company_id`, `sprint_id`, `item_id`, `host` |
@@ -228,6 +228,36 @@ browser sandbox image's own pinned Playwright, `FABRIQUE_PLAYWRIGHT_DIR`;
 `project`: the project's), `package`, `playwright`, `browser`, or `reason`,
 with `exit_code`. Without an e2e command, or without the field, no probe runs
 and the reply has no `browser_probe`.
+
+### 5.1.1 The security probe (additive, issue #540)
+
+**`security_probe: true`** on `workspace.app.check`: once the application
+listens (before the e2e command), the daemon sends it a fixed set of requests
+from where it runs (the daemon's own process in host mode;
+`python3 -c <security_probe.py> <base_url> <path>` inside the application's
+container in container mode, its printed line read back and bounded again)
+and replies `security_probe`: `observed`, `observed_by: daemon`, `ran_in`
+(`host` / `container`), `base_url`, `scheme`, `path` and `requests`, one
+entry per probe, each with the `request` sent (`method`, `path`, `headers`),
+the `status` (or `null` with `error`), the response `headers` as
+`[name, value]` pairs (each value cut at 1024 characters, at most 40) and
+`body_bytes`:
+
+| Entry | Request | Kept beyond the status |
+| --- | --- | --- |
+| `get` | `GET <probe_path>` | every header; `cookies`: each `Set-Cookie` parsed (`name`, `value_bytes`, `secure`, `httponly`, `samesite`, `path`, `domain`, `expires`, `max_age`, `attributes`); a cookie's value is never kept, in `cookies` or in `headers` |
+| `cors_origin`, `cors_credentials` | the same GET with `Origin: https://evil.example`, the second with a cookie | `Access-Control-*`, `Vary` |
+| `preflight` | `OPTIONS` from that origin asking for `PUT` and `authorization` | `Access-Control-*`, `Vary`, `Allow` |
+| `options`, `trace` | `OPTIONS`; `TRACE` with a random `X-Fabrique-Probe` header | `Allow`; `echoed` (whether the TRACE answer reflected that header), never the body |
+| `not_found`, `malformed` | `GET /fabrique-probe-<hex>-missing`; `POST <probe_path>` with a truncated JSON body | `body_head` (2000 characters), `Content-Type`, `Server`, `X-Powered-By` |
+| `git_head`, `env_file` | `GET /.git/HEAD`; `GET /.env` | `body_head` (200 characters) for the first; `env_keys` (the names the file assigns, never a value) for the second |
+
+Each request has a 5 s bound and the whole probe 40 s; a probe that could not
+run says so with `observed: false` and `reason` (no `python3` in the image,
+the bound). The daemon judges nothing: the backend maps the answers to OWASP
+WSTG items (`services/evidence/security_probe.py`). Without the field no
+request is sent and the reply has no `security_probe`; a daemon from before
+it ignores the field, and the backend records the probe as not observed.
 
 ### 5.2 `workspace.execute` and the daemon's sandbox floor (additive, issue #525)
 
@@ -293,7 +323,9 @@ side; a console assistant's consultation on the host; and a request without
 `sandbox` refused by a floor whose runtime is missing); the other subjects are
 covered by their schema, and their handlers by their own tests
 (`workspace.app.check`'s probe and full log in
-`backend/tests/test_browser_image.py` and `test_run_logs.py`). To add one, write the file with the request and
+`backend/tests/test_browser_image.py` and `test_run_logs.py`, its security
+probe in `test_security_probe.py`, which validates a real reply against the
+schema). To add one, write the file with the request and
 an empty `reply`, run the daemon-side test, and copy the actual reply it
 prints after checking it.
 
