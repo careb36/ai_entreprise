@@ -116,10 +116,16 @@ What pushing the tag runs:
 - **`images.yml`** makes the same checks and publishes the five images
   `docker-build.yml` builds (`backend`, `janitor`, `frontend`, `llm-proxy`,
   `vscode-daemon`) to `ghcr.io/<owner>/<repo>/<service>:X.Y.Z`, plus
-  `:latest` for a stable release. They are built for `linux/amd64` only, on
-  the self-hosted runner with plain `docker build`; multi-arch images need
-  buildx and QEMU on the runner. A new package on GHCR is private until its
-  visibility is changed in the package's settings.
+  `:latest` for a stable release. Those five are built for `linux/amd64`
+  only, on the self-hosted runner with plain `docker build`. A sixth image,
+  `browser-sandbox` (`vscode-daemon/images/browser`, issue #529), is
+  published from the same tag by a job of its own, outside that list:
+  `linux/amd64,linux/arm64` with buildx under QEMU, the same `:X.Y.Z` (plus
+  `:latest` for a stable release), the same SBOM and the same keyless
+  signature as the rest. `.github/workflows/browser-image-probe.yml` (manual,
+  `workflow_dispatch`) is the check that the runner can build and run both
+  architectures before a release tag relies on it. A new package on GHCR is
+  private until its visibility is changed in the package's settings.
 
 Each release also records what it is made of and who built it (issue #522,
 part C):
@@ -134,13 +140,17 @@ part C):
 - **SBOMs of the images.** `images.yml` scans each image it pushed (the base
   image's packages included) into `<image>-X.Y.Z.cdx.json`, kept as the run's
   artifact `sbom-<image>` for 90 days and attached to the image in the
-  registry as a signed CycloneDX attestation.
+  registry as a signed CycloneDX attestation. The multi-arch `browser-sandbox`
+  is scanned by its digest in the registry (a manifest list is never in the
+  Docker daemon) and its SBOM catalogs the `linux/amd64` variant; the arm64
+  one differs only in the browser binary, which the Dockerfile checks against
+  its own pinned sha256.
 - **Signatures.** `images.yml` signs each image by its digest with keyless
   [cosign](https://github.com/sigstore/cosign): the job's GitHub OIDC token
-  (`id-token: write`, on the publish job only) gets a short-lived certificate
-  from Fulcio naming this workflow and the tag, and the signature is logged in
-  the public Rekor transparency log. No signing key exists to store, rotate
-  or leak.
+  (`id-token: write`, on the two publish jobs only) gets a short-lived
+  certificate from Fulcio naming this workflow and the tag, and the signature
+  is logged in the public Rekor transparency log. No signing key exists to
+  store, rotate or leak.
 
 Verify an image before deploying it (cosign 2.x or 3.x):
 
@@ -163,6 +173,14 @@ policy-controller or Kyverno) is not set up (SECURITY.md §5.3). The signing
 steps run on the self-hosted runner and have not been exercised by a release
 yet; the first tag after this change is their first run
 (`docs/design/SELF_HOSTED_RUNNER.md` records the runner's risks).
+
+The browser sandbox is pinned the same way: the publish run's summary prints
+the line to paste into the backend's environment,
+`DELIVERY_BROWSER_IMAGE=ghcr.io/<owner>/<repo>/browser-sandbox@sha256:…`
+(`docs/CONFIGURATION.md`), so the application check runs its browser e2e
+commands in the published multi-arch image, by digest. The verification
+commands above apply to it unchanged (same workflow, same certificate
+identity; its digest names the manifest list).
 
 Check a release's component SBOMs against their checksums:
 
